@@ -199,7 +199,7 @@ task seems to require crossing one, stop and ask - never work around it silently
   is the **extension-less** form - CF Pages 308-redirects `*.html`.
 - `lastmod` = **git mtime**, never the build date.
 
-### Documentation (this file and `docs/`)
+### Documentation (all repo markdown: this file, README/CONTRIBUTING, `docs/`, the `.github` templates)
 
 Apply this test whenever you write or touch a doc:
 
@@ -209,6 +209,16 @@ Apply this test whenever you write or touch a doc:
   names, supported-format tables), a table that restates a code definition, a precise
   call sequence a refactor will change. If a `grep` answers it, point at the file or
   symbol that owns it instead of copying the value.
+- **Say it once, at the point of use.** The same fact or instruction in two docs
+  drifts exactly like a doc that mirrors code: one copy where the reader acts on
+  it, a bare pointer everywhere else. A pointer never retells its destination -
+  "see X", plus at most what you would go there for, is complete; "see X, which
+  explains how to Y" and inline summaries are second copies.
+- **Instruction over justification.** In reader-facing instructions (rules,
+  checklists, templates) state the action and keep at most the one WHY that
+  changes whether the reader complies; cut rationale tails the reader infers on
+  their own. Per-item reasons turn a checklist into prose. Design rationale in a
+  deep-dive doc is a different genre - that is the "keep" below.
 - **Keep only what the code cannot tell you:** constraints and invariants, working
   rules, design rationale (WHY a thing is shaped this way), hard-won
   external/operational knowledge (browser bugs, protocol quirks, deploy traps), and a
