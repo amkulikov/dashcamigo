@@ -215,6 +215,13 @@ export default defineConfig(({ command }) => {
         // so the hash plugin sees the stub's bootstrap (identical to locale
         // pages by construction).
         rootStubPlugin({ noIndex: NO_INDEX }),
+        // CSP for the inline bootstrap: 'sha256-...' into dist/_headers, plus
+        // (META_CSP=1 builds) the policy as a <meta> in every HTML for hosts
+        // that cannot send headers. MUST run AFTER every HTML-writing plugin
+        // above (the hash and the meta need the final markup) and BEFORE
+        // swPrecachePlugin - the precache manifest hashes the shells, so a
+        // later HTML edit would break offline reconciliation.
+        cspHashPlugin(),
         // Inject the precache manifest into dist/sw.js for offline support. MUST
         // run AFTER i18nPrerenderPlugin + rootStubPlugin (all 12 shells + the
         // stub must exist in dist/) and BEFORE minifyServiceWorker() (which then
@@ -239,11 +246,6 @@ export default defineConfig(({ command }) => {
         // of noIndex - the file lists production URLs, so even on staging
         // it points agents at the canonical site. See vite-plugins/llms-txt.ts.
         llmsTxtPlugin(),
-        // CSP hash for the inline bootstrap in index.html. Registered last -
-        // reads the final dist/index.html (after html-minifier and the SEO
-        // plugins) and injects 'sha256-...' into dist/_headers. Without this
-        // the inline <script> gets blocked by CSP in prod.
-        cspHashPlugin(),
         // Source maps -> Sentry (prod CF build only, gated by SENTRY_UPLOAD).
         // Injects a debugId into every emitted chunk and uploads the matching
         // hidden .map, then deletes all .map from dist (filesToDeleteAfterUpload)

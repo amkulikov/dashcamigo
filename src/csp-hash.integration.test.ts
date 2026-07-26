@@ -23,6 +23,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { injectMetaCsp, metaCspFromHeaderPolicy } from "../vite-plugins/csp-hash.js";
 
 const DIST_DIR = resolve(__dirname, "..", "dist");
 const ROOT_HTML = resolve(DIST_DIR, "index.html");
@@ -106,5 +107,81 @@ describe("CSP hash integration: stub and locale pages share one bootstrap", () =
             headers,
             `_headers must contain ${expectedDirective} in script-src for the inline bootstrap to load`,
         ).toContain(expectedDirective);
+    });
+});
+
+describe("meta CSP helpers", () => {
+    it("drops frame-ancestors from the header policy and keeps every other directive", () => {
+        const header =
+            "default-src 'self'; script-src 'self' 'sha256-x'; frame-ancestors 'none'; upgrade-insecure-requests";
+        expect(metaCspFromHeaderPolicy(header)).toBe(
+            "default-src 'self'; script-src 'self' 'sha256-x'; upgrade-insecure-requests",
+        );
+    });
+
+    it("injects the meta tag right after <meta charset>, before any script", () => {
+        const out = injectMetaCsp('<head><meta charset="UTF-8"><script>x()</script></head>', "default-src 'self'");
+        expect(out).toBe(
+            '<head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src \'self\'"><script>x()</script></head>',
+        );
+    });
+
+    it("falls back to right after <head> when there is no charset meta", () => {
+        const out = injectMetaCsp("<head><title>t</title></head>", "default-src 'self'");
+        expect(out.startsWith('<head><meta http-equiv="Content-Security-Policy"')).toBe(true);
+    });
+
+    it("throws on HTML with neither charset nor head", () => {
+        expect(() => injectMetaCsp("<body></body>", "default-src 'self'")).toThrow(/neither/);
+    });
+});
+
+// Every *.html in dist, not just index.html - the meta CSP must cover the
+// static pages (privacy, 404) and the generated marketing pages too.
+function findAllHtml(dir: string, out: string[] = []): string[] {
+    for (const entry of readdirSync(dir)) {
+        const full = resolve(dir, entry);
+        const st = statSync(full);
+        if (st.isDirectory()) {
+            findAllHtml(full, out);
+        } else if (entry.endsWith(".html")) {
+            out.push(full);
+        }
+    }
+    return out;
+}
+
+const META_TAG_RE = /<meta http-equiv="Content-Security-Policy" content="([^"]+)">/;
+
+describe("meta CSP in built HTML (META_CSP flavor)", () => {
+    const metaOn = Boolean(process.env.META_CSP);
+
+    itIf("dist HTML matches the META_CSP flag the build ran with", () => {
+        const headers = readFileSync(HEADERS, "utf-8");
+        const headerPolicy = /Content-Security-Policy: ([^\n]+)/.exec(headers)?.[1];
+        if (!headerPolicy) throw new Error("no Content-Security-Policy line in dist/_headers");
+        // The header keeps frame-ancestors regardless of the flavor.
+        expect(headerPolicy, "_headers policy keeps frame-ancestors").toContain("frame-ancestors");
+
+        for (const file of findAllHtml(DIST_DIR)) {
+            const html = readFileSync(file, "utf-8");
+            const tags = html.match(new RegExp(META_TAG_RE.source, "g")) ?? [];
+            if (!metaOn) {
+                expect(tags.length, `${file}: no meta CSP expected without META_CSP`).toBe(0);
+                continue;
+            }
+            expect(tags.length, `${file}: exactly one meta CSP expected`).toBe(1);
+            const policy = META_TAG_RE.exec(html)?.[1] ?? "";
+            expect(policy, `${file}: meta policy derives from the header policy`).toBe(
+                metaCspFromHeaderPolicy(headerPolicy),
+            );
+            // The policy must be parsed before the first script executes.
+            const firstScript = html.indexOf("<script");
+            if (firstScript !== -1) {
+                expect(html.indexOf("<meta http-equiv"), `${file}: meta CSP precedes the first script`).toBeLessThan(
+                    firstScript,
+                );
+            }
+        }
     });
 });

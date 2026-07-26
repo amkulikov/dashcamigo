@@ -11,6 +11,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
+# nginx.conf sends no CSP header, so deliver the CSP as a <meta> tag
+# (vite-plugins/csp-hash.ts) - same flavor the release artifact ships.
+ENV META_CSP=1
 RUN npm run build
 
 FROM nginx:alpine

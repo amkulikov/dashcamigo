@@ -14,9 +14,11 @@
 #
 # The build intentionally gets no VITE_*/SENTRY_* env: the published zip ships
 # with analytics and crash reporting compiled out (the tree-shake contract in
-# .env.example) - same env-less build ci.yml gates on every push. Unit tests
-# run here as a cheap sanity gate; the e2e suite already gated this code on
-# its way into main.
+# .env.example) - same env-less build ci.yml gates on every push, except for
+# META_CSP=1: the artifact targets header-less hosts (GitHub Pages mirror,
+# `npx serve`), so the CSP ships as a <meta> tag (vite-plugins/csp-hash.ts);
+# the unit tests in this job run under the same flag and assert that flavor.
+# The e2e suite already gated this code on its way into main.
 
 name: Release
 
@@ -164,6 +166,10 @@ jobs:
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      # CSP as a <meta> tag for header-less hosts - see the header comment.
+      # Job-level so the build injects it and the unit tests assert it.
+      META_CSP: "1"
     permissions:
       contents: write
       # Build-provenance attestation (attest step below).
