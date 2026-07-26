@@ -315,15 +315,16 @@ jobs:
       # trigger cannot see it: events created with GITHUB_TOKEN never start
       # other workflows (GitHub's anti-recursion rule), and the publish above
       # runs on exactly that token - workflow_dispatch is the documented
-      # exception, hence the explicit dispatch. main ref: the mirror pulls
-      # the latest release, and the github-pages environment allows the
-      # default branch out of the box.
+      # exception, hence the explicit dispatch. Ref = the tag: the
+      # github-pages environment admits only v* tag refs (docs/deploy.md,
+      # "GitHub Pages mirror") - a main-ref run is rejected by environment
+      # protection before its first step.
       - name: Dispatch the Pages mirror re-deploy (tag push only)
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh workflow run mirror.yml --repo "${GITHUB_REPOSITORY}" --ref main || {
+          gh workflow run mirror.yml --repo "${GITHUB_REPOSITORY}" --ref "${GITHUB_REF_NAME}" || {
             echo "::error::the release itself is published; only the mirror dispatch failed - run the Mirror workflow manually, do NOT re-run this job (the immutability guard fails a re-run)"
             exit 1
           }

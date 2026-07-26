@@ -107,6 +107,15 @@ Two properties of this shape to keep in mind:
   chained after `deploy` in release.yml - its failure cannot fail the deploy
   it follows. Secrets: where `INDEXNOW_KEY` lives, why it is in no file, and
   how the ping pre-flights it - `docs/seo.md`, "IndexNow".
+- **A fresh deployment propagates non-atomically across the CF edge:** for
+  the first ~1-3 minutes a PoP can serve the new HTML while still 404-ing
+  its hashed assets, so a load in that window renders a dead shell - for
+  ANY online visitor, installed service worker or not: navigation is
+  network-first by design (the WHY sits at `NAV_NETWORK_TIMEOUT_MS` in
+  `public/sw.js`). The SW only keeps the hole out of its caches (an install
+  with a missing asset fails and retries later, so offline launches keep
+  the previous build); the IndexNow preflight retries through the same
+  window. Do not debug a just-deployed 404 before waiting it out.
 
 ## Custom domain
 
@@ -289,11 +298,11 @@ One-time setup:
    **DNS-only** (grey cloud) - proxying it through Cloudflare would put the
    mirror behind the same edge it exists to bypass.
 3. Settings -> Environments -> `github-pages` -> Deployment branches and
-   tags: add a **tag rule `v*`**. Enabling Pages auto-creates this
-   environment restricted to the default branch, and the release-published
-   trigger (a release published by hand) runs with the tag as its ref -
-   without the rule that path fails on environment protection while
-   main-ref runs (release.yml's dispatch, a manual dispatch) pass.
+   tags: **`v*` tag refs only** (drop the default-branch rule Pages
+   auto-creates). Every mirror run carries a tag ref: release.yml
+   dispatches on the release tag, a manual dispatch picks a tag in the
+   ref dropdown - a main-ref run is rejected by environment protection
+   before its first step.
 4. GitHub account Settings -> Pages -> **Add verified domain** for
    `gh.dashcamigo.app` (one TXT record). Without it, a dangling CNAME after
    any future Pages teardown lets another GitHub user claim the subdomain

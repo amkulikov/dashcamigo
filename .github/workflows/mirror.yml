@@ -10,7 +10,9 @@
 # events created with GITHUB_TOKEN never trigger workflows (GitHub's
 # anti-recursion rule). The release trigger below covers only a release
 # published by hand from the UI; workflow_dispatch re-deploys from the
-# latest release without cutting a tag.
+# latest release without cutting a tag. Any run must carry a v* tag ref -
+# the github-pages environment admits nothing else, so a manual dispatch
+# picks a tag in the ref dropdown, never main.
 #
 # One-time setup and the DNS contract: docs/deploy.md, "GitHub Pages mirror".
 
