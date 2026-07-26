@@ -18,15 +18,27 @@ import { alternativePagesPlugin } from "./vite-plugins/alternative-pages.js";
 import { featurePagesPlugin } from "./vite-plugins/feature-pages.js";
 import { vendorPagesPlugin } from "./vite-plugins/vendor-pages.js";
 
-// App version for logs and diagnostics. No backend, so the only reliable
-// build identifier is the git short SHA, tagged with -dirty if the working
-// copy has uncommitted changes. Computed once at vite startup (dev-server or
-// build) and passed into code via `define: { __APP_VERSION__: ... }`. If the
-// repo is not a git checkout (unpacked archive or CI without .git) - "unknown".
+// App version for the footer, logs and diagnostics. A tagged checkout - the
+// production deploy and the release artifact both check out the tag - reports
+// the release id (v2026.07.27); anything else falls back to the git short
+// SHA. Either form gets -dirty if the working copy has uncommitted changes.
+// Computed once at vite startup (dev-server or build) and passed into code
+// via `define: { __APP_VERSION__: ... }`. If the repo is not a git checkout
+// (unpacked archive or CI without .git) - "unknown".
 function getAppVersion(): string {
     try {
-        const sha = execSync("git rev-parse --short HEAD", { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] })
-            .trim();
+        let id: string;
+        try {
+            id = execSync("git describe --tags --exact-match HEAD", {
+                encoding: "utf-8",
+                stdio: ["ignore", "pipe", "ignore"],
+            }).trim();
+        } catch {
+            id = execSync("git rev-parse --short HEAD", {
+                encoding: "utf-8",
+                stdio: ["ignore", "pipe", "ignore"],
+            }).trim();
+        }
         let dirty = false;
         try {
             // exit 0 = clean, exit 1 = has changes (execSync throws).
@@ -34,7 +46,7 @@ function getAppVersion(): string {
         } catch {
             dirty = true;
         }
-        return dirty ? `${sha}-dirty` : sha;
+        return dirty ? `${id}-dirty` : id;
     } catch {
         return "unknown";
     }

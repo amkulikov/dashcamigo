@@ -23,7 +23,12 @@ test.describe("visual regression", () => {
         await gotoApp(page, "en");
         await expect(page.locator("#landing")).toBeVisible();
         await settle(page);
-        await expect(page).toHaveScreenshot("landing-desktop.png", { fullPage: true });
+        // The footer build id changes with every commit - masked, or the
+        // snapshot is nondeterministic build-to-build.
+        await expect(page).toHaveScreenshot("landing-desktop.png", {
+            fullPage: true,
+            mask: [page.locator("#footer-version")],
+        });
     });
 
     test("landing - mobile", async ({ page }) => {
@@ -31,7 +36,11 @@ test.describe("visual regression", () => {
         await gotoApp(page, "en");
         await expect(page.locator("#landing")).toBeVisible();
         await settle(page);
-        await expect(page).toHaveScreenshot("landing-mobile.png", { fullPage: true });
+        // Same footer build-id mask as the desktop shot.
+        await expect(page).toHaveScreenshot("landing-mobile.png", {
+            fullPage: true,
+            mask: [page.locator("#footer-version")],
+        });
     });
 
     test("settings modal", async ({ page }) => {

@@ -316,6 +316,14 @@ requestAnimationFrame(() => {
 });
 
 initLangSwitcher();
+// Footer build id: which release this copy serves - tells the mirror and a
+// self-host apart from production at a glance. Filled at runtime so the
+// prerendered HTML stays build-agnostic; hidden when the build had no git.
+const footerVersion = document.getElementById("footer-version");
+if (footerVersion && APP_VERSION !== "unknown") {
+    footerVersion.textContent = APP_VERSION;
+    footerVersion.hidden = false;
+}
 // Topbar overflow-bar: when the header shrinks, low-priority buttons
 // (theme/feedback/install) move into the kebab menu. Must run after
 // initThemeToggle/initLangSwitcher - they bind handlers to the original

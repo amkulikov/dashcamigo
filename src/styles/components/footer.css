@@ -120,3 +120,13 @@
     width: 18px;
     height: 18px;
 }
+
+/* Build id line - the quietest element of the footer: informational for
+   mirror/self-host identification, never a navigation target. Own line so
+   its width (tag vs commit vs -dirty) never shifts the rows around it. */
+.site-footer-version {
+    color: var(--fg-mute);
+    opacity: 0.55;
+    font-size: 0.85em;
+    margin: 0;
+}

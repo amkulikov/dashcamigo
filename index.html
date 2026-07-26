@@ -1092,6 +1092,12 @@
                             <span>OpenFreeMap</span>
                         </a>
                     </p>
+                    <!-- Build id of the copy being served (release tag on tagged
+                         builds, commit otherwise) - tells the mirror / a
+                         self-host apart at a glance. Filled at runtime (app.ts)
+                         so the prerendered HTML stays build-agnostic; VRT masks
+                         it (visual.vrt.ts). -->
+                    <p class="site-footer-version" id="footer-version" hidden></p>
                 </footer>
 
                 <!-- Docked CTA: appears when the inline drop card scrolls out of
