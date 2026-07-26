@@ -1,13 +1,20 @@
 // Generates the OG / social-share covers (public/og-cover.png, og-cover-ru.png).
-// Manual run (when the brand or the hero copy changes):
+// Manual run (when the brand, the hero copy or the app screenshots change):
 //   node scripts/generate-og-cover.mjs
 //
 // The cover is a self-contained HTML document rendered by headless Chrome at
 // exactly 1200x630 (the OG-image canonical size). Everything is inlined -
-// fonts as base64 data: URIs, the mark and the mock-player artwork as inline
-// SVG/CSS - so the render has no network or file subresources and is
-// deterministic. Non-English locales other than ru fall back to the English
-// cover (see src/i18n/seo-config.ts).
+// fonts and the app screenshot as base64 data: URIs, the mark as inline SVG -
+// so the render has no network or file subresources and is deterministic.
+// Non-English locales other than ru fall back to the English cover (see
+// src/i18n/seo-config.ts).
+//
+// The right side shows the real app: a crop of the desktop screenshot with
+// the phone screenshot overlapping its bottom-right corner - the same
+// composite idiom as the landing hero and the README hero. Both shots come
+// from docs/screenshots/ (produced by scripts/generate-readme-screenshots.mjs)
+// - re-run this script after the screenshots are regenerated. Both covers
+// embed the same EN-locale shots.
 //
 // The headline mirrors the landing hero h1 (src/i18n/{en,ru}.ts,
 // landing.hero.h1.*). It is duplicated here on purpose: the cover is a baked
@@ -24,25 +31,61 @@ const ROOT = resolve(__dirname, "..");
 
 const CHROME = findChrome();
 
-// Brand fonts, inlined. Space Grotesk carries only the wordmark (latin is
-// enough - "dashcamigo" never localizes). Inter carries display text and
-// JetBrains Mono the technical chrome; both need their cyrillic subsets for
-// the ru cover.
-function fontB64(rel) {
-    const path = resolve(ROOT, "public/fonts", rel);
+function assetB64(rel) {
+    const path = resolve(ROOT, rel);
     if (!existsSync(path)) {
-        console.error(`font not found: ${path}`);
+        console.error(`asset not found: ${path}`);
         process.exit(1);
     }
     return readFileSync(path).toString("base64");
 }
+
+// Brand fonts, inlined. Space Grotesk carries only the wordmark (latin is
+// enough - "dashcamigo" never localizes). Inter carries display text and
+// JetBrains Mono the technical chrome; both need their cyrillic subsets for
+// the ru cover.
 const FONTS = {
-    grotesk: fontB64("space-grotesk-700-latin.woff2"),
-    interLatin: fontB64("inter-var-latin.woff2"),
-    interCyr: fontB64("inter-var-cyrillic.woff2"),
-    monoLatin: fontB64("jetbrains-mono-var-latin.woff2"),
-    monoCyr: fontB64("jetbrains-mono-var-cyrillic.woff2"),
+    grotesk: assetB64("public/fonts/space-grotesk-700-latin.woff2"),
+    interLatin: assetB64("public/fonts/inter-var-latin.woff2"),
+    interCyr: assetB64("public/fonts/inter-var-cyrillic.woff2"),
+    monoLatin: assetB64("public/fonts/jetbrains-mono-var-latin.woff2"),
+    monoCyr: assetB64("public/fonts/jetbrains-mono-var-cyrillic.woff2"),
 };
+
+const SHOT = assetB64("docs/screenshots/app-desktop.png");
+const PHONE = assetB64("docs/screenshots/app-mobile-player.png");
+
+// The app window shows a bottom-anchored crop of the screenshot: the trip
+// sidebar and everything above the video area are cut, so the split video,
+// the map and the chart stay legible at OG-thumbnail size instead of the
+// whole UI shrinking into mush.
+const SHOT_SRC_WIDTH = 2880;
+const SHOT_CROP_LEFT = 640; // cut the trip sidebar
+const SHOT_CROP_BOTTOM_HEIGHT = 1228; // from the bottom bar up to just above the video
+const SHOT_VIEW_WIDTH = 478; // window inner width on the 1200x630 canvas
+
+const shotScale = SHOT_VIEW_WIDTH / (SHOT_SRC_WIDTH - SHOT_CROP_LEFT);
+const shotImgWidth = Math.round(SHOT_SRC_WIDTH * shotScale);
+const shotLeft = Math.round(SHOT_CROP_LEFT * shotScale);
+const shotViewHeight = Math.round(SHOT_CROP_BOTTOM_HEIGHT * shotScale);
+
+// Window geometry on the canvas; the phone overlay straddles its corner.
+const MOCK_RIGHT = 96; // window inset from the canvas right edge
+const MOCK_TOP = 120;
+const mockHeight = 2 + 34 + shotViewHeight; // borders + titlebar + shot
+
+// The phone shot (light theme, so it contrasts with the dark desktop)
+// straddles the window's bottom-right corner - the README-hero idiom. Kept
+// small and poking OUT of the window, not lying inside it: the map column
+// of the desktop crop must stay visible behind it.
+const PHONE_SRC_WIDTH = 1170;
+const PHONE_SRC_HEIGHT = 2532;
+const PHONE_VIEW_WIDTH = 100;
+const PHONE_STICKOUT = 34; // how far it pokes past the window's right edge
+const PHONE_HANG = 26; // how far it drops below the window's bottom edge
+
+const phoneViewHeight = Math.round((PHONE_SRC_HEIGHT / PHONE_SRC_WIDTH) * PHONE_VIEW_WIDTH);
+const phoneTop = MOCK_TOP + mockHeight + PHONE_HANG - phoneViewHeight;
 
 // Palette: mirrors src/styles/tokens.css (--dc-* raw tokens). Keep in sync by
 // hand - the cover is regenerated rarely and must not depend on the app build.
@@ -52,42 +95,28 @@ const C = {
     tile: "#161616",
     fg: "#f5f4f1",
     accent: "#ff9000",
-    red: "#e5102b",
-    track: ["#1aa7ec", "#1fa463", "#f5c518", "#ff9000", "#e5102b"],
 };
 
 const LOCALES = [
     {
         out: "public/og-cover.png",
         lang: "en",
-        badge: "LOCAL-ONLY · NO UPLOAD",
         h1Before: "Dashcam player in your browser — ",
         h1Hl: "map, speed, events",
         h1After: ".",
         h1Size: 46,
-        chips: [
-            { label: "PLAYER", value: "MP4 · MOV · TS" },
-            { label: "MAP", value: "GPS · NMEA" },
-            { label: "PRIVACY", value: "100%", accent: true },
-        ],
+        oss: "Open source on GitHub",
     },
     {
         out: "public/og-cover-ru.png",
         lang: "ru",
-        badge: "ЛОКАЛЬНО · БЕЗ ЗАГРУЗКИ",
         h1Before: "Плеер видеорегистратора в браузере — ",
         h1Hl: "карта, скорость, события",
         h1After: ".",
         h1Size: 40,
-        chips: [
-            { label: "ПЛЕЕР", value: "MP4 · MOV · TS" },
-            { label: "КАРТА", value: "GPS · NMEA" },
-            { label: "ПРИВАТНОСТЬ", value: "100%", accent: true },
-        ],
+        oss: "Открытый код на GitHub",
     },
 ];
-
-const trackGradient = C.track.join(", ");
 
 function coverHtml(loc) {
     return `<!doctype html>
@@ -133,18 +162,11 @@ function coverHtml(loc) {
   .mono { font-family: "JetBrains Mono", monospace; }
 
   .left {
-    position: absolute; left: 60px; top: 62px; width: 560px;
+    /* Vertically matched to the window+phone block on the right. */
+    position: absolute; left: 60px; top: 120px; width: 560px;
     display: flex; flex-direction: column; align-items: flex-start;
   }
-  .badge {
-    display: flex; align-items: center; gap: 10px;
-    padding: 8px 16px; border-radius: 999px;
-    border: 1.5px solid rgba(255,144,0,0.5);
-    color: ${C.accent}; font-family: "JetBrains Mono", monospace;
-    font-size: 14px; font-weight: 600; letter-spacing: 0.08em;
-  }
-  .badge .dot { width: 8px; height: 8px; border-radius: 50%; background: ${C.accent}; }
-  .lockup { display: flex; align-items: center; gap: 18px; margin-top: 34px; }
+  .lockup { display: flex; align-items: center; gap: 18px; }
   .tile {
     width: 66px; height: 66px; border-radius: 23%;
     background: ${C.tile}; border: 1px solid rgba(255,255,255,0.08);
@@ -161,17 +183,9 @@ function coverHtml(loc) {
     line-height: 1.18; letter-spacing: -0.01em;
   }
   h1 .hl { color: ${C.accent}; }
-  .chips { display: flex; gap: 12px; margin-top: 34px; }
-  .chip {
-    background: #121212; border: 1px solid rgba(255,255,255,0.09);
-    border-radius: 12px; padding: 10px 16px;
-  }
-  .chip .label {
-    font-family: "JetBrains Mono", monospace; font-size: 10px; font-weight: 600;
-    letter-spacing: 0.14em; color: rgba(245,244,241,0.45);
-  }
-  .chip .value { margin-top: 4px; font-size: 16px; font-weight: 700; }
-  .chip .value.accent { color: ${C.accent}; }
+  .oss { display: flex; align-items: center; gap: 12px; margin-top: 38px; }
+  .oss svg { width: 28px; height: 28px; fill: ${C.fg}; }
+  .oss span { font-size: 20px; font-weight: 700; color: rgba(245,244,241,0.92); }
   .app-pill {
     position: absolute; right: 60px; bottom: 48px;
     display: flex; align-items: center; gap: 10px;
@@ -185,84 +199,39 @@ function coverHtml(loc) {
     border-top: 6px solid transparent; border-bottom: 6px solid transparent;
   }
 
-  /* --- mock player window --- */
+  /* --- app window with the real screenshot --- */
   .mock {
-    position: absolute; right: 60px; top: 58px; width: 464px;
+    position: absolute; right: ${MOCK_RIGHT}px; top: ${MOCK_TOP}px; width: ${SHOT_VIEW_WIDTH + 2}px;
     background: ${C.card}; border: 1px solid rgba(255,255,255,0.10);
     border-radius: 14px; overflow: hidden;
     box-shadow: 0 24px 70px rgba(0,0,0,0.6);
   }
   .titlebar {
     display: flex; align-items: center; gap: 6px;
-    height: 38px; padding: 0 14px;
+    height: 34px; padding: 0 14px;
     border-bottom: 1px solid rgba(255,255,255,0.07);
   }
   .titlebar .win-dot { width: 9px; height: 9px; border-radius: 50%; background: #2e2e2e; }
-  .titlebar .file {
-    margin-left: 10px; font-size: 11px; font-weight: 600;
-    color: rgba(245,244,241,0.6); letter-spacing: 0.04em;
+  .shot {
+    position: relative; width: ${SHOT_VIEW_WIDTH}px; height: ${shotViewHeight}px;
+    overflow: hidden;
   }
-  .titlebar .rec {
-    margin-left: auto; display: flex; align-items: center; gap: 6px;
-    font-size: 10px; font-weight: 700; color: ${C.red}; letter-spacing: 0.1em;
+  /* Bottom-anchored so the player control bar sits flush with the window edge. */
+  .shot img {
+    position: absolute; left: -${shotLeft}px; bottom: 0;
+    width: ${shotImgWidth}px;
   }
-  .titlebar .rec .dot { width: 7px; height: 7px; border-radius: 50%; background: ${C.red}; }
-  .video {
-    position: relative; height: 234px;
-    background: linear-gradient(155deg, #16171b 0%, #0c0d10 65%, #101014 100%);
+  .phone {
+    position: absolute;
+    right: ${MOCK_RIGHT - PHONE_STICKOUT}px; top: ${phoneTop}px;
+    width: ${PHONE_VIEW_WIDTH}px;
+    border-radius: 14px; border: 1px solid rgba(255,255,255,0.16);
+    box-shadow: 0 18px 50px rgba(0,0,0,0.65);
   }
-  .video .cam { position: absolute; left: 14px; top: 12px; font-size: 10px; font-weight: 700; color: ${C.accent}; letter-spacing: 0.1em; }
-  .video .res { position: absolute; right: 14px; top: 12px; font-size: 10px; font-weight: 600; color: rgba(245,244,241,0.45); letter-spacing: 0.08em; }
-  .minimap {
-    position: absolute; right: 14px; top: 34px; width: 148px; height: 108px;
-    background: #0c1015; border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 10px; overflow: hidden;
-  }
-  .minimap .tag { position: absolute; left: 8px; top: 6px; font-size: 8px; font-weight: 600; color: rgba(245,244,241,0.5); letter-spacing: 0.12em; }
-  .minimap .scale { position: absolute; left: 8px; bottom: 6px; font-size: 8px; color: rgba(245,244,241,0.55); }
-  .minimap .scale::before { content: ""; display: block; width: 34px; height: 2px; background: rgba(245,244,241,0.7); margin-bottom: 3px; }
-  .speedpill {
-    position: absolute; left: 14px; bottom: 14px;
-    display: flex; align-items: baseline; gap: 7px;
-    padding: 6px 11px; border-radius: 8px; background: rgba(0,0,0,0.65);
-    border: 1px solid rgba(255,255,255,0.08);
-  }
-  .speedpill .num { font-family: "Inter", sans-serif; font-size: 18px; font-weight: 800; color: ${C.accent}; }
-  .speedpill .rest { font-size: 11px; font-weight: 600; color: rgba(245,244,241,0.65); }
-  .chartstrip { position: relative; padding: 10px 14px 6px; border-top: 1px solid rgba(255,255,255,0.07); }
-  .chartstrip .row { display: flex; justify-content: space-between; font-size: 9px; font-weight: 600; letter-spacing: 0.12em; }
-  .chartstrip .row .l { color: rgba(245,244,241,0.4); }
-  .chartstrip .row .r { color: ${C.accent}; }
-  .chartstrip svg { display: block; margin-top: 6px; }
-  .controls {
-    display: flex; align-items: center; gap: 12px;
-    padding: 10px 14px 14px;
-  }
-  .play {
-    width: 30px; height: 30px; border-radius: 50%; background: ${C.accent};
-    display: flex; align-items: center; justify-content: center; flex: none;
-  }
-  .play .tri {
-    width: 0; height: 0; margin-left: 3px;
-    border-left: 9px solid #141414;
-    border-top: 6px solid transparent; border-bottom: 6px solid transparent;
-  }
-  .time { font-size: 11px; font-weight: 600; color: rgba(245,244,241,0.75); white-space: nowrap; }
-  .scrubber {
-    position: relative; flex: 1; height: 6px; border-radius: 3px;
-    background: linear-gradient(90deg, ${trackGradient});
-  }
-  .scrubber .head {
-    position: absolute; left: 42%; top: -3px; width: 3px; height: 12px;
-    border-radius: 2px; background: ${C.fg};
-    box-shadow: 0 0 0 2px rgba(0,0,0,0.5);
-  }
-  .scrubber .tick { position: absolute; top: -2px; width: 2px; height: 10px; background: ${C.red}; border-radius: 1px; }
 </style>
 </head>
 <body>
   <div class="left">
-    <div class="badge"><span class="dot"></span>${loc.badge}</div>
     <div class="lockup">
       <div class="tile">
         <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -276,75 +245,23 @@ function coverHtml(loc) {
       <div class="wordmark">dashcamigo</div>
     </div>
     <h1>${loc.h1Before}<span class="hl">${loc.h1Hl}</span>${loc.h1After}</h1>
-    <div class="chips">
-      ${loc.chips
-          .map(
-              (chip) => `<div class="chip">
-        <div class="label mono">${chip.label}</div>
-        <div class="value${chip.accent ? " accent" : ""}">${chip.value}</div>
-      </div>`,
-          )
-          .join("\n      ")}
+    <div class="oss">
+      <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+      </svg>
+      <span>${loc.oss}</span>
     </div>
   </div>
 
-  <div class="mock mono">
+  <div class="mock">
     <div class="titlebar">
       <span class="win-dot"></span><span class="win-dot"></span><span class="win-dot"></span>
-      <span class="file">FILE_20260614_1730.MP4</span>
-      <span class="rec"><span class="dot"></span>REC</span>
     </div>
-    <div class="video">
-      <span class="cam">CH1 · FRONT</span>
-      <span class="res">1920×1080 · 30FPS</span>
-      <div class="minimap">
-        <span class="tag">GPS</span>
-        <svg width="148" height="108" viewBox="0 0 148 108" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <linearGradient id="trk" x1="16" y1="88" x2="128" y2="16" gradientUnits="userSpaceOnUse">
-              ${C.track.map((color, i) => `<stop offset="${(i / (C.track.length - 1)).toFixed(2)}" stop-color="${color}"/>`).join("\n              ")}
-            </linearGradient>
-          </defs>
-          <!-- faint cross streets behind the track -->
-          <path d="M0 62 L148 44" stroke="rgba(255,255,255,0.07)" stroke-width="7"/>
-          <path d="M44 108 L84 0" stroke="rgba(255,255,255,0.07)" stroke-width="5"/>
-          <path d="M16 88 C 36 76, 40 58, 60 52 S 96 44, 106 32 S 120 20, 128 14"
-                stroke="url(#trk)" stroke-width="3.5" stroke-linecap="round"/>
-          <circle cx="16" cy="88" r="4" fill="#1fa463"/>
-          <circle cx="106" cy="32" r="5" fill="${C.accent}" stroke="${C.fg}" stroke-width="1.6"/>
-        </svg>
-        <span class="scale">100 m</span>
-      </div>
-      <div class="speedpill"><span class="num">62</span><span class="rest">km/h · 14:30:42</span></div>
-    </div>
-    <div class="chartstrip">
-      <div class="row"><span class="l">SPEED · KM/H</span><span class="r">PEAK 78</span></div>
-      <svg width="436" height="46" viewBox="0 0 436 46" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="area" x1="0" y1="0" x2="0" y2="46" gradientUnits="userSpaceOnUse">
-            <stop offset="0" stop-color="rgba(255,144,0,0.35)"/>
-            <stop offset="1" stop-color="rgba(255,144,0,0)"/>
-          </linearGradient>
-        </defs>
-        <path d="M0 36 C 30 32, 48 20, 78 22 S 132 38, 168 30 S 224 8, 268 14 S 342 32, 380 26 S 420 20, 436 22 L436 46 L0 46 Z" fill="url(#area)"/>
-        <path d="M0 36 C 30 32, 48 20, 78 22 S 132 38, 168 30 S 224 8, 268 14 S 342 32, 380 26 S 420 20, 436 22"
-              stroke="${C.accent}" stroke-width="2"/>
-        <path d="M183 6 V 42" stroke="rgba(245,244,241,0.8)" stroke-width="1.4" stroke-dasharray="3 3"/>
-        <circle cx="183" cy="29" r="3.4" fill="${C.fg}"/>
-        <path d="M252 10 V 42" stroke="${C.red}" stroke-width="2" opacity="0.85"/>
-        <path d="M356 18 V 42" stroke="${C.red}" stroke-width="2" opacity="0.85"/>
-      </svg>
-    </div>
-    <div class="controls">
-      <div class="play"><span class="tri"></span></div>
-      <span class="time">00:04:12 / 00:10:00</span>
-      <div class="scrubber">
-        <span class="tick" style="left: 58%"></span>
-        <span class="tick" style="left: 82%"></span>
-        <span class="head"></span>
-      </div>
+    <div class="shot">
+      <img src="data:image/png;base64,${SHOT}" alt="">
     </div>
   </div>
+  <img class="phone" src="data:image/png;base64,${PHONE}" alt="">
 
   <div class="app-pill"><span class="tri"></span>dashcamigo.app</div>
 </body>
