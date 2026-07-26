@@ -285,6 +285,16 @@ One-time setup:
 2. DNS (zone dashcamigo.app): CNAME `gh` -> `amkulikov.github.io`,
    **DNS-only** (grey cloud) - proxying it through Cloudflare would put the
    mirror behind the same edge it exists to bypass.
+3. Settings -> Environments -> `github-pages` -> Deployment branches and
+   tags: add a **tag rule `v*`**. Enabling Pages auto-creates this
+   environment restricted to the default branch, and the release-published
+   trigger runs with the tag as its ref - without the rule every
+   post-release mirror deploy fails on environment protection while the
+   manual (main-ref) run passes.
+4. GitHub account Settings -> Pages -> **Add verified domain** for
+   `gh.dashcamigo.app` (one TXT record). Without it, a dangling CNAME after
+   any future Pages teardown lets another GitHub user claim the subdomain
+   onto their own Pages site.
 
 The custom domain gives the mirror the site root, so the root-only build
 constraint (see "Serving rules" in docs/self-hosting.md) holds without a
