@@ -239,6 +239,10 @@ const ASSET_RETRY_MAX_ATTEMPTS = 4;
 // boot-time retry takes over with its backoff.
 window.addEventListener("vite:preloadError", (ev) => {
     if (state.trips.length > 0 || state.ingestController !== null) return;
+    // Offline a reload cannot fetch the missing chunk anyway - don't burn a
+    // retry from the budget; the failure surfaces through the usual error
+    // paths (the boot-time retry in dc-bootstrap waits for `online` instead).
+    if (navigator.onLine === false) return;
     try {
         const attempts = Number.parseInt(sessionStorage.getItem(ASSET_RETRY_STORAGE_KEY) ?? "0", 10) || 0;
         if (attempts >= ASSET_RETRY_MAX_ATTEMPTS) return;
