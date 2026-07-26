@@ -89,17 +89,33 @@ const payload = JSON.stringify({
 // Pre-flight: the engines validate by fetching keyLocation, so if the live
 // site does not serve our key (the secret was rotated but production not yet
 // redeployed with it) every engine would reject the batch. Catch that here
-// with one fetch and a clear message instead of five opaque 403s.
-try {
-    const keyRes = await fetch(KEY_LOCATION);
-    const body = keyRes.ok ? (await keyRes.text()).trim() : "";
-    if (!keyRes.ok || body !== KEY) {
-        console.error(`indexnow: ${KEY_LOCATION} is not serving the current key (HTTP ${keyRes.status})`);
-        console.error("indexnow: deploy a production build with INDEXNOW_KEY set before pinging");
-        process.exit(1);
+// with a clear message instead of five opaque 403s. Retried: the ping runs
+// right after the production upload, and the custom domain can lag it by a
+// minute or two - a fresh deploy must wait out propagation, not fail on it.
+const PREFLIGHT_ATTEMPTS = 10;
+const PREFLIGHT_INTERVAL_MS = 20_000;
+let keyIsLive = false;
+for (let attempt = 1; attempt <= PREFLIGHT_ATTEMPTS; attempt++) {
+    let status = "network error";
+    try {
+        const keyRes = await fetch(KEY_LOCATION);
+        const body = keyRes.ok ? (await keyRes.text()).trim() : "";
+        if (keyRes.ok && body === KEY) {
+            keyIsLive = true;
+            break;
+        }
+        status = `HTTP ${keyRes.status}`;
+    } catch (err) {
+        status = err.message;
     }
-} catch (err) {
-    console.error(`indexnow: cannot fetch ${KEY_LOCATION}: ${err.message}`);
+    console.log(`indexnow: key file not live yet (${status}), attempt ${attempt}/${PREFLIGHT_ATTEMPTS}`);
+    if (attempt < PREFLIGHT_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, PREFLIGHT_INTERVAL_MS));
+    }
+}
+if (!keyIsLive) {
+    console.error(`indexnow: ${KEY_LOCATION} is not serving the current key`);
+    console.error("indexnow: deploy a production build with INDEXNOW_KEY set before pinging");
     process.exit(1);
 }
 
