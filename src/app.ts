@@ -222,6 +222,36 @@ window.addEventListener("unhandledrejection", (ev) => {
     uncaughtLog.error("unhandled promise rejection", reason);
 });
 
+// Hand-mirrored with the boot-time asset retry in index.html (dc-bootstrap):
+// same key, same cap - reloads spent there and here draw from one budget,
+// and dc:ready clears it after a successful boot.
+const ASSET_RETRY_STORAGE_KEY = "dc-asset-retry";
+const ASSET_RETRY_MAX_ATTEMPTS = 4;
+
+// A lazy chunk that fails to load means the deployment changed under this
+// session: the CF-edge propagation window right after a release, or a
+// long-lived tab importing a chunk the new deployment no longer ships
+// (docs/deploy.md, "Deployment pipeline"). Reload only while there is
+// nothing to lose - with trips loaded or an ingest running a reload would
+// destroy the tab's in-memory state, so the import rejection flows to the
+// caller's error path instead (and gets logged by the handlers above). An
+// immediate reload is enough: if the fresh HTML's assets still 404, the
+// boot-time retry takes over with its backoff.
+window.addEventListener("vite:preloadError", (ev) => {
+    if (state.trips.length > 0 || state.ingestController !== null) return;
+    try {
+        const attempts = Number.parseInt(sessionStorage.getItem(ASSET_RETRY_STORAGE_KEY) ?? "0", 10) || 0;
+        if (attempts >= ASSET_RETRY_MAX_ATTEMPTS) return;
+        sessionStorage.setItem(ASSET_RETRY_STORAGE_KEY, String(attempts + 1));
+    } catch {
+        // Storage unavailable: no way to cap - a visible failure beats a
+        // potential reload loop.
+        return;
+    }
+    ev.preventDefault();
+    location.reload();
+});
+
 // Warn before close/reload. No backend: loaded trips and the index live
 // only in the current tab's memory - reload resets state, files on disk
 // remain but need re-indexing. The browser shows its own generic prompt
