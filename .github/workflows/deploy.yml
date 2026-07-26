@@ -55,7 +55,7 @@ jobs:
           # (vite-plugins/git-mtime.ts); a shallow clone would drop it.
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: steps.gate.outputs.deploy == 'true'
         with:
           node-version: 22

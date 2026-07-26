@@ -101,7 +101,7 @@ jobs:
           # (vite-plugins/git-mtime.ts); a shallow clone would drop it.
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: steps.gate.outputs.deploy == 'true'
         with:
           node-version: 22
@@ -148,7 +148,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: Ping IndexNow engines
@@ -178,7 +178,7 @@ jobs:
           # (vite-plugins/git-mtime.ts); a shallow clone would drop it.
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
