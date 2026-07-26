@@ -94,7 +94,7 @@ jobs:
             echo "deploy=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.gate.outputs.deploy == 'true'
         with:
           # Full history: sitemap <lastmod> derives from git mtime
@@ -147,7 +147,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -172,7 +172,7 @@ jobs:
       # ghcr.io image push (container image step below).
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Full history: sitemap <lastmod> derives from git mtime
           # (vite-plugins/git-mtime.ts); a shallow clone would drop it.
