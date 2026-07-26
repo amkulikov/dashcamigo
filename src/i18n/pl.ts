@@ -32,7 +32,7 @@ export const plDict = {
     "landing.hero.shot.alt": "dashcamigo od środka: dwie kamery obok siebie, wykres prędkości ze znacznikami zdarzeń i trasa na mapie",
     "landing.hero.shot.altPhone": "dashcamigo na telefonie: odtwarzacz z mapą trasy",
     "landing.dock.hint": "Upuść folder karty SD w dowolnym miejscu — albo",
-    "landing.oss.line": "Open source — AGPL-3.0.",
+    "landing.oss.line": "Open source.",
     "landing.oss.cta": "Źródła na GitHubie →",
     "landing.drop.t1": "Upuść tutaj cały folder z karty SD",
     "landing.drop.t1Touch": "Wybierz cały folder z karty SD",

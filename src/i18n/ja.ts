@@ -42,7 +42,7 @@ export const jaDict = {
     "landing.hero.shot.alt": "dashcamigo の画面：2 台のカメラを並べて表示、イベント付きの速度グラフ、地図上のルート",
     "landing.hero.shot.altPhone": "スマホの dashcamigo：ルート地図付きのプレーヤー",
     "landing.dock.hint": "SD カードのフォルダーはどこへドロップしても OK — または",
-    "landing.oss.line": "オープンソース — AGPL-3.0。",
+    "landing.oss.line": "オープンソース。",
     "landing.oss.cta": "GitHub でソースを見る →",
     "landing.drop.t1": "SD カードのフォルダーごとここにドロップ",
     "landing.drop.t1Touch": "SD カードのフォルダーごと選択",

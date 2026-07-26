@@ -31,7 +31,7 @@ export const zhDict = {
     "landing.hero.shot.alt": "dashcamigo 界面：两路摄像头并排显示、带事件标记的速度图表、地图上的路线",
     "landing.hero.shot.altPhone": "手机上的 dashcamigo：带路线地图的播放器",
     "landing.dock.hint": "把 SD 卡文件夹拖到页面任意位置 — 或者",
-    "landing.oss.line": "开源 — AGPL-3.0。",
+    "landing.oss.line": "开源。",
     "landing.oss.cta": "在 GitHub 查看源码 →",
     "landing.drop.t1": "把整个 SD 卡文件夹拖到这里",
     "landing.drop.t1Touch": "选择整个 SD 卡文件夹",

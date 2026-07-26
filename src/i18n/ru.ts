@@ -37,7 +37,7 @@ export const ruDict = {
     "landing.hero.shot.alt": "dashcamigo изнутри: две камеры рядом, график скорости с отметками событий и маршрут на карте",
     "landing.hero.shot.altPhone": "dashcamigo на телефоне: плеер с картой маршрута",
     "landing.dock.hint": "Папку с SD-карты можно бросить в любое место — или",
-    "landing.oss.line": "Открытый код — AGPL-3.0.",
+    "landing.oss.line": "Открытый код.",
     "landing.oss.cta": "Исходники на GitHub →",
     "landing.drop.t1": "Брось сюда всю папку с SD‑карты целиком",
     "landing.drop.t1Touch": "Выбери всю папку с SD‑карты целиком",

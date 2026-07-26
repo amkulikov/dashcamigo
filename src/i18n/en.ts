@@ -30,7 +30,7 @@ export const enDict = {
     "landing.hero.shot.alt": "Inside dashcamigo: two cameras side by side, the speed chart with event marks and the route on the map",
     "landing.hero.shot.altPhone": "dashcamigo on a phone: the player with the route map",
     "landing.dock.hint": "Drop your SD-card folder anywhere — or",
-    "landing.oss.line": "Open source — AGPL-3.0.",
+    "landing.oss.line": "Open source.",
     "landing.oss.cta": "Source on GitHub →",
     "landing.drop.t1": "Drop the entire SD‑card folder here",
     // *Touch variants replace the drag-centric strings on coarse-pointer

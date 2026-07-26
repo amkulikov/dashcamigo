@@ -30,7 +30,7 @@ export const deDict = {
     "landing.hero.shot.alt": "dashcamigo von innen: zwei Kameras nebeneinander, das Tempo-Diagramm mit Ereignismarken und die Route auf der Karte",
     "landing.hero.shot.altPhone": "dashcamigo auf dem Handy: der Player mit der Routenkarte",
     "landing.dock.hint": "Den SD-Karten-Ordner irgendwo ablegen — oder",
-    "landing.oss.line": "Open Source — AGPL-3.0.",
+    "landing.oss.line": "Open Source.",
     "landing.oss.cta": "Quellcode auf GitHub →",
     "landing.drop.t1": "Den ganzen SD‑Karten-Ordner hier ablegen",
     "landing.drop.t1Touch": "Den ganzen SD‑Karten-Ordner auswählen",

@@ -41,7 +41,7 @@ export const koDict = {
     "landing.hero.shot.alt": "dashcamigo 화면: 두 카메라 나란히, 이벤트 표시가 있는 속도 그래프, 지도 위의 경로",
     "landing.hero.shot.altPhone": "휴대폰의 dashcamigo: 경로 지도가 있는 플레이어",
     "landing.dock.hint": "SD 카드 폴더는 아무 데나 놓아도 돼요 — 또는",
-    "landing.oss.line": "오픈 소스 — AGPL-3.0.",
+    "landing.oss.line": "오픈 소스.",
     "landing.oss.cta": "GitHub에서 소스 보기 →",
     "landing.drop.t1": "SD 카드 폴더를 통째로 여기에 놓아요",
     "landing.drop.t1Touch": "SD 카드 폴더를 통째로 선택해요",

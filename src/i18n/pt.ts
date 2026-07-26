@@ -32,7 +32,7 @@ export const ptDict = {
     "landing.hero.shot.alt": "dashcamigo por dentro: duas câmeras lado a lado, o gráfico de velocidade com marcas de eventos e a rota no mapa",
     "landing.hero.shot.altPhone": "dashcamigo no celular: o player com o mapa da rota",
     "landing.dock.hint": "Solte a pasta do cartão SD em qualquer lugar — ou",
-    "landing.oss.line": "Código aberto — AGPL-3.0.",
+    "landing.oss.line": "Código aberto.",
     "landing.oss.cta": "Código no GitHub →",
     "landing.drop.t1": "Solte aqui a pasta inteira do cartão SD",
     "landing.drop.t1Touch": "Escolha a pasta inteira do cartão SD",

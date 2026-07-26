@@ -32,7 +32,7 @@ export const frDict = {
     "landing.hero.shot.alt": "dashcamigo de l'intérieur : deux caméras côte à côte, le graphique de vitesse avec les repères d'événements et l'itinéraire sur la carte",
     "landing.hero.shot.altPhone": "dashcamigo sur un téléphone : le lecteur avec la carte du trajet",
     "landing.dock.hint": "Dépose le dossier de la carte SD n'importe où — ou",
-    "landing.oss.line": "Open source — AGPL-3.0.",
+    "landing.oss.line": "Open source.",
     "landing.oss.cta": "Code source sur GitHub →",
     "landing.drop.t1": "Dépose ici le dossier entier de la carte SD",
     "landing.drop.t1Touch": "Choisis le dossier entier de la carte SD",

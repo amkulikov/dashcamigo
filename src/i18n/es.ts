@@ -32,7 +32,7 @@ export const esDict = {
     "landing.hero.shot.alt": "dashcamigo por dentro: dos cámaras lado a lado, el gráfico de velocidad con marcas de eventos y la ruta en el mapa",
     "landing.hero.shot.altPhone": "dashcamigo en un móvil: el reproductor con el mapa de la ruta",
     "landing.dock.hint": "Suelta la carpeta de la tarjeta SD en cualquier parte — o",
-    "landing.oss.line": "Código abierto — AGPL-3.0.",
+    "landing.oss.line": "Código abierto.",
     "landing.oss.cta": "Código en GitHub →",
     "landing.drop.t1": "Suelta aquí toda la carpeta de la SD",
     "landing.drop.t1Touch": "Elige toda la carpeta de la SD",
