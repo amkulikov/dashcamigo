@@ -3,6 +3,12 @@
 [![Live app](https://img.shields.io/badge/live-dashcamigo.app-ff9000)](https://dashcamigo.app)
 [![Beta](https://img.shields.io/badge/beta-beta.dashcamigo.app-8250df)](https://beta.dashcamigo.app)
 
+<p align="center">
+  <a href="https://dashcamigo.app">
+    <img src="docs/screenshots/readme-hero.png" alt="dashcamigo on desktop (dark theme) and on a phone (light theme): a two-camera trip with front and rear video side by side, a speed and G-force chart, and the speed-colored route on a map">
+  </a>
+</p>
+
 dashcamigo plays the recordings straight off a dashcam's SD card, entirely in
 the browser. Point it at the card's folder and the clips become trips:
 playback continues across file boundaries, and the route shows on a map
@@ -18,12 +24,6 @@ tiles and anonymized opt-out analytics
 analytics at all unless you configure it.
 
 [Open the app](https://dashcamigo.app) | [Supported cameras](#supported-cameras) | [Self-hosting](#self-hosting) | [Contributing](CONTRIBUTING.md) | [License](#license)
-
-<p align="center">
-  <a href="https://dashcamigo.app">
-    <img src="docs/screenshots/readme-hero.png" alt="dashcamigo on desktop (dark theme) and on a phone (light theme): a two-camera trip with front and rear video side by side, a speed and G-force chart, and the speed-colored route on a map">
-  </a>
-</p>
 
 ## Features
 
