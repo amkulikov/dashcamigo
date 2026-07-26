@@ -141,7 +141,7 @@ export const deDict = {
     "landing.faq.q5": "Was kostet das?",
     "landing.faq.a5": "Kostenlos. Keine Werbung, keine Anmeldung, keine Abos, keine versteckten Gebühren.",
     "landing.faq.q11": "Ist dashcamigo Open Source?",
-    "landing.faq.a11": "Ja. Der Code ist unter der AGPL-3.0-Lizenz offen — du kannst genau nachlesen, was die App mit deinen Dateien macht, und deine eigene Kopie auf deinem Rechner oder Server laufen lassen. So oder so verlassen deine Aufnahmen dein Gerät nicht.",
+    "landing.faq.a11": "Ja. Der Code liegt offen auf GitHub — du kannst genau nachlesen, was die App mit deinen Dateien macht, und deine eigene Kopie auf deinem Rechner oder Server laufen lassen. So oder so verlassen deine Aufnahmen dein Gerät nicht.",
     "landing.faq.q6": "Kann ich einen Ausschnitt herausschneiden und als Datei speichern?",
     "landing.faq.a6": "Ja. Du kannst die Zeitleiste trimmen, Kameras zusammenfügen, Geschwindigkeit, Koordinaten und eine Mini-Karte in jedes Bild einbrennen und als MP4 mit GPS in der Datei oder als separate .gpx-Spur speichern. Ein Einzelbild wird als .jpg gespeichert.",
     "landing.faq.q10": "Kann ich ein Kennzeichen oder ein Gesicht unkenntlich machen, bevor ich das Video teile?",

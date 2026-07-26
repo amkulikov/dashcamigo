@@ -142,7 +142,7 @@ export const enDict = {
     "landing.faq.q5": "How much does it cost?",
     "landing.faq.a5": "Free. No ads, no sign-up, no subscriptions, no hidden charges.",
     "landing.faq.q11": "Is dashcamigo open source?",
-    "landing.faq.a11": "Yes. The code is open under the AGPL-3.0 license — you can see exactly what the app does with your files, and run your own copy on your computer or server. Either way, your recordings never leave your device.",
+    "landing.faq.a11": "Yes. The code is public on GitHub — you can see exactly what the app does with your files, and run your own copy on your computer or server. Either way, your recordings never leave your device.",
     "landing.faq.q6": "Can I cut out a clip and save it as a file?",
     "landing.faq.a6": "Yes. You can trim the timeline, stitch cameras, burn speed, coordinates and a mini-map onto each frame, and save as MP4 with GPS inside the file or as a separate .gpx track. A single frame saves as a .jpg.",
     "landing.faq.q10": "Can I blur a license plate or a face before sharing?",

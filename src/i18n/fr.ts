@@ -143,7 +143,7 @@ export const frDict = {
     "landing.faq.q5": "Combien ça coûte ?",
     "landing.faq.a5": "Gratuit. Pas de pub, pas d'inscription, pas d'abonnement, pas de frais cachés.",
     "landing.faq.q11": "dashcamigo est-il open source ?",
-    "landing.faq.a11": "Oui. Le code est ouvert sous licence AGPL-3.0 — vous pouvez voir exactement ce que l'application fait de vos fichiers et faire tourner votre propre copie sur votre ordinateur ou votre serveur. Quoi qu'il en soit, vos enregistrements ne quittent jamais votre appareil.",
+    "landing.faq.a11": "Oui. Le code est ouvert sur GitHub — vous pouvez voir exactement ce que l'application fait de vos fichiers et faire tourner votre propre copie sur votre ordinateur ou votre serveur. Quoi qu'il en soit, vos enregistrements ne quittent jamais votre appareil.",
     "landing.faq.q6": "Puis-je couper un extrait et l'enregistrer en fichier ?",
     "landing.faq.a6": "Oui. Vous pouvez découper la chronologie, combiner les caméras, incruster vitesse, coordonnées et mini-carte sur chaque image et enregistrer en MP4 avec GPS dans le fichier ou en piste .gpx séparée. Une image fixe est sauvegardée en .jpg.",
     "landing.faq.q10": "Puis-je flouter une plaque d'immatriculation ou un visage avant de partager ?",

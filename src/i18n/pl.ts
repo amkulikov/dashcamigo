@@ -141,7 +141,7 @@ export const plDict = {
     "landing.faq.q5": "Ile to kosztuje?",
     "landing.faq.a5": "Za darmo. Bez reklam, bez rejestracji, bez abonamentu, bez ukrytych opłat.",
     "landing.faq.q11": "Czy dashcamigo jest open source?",
-    "landing.faq.a11": "Tak. Kod jest otwarty na licencji AGPL-3.0 — możesz sprawdzić, co dokładnie aplikacja robi z plikami, i uruchomić własną kopię na twoim komputerze lub serwerze. Tak czy inaczej, nagrania nie opuszczają twojego urządzenia.",
+    "landing.faq.a11": "Tak. Kod jest otwarty na GitHubie — możesz sprawdzić, co dokładnie aplikacja robi z plikami, i uruchomić własną kopię na twoim komputerze lub serwerze. Tak czy inaczej, nagrania nie opuszczają twojego urządzenia.",
     "landing.faq.q6": "Czy mogę wyciąć fragment i zapisać jako plik?",
     "landing.faq.a6": "Tak. Możesz przyciąć oś czasu, zmontować kamery, wypalić prędkość, współrzędne i mini-mapę na każdej klatce i zapisać jako MP4 z GPS w pliku albo jako osobną ścieżkę .gpx. Pojedyncza klatka zapisuje się jako .jpg.",
     "landing.faq.q10": "Czy mogę zamazać tablicę rejestracyjną albo twarz przed udostępnieniem?",
