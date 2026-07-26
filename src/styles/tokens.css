@@ -1,0 +1,350 @@
+/* =========================================================================
+   dashcamigo Design System - Colors & Type
+   --------------------------------------------------------------------------
+   This file is the source of truth for the design tokens. Raw --dc-* tokens
+   plus semantic aliases; component styles use the semantics, never the raw
+   colors. Prefix --dc-* to avoid colliding with any other CSS vars.
+
+   Fonts are defined in fonts.css (self-hosted woff2 in public/fonts/, no
+   external requests - see CLAUDE.md). fonts.css is loaded via a separate
+   <link> in index.html, NOT via @import here: @import would block parsing
+   of the rest of this file until the fonts loaded, and the :root{--dc-*}
+   block might not finish parsing by the time JS reads CSS vars in Chart.js
+   (chart lines came out black in dark theme). A separate <link> parallelizes
+   the request and does not block tokens.css.
+   ========================================================================= */
+
+:root {
+    /* ----- BRAND CORE ----- */
+    --dc-black: #000000;
+    --dc-ink: #0e0e0e; /* "almost black" for text on bone */
+    --dc-white: #ffffff;
+    --dc-bone: #f5f4f1; /* warm off-white (light mode background) */
+    --dc-bone-2: #eae7e0; /* hover on bone */
+
+    --dc-orange: #ff9000; /* accent, primary CTA */
+    --dc-orange-hot: #ffa31a; /* hover / press */
+    --dc-orange-dim: #3d2200; /* tinted background of active elements on dark */
+    /* Orange used AS TEXT on light surfaces. Raw --dc-orange on bone is
+       ~2.1:1 - below even the 3:1 display-text floor; this darker cut is
+       3.5:1. Only for text/ink roles (see --accent-ink); fills, borders and
+       text-on-dark keep --dc-orange. */
+    --dc-orange-ink: #c76a00;
+
+    /* ----- GREYS (dark surface scale) ----- */
+    --dc-ash-1: #1a1a1a; /* surface elev 1 (sidebar in dark) */
+    --dc-ash-2: #222222; /* surface elev 2 (cards) */
+    --dc-ash-3: #2a2a2a; /* borders on dark */
+    --dc-ash-4: #3a3a3a; /* divider, hover-border */
+    --dc-ash-5: #5c5c5c; /* mut text */
+    --dc-ash-6: #8a8a8a; /* dimmed text on dark */
+
+    /* ----- GREYS (light surface scale) ----- */
+    --dc-stone-1: #eceae3;
+    --dc-stone-2: #dcd8cd;
+    --dc-stone-3: #bdb7a6;
+    --dc-stone-4: #6f6a5c;
+    --dc-stone-5: #2d2a23;
+
+    /* ----- SEMANTIC ----- */
+    --dc-red: #e5102b; /* brake-event, error */
+    --dc-yellow: #f5c518; /* warn, mtime fallback */
+    --dc-green: #1fa463; /* ok, start-marker */
+    --dc-blue: #1aa7ec; /* info, low-speed end of gradient */
+
+    /* ----- SPEED-GRADIENT (track polyline colored by speed) ----- */
+    --dc-track-1: #1aa7ec; /* slow */
+    --dc-track-2: #1fa463;
+    --dc-track-3: #f5c518;
+    --dc-track-4: #ff9000;
+    --dc-track-5: #e5102b; /* fast */
+
+    /* ----- TYPE ----- */
+    /* BrandMark "dashcamigo" - Space Grotesk, a tight grotesque derived from
+       Space Mono. Used only in the .dc-mark wordmark; the rest of the display
+       and heavy UI is Inter (neutral grotesque, one character with body). */
+    --dc-font-brand: "Space Grotesk", "Inter", system-ui, sans-serif;
+    --dc-font-display: "Inter", system-ui, sans-serif;
+    --dc-font-heavy: "Inter", system-ui, sans-serif;
+    --dc-font-body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    /* Semantic alias for small UI chrome (chips, badges, tile labels). Same
+       stack as body; exists so chip-like components can opt out of a local
+       mono/heavy context (e.g. .channel-tag inside the mono .file-name)
+       without hard-coding the stack. Was referenced but undefined before -
+       the declarations silently inherited. */
+    --dc-font-ui: var(--dc-font-body);
+    --dc-font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+    /* type scale (px) */
+    --dc-text-3xs: 9px; /* dense micro-labels (chip counts, axis ticks) - below xs */
+    --dc-text-2xs: 10px; /* micro-labels (sidebar meta, map scale, player tags) */
+    --dc-text-xs: 11px;
+    --dc-text-sm: 12px;
+    --dc-text-md: 13px;
+    --dc-text-base: 14px; /* body default */
+    --dc-text-lg: 16px;
+    --dc-text-xl: 18px;
+    --dc-text-2xl: 22px;
+    --dc-text-3xl: 28px;
+    --dc-text-4xl: 40px;
+    --dc-text-5xl: 64px;
+    --dc-text-6xl: 96px; /* hero brand-mark */
+
+    --dc-leading-tight: 1.05;
+    --dc-leading-snug: 1.25;
+    --dc-leading-normal: 1.4;
+    --dc-leading-loose: 1.6;
+
+    --dc-tracking-tight: -0.02em;
+    --dc-tracking-normal: 0;
+    --dc-tracking-wide: 0.05em;
+    --dc-tracking-caps: 0.1em;
+
+    /* ----- SPACING (4px grid) ----- */
+    --dc-space-0: 0;
+    --dc-space-1: 4px;
+    --dc-space-2: 8px;
+    --dc-space-3: 12px;
+    --dc-space-4: 16px;
+    --dc-space-5: 24px;
+    --dc-space-6: 32px;
+    --dc-space-7: 48px;
+    --dc-space-8: 64px;
+    --dc-space-9: 96px;
+
+    /* ----- RADIUS (deliberately sharp) ----- */
+    --dc-radius-none: 0;
+    --dc-radius-xs: 2px;
+    --dc-radius-sm: 4px;
+    --dc-radius-md: 6px;
+    --dc-radius-lg: 8px; /* max */
+    --dc-radius-pill: 999px; /* status-chips only */
+
+    /* ----- SHADOWS (minimal system) ----- */
+    --dc-shadow-card: 0 1px 3px rgba(0, 0, 0, 0.2);
+    --dc-shadow-popup: 0 4px 16px rgba(0, 0, 0, 0.4);
+    /* Deepest tier: full-page sheets / side drawers / the CSP report modal that
+       need more separation than a popup. Elevated panels were inventing ~15
+       bespoke shadows; this is the sanctioned floor for the heavy ones. */
+    --dc-shadow-sheet: 0 12px 48px rgba(0, 0, 0, 0.5);
+
+    /* ----- MOTION ----- */
+    --dc-ease: cubic-bezier(0.4, 0, 0.2, 1);
+    /* Decelerating curve for entrances (sheets/banners/toasts slide in then
+       settle). ease-out-quint - was duplicated as a literal in mobile-drawer.ts
+       and landing.ts before this token. */
+    --dc-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --dc-dur-fast: 80ms;
+    --dc-dur-base: 120ms;
+    --dc-dur-slow: 160ms;
+    /* Entrance tier: the 180-280ms band used by banners/toasts/sheets/the
+       export drawer slide. Above the interaction durations (hover/press),
+       below page-level transitions. */
+    --dc-dur-entrance: 220ms;
+    --dc-dur-page: 250ms;
+
+    /* ----- SEMANTIC SURFACES (dark default - the product's primary mode) ----- */
+    --bg: var(--dc-black);
+    --bg-elev: var(--dc-ash-1);
+    --bg-elev-2: var(--dc-ash-2);
+    --bg-hover: var(--dc-ash-3);
+    /* Pressed state (:active). One step stronger than --bg-hover so a tap reads
+       as "pressed" - the primary touch-feedback channel where :hover never fires. */
+    --bg-active: var(--dc-ash-4);
+    --fg: var(--dc-white);
+    --fg-dim: var(--dc-ash-6);
+    --fg-mute: var(--dc-ash-5);
+    --accent: var(--dc-orange);
+    --accent-hot: var(--dc-orange-hot);
+    --accent-dim: var(--dc-orange-dim);
+    /* Accent in a TEXT role: same as --accent on dark, darkens on light
+       themes for contrast (see --dc-orange-ink). Use for orange words on
+       --bg/--bg-elev; never for fills or the always-dark safety card. */
+    --accent-ink: var(--dc-orange);
+    --border: var(--dc-ash-3);
+    --border-strong: var(--dc-ash-4);
+
+    --warn: var(--dc-yellow);
+    --err: var(--dc-red);
+    --ok: var(--dc-green);
+
+    /* ----- INFERRED EVENTS (strip + scrub-thumb) -----
+       Semantic aliases for bar colors of events inferred from speed/bearing
+       (see src/inferred-events.ts). Green for accel is a deliberate choice,
+       NOT orange: orange is already taken by the speed line on chart, the
+       current-position playhead, the brand wordmark and the primary CTA.
+       Orange accel would visually clash with the speed line during hard
+       acceleration. */
+    --ev-brake: var(--dc-red);
+    --ev-accel: var(--dc-green);
+    --ev-turn: var(--dc-yellow);
+    --ev-stop: var(--dc-ash-5); /* dim grey - stop is a state, not a magnitude */
+    --ev-overlap: var(--dc-orange); /* diamond marker on brake+turn coincident */
+
+    /* ----- EXPORT RANGE PULL-TABS -----
+       Green start / red end mirrors the map's start/end trip markers
+       (theme.ts markerStart/markerEnd) and, critically, is DISTINCT from
+       --accent: the orange playhead parked on an orange tab was unreadable -
+       users could not tell the current position from a clip boundary. */
+    --range-handle-start: var(--dc-green);
+    --range-handle-end: var(--dc-red);
+
+    /* Stroke around SVG markers on the map. White on dark, dark on light.
+       Without it a light stroke dissolves into the bone background. */
+    --dc-marker-stroke: var(--dc-white);
+
+    /* ----- BREAKPOINTS -----
+       System-wide scale: everything below is mobile, everything above is
+       desktop. The CSS vars here live purely as documentation (CSS Media
+       Queries cannot read var() - see
+       https://www.w3.org/TR/mediaqueries-5/#custom-mq); the actual numbers
+       are duplicated in @media rules in the component files. Change them
+       EVERYWHERE when they change, or the token drifts out of sync with
+       the rules.
+
+       Intermediate breakpoints (player-bar pm-time, mini-export-padding,
+       etc.) moved to @container queries - they depend on the component's
+       width, not the window's. */
+    --dc-bp-mobile: 768px; /* < 768  : mobile (drawer, stack) */
+    --dc-bp-tablet: 1024px; /* < 1024 : tablet (single-column modals) */
+    --dc-bp-laptop: 1280px; /* < 1280 : narrow laptop (compact defaults) */
+
+    /* ----- LAYOUT METRICS -----
+       Single source of truth for global sizes several components rely on.
+       Two topbar heights, because the mobile topbar is genuinely taller:
+       - --dc-topbar-h: desktop min-height of .topbar (44px). Anchors the
+         desktop export drawer, WCO overlay, landing sticky offsets.
+       - --dc-topbar-h-mobile: the REAL rendered mobile topbar height. The
+         mobile @media in topbar.css sets padding-top max(8px, safe-area-top)
+         + the 40px burger (--dc-iconbtn-touch, tallest row item) + 8px
+         padding-bottom + 1px border-bottom, which exceeds the 44px
+         min-height. Anything anchored to the mobile topbar bottom (sidebar
+         drawer) must use this token, NOT --dc-topbar-h - otherwise it
+         overlaps the topbar by ~12px. Keep the formula in sync with the
+         mobile .topbar padding rules in topbar.css. */
+    --dc-topbar-h: 44px;
+    --dc-topbar-h-mobile: calc(max(8px, env(safe-area-inset-top, 0px)) + var(--dc-iconbtn-touch) + 8px + 1px);
+
+    /* Height reserved at the very top by the offline banner (a fixed strip above
+       the topbar). 0 when the banner is absent, so nothing shifts in the normal
+       case; body.has-offline-banner (offline-banner.css) raises it and re-bases
+       --dc-topbar-h / --dc-topbar-h-mobile by the same amount, so EVERY layer
+       anchored to the topbar bottom (mobile drawer, toasts, export drawer,
+       landing sticky, viewer fit-height) follows from one place - no per-
+       component offset. */
+    --dc-offline-banner-h: 0px;
+
+    /* ----- CONTROL SIZES (icon buttons, square affordances) -----
+       Single source of truth for icon-button squares. Before this they were
+       hard-coded per component and drifted apart: theme toggle 28 in the
+       topbar but 32 in the overflow menu, map collapse 36 next to map
+       controls at 30, modal close buttons split 28 vs 30, the export-panel
+       close had no fixed square at all. Two density tiers (compact topbar /
+       standard player+map+modal), a corner-mini for map attribution, and a
+       mobile touch floor. Components reference these - never re-introduce a
+       bare px square. */
+    --dc-iconbtn-mini: 22px; /* corner affordances: map attribution, map error close */
+    --dc-iconbtn-sm: 28px; /* compact topbar density: topbar icon buttons, theme toggle */
+    --dc-iconbtn: 30px; /* standard: player + map controls, modal close buttons */
+    --dc-iconbtn-touch: 40px; /* mobile touch floor / primary mobile targets (burger, play) */
+
+    /* ----- GLOBAL Z-INDEX LADDER -----
+       One documented stacking scale for everything that competes GLOBALLY:
+       chrome, drawers, menus, banners, modals, scrims, the splash and the gate.
+       Values preserve the prior numeric ladder, so the relative order of every
+       existing layer is unchanged - the only behavioural fix is the modal-top
+       tier moving ABOVE the banner tier (the hotkeys modal used to tie the
+       banner tier at 110, leaving their order undefined / DOM-dependent).
+
+       Deliberately NOT tokenized: a component's INTERNAL layering (the bare
+       1..8 and -1 z-indexes scoped inside its own stacking context - map
+       controls, chart overlays, player tiles). Those are local, never compete
+       across components, and turning them into global tokens would be wrong. */
+    --dc-z-drawer: 50; /* side drawers (sidebar, export), window-controls overlay */
+    --dc-z-header: 70; /* sticky topbar + its overflow trigger */
+    --dc-z-menu: 80; /* dropdown / overflow menus */
+    --dc-z-popover: 90; /* map + chart event popover */
+    --dc-z-modal: 100; /* centered dialog scaffold (overlay + card); base modals */
+    --dc-z-banner: 110; /* bottom sticky banners (install toast, lang suggestion) - above base modals by design */
+    --dc-z-modal-top: 120; /* user-triggered content modals that must clear a banner (hotkeys, feedback) */
+    --dc-z-scrim: 200; /* full-viewport scrims: drop-zone overlay, notifications root */
+    --dc-z-toast: 210; /* notification toasts (above the scrim) */
+    --dc-z-ingest: 250; /* ingest progress overlay (its progress bar sits at +10 locally) */
+    --dc-z-ingest-modal: 300; /* modals raised over the ingest overlay (unsupported, lazy-gps, chromium) */
+    --dc-z-splash: 9999; /* splash loader + fullscreen player takeover */
+    --dc-z-gate: 10000; /* capability gate / onboarding spotlight - the ceiling */
+}
+
+/* =========================================================================
+   AUTO THEME - follows prefers-color-scheme.
+   Product default is dark (see :root). Under a light system theme we
+   override the semantic surfaces with the bone palette.
+
+   UX-24: user override via the theme-toggle in the header. Logic:
+     - auto (default):     `<html>` has no .dc-light/.dc-dark class, the
+                           media query below applies.
+     - light explicit:     `<html class="dc-light">` - always light,
+                           ignore prefers-color-scheme.
+     - dark explicit:      `<html class="dc-dark">` - always dark (default
+                           :root vars, plus a guard for the case where the
+                           user's system theme was light at some point).
+
+   The class is set in src/ui/theme.ts on startup and on toggle click.
+   ========================================================================= */
+@media (prefers-color-scheme: light) {
+    :root {
+        --bg: var(--dc-bone);
+        --bg-elev: var(--dc-white);
+        --bg-elev-2: var(--dc-bone-2);
+        --bg-hover: var(--dc-stone-1);
+        --bg-active: var(--dc-stone-2);
+        --fg: var(--dc-ink);
+        --fg-dim: var(--dc-stone-4);
+        --fg-mute: var(--dc-stone-3);
+        --accent-ink: var(--dc-orange-ink);
+        --border: var(--dc-stone-2);
+        --border-strong: var(--dc-stone-3);
+        --dc-marker-stroke: var(--dc-ink);
+        /* Lighter stop bar on bone background - ash-5 (#5c5c5c) on dark is
+           close to black; on light it gives strong contrast and reads as
+           "important". stone-3 gives a soft grey under semantic "neutral". */
+        --ev-stop: var(--dc-stone-3);
+    }
+}
+
+/* UX-24: explicit user override. Beats prefers-color-scheme because
+   class specificity > media-query (given equal structure otherwise). */
+html.dc-light {
+    --bg: var(--dc-bone);
+    --bg-elev: var(--dc-white);
+    --bg-elev-2: var(--dc-bone-2);
+    --bg-hover: var(--dc-stone-1);
+    --bg-active: var(--dc-stone-2);
+    --fg: var(--dc-ink);
+    --fg-dim: var(--dc-stone-4);
+    --fg-mute: var(--dc-stone-3);
+    --accent-ink: var(--dc-orange-ink);
+    --border: var(--dc-stone-2);
+    --border-strong: var(--dc-stone-3);
+    --dc-marker-stroke: var(--dc-ink);
+    --ev-stop: var(--dc-stone-3);
+}
+/* dc-dark - forced dark even on a light system theme. We set the vars
+   from :root explicitly to beat the prefers-color-scheme: light above. */
+html.dc-dark {
+    --bg: var(--dc-black);
+    --bg-elev: var(--dc-ash-1);
+    --bg-elev-2: var(--dc-ash-2);
+    --bg-hover: var(--dc-ash-3);
+    --bg-active: var(--dc-ash-4);
+    --fg: var(--dc-white);
+    --fg-dim: var(--dc-ash-6);
+    --fg-mute: var(--dc-ash-5);
+    --accent-ink: var(--dc-orange);
+    --border: var(--dc-ash-3);
+    --border-strong: var(--dc-ash-4);
+    --dc-marker-stroke: var(--dc-white);
+    /* Without this reset a system-light user forcing dark kept the light
+       stone-3 stop bars - the only semantic var the block did not restore. */
+    --ev-stop: var(--dc-ash-5);
+}

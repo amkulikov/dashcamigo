@@ -1,0 +1,277 @@
+/* =========================================================================
+   OVERFLOW BAR (kebab + popover menu)
+   A universal "priority+" toolbar pattern for the topbar and player-bar.
+   Hides low-priority buttons as the container shrinks and shows them
+   in a popup menu. JS logic: src/ui/overflow-bar.ts.
+
+   The selectors here are not tied to the topbar - they're reused by
+   player-bar and any other toolbar. Cascade: loaded AFTER topbar.css and
+   player-bar.css, so [data-overflow-hidden="true"] beats their display
+   rules, which have the same specificity (0,1,0).
+   ========================================================================= */
+
+/* Hides any item flagged by JS as "moved into the overflow menu".
+   Doubled attribute selector boosts specificity from (0,1,0) to (0,2,0)
+   so this rule wins against .player-btn{display:inline-flex} and friends
+   regardless of which file ships later in the bundle. */
+[data-overflow-hidden][data-overflow-hidden="true"] {
+    display: none;
+}
+
+.overflow-wrap {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.overflow-toggle[hidden] {
+    /* The hidden attribute already gives display:none, but we duplicate it
+       explicitly: the .topbar-iconbtn class, later in the cascade, sets
+       inline-flex and would beat the standard hidden rule at equal specificity. */
+    display: none;
+}
+
+.overflow-menu {
+    /* Popover downward from the kebab button. Mirrors .lang-menu/.player-speed-menu
+       so the user sees the same menu model across the whole UI. */
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    list-style: none;
+    margin: 0;
+    padding: var(--dc-space-1) 0;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-md);
+    box-shadow: var(--dc-shadow-popup);
+    min-width: 200px;
+    /* Same as .lang-menu: lift transient toolbar popovers above the
+       export-panel drawer (z=50) while staying below modals (100). The mobile
+       player sheet overrides this to 80 (more specific selector below). */
+    z-index: var(--dc-z-header);
+    font-family: var(--dc-font-body);
+}
+.overflow-menu[hidden] {
+    display: none;
+}
+/* Popup upward (player-bar is at the bottom of the player; opening down would go off-window). */
+.overflow-menu--up {
+    top: auto;
+    bottom: calc(100% + 6px);
+}
+
+.overflow-menu-item {
+    margin: 0;
+    padding: 0;
+}
+.overflow-menu-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+    width: 100%;
+    padding: var(--dc-space-2) var(--dc-space-3);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    color: var(--fg);
+    font-family: inherit;
+    font-size: var(--dc-text-sm);
+    text-align: left;
+    transition: background var(--dc-dur-fast) var(--dc-ease);
+}
+.overflow-menu-btn:hover,
+.overflow-menu-btn:focus-visible {
+    background: var(--bg-hover);
+    outline: none;
+}
+/* Pressed feedback - the only press signal on touch, where :hover never fires. */
+.overflow-menu-btn:active {
+    background: var(--bg-active);
+}
+.overflow-menu-btn[aria-pressed="true"] {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.overflow-menu-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    /* SVG stroke inherits currentColor from the button. */
+    color: currentColor;
+}
+
+.overflow-menu-label {
+    flex: 1;
+    min-width: 0;
+}
+
+.overflow-menu-check {
+    flex-shrink: 0;
+    color: var(--accent);
+    font-weight: 700;
+}
+
+/* ---------- theme-toggle group in the overflow menu ----------
+   When theme-toggle (3 buttons auto/light/dark) moves into overflow, we
+   render it as a section with a heading and a horizontal group - so the
+   user sees all 3 options at once and switches mode with one click. */
+.overflow-menu-item--theme {
+    padding: var(--dc-space-2) var(--dc-space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-1);
+}
+.overflow-menu-section-label {
+    font-family: var(--dc-font-heavy);
+    font-size: var(--dc-text-xs);
+    font-weight: 800;
+    color: var(--fg-dim);
+    text-transform: uppercase;
+    letter-spacing: var(--dc-tracking-caps);
+}
+.overflow-menu-theme-group {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-sm);
+    overflow: hidden;
+    align-self: flex-start;
+}
+.overflow-menu-theme-btn {
+    /* Same square as the topbar theme-toggle (--dc-iconbtn-sm = 28), so the toggle keeps its size when it moves into the overflow menu. */
+    width: var(--dc-iconbtn-sm);
+    height: var(--dc-iconbtn-sm);
+    padding: 0;
+    background: transparent;
+    border: 0;
+    color: var(--fg-dim);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition:
+        background var(--dc-dur-fast) var(--dc-ease),
+        color var(--dc-dur-fast) var(--dc-ease);
+}
+.overflow-menu-theme-btn + .overflow-menu-theme-btn {
+    border-left: 1px solid var(--border);
+}
+.overflow-menu-theme-btn:hover {
+    color: var(--fg);
+    background: var(--bg-hover);
+}
+.overflow-menu-theme-btn[aria-pressed="true"] {
+    background: var(--accent);
+    color: var(--dc-black);
+}
+.overflow-menu-theme-btn[aria-pressed="true"]:hover {
+    background: var(--accent-hot);
+    color: var(--dc-black);
+}
+.overflow-menu-theme-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+/* Touch: the theme segments grow to the touch floor once they collapse into the
+   kebab, matching the topbar secondary controls. */
+@media (pointer: coarse) {
+    .overflow-menu-theme-btn {
+        width: var(--dc-iconbtn-touch);
+        height: var(--dc-iconbtn-touch);
+    }
+}
+
+/* ---------- volume slider row in the overflow menu ----------
+   The bar's volume popover lives inside .player-mute-wrap, which is
+   display:none'd when mute collapses into the kebab. So the menu carries its
+   own horizontal slider; drag to 0 mutes (same rule as the bar slider). */
+.overflow-menu-item--volume {
+    padding: var(--dc-space-2) var(--dc-space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-1);
+}
+.overflow-menu-volume-slider {
+    width: 100%;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+@media (pointer: coarse) {
+    .overflow-menu-volume-slider {
+        height: var(--dc-iconbtn-touch);
+    }
+}
+
+/* ==========================================================================
+   MOBILE BOTTOM SHEET - the overflow-menu inside #player-bar turns into a
+   slide-up sheet (see spec/05-mobile.md "overflow action sheet"). Outside
+   player-bar (e.g. topbar-overflow-menu) the rule must NOT apply - we
+   target #player-overflow-menu specifically, not the global class.
+   Landscape phones (height <= 500) get the same sheet pattern - touch
+   targets and bottom-anchored sheet read better than a popover.
+   ========================================================================== */
+@media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {
+    #player-overflow-menu.overflow-menu {
+        /* Anchored to the bottom of the window, full width. position:fixed
+           pulls the sheet out from under player-bar absolute-positioned
+           contexts. */
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        top: auto;
+        margin: 0;
+        /* left:0 + right:0 already span the viewport; width:100vw was redundant
+           (and ignores the side insets below). */
+        min-width: 0;
+        max-height: 70vh;
+        overflow-y: auto;
+        /* Keep a flick that reaches the sheet's scroll end from chaining to the
+           player/page behind it. */
+        overscroll-behavior: contain;
+        /* Side insets keep row labels off a landscape notch. Items already carry
+           their own ~16px gutter, so the container adds only the raw side inset
+           (0 in portrait => unchanged; ~44px under a landscape ear). */
+        padding: 12px env(safe-area-inset-right, 0px) max(16px, env(safe-area-inset-bottom))
+            env(safe-area-inset-left, 0px);
+        background: var(--bg);
+        /* 2px orange is the only visual anchor of the sheet; we drop the
+           other borders + radius (sheet is flush with the bottom edge). */
+        border: 0;
+        border-top: 2px solid var(--accent);
+        border-radius: 0;
+        box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5);
+        z-index: var(--dc-z-menu);
+        /* Slide-up animation: triggered when hidden=false on open via a
+           one-shot CSS animation. Hide is done through [hidden]->display:none
+           with no reverse animation (cheap and good enough). */
+        animation: mobile-sheet-up var(--dc-dur-entrance) var(--dc-ease-out);
+    }
+    /* Row sizing is NOT player-scoped: the topbar kebab (#topbar-overflow-menu)
+       shares .overflow-menu-btn and wants the same touch-friendly rows on mobile.
+       The bottom-sheet positioning above stays player-scoped. */
+    .overflow-menu-btn {
+        min-height: 48px;
+        padding: var(--dc-space-3) var(--dc-space-4);
+        font-size: var(--dc-text-base);
+        gap: var(--dc-space-3);
+    }
+    .overflow-menu-icon {
+        width: 18px;
+        height: 18px;
+    }
+}
+@keyframes mobile-sheet-up {
+    from {
+        transform: translateY(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    #player-overflow-menu.overflow-menu {
+        animation: none;
+    }
+}

@@ -1,0 +1,164 @@
+/* =========================================================================
+   14a. INGEST PROGRESS BAR (thin strip at the top of the window, UX-02)
+   ----------------------------------------------------------------
+   A thin 2px strip along the top of the viewport. The main "not hung"
+   signal while parsing a 200+ file folder. Does not take layout space
+   (position: fixed, z-index above the header and the ingest overlay).
+   Three states via data-state.
+
+   z-index stack around ingest (tokens in tokens.css): --dc-z-ingest (overlay) <
+   the strip (+10). Base modals (--dc-z-modal..modal-top) are below the
+   overlay - they do not open during parsing (the header is under the
+   overlay, buttons are unavailable). Exception - unsupported-modal and
+   lazy-gps-load-modal: they get an inline --dc-z-ingest-modal in
+   index.html, since they show up during/after ingest and must be ABOVE
+   the overlay.
+   ========================================================================= */
+.ingest-progress-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    z-index: calc(
+        var(--dc-z-ingest) +
+        10
+    ); /* above .ingest-overlay (250) - otherwise the strip ends up behind the overlay's blur mask and the user never sees it. See the file header for the z-index stack. */
+    pointer-events: none;
+    background: transparent;
+    opacity: 0;
+    transition: opacity var(--dc-dur-base) var(--dc-ease);
+    overflow: hidden;
+}
+.ingest-progress-bar[data-state="indeterminate"],
+.ingest-progress-bar[data-state="determinate"] {
+    opacity: 1;
+}
+.ingest-progress-bar-fill {
+    height: 100%;
+    width: 0;
+    background: var(--accent);
+    transition: width var(--dc-dur-slow) var(--dc-ease);
+}
+.ingest-progress-bar[data-state="determinate"] .ingest-progress-bar-fill {
+    /* width is set inline via JS: setIngestProgress({done, total}). */
+}
+/* Indeterminate: the slider bounces back and forth, same as in ingest-overlay below. */
+.ingest-progress-bar[data-state="indeterminate"] .ingest-progress-bar-fill {
+    width: 30%;
+    animation: ingest-progress-indef 1.4s linear infinite;
+    transition: none;
+}
+@keyframes ingest-progress-indef {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(400%);
+    }
+}
+
+/* =========================================================================
+   14b. INGEST OVERLAY (blocks the UI while processing a folder)
+   ----------------------------------------------------------------
+   A fullscreen mask with a spinner, progress text and a Cancel button.
+   Z-index is ABOVE drop-overlay (so a repeat drop during an active ingest
+   doesn't swap the UI back - the user sees "parsing in progress" instead of
+   "drop here"). The drag/drop events over the ingest overlay are still
+   handled: window listeners queue the drop, ingestFiles processes it.
+   ========================================================================= */
+.ingest-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: var(--dc-z-ingest);
+    font-family: var(--dc-font-body);
+}
+.ingest-overlay[hidden] {
+    display: none;
+}
+
+.ingest-overlay-card {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-lg);
+    padding: var(--dc-space-5) var(--dc-space-6);
+    min-width: 320px;
+    max-width: 440px;
+    color: var(--fg);
+    box-shadow: var(--dc-shadow-popup);
+    text-align: center;
+}
+
+/* A pure-CSS spinner - a circle with a gap, rotating. Uses --accent
+   (orange by design) on a dark --border ring. */
+.ingest-overlay-spinner {
+    width: 36px;
+    height: 36px;
+    margin: 0 auto var(--dc-space-3);
+    border-radius: 50%;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    animation: ingest-spin 0.9s linear infinite;
+}
+@keyframes ingest-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+/* WCAG 2.3.3: a continuously spinning element is exactly the motion vestibular-
+   sensitive users opt out of. Kill the rotation; the static gapped ring still
+   reads as a busy hint. One rule covers the ingest overlay AND the buffering
+   overlay (shared .ingest-overlay-spinner class). */
+@media (prefers-reduced-motion: reduce) {
+    .ingest-overlay-spinner {
+        animation: none;
+    }
+}
+
+.ingest-overlay-title {
+    font-family: var(--dc-font-display);
+    font-size: var(--dc-text-xl);
+    letter-spacing: var(--dc-tracking-tight);
+    margin-bottom: var(--dc-space-1);
+    color: var(--fg);
+}
+
+.ingest-overlay-status {
+    font-size: var(--dc-text-sm);
+    color: var(--fg-dim);
+    margin-bottom: var(--dc-space-1);
+    font-variant-numeric: tabular-nums;
+    /* Reserve one text line so the card does not jump when the status text is
+       empty. The token is a unitless line-height ratio, not a length - a bare
+       var() here is invalid and gets dropped; multiply by 1em to get the
+       actual line box height. */
+    min-height: calc(1em * var(--dc-leading-snug));
+    line-height: var(--dc-leading-snug);
+}
+
+.ingest-overlay-queue {
+    font-size: var(--dc-text-xs);
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: var(--dc-space-3);
+}
+.ingest-overlay-queue[hidden] {
+    display: none;
+}
+
+.ingest-overlay-actions {
+    display: flex;
+    justify-content: center;
+    margin-top: var(--dc-space-2);
+}
+/* Slightly wider than the default .dc-btn so the lone Cancel reads as a
+   deliberate, tappable target on the full-screen overlay. */
+.ingest-overlay-actions .dc-btn {
+    padding: var(--dc-space-2) var(--dc-space-5);
+}

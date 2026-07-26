@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>dashcamigo - Add your dashcam</title>
+    <!-- One physical URL with a 12-language switcher inside (article[data-lang]
+         blocks), same shape as public/privacy.html. No hreflang: the switcher
+         swaps content in place, the URL stays /add-my-camera. Canonical points
+         at the extension-less form (CF Pages 308-redirects /add-my-camera.html
+         to /add-my-camera). -->
+    <link rel="canonical" href="https://dashcamigo.app/add-my-camera">
+    <meta name="description" content="Help us add support for your dashcam: send the list of files on your memory card - no video needed. One click inside dashcamigo, or a single command if the app can't open your card.">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="alternate icon" href="/favicon.ico" sizes="any">
+    <link rel="stylesheet" href="/privacy.css">
+</head>
+<body>
+    <!-- Lang switcher: endonym on each button so a user finds their language
+         regardless of the current locale. Order matches privacy.html. -->
+    <div class="lang-switcher" role="tablist" aria-label="Language">
+        <button type="button" data-set-lang="de" role="tab" aria-selected="false">Deutsch</button>
+        <button type="button" data-set-lang="en" class="active" role="tab" aria-selected="true">English</button>
+        <button type="button" data-set-lang="es" role="tab" aria-selected="false">Español</button>
+        <button type="button" data-set-lang="fr" role="tab" aria-selected="false">Français</button>
+        <button type="button" data-set-lang="pl" role="tab" aria-selected="false">Polski</button>
+        <button type="button" data-set-lang="pt" role="tab" aria-selected="false">Português</button>
+        <button type="button" data-set-lang="ru" role="tab" aria-selected="false">Русский</button>
+        <button type="button" data-set-lang="zh" role="tab" aria-selected="false">中文</button>
+        <button type="button" data-set-lang="ja" role="tab" aria-selected="false">日本語</button>
+        <button type="button" data-set-lang="ko" role="tab" aria-selected="false">한국어</button>
+    </div>
+
+    <main>
+        <!-- EN: source of truth. -->
+        <article data-lang="en">
+            <h1>Help us add your dashcam</h1>
+            <p>
+                dashcamigo reads many dashcams, and the list keeps growing — we add new ones from
+                real recordings people send us. If yours isn't supported yet, here's how to help.
+            </p>
+
+            <h2>The easy way</h2>
+            <ol>
+                <li>Open <a href="/">dashcamigo</a> and load your memory card — plug it into your computer, then pick the card's folder.</li>
+                <li>Open <strong>Report a problem</strong> (in the menu; it also pops up on its own if we couldn't read the card) and choose <strong>Download the report</strong>. That saves a small text report — just the names, sizes and folder layout of the files on your card. No video, no location.</li>
+                <li>Email the report to <a href="mailto:feedback@dashcamigo.app">feedback@dashcamigo.app</a> and tell us the brand and model of your dashcam (and the firmware version, if you know it).</li>
+            </ol>
+            <p>Open the report and check it before sending — it has no video and no GPS.</p>
+
+            <h2>If dashcamigo can't open your card</h2>
+            <p>
+                Some phones can't pick a card folder (iPhone, for one), or the card won't open in
+                the app. Then make the list yourself — it's one command — and send us the file the
+                same way.
+            </p>
+            <h3>Windows</h3>
+            <ol>
+                <li>Open the card, click the address bar, type <code>cmd</code> and press Enter.</li>
+                <li>Paste <code>tree /F /A &gt; "%USERPROFILE%\Downloads\dashcam.txt"</code> and press Enter.</li>
+                <li>The file <code>dashcam.txt</code> appears in your Downloads folder.</li>
+            </ol>
+            <h3>macOS</h3>
+            <ol>
+                <li>Open Terminal, type <code>cd </code> (with a space), drag the card's icon into the window, press Enter.</li>
+                <li>Paste <code>find . | sort &gt; ~/Downloads/dashcam.txt</code> and press Enter.</li>
+                <li>The file appears in your Downloads folder.</li>
+            </ol>
+            <h3>Linux</h3>
+            <ol>
+                <li>Open a terminal in the card's folder.</li>
+                <li>Run <code>find . | sort &gt; ~/dashcam.txt</code>.</li>
+                <li>The file appears in your home folder.</li>
+            </ol>
+
+            <h2>What helps most</h2>
+            <ul>
+                <li>Brand and model of your dashcam (as printed on the box or shown in its menu).</li>
+                <li>How many cameras it has — front only, front + rear, interior, and so on.</li>
+                <li>Firmware version, if you can find it (usually in the dashcam's settings).</li>
+                <li>For some dashcams we'll ask for one short clip afterwards — a single real file is often all it takes.</li>
+            </ul>
+
+            <a href="/" class="home-link">← Back to dashcamigo</a>
+        </article>
+
+        <!-- RU: first-class, no prevails disclaimer. -->
+        <article data-lang="ru" hidden>
+            <h1>Помоги добавить твой регистратор</h1>
+            <p>
+                dashcamigo понимает много регистраторов, и список растёт — новые мы добавляем по
+                реальным записям, которые нам присылают. Если твоего пока нет, вот как помочь.
+            </p>
+
+            <h2>Простой способ</h2>
+            <ol>
+                <li>Открой <a href="/">dashcamigo</a> и загрузи карту памяти — вставь её в компьютер и выбери папку карты.</li>
+                <li>Открой <strong>Сообщить о проблеме</strong> (в меню; оно и само всплывёт, если карту прочитать не удалось) и выбери <strong>Скачать отчёт</strong>. Так сохранится небольшой текстовый отчёт — только имена, размеры и структура папок с файлами на твоей карте. Без видео и без координат.</li>
+                <li>Отправь отчёт на <a href="mailto:feedback@dashcamigo.app">feedback@dashcamigo.app</a> и напиши марку и модель регистратора (и версию прошивки, если знаешь).</li>
+            </ol>
+            <p>Открой отчёт и проверь перед отправкой — ни видео, ни GPS в нём нет.</p>
+
+            <h2>Если dashcamigo не открывает карту</h2>
+            <p>
+                Некоторые телефоны не дают выбрать папку карты (тот же iPhone), или карта не
+                открывается в приложении. Тогда собери список сам — это одна команда — и пришли
+                файл так же.
+            </p>
+            <h3>Windows</h3>
+            <ol>
+                <li>Открой карту, кликни в адресную строку, набери <code>cmd</code> и нажми Enter.</li>
+                <li>Вставь <code>tree /F /A &gt; "%USERPROFILE%\Downloads\dashcam.txt"</code> и нажми Enter.</li>
+                <li>Файл <code>dashcam.txt</code> появится в папке "Загрузки".</li>
+            </ol>
+            <h3>macOS</h3>
+            <ol>
+                <li>Открой Терминал, набери <code>cd </code> (с пробелом), перетащи значок карты в окно, нажми Enter.</li>
+                <li>Вставь <code>find . | sort &gt; ~/Downloads/dashcam.txt</code> и нажми Enter.</li>
+                <li>Файл появится в папке "Загрузки".</li>
+            </ol>
+            <h3>Linux</h3>
+            <ol>
+                <li>Открой терминал в папке карты.</li>
+                <li>Выполни <code>find . | sort &gt; ~/dashcam.txt</code>.</li>
+                <li>Файл появится в домашней папке.</li>
+            </ol>
+
+            <h2>Что помогает больше всего</h2>
+            <ul>
+                <li>Марка и модель регистратора (как на коробке или в меню).</li>
+                <li>Сколько камер — только передняя, передняя + задняя, салонная и так далее.</li>
+                <li>Версия прошивки, если найдёшь (обычно в настройках регистратора).</li>
+                <li>Для некоторых регистраторов потом попросим короткую запись — часто одного реального файла достаточно.</li>
+            </ul>
+
+            <a href="/" class="home-link">← Вернуться в dashcamigo</a>
+        </article>
+        <article data-lang="de" hidden>
+        <p class="muted prevails">Wenn diese Übersetzung und die englische Version voneinander abweichen, gilt die <a href="?lang=en">englische Version</a>.</p>
+        <h1>Hilf uns, deine Dashcam hinzuzufügen</h1>
+        <p>dashcamigo liest viele Dashcams, und die Liste wächst ständig — neue kommen aus echten Aufnahmen dazu, die uns Leute schicken. Wird deine noch nicht unterstützt, kannst du so helfen.</p>
+        <h2>Der einfache Weg</h2>
+        <ol>
+        <li>Öffne <a href="/">dashcamigo</a> und lade deine Speicherkarte — steck sie in deinen Computer und wähl dann den Ordner der Karte.</li>
+        <li>Öffne <strong>Problem melden</strong> (im Menü; es erscheint auch von selbst, wenn wir die Karte nicht lesen konnten) und wähl <strong>Bericht herunterladen</strong>. Das speichert einen kleinen Textbericht — nur die Namen, Größen und Ordnerstruktur der Dateien auf deiner Karte. Kein Video, kein Standort.</li>
+        <li>Schick den Bericht per E-Mail an <a href="mailto:feedback@dashcamigo.app">feedback@dashcamigo.app</a> und nenn uns Marke und Modell deiner Dashcam (und die Firmware-Version, falls du sie kennst).</li>
+        </ol>
+        <p>Öffne den Bericht und prüf ihn vor dem Senden — er enthält kein Video und kein GPS.</p>
+        <h2>Wenn dashcamigo deine Karte nicht öffnen kann</h2>
+        <p>Manche Handys können keinen Kartenordner auswählen (das iPhone zum Beispiel), oder die Karte lässt sich in der App nicht öffnen. Dann erstell die Liste selbst — mit einem einzigen Befehl — und schick uns die Datei auf demselben Weg.</p>
+        <h3>Windows</h3>
+        <ol>
+        <li>Öffne die Karte, klick in die Adressleiste, tippe <code>cmd</code> und drück Enter.</li>
+        <li>Füg <code>tree /F /A > "%USERPROFILE%\Downloads\dashcam.txt"</code> ein und drück Enter.</li>
+        <li>Die Datei <code>dashcam.txt</code> erscheint in deinem Downloads-Ordner.</li>
+        </ol>
+        <h3>macOS</h3>
+        <ol>
+        <li>Öffne das Terminal, tippe <code>cd </code> (mit Leerzeichen), zieh das Symbol der Karte ins Fenster und drück Enter.</li>
+        <li>Füg <code>find . | sort > ~/Downloads/dashcam.txt</code> ein und drück Enter.</li>
+        <li>Die Datei erscheint in deinem Downloads-Ordner.</li>
+        </ol>
+        <h3>Linux</h3>
+        <ol>
+        <li>Öffne ein Terminal im Ordner der Karte.</li>
+        <li>Führe <code>find . | sort > ~/dashcam.txt</code> aus.</li>
+        <li>Die Datei erscheint in deinem Home-Ordner.</li>
+        </ol>
+        <h2>Was am meisten hilft</h2>
+        <ul>
+        <li>Marke und Modell deiner Dashcam (wie auf der Verpackung aufgedruckt oder im Menü angezeigt).</li>
+        <li>Wie viele Kameras sie hat — nur vorne, vorne + hinten, innen und so weiter.</li>
+        <li>Firmware-Version, falls du sie findest (meist in den Einstellungen der Dashcam).</li>
+        <li>Bei manchen Dashcams bitten wir dich danach um einen kurzen Clip — oft reicht schon eine einzige echte Datei.</li>
+        </ul>
+        <a href="/" class="home-link">← Zurück zu dashcamigo</a>
+        </article>
+
+        <article data-lang="es" hidden>
+        <p class="muted prevails">Si esta traducción y la versión en inglés no coinciden, prevalece la <a href="?lang=en">versión en inglés</a>.</p>
+        <h1>Ayúdanos a añadir tu cámara de coche</h1>
+        <p>dashcamigo lee muchas cámaras de coche, y la lista sigue creciendo — añadimos nuevas a partir de grabaciones reales que nos envía la gente. Si la tuya todavía no es compatible, así puedes ayudar.</p>
+        <h2>La forma fácil</h2>
+        <ol>
+        <li>Abre <a href="/">dashcamigo</a> y carga tu tarjeta de memoria — conéctala a tu ordenador y luego elige la carpeta de la tarjeta.</li>
+        <li>Abre <strong>Reportar un problema</strong> (en el menú; también aparece por su cuenta si no pudimos leer la tarjeta) y elige <strong>Descargar el informe</strong>. Eso guarda un pequeño informe de texto — solo los nombres, tamaños y la estructura de carpetas de los archivos de tu tarjeta. Sin vídeo ni ubicación.</li>
+        <li>Envía el informe por correo a <a href="mailto:feedback@dashcamigo.app">feedback@dashcamigo.app</a> y dinos la marca y el modelo de tu cámara de coche (y la versión del firmware, si la sabes).</li>
+        </ol>
+        <p>Abre el informe y revísalo antes de enviarlo — no tiene vídeo ni GPS.</p>
+        <h2>Si dashcamigo no puede abrir tu tarjeta</h2>
+        <p>Algunos teléfonos no pueden elegir una carpeta de la tarjeta (el iPhone, por ejemplo), o la tarjeta no se abre en la app. En ese caso, crea la lista tú mismo — es un solo comando — y envíanos el archivo de la misma forma.</p>
+        <h3>Windows</h3>
+        <ol>
+        <li>Abre la tarjeta, haz clic en la barra de direcciones, escribe <code>cmd</code> y pulsa Enter.</li>
+        <li>Pega <code>tree /F /A > "%USERPROFILE%\Downloads\dashcam.txt"</code> y pulsa Enter.</li>
+        <li>El archivo <code>dashcam.txt</code> aparece en tu carpeta de Descargas.</li>
+        </ol>
+        <h3>macOS</h3>
+        <ol>
+        <li>Abre la Terminal, escribe <code>cd </code> (con un espacio), arrastra el icono de la tarjeta a la ventana y pulsa Enter.</li>
+        <li>Pega <code>find . | sort > ~/Downloads/dashcam.txt</code> y pulsa Enter.</li>
+        <li>El archivo aparece en tu carpeta de Descargas.</li>
+        </ol>
+        <h3>Linux</h3>
+        <ol>
+        <li>Abre una terminal en la carpeta de la tarjeta.</li>
+        <li>Ejecuta <code>find . | sort > ~/dashcam.txt</code>.</li>
+        <li>El archivo aparece en tu carpeta personal.</li>
+        </ol>
+        <h2>Lo que más ayuda</h2>
+        <ul>
+        <li>La marca y el modelo de tu cámara de coche (como aparece en la caja o en su menú).</li>
+        <li>Cuántas cámaras tiene — solo frontal, frontal + trasera, interior, y así.</li>
+        <li>La versión del firmware, si la encuentras (normalmente en los ajustes de la cámara de coche).</li>
+        <li>Para algunas cámaras de coche te pediremos un clip corto después — con un solo archivo real suele bastar.</li>
+        </ul>
+        <a href="/" class="home-link">← Volver a dashcamigo</a>
+        </article>
+
+        <article data-lang="fr" hidden>
+        <p class="muted prevails">En cas de divergence entre cette traduction et la version anglaise, la <a href="?lang=en">version anglaise</a> prévaut.</p>
+        <h1>Aide-nous à ajouter ta dashcam</h1>
+        <p>dashcamigo lit beaucoup de dashcams, et la liste s'allonge — on en ajoute de nouvelles à partir des enregistrements réels qu'on nous envoie. Si la tienne n'est pas encore prise en charge, voici comment aider.</p>
+        <h2>La méthode simple</h2>
+        <ol>
+        <li>Ouvre <a href="/">dashcamigo</a> et charge ta carte mémoire — branche-la sur ton ordinateur, puis choisis le dossier de la carte.</li>
+        <li>Ouvre <strong>Signaler un problème</strong> (dans le menu ; ça apparaît aussi tout seul si on n'a pas réussi à lire la carte) et choisis <strong>Télécharger le rapport</strong>. Ça enregistre un petit rapport texte — juste les noms de fichiers, les tailles et la structure des dossiers de ta carte. Pas de vidéo, pas de localisation.</li>
+        <li>Envoie le rapport par mail à <a href="mailto:feedback@dashcamigo.app">feedback@dashcamigo.app</a> et indique-nous la marque et le modèle de ta dashcam (et la version du firmware, si tu la connais).</li>
+        </ol>
+        <p>Ouvre le rapport et vérifie-le avant de l'envoyer — il ne contient ni vidéo ni GPS.</p>
+        <h2>Si dashcamigo n'arrive pas à ouvrir ta carte</h2>
+        <p>Certains téléphones ne permettent pas de choisir le dossier d'une carte (l'iPhone, par exemple), ou la carte ne s'ouvre pas dans l'appli. Dans ce cas, fais la liste toi-même — c'est une seule commande — et envoie-nous le fichier de la même façon.</p>
+        <h3>Windows</h3>
+        <ol>
+        <li>Ouvre la carte, clique dans la barre d'adresse, tape <code>cmd</code> et appuie sur Entrée.</li>
+        <li>Colle <code>tree /F /A > "%USERPROFILE%\Downloads\dashcam.txt"</code> et appuie sur Entrée.</li>
+        <li>Le fichier <code>dashcam.txt</code> apparaît dans ton dossier Téléchargements.</li>
+        </ol>
+        <h3>macOS</h3>
+        <ol>
+        <li>Ouvre le Terminal, tape <code>cd </code> (avec un espace), fais glisser l'icône de la carte dans la fenêtre, appuie sur Entrée.</li>
+        <li>Colle <code>find . | sort > ~/Downloads/dashcam.txt</code> et appuie sur Entrée.</li>
+        <li>Le fichier apparaît dans ton dossier Téléchargements.</li>
+        </ol>
+        <h3>Linux</h3>
+        <ol>
+        <li>Ouvre un terminal dans le dossier de la carte.</li>
+        <li>Lance <code>find . | sort > ~/dashcam.txt</code>.</li>
+        <li>Le fichier apparaît dans ton dossier personnel.</li>
+        </ol>
+        <h2>Ce qui aide le plus</h2>
+        <ul>
+        <li>La marque et le modèle de ta dashcam (comme indiqué sur la boîte ou dans son menu).</li>
+        <li>Combien de caméras elle a — avant seule, avant + arrière, habitacle, et ainsi de suite.</li>
+        <li>La version du firmware, si tu la trouves (généralement dans les réglages de la dashcam).</li>
+        <li>Pour certaines dashcams, on demandera ensuite un court clip — un seul fichier réel suffit souvent.</li>
+        </ul>
+        <a href="/" class="home-link">← Retour à dashcamigo</a>
+        </article>
+
+        <article data-lang="pt" hidden>
+        <p class="muted prevails">Se esta tradução e a versão em inglês divergirem, vale a <a href="?lang=en">versão em inglês</a>.</p>
+        <h1>Ajude a adicionar sua dashcam</h1>
+        <p>O dashcamigo lê muitas dashcams, e a lista não para de crescer — adicionamos novas a partir de gravações reais que as pessoas nos enviam. Se a sua ainda não tem suporte, veja como ajudar.</p>
+        <h2>O jeito fácil</h2>
+        <ol>
+        <li>Abra o <a href="/">dashcamigo</a> e carregue seu cartão de memória — conecte-o ao computador e escolha a pasta do cartão.</li>
+        <li>Abra o <strong>Reportar um problema</strong> (no menu; ele também aparece sozinho se não conseguirmos ler o cartão) e escolha <strong>Baixar o relatório</strong>. Isso salva um pequeno relatório de texto — só com os nomes, tamanhos e a estrutura de pastas dos arquivos do seu cartão. Sem vídeo, sem localização.</li>
+        <li>Envie o relatório por e-mail para <a href="mailto:feedback@dashcamigo.app">feedback@dashcamigo.app</a> e conte a marca e o modelo da sua dashcam (e a versão do firmware, se você souber).</li>
+        </ol>
+        <p>Abra o relatório e confira antes de enviar — ele não tem vídeo nem GPS.</p>
+        <h2>Se o dashcamigo não conseguir abrir seu cartão</h2>
+        <p>Alguns celulares não conseguem escolher a pasta do cartão (o iPhone, por exemplo), ou o cartão simplesmente não abre no app. Nesse caso, faça a lista você mesmo — é um comando só — e mande o arquivo do mesmo jeito.</p>
+        <h3>Windows</h3>
+        <ol>
+        <li>Abra o cartão, clique na barra de endereços, digite <code>cmd</code> e pressione Enter.</li>
+        <li>Cole <code>tree /F /A > "%USERPROFILE%\Downloads\dashcam.txt"</code> e pressione Enter.</li>
+        <li>O arquivo <code>dashcam.txt</code> aparece na sua pasta Downloads.</li>
+        </ol>
+        <h3>macOS</h3>
+        <ol>
+        <li>Abra o Terminal, digite <code>cd </code> (com um espaço), arraste o ícone do cartão para a janela e pressione Enter.</li>
+        <li>Cole <code>find . | sort > ~/Downloads/dashcam.txt</code> e pressione Enter.</li>
+        <li>O arquivo aparece na sua pasta Downloads.</li>
+        </ol>
+        <h3>Linux</h3>
+        <ol>
+        <li>Abra um terminal na pasta do cartão.</li>
+        <li>Execute <code>find . | sort > ~/dashcam.txt</code>.</li>
+        <li>O arquivo aparece na sua pasta pessoal.</li>
+        </ol>
+        <h2>O que ajuda mais</h2>
+        <ul>
+        <li>Marca e modelo da sua dashcam (como está escrito na caixa ou aparece no menu dela).</li>
+        <li>Quantas câmeras ela tem — só frontal, frontal + traseira, interna, e assim por diante.</li>
+        <li>Versão do firmware, se você encontrar (geralmente nas configurações da dashcam).</li>
+        <li>Para algumas dashcams vamos pedir um clipe curto depois — muitas vezes um único arquivo real já basta.</li>
+        </ul>
+        <a href="/" class="home-link">← Voltar ao dashcamigo</a>
+        </article>
+
+        <article data-lang="pl" hidden>
+        <p class="muted prevails">W przypadku rozbieżności między tym tłumaczeniem a wersją angielską, decydująca jest <a href="?lang=en">wersja angielska</a>.</p>
+        <h1>Pomóż nam dodać twój wideorejestrator</h1>
+        <p>dashcamigo rozumie wiele wideorejestratorów, a lista wciąż rośnie — nowe dodajemy na podstawie prawdziwych nagrań, które do nas trafiają. Jeśli twojego jeszcze nie ma na liście, oto jak pomóc.</p>
+        <h2>Prosty sposób</h2>
+        <ol>
+        <li>Otwórz <a href="/">dashcamigo</a> i wczytaj kartę pamięci — włóż ją do komputera i wskaż folder karty.</li>
+        <li>Otwórz <strong>Zgłoś problem</strong> (w menu; pojawi się też sam, jeśli nie uda nam się odczytać karty) i wybierz <strong>Pobierz raport</strong>. Zapisze to mały plik tekstowy — tylko nazwy, rozmiary i układ folderów z plikami na twojej karcie. Bez wideo, bez lokalizacji.</li>
+        <li>Wyślij raport na <a href="mailto:feedback@dashcamigo.app">feedback@dashcamigo.app</a> i podaj markę oraz model wideorejestratora (a także wersję oprogramowania, jeśli ją znasz).</li>
+        </ol>
+        <p>Otwórz raport i sprawdź go przed wysłaniem — nie ma w nim wideo ani GPS.</p>
+        <h2>Jeśli dashcamigo nie może otworzyć twojej karty</h2>
+        <p>Niektóre telefony nie potrafią wskazać folderu karty (choćby iPhone) albo karta nie otwiera się w aplikacji. Wtedy zrób listę samodzielnie — to jedno polecenie — i wyślij nam plik w ten sam sposób.</p>
+        <h3>Windows</h3>
+        <ol>
+        <li>Otwórz kartę, kliknij pasek adresu, wpisz <code>cmd</code> i naciśnij Enter.</li>
+        <li>Wklej <code>tree /F /A > "%USERPROFILE%\Downloads\dashcam.txt"</code> i naciśnij Enter.</li>
+        <li>Plik <code>dashcam.txt</code> pojawi się w folderze Pobrane.</li>
+        </ol>
+        <h3>macOS</h3>
+        <ol>
+        <li>Otwórz Terminal, wpisz <code>cd </code> (ze spacją), przeciągnij ikonę karty do okna, naciśnij Enter.</li>
+        <li>Wklej <code>find . | sort > ~/Downloads/dashcam.txt</code> i naciśnij Enter.</li>
+        <li>Plik pojawi się w folderze Pobrane.</li>
+        </ol>
+        <h3>Linux</h3>
+        <ol>
+        <li>Otwórz terminal w folderze karty.</li>
+        <li>Uruchom <code>find . | sort > ~/dashcam.txt</code>.</li>
+        <li>Plik pojawi się w twoim folderze domowym.</li>
+        </ol>
+        <h2>Co pomaga najbardziej</h2>
+        <ul>
+        <li>Marka i model wideorejestratora (tak jak na pudełku albo w jego menu).</li>
+        <li>Ile ma kamer — tylko przednia, przednia + tylna, wnętrze i tak dalej.</li>
+        <li>Wersja oprogramowania, jeśli uda ci się ją znaleźć (zwykle w ustawieniach wideorejestratora).</li>
+        <li>Przy niektórych wideorejestratorach poprosimy potem o krótki klip — często wystarczy jeden prawdziwy plik.</li>
+        </ul>
+        <a href="/" class="home-link">← Powrót do dashcamigo</a>
+        </article>
+
+        <article data-lang="zh" hidden>
+        <p class="muted prevails">如果这份翻译与英文版本有出入，以<a href="?lang=en">英文版本</a>为准。</p>
+        <h1>帮我们添加你的行车记录仪</h1>
+        <p>dashcamigo 能读取很多行车记录仪，而且支持列表还在不断增长 — 我们会根据大家发来的真实录像添加新的型号。如果你的还不支持，下面就告诉你怎么帮忙。</p>
+        <h2>简单的办法</h2>
+        <ol>
+        <li>打开 <a href="/">dashcamigo</a>，加载你的存储卡 — 把卡插进电脑，然后选择卡里的文件夹。</li>
+        <li>打开 <strong>反馈问题</strong>（在菜单里；如果我们读不了这张卡，它也会自己弹出来），然后选择 <strong>下载报告</strong>。这会保存一个小小的文本报告 — 只有你卡里文件的名字、大小和文件夹结构。没有视频，也没有位置。</li>
+        <li>把报告发邮件到 <a href="mailto:feedback@dashcamigo.app">feedback@dashcamigo.app</a>，并告诉我们你行车记录仪的品牌和型号（如果你知道固件版本，也写上）。</li>
+        </ol>
+        <p>发送前先打开报告检查一下 — 里面没有视频，也没有 GPS。</p>
+        <h2>如果 dashcamigo 打不开你的卡</h2>
+        <p>有些手机没法选择卡里的文件夹（比如 iPhone），或者卡在应用里打不开。那就自己生成这个列表 — 只要一条命令 — 然后用同样的方式把文件发给我们。</p>
+        <h3>Windows</h3>
+        <ol>
+        <li>打开卡，点击地址栏，输入 <code>cmd</code> 然后按回车。</li>
+        <li>粘贴 <code>tree /F /A > "%USERPROFILE%\Downloads\dashcam.txt"</code> 然后按回车。</li>
+        <li>文件 <code>dashcam.txt</code> 会出现在你的下载文件夹里。</li>
+        </ol>
+        <h3>macOS</h3>
+        <ol>
+        <li>打开「终端」，输入 <code>cd </code>（带一个空格），把卡的图标拖进窗口，按回车。</li>
+        <li>粘贴 <code>find . | sort > ~/Downloads/dashcam.txt</code> 然后按回车。</li>
+        <li>文件会出现在你的下载文件夹里。</li>
+        </ol>
+        <h3>Linux</h3>
+        <ol>
+        <li>在卡的文件夹里打开一个终端。</li>
+        <li>运行 <code>find . | sort > ~/dashcam.txt</code>。</li>
+        <li>文件会出现在你的主目录里。</li>
+        </ol>
+        <h2>最有帮助的信息</h2>
+        <ul>
+        <li>你行车记录仪的品牌和型号（包装盒上印的，或者菜单里显示的）。</li>
+        <li>它有几个摄像头 — 只有前置、前置 + 后置、车内摄像头等等。</li>
+        <li>固件版本，如果你能找到的话（通常在行车记录仪的设置里）。</li>
+        <li>有些行车记录仪我们之后还会请你提供一小段视频 — 通常一个真实文件就够了。</li>
+        </ul>
+        <a href="/" class="home-link">← 返回 dashcamigo</a>
+        </article>
+
+        <article data-lang="ja" hidden>
+        <p class="muted prevails">この翻訳と英語版に食い違いがある場合は、<a href="?lang=en">英語版</a>が優先されます。</p>
+        <h1>ドライブレコーダーの追加にご協力ください</h1>
+        <p>dashcamigo は多くのドライブレコーダーに対応していて、その数は増え続けています — みなさんから送られてくる実際の録画をもとに、新しい機種を追加しています。あなたのがまだ対応していなければ、こうやって手伝えます。</p>
+        <h2>かんたんな方法</h2>
+        <ol>
+        <li><a href="/">dashcamigo</a> を開いてメモリーカードを読み込みます — カードをパソコンに挿して、カードのフォルダを選びます。</li>
+        <li><strong>問題を報告する</strong>（メニューにあります。カードを読み取れなかったときは自動でも表示されます）を開いて、<strong>レポートをダウンロード</strong>を選びます。カード内のファイルの名前・サイズ・フォルダ構成だけを収めた、小さなテキストのレポートが保存されます。動画も位置情報も含まれていません。</li>
+        <li>レポートを <a href="mailto:feedback@dashcamigo.app">feedback@dashcamigo.app</a> までメールで送り、ドライブレコーダーのメーカーと型番（わかればファームウェアのバージョンも）を教えてください。</li>
+        </ol>
+        <p>送る前にレポートを開いて確認してください — 動画も GPS も含まれていません。</p>
+        <h2>dashcamigo がカードを開けない場合</h2>
+        <p>スマホによってはカードのフォルダを選べないもの（たとえば iPhone）や、アプリでカードが開けないことがあります。そんなときは自分でリストを作ってください — コマンド1つです — そして同じ方法でファイルを送ってください。</p>
+        <h3>Windows</h3>
+        <ol>
+        <li>カードを開き、アドレスバーをクリックして <code>cmd</code> と入力し、Enter を押します。</li>
+        <li><code>tree /F /A > "%USERPROFILE%\Downloads\dashcam.txt"</code> を貼り付けて、Enter を押します。</li>
+        <li>ダウンロードフォルダに <code>dashcam.txt</code> というファイルができます。</li>
+        </ol>
+        <h3>macOS</h3>
+        <ol>
+        <li>ターミナルを開き、<code>cd </code>（末尾にスペース）と入力し、カードのアイコンをウインドウにドラッグして、Enter を押します。</li>
+        <li><code>find . | sort > ~/Downloads/dashcam.txt</code> を貼り付けて、Enter を押します。</li>
+        <li>ダウンロードフォルダにファイルができます。</li>
+        </ol>
+        <h3>Linux</h3>
+        <ol>
+        <li>カードのフォルダでターミナルを開きます。</li>
+        <li><code>find . | sort > ~/dashcam.txt</code> を実行します。</li>
+        <li>ホームフォルダにファイルができます。</li>
+        </ol>
+        <h2>いちばん役立つこと</h2>
+        <ul>
+        <li>ドライブレコーダーのメーカーと型番（箱に印刷されているもの、または本体のメニューに表示されるもの）。</li>
+        <li>カメラの数 — 前方のみ、前方＋後方、車内、などです。</li>
+        <li>ファームウェアのバージョン（見つかれば。たいていはドライブレコーダーの設定にあります）。</li>
+        <li>一部のドライブレコーダーでは、あとで短いクリップを1つお願いすることもあります — 実際のファイルが1つあれば足りることが多いです。</li>
+        </ul>
+        <a href="/" class="home-link">← dashcamigo に戻る</a>
+        </article>
+
+        <article data-lang="ko" hidden>
+                    <p class="muted prevails">본 번역과 영문 버전이 다를 경우 <a href="?lang=en">영문 버전</a>이 우선합니다.</p>
+                    <h1>블랙박스 추가를 도와주세요</h1>
+                    <p>
+                        dashcamigo는 많은 블랙박스를 읽고, 목록은 계속 늘어나요 — 사람들이 보내 주는 실제
+                        녹화로 새 기기를 추가하거든요. 아직 지원되지 않는다면, 이렇게 도와줄 수 있어요.
+                    </p>
+
+                    <h2>간단한 방법</h2>
+                    <ol>
+                        <li><a href="/">dashcamigo</a>를 열고 메모리 카드를 불러와요 — 컴퓨터에 꽂은 다음, 카드 폴더를 골라요.</li>
+                        <li><strong>문제 신고</strong>를 열고 (메뉴에 있어요; 카드를 읽지 못하면 저절로 뜨기도 해요) <strong>보고서 다운로드</strong>를 눌러요. 작은 텍스트 보고서가 저장돼요 — 카드에 있는 파일의 이름, 크기, 폴더 구조만 담겨 있어요. 영상도 없고, 위치도 없어요.</li>
+                        <li>보고서를 <a href="mailto:feedback@dashcamigo.app">feedback@dashcamigo.app</a>으로 보내고, 블랙박스 제조사와 모델명을 알려 주세요 (펌웨어 버전도 알면 함께요).</li>
+                    </ol>
+                    <p>보내기 전에 보고서를 열어서 확인해요 — 영상도 GPS도 없어요.</p>
+
+                    <h2>dashcamigo가 카드를 열지 못한다면</h2>
+                    <p>
+                        어떤 폰은 카드 폴더를 고를 수 없거나 (예를 들면 아이폰), 카드가 앱에서 열리지 않아요.
+                        그럴 땐 목록을 직접 만들어요 — 명령어 하나면 돼요 — 그리고 같은 방법으로 파일을 보내
+                        주세요.
+                    </p>
+                    <h3>Windows</h3>
+                    <ol>
+                        <li>카드를 열고, 주소 표시줄을 클릭한 다음 <code>cmd</code>를 입력하고 Enter를 눌러요.</li>
+                        <li><code>tree /F /A > "%USERPROFILE%\Downloads\dashcam.txt"</code>를 붙여넣고 Enter를 눌러요.</li>
+                        <li>다운로드 폴더에 <code>dashcam.txt</code> 파일이 생겨요.</li>
+                    </ol>
+                    <h3>macOS</h3>
+                    <ol>
+                        <li>터미널을 열고 <code>cd </code>를 입력한 다음 (뒤에 공백 포함), 카드 아이콘을 창으로 끌어다 놓고 Enter를 눌러요.</li>
+                        <li><code>find . | sort > ~/Downloads/dashcam.txt</code>를 붙여넣고 Enter를 눌러요.</li>
+                        <li>다운로드 폴더에 파일이 생겨요.</li>
+                    </ol>
+                    <h3>Linux</h3>
+                    <ol>
+                        <li>카드 폴더에서 터미널을 열어요.</li>
+                        <li><code>find . | sort > ~/dashcam.txt</code>를 실행해요.</li>
+                        <li>홈 폴더에 파일이 생겨요.</li>
+                    </ol>
+
+                    <h2>가장 도움이 되는 것</h2>
+                    <ul>
+                        <li>블랙박스 제조사와 모델명 (상자에 적혀 있거나 메뉴에 표시돼요).</li>
+                        <li>카메라가 몇 개인지 — 전방만, 전방 + 후방, 실내 등등.</li>
+                        <li>펌웨어 버전 (찾을 수 있다면 — 보통 블랙박스 설정에 있어요).</li>
+                        <li>어떤 블랙박스는 나중에 짧은 영상 하나를 부탁드려요 — 실제 파일 하나면 충분할 때가 많아요.</li>
+                    </ul>
+
+                    <a href="/" class="home-link">← dashcamigo로 돌아가기</a>
+                </article>
+
+    </main>
+
+    <script src="/doc-lang.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,354 @@
+/* =========================================================================
+   TOPBAR + BRAND MARK + ICON BUTTONS + THEME/LANG TOGGLES
+   ========================================================================= */
+.topbar {
+    /* The topbar follows the theme: dark elev on dark, white on light.
+       Text color via --fg also switches automatically.
+
+       Heights are tokenized: --dc-topbar-h (44px desktop min-height, used
+       by WCO overlay / export drawer / landing sticky) and
+       --dc-topbar-h-mobile (the taller real mobile height - safe-area
+       padding + burger row; used by the sidebar drawer). See tokens.css. */
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    padding: var(--dc-space-1) var(--dc-space-4);
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-3);
+    min-height: var(--dc-topbar-h);
+    box-sizing: border-box;
+    /* flex-wrap: nowrap (default flex) - overflow-bar.ts controls button
+       visibility via data-overflow-hidden. Without nowrap, buttons would
+       spill onto a second row on narrow windows, and overflow detection
+       (rect-based in overflow-bar) would stop firing.
+       We do NOT set overflow: hidden - that would clip child popovers
+       (.lang-menu, .overflow-menu), which are position:absolute
+       outside the header. Overflow-bar uses getBoundingClientRect, so
+       overflow:visible doesn't confuse it. */
+    flex-wrap: nowrap;
+    /* min-width: 0 is needed so the flex-item dc-mark with the long
+       "dashcamigo" wordmark can shrink in the header - otherwise it holds
+       its min-content width and prevents the rest of the flex row from shrinking. */
+    min-width: 0;
+    color: var(--fg);
+}
+
+/* Trips button. Hidden by default (shown only on mobile, see media query below). */
+.topbar-burger {
+    display: none;
+    width: var(--dc-iconbtn-touch);
+    height: var(--dc-iconbtn-touch);
+    padding: 0;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-sm);
+    color: var(--fg);
+    cursor: pointer;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+}
+.topbar-burger:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent);
+}
+.topbar-burger:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+.topbar-burger-icon {
+    width: 20px;
+    height: 20px;
+}
+
+/* Brand mark - lowercase wordmark + camera SVG.
+   The camera body inherits currentColor from .topbar (--fg, switches
+   with the theme); the lens is always orange (hardcoded in the SVG). */
+.dc-mark {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.22em;
+    font-family: var(--dc-font-brand);
+    font-weight: 700;
+    font-size: var(--dc-text-2xl);
+    line-height: 1;
+    /* Literal, not var(--dc-tracking-tight): the wordmark owns its tracking so a
+       later change to the shared token cannot loosen the mark. Space Grotesk is
+       set tight (-0.02em) to match the heavy, tight hero and mono accents. */
+    letter-spacing: -0.02em;
+    user-select: none;
+    text-transform: lowercase;
+    color: inherit;
+    flex-shrink: 0;
+}
+.dc-mark__icon {
+    width: 1.1em;
+    height: 1.1em;
+    flex-shrink: 0;
+}
+/* Pushes the topbar buttons to the right side of the bar. Messages live
+   in toasts and the bell drawer (see src/ui/notifications.ts). */
+.topbar-spacer {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Notifications bell: same look as other topbar icon buttons, plus a
+   red unread dot anchored to the top-right corner. */
+#notif-bell {
+    position: relative;
+}
+.notif-bell-dot {
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--err);
+    border: 2px solid var(--bg-elev);
+    pointer-events: none;
+}
+.notif-bell-dot[hidden] {
+    display: none;
+}
+
+/* UX-24: theme-toggle on the right of the header (left of lang-toggle -
+   theme is switched more often). Segmented control of 3 buttons
+   auto/light/dark, active one highlighted orange via [aria-pressed="true"].
+   The rightward shift comes from .topbar-spacer (flex:1) above; our block
+   lands right before the language toggle. */
+.theme-toggle {
+    display: inline-flex;
+    flex-shrink: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-sm);
+    overflow: hidden;
+}
+.theme-toggle-btn {
+    width: var(--dc-iconbtn-sm);
+    height: var(--dc-iconbtn-sm);
+    padding: 0;
+    background: transparent;
+    border: 0;
+    color: var(--fg-dim);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition:
+        background var(--dc-dur-fast) var(--dc-ease),
+        color var(--dc-dur-fast) var(--dc-ease);
+}
+.theme-toggle-btn + .theme-toggle-btn {
+    border-left: 1px solid var(--border);
+}
+.theme-toggle-btn:hover {
+    color: var(--fg);
+    background: var(--bg-hover);
+}
+.theme-toggle-btn[aria-pressed="true"] {
+    background: var(--accent);
+    color: var(--dc-black);
+}
+.theme-toggle-btn[aria-pressed="true"]:hover {
+    background: var(--accent-hot);
+    color: var(--dc-black);
+}
+.theme-toggle-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+/* The language switcher on the right of the header. Icon-only button, uses
+   the shared .topbar-iconbtn class (same as feedback-btn) so all header
+   buttons are the same 28x28 size. Lucide "languages" SVG icon inside. The
+   menu (popover downward) is filled dynamically from i18n.LANGS - built to
+   scale (>2 languages). The rightward shift comes from .topbar-spacer
+   (flex:1) above. */
+.lang-wrap {
+    position: relative;
+    flex-shrink: 0;
+}
+.lang-toggle[aria-expanded="true"] {
+    color: var(--fg);
+    border-color: var(--accent);
+}
+.lang-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    list-style: none;
+    margin: 0;
+    padding: var(--dc-space-1) 0;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-md);
+    box-shadow: var(--dc-shadow-popup);
+    min-width: 140px;
+    /* Above the export-panel drawer (z=50): the panel is fixed at z=50 in the
+       root stacking context, the topbar creates no stacking context, so this
+       popover sits in the same root context and z=8 lost to the panel - the
+       menu opened *behind* it. Stay below modals (100) and banners. */
+    z-index: var(--dc-z-header);
+}
+.lang-menu[hidden] {
+    display: none;
+}
+.lang-menu li {
+    padding: var(--dc-space-1) var(--dc-space-3);
+    cursor: pointer;
+    font-family: var(--dc-font-body);
+    font-size: var(--dc-text-sm);
+    color: var(--fg);
+    white-space: nowrap;
+    transition: background var(--dc-dur-fast) var(--dc-ease);
+}
+.lang-menu li:hover {
+    background: var(--bg-hover);
+}
+.lang-menu li.active {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    font-weight: 700;
+}
+
+/* ---------- icon-only header buttons (shared class) ---------- */
+.topbar-iconbtn {
+    /* Small icon-only topbar button (feedback, settings, notif, lang, kebab).
+       Size via the shared token (--dc-iconbtn-sm = 28), same as the theme
+       toggle, so the whole topbar control row reads as one height. The mobile
+       burger is intentionally a larger primary-nav target (--dc-iconbtn-touch
+       = 40); the secondary icons stay compact. */
+    width: var(--dc-iconbtn-sm);
+    height: var(--dc-iconbtn-sm);
+    padding: 0;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-sm);
+    color: var(--fg-dim);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition:
+        color var(--dc-dur-base) var(--dc-ease),
+        border-color var(--dc-dur-base) var(--dc-ease);
+}
+.topbar-iconbtn:hover {
+    color: var(--fg);
+    border-color: var(--accent);
+}
+.topbar-iconbtn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+/* Restore the HTML `hidden` attribute. .topbar-iconbtn sets `display: inline-flex`
+   which matches the same specificity as the browser-default `[hidden]` rule but
+   comes later in the cascade, so `hidden` would otherwise be a no-op. */
+.topbar-iconbtn[hidden] {
+    display: none;
+}
+
+/* Touch: secondary topbar controls (lang/theme/feedback/settings/bell/kebab)
+   jump from the compact 28px desktop density to the 40px touch floor. Keyed on
+   pointer:coarse - a narrow desktop window keeps 28px; only touch grows. When
+   the row no longer fits at 40px, overflow-bar.ts moves extras into the kebab. */
+@media (pointer: coarse) {
+    .topbar-iconbtn,
+    .theme-toggle-btn {
+        width: var(--dc-iconbtn-touch);
+        height: var(--dc-iconbtn-touch);
+    }
+}
+/* Pressed feedback - the only press signal on touch, where :hover never fires. */
+.topbar-iconbtn:active,
+.topbar-burger:active {
+    background: var(--bg-active);
+    color: var(--fg);
+}
+.theme-toggle-btn:active:not([aria-pressed="true"]) {
+    background: var(--bg-active);
+    color: var(--fg);
+}
+
+/* ---------- mobile: burger visible, title compact ---------- */
+@media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {
+    .topbar-burger {
+        display: flex;
+    }
+    /* While browsing (trips loaded, none active) the list is the full-screen
+       surface, so the toggle is pointless - hide it. It reappears on pick, and
+       the list collapses into it (see mobile-drawer.ts syncBrowseState). */
+    body.browsing .topbar-burger {
+        display: none;
+    }
+    .topbar {
+        /* Account for the notch / dynamic island. In portrait the notch eats
+           the top edge; in landscape it's the ear/punch-hole on the left/right.
+           max() with the base padding - inset 0 on devices without a safe
+           area does not shrink the base padding below it.
+           NOTE: padding-top/-bottom here + the 40px burger + 1px border
+           define --dc-topbar-h-mobile in tokens.css - keep them in sync. */
+        padding-top: max(8px, env(safe-area-inset-top));
+        padding-right: max(12px, env(safe-area-inset-right));
+        padding-bottom: var(--dc-space-2);
+        padding-left: max(12px, env(safe-area-inset-left));
+        gap: var(--dc-space-2);
+    }
+    .dc-mark {
+        font-size: var(--dc-text-xl);
+    }
+}
+
+/* Language list is a 12-item picker and a primary touch control; give its rows
+   the 44px touch floor the view-menu rows use, so adjacent wrong-locale taps are
+   less likely. Keyed on coarse pointer (not width): an iPad in portrait is touch
+   yet >=768px, matching the sort-controls/topbar-icons rationale - a width-only
+   query would leave touch tablets with mouse-density rows. */
+@media (pointer: coarse) {
+    .lang-menu li {
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        padding: var(--dc-space-2) var(--dc-space-3);
+    }
+}
+
+/* Cap the 12-locale language menu to the space below the topbar and scroll
+   inside. It drops DOWN from the topbar; with 12 touch rows (~528px) it runs off
+   the BOTTOM of a short landscape phone (~390px tall), leaving the lower locales
+   unreachable. Limit = viewport - the mobile topbar - a small gap. 100dvh tracks
+   the iOS URL-bar; in portrait the cap is far larger than the list and never bites. */
+@media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {
+    .lang-menu {
+        max-height: calc(100dvh - var(--dc-topbar-h-mobile) - var(--dc-space-3));
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+}
+
+/* ---------- compact dc-mark on narrow screens ----------
+   At <=480 (typical mobile portrait) the six header buttons + burger +
+   the "dashcamigo" wordmark don't fit even with the kebab. We hide the
+   wordmark text itself, keeping the camera icon - it still reads as the
+   brand mark on its own. The SVG icon comes via ::after on the span (the
+   wordmark itself is a text node right inside .dc-mark), so a separate
+   selector is only needed for the text-prop. */
+@media (max-width: 480px) {
+    .dc-mark {
+        /* Visually hide text nodes while keeping the svg camera. font-size: 0
+           on .dc-mark itself collapses the text node to 0 width, while the
+           svg has explicit width/height (1.1em) - but 1.1em of 0 is 0. We fix
+           this via overflow: visible + width on the svg in abs px. */
+        font-size: 0;
+        line-height: 0;
+        gap: 0;
+    }
+    .dc-mark__icon {
+        /* Restore the icon size independent of .dc-mark's font-size. */
+        width: 22px;
+        height: 22px;
+    }
+}

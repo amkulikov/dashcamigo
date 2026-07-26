@@ -1,0 +1,58 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`rvmi-extract / real-anonymized fixture > parses sample.mp4 (RegistratorViewer-exported AMBA2373 fragment) 1`] = `
+{
+  "records": [
+    {
+      "accelXg": -0.05859375,
+      "accelYg": -0.068359375,
+      "accelZg": 0,
+      "active": true,
+      "bearingDeg": 0,
+      "lat": 50,
+      "lon": 30,
+      "mp4Filename": "sample.mp4",
+      "speedMs": 0,
+      "unixSeconds": 1432928891.8185322,
+    },
+    {
+      "accelXg": -0.05859375,
+      "accelYg": -0.068359375,
+      "accelZg": 0,
+      "active": true,
+      "bearingDeg": 224,
+      "lat": 50.0001,
+      "lon": 30.0001,
+      "mp4Filename": "sample.mp4",
+      "speedMs": 0.3333333333333333,
+      "unixSeconds": 1432928892.0585322,
+    },
+    {
+      "accelXg": -0.05859375,
+      "accelYg": -0.126953125,
+      "accelZg": 0,
+      "active": true,
+      "bearingDeg": 220,
+      "lat": 50.0002,
+      "lon": 30.0002,
+      "mp4Filename": "sample.mp4",
+      "speedMs": 1.0555555555555556,
+      "unixSeconds": 1432928893.0585322,
+    },
+    {
+      "accelXg": -0.05859375,
+      "accelYg": -0.068359375,
+      "accelZg": 0,
+      "active": true,
+      "bearingDeg": 222,
+      "lat": 50.0003,
+      "lon": 30.0003,
+      "mp4Filename": "sample.mp4",
+      "speedMs": 2,
+      "unixSeconds": 1432928894.0785322,
+    },
+  ],
+  "skipped": [],
+  "videoStartUtcHint": 1432928891.8185322,
+}
+`;

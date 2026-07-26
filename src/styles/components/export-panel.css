@@ -1,0 +1,927 @@
+/* Export panel: right-side drawer on desktop, in-flow section on phones.
+   Visible only in export mode (body.export-mode). Contains quality,
+   GPS-overlays toggles, audio/gpmf/gpx checkboxes, fallback warn, Save.
+   On Save the section flips to progress, then to done. See src/ui/export-panel.ts.
+
+   Layout split: on a real desktop it is a fixed right drawer (the player
+   reserves margin-right for it, both stay visible). On phone-sized screens
+   it is NOT an overlay - it sits in the normal flow as the last child of
+   .viewer, directly after .player-wrap, and the viewer scrolls through
+   video -> trim bar -> chart (with range tabs) -> bar -> export options ->
+   Save. That way the bottom-sheet never covers the trim controls (the trim
+   bar and the range pull-tabs live in the player column) and landscape
+   phones are not eaten by a 360px drawer. The two layouts are partitioned by complementary media queries
+   that match the player/main.layout mobile trigger - see the blocks below. */
+
+/* On :root (not .export-panel) because the second consumer - the
+   margin-right reserve on .top-panel/.player-wrap below - is not a
+   descendant of the panel. */
+:root {
+    --dc-export-panel-w: 360px;
+}
+
+.export-panel {
+    position: fixed;
+    top: var(--dc-topbar-h);
+    right: 0;
+    bottom: 0;
+    width: var(--dc-export-panel-w);
+    max-width: 92vw;
+    z-index: var(--dc-z-drawer);
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-elev);
+    border-left: 1px solid var(--border);
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.18);
+    /* Slide-in animation. transform avoids reflowing the viewer column. */
+    transform: translateX(100%);
+    transition: transform var(--dc-dur-entrance) cubic-bezier(0.2, 0.8, 0.2, 1);
+    visibility: hidden;
+}
+
+body.export-mode .export-panel {
+    transform: translateX(0);
+    visibility: visible;
+}
+
+.export-panel[hidden] {
+    display: flex;
+}
+
+.export-panel__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--dc-space-3);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.export-panel__title {
+    margin: 0;
+    font-size: var(--dc-text-base);
+    font-weight: 600;
+    color: var(--fg);
+}
+
+.export-panel__close {
+    /* Fixed square like every other modal/panel close (it had only padding
+       before, so its size drifted with the icon). */
+    width: var(--dc-iconbtn);
+    height: var(--dc-iconbtn);
+    padding: 0;
+    background: transparent;
+    border: 0;
+    color: var(--fg-mute);
+    cursor: pointer;
+    border-radius: var(--dc-radius-sm);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.export-panel__close:hover {
+    background: var(--bg-hover);
+    color: var(--fg);
+}
+
+.export-panel__section {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--dc-space-3);
+}
+
+.export-panel__section[hidden] {
+    display: none;
+}
+
+/* Export-panel action buttons. Kept as their own classes (6 call sites incl.
+   the crop editor with different layout needs) but matched to the .dc-btn
+   primitive's spec - same geometry, focus ring and :disabled the bespoke set
+   used to skip. */
+.export-panel__primary-btn,
+.export-panel__secondary-btn {
+    width: 100%;
+    padding: var(--dc-space-2) var(--dc-space-4);
+    border-radius: var(--dc-radius-sm);
+    border: 1px solid transparent;
+    font-family: var(--dc-font-body);
+    font-size: var(--dc-text-md);
+    font-weight: 600;
+    line-height: var(--dc-leading-snug);
+    cursor: pointer;
+    margin-bottom: var(--dc-space-2);
+    transition:
+        background var(--dc-dur-fast) var(--dc-ease),
+        color var(--dc-dur-fast) var(--dc-ease),
+        border-color var(--dc-dur-fast) var(--dc-ease),
+        transform var(--dc-dur-fast) var(--dc-ease);
+}
+
+.export-panel__primary-btn:focus-visible,
+.export-panel__secondary-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.export-panel__primary-btn:disabled,
+.export-panel__secondary-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.export-panel__primary-btn {
+    background: var(--accent);
+    color: var(--dc-black);
+    border-color: var(--accent);
+}
+
+.export-panel__primary-btn:hover:not(:disabled) {
+    background: var(--accent-hot);
+    border-color: var(--accent-hot);
+}
+
+.export-panel__secondary-btn {
+    background: transparent;
+    color: var(--fg);
+    border-color: var(--border-strong);
+}
+
+.export-panel__secondary-btn:hover:not(:disabled) {
+    background: var(--bg-hover);
+    border-color: var(--accent);
+}
+
+/* Press feedback - mirrors .dc-btn:active. :hover never fires on touch and
+   base.css suppresses the OS tap flash, so without this the Save/Back CTAs gave
+   no press confirmation on a phone. */
+.export-panel__primary-btn:active:not(:disabled),
+.export-panel__secondary-btn:active:not(:disabled) {
+    transform: translateY(1px);
+}
+
+/* Grouped sections. Output / Quality / Speed / Export options / Overlays are
+   <fieldset> with a <legend>; the crop entry is a bare <div>. Normalize the
+   native fieldset chrome (which renders a dated notched border) to the design
+   system and give every group consistent spacing. min-width:0 defeats the
+   fieldset default min-inline-size:min-content, which otherwise blocks flex
+   children from shrinking inside the fixed-width drawer. */
+.export-panel__group {
+    margin: 0 0 var(--dc-space-3);
+    padding: 0;
+    border: 0;
+    min-width: 0;
+}
+
+fieldset.export-panel__group {
+    padding: var(--dc-space-2) var(--dc-space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-md);
+}
+
+.export-panel__group legend {
+    padding: 0 var(--dc-space-1);
+    font-size: var(--dc-text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: var(--dc-tracking-wide);
+    color: var(--fg-mute);
+}
+
+/* Output preset: native <select> themed to the design system, full-width in the
+   vertical panel. The custom W×H pair is revealed only for the "custom" preset.
+   The [hidden] override is required because inline-flex on the custom row would
+   otherwise win the specificity tie against the UA [hidden]{display:none}. */
+/* Width only - appearance from forms.css (shared select base). */
+.export-panel__output-select {
+    width: 100%;
+}
+
+.export-panel__output-custom {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--dc-space-1);
+    margin-top: var(--dc-space-2);
+}
+
+.export-panel__output-custom[hidden] {
+    display: none;
+}
+
+/* Width only - appearance from forms.css (shared number-input base). */
+.export-panel__output-custom input[type="number"] {
+    width: 64px;
+}
+
+.export-panel__output-sep {
+    color: var(--fg-mute);
+    font-size: var(--dc-text-sm);
+}
+
+/* Estimated-output block: a prominent size line over a muted
+   resolution · duration · codec line. tabular-nums keeps it from jittering as
+   the live estimate updates with Output / quality / range / speed. */
+.export-panel__estimate-size {
+    font-size: var(--dc-text-base);
+    font-weight: 600;
+    color: var(--fg);
+}
+
+.export-panel__estimate-details {
+    margin-top: var(--dc-space-1);
+    font-size: var(--dc-text-sm);
+    color: var(--fg-mute);
+    font-variant-numeric: tabular-nums;
+}
+
+/* GPS-track summary (gpx mode): stands in for the hidden video controls. A muted
+   caption (".gpx file, no video") over a prominent points · distance · length
+   line - same visual weight as the estimate block, tabular figures so the stats
+   do not jitter as the range drags. */
+.export-panel__gpx-summary {
+    padding: var(--dc-space-2) 0;
+}
+
+.export-panel__gpx-summary-caption {
+    font-size: var(--dc-text-sm);
+    color: var(--fg-mute);
+    margin-bottom: var(--dc-space-1);
+}
+
+.export-panel__gpx-summary-stats {
+    font-size: var(--dc-text-base);
+    font-weight: 600;
+    color: var(--fg);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Quality radios: one option per row, radio left of the label, sub-label
+   muted on the same line. Without this the labels render inline and wrap
+   mid-pair, scattering radios away from their text. */
+.export-panel__radio {
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+    margin-bottom: var(--dc-space-2);
+    font-size: var(--dc-text-md);
+    color: var(--fg);
+    cursor: pointer;
+}
+
+.export-panel__radio:last-child {
+    margin-bottom: 0;
+}
+
+.export-panel__radio input[type="radio"] {
+    margin: 0;
+    cursor: pointer;
+    flex-shrink: 0;
+    /* Brand orange, matching every checkbox in the panel (forms.css) instead of
+       the UA-default blue. */
+    accent-color: var(--accent);
+}
+.export-panel__radio input[type="radio"]:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.export-panel__radio-sub {
+    color: var(--fg-mute);
+}
+
+/* Map-scale slider row. Indented under the Map checkbox; dims when disabled
+   (Map overlay off). */
+.export-panel__slider {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-1);
+    margin: 0 0 var(--dc-space-2);
+    padding-left: var(--dc-space-5);
+    font-size: var(--dc-text-sm);
+    color: var(--fg);
+}
+
+.export-panel__slider.is-disabled {
+    opacity: 0.45;
+}
+
+.export-panel__slider-label {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--dc-space-2);
+}
+
+.export-panel__slider-val {
+    color: var(--fg-mute);
+    font-variant-numeric: tabular-nums;
+}
+
+.export-panel__slider input[type="range"] {
+    width: 100%;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+.export-panel__slider.is-disabled input[type="range"] {
+    cursor: default;
+}
+
+/* Inline checkboxes (audio / GPMF / GPX). Stack vertically with consistent
+   spacing. The checkbox itself uses the system default; the label sits on
+   the right of the input. */
+.export-panel__checkbox {
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+    margin-bottom: var(--dc-space-2);
+    font-size: var(--dc-text-md);
+    color: var(--fg);
+    cursor: pointer;
+}
+
+.export-panel__checkbox:last-child {
+    margin-bottom: 0;
+}
+
+.export-panel__checkbox input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
+}
+
+/* Disabled checkbox row (audio while the clip is sped up - audio is muted then). */
+.export-panel__checkbox.is-disabled,
+.export-panel__checkbox.is-disabled input[type="checkbox"] {
+    opacity: 0.45;
+    cursor: default;
+}
+
+/* Speed-up (timelapse) segmented selector: a wrapping row of factor chips. The
+   active factor fills with the accent; the rest are outline buttons. */
+.export-panel__segmented {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--dc-space-1);
+}
+
+.export-panel__seg-btn {
+    flex: 1 1 0;
+    min-width: 44px;
+    padding: var(--dc-space-1) var(--dc-space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-sm);
+    background: var(--bg);
+    color: var(--fg);
+    font-size: var(--dc-text-md);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+}
+
+.export-panel__seg-btn:hover {
+    background: var(--bg-hover);
+}
+/* Press feedback on touch (no :hover, OS flash suppressed). Momentary - the
+   selected chip keeps its .active accent fill. */
+.export-panel__seg-btn:active:not(.active) {
+    background: var(--bg-active);
+}
+
+.export-panel__seg-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--dc-black);
+}
+
+/* Small muted helper line under a control (the speed audio-mute note, crop hint). */
+.export-panel__note {
+    margin-top: var(--dc-space-2);
+    font-size: var(--dc-text-sm);
+    line-height: var(--dc-leading-normal);
+    color: var(--fg-mute);
+}
+
+/* Resulting clip length under the speed selector: full-contrast (it is a value
+   the user reads off), tabular figures so it does not jitter as the range drags. */
+.export-panel__speed-result {
+    color: var(--fg);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Crop entry button: a full-width secondary button sitting inline in the
+   options flow (its own group), so the trailing margin is dropped - the hint
+   below carries its own top margin. */
+.export-panel__crop-btn {
+    margin-bottom: 0;
+}
+
+.export-panel__progress-status {
+    font-size: var(--dc-text-md);
+    color: var(--fg);
+    margin-bottom: var(--dc-space-2);
+}
+
+.export-panel__progress-bar {
+    height: 6px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-pill);
+    overflow: hidden;
+    margin-bottom: var(--dc-space-2);
+}
+
+.export-panel__progress-fill {
+    height: 100%;
+    background: var(--accent);
+    width: 0;
+    transition: width var(--dc-dur-base) var(--dc-ease);
+}
+
+/* Indeterminate: the final disk-commit flush has no observable progress (native
+   FSA close() is opaque), so a slow multi-GB write to a memory card would leave
+   the bar frozen at ~100% and read as a hang. Run a looping sweep instead. */
+.export-panel__progress-bar--indeterminate .export-panel__progress-fill {
+    width: 35%;
+    transition: none;
+    animation: dc-export-indeterminate 1.4s ease-in-out infinite;
+}
+
+@keyframes dc-export-indeterminate {
+    0% {
+        transform: translateX(-120%);
+    }
+    100% {
+        transform: translateX(320%);
+    }
+}
+
+/* Live frames · ETA · bytes readout. tabular-nums stops the counters jittering;
+   min-height reserves the line so the layout does not jump between the fast
+   stream-copy path (blank) and the transcode path (populated). */
+.export-panel__progress-meta {
+    font-size: var(--dc-text-sm);
+    color: var(--fg-mute);
+    margin-bottom: var(--dc-space-3);
+    min-height: 1em;
+    font-variant-numeric: tabular-nums;
+}
+
+.export-panel__done-summary {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-md);
+    padding: var(--dc-space-2) var(--dc-space-3);
+    margin-bottom: var(--dc-space-3);
+    font-size: var(--dc-text-md);
+}
+
+.export-panel__done-summary p {
+    margin: 0 0 var(--dc-space-1);
+    color: var(--fg);
+}
+
+.export-panel__done-summary p:last-child {
+    margin-bottom: 0;
+}
+
+/* In-memory-blob warning (incognito FF/Safari). Tinted with the warn token so
+   it reads as caution, not a hard error, above the Save button. */
+.export-panel__warn {
+    font-size: var(--dc-text-sm);
+    line-height: var(--dc-leading-normal);
+    color: var(--warn);
+    border: 1px solid var(--warn);
+    border-radius: var(--dc-radius-md);
+    padding: var(--dc-space-2) var(--dc-space-3);
+    margin-bottom: var(--dc-space-3);
+}
+
+/* Hard-blocking variant (device cannot encode at this resolution): error tone,
+   shown alongside a disabled Save - not just caution. */
+.export-panel__warn.is-error {
+    color: var(--err);
+    border-color: var(--err);
+}
+
+/* Non-Chromium recommendation banner at the very top of the options view
+   (Firefox / Safari / iOS WebKit). Informational and clickable, NOT a warning -
+   so it uses the accent tint, not the warn token. Opens the download modal. */
+.export-panel__chromium-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+    width: 100%;
+    text-align: left;
+    font: inherit;
+    font-size: var(--dc-text-sm);
+    line-height: 1.35;
+    color: var(--fg);
+    background: color-mix(in srgb, var(--accent) 10%, var(--bg-elev));
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+    border-radius: var(--dc-radius-md);
+    padding: var(--dc-space-2) var(--dc-space-3);
+    margin-bottom: var(--dc-space-3);
+    cursor: pointer;
+}
+.export-panel__chromium-banner:hover {
+    background: color-mix(in srgb, var(--accent) 16%, var(--bg-elev));
+}
+.export-panel__chromium-banner-icon {
+    width: 16px;
+    height: 16px;
+    flex: none;
+    color: var(--accent);
+}
+.export-panel__chromium-banner-text {
+    flex: 1 1 auto;
+}
+.export-panel__chromium-banner-chev {
+    width: 15px;
+    height: 15px;
+    flex: none;
+    opacity: 0.7;
+}
+
+/* "Open in a Chromium browser" modal: short body + a grid of browser download
+   chips (icon + name, external links). */
+.chromium-modal-body {
+    margin: 0 0 var(--dc-space-3);
+    font-size: var(--dc-text-md);
+    line-height: 1.45;
+    color: var(--fg-dim);
+}
+.chromium-modal-grid {
+    list-style: none;
+    margin: 0 0 var(--dc-space-3);
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--dc-space-2);
+}
+.chromium-modal-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+    padding: var(--dc-space-2) var(--dc-space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-pill);
+    background: var(--bg);
+    color: var(--fg);
+    font-size: var(--dc-text-md);
+    font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.chromium-modal-chip:hover {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+    background: color-mix(in srgb, var(--accent) 8%, var(--bg));
+}
+.chromium-modal-chip svg {
+    width: 15px;
+    height: 15px;
+    flex: none;
+    opacity: 0.92;
+}
+
+/* Error-phase message: export failed, with a "Back to settings" button below. */
+.export-panel__error-status {
+    font-size: var(--dc-text-md);
+    color: var(--err);
+    margin-bottom: var(--dc-space-3);
+}
+
+/* Phone-sized screens: in-flow section, NOT an overlay. The breakpoint matches
+   the player + main.layout mobile trigger (max-width 767, or a short landscape
+   phone) so portrait and landscape behave the same and the desktop right-drawer
+   rules below never fight this layout.
+
+   The panel becomes position:static, so it lands in the normal flow as the last
+   child of .viewer (after .player-wrap). The viewer (overflow-y:auto on mobile)
+   owns the scroll; the user scrolls past the player to reach the options + Save.
+   Nothing covers the chart/scrubber where the export range is selected. */
+@media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {
+    .export-panel {
+        position: static;
+        width: 100%;
+        max-width: 100%;
+        height: auto;
+        max-height: none;
+        border-left: 0;
+        border-top: 1px solid var(--border);
+        border-radius: 0;
+        box-shadow: none;
+        transform: none;
+        visibility: visible;
+        z-index: auto;
+    }
+    /* Not in export-mode: take no flow space. Overrides the base
+       `.export-panel[hidden] { display: flex }` (which exists only for the
+       desktop slide animation) - in-flow that would leave an empty "Save clip"
+       block sitting under the player. */
+    .export-panel[hidden] {
+        display: none;
+    }
+    /* The visible phase section grows to its content; the viewer owns the
+       scroll, so no internal scrollbar that would crop the options list.
+       The section is the genuine bottom-docked content when scrolled, so pad
+       the bottom past the iOS home indicator (mirrors player-bar.css). */
+    .export-panel__section {
+        overflow-y: visible;
+        padding-bottom: max(var(--dc-space-3), env(safe-area-inset-bottom, 0px));
+    }
+    /* In export-mode let the player shrink to its content so the panel peeks
+       below it (discoverable) instead of sitting a full viewport down. Normal
+       mode keeps min-height:100% (see viewer.css) so the bar pins near the
+       bottom of the first screen. */
+    body.export-mode .player-wrap {
+        min-height: 0;
+    }
+}
+
+/* Sidebar hide animation in export-mode. The sidebar slides off-screen
+   to the left, giving the player area extra space. Phones are unaffected
+   (sidebar there is already a drawer, and the panel is in-flow). The
+   min-height:501 guard excludes landscape phones (height <=500) so they
+   take the in-flow layout above instead of the right drawer + margin-right.
+   Pairs complementarily with the phone media query above. */
+@media (min-width: 768px) and (min-height: 501px) {
+    body.export-mode .sidebar,
+    body.export-mode #sidebar-resize {
+        transform: translateX(-100%);
+        opacity: 0;
+        pointer-events: none;
+        transition:
+            transform var(--dc-dur-entrance) cubic-bezier(0.2, 0.8, 0.2, 1),
+            opacity var(--dc-dur-slow) var(--dc-ease);
+    }
+    .sidebar,
+    #sidebar-resize {
+        transition:
+            transform var(--dc-dur-entrance) cubic-bezier(0.2, 0.8, 0.2, 1),
+            opacity var(--dc-dur-slow) var(--dc-ease);
+    }
+
+    /* Reserve the fixed drawer's width on the in-flow player content so the
+       top-panel controls and player don't slide underneath it. Applied to
+       the children (not .viewer padding) so it holds regardless of whether
+       .viewer's container-type makes it the containing block for the drawer. */
+    body.export-mode .top-panel,
+    body.export-mode .player-wrap {
+        margin-right: var(--dc-export-panel-w);
+    }
+}
+
+/* Collapse the vacated sidebar + resize grid tracks so the player column
+   spans the full width (minus the reserved drawer). Without this the hidden
+   sidebar still holds its grid track and leaves an empty band on the left.
+   Scoped to the same desktop trigger as the drawer above (>=768 wide AND
+   >501 tall) so it never fights the single-column mobile grid: main.layout
+   switches to one column at <=767px OR on a short landscape phone, and there
+   the export panel is in-flow, not a drawer. The hidden sidebar stays
+   invisible via opacity:0 above even though its 0-width track lets content
+   overflow; .viewer paints over it (later in DOM, opaque background). */
+@media (min-width: 768px) and (min-height: 501px) {
+    body.export-mode main.layout {
+        grid-template-columns: 0 0 minmax(0, 1fr);
+    }
+}
+
+/* ===================== Overlay constructor ===================== */
+
+/* Sub-heading above each control cluster (Style / Preset / Widgets / Accent). */
+.export-panel__ov-subhead {
+    margin: var(--dc-space-3) 0 var(--dc-space-1);
+    font-size: var(--dc-text-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: var(--dc-tracking-caps);
+    color: var(--fg-dim);
+}
+
+/* Generic segmented control (style + map shape). */
+.export-panel__segment {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--dc-space-1);
+}
+
+.export-panel__segment button {
+    flex: 1 1 0;
+    min-width: 44px;
+    padding: var(--dc-space-1) var(--dc-space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-sm);
+    background: var(--bg);
+    color: var(--fg);
+    font-size: var(--dc-text-sm);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.export-panel__segment button:hover {
+    background: var(--bg-hover);
+}
+
+.export-panel__segment button.is-active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--dc-black);
+}
+
+/* Widget toggle list: a checkbox + a clickable name that expands its inline
+   settings (the inspector docks right under the row). */
+.export-panel__ov-widgets {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.export-panel__ov-row {
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+}
+
+.export-panel__ov-row input[type="checkbox"] {
+    /* Match the panel's other checkboxes (forms.css .export-panel__checkbox):
+       brand-orange tick + consistent size, not the browser's default blue. */
+    accent-color: var(--accent);
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    cursor: pointer;
+    flex: 0 0 auto;
+}
+
+.export-panel__ov-name {
+    flex: 1 1 auto;
+    text-align: left;
+    padding: var(--dc-space-1) var(--dc-space-2);
+    border: 1px solid transparent;
+    border-radius: var(--dc-radius-sm);
+    background: transparent;
+    color: var(--fg);
+    font-size: var(--dc-text-md);
+    cursor: pointer;
+}
+
+.export-panel__ov-name:hover {
+    background: var(--bg-hover);
+}
+/* Press feedback on touch (no :hover, OS flash suppressed). */
+.export-panel__ov-row:not(.is-disabled) .export-panel__ov-name:active {
+    background: var(--bg-active);
+}
+
+.export-panel__ov-row.is-selected .export-panel__ov-name {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.export-panel__ov-row.is-disabled {
+    opacity: 0.45;
+}
+
+.export-panel__ov-row.is-disabled .export-panel__ov-name {
+    cursor: default;
+}
+
+/* Accent swatches. */
+.export-panel__ov-accents {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--dc-space-2);
+    /* Clear the next control (the Scrim checkbox): without it the row sits flush
+       and the active swatch's box-shadow ring bleeds into the checkbox above it. */
+    margin-bottom: var(--dc-space-2);
+}
+
+.export-panel__ov-swatch {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 2px solid var(--border);
+    border-radius: var(--dc-radius-sm);
+    background: var(--swatch, #fff);
+    cursor: pointer;
+}
+
+.export-panel__ov-swatch.is-active {
+    border-color: var(--fg);
+    box-shadow:
+        0 0 0 2px var(--bg-elev),
+        0 0 0 3px var(--swatch, var(--accent));
+}
+
+/* Inline inspector: docked right under the expanded widget row (accordion). The
+   left accent edge ties it visually to the selected row above it. */
+.export-panel__ov-inspector {
+    margin: var(--dc-space-1) 0 var(--dc-space-2);
+    padding: var(--dc-space-2);
+    border: 1px solid var(--border);
+    border-left: 2px solid var(--accent);
+    border-radius: var(--dc-radius-md);
+    background: var(--bg-elev);
+}
+
+.export-panel__ov-inspector[hidden] {
+    display: none;
+}
+
+.export-panel__ov-inspector .export-panel__slider {
+    padding-left: 0;
+}
+
+/* Drag-to-position hint, in place of the removed X/Y sliders + align grid. */
+.export-panel__ov-hint {
+    margin-top: var(--dc-space-2);
+}
+
+.export-panel__ov-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-1);
+    margin-bottom: var(--dc-space-2);
+}
+
+.export-panel__ov-field-label {
+    font-size: var(--dc-text-sm);
+    color: var(--fg);
+}
+
+/* Brand focus ring for the overlay controls, matching the rest of the panel
+   (primary/secondary buttons + selects/checkboxes in forms.css). Without it
+   these new controls fell back to the browser default outline, out of step
+   with every other focusable control here. */
+.export-panel__segment button:focus-visible,
+.export-panel__ov-name:focus-visible,
+.export-panel__ov-swatch:focus-visible,
+.export-panel__ov-row input[type="checkbox"]:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* Touch targets. The compact overlay controls are sized for a mouse; on a
+   coarse pointer they grow to a finger-friendly tap size (~44px, the bar the
+   player-bar/overflow already use). Deliberately keyed on `pointer: coarse`,
+   not the width breakpoints above: those drive LAYOUT, but tap size is a
+   modality concern - an iPad in portrait is >=768px (desktop layout) yet still
+   touch, and the width queries would leave its controls mouse-sized. */
+@media (pointer: coarse) {
+    .export-panel__close {
+        width: var(--dc-iconbtn-touch);
+        height: var(--dc-iconbtn-touch);
+    }
+    .export-panel__segment button,
+    .export-panel__seg-btn {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    /* The panel's main action CTAs (Save clip / Back / Download / Cancel) - match
+       the 44px floor the segment/preset buttons above them use, not the 40px
+       icon token, so the primary Save isn't shorter than the chips. */
+    .export-panel__primary-btn,
+    .export-panel__secondary-btn {
+        min-height: 44px;
+    }
+    .export-panel__ov-name {
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+    }
+    .export-panel__ov-row input[type="checkbox"] {
+        width: 22px;
+        height: 22px;
+    }
+    .export-panel__ov-swatch {
+        width: 40px;
+        height: 40px;
+    }
+}
+
+/* Reduced motion: kill the large-surface slides this file animates (the 360px
+   drawer sliding in, the whole sidebar sliding off). Placed last so it wins the
+   cascade over the transition declarations above at equal specificity. The
+   small button-press / progress-fill transitions stay - they are non-vestibular
+   feedback, not motion WCAG 2.3.3 targets. */
+@media (prefers-reduced-motion: reduce) {
+    .export-panel,
+    body.export-mode .sidebar,
+    body.export-mode #sidebar-resize,
+    .sidebar,
+    #sidebar-resize {
+        transition: none;
+    }
+
+    /* Drop the looping sweep (continuous motion is a WCAG 2.3.3 target). A
+       full-width, dimmed bar still reads as "busy, not frozen" without motion;
+       the ticking elapsed-time status carries the liveness signal. */
+    .export-panel__progress-bar--indeterminate .export-panel__progress-fill {
+        width: 100%;
+        transform: none;
+        animation: none;
+        opacity: 0.55;
+    }
+}

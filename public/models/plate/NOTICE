@@ -1,0 +1,9 @@
+yolo-v9-t-512-license-plates-end2end.onnx
+
+License-plate detection model, MIT (see LICENSE; (c) ankandrew).
+
+Provenance:
+- ankandrew/open-image-models, release asset
+  yolo-v9-t-512-license-plates-end2end.onnx
+  (https://github.com/ankandrew/open-image-models).
+- sha256: 746fdd358ec110418775d7c9d8d07910d48b1a21471f92bf4421f6510d6daade

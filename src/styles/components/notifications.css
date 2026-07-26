@@ -1,0 +1,233 @@
+/* --- Notifications: toasts + bell drawer ---
+   Driven by src/ui/notifications.ts. Toasts pop top-right and auto-dismiss
+   (info/warn) or stay until clicked away (error). The bell drawer keeps
+   the full session history. */
+
+.toast-container {
+    position: fixed;
+    /* Clear the desktop topbar (44px) so a persistent error toast never paints
+       over and blocks the top-right controls; env() is 0 on non-notched and
+       desktop, so max() keeps the notch-floor intent on iOS. */
+    top: max(calc(var(--dc-topbar-h) + var(--dc-space-2)), env(safe-area-inset-top));
+    right: max(var(--dc-space-4), env(safe-area-inset-right));
+    z-index: var(--dc-z-scrim);
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-2);
+    pointer-events: none;
+    max-width: min(380px, calc(100vw - 32px));
+}
+/* On mobile the topbar controls (bell/lang/theme) live in the top-right corner -
+   exactly where toasts stack. The 16px desktop anchor lets a z=200 toast paint
+   over and intercept taps on those z=70 controls, so drop the toast below the
+   mobile bar. Keyed on the topbar's own mobile breakpoint (not pointer:coarse):
+   that is when --dc-topbar-h-mobile applies and the controls sit in the corner.
+   --dc-topbar-h-mobile already folds in env(safe-area-inset-top). */
+@media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {
+    .toast-container {
+        top: calc(var(--dc-topbar-h-mobile) + var(--dc-space-2));
+    }
+}
+.dc-toast {
+    pointer-events: auto;
+    display: flex;
+    align-items: flex-start;
+    gap: var(--dc-space-2);
+    background: var(--bg-elev-2);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--fg-dim);
+    border-radius: var(--dc-radius-md);
+    box-shadow: var(--dc-shadow-popup);
+    padding: var(--dc-space-2) var(--dc-space-3);
+    font-size: var(--dc-text-sm);
+    line-height: var(--dc-leading-normal);
+    /* Slide in from the right. transform/opacity only - GPU composited. */
+    animation: dc-toast-in var(--dc-dur-entrance) var(--dc-ease);
+}
+@keyframes dc-toast-in {
+    from {
+        transform: translateX(12px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+.dc-toast--info {
+    border-left-color: var(--accent);
+}
+.dc-toast--warn {
+    border-left-color: var(--warn);
+}
+.dc-toast--error {
+    border-left-color: var(--err);
+}
+.dc-toast__icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    margin-top: 1px;
+    color: var(--fg-mute);
+}
+.dc-toast--info .dc-toast__icon {
+    color: var(--accent);
+}
+.dc-toast--warn .dc-toast__icon {
+    color: var(--warn);
+}
+.dc-toast--error .dc-toast__icon {
+    color: var(--err);
+}
+.dc-toast__body {
+    flex: 1;
+    min-width: 0;
+}
+.dc-toast__close {
+    flex-shrink: 0;
+    background: transparent;
+    border: none;
+    color: var(--fg-mute);
+    font-size: var(--dc-text-xl);
+    line-height: 1;
+    padding: 0 var(--dc-space-1);
+    cursor: pointer;
+    align-self: flex-start;
+}
+.dc-toast__close:hover {
+    color: var(--fg);
+}
+.dc-toast__close:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+/* Touch: grow the dismiss target to the touch floor. Error toasts stay until
+   dismissed, so on a phone this × is the required close. align-self:flex-start
+   (inherited) keeps the square's top edge tracking the first text line; the
+   glyph centers inside it. */
+@media (pointer: coarse) {
+    .dc-toast__close {
+        width: var(--dc-iconbtn-touch);
+        height: var(--dc-iconbtn-touch);
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+}
+
+.notif-drawer {
+    position: fixed;
+    /* Clear the topbar (token, not a magic 50px) so the drawer header (title +
+       Clear) never overlaps the top-right controls it paints in front of (the
+       drawer z=210 is above the topbar z=70). right: max(.., env()) clears a
+       landscape side-notch, mirroring .toast-container. The mobile override
+       below swaps in the taller --dc-topbar-h-mobile (folds in safe-area-top). */
+    top: calc(var(--dc-topbar-h) + var(--dc-space-1));
+    right: max(var(--dc-space-4), env(safe-area-inset-right));
+    /* Above the toast container (200): the drawer is an explicitly opened
+       panel, so a toast arriving while it is open must not cover its header -
+       both anchor to the same top-right corner. */
+    z-index: var(--dc-z-toast);
+    width: min(360px, calc(100vw - 32px));
+}
+@media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {
+    .notif-drawer {
+        top: calc(var(--dc-topbar-h-mobile) + var(--dc-space-2));
+    }
+}
+.notif-drawer[hidden] {
+    display: none;
+}
+.notif-drawer-card {
+    background: var(--bg-elev);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-md);
+    box-shadow: var(--dc-shadow-popup);
+    overflow: hidden;
+    animation: dc-drawer-in var(--dc-dur-entrance) var(--dc-ease);
+}
+@keyframes dc-drawer-in {
+    from {
+        transform: translateY(-6px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+/* Respect users who asked for reduced motion - the slide-in is decorative,
+   the notification still appears at its target position. */
+@media (prefers-reduced-motion: reduce) {
+    .dc-toast,
+    .notif-drawer-card {
+        animation: none;
+    }
+}
+.notif-drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--dc-space-3);
+    padding: var(--dc-space-2) var(--dc-space-3);
+    border-bottom: 1px solid var(--border);
+}
+.notif-drawer-title {
+    font-weight: 700;
+    font-size: var(--dc-text-base);
+}
+.notif-drawer-clear {
+    background: transparent;
+    border: none;
+    color: var(--fg-mute);
+    font-size: var(--dc-text-xs);
+    cursor: pointer;
+    padding: var(--dc-space-1) var(--dc-space-1);
+}
+.notif-drawer-clear:hover {
+    color: var(--accent);
+}
+.notif-drawer-list {
+    max-height: 50vh;
+    overflow-y: auto;
+    padding: var(--dc-space-1) 0;
+}
+.notif-drawer-empty {
+    margin: 0;
+    padding: var(--dc-space-4) var(--dc-space-3);
+    color: var(--fg-mute);
+    font-size: var(--dc-text-sm);
+    text-align: center;
+}
+.notif-drawer-item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--dc-space-2);
+    padding: var(--dc-space-2) var(--dc-space-3);
+    font-size: var(--dc-text-sm);
+    line-height: var(--dc-leading-normal);
+}
+.notif-drawer-item + .notif-drawer-item {
+    border-top: 1px solid var(--border);
+}
+.notif-drawer-item__icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    margin-top: 2px; /* baseline-align the icon with the first text line */
+    color: var(--fg-mute);
+}
+.notif-drawer-item--info .notif-drawer-item__icon {
+    color: var(--accent);
+}
+.notif-drawer-item--warn .notif-drawer-item__icon {
+    color: var(--warn);
+}
+.notif-drawer-item--error .notif-drawer-item__icon {
+    color: var(--err);
+}
+.notif-drawer-item__text {
+    flex: 1;
+    min-width: 0;
+}

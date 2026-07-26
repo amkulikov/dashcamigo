@@ -1,0 +1,91 @@
+# Staging deploy: every push to `main` builds with the staging env and uploads
+# dist/ to the Cloudflare Pages project as a deployment of the `main` branch.
+# beta.dashcamigo.app is a CNAME to that branch alias
+# (main.<project>.pages.dev; docs/deploy.md, "Staging domain").
+#
+# The build runs here, not in Cloudflare: the Pages project's git integration
+# is unused (Pages cannot re-link a project to another repository -
+# docs/deploy.md, "Deployment pipeline"); wrangler deploys by project name
+# over the API, no git binding involved. --commit-hash ties the deployment
+# record to the commit for the dashboard and API consumers; --branch selects
+# the alias (a non-production branch name = a preview deployment).
+#
+# Forks: without the CF secrets the run self-skips and stays green (same
+# contract as the INDEXNOW_KEY gate in indexnow.yml).
+
+name: Deploy staging
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+# Rapid successive pushes: only the newest tree is worth deploying - a
+# superseded run wastes minutes and could land its deployment out of order.
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Gate first, before checkout, so a fork's skip costs seconds.
+      - name: Check Cloudflare secrets
+        id: gate
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            echo "::notice::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID not set - staging deploy is off for this repo, skipping"
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.deploy == 'true'
+        with:
+          # Full history: sitemap <lastmod> derives from git mtime
+          # (vite-plugins/git-mtime.ts); a shallow clone would drop it.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.deploy == 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+        if: steps.gate.outputs.deploy == 'true'
+
+      - name: Build (staging env)
+        if: steps.gate.outputs.deploy == 'true'
+        env:
+          # Staging must never be indexed (vite.config.ts gates noindex +
+          # robots.txt on this). Staging reports to its own Sentry project
+          # (separate DSN + slug), so beta noise never lands among production
+          # issues. No INDEXNOW_KEY: the key file is a production concern.
+          VITE_NO_INDEX: "1"
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN_STAGING }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT_STAGING }}
+        run: npm run build
+
+      - name: Deploy to Cloudflare Pages (branch alias main)
+        if: steps.gate.outputs.deploy == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx wrangler@4.114.0 pages deploy dist \
+            --project-name=dashcamigo \
+            --branch=main \
+            --commit-hash="${GITHUB_SHA}" \
+            --commit-dirty=false

@@ -1,0 +1,3255 @@
+// Map (large + mini) on MapLibre. Single owner of map instances,
+// markers, popups, rAF marker loop, expand/collapse, mini-map morph animations,
+// follow modes, theme-aware tile style, and GPS-point hover popups.
+//
+// Reverse dependencies (sidebar/player/chart → map): via direct import.
+// Forward dependencies (map → seek/chart layout): via initMap callbacks.
+
+// Type-only import: erased at build, so it does NOT pull the ~1MB maplibre-gl
+// lib into the bundle. Every `maplibregl.X` below is a type position. The
+// runtime namespace is loaded lazily via loadMaplibre() (see the holder under
+// the imports), which is what keeps maplibre off the landing critical path.
+// Namespace form: v6 is ESM-only and has no default export.
+import type * as maplibregl from "maplibre-gl";
+// Worker entry URL, resolved at build time to a string - the lib itself stays
+// out of the eager graph. `?worker&url` (not plain `?url`): the dist worker
+// imports a sibling shared chunk, and `?url` would emit the file verbatim
+// without it, so the worker dies on its first import and no tile ever loads.
+import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
+
+import { probeWebGL } from "../capabilities.js";
+import { gMagnitude } from "../events.js";
+import { escapeHtml } from "../escape.js";
+import { getDateLocale, t } from "../i18n/index.js";
+import { createLogger } from "../log.js";
+import { emitLifecycle } from "../perf.js";
+import { interpolatePosition } from "../parser.js";
+import { captureSentryMessage } from "../sentry.js";
+import { COARSE_POINTER_QUERY, isCoarsePointer, prefersReducedMotion } from "./media-queries.js";
+import type { GpsRecord } from "../parser.js";
+import { wallToContentSec, type Trip, type TripFrame } from "../trips.js";
+import { getViewPanels, setPanelAvailable, setPanelVisible, subscribeViewPanels } from "./view-menu.js";
+
+const log = createLogger("map");
+
+// Dedup MapLibre errors by message - one unique text logged once per session,
+// repeats dropped. Without this, `Failed to fetch` on offline floods the ring
+// buffer (~500 entries): MapLibre emits error per tile miss. The Set stays
+// at 10-20 unique messages in real use.
+const seenMapErrors = new Set<string>();
+const seenMiniMapErrors = new Set<string>();
+
+import { reportMapTileNetworkError, reportMapTilesOk } from "./connectivity.js";
+import { dom } from "./dom.js";
+import { subscribeExportState } from "./export-state.js";
+import { formatTime } from "./format.js";
+import { activeFrame, activeTrip, state } from "./state.js";
+import type { FollowMode, LngLatTuple, MiniMapData } from "./state.js";
+import { formatSpeedFromMs } from "../units-pref.js";
+import { currentMapTheme, getCssVar, themeColors } from "./theme.js";
+import type { MapStyleId, MapTheme } from "./theme.js";
+import { buildMercatorCumulativeDistances, buildSpeedGradient, mercatorY } from "./speed-gradient.js";
+
+// --- lazy maplibre-gl loading (T9) ---
+//
+// maplibre-gl is ~1MB. A static value-import put the lib in the landing entry
+// chunk - Vite modulepreloaded it before any trip was opened, pure waste on the
+// indexed home page (LCP/TBT hit). We load the runtime namespace once, on
+// demand, and keep it in `mlg`. loadMaplibre() is awaited by initTripUi (before
+// any map is created) and by export-map-snapshot. Invariant: nothing constructs
+// a map/marker/popup before loadMaplibre() resolves, so the `mlg!` assertions at
+// the `new mlg!.X` sites below always hold (ensureMap/ensureMiniMap and every
+// marker/popup helper run on the trip path, after init).
+type MaplibreNamespace = typeof import("maplibre-gl");
+let mlg: MaplibreNamespace | null = null;
+
+// Loads maplibre-gl on first call (memoized) and returns the runtime namespace
+// so other lazy entry points share the one loaded copy. The dynamic import() is
+// what moves the lib out of the eager graph into its own on-demand chunk.
+export async function loadMaplibre(): Promise<MaplibreNamespace> {
+    if (!mlg) {
+        const mod = await import("maplibre-gl");
+        // Bundlers cannot resolve the worker from the lib's own `import.meta.url`,
+        // so v6 requires the consumer to hand it the URL. Must happen before the
+        // first Map is constructed - the dispatcher is created eagerly with it.
+        mod.setWorkerUrl(maplibreWorkerUrl);
+        mlg = mod;
+    }
+    return mlg;
+}
+
+interface MapCallbacks {
+    /** Track click - seek player to the nearest GPS point. */
+    onSeekTripTime: (targetSec: number) => void;
+    /** refreshMap flips state.hasTrack - chart layout needs updating. */
+    onChartLayoutChange: () => void;
+}
+
+let callbacks: MapCallbacks = {
+    onSeekTripTime: () => {},
+    onChartLayoutChange: () => {},
+};
+
+/**
+ * Map tile styles. Both self-hosted in public/styles/, both keyless.
+ *
+ * Light: OpenFreeMap Liberty, snapshot copied as-is. Source/sprite/glyphs all
+ * point at tiles.openfreemap.org (no API key).
+ *
+ * Dark: Dark Matter (OpenMapTiles schema, CC0) adapted - source/glyphs URLs
+ * rewritten from MapTiler (keyed) to OpenFreeMap, text-font normalized to
+ * Noto Sans Regular/Italic (OFM glyph set), sprite copied locally.
+ *
+ * Both use the same OpenFreeMap planet vector tiles - one shared tile cache.
+ * Tied to currentMapTheme(): UI dark -> dark, UI light -> light, UI auto ->
+ * matchMedia(prefers-color-scheme).
+ */
+const MAP_STYLE_URLS: Record<MapStyleId, string> = {
+    light: "/styles/light.json",
+    dark: "/styles/dark.json",
+    // Export-only: a semi-transparent black slot with orange-glowing features.
+    // Never selected by the live map (currentMapTheme() returns only light/dark).
+    neon: "/styles/neon.json",
+};
+
+// 10 s timeout for style.json fetch. The file is same-origin (CF Pages) and
+// typically responds in <500 ms; the ceiling covers slow mobile (EDGE / poor
+// coverage) and rare CF PoP slowness. The map canvas appears immediately with
+// EMPTY_STYLE, so the user is not blocked - timeout only affects when the base
+// layer becomes visible.
+const MAP_STYLE_TIMEOUT_MS = 10000;
+
+// Minimal valid MapLibre style with no base layer. Used as the initial value so
+// the map canvas appears immediately while the real style loads (or as permanent
+// fallback if fetch fails).
+const EMPTY_STYLE: maplibregl.StyleSpecification = {
+    version: 8,
+    sources: {},
+    layers: [],
+};
+
+// Style cache: both maps share one URL per theme, no double fetch. The promise
+// is cleared after failure so retry triggers a real re-request. Both themes are
+// prefetched from ensureMap (the inactive one with source="prefetch", silent on
+// failure) so theme toggles and the export-overlay snapshotter (always "light")
+// hit the cache instead of triggering a fresh fetch with its own failure surface.
+const cachedMapStyle: Record<MapStyleId, maplibregl.StyleSpecification | null> = {
+    light: null,
+    dark: null,
+    neon: null,
+};
+const mapStyleLoadPromise: Record<MapStyleId, Promise<maplibregl.StyleSpecification | null> | null> = {
+    light: null,
+    dark: null,
+    neon: null,
+};
+// AbortController for the in-flight fetch per theme. force=true aborts it via
+// signal.reason="superseded" so the .catch knows the failure was our own
+// teardown and stays silent (no analytics event, no banner). Without this the
+// orphaned fetch keeps running and its eventual failure fires a spurious
+// map_load_failed.
+const mapStyleLoadCtrl: Record<MapStyleId, AbortController | null> = {
+    light: null,
+    dark: null,
+    neon: null,
+};
+// Theme of the most recent failure. Retry uses this instead of
+// currentMapTheme() so the click actually re-fetches what broke. Without it
+// the export-overlay code path (always loads "light") would fail on a dark
+// user, retry would redundantly hit the already-cached "dark" and hide the
+// banner without fixing anything.
+let lastFailedTheme: MapStyleId | null = null;
+
+/**
+ * Where a loadMapStyle call originates. Sent to GA4 as `source` on
+ * map_load_failed so we can tell apart "the main map failed to load"
+ * (severity: user blocked) from "an export-overlay snapshot failed"
+ * (severity: optional feature degraded) - they used to merge.
+ *
+ * "prefetch" - background warmup of the inactive theme from ensureMap; the
+ * catch is fully silent (no banner, no lastFailedTheme, no analytics).
+ * Analytics is intentionally skipped to avoid double-counting a single
+ * network issue when the user later requests that theme and it fails again
+ * with source="main".
+ */
+export type MapLoadSource = "main" | "export" | "preview" | "prefetch";
+
+/**
+ * Fetches the tile style JSON with a timeout. Caches the result - repeat calls
+ * on success return the same object; on failure (null) a new fetch is started.
+ * force=true aborts any in-flight fetch and clears the cache, used by the retry
+ * button to avoid getting the same null from a previously cached failure.
+ * source labels the call site for analytics + decides whether the failure
+ * surfaces in the UI - "prefetch" is background-silent.
+ */
+export function loadMapStyle(
+    theme: MapStyleId,
+    force = false,
+    source: MapLoadSource = "main",
+): Promise<maplibregl.StyleSpecification | null> {
+    if (force) {
+        // Actually abort the previous fetch instead of just dropping the
+        // reference. Otherwise it keeps running, its eventual catch can stomp
+        // the freshly-set mapStyleLoadPromise[theme] and emits a stale
+        // map_load_failed analytics event.
+        const oldCtrl = mapStyleLoadCtrl[theme];
+        if (oldCtrl) oldCtrl.abort("superseded");
+        cachedMapStyle[theme] = null;
+        mapStyleLoadPromise[theme] = null;
+        mapStyleLoadCtrl[theme] = null;
+    }
+    const cached = cachedMapStyle[theme];
+    if (cached) return Promise.resolve(cached);
+    const inflight = mapStyleLoadPromise[theme];
+    if (inflight) return inflight;
+
+    const ctrl = new AbortController();
+    mapStyleLoadCtrl[theme] = ctrl;
+    // Pass a distinct reason so the catch can tell timeout-abort apart from
+    // force-supersede-abort. Default DOMException would conflate the two.
+    const timeoutId = window.setTimeout(() => ctrl.abort("timeout"), MAP_STYLE_TIMEOUT_MS);
+    const fetchStart = performance.now();
+
+    const promise: Promise<maplibregl.StyleSpecification | null> = fetch(MAP_STYLE_URLS[theme], { signal: ctrl.signal })
+        .then((r) => {
+            if (!r.ok) throw new Error(`http ${r.status}`);
+            return r.json() as Promise<maplibregl.StyleSpecification>;
+        })
+        .then((style) => {
+            // MapLibre refuses relative sprite/glyphs URLs at runtime
+            // ("Invalid sprite URL ..., must be absolute"). Our self-hosted
+            // dark style ships sprite: "/styles/sprite/sprite" - resolve it
+            // against location.origin so it becomes absolute. Same treatment
+            // for glyphs if any local style ever adds them.
+            if (typeof style.sprite === "string" && style.sprite.startsWith("/")) {
+                style.sprite = new URL(style.sprite, location.origin).href;
+            }
+            if (typeof style.glyphs === "string" && style.glyphs.startsWith("/")) {
+                style.glyphs = new URL(style.glyphs, location.origin).href;
+            }
+            cachedMapStyle[theme] = style;
+            if (lastFailedTheme === theme) lastFailedTheme = null;
+            hideMapStyleError();
+            // The tile server is the only external runtime dependency. Style load
+            // time is the first proxy for network issues; clearly visible in a
+            // "map opens slowly" bug report.
+            log.info("map style loaded", { theme, durationMs: Math.round(performance.now() - fetchStart) });
+            return style;
+        })
+        .catch((err: unknown) => {
+            // Our own force=true tore this fetch down to start a fresh one -
+            // not a real failure. No banner, no analytics, no log noise.
+            if (ctrl.signal.aborted && ctrl.signal.reason === "superseded") {
+                return null;
+            }
+            const isTimeout = ctrl.signal.aborted && ctrl.signal.reason === "timeout";
+            const reasonForLog = isTimeout ? "timeout" : err;
+            log.warn("map style fetch failed", {
+                theme,
+                source,
+                reason: reasonForLog instanceof Error ? reasonForLog.message : reasonForLog,
+            });
+            // Clear in-flight promise/ctrl so the next loadMapStyle starts a
+            // real new fetch. Guard with identity check: between our request
+            // start and our own .catch a force=true may have already replaced
+            // both fields - we must not stomp the newer references.
+            if (mapStyleLoadPromise[theme] === promise) {
+                mapStyleLoadPromise[theme] = null;
+            }
+            if (mapStyleLoadCtrl[theme] === ctrl) {
+                mapStyleLoadCtrl[theme] = null;
+            }
+            // Background prefetch failures stay invisible: no banner, no
+            // lastFailedTheme (retry must not fixate on a theme the user is
+            // not even looking at), and no analytics either - if the user
+            // later requests that theme and it fails again, the user-facing
+            // failure will fire its own map_load_failed; counting the
+            // prefetch attempt too would double-count one real network issue.
+            if (source === "prefetch") return null;
+            lastFailedTheme = theme;
+            showMapStyleError();
+            return null;
+        })
+        .finally(() => {
+            window.clearTimeout(timeoutId);
+        });
+
+    mapStyleLoadPromise[theme] = promise;
+    return promise;
+}
+
+/**
+ * Applies a loaded style.json to the large map and mini-map (if created). Track
+ * redraw after style change happens in the `style.load` handlers in
+ * ensureMap/ensureMiniMap, not here - to avoid calling refreshMap twice per event.
+ *
+ * Theme is checked before applying: the user may have toggled prefers-color-scheme
+ * while the style was loading, making this result stale.
+ */
+function applyLoadedStyle(style: maplibregl.StyleSpecification, theme: MapStyleId): void {
+    // Only the live UI theme is ever applied to the on-screen maps. A retried
+    // "neon" fetch (export-overlay failure) re-caches neon.json but never equals
+    // currentMapTheme(), so it falls out here - the next export reads the cache.
+    if (theme !== currentMapTheme()) return;
+    // diff:false - do not try to preserve sources/layers across styles. The trip
+    // line redraws via style.load; diff:true could place our layer at a wrong
+    // z-order in the new style.
+    if (state.map) state.map.setStyle(style, { diff: false });
+    if (state.miniMap) state.miniMap.setStyle(style, { diff: false });
+}
+
+function showMapStyleError(): void {
+    if (!dom.mapStyleError) return;
+    dom.mapStyleError.hidden = false;
+}
+
+function hideMapStyleError(): void {
+    if (!dom.mapStyleError) return;
+    dom.mapStyleError.hidden = true;
+}
+
+// Active user gestures on the map (keys: "drag"/"rotate"/"pitch"). Non-empty
+// means the per-frame follow camera must not interrupt with programmatic moves. A Set
+// (not a counter) so a missing '*end' - MapLibre does not guarantee one when a
+// gesture is interrupted by setStyle/theme-swap or WebGL context loss - self-
+// heals on the next complete gesture of that type (a counter would latch >0 and
+// kill follow for the whole session). Also cleared on every style.load.
+const activeMapGestures = new Set<string>();
+
+// Cached track scaffolding used by the rAF loop to compute current line-progress
+// for the trail overlay. Populated in refreshMap from the deduped record list
+// so all consumers share the same indexing.
+let trackRecs: GpsRecord[] = [];
+let trackCumDist: number[] = [];
+let trackTotalDist = 0;
+
+const TRAIL_LAYER_SUFFIX = "-trail";
+
+/**
+ * Maps the player currentTime to a [0..1] progress along the track. Uses the
+ * same binary search shape as interpolatePosition but returns a normalized
+ * distance instead of a position, so the trail overlay can mask the not-yet-
+ * driven portion via line-gradient stops.
+ */
+function computeTrackProgress(targetUnix: number): number {
+    if (trackRecs.length < 2 || trackTotalDist === 0) return 0;
+    let lo = 0;
+    let hi = trackRecs.length - 1;
+    while (lo < hi) {
+        const mid = (lo + hi) >>> 1;
+        if (trackRecs[mid]!.unixSeconds < targetUnix) lo = mid + 1;
+        else hi = mid;
+    }
+    if (lo === 0) return 0;
+    const prev = trackRecs[lo - 1]!;
+    const next = trackRecs[lo]!;
+    const span = next.unixSeconds - prev.unixSeconds;
+    const t = span > 0 ? Math.max(0, Math.min(1, (targetUnix - prev.unixSeconds) / span)) : 0;
+    const cumPrev = trackCumDist[lo - 1]!;
+    const cumNext = trackCumDist[lo]!;
+    const cum = cumPrev + (cumNext - cumPrev) * t;
+    return Math.max(0, Math.min(1, cum / trackTotalDist));
+}
+
+// Trail write gating. Each line-gradient write regenerates a color-ramp
+// texture per visible tile the line crosses (maplibre bumps gradientVersion),
+// so writes are rationed by how far the veil BOUNDARY moved on screen - a
+// fraction-of-trip threshold either starved short trips or visibly trailed the
+// car on long ones (0.5% of 100 km = 500 m of stale veil at street zoom).
+// cumDist is in mercator degree-equivalent units (world = 360; see
+// buildMercatorCumulativeDistances), so boundary px shift =
+// dProgress * total * tileSize * 2^zoom / 360. A hard rate cap bounds the
+// texture-regen frequency at high zoom; the max interval bounds staleness at
+// overview zoom.
+let trailLastProgressWritten = -1;
+let trailLastWriteAt = 0;
+const TRAIL_MIN_BOUNDARY_SHIFT_PX = 8;
+const TRAIL_MIN_WRITE_INTERVAL_MS = 250;
+const TRAIL_MAX_WRITE_INTERVAL_MS = 1000;
+const MAPLIBRE_TILE_SIZE_PX = 512;
+
+// Trailing-edge retry for a rate-capped write. setTrailProgress is only called
+// while the playhead moves, so a large shift dropped by the rate cap (typical:
+// the final position of a fast scrub) would otherwise never be written and the
+// veil would sit visibly stale until the next playback. One timer, re-aimed at
+// the latest progress.
+let trailPendingTimer: number | null = null;
+let trailPendingProgress = 0;
+
+function scheduleTrailingTrailWrite(progress: number): void {
+    trailPendingProgress = progress;
+    if (trailPendingTimer !== null) return;
+    trailPendingTimer = window.setTimeout(() => {
+        trailPendingTimer = null;
+        setTrailProgress(trailPendingProgress);
+    }, TRAIL_MIN_WRITE_INTERVAL_MS);
+}
+
+function cancelTrailingTrailWrite(): void {
+    if (trailPendingTimer !== null) {
+        window.clearTimeout(trailPendingTimer);
+        trailPendingTimer = null;
+    }
+}
+
+/**
+ * Updates the trail overlay's line-gradient so the un-driven part of the track
+ * is dimmed. Four stops: transparent [0..progress], then a step into dimColor
+ * [progress..1]. The step is 0.0001 wide so MapLibre's linear interpolation
+ * does not bleed colors across the boundary.
+ */
+function setTrailProgress(progress: number): void {
+    if (!state.map) return;
+    const layerId = `${state.tripSourceId}${TRAIL_LAYER_SUFFIX}`;
+    if (!state.map.getLayer(layerId)) return;
+    const now = performance.now();
+    const sincePrevMs = now - trailLastWriteAt;
+    const boundaryShiftPx =
+        Math.abs(progress - trailLastProgressWritten) *
+        trackTotalDist *
+        ((MAPLIBRE_TILE_SIZE_PX * 2 ** state.map.getZoom()) / 360);
+    if (boundaryShiftPx < TRAIL_MIN_BOUNDARY_SHIFT_PX && sincePrevMs < TRAIL_MAX_WRITE_INTERVAL_MS) return;
+    if (sincePrevMs < TRAIL_MIN_WRITE_INTERVAL_MS) {
+        // A LARGE shift hit the rate cap - retry it on the trailing edge (a
+        // sub-threshold shift above just returns: staleness under 8 px is
+        // invisible, no retry needed).
+        scheduleTrailingTrailWrite(progress);
+        return;
+    }
+    cancelTrailingTrailWrite();
+    trailLastProgressWritten = progress;
+    trailLastWriteAt = now;
+    const dim = themeColors().trackVeil;
+    const transparent = "rgba(0,0,0,0)";
+    // line-gradient inputs must be STRICTLY ascending. We emit four stops:
+    // 0 -> p (transparent), p+eps -> 1 (dim). Clamp p so neither 0==p nor
+    // p+eps==1 collapses. eps=1e-4 is small enough to be invisible but
+    // large enough to survive float rounding.
+    const eps = 0.0001;
+    const p = Math.max(eps, Math.min(1 - 2 * eps, progress));
+    const gradient: unknown[] = [
+        "interpolate",
+        ["linear"],
+        ["line-progress"],
+        0,
+        transparent,
+        p,
+        transparent,
+        p + eps,
+        dim,
+        1,
+        dim,
+    ];
+    state.map.setPaintProperty(layerId, "line-gradient", gradient as never);
+}
+
+/**
+ * Minimal custom attribution control. The default MapLibre one starts in an
+ * "open" <details> state under some viewport widths even with compact:true,
+ * which floods the bottom of the map with text on first load. We render a
+ * fixed-size pill instead: an "i" button + a popup with links to OSM,
+ * OpenMapTiles and OpenFreeMap. Always starts collapsed.
+ */
+class MiniAttributionControl implements maplibregl.IControl {
+    private root: HTMLDivElement | null = null;
+    private button: HTMLButtonElement | null = null;
+
+    onAdd(_map: maplibregl.Map): HTMLElement {
+        const root = document.createElement("div");
+        // Inherit maplibre ctrl spacing so it sits flush with NavigationControl
+        // / ScaleControl - same outer margin, our CSS adds the visual style.
+        root.className = "maplibregl-ctrl dc-map-attrib";
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "dc-map-attrib-btn";
+        btn.textContent = "i";
+        const text = document.createElement("div");
+        text.className = "dc-map-attrib-text";
+        text.hidden = true;
+        text.innerHTML =
+            '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors' +
+            ' · © <a href="https://openmaptiles.org/" target="_blank" rel="noopener noreferrer">OpenMapTiles</a>' +
+            ' · © <a href="https://openfreemap.org/" target="_blank" rel="noopener noreferrer">OpenFreeMap</a>';
+        btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            text.hidden = !text.hidden;
+            btn.setAttribute("aria-expanded", text.hidden ? "false" : "true");
+        });
+        root.appendChild(btn);
+        root.appendChild(text);
+        this.root = root;
+        this.button = btn;
+        this.applyLabels();
+        return root;
+    }
+
+    onRemove(): void {
+        this.root?.remove();
+        this.root = null;
+        this.button = null;
+    }
+
+    /** Re-applies i18n labels. Called on language change. */
+    applyLabels(): void {
+        if (!this.button) return;
+        const label = t("map.ctrl.attribution");
+        this.button.setAttribute("aria-label", label);
+        this.button.setAttribute("title", label);
+        if (!this.button.hasAttribute("aria-expanded")) {
+            this.button.setAttribute("aria-expanded", "false");
+        }
+    }
+}
+
+const miniAttributionControl = new MiniAttributionControl();
+
+/**
+ * Installs a transparent 1x1 stub for every icon the style asks for but the
+ * sprite does not carry (Liberty references POI icons - running, office,
+ * hospital - that its sprite omits). Without it MapLibre warnOnce's per missing
+ * icon; with it the POIs simply render label-only. Shared by both live maps.
+ *
+ * Must be a resolver, not a `styleimagemissing` listener: since v6 the event is
+ * notify-only and addImage from it no longer satisfies the pending request.
+ */
+function stubMissingStyleImages(map: maplibregl.Map): void {
+    map.setMissingStyleImageResolver((id) => {
+        if (map.hasImage(id)) return;
+        map.addImage(id, { width: 1, height: 1, data: new Uint8Array(4) });
+    });
+}
+
+// Set once when MapLibre cannot get a WebGL context (blocklisted/ancient GPU,
+// hardware acceleration off). Map + mini-map are then skipped, the in-panel
+// notice is shown, and every map-dependent path no-ops via the existing
+// state.map/state.miniMap null guards - video, chart and export keep working.
+let mapInitFailed = false;
+
+/** False after a WebGL context could not be created for the map. Other modules
+ *  consult this to skip map-only work or surface the right message. */
+export function isMapAvailable(): boolean {
+    return !mapInitFailed;
+}
+
+/**
+ * Marks the map as permanently unavailable for this session and surfaces the
+ * reason in the map panel. Idempotent. Reason is WebGL: MapLibre needs WebGL2,
+ * so reaching here means no usable WebGL2 context.
+ */
+function handleMapInitFailure(err?: unknown): void {
+    if (mapInitFailed) return;
+    mapInitFailed = true;
+    log.error("map unavailable: no WebGL context", err instanceof Error ? err : { err: String(err) });
+    if (typeof document !== "undefined") {
+        // Body class hides the mini-map circle (an empty 140px ring would be
+        // worse than nothing) and the map toggle; CSS in components/map.css.
+        document.body.classList.add("map-unavailable");
+        const notice = document.getElementById("map-unavailable");
+        if (notice) notice.hidden = false;
+    }
+}
+
+export function ensureMap(): maplibregl.Map | null {
+    if (state.map) return state.map;
+    if (mapInitFailed) return null;
+    // Preflight the WebGL context ourselves (same probe the capability report
+    // uses) so we degrade deterministically instead of depending on MapLibre's
+    // throw-vs-async-error behaviour on a context-less GPU.
+    if (!probeWebGL()) {
+        handleMapInitFailure();
+        return null;
+    }
+
+    let map: maplibregl.Map;
+    try {
+        map = new mlg!.Map({
+            container: "map",
+            // Start with empty inline style so the canvas appears immediately; real
+            // style loads async via loadMapStyle below. Also covers graceful
+            // degradation: if the tile server is unavailable the canvas stays blank
+            // but track/markers/popups keep working (sources are added on top of any
+            // style).
+            style: EMPTY_STYLE,
+            center: [0, 0],
+            zoom: 1,
+            // Default AttributionControl can't be reliably forced into "collapsed
+            // by default" - the <details> element opens itself on certain map
+            // widths regardless of the compact flag. We add our own minimal "i"
+            // pill via addControl below, styled to match the rest of map-controls.
+            attributionControl: false,
+            // Performance tuning - see ensureMiniMap for refreshExpiredTiles /
+            // crossSourceCollisions. fadeDuration is deliberately left at its
+            // default (300 ms) here, unlike the mini-map: besides the label
+            // fade it doubles as the symbol-placement throttle
+            // (Placement.stillRecent) - at 0 the label collision pass restarts
+            // every rendered frame, a continuous main-thread cost while the
+            // follow camera keeps the map moving. At 300 ms placement runs at
+            // most ~3x/s and labels cross-fade instead of popping.
+            refreshExpiredTiles: false,
+            crossSourceCollisions: false,
+            // Pitch (tilt) is driven ONLY programmatically, by followMode
+            // "chase" (and its tilt slider). We keep the direct gesture pitch
+            // controls OFF so a stray ctrl-drag / two-finger pinch (mobile is
+            // first-class here) cannot strand the map tilted with no obvious way
+            // back - the compass resets bearing, not pitch. dragRotate stays on:
+            // bearing rotation IS used ("rotate"/"chase" follow, compass).
+            pitchWithRotate: false,
+            touchPitch: false,
+            // Raise the ceiling above the 60 default so the chase camera can
+            // reach CHASE_MAX_PITCH_DEG. Capped at 70 (< the 85 hard max): past
+            // ~70 the renderer pulls in far too many tiles near the horizon
+            // (MapLibre flags pitch>60 experimental for exactly this) for little
+            // gain at street zoom. Non-chase modes ease pitch back to 0.
+            maxPitch: CHASE_MAX_PITCH_DEG,
+            // Skip MapLibre's runtime style validation: styles are static, self-
+            // hosted and gated at build time by scripts/validate-map-styles.mjs
+            // (pretest + prebuild). The flag also propagates to the
+            // setStyle(diff:false) theme-swap path, so the heavy style is not
+            // re-validated on theme toggle either.
+            validateStyle: false,
+            // Cooperative gestures ON only on touch (coarse pointer): there one
+            // finger must scroll the page and two fingers move the map - otherwise
+            // the map traps a single-finger pan and the user can't scroll past it.
+            // A mouse never triggers this (no Ctrl+scroll is ever imposed), so a
+            // narrow desktop window keeps plain wheel-zoom. syncCooperativeGestures()
+            // resyncs if the pointer type changes (mouse plugged into a tablet).
+            cooperativeGestures: isCoarsePointer(),
+            // Localized overlay text ("use two fingers"). MapLibre bakes it into the
+            // DOM at enable() time from this table; langchange refresh via
+            // localizeCooperativeOverlay() below.
+            locale: cooperativeLocale(),
+        });
+    } catch (err) {
+        // WebGL context creation can still throw on some drivers even after the
+        // preflight passed (e.g. a context lost between probe and construction).
+        handleMapInitFailure(err);
+        return null;
+    }
+    state.map = map;
+
+    map.on("load", () => {
+        state.mapReady = true;
+    });
+
+    // Dedup per message: MapLibre fires error per failed tile fetch, so one
+    // unique message is logged once; repeats are dropped to protect the ring
+    // buffer (hot-path logging rule).
+    map.on("error", (ev) => {
+        const e = ev?.error || ev;
+        const message = e?.message ?? String(e);
+        // A tile fetch that failed with a NETWORK error (server unreachable)
+        // means we are offline - including "connected but no internet" limbo,
+        // where navigator.onLine stays true. status===0 / "failed to fetch" are
+        // the network-failure signatures; an HTTP 404 (a genuinely missing tile)
+        // is NOT offline and must not trip the banner. Fires before the dedup so
+        // it is not swallowed for repeated identical messages (it is idempotent).
+        const status = (e as { status?: number } | undefined)?.status;
+        if (
+            status === 0 ||
+            (status === undefined && /failed to fetch|networkerror|load failed|network request failed/i.test(message))
+        ) {
+            reportMapTileNetworkError();
+        }
+        if (seenMapErrors.has(message)) return;
+        seenMapErrors.add(message);
+        log.error("maplibre error", e instanceof Error ? e : { message });
+    });
+
+    // WebGL context loss (GPU process crash/reset; seen on Linux Chrome under
+    // heavy WebCodecs load). MapLibre self-heals: it stashes the style on loss
+    // and re-applies it on restore, which fires our style.load handler and
+    // redraws the track - nothing to rebuild here. These handlers exist for
+    // observability: the paired Sentry messages measure how often a loss
+    // happens and whether it recovers (the raw symptom - an unhandled empty-log
+    // shader-compile throw from MapLibre's rAF - is filtered in sentry-init.ts).
+    map.on("webglcontextlost", () => {
+        log.warn("webgl context lost");
+        captureSentryMessage("map webgl context lost", {
+            level: "warning",
+            fingerprint: ["map_webgl_context_lost"],
+            tags: { map: "main" },
+        });
+    });
+    map.on("webglcontextrestored", () => {
+        log.info("webgl context restored");
+        captureSentryMessage("map webgl context restored", {
+            fingerprint: ["map_webgl_context_restored"],
+            tags: { map: "main" },
+        });
+    });
+
+    // Recovery signal for the offline banner: a tile that actually loaded means
+    // the tile server is reachable again. Gated inside reportMapTilesOk (no-op
+    // unless currently flagged offline), so this hot per-tile event costs one
+    // boolean check in the normal case - no logging on the hot path.
+    map.on("data", (e) => {
+        if (e.dataType === "source" && e.tile) reportMapTilesOk();
+    });
+
+    stubMissingStyleImages(map);
+
+    // Cache the container size for the follow loop (teleport guard). The
+    // initial read is off the hot path; MapLibre fires 'resize' for both
+    // window resizes and programmatic map.resize() (applyMapLayout), so the
+    // cache stays current without per-frame layout reads.
+    const updateFollowViewportSize = (): void => {
+        const el = map.getContainer();
+        bigMapViewportPx = Math.max(el.clientWidth, el.clientHeight, 1);
+    };
+    updateFollowViewportSize();
+    map.on("resize", updateFollowViewportSize);
+
+    // Standard NavigationControl: +/- zoom, compass. Pitch not shown - 3D tilt
+    // without real elevation data looks cheap.
+    map.addControl(
+        new mlg!.NavigationControl({ showCompass: true, showZoom: true, visualizePitch: false }),
+        "top-right",
+    );
+
+    // Scale bar. ScaleControl.setUnit switches the unit SYSTEM
+    // (metric/imperial/nautical) but not the label language - the "m"/"km" text
+    // is Latin textContent with no setLocale API. All 12 locales use metric, so
+    // the Latin defaults stand and the translation value is low.
+    map.addControl(new mlg!.ScaleControl({ maxWidth: 120, unit: "metric" }), "bottom-left");
+
+    // Custom attribution: tiny "i" pill in the bottom-right that opens a popup
+    // with OSM/OpenMapTiles/OpenFreeMap credits. Replaces the default
+    // AttributionControl (see attributionControl:false above).
+    map.addControl(miniAttributionControl, "bottom-right");
+
+    // NavigationControl buttons ship with English title/aria-label from
+    // MapLibre's defaultLocale. Overwrite them via DOM queries now and on every
+    // langchange (see subscription at the end of initMap).
+    localizeMapNavControls();
+
+    // Track user map gestures so the rAF loop does not fight them. A live
+    // gesture suspends the per-frame follow camera (activeMapGestures); the gesture also
+    // arms the post-interaction grace window so auto-follow stays paused for a
+    // few seconds after the user lets go (noteUserMapInteraction).
+    const startEvents: Array<"dragstart" | "rotatestart" | "pitchstart"> = ["dragstart", "rotatestart", "pitchstart"];
+    const endEvents: Array<"dragend" | "rotateend" | "pitchend"> = ["dragend", "rotateend", "pitchend"];
+    startEvents.forEach((ev) => {
+        map.on(ev, (e) => {
+            activeMapGestures.add(ev.slice(0, -"start".length));
+            // Arm the pause ONLY on a genuine USER gesture. A programmatic easeTo
+            // (chase entry, recenter, follow-switch, fitBounds) can also emit a
+            // *start, but carries no originalEvent. Without this guard, entering
+            // chase (an easeTo with a pitch change) would fire pitchstart and
+            // pause follow the instant it engaged. activeMapGestures still tracks
+            // all *starts (it only suspends the per-frame follow camera, harmless for
+            // programmatic ones).
+            if ((e as { originalEvent?: unknown }).originalEvent) noteUserMapInteraction();
+        });
+    });
+    endEvents.forEach((ev) => {
+        map.on(ev, (e) => {
+            activeMapGestures.delete(ev.slice(0, -"end".length));
+            // Restart the grace countdown from the moment the gesture ends, so the
+            // window is measured from the user's LAST touch, not its first. Guard
+            // on originalEvent for the same reason as the *start handler (a
+            // programmatic ease can emit a *end too).
+            if ((e as { originalEvent?: unknown }).originalEvent) noteUserMapInteraction();
+        });
+    });
+
+    // Manual zoom (wheel, trackpad pinch, double-click, NavigationControl +/-) is
+    // a user interaction too: pause auto-follow for the grace window, just like
+    // pan/rotate/pitch. It does NOT disable chase speed-adaptive zoom anymore -
+    // adaptive re-applies on resume, so the toggle stays the user's deliberate
+    // switch, not something a stray scroll flips off.
+    //
+    // Detection is by the raw zoom-causing events, NOT the 'zoom' event's
+    // originalEvent: MapLibre's smooth scroll-zoom fires its per-frame 'zoom'
+    // WITHOUT originalEvent (verified), so that check never sees a wheel.
+    map.on("wheel", noteUserMapInteraction); // wheel + trackpad pinch-zoom
+    map.on("dblclick", noteUserMapInteraction); // double-click zoom
+    map.on("touchstart", (e) => {
+        // Two fingers = pinch-zoom (one-finger pan already fires dragstart, and
+        // pinch fires neither drag nor rotate start). Catch the multi-touch case.
+        const points = (e as { points?: unknown[] }).points;
+        if (points && points.length >= 2) noteUserMapInteraction();
+    });
+    // The NavigationControl +/- buttons call zoomIn/Out({}, {originalEvent}) -
+    // an easeTo whose per-frame 'zoom' events fire only from the ease's FIRST
+    // render callback. The per-frame follow jumpTo calls stop() and would
+    // cancel that ease before its first frame, so a 'zoom' listener never sees
+    // the click and the buttons go dead while following. 'zoomstart' fires
+    // SYNCHRONOUSLY inside zoomIn/Out (with the same eventData), so the grace
+    // window arms before the next follow frame and the ease survives. The
+    // originalEvent guard still filters our own programmatic camera moves.
+    map.on("zoomstart", (e) => {
+        if ((e as { originalEvent?: unknown }).originalEvent) noteUserMapInteraction();
+    });
+
+    // Redraw the track after every style change (setStyle clears all sources/layers
+    // including our trip-line). The first style.load fires for EMPTY_STYLE with
+    // state.active === null - that's a no-op.
+    map.on("style.load", () => {
+        // A setStyle (theme swap) interrupts any in-flight gesture without
+        // guaranteeing its '*end'; drop the stale gesture flags so follow-ease
+        // is not suspended forever.
+        activeMapGestures.clear();
+        // NOTE on setSourceTileLodParams: deliberately NOT used. The variable
+        // tile zoom it configures only activates at pitch > ~60 deg (mercator
+        // allowVariableZoom gate), which the default chase pitch (58) never
+        // reaches - and lowering maxZoomLevelsOnScreen below the 9.314 default
+        // makes far tiles KEEP more zoom (more tiles, not fewer); the built-in
+        // default is already the sane LOD for our pitch range.
+        const trip = activeTrip();
+        if (trip) refreshMap(trip);
+        // setStyle (theme swap) wipes every non-style layer, including our 3D
+        // building extrusion. Re-add it - with the new theme's wall color - when
+        // chase is the active mode.
+        if (state.followMode === "chase") ensure3dBuildings(map);
+    });
+
+    // Start loading the real style. Promise is cached so a subsequent
+    // ensureMiniMap call does not double-fetch.
+    const theme = currentMapTheme();
+    loadMapStyle(theme).then((style) => {
+        if (style) applyLoadedStyle(style, theme);
+    });
+
+    // Background prefetch the other theme. Two reasons:
+    //   1) Export-overlay snapshotter (src/ui/export-map-snapshot.ts) ALWAYS
+    //      uses light - on a dark user this used to fire a fresh fetch the
+    //      moment the user enabled "Map overlay" in the export modal, with
+    //      its own failure surface. Prewarming makes that path a cache hit.
+    //   2) prefers-color-scheme toggle / theme-switch button no longer waits
+    //      on a fetch on the first switch.
+    // source="prefetch" makes failures silent (no banner) - the user never
+    // explicitly asked for this fetch.
+    const otherTheme: MapTheme = theme === "light" ? "dark" : "light";
+    loadMapStyle(otherTheme, false, "prefetch");
+
+    return map;
+}
+
+/**
+ * Mini-map in the player corner. Separate MapLibre instance with the same
+ * Liberty style, no controls, and interactive:false. Clicking it expands the
+ * large map.
+ *
+ * The car marker stays centered: camera follows the current position on every
+ * rAF tick (see startMarkerLoop). Zoom keeps MINI_MAP_TARGET_DIAMETER_KM around
+ * the car. Bearing is always 0 (north-up).
+ *
+ * Web Mercator on MapLibre's 512 px tiles: meters_per_pixel =
+ * 78271.5 * cos(lat) / 2^zoom - NOT the 256-tile 156543.03 (MapLibre's zoom is
+ * one level "sharper"; see zoomForDiameterKm). The latitude dependency is
+ * significant (~1.5 zoom levels from equator to 70°N), so zoom is recomputed
+ * dynamically on each jumpTo.
+ */
+const MINI_MAP_DIAMETER_PX = 140; // Must match .mini-map width/height in styles/components/map.css.
+// ~5 km across the circle. Was nominally 10 with the 256-tile constant that
+// doubled the zoom, so it actually rendered ~5 km; this keeps that exact framing
+// now that the constant is fixed. Raise it for more surrounding context.
+const MINI_MAP_TARGET_DIAMETER_KM = 5;
+
+function miniMapZoomForLat(lat: number): number {
+    const targetMetersPerPx = (MINI_MAP_TARGET_DIAMETER_KM * 1000) / MINI_MAP_DIAMETER_PX;
+    const cosLat = Math.cos((lat * Math.PI) / 180);
+    // Near poles cos → 0; guard against -Infinity and absurdly large zoom.
+    const safeCos = Math.max(cosLat, 0.01);
+    return Math.log2((78271.5 * safeCos) / targetMetersPerPx);
+}
+
+export function ensureMiniMap(): maplibregl.Map | null {
+    if (state.miniMap) return state.miniMap;
+    // The big map is ensured first; if its WebGL preflight failed, do not retry.
+    if (mapInitFailed) return null;
+    if (!probeWebGL()) {
+        handleMapInitFailure();
+        return null;
+    }
+
+    let mini: maplibregl.Map;
+    try {
+        mini = new mlg!.Map({
+            container: "mini-map",
+            // Start with empty style; real style is applied via applyLoadedStyle
+            // after the shared fetch in ensureMap.
+            style: EMPTY_STYLE,
+            center: [0, 0],
+            // Initial zoom at lat 0; recalculated on every rAF tick via jumpTo.
+            zoom: miniMapZoomForLat(0),
+            // Fully non-interactive - user should not accidentally pan/rotate it;
+            // click is handled by a separate DOM listener that expands the large map.
+            interactive: false,
+            // Attribution only on the large map; it would just clutter a 150 px circle.
+            attributionControl: false,
+            // Performance tuning for "car-camera follow" use case:
+            //  - fadeDuration:0 - zeroes the 300 ms label-collision fade (per the
+            //    style-spec fadeDuration animates symbol collision in/out, NOT
+            //    raster tile cross-fade). The mini-map camera moves in sparse
+            //    px-gated jumps; a nonzero fade would keep it rendering for
+            //    300 ms after every jump - nearly continuous rendering for a
+            //    140 px thumbnail. The big map makes the opposite call (see
+            //    ensureMap): there the camera moves continuously anyway and
+            //    fadeDuration doubles as the symbol-placement throttle.
+            //  - refreshExpiredTiles:false - skip tile TTL revalidation; sessions are
+            //    read-only playback, tiles don't meaningfully "expire".
+            //  - crossSourceCollisions:false - disables label-collision detection across
+            //    sources (one tile source + our line source). One of the most expensive
+            //    algorithms in the render loop.
+            fadeDuration: 0,
+            refreshExpiredTiles: false,
+            crossSourceCollisions: false,
+            // Small tile cache is fine: ~140 px viewport fits 4-9 tiles at typical zoom.
+            // 32 gives headroom for speed changes and zoom shifts on long trips.
+            maxTileCacheSize: 32,
+            // Skip runtime style validation (static self-hosted styles, gated at
+            // build time). Propagates to the setStyle(diff:false) path used to
+            // apply the cached style below. See ensureMap for the full rationale.
+            validateStyle: false,
+        });
+    } catch (err) {
+        handleMapInitFailure(err);
+        return null;
+    }
+    state.miniMap = mini;
+
+    mini.on("load", () => {
+        state.miniMapReady = true;
+    });
+
+    mini.on("error", (ev) => {
+        const e = ev?.error || ev;
+        const message = e?.message ?? String(e);
+        if (seenMiniMapErrors.has(message)) return;
+        seenMiniMapErrors.add(message);
+        log.error("maplibre mini error", e instanceof Error ? e : { message });
+    });
+
+    // Same context-loss observability as the large map (see ensureMap). A GPU
+    // crash kills both contexts at once; a single-context eviction can hit just
+    // one - the map tag tells them apart in Sentry.
+    mini.on("webglcontextlost", () => {
+        log.warn("mini webgl context lost");
+        captureSentryMessage("map webgl context lost", {
+            level: "warning",
+            fingerprint: ["map_webgl_context_lost"],
+            tags: { map: "mini" },
+        });
+    });
+    mini.on("webglcontextrestored", () => {
+        log.info("mini webgl context restored");
+        captureSentryMessage("map webgl context restored", {
+            fingerprint: ["map_webgl_context_restored"],
+            tags: { map: "mini" },
+        });
+    });
+
+    stubMissingStyleImages(mini);
+
+    // After every style change on the mini-map all sources/layers/markers are
+    // cleared. Redraw from the snapshot in state.miniMapData - needed when
+    // ensureMiniMap is called AFTER ensureMap and the style fetch has already
+    // completed (applyLoadedStyle was never called for this mini-map instance).
+    mini.on("style.load", () => {
+        if (state.miniMapData) refreshMiniMap(state.miniMapData);
+    });
+
+    // If the style fetch already completed (typical: ensureMiniMap called after
+    // ensureMap and the style resolved), apply the cached style directly.
+    // Otherwise do nothing: ensureMap - always called first, and the only reason
+    // cached is still null - has a pending loadMapStyle().then(applyLoadedStyle)
+    // on the same cached promise, and applyLoadedStyle sets state.miniMap too
+    // (assigned synchronously above). Registering our own callback here would
+    // just re-apply the same style a second time to both maps (full setStyle
+    // diff:false = teardown + re-parse of the heavy style.json).
+    const theme = currentMapTheme();
+    const cached = cachedMapStyle[theme];
+    if (cached && state.miniMap) {
+        state.miniMap.setStyle(cached, { diff: false });
+    }
+
+    return mini;
+}
+
+/**
+ * Creates the car marker DOM element. The triangle arrow points up at bearing=0
+ * (north). Rotation is via the --bearing CSS variable on the inner .car-marker
+ * (see styles/components/map.css). A fresh element is created on each refreshMap because a
+ * MapLibre Marker owns its element; recreating the marker is simpler than
+ * detaching and reattaching.
+ */
+function buildCarMarkerElement(): HTMLDivElement {
+    const wrap = document.createElement("div");
+    wrap.className = "car-marker-wrap";
+    const tc = themeColors();
+    wrap.innerHTML = `
+        <div class="car-marker" style="--bearing:0deg">
+            <svg viewBox="-12 -12 24 24" width="28" height="28">
+                <polygon points="0,-10 7,8 0,4 -7,8" fill="${tc.markerCar}" stroke="${tc.markerStroke}" stroke-width="1.5" stroke-linejoin="round"/>
+            </svg>
+        </div>
+    `;
+    return wrap;
+}
+
+/**
+ * SVG circle with a letter - start ('A', green) or end ('B', red) marker.
+ * Makes direction of travel obvious on loop routes.
+ */
+function buildEndpointMarkerElement(kind: "start" | "end"): HTMLDivElement {
+    const wrap = document.createElement("div");
+    wrap.className = "endpoint-marker-wrap";
+    const tc = themeColors();
+    const isStart = kind === "start";
+    const fill = isStart ? tc.markerStart : tc.markerEnd;
+    const letter = isStart ? "A" : "B";
+    wrap.innerHTML = `
+        <svg viewBox="-12 -12 24 24" width="22" height="22">
+            <circle cx="0" cy="0" r="10" fill="${fill}" stroke="${tc.markerStroke}" stroke-width="2"/>
+            <text x="0" y="1" text-anchor="middle" dominant-baseline="middle"
+                  font-size="11" font-weight="700" fill="${tc.markerStroke}" font-family="Inter, system-ui, sans-serif">${letter}</text>
+        </svg>
+    `;
+    return wrap;
+}
+
+/**
+ * "Loop" heuristic: start and end are within 30% of the bounding-box diagonal.
+ * On a straight trip A/B markers add no information (direction is unambiguous
+ * from the speed gradient and the car marker); on a loop they pin down which
+ * corner is the start. Threshold chosen empirically - generous enough to catch
+ * city laps that return near the start, tight enough to skip near-straight
+ * commutes that just happen to share a parking lot at both ends.
+ */
+function isLoopRoute(start: LngLatTuple, end: LngLatTuple, bounds: maplibregl.LngLatBounds): boolean {
+    const dLon = start[0] - end[0];
+    const dLat = start[1] - end[1];
+    const startEndDist = Math.sqrt(dLon * dLon + dLat * dLat);
+    const ne = bounds.getNorthEast();
+    const sw = bounds.getSouthWest();
+    const diag = Math.sqrt((ne.lng - sw.lng) ** 2 + (ne.lat - sw.lat) ** 2);
+    if (diag === 0) return false;
+    return startEndDist / diag < 0.3;
+}
+
+/**
+ * Trip state update when the map cannot render (no WebGL). Mirrors the
+ * GPS-presence decisions refreshMap makes - state.hasTrack and the View-menu
+ * chart/strip availability - minus everything that touches the map. Keeps the
+ * speed chart and inferred-event strip fully working without a map. applyMapLayout
+ * shows the "map unavailable" notice in the map slot when GPS exists.
+ */
+function refreshMapless(trip: Trip | null): void {
+    const hasUsableGps = (trip?.records ?? []).some(
+        (r) => r.active && Number.isFinite(r.lat) && Number.isFinite(r.lon),
+    );
+    state.hasTrack = hasUsableGps;
+    // The map row stays unavailable for the whole session - there is no WebGL.
+    setPanelAvailable("map", false);
+    setPanelAvailable("chart", hasUsableGps);
+    setPanelAvailable("strip", hasUsableGps);
+    applyMapLayout();
+    callbacks.onChartLayoutChange();
+    emitLifecycle("map-tracks-rendered", { recordCount: hasUsableGps ? (trip?.records.length ?? 0) : 0 });
+}
+
+// Single pending-deferral guard: refreshMap can be called repeatedly (trip
+// switches) while the initial style load or a theme/style swap is in flight.
+// Each call would otherwise stack another one-shot listener, and they all redraw
+// the same current trip (refreshCurrent re-resolves state.active). Collapse to
+// one pending deferral.
+let mapRefreshDeferred = false;
+
+export function refreshMap(trip: Trip | null): void {
+    const map = ensureMap();
+    if (!map) {
+        // No WebGL: the map can't render, but the chart + inferred strip depend
+        // only on GPS data and must still work. Drive their state without
+        // touching the (absent) map.
+        refreshMapless(trip);
+        return;
+    }
+    // Both deferrals below re-resolve the CURRENT active trip when they fire
+    // instead of capturing `trip`: the user can switch trips while the style
+    // loads, and the stale closure would then redraw the old trip's track
+    // over the new one (the rAF marker and the rendered track disagreeing).
+    const refreshCurrent = (): void => refreshMap(activeTrip());
+    if (!state.mapReady) {
+        // Initial style not yet loaded; defer until 'load' fires.
+        if (!mapRefreshDeferred) {
+            mapRefreshDeferred = true;
+            map.once("load", () => {
+                mapRefreshDeferred = false;
+                refreshCurrent();
+            });
+        }
+        return;
+    }
+    if (!map.isStyleLoaded()) {
+        // setStyle (theme switch / retry) is in flight. state.mapReady stays
+        // true from the initial load, but isStyleLoaded() flips false until
+        // the new style finishes parsing - addSource/addLayer would throw
+        // "Style is not done loading". Wait for 'idle', which fires once
+        // the new style is fully loaded and a render frame has completed.
+        if (!mapRefreshDeferred) {
+            mapRefreshDeferred = true;
+            map.once("idle", () => {
+                mapRefreshDeferred = false;
+                refreshCurrent();
+            });
+        }
+        return;
+    }
+
+    // Remove old delegated listeners BEFORE removing the layer. MapLibre does
+    // NOT auto-remove listeners registered via map.on(type, layerId, handler)
+    // when the layer is removed - they stay in the internal dispatcher and
+    // re-activate when a new layer with the same id is added.
+    removeTrackListeners(map);
+    removeEventsListeners(map);
+
+    // Drop the cached track scaffolding from the previous trip - the rAF tick
+    // skips trail-progress writes when trackTotalDist is 0. Reset the trail
+    // delta-guard too, otherwise a new trip whose initial progress happens to
+    // match the previous one would skip the first write and leave the overlay
+    // stale until 0.5% of the track is driven.
+    trackRecs = [];
+    trackCumDist = [];
+    trackTotalDist = 0;
+    trailLastProgressWritten = -1;
+    trailLastWriteAt = 0;
+    // A pending trailing write carries the OLD trip's progress - it must not
+    // land on the new trip's freshly-added trail layer.
+    cancelTrailingTrailWrite();
+    // Invalidate the follow-camera filter and the applied-target caches: the
+    // fitBounds below moves the camera (stepping the filter from the old
+    // trip's coordinates would yank it back), and a new trip that starts at
+    // the previous trip's exact parking spot must not skip its first write.
+    resetFollowCameraFilter();
+    bigMapAppliedLat = Number.NaN;
+    bigMapAppliedLon = Number.NaN;
+    bigMapAppliedBearing = Number.NaN;
+    bigMapAppliedZoom = Number.NaN;
+    miniAppliedLat = Number.NaN;
+    miniAppliedLon = Number.NaN;
+    miniAppliedBearing = Number.NaN;
+
+    const trailLayerId = `${state.tripSourceId}${TRAIL_LAYER_SUFFIX}`;
+    if (map.getLayer(trailLayerId)) map.removeLayer(trailLayerId);
+    if (map.getLayer(state.tripSourceId)) map.removeLayer(state.tripSourceId);
+    if (map.getSource(state.tripSourceId)) map.removeSource(state.tripSourceId);
+    if (state.marker) {
+        state.marker.remove();
+        state.marker = null;
+    }
+    if (state.startMarker) {
+        state.startMarker.remove();
+        state.startMarker = null;
+    }
+    if (state.endMarker) {
+        state.endMarker.remove();
+        state.endMarker = null;
+    }
+    // Hover artifacts must not survive a trip switch. With a mouse the layer
+    // mouseleave cleans them on the way out, but on touch (tap shows the
+    // popup, no mouseleave ever fires) the old trip's popup stays anchored at
+    // stale coords and the chart keeps re-showing the leftover hover cursor.
+    if (state.hoverPopup) {
+        state.hoverPopup.remove();
+        state.hoverPopup = null;
+    }
+    state.chartHoverX = null;
+
+    const recs = trip?.records ?? [];
+    // Active GPS fixes only, in two derived lists:
+    //  - activeRecs: every active+finite fix in time order. Drives the trail
+    //    progress (below) so its time->distance mapping matches the marker.
+    //  - dedupedRecs: activeRecs minus consecutive identical coordinates. They
+    //    produce no line segment and break the strictly increasing line-progress
+    //    the gradient needs (stationary periods, parallel recordings, etc.), so
+    //    only the line geometry + gradient use this list.
+    const activeRecs: GpsRecord[] = [];
+    const dedupedRecs: GpsRecord[] = [];
+    for (const r of recs) {
+        if (!r.active) continue;
+        // Guard against non-finite coords from a buggy parser - a NaN lat/lon
+        // would poison fitBounds and the line-gradient stops. The events layer
+        // (refreshEventsLayer) already does this; keep the main track symmetric.
+        if (!Number.isFinite(r.lat) || !Number.isFinite(r.lon)) continue;
+        activeRecs.push(r);
+        const last = dedupedRecs[dedupedRecs.length - 1];
+        if (!last || last.lat !== r.lat || last.lon !== r.lon) {
+            dedupedRecs.push(r);
+        }
+    }
+    if (dedupedRecs.length === 0) {
+        // No GPS - clear mini-map too (otherwise the previous trip's track stays).
+        // hasTrack=false hides both maps and the icon via applyMapLayout.
+        // refreshEventsLayer(null) drops a stale events source/layer carried
+        // over from the previous (GPS-bearing) trip - applyMapLayout only hides
+        // the map, the source would stay registered in MapLibre's style.
+        refreshEventsLayer(map, null);
+        refreshMiniMap(null);
+        state.hasTrack = false;
+        // Disable all three "View" menu rows - without GPS the mini-map is
+        // empty, the speed chart has no data, and the inferred-events strip
+        // can't detect anything. Rows dim, clicks are a no-op, hotkeys C / E
+        // / M ignored. Stored toggle preferences are preserved, so toggles
+        // come back the way the user left them on the next GPS-bearing trip.
+        setPanelAvailable("map", false);
+        setPanelAvailable("chart", false);
+        setPanelAvailable("strip", false);
+        applyMapLayout();
+        // Without GPS the chart is also hidden, leaving only the scrub bar.
+        callbacks.onChartLayoutChange();
+        // Lifecycle: stage finished. We still fire the event so external
+        // observers (perf harness) don't wait forever on tracks-less trips.
+        emitLifecycle("map-tracks-rendered", { recordCount: 0 });
+        return;
+    }
+
+    // MapLibre uses [lng, lat], not [lat, lng] like Leaflet.
+    //
+    // Known limitation: no antimeridian handling. A trip crossing ±180°
+    // (Chukotka, Taveuni) renders a world-spanning segment, and the marker
+    // interpolation lerps longitude straight across the globe. Deliberately
+    // undocumented in the UI and unfixed: no real dashcam sample crosses it,
+    // and the split/normalize machinery is not worth the surface until one
+    // does. If such a sample ever lands, normalize segment lon deltas to
+    // (-180, 180] in interpolatePosition and split the LineString here.
+    const coords: LngLatTuple[] = dedupedRecs.map((r) => [r.lon, r.lat]);
+    const { cumDist, total: totalDist } = buildMercatorCumulativeDistances(dedupedRecs);
+    const gradient = buildSpeedGradient(dedupedRecs, cumDist, totalDist);
+
+    // Save for the rAF trail-progress computation. Trail progress runs over
+    // activeRecs, NOT dedupedRecs: the marker interpolates the car position over
+    // the raw records by time, so during a stop (many same-coordinate fixes) it
+    // stays put. dedupedRecs collapses those fixes, so ITS time axis would
+    // interpolate the distance toward the next point during the stop - making
+    // the dimmed trail run ahead of the marker on stop-and-go routes. activeRecs
+    // keeps the stationary fixes, so the time->distance mapping matches the
+    // marker. Its cumulative-distance total equals the deduped line length (the
+    // dropped segments are zero-length), so the fraction still maps 1:1 onto the
+    // line's line-progress.
+    const trailProgress = buildMercatorCumulativeDistances(activeRecs);
+    trackRecs = activeRecs;
+    trackCumDist = trailProgress.cumDist;
+    trackTotalDist = trailProgress.total;
+
+    // lineMetrics:true enables line-progress for line-gradient.
+    map.addSource(state.tripSourceId, {
+        type: "geojson",
+        lineMetrics: true,
+        data: {
+            type: "Feature",
+            geometry: { type: "LineString", coordinates: coords },
+            properties: {},
+        },
+    });
+    // Base track layer: speed gradient over the whole route.
+    map.addLayer({
+        id: state.tripSourceId,
+        type: "line",
+        source: state.tripSourceId,
+        layout: { "line-join": "round", "line-cap": "round" },
+        paint: {
+            "line-width": 4,
+            "line-opacity": 0.9,
+            "line-gradient": gradient as never,
+        },
+    });
+    // Trail overlay: same geometry, line-gradient is a 4-stop transparent ->
+    // dim mask. setTrailProgress() rewrites it on every rAF tick so the un-
+    // driven part of the track fades toward the map background. The driven
+    // part stays unveiled - the base layer's speed gradient shines through.
+    map.addLayer({
+        id: trailLayerId,
+        type: "line",
+        source: state.tripSourceId,
+        layout: { "line-join": "round", "line-cap": "round" },
+        paint: {
+            "line-width": 5,
+            "line-gradient": [
+                "interpolate",
+                ["linear"],
+                ["line-progress"],
+                0,
+                themeColors().trackVeil,
+                1,
+                themeColors().trackVeil,
+            ] as never,
+        },
+    });
+
+    addTrackListeners(map);
+
+    state.marker = new mlg!.Marker({
+        element: buildCarMarkerElement(),
+        // "map" alignment: CSS bearing is in map coordinates (from true north).
+        // MapLibre auto-counter-rotates the marker when the map rotates, so the
+        // arrow always points the correct geographic direction. With "viewport"
+        // in rotate mode the arrow would drift sideways relative to the map.
+        rotationAlignment: "map",
+        // Keep the arrow an upright billboard under chase tilt: pitchAlignment
+        // "viewport" stops it from foreshortening into an unreadable sliver at
+        // high pitch. No effect at pitch 0 (the flat modes), so it is safe to
+        // set unconditionally. Bearing stays geographic via rotationAlignment.
+        pitchAlignment: "viewport",
+        // Subpixel translate3d on the marker DOM. Without this the marker snaps
+        // to whole pixels per frame - visible jitter at slow speeds where the
+        // per-frame shift is <1 px.
+        subpixelPositioning: true,
+    })
+        .setLngLat(coords[0]!)
+        .addTo(map);
+
+    // Fit camera to track bounding box.
+    const bounds = coords.reduce((acc, c) => acc.extend(c), new mlg!.LngLatBounds(coords[0]!, coords[0]!));
+
+    // Start ('A') and end ('B') anchors only make sense on loop routes - when
+    // start sits near end, the user can otherwise mistake direction-of-travel.
+    // On a straight A-to-B trip the start marker is always at the bbox corner
+    // and the end at the opposite, no ambiguity - so we drop both and let the
+    // car marker + speed-gradient + trail veil tell the story.
+    if (isLoopRoute(coords[0]!, coords[coords.length - 1]!, bounds)) {
+        // subpixelPositioning: without it Marker._update rounds the position on
+        // every moveend, and the per-frame follow jumpTo fires moveend per frame
+        // - the pins would jitter by up to 1 px against the gliding basemap.
+        state.startMarker = new mlg!.Marker({
+            element: buildEndpointMarkerElement("start"),
+            anchor: "center",
+            subpixelPositioning: true,
+        })
+            .setLngLat(coords[0]!)
+            .addTo(map);
+
+        state.endMarker = new mlg!.Marker({
+            element: buildEndpointMarkerElement("end"),
+            anchor: "center",
+            subpixelPositioning: true,
+        })
+            .setLngLat(coords[coords.length - 1]!)
+            .addTo(map);
+    }
+    map.fitBounds(bounds, { padding: 40, animate: false });
+
+    // Update mini-map with the already-prepared coords and gradient.
+    refreshMiniMap({ coords, gradient });
+
+    // UX-19: event dots on the large map only - mini-map is too small to read them.
+    refreshEventsLayer(map, trip);
+
+    // Track present - show maps and icons.
+    state.hasTrack = true;
+    setPanelAvailable("map", true);
+    setPanelAvailable("chart", true);
+    setPanelAvailable("strip", true);
+    applyMapLayout();
+    // chart-layout removes the no-gps class, making the chart visible again.
+    callbacks.onChartLayoutChange();
+
+    // Lifecycle: the polyline + markers + mini-map are committed to the map.
+    // Subscribers (perf harness) pair this with trip-activated to time map
+    // rendering. Tracks-less branch above returns early - that case does not
+    // fire the event (there is nothing to render).
+    emitLifecycle("map-tracks-rendered", { recordCount: dedupedRecs.length });
+}
+
+// -- Named handlers for delegated map.on(type, layerId) listeners. -----------
+// Must be stable references so map.off() can remove them by identity.
+
+function onTrackEnter(): void {
+    state.map?.getCanvas().style.setProperty("cursor", "pointer");
+}
+
+function onTrackLeave(): void {
+    const map = state.map;
+    if (!map) return;
+    map.getCanvas().style.cursor = "";
+    if (state.hoverPopup) {
+        state.hoverPopup.remove();
+        state.hoverPopup = null;
+    }
+    if (state.chartHoverX !== null) {
+        state.chartHoverX = null;
+        if (state.chart) state.chart.draw();
+    }
+}
+
+function onEventsEnter(): void {
+    state.map?.getCanvas().style.setProperty("cursor", "pointer");
+}
+
+function onEventsLeave(): void {
+    if (state.map) state.map.getCanvas().style.cursor = "";
+}
+
+function onEventsClick(e: maplibregl.MapLayerMouseEvent): void {
+    const feat = e.features?.[0];
+    if (!feat) return;
+    const props = feat.properties as { relSec?: number } | null;
+    if (!props || typeof props.relSec !== "number") return;
+    callbacks.onSeekTripTime(Math.max(0, props.relSec - 5));
+}
+
+function addTrackListeners(map: maplibregl.Map): void {
+    map.on("click", state.tripSourceId, onTrackClick);
+    map.on("mousemove", state.tripSourceId, onTrackHover);
+    map.on("mouseenter", state.tripSourceId, onTrackEnter);
+    map.on("mouseleave", state.tripSourceId, onTrackLeave);
+}
+
+function removeTrackListeners(map: maplibregl.Map): void {
+    map.off("click", state.tripSourceId, onTrackClick);
+    map.off("mousemove", state.tripSourceId, onTrackHover);
+    map.off("mouseenter", state.tripSourceId, onTrackEnter);
+    map.off("mouseleave", state.tripSourceId, onTrackLeave);
+}
+
+function addEventsListeners(map: maplibregl.Map): void {
+    map.on("mouseenter", EVENTS_LAYER_ID, onEventsEnter);
+    map.on("mouseleave", EVENTS_LAYER_ID, onEventsLeave);
+    map.on("click", EVENTS_LAYER_ID, onEventsClick);
+}
+
+function removeEventsListeners(map: maplibregl.Map): void {
+    map.off("mouseenter", EVENTS_LAYER_ID, onEventsEnter);
+    map.off("mouseleave", EVENTS_LAYER_ID, onEventsLeave);
+    map.off("click", EVENTS_LAYER_ID, onEventsClick);
+}
+
+// UX-19: source/layer IDs for events on the main map.
+const EVENTS_SOURCE_ID = "trip-events";
+const EVENTS_LAYER_ID = "trip-events-circle";
+
+/**
+ * UX-19: draws clickable brake-event dots on top of the track on the large map.
+ * Mini-map skips events - density makes them unreadable at small scale.
+ * Click seeks to event.relSec - 5 s (same offset as UX-08).
+ */
+function refreshEventsLayer(map: maplibregl.Map, trip: Trip | null): void {
+    removeEventsListeners(map);
+    if (map.getLayer(EVENTS_LAYER_ID)) map.removeLayer(EVENTS_LAYER_ID);
+    if (map.getSource(EVENTS_SOURCE_ID)) map.removeSource(EVENTS_SOURCE_ID);
+
+    if (!trip || trip.events.length === 0) return;
+
+    // Event coordinates from trip.records[event.recordIndex]. Skip records
+    // without an active GPS fix - no reliable coordinate.
+    const features: Array<{
+        type: "Feature";
+        geometry: { type: "Point"; coordinates: [number, number] };
+        properties: { kind: string; relSec: number; severity: number; recordIndex: number };
+    }> = [];
+    for (const ev of trip.events) {
+        const rec = trip.records[ev.recordIndex];
+        if (!rec?.active) continue;
+        if (!Number.isFinite(rec.lat) || !Number.isFinite(rec.lon)) continue;
+        features.push({
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [rec.lon, rec.lat] },
+            properties: {
+                kind: ev.kind,
+                relSec: ev.relSec,
+                severity: ev.severity,
+                recordIndex: ev.recordIndex,
+            },
+        });
+    }
+    if (features.length === 0) return;
+
+    map.addSource(EVENTS_SOURCE_ID, {
+        type: "geojson",
+        data: { type: "FeatureCollection", features },
+    });
+    const tc = themeColors();
+    // 6 px circle with --bg stroke: readable on both light and dark base layers.
+    const bgColor = getCssVar("--bg") || "#000";
+    map.addLayer({
+        id: EVENTS_LAYER_ID,
+        type: "circle",
+        source: EVENTS_SOURCE_ID,
+        paint: {
+            // Radius scales with impact severity (|G|, carried per feature at
+            // properties.severity): a harder impact draws a bigger dot - the core
+            // signal for a crash viewer. Domain spans from just under the default
+            // 0.5g noise floor up to a hard ~1.5g impact; `interpolate` clamps
+            // outside it, so a user-raised/lowered detection threshold still
+            // renders sensibly. Color stays the fixed --dc-red brake signal -
+            // the exact g value already shows in the chart event popup, so a
+            // color ramp would only erode the established semantic. Cast `as
+            // never` mirrors the line-gradient expression idiom above.
+            "circle-radius": ["interpolate", ["linear"], ["get", "severity"], 0.4, 4, 1.5, 8] as never,
+            "circle-color": tc.eventBrake,
+            "circle-stroke-width": 2,
+            "circle-stroke-color": bgColor,
+        },
+    });
+
+    addEventsListeners(map);
+}
+
+/**
+ * Updates the track source/layer and car marker on the mini-map. Called from
+ * refreshMap on trip change. Accepts already-prepared coords + gradient to
+ * avoid re-deduplicating GPS records and diverging from the large map.
+ */
+// Mirror of mapRefreshDeferred for the mini-map - same stacking guard.
+let miniMapRefreshDeferred = false;
+
+function refreshMiniMap(data: MiniMapData | null): void {
+    // Store in state so the style.load handler in ensureMiniMap can redraw
+    // with the same coords/gradient without touching state.active.
+    state.miniMapData = data;
+
+    const mini = ensureMiniMap();
+    // No WebGL: no mini-map instance. Nothing to draw - the big-map slot already
+    // shows the "map unavailable" notice (see applyMapLayout).
+    if (!mini) return;
+    // Re-resolve state.miniMapData when the deferral fires (not the captured
+    // `data`): a trip switch mid-style-load would otherwise redraw the stale
+    // trip's track. Same rationale as the deferrals in refreshMap.
+    if (!state.miniMapReady) {
+        if (!miniMapRefreshDeferred) {
+            miniMapRefreshDeferred = true;
+            mini.once("load", () => {
+                miniMapRefreshDeferred = false;
+                refreshMiniMap(state.miniMapData);
+            });
+        }
+        return;
+    }
+    if (!mini.isStyleLoaded()) {
+        // Mini-map style swap in flight - see the matching guard in refreshMap.
+        if (!miniMapRefreshDeferred) {
+            miniMapRefreshDeferred = true;
+            mini.once("idle", () => {
+                miniMapRefreshDeferred = false;
+                refreshMiniMap(state.miniMapData);
+            });
+        }
+        return;
+    }
+
+    // Clear previous track.
+    if (mini.getLayer(state.tripSourceId)) mini.removeLayer(state.tripSourceId);
+    if (mini.getSource(state.tripSourceId)) mini.removeSource(state.tripSourceId);
+    if (state.miniMapMarker) {
+        state.miniMapMarker.remove();
+        state.miniMapMarker = null;
+    }
+
+    if (!data || data.coords.length === 0) return;
+    const { coords, gradient } = data;
+
+    mini.addSource(state.tripSourceId, {
+        type: "geojson",
+        lineMetrics: true,
+        data: {
+            type: "Feature",
+            geometry: { type: "LineString", coordinates: coords },
+            properties: {},
+        },
+    });
+    // Thinner line on mini-map: at small scale a 4 px line turns into a blob.
+    mini.addLayer({
+        id: state.tripSourceId,
+        type: "line",
+        source: state.tripSourceId,
+        layout: { "line-join": "round", "line-cap": "round" },
+        paint: {
+            "line-width": 3,
+            "line-opacity": 0.95,
+            "line-gradient": gradient as never,
+        },
+    });
+
+    state.miniMapMarker = new mlg!.Marker({
+        element: buildCarMarkerElement(),
+        rotationAlignment: "viewport",
+        subpixelPositioning: true,
+    })
+        .setLngLat(coords[0]!)
+        .addTo(mini);
+
+    // Initial view at the first point; rAF loop will center on current position
+    // at the first tick. Invalidate the mini lane's applied-target cache: this
+    // function also re-runs from the mini-map's style.load (theme swap), and
+    // with an unchanged playhead the change-gate would otherwise skip the next
+    // update and leave the camera + marker parked at the trip start.
+    mini.jumpTo({ center: coords[0]!, zoom: miniMapZoomForLat(coords[0]![1]), bearing: 0 });
+    miniAppliedLat = Number.NaN;
+    miniAppliedLon = Number.NaN;
+    miniAppliedBearing = Number.NaN;
+}
+
+/** Rotates a car marker by updating the --bearing CSS variable on its inner
+ *  .car-marker element. No-op when the marker or element is absent. Shared by
+ *  the main map and the mini-map (separate Marker instances). */
+function rotateMarker(marker: maplibregl.Marker | null, bearingDeg: number): void {
+    if (!marker) return;
+    const inner = marker.getElement()?.querySelector<HTMLElement>(".car-marker");
+    if (!inner) return;
+    inner.style.setProperty("--bearing", `${bearingDeg}deg`);
+}
+
+/**
+ * Hides/shows a marker via CSS visibility (not display:none) so MapLibre keeps
+ * it in layout and setLngLat/getElement remain safe. Idempotent.
+ */
+function setMarkerHidden(m: maplibregl.Marker, hidden: boolean): void {
+    const el = m.getElement();
+    if (!el) return;
+    el.style.visibility = hidden ? "hidden" : "";
+}
+
+/**
+ * Finds the nearest active GPS record to a geographic point. Euclidean distance
+ * in degrees - negligible error over short segments, faster than haversine.
+ * Returns the index in trip.records or -1.
+ */
+function nearestActiveRecordIndex(trip: Trip, lat: number, lng: number): number {
+    let bestIdx = -1;
+    let bestDist = Infinity;
+    for (let i = 0; i < trip.records.length; i++) {
+        const r = trip.records[i]!;
+        if (!r.active) continue;
+        const dLat = r.lat - lat;
+        const dLon = r.lon - lng;
+        const d = dLat * dLat + dLon * dLon;
+        if (d < bestDist) {
+            bestDist = d;
+            bestIdx = i;
+        }
+    }
+    return bestIdx;
+}
+
+/** Track click: seek to the video moment corresponding to the nearest GPS point. */
+function onTrackClick(ev: maplibregl.MapMouseEvent): void {
+    if (!state.active) return;
+    const trip = state.trips[state.active.trip];
+    if (!trip || trip.records.length === 0) return;
+
+    const idx = nearestActiveRecordIndex(trip, ev.lngLat.lat, ev.lngLat.lng);
+    if (idx === -1) return;
+    const rec = trip.records[idx]!;
+    // Seek targets are footage-axis seconds; project the record's wall-clock time.
+    callbacks.onSeekTripTime(wallToContentSec(trip.timeline, rec.unixSeconds));
+}
+
+/**
+ * Track hover: shows a popup with time, speed and coordinates for the nearest
+ * GPS point. The popup instance is reused (one per state) to avoid DOM churn.
+ */
+function onTrackHover(ev: maplibregl.MapMouseEvent): void {
+    if (!state.active || !state.map) return;
+    const trip = state.trips[state.active.trip];
+    if (!trip || trip.records.length === 0) return;
+
+    const idx = nearestActiveRecordIndex(trip, ev.lngLat.lat, ev.lngLat.lng);
+    if (idx === -1) return;
+    const rec = trip.records[idx]!;
+
+    if (!state.hoverPopup) {
+        state.hoverPopup = new mlg!.Popup({
+            // On touch there is no mouseleave to auto-remove the popup, so without
+            // a close button a tapped route popup lingers for the whole trip. Give
+            // coarse pointers an explicit dismiss; desktop keeps the clean
+            // hover-driven popup (mouseleave still removes it).
+            closeButton: isCoarsePointer(),
+            closeOnClick: false,
+            offset: 12,
+            className: "ez-popup",
+        });
+    }
+    state.hoverPopup.setLngLat([rec.lon, rec.lat]).setHTML(buildRecordPopupHtml(rec, trip)).addTo(state.map);
+
+    // Sync the chart cursor to the same moment (footage axis, same as chart hover).
+    state.chartHoverX = wallToContentSec(trip.timeline, rec.unixSeconds);
+    if (state.chart) state.chart.draw();
+}
+
+/**
+ * Single HTML generator for hover tooltips: shared by the map track popup and
+ * the Chart.js external tooltip. One source of truth for content and style.
+ */
+export function buildRecordPopupHtml(rec: GpsRecord, trip: Trip): string {
+    // "rel" label is the footage-axis position (matches the scrubber/chart);
+    // "abs" below stays real wall-clock.
+    const relSec = wallToContentSec(trip.timeline, rec.unixSeconds);
+    const absFmt = new Intl.DateTimeFormat(getDateLocale(), {
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+    });
+    const titleStr = t("popup.title", {
+        rel: formatTime(relSec),
+        abs: absFmt.format(new Date(rec.unixSeconds * 1000)),
+    });
+    // Show speed in the user-selected units (km/h or mph). The track color
+    // gradient is still computed from km/h - we don't shift its breakpoints
+    // between units.
+    const speedFmt = formatSpeedFromMs(rec.speedMs);
+    const speedStr = speedFmt.value.toFixed(0);
+    const speedUnitKey = speedFmt.unitKey;
+    const gMag = gMagnitude(rec).toFixed(2);
+    // mp4Filename is user-controlled (70mai: CSV field[9]; GPX: matched MP4
+    // basename; embedded: File.name). The user may have renamed the file to
+    // anything, including HTML/JS injection - escape before innerHTML/setHTML.
+    const fileRaw = rec.mp4Filename && rec.mp4Filename !== "0" ? rec.mp4Filename : t("popup.placeholder");
+    const fileStr = escapeHtml(fileRaw);
+    return `
+        <div class="track-popup">
+            <div class="track-popup-title">${titleStr}</div>
+            <div class="track-popup-row"><span class="track-popup-label">${t("popup.label.speed")}</span><span>${speedStr} ${t(speedUnitKey)}</span></div>
+            <div class="track-popup-row"><span class="track-popup-label">${t("popup.label.gMag")}</span><span>${gMag} g</span></div>
+            <div class="track-popup-row mono"><span class="track-popup-label">${t("popup.label.aXYZ")}</span><span>${rec.accelXg.toFixed(2)} · ${rec.accelYg.toFixed(2)} · ${rec.accelZg.toFixed(2)}</span></div>
+            <div class="track-popup-row mono"><span class="track-popup-label">${t("popup.label.coords")}</span><span>${rec.lat.toFixed(5)}, ${rec.lon.toFixed(5)}</span></div>
+            <div class="track-popup-row mono"><span class="track-popup-label">${t("popup.label.file")}</span><span>${fileStr}</span></div>
+        </div>
+    `;
+}
+
+// UX-18: FOLLOW_CYCLE removed - segmented control lets the user pick a mode
+// directly without cycling.
+
+/**
+ * Real UTC for the player's current position. Both native and per-file MSE
+ * backends present file-relative currentTime (0..frame.durationSec), so we
+ * always add it to frame.startUtc.
+ */
+function currentRealUtc(af: { trip: Trip; frame: TripFrame }): number {
+    const ct = dom.player.currentTime || 0;
+    return af.frame.startUtc + ct;
+}
+
+/**
+ * Returns the interpolated position for the current player currentTime.
+ * Shared by the rAF loop and the follow-mode switch so they get the same point.
+ */
+function currentInterpolatedPosition(): {
+    lat: number;
+    lon: number;
+    bearingDeg: number;
+    speedMs: number;
+} | null {
+    const af = activeFrame();
+    if (!af || af.trip.records.length === 0) return null;
+    return interpolatePosition(af.trip.records, currentRealUtc(af));
+}
+
+export function syncMapFollowButton(): void {
+    // UX-18: 3-button segmented control; active mode highlighted via
+    // [aria-pressed="true"] (see CSS .map-follow-seg[aria-pressed="true"]).
+    if (!dom.mapFollowSegments) return;
+    const buttons = dom.mapFollowSegments.querySelectorAll<HTMLButtonElement>(".map-follow-seg");
+    for (const btn of buttons) {
+        const mode = btn.dataset.followMode as FollowMode | undefined;
+        if (!mode) continue;
+        btn.setAttribute("aria-pressed", mode === state.followMode ? "true" : "false");
+    }
+    syncChaseControls();
+}
+
+/**
+ * Smoothly moves the camera to the current car position. Used on file boundary
+ * within a trip to avoid a hard jump.
+ */
+export function smoothCameraToCurrentPosition(): void {
+    // Only animate when follow is on; in "off" mode the user controls the view
+    // and an automatic camera move on file change would be intrusive.
+    if (!state.map || state.followMode === "off") return;
+    const pos = currentInterpolatedPosition();
+    if (!pos) return;
+    const duration = 250;
+    const opts: maplibregl.EaseToOptions = { center: [pos.lon, pos.lat], duration };
+    if (isHeadingUpMode(state.followMode)) {
+        opts.bearing = pos.bearingDeg;
+    }
+    suspendFollowEase(duration);
+    state.map.easeTo(opts);
+}
+
+/** Applies a follow-mode transition. Extracted from the segmented-control click
+ *  so the recenter "resume" path can reuse the exact same camera logic. Sets
+ *  state, syncs the control + the resolution cap, then runs the one-off ease /
+ *  chase entry toward the current car. */
+function applyFollowMode(mode: FollowMode): void {
+    const fromMode = state.followMode;
+    if (fromMode === mode) return;
+    state.followMode = mode;
+    // A deliberate mode pick cancels any pending post-interaction grace window (and
+    // its resume latch) so the new mode engages now, not after the leftover seconds
+    // - and the follow loop does not fire a spurious re-aim on top of this switch.
+    resetFollowInteractionPause();
+    syncMapFollowButton();
+    // off<->following transitions flip the resolution cap (off = full res for
+    // hand inspection; follow/rotate/chase = capped while the map drives).
+    syncBigMapPixelRatio();
+    const map = state.map;
+    if (!map) return;
+    // Whether chase VISUALS (tilt + 3D buildings) are currently on screen. Keyed
+    // on the actual map pitch, NOT fromMode === "chase": a user gesture can break
+    // chase to "off" while deliberately keeping the tilt + buildings, so a later
+    // switch to follow/rotate must still tear them down even though fromMode is
+    // now "off".
+    const chaseVisualsActive = map.getPitch() > 1;
+    if (mode !== "chase" && chaseVisualsActive) leaveChaseCamera(map);
+    const pos = currentInterpolatedPosition();
+    if (mode === "chase") {
+        enterChaseCamera(map, pos);
+        return;
+    }
+    const duration = 300;
+    const opts: maplibregl.EaseToOptions = { duration };
+    // "off" keeps the user's view; follow/rotate snap to the car.
+    if (mode !== "off" && pos) {
+        opts.center = [pos.lon, pos.lat];
+        if (isHeadingUpMode(mode)) opts.bearing = pos.bearingDeg;
+    }
+    // Un-tilt back to flat when leaving a tilted (chase / broken-chase) state.
+    if (chaseVisualsActive) opts.pitch = 0;
+    // "follow" is north-up by definition - reset bearing when coming from a
+    // heading-up mode OR when the map is currently rotated (e.g. broken chase).
+    if (mode === "follow" && (isHeadingUpMode(fromMode) || Math.abs(map.getBearing()) > 0.5)) opts.bearing = 0;
+    // Nothing to animate (e.g. off<-follow with no recenter) - skip the ease.
+    if (opts.center === undefined && opts.pitch === undefined && opts.bearing === undefined) return;
+    suspendFollowEase(duration);
+    map.easeTo(opts);
+}
+
+/** Clears any pending post-interaction grace window + the "user is steering"
+ *  latch. Called on trip change so a pause armed in one trip does not carry its
+ *  follow-resume re-aim into the next. followMode itself is a persistent map
+ *  preference and is intentionally NOT reset. */
+export function resetFollowInteractionPause(): void {
+    followResumeRemainingMs = 0;
+    followWasUserPaused = false;
+}
+
+// --- map expanded / collapsed ---
+//
+// State flags:
+//   - state.hasTrack    - active GPS points exist
+//   - state.mapExpanded - large map is shown beside the video
+//
+// Mini-map visibility is driven by the "View" menu (src/ui/view-menu.ts,
+// localStorage["dc.viewer.panels"].map). When the user toggles it off
+// via menu or hotkey M, dom.miniMap gets `hidden`. When no GPS is present
+// the panel is also hidden (and the view-menu row is disabled).
+//
+// Nothing else here flips mini-map visibility - the previous close-X +
+// "Show mini-map" reveal button + morph animation between them have been
+// removed (replaced by the unified menu).
+
+// Cap on the big map's render resolution while it is actively following. 1.5 is
+// still high-DPI (well above a non-Retina 1.0), so the softening is barely
+// perceptible, yet on a devicePixelRatio=2 screen it renders (1.5/2)^2 = ~56% of
+// the fragments - a ~44% cut on the fill-heavy tilted 3D chase view.
+const BIG_MAP_FOLLOW_PIXEL_RATIO_CAP = 1.5;
+let bigMapPixelRatioApplied = Number.NaN;
+
+/**
+ * Caps the big map's pixel ratio while it is actively following, to cut
+ * fragment-shading cost on high-DPI screens. Smoothness is untouched - the map
+ * still renders at 60 fps via the chained follow ease; we only rasterize fewer
+ * pixels per frame. Restored to full devicePixelRatio when follow is "off" (the
+ * user is inspecting the map by hand) or the big map is hidden, so any frame the
+ * user lingers on / screenshots is crisp. min() makes it a no-op on non-Retina
+ * (dpr <= cap). setPixelRatio resizes the GL backing store, so we only call it
+ * when the target actually changes - avoids a redundant resize on every layout
+ * recompute. The mini-map is a separate instance and is left at full res (it is
+ * small and cheap). Idempotent; safe to call from any layout/mode-change site.
+ */
+function syncBigMapPixelRatio(): void {
+    const map = state.map;
+    if (!map) return;
+    const dpr = window.devicePixelRatio || 1;
+    const bigMapShown = state.hasTrack && state.mapExpanded && getViewPanels().map && !state.exportModeOpen;
+    const following = bigMapShown && state.followMode !== "off";
+    const target = following ? Math.min(dpr, BIG_MAP_FOLLOW_PIXEL_RATIO_CAP) : dpr;
+    if (target === bigMapPixelRatioApplied) return;
+    bigMapPixelRatioApplied = target;
+    map.setPixelRatio(target);
+}
+
+export function applyMapLayout(): void {
+    // No WebGL: there is no map to lay out. Use the big-map slot to host the
+    // permanent "map unavailable" notice (it has no canvas) whenever GPS exists
+    // and the user wants a map; the mini-map circle and the toggles are hidden
+    // via body.map-unavailable in CSS. The chart keeps its own layout.
+    if (!isMapAvailable()) {
+        // Export mode suppresses the notice pane exactly like it suppresses the
+        // real map below: the export grid templates rely on .map-expanded never
+        // coexisting with body.export-mode (see the trim-row overrides in
+        // viewer.css), and without this term this branch would be the one path
+        // that breaks that invariant. Restored on close via the same recompute.
+        const showNotice = state.hasTrack && getViewPanels().map && !state.exportModeOpen;
+        dom.playerWrapEl.classList.toggle("map-expanded", showNotice);
+        dom.miniMap.hidden = true;
+        dom.miniMapClose.hidden = true;
+        dom.mapCollapseBtn.hidden = true;
+        dom.playerMapBtn.disabled = true;
+        return;
+    }
+    // Mini-map visibility = GPS available AND not in expanded mode AND user
+    // hasn't hidden it via the "View" menu. View-menu writes the `hidden`
+    // attribute on dom.miniMap directly; we re-apply here so the same state
+    // also drives expanded-mode toggling and trip switches.
+    //
+    // Export mode hides both the big map and the mini-map: while configuring an
+    // export the player is the WYSIWYG preview of the burned-in overlays (incl.
+    // its own map mini-overlay), so the viewer's live map/mini-map only add
+    // clutter. We suppress DISPLAY only - mapExpanded and the View-menu pref are
+    // left untouched, so closing export restores exactly the prior layout via
+    // the same recompute (subscribeExportState -> applyMapLayout).
+    const exportSuppressed = state.exportModeOpen;
+    const userWantsMap = getViewPanels().map;
+    const showBigMap = state.hasTrack && state.mapExpanded && userWantsMap && !exportSuppressed;
+    const showMini = state.hasTrack && !state.mapExpanded && userWantsMap && !exportSuppressed;
+
+    // Update class first so the grid reflows immediately.
+    dom.playerWrapEl.classList.toggle("map-expanded", showBigMap);
+
+    dom.miniMap.hidden = !showMini;
+    // Close-X follows the mini-map - if there's no map to close, no button.
+    dom.miniMapClose.hidden = !showMini;
+    dom.mapCollapseBtn.hidden = !showBigMap;
+
+    // Player-bar map toggle: mobile-only entry to expand/collapse the map
+    // (mini-map circle is hidden on mobile - see map.css). Disabled only when
+    // there is no GPS - userWantsMap is intentionally not a disable condition
+    // because the View menu sits inside the overflow kebab on mobile and is a
+    // discoverability dead-end; the click handler force-enables map visibility
+    // so this button is a true single-tap entry point.
+    dom.playerMapBtn.disabled = !state.hasTrack || exportSuppressed;
+    const playerMapLabel = showBigMap ? t("map.collapse") : t("miniMap.expandAria");
+    dom.playerMapBtn.setAttribute("aria-label", playerMapLabel);
+    dom.playerMapBtn.title = playerMapLabel;
+    dom.playerMapBtn.setAttribute("aria-pressed", showBigMap ? "true" : "false");
+
+    // Apply / clear the follow-resolution cap for the new layout (expand shows the
+    // big map -> cap; collapse hides it -> restore). Before the resize() below so
+    // setPixelRatio's own resize and the container resize settle in one frame.
+    syncBigMapPixelRatio();
+
+    // MapLibre does not observe CSS container size changes. resize() is required
+    // after layout change, otherwise the canvas keeps the old pixel dimensions.
+    requestAnimationFrame(() => {
+        if (state.map && showBigMap) state.map.resize();
+        if (state.miniMap && showMini) state.miniMap.resize();
+    });
+}
+
+function expandMap(): void {
+    if (state.mapExpanded || !state.hasTrack) return;
+    state.mapExpanded = true;
+    applyMapLayout();
+    // Default follow mode is "chase": tilt the big map into the 3D view the first
+    // time it is shown. The tilt + 3D buildings live in enterChaseCamera, not in
+    // the hot follow loop, so flipping the state default alone would leave the map
+    // flat. Idempotent (pitch-guarded), so re-expanding never re-eases.
+    ensureChaseEngaged();
+}
+
+function collapseMap(): void {
+    if (!state.mapExpanded) return;
+    state.mapExpanded = false;
+    applyMapLayout();
+}
+
+/** Mini-map close-X: morph mini-map into the "View" button (visual cue:
+ *  "the panel collapsed into the menu") and then flip the view-menu state
+ *  so the checkbox + localStorage match. ViewMenuButton must exist - it
+ *  is always present in the playerbar. Fallback (button missing somehow)
+ *  - flip state immediately without animation. */
+function closeMiniMapToViewMenu(): void {
+    const target = dom.viewMenuButton;
+    if (!target) {
+        setPanelVisible("map", false);
+        return;
+    }
+    // Hide the X immediately - it does not need to morph; the mini-map body
+    // is the visual focus.
+    dom.miniMapClose.hidden = true;
+    morphHide(dom.miniMap, target).then(() => {
+        // State sync after animation. setPanelVisible writes to the menu's
+        // store + applies hidden on dom.miniMap (no-op since morph already
+        // hid it via inline display:none) + fires subscribers (applyMapLayout
+        // among them). Triggers MapLibre resize on next frame.
+        setPanelVisible("map", false);
+    });
+}
+
+const MORPH_DURATION_MS = 350;
+const MORPH_TIMEOUT_MS = 500;
+
+/** Animates `source` shrinking + sliding toward `target`. Resolves when
+ *  the transitionend fires (or the safety timer expires). Used for the
+ *  "mini-map flies into View button" close gesture. */
+function morphHide(source: HTMLElement, target: HTMLElement): Promise<void> {
+    // Honor prefers-reduced-motion (WCAG 2.3.3): skip the 350ms fly-to-button
+    // morph and settle instantly. The caller still runs setPanelVisible, so the
+    // end result (mini-map hidden) is identical, just without the animation. Same
+    // instant-settle path flip.ts takes.
+    if (prefersReducedMotion()) {
+        return Promise.resolve();
+    }
+    const sRect = source.getBoundingClientRect();
+    const tRect = target.getBoundingClientRect();
+    const dx = tRect.left + tRect.width / 2 - (sRect.left + sRect.width / 2);
+    const dy = tRect.top + tRect.height / 2 - (sRect.top + sRect.height / 2);
+    const scaleX = tRect.width / sRect.width;
+    const scaleY = tRect.height / sRect.height;
+
+    source.style.transformOrigin = "center center";
+    // var(--dc-ease) resolves against :root in the CSSOM - reuse the house curve
+    // instead of duplicating its cubic-bezier literal here.
+    source.style.transition = `transform ${MORPH_DURATION_MS}ms var(--dc-ease), opacity ${MORPH_DURATION_MS}ms var(--dc-ease)`;
+    source.style.pointerEvents = "none"; // do not catch clicks while flying
+
+    return new Promise<void>((resolve) => {
+        requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+                source.style.transform = `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})`;
+                source.style.opacity = "0";
+            }),
+        );
+
+        let done = false;
+        const finish = (): void => {
+            if (done) return;
+            done = true;
+            source.removeEventListener("transitionend", onEnd);
+            clearTimeout(timer);
+            // Reset inline styles so the next show is clean. The actual
+            // visibility comes from setPanelVisible -> applyPanels -> hidden.
+            source.style.transition = "";
+            source.style.transform = "";
+            source.style.opacity = "";
+            source.style.transformOrigin = "";
+            source.style.pointerEvents = "";
+            resolve();
+        };
+        const onEnd = (e: TransitionEvent): void => {
+            if (e.target !== source || e.propertyName !== "transform") return;
+            finish();
+        };
+        source.addEventListener("transitionend", onEnd);
+        const timer = setTimeout(finish, MORPH_TIMEOUT_MS);
+    });
+}
+
+// Mini-map position persisted as proportions of drag-range (frame - mini -
+// 2*padding) so the relative position survives viewport size changes between
+// sessions. Single JSON key for atomic read/write.
+const MINIMAP_POS_STORAGE_KEY = "dashcamigo:minimap-pos";
+const MINIMAP_SIZE_PX = 140;
+const MINIMAP_PADDING_PX = 16;
+
+interface MiniMapStoredPos {
+    xPct: number;
+    yPct: number;
+}
+
+function loadStoredMiniMapPos(): MiniMapStoredPos | null {
+    try {
+        const raw = localStorage.getItem(MINIMAP_POS_STORAGE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as unknown;
+        if (typeof parsed !== "object" || parsed === null) return null;
+        const obj = parsed as { xPct?: unknown; yPct?: unknown };
+        const xPct = typeof obj.xPct === "number" && Number.isFinite(obj.xPct) ? obj.xPct : null;
+        const yPct = typeof obj.yPct === "number" && Number.isFinite(obj.yPct) ? obj.yPct : null;
+        if (xPct === null || yPct === null) return null;
+        return {
+            xPct: Math.max(0, Math.min(1, xPct)),
+            yPct: Math.max(0, Math.min(1, yPct)),
+        };
+    } catch {
+        return null;
+    }
+}
+
+function persistMiniMapPos(pos: MiniMapStoredPos): void {
+    try {
+        localStorage.setItem(MINIMAP_POS_STORAGE_KEY, JSON.stringify(pos));
+    } catch {
+        // localStorage blocked (incognito quota) - position survives the session
+        // but not a reload. Non-critical.
+    }
+}
+
+/**
+ * Drag range for the mini-map in the current frame size: 0..(frame - mini -
+ * 2*padding). Returns 0 if the frame has no dimensions yet (pre-first-paint) or
+ * is too small; applyOffset clamps to 0 in that case.
+ */
+function dragRangeForFrame(frame: HTMLElement): { rangeX: number; rangeY: number } {
+    const fr = frame.getBoundingClientRect();
+    const rangeX = Math.max(0, fr.width - MINIMAP_SIZE_PX - MINIMAP_PADDING_PX * 2);
+    const rangeY = Math.max(0, fr.height - MINIMAP_SIZE_PX - MINIMAP_PADDING_PX * 2);
+    return { rangeX, rangeY };
+}
+
+function initMiniMapDrag(): void {
+    // Click expands the large map; Enter/Space for keyboard accessibility
+    // (mini-map has role="button" tabindex=0). The close button is a sibling,
+    // not a child, so its click does not bubble through the mini-map.
+    //
+    // Drag: pointer events on the element. Movement above threshold suppresses
+    // the subsequent click to prevent accidental map expand on drag release.
+    // Offset is kept in JS and applied via CSS vars --mini-map-offset-x/y to
+    // both the mini-map and close button (siblings). Persisted as proportions
+    // {xPct, yPct} of drag-range for viewport-size independence.
+    const DRAG_THRESHOLD_PX = 5;
+    let dragging = false;
+    let suppressNextClick = false;
+    let startClientX = 0,
+        startClientY = 0;
+    let baseOffsetX = 0,
+        baseOffsetY = 0;
+    let appliedOffsetX = 0,
+        appliedOffsetY = 0;
+
+    function writeCssOffset(x: number, y: number): void {
+        const root = document.documentElement.style;
+        root.setProperty("--mini-map-offset-x", `${x}px`);
+        root.setProperty("--mini-map-offset-y", `${y}px`);
+    }
+
+    /**
+     * Applies an absolute offset (from the left:16/top:16 anchor) clamped to the
+     * frame bounds. Returns 0 if the frame has no dimensions yet.
+     */
+    function applyOffset(x: number, y: number, persist: boolean): void {
+        const frame = dom.miniMap.parentElement;
+        if (!frame) return;
+        const { rangeX, rangeY } = dragRangeForFrame(frame);
+        const cx = Math.max(0, Math.min(rangeX, x));
+        const cy = Math.max(0, Math.min(rangeY, y));
+        appliedOffsetX = cx;
+        appliedOffsetY = cy;
+        writeCssOffset(cx, cy);
+        if (persist) {
+            const xPct = rangeX > 0 ? cx / rangeX : 0;
+            const yPct = rangeY > 0 ? cy / rangeY : 0;
+            persistMiniMapPos({ xPct, yPct });
+        }
+    }
+
+    /**
+     * Restores position from localStorage scaled to the current drag-range.
+     * Called on init and on each ResizeObserver frame-resize event so the
+     * relative position is preserved when the window is resized.
+     */
+    function applyFromStorage(): void {
+        const frame = dom.miniMap.parentElement;
+        if (!frame) return;
+        const stored = loadStoredMiniMapPos();
+        const { rangeX, rangeY } = dragRangeForFrame(frame);
+        if (!stored) {
+            applyOffset(0, 0, false);
+            return;
+        }
+        applyOffset(stored.xPct * rangeX, stored.yPct * rangeY, false);
+    }
+
+    // Initial apply - frame may have no dimensions yet (viewer is display:none
+    // on the landing page). ResizeObserver will re-apply once dimensions appear.
+    applyFromStorage();
+    if (typeof ResizeObserver === "function") {
+        const frame = dom.miniMap.parentElement;
+        if (frame) {
+            const ro = new ResizeObserver(() => {
+                if (dragging) return; // don't reposition while the user is dragging
+                applyFromStorage();
+            });
+            ro.observe(frame);
+        }
+    }
+
+    dom.miniMap.addEventListener("pointerdown", (e) => {
+        // Primary mouse button or first touch only.
+        if (e.button !== 0 && e.pointerType === "mouse") return;
+        dragging = true;
+        suppressNextClick = false;
+        startClientX = e.clientX;
+        startClientY = e.clientY;
+        baseOffsetX = appliedOffsetX;
+        baseOffsetY = appliedOffsetY;
+        dom.miniMap.classList.add("is-dragging");
+        // Pointer capture keeps pointermove firing even when the cursor leaves
+        // the mini-map bounds.
+        dom.miniMap.setPointerCapture(e.pointerId);
+    });
+
+    dom.miniMap.addEventListener("pointermove", (e) => {
+        if (!dragging) return;
+        const dx = e.clientX - startClientX;
+        const dy = e.clientY - startClientY;
+        if (!suppressNextClick && Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) {
+            suppressNextClick = true;
+        }
+        // No persist during drag (writes on every pointermove would thrash
+        // localStorage); final persist happens on pointerup.
+        applyOffset(baseOffsetX + dx, baseOffsetY + dy, false);
+    });
+
+    function endDrag(e: PointerEvent): void {
+        if (!dragging) return;
+        dragging = false;
+        dom.miniMap.classList.remove("is-dragging");
+        applyOffset(appliedOffsetX, appliedOffsetY, true);
+        try {
+            dom.miniMap.releasePointerCapture(e.pointerId);
+        } catch {
+            /* already released */
+        }
+    }
+    dom.miniMap.addEventListener("pointerup", endDrag);
+    dom.miniMap.addEventListener("pointercancel", endDrag);
+
+    dom.miniMap.addEventListener("click", (e) => {
+        if (suppressNextClick) {
+            // This was a drag, not a click - suppress map expand.
+            suppressNextClick = false;
+            e.stopPropagation();
+            return;
+        }
+        expandMap();
+    });
+
+    dom.miniMap.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            expandMap();
+        }
+    });
+}
+
+/**
+ * Mini-map hover sync: while the cursor is over the mini-map, project the
+ * pixel coord to LngLat, snap to the nearest GPS record, and drive the chart
+ * cursor. Mirrors what onTrackHover does on the main map but without a popup
+ * (140 px viewport is too small to read one). interactive:false on the
+ * mini-map blocks MapLibre's own listeners; we attach to the DOM container
+ * directly and use mini.unproject() for coordinate conversion.
+ */
+function initMiniMapHover(): void {
+    let lastHoverIdx = -1;
+    dom.miniMap.addEventListener("pointermove", (e) => {
+        // Drag of the mini-map widget (positioning) takes priority over
+        // hover - is-dragging class is added on pointerdown in initMiniMapDrag.
+        if (dom.miniMap.classList.contains("is-dragging")) return;
+        if (!state.active || !state.miniMap) return;
+        const trip = state.trips[state.active.trip];
+        if (!trip || trip.records.length === 0) return;
+        const rect = dom.miniMap.getBoundingClientRect();
+        const lngLat = state.miniMap.unproject([e.clientX - rect.left, e.clientY - rect.top]);
+        const idx = nearestActiveRecordIndex(trip, lngLat.lat, lngLat.lng);
+        if (idx === -1 || idx === lastHoverIdx) return;
+        lastHoverIdx = idx;
+        const rec = trip.records[idx]!;
+        state.chartHoverX = wallToContentSec(trip.timeline, rec.unixSeconds);
+        if (state.chart) state.chart.draw();
+    });
+    dom.miniMap.addEventListener("pointerleave", () => {
+        lastHoverIdx = -1;
+        if (state.chartHoverX !== null) {
+            state.chartHoverX = null;
+            if (state.chart) state.chart.draw();
+        }
+    });
+}
+
+// rAF loop: recalculates marker position and bearing on each frame via linear
+// interpolation between adjacent GPS points. Produces smooth movement despite
+// 1 Hz GPS log rate. rAF is used instead of setInterval because it is synced to
+// the monitor refresh rate, does not steal render frames, and pauses in background
+// tabs (CPU savings). Text metrics are updated via timeupdate instead - no point
+// writing to the DOM at 60 Hz.
+//
+// Two lanes inside the tick:
+//   fast (every frame): marker DOM + follow camera. Marker.setLngLat is a pure
+//        DOM transform in maplibre v6 (no map repaint), and the camera jumpTo
+//        is change-gated, so the per-frame lane costs ~a binary search while
+//        the playhead is static.
+//   slow (200 ms): master/slave drift sync (onAfterTick) + the post-interaction
+//        grace-window countdown. Neither needs frame rate.
+let markerRafHandle: number | null = null;
+
+const DRIFT_SYNC_INTERVAL_MS = 200;
+let slowLaneLastMs = 0;
+// Previous fast-lane timestamp, for the filter's frame dt.
+let lastFrameMs = 0;
+
+// Camera drive: direct per-frame jumpTo, NOT chained easeTo. Both repaint every
+// frame while the camera moves (each easeTo schedules its own per-frame render
+// callback for its whole duration), so per-frame jumpTo costs the same GPU-side
+// - but easeTo fully restarts its tween on every call (easeId only suppresses
+// the event churn, it does not blend animations): camera velocity stepped at
+// every tick seam, the camera trailed the marker by one tick interval, and a
+// late rAF tick let the ease finish early - a visible micro-freeze. Driving the
+// transform directly each frame removes the seams and the lag; the exponential
+// filter below supplies the smoothing the ease used to provide, and keeps
+// camera motion continuous across 1 Hz GPS record boundaries, where linear
+// interpolation kinks.
+
+// Time constants of the exponential follow filter (how far the camera lags the
+// raw interpolated position). Small enough to feel attached to the car, large
+// enough to swallow per-record velocity kinks and GPS bearing noise. Divided by
+// the playback rate in the step so the SPATIAL lag stays bounded at 2x-8x.
+const FOLLOW_CENTER_TAU_MS = 150;
+const FOLLOW_BEARING_TAU_MS = 180;
+const FOLLOW_ZOOM_TAU_MS = 250;
+
+// Convergence thresholds: when the filter is this close to its target it snaps
+// exactly onto it and the per-frame jumpTo stops - the map goes fully idle on a
+// paused/stopped playhead. Critical: jumpTo unconditionally fires move events
+// and a repaint even for an identical transform, so calling it every frame
+// would keep the map rendering at 60 Hz for nothing. 1e-7 deg is ~1 cm - far
+// below a visible pixel at any zoom; the chase adaptive zoom EMA converges
+// asymptotically, so without the zoom snap the map could not idle for ~10-20 s
+// after every pause.
+const FOLLOW_SNAP_DEG = 1e-7;
+const FOLLOW_SNAP_BEARING_DEG = 0.01;
+const FOLLOW_SNAP_ZOOM = 0.001;
+
+// Teleport guard: a seek can move the target across the whole map; gliding
+// there through the filter would sweep the camera over every tile in between
+// (a transient tile-fetch storm for ~half a second). Beyond ~1.5 viewports of
+// ground distance - or a multi-level zoom gap - snap the filter straight onto
+// the target instead.
+const FOLLOW_TELEPORT_VIEWPORTS = 1.5;
+const FOLLOW_TELEPORT_ZOOM_LEVELS = 3;
+
+// Big-map container size in CSS px, cached because reading clientWidth inside
+// the follow loop forces a synchronous layout every frame (the marker DOM
+// transform is written just before). Refreshed on the map's resize event -
+// MapLibre fires it for both window resizes and programmatic map.resize().
+let bigMapViewportPx = 1;
+
+// Filtered camera state. NaN = unseeded: the next follow frame seeds it from
+// the live camera, so the glide always starts from what the user actually sees
+// (after a one-off ease, a user gesture, a trip switch). Bearing is kept
+// UNWRAPPED (continuous) so the filter never takes the long way around 360.
+let followCamLat = Number.NaN;
+let followCamLon = Number.NaN;
+let followCamBearing = Number.NaN;
+let followCamZoom = Number.NaN;
+// True once the filter snapped onto an unchanged target - lets the fast lane
+// skip the whole camera step (and its jumpTo) until the target moves again.
+let followFilterConverged = false;
+
+/** Invalidates the filtered follow-camera state so the next follow frame
+ *  reseeds from the live camera. Called whenever something else moved the
+ *  camera (one-off ease via suspendFollowEase, trip switch): stepping the
+ *  filter from its stale state would yank the view back to wherever the
+ *  filter last was. */
+function resetFollowCameraFilter(): void {
+    followCamLat = Number.NaN;
+    followCamLon = Number.NaN;
+    followCamBearing = Number.NaN;
+    followCamZoom = Number.NaN;
+    followFilterConverged = false;
+}
+
+/** Maps an angle delta onto the shortest signed arc in [-180, 180) - an exact
+ *  +180 input comes back as -180 (both are valid shortest arcs). */
+function shortestArcDeg(deltaDeg: number): number {
+    return ((((deltaDeg + 180) % 360) + 360) % 360) - 180;
+}
+
+// Last raw follow target (marker + camera goal). A static playhead yields a
+// byte-identical interpolated pos (interpolatePosition is deterministic), so an
+// exact compare against these reliably detects "nothing moved" and skips the
+// marker/trail writes. NaN seeds force the first tick to apply.
+let bigMapAppliedLat = Number.NaN;
+let bigMapAppliedLon = Number.NaN;
+let bigMapAppliedBearing = Number.NaN;
+let bigMapAppliedZoom = Number.NaN;
+// Same idea for the mini-map (its lane is independent: the big-map vars are
+// not updated while the big map is collapsed).
+let miniAppliedLat = Number.NaN;
+let miniAppliedLon = Number.NaN;
+let miniAppliedBearing = Number.NaN;
+
+/**
+ * One per-frame step of the follow camera: exponential glide of center /
+ * bearing / (chase adaptive) zoom toward the raw interpolated position, applied
+ * with a single jumpTo. Snaps and flags convergence when close enough, so the
+ * caller stops invoking it and the map idles.
+ */
+function stepFollowCamera(
+    map: maplibregl.Map,
+    pos: { lat: number; lon: number; bearingDeg: number; speedMs: number },
+    zoomTarget: number | undefined,
+    headingUp: boolean,
+    frameDtMs: number,
+): void {
+    if (Number.isNaN(followCamLat)) {
+        const center = map.getCenter();
+        followCamLat = center.lat;
+        followCamLon = center.lng;
+        followCamBearing = map.getBearing();
+        followCamZoom = map.getZoom();
+    }
+
+    // Teleport check on GROUND distance in mercator units converted to px at
+    // the filter zoom - deliberately NOT map.project(): the screen projection
+    // is useless as a distance metric under the pitched chase camera (forward
+    // points saturate at the horizon offset, behind-camera points mirror to
+    // bounded coordinates), so a project()-based guard never fires at pitch.
+    // The mercator math is orientation-independent and allocation-free.
+    // A large zoom gap is a teleport too: gliding zoom across many levels
+    // (trip switch lands on a fitBounds overview) sweeps every intermediate
+    // tile level for no visual benefit.
+    const groundPx =
+        Math.hypot(pos.lon - followCamLon, mercatorY(pos.lat) - mercatorY(followCamLat)) *
+        ((MAPLIBRE_TILE_SIZE_PX * 2 ** followCamZoom) / 360);
+    const zoomGap = zoomTarget === undefined ? 0 : Math.abs(zoomTarget - followCamZoom);
+    const farTeleport =
+        groundPx > bigMapViewportPx * FOLLOW_TELEPORT_VIEWPORTS || zoomGap > FOLLOW_TELEPORT_ZOOM_LEVELS;
+
+    if (farTeleport) {
+        followCamLat = pos.lat;
+        followCamLon = pos.lon;
+        followCamBearing = pos.bearingDeg;
+        if (zoomTarget !== undefined) followCamZoom = zoomTarget;
+    } else {
+        // tau/rate: at 8x the car covers 8x the ground per wall-clock ms, so an
+        // unscaled tau would grow the spatial lag 8x. Scaling keeps it constant.
+        const rate = dom.player.paused ? 1 : Math.max(1, dom.player.playbackRate || 1);
+        const dtScaled = frameDtMs * rate;
+        const alphaCenter = 1 - Math.exp(-dtScaled / FOLLOW_CENTER_TAU_MS);
+        followCamLat += (pos.lat - followCamLat) * alphaCenter;
+        followCamLon += (pos.lon - followCamLon) * alphaCenter;
+        if (headingUp) {
+            const alphaBearing = 1 - Math.exp(-dtScaled / FOLLOW_BEARING_TAU_MS);
+            followCamBearing += shortestArcDeg(pos.bearingDeg - followCamBearing) * alphaBearing;
+        }
+        if (zoomTarget !== undefined) {
+            const alphaZoom = 1 - Math.exp(-dtScaled / FOLLOW_ZOOM_TAU_MS);
+            followCamZoom += (zoomTarget - followCamZoom) * alphaZoom;
+        }
+    }
+
+    const centerDone =
+        Math.abs(pos.lat - followCamLat) < FOLLOW_SNAP_DEG && Math.abs(pos.lon - followCamLon) < FOLLOW_SNAP_DEG;
+    const bearingDone =
+        !headingUp || Math.abs(shortestArcDeg(pos.bearingDeg - followCamBearing)) < FOLLOW_SNAP_BEARING_DEG;
+    const zoomDone = zoomTarget === undefined || Math.abs(zoomTarget - followCamZoom) < FOLLOW_SNAP_ZOOM;
+    if (centerDone && bearingDone && zoomDone) {
+        followCamLat = pos.lat;
+        followCamLon = pos.lon;
+        followCamBearing += shortestArcDeg(pos.bearingDeg - followCamBearing);
+        if (zoomTarget !== undefined) followCamZoom = zoomTarget;
+        followFilterConverged = true;
+    }
+
+    const jump: maplibregl.JumpToOptions = { center: [followCamLon, followCamLat] };
+    // Wrap the unwrapped filter bearing back into MapLibre's range; without
+    // heading-up the map bearing is left alone (north-up "follow" resets it in
+    // applyFollowMode, "off" never reaches here).
+    if (headingUp) jump.bearing = shortestArcDeg(followCamBearing);
+    if (zoomTarget !== undefined) jump.zoom = followCamZoom;
+    map.jumpTo(jump);
+}
+
+// Soft-suspend the per-frame follow camera for the span of a one-off easeTo
+// (recenter button, follow-mode switch, chase entry). Without this guard the
+// per-frame jumpTo would land at the next rAF and cancel the one-off animation
+// mid-flight (jumpTo stops any in-flight ease). The suspension covers the
+// one-off's duration plus a small buffer; the filter is invalidated so the
+// follow glide then resumes from wherever the ease left the camera.
+let followEaseSuspendedUntilMs = 0;
+function suspendFollowEase(durationMs: number): void {
+    followEaseSuspendedUntilMs = performance.now() + durationMs + 50;
+    resetFollowCameraFilter();
+}
+
+// --- transient post-interaction follow pause ------------------------------
+//
+// A real pan/zoom/rotate/pitch gesture hands the camera to the user: auto-follow
+// is PAUSED, not switched off (the mode button stays lit). followResumeRemainingMs
+// is how much grace time is left before the follow camera re-engages; refreshed to
+// the full delay on every interaction so it counts from the LAST touch. It is
+// drained ONLY while the video plays (see the marker loop) - a user who paused to
+// inspect the map keeps the camera until they resume playback. On expiry the loop
+// runs one smooth re-aim back to the car (resumeFollowAfterInteraction).
+const FOLLOW_RESUME_DELAY_MS = 5000;
+let followResumeRemainingMs = 0;
+let followGraceLastTickMs = 0;
+let followWasUserPaused = false;
+function noteUserMapInteraction(): void {
+    followResumeRemainingMs = FOLLOW_RESUME_DELAY_MS;
+}
+
+let markerLoopOnAfterTick: (() => void) | undefined;
+
+/**
+ * Restarts the rAF loop if it was stopped by the early-exit in tick. Safe to
+ * call repeatedly - no-op if the loop is already running. Called from sites
+ * where state.active may become non-null: after ingest, on playFrame, on expandMap.
+ */
+export function ensureMarkerLoop(): void {
+    if (markerRafHandle !== null) return;
+    if (!state.active) return;
+    startMarkerLoop({ onAfterTick: markerLoopOnAfterTick });
+}
+
+export function startMarkerLoop(opts: { onAfterTick?: () => void } = {}): void {
+    if (markerRafHandle !== null) return;
+    markerLoopOnAfterTick = opts.onAfterTick;
+    const onAfterTick = opts.onAfterTick;
+
+    // No WebGL: there is no car marker (refreshMapless never creates one), so the
+    // marker tick below would self-terminate on its `!state.marker` guard and
+    // never reach onAfterTick. But onAfterTick (driftSyncSlaves) is the ONLY
+    // continuous master/slave resync during steady multichannel playback - the
+    // event-based corrections only fire on seek/play/pause. Run a minimal loop
+    // that just drives onAfterTick so slaves don't drift on a map-less browser.
+    if (!isMapAvailable()) {
+        const driftTick = (): void => {
+            if (!state.active) {
+                markerRafHandle = null;
+                return;
+            }
+            markerRafHandle = requestAnimationFrame(driftTick);
+            if (state.transcodeInProgress) return;
+            const now = performance.now();
+            if (now - slowLaneLastMs < DRIFT_SYNC_INTERVAL_MS) return;
+            slowLaneLastMs = now;
+            onAfterTick?.();
+        };
+        markerRafHandle = requestAnimationFrame(driftTick);
+        return;
+    }
+
+    // Marker/camera work for one frame. Separate from the rAF tick so its
+    // early-returns (no trip / no frame / GPS window ended) skip ONLY the map
+    // work - onAfterTick in the rAF tick below must still run.
+    const markerTick = (now: number, frameDtMs: number): void => {
+        if (!state.active || !state.marker) return;
+        const trip = state.trips[state.active.trip];
+        if (!trip || trip.records.length === 0) return;
+        // The marker always reflects the actual currentTime of the video.
+        // chartHoverX is only for the chart cursor (cursorPlugin) - graph hover
+        // must not move the marker, otherwise the user loses track of where the
+        // car actually is during playback.
+        const frame = trip.frames[state.active.frame];
+        if (!frame) return;
+        const targetUnix = currentRealUtc({ trip, frame });
+        const pos = interpolatePosition(trip.records, targetUnix);
+        if (!pos) {
+            // GPS window ended before video (Vantrue drops GPS on long stops;
+            // GoPro cuts the gpmd track in the last second). Hide both markers
+            // so they don't freeze at the last known point. Player metrics are
+            // hidden in sync via the timeupdate handler.
+            setMarkerHidden(state.marker, true);
+            if (state.miniMapMarker) setMarkerHidden(state.miniMapMarker, true);
+            return;
+        }
+        setMarkerHidden(state.marker, false);
+        if (state.miniMapMarker) setMarkerHidden(state.miniMapMarker, false);
+
+        // Skip work for invisible maps. jumpTo repaints (and fires move events)
+        // even when the container is display:none, and the marker DOM writes
+        // would be pure waste on a hidden map. mainMapVisible must mirror the
+        // FULL showBigMap condition from applyMapLayout - the map container is
+        // also display:none when the View menu hides the map panel or export
+        // mode is open, while state.mapExpanded stays true.
+        const mainMapVisible = state.hasTrack && state.mapExpanded && getViewPanels().map && !state.exportModeOpen;
+        const miniMapVisible = state.hasTrack && !state.mapExpanded && !dom.miniMap.hidden;
+
+        if (mainMapVisible) {
+            const map = state.map;
+            // The user is steering the camera: a live drag/rotate/pitch
+            // (activeMapGestures) or the post-interaction grace window
+            // (followResumeRemainingMs, drained by the loop only while playing).
+            // Auto-follow is paused, not switched off - the mode button stays lit.
+            const userPausing = activeMapGestures.size > 0 || followResumeRemainingMs > 0;
+            // Resume latch: tracks ONLY the grace window, which is armed
+            // exclusively by genuine user input (originalEvent-guarded). It must
+            // NOT track activeMapGestures: a programmatic one-off ease with a
+            // bearing change fires its own rotatestart/rotateend pair, and a
+            // latch on the gesture set would read that as "user let go" and fire
+            // resumeFollowAfterInteraction - whose own enterChaseCamera ease
+            // starts the next rotatestart, an infinite ~550 ms ease loop that
+            // keeps the map rendering forever (also through pauses).
+            if (
+                followWasUserPaused &&
+                followResumeRemainingMs === 0 &&
+                activeMapGestures.size === 0 &&
+                state.followMode !== "off"
+            ) {
+                // Grace window just expired: glide once back to the car (chase
+                // re-enters its 3D view), then per-frame follow resumes below.
+                resumeFollowAfterInteraction();
+            }
+            followWasUserPaused = followResumeRemainingMs > 0;
+            // Also skip the follow camera while a one-off easeTo (recenter /
+            // follow-switch / the resume re-aim above) is mid-flight - a jumpTo
+            // would cancel that animation on the next frame.
+            const suspended = userPausing || now < followEaseSuspendedUntilMs;
+            const following = !!map && !suspended && state.followMode !== "off";
+            const headingUp = isHeadingUpMode(state.followMode);
+
+            // Chase speed-adaptive zoom target (EMA-smoothed so it does not pump on
+            // noisy GPS speed). Computed before the change check below so a still-
+            // settling zoom counts as a change. The live chase zoom range stays
+            // >= maxzoom 14, so this never refetches tiles (overzoom from cached).
+            let zoomTarget: number | undefined;
+            if (following && state.followMode === "chase" && chaseAdaptiveZoom) {
+                if (dom.player.paused) {
+                    // A pause freezes pos.speedMs - smoothing toward a frozen
+                    // value only delays idle by seconds. Snap at once; the zoom
+                    // FILTER still glides to the new target, so nothing jumps.
+                    chaseSmoothedSpeedMs = pos.speedMs;
+                } else {
+                    // dt-aware EMA: the smoothing window stays ~constant in
+                    // wall-clock regardless of rAF jitter.
+                    const alpha = 1 - Math.exp(-frameDtMs / CHASE_SPEED_TAU_MS);
+                    chaseSmoothedSpeedMs += (pos.speedMs - chaseSmoothedSpeedMs) * alpha;
+                    // Snap once visually converged. The exponential approach
+                    // never reaches float equality on its own, and the raw
+                    // zoomTarget feeds the EXACT compare in targetChanged below
+                    // - without the snap a stopped car keeps producing ULP-level
+                    // zoom changes, re-arming the whole camera lane (jumpTo +
+                    // repaint at 60 Hz) for ~20 s. 0.01 m/s maps to a zoom delta
+                    // far below FOLLOW_SNAP_ZOOM, so the snap is invisible.
+                    if (Math.abs(chaseSmoothedSpeedMs - pos.speedMs) < CHASE_SPEED_SNAP_MPS) {
+                        chaseSmoothedSpeedMs = pos.speedMs;
+                    }
+                }
+                zoomTarget = chaseZoomForSpeed(chaseSmoothedSpeedMs);
+            }
+
+            // Raw-target change detection: paused playback / a stopped car yield a
+            // byte-identical pos, so marker + trail writes are skipped entirely.
+            const targetChanged =
+                pos.lat !== bigMapAppliedLat ||
+                pos.lon !== bigMapAppliedLon ||
+                (headingUp && pos.bearingDeg !== bigMapAppliedBearing) ||
+                (zoomTarget !== undefined && zoomTarget !== bigMapAppliedZoom);
+            if (targetChanged) {
+                // Trail overlay: dim the un-driven part of the track (a 4-stop
+                // line-gradient rewrite on one layer, self-throttled). Inside the
+                // change gate: a static playhead does not advance the driven part.
+                setTrailProgress(computeTrackProgress(targetUnix));
+                // The marker tracks the RAW position (the filter below is camera-
+                // only): it must stay glued to the GPS truth, and Marker.setLngLat
+                // is a pure DOM transform - no repaint to save.
+                state.marker.setLngLat([pos.lon, pos.lat]);
+                // rotationAlignment:"map" - bearing is in map coordinates (true
+                // north). MapLibre counter-rotates the marker on map rotation, so
+                // pos.bearingDeg always points the correct geographic direction.
+                rotateMarker(state.marker, pos.bearingDeg);
+                bigMapAppliedLat = pos.lat;
+                bigMapAppliedLon = pos.lon;
+                bigMapAppliedBearing = pos.bearingDeg;
+                if (zoomTarget !== undefined) bigMapAppliedZoom = zoomTarget;
+                followFilterConverged = false;
+            }
+            // Camera: keep stepping after the target stops changing until the
+            // filter has settled onto it (convergence flips the flag and the
+            // map goes idle - jumpTo on an identical transform is NOT free, it
+            // fires move events and forces a repaint).
+            if (map && following && !followFilterConverged) {
+                stepFollowCamera(map, pos, zoomTarget, headingUp, frameDtMs);
+            }
+        }
+
+        // Mini-map: the whole block is gated on a raw position change - a static
+        // playhead touches neither the marker DOM (Marker._update allocates a
+        // rAF promise per call even for an identical position) nor the camera.
+        if (miniMapVisible && state.miniMap && state.miniMapMarker) {
+            const miniChanged =
+                pos.lat !== miniAppliedLat || pos.lon !== miniAppliedLon || pos.bearingDeg !== miniAppliedBearing;
+            if (miniChanged) {
+                miniAppliedLat = pos.lat;
+                miniAppliedLon = pos.lon;
+                miniAppliedBearing = pos.bearingDeg;
+                const miniMap = state.miniMap;
+                // Marker position + rotation: pure DOM (no repaint), applied on
+                // every change so the arrow slides smoothly even between the
+                // px-gated camera jumps below.
+                state.miniMapMarker.setLngLat([pos.lon, pos.lat]);
+                rotateMarker(state.miniMapMarker, pos.bearingDeg);
+
+                // jumpTo - WebGL repaint, gate it. At zoom ~15, 1 px = ~10 m.
+                // Threshold 3 px batches several frames into one camera update;
+                // the marker still slides smoothly relative to the (briefly
+                // stale) basemap.
+                const newZoom = miniMapZoomForLat(pos.lat);
+                const curZoom = miniMap.getZoom();
+                const curPx = miniMap.project(miniMap.getCenter());
+                const newPx = miniMap.project([pos.lon, pos.lat]);
+                const pxDist = Math.hypot(curPx.x - newPx.x, curPx.y - newPx.y);
+                const zoomChanged = Math.abs(newZoom - curZoom) > 0.001;
+                if (pxDist >= MINI_MAP_REPAINT_THRESHOLD_PX || zoomChanged) {
+                    miniMap.jumpTo({ center: [pos.lon, pos.lat], zoom: newZoom });
+                }
+            }
+        }
+    };
+
+    const tick = (): void => {
+        // Early exit ONLY when no trip is active (idle before first trip
+        // selection) - do not reschedule; ensureMarkerLoop() restarts when
+        // state.active appears. Eliminates 60 Hz idle wake-ups.
+        //
+        // Deliberately NOT gated on state.marker: a no-GPS trip never creates
+        // one (refreshMap bails before marker creation), and the old
+        // `!state.marker` exit killed the whole loop - including onAfterTick
+        // (driftSyncSlaves), the ONLY continuous master/slave resync during
+        // steady multichannel playback. The marker-specific work skips itself
+        // inside markerTick instead.
+        if (!state.active) {
+            markerRafHandle = null;
+            return;
+        }
+        markerRafHandle = requestAnimationFrame(tick);
+        // During export the main thread handles worker ack messages from the
+        // proxy sink (see writable-bridge.ts). Any rAF work here steals main-
+        // thread time from those acks, stalling the worker in await.
+        if (state.transcodeInProgress) return;
+        const now = performance.now();
+        // Clamp the frame delta: after a background-tab span rAF resumes with a
+        // huge gap, and an unclamped dt would make the filter alphas ~1 (hard
+        // snap). 100 ms keeps the glide graceful across dropped frames.
+        const frameDtMs = Math.min(100, Math.max(1, now - lastFrameMs));
+        lastFrameMs = now;
+        // Slow lane: drift sync + grace-window countdown at a fixed cadence.
+        if (now - slowLaneLastMs >= DRIFT_SYNC_INTERVAL_MS) {
+            slowLaneLastMs = now;
+            // Drain the post-interaction follow grace window, but ONLY while the
+            // video is playing and the user is not mid-gesture - a paused
+            // inspection should not let follow snap back. followGraceLastTickMs
+            // is updated every slow tick (even when frozen) so a paused span is
+            // never counted on resume.
+            if (followResumeRemainingMs > 0 && !dom.player.paused && activeMapGestures.size === 0) {
+                followResumeRemainingMs = Math.max(0, followResumeRemainingMs - (now - followGraceLastTickMs));
+            }
+            followGraceLastTickMs = now;
+            // Player hook for master/slave drift sync in multi-channel trips.
+            // No-op on single-channel. Runs even when markerTick skips its map
+            // work (no GPS / GPS window ended) - drift sync needs no marker.
+            if (onAfterTick) onAfterTick();
+        }
+        markerTick(now, frameDtMs);
+    };
+    lastFrameMs = performance.now();
+    markerRafHandle = requestAnimationFrame(tick);
+}
+
+// Minimum pixel shift before a mini-map repaint. At zoom ~15, 1 px = ~10 m, so
+// the camera re-centers every ~3 px of car travel - a 3 px jump in a 140 px
+// circle is imperceptible as jitter, and the marker slides smoothly on top.
+const MINI_MAP_REPAINT_THRESHOLD_PX = 3;
+
+// =====================================================================
+// Chase camera (followMode "chase")
+// =====================================================================
+// "chase" = heading-up follow (like "rotate") + camera tilt + 3D buildings,
+// optionally with speed-adaptive zoom. The "dashcam / racing-game" view.
+//
+// Performance notes (this map repaints continuously during playback, so every
+// added per-frame cost matters):
+//  - Tilt is a one-off setPitch on enter + the slider; the hot follow loop does
+//    NOT touch pitch (it is sticky in MapLibre, and jumpTo without a pitch key
+//    leaves it alone), so chase costs the same per-frame camera step as
+//    "rotate".
+//  - 3D buildings (fill-extrusion) are added ONLY while chase is active and
+//    removed on exit, so flat/overview/north-up views pay nothing. minzoom 14
+//    means they render only at street zoom, never on the trip-overview fit.
+//  - Adaptive zoom rides on the SAME per-frame camera step (just adds a zoom
+//    target), and the whole zoom range stays >= the vector source maxzoom (14),
+//    so changing it overzooms from the already-cached z14 tiles - no extra tile
+//    fetches.
+
+// Slider ceiling. See the maxPitch comment in ensureMap for why 70, not 85.
+const CHASE_MAX_PITCH_DEG = 70;
+const CHASE_DEFAULT_PITCH_DEG = 58;
+// Street-level zoom chase eases to on entry when the user was zoomed out on the
+// trip overview. Buildings live at z14+, so a tilted overview would show none.
+const CHASE_DEFAULT_ZOOM = 16.4;
+// Speed-adaptive zoom: zoom out as speed rises so the road ahead stays in view.
+// Range is narrow AND entirely above the source maxzoom (14) on purpose - every
+// value overzooms from the same z14 vector tiles, so sweeping it fetches no new
+// tiles (verified against the OpenFreeMap planet TileJSON: maxzoom 14).
+const CHASE_ZOOM_AT_REST = 16.8;
+const CHASE_ZOOM_AT_SPEED = 15.4;
+const CHASE_SPEED_FULL_MS = 33; // ~120 km/h -> most zoomed-out end
+// Time constant for the EMA that smooths the speed feeding adaptive zoom (so the
+// zoom does not pump at every light or noisy fix). The per-frame factor is
+// derived from the actual frame delta (alpha = 1 - exp(-dt/tau)), NOT a fixed
+// constant, so the smoothing window stays ~0.7 s wall-clock regardless of rAF
+// jitter.
+const CHASE_SPEED_TAU_MS = 700;
+// EMA convergence snap, in m/s - see the snap comment in markerTick.
+const CHASE_SPEED_SNAP_MPS = 0.01;
+const BUILDINGS_3D_LAYER_ID = "dc-buildings-3d";
+// Both styles (light/dark) share this OpenFreeMap vector source id and the
+// "building" source-layer (verified in public/styles/*.json).
+const VECTOR_SOURCE_ID = "openmaptiles";
+const BUILDING_SOURCE_LAYER = "building";
+
+const CHASE_PITCH_STORAGE_KEY = "dashcamigo:chase-pitch";
+const CHASE_ADAPTIVE_STORAGE_KEY = "dashcamigo:chase-adaptive-zoom";
+
+// User-tunable chase state, hydrated from localStorage in initMap. Kept module-
+// level so the follow loop and the controls share one source of truth.
+let chasePitchDeg = CHASE_DEFAULT_PITCH_DEG;
+let chaseAdaptiveZoom = true;
+// EMA-smoothed speed (m/s) for adaptive zoom. Reset on chase enter so the first
+// frame does not lurch from a stale value.
+let chaseSmoothedSpeedMs = 0;
+
+function clampPitch(deg: number): number {
+    if (!Number.isFinite(deg)) return CHASE_DEFAULT_PITCH_DEG;
+    return Math.max(0, Math.min(CHASE_MAX_PITCH_DEG, deg));
+}
+
+/** True for the heading-up follow modes (camera bearing tracks the car). Drives
+ *  the per-frame bearing write and recenter bearing. */
+function isHeadingUpMode(mode: FollowMode): boolean {
+    return mode === "rotate" || mode === "chase";
+}
+
+/** Maps speed to a chase zoom: rest -> zoomed in, fast -> zoomed out. Monotonic,
+ *  clamped to [CHASE_ZOOM_AT_SPEED, CHASE_ZOOM_AT_REST] (both above maxzoom 14). */
+function chaseZoomForSpeed(speedMs: number): number {
+    const f = Math.max(0, Math.min(1, speedMs / CHASE_SPEED_FULL_MS));
+    return CHASE_ZOOM_AT_REST + (CHASE_ZOOM_AT_SPEED - CHASE_ZOOM_AT_REST) * f;
+}
+
+function loadChasePitch(): number {
+    try {
+        const raw = localStorage.getItem(CHASE_PITCH_STORAGE_KEY);
+        if (raw === null) return CHASE_DEFAULT_PITCH_DEG;
+        return clampPitch(Number(raw));
+    } catch {
+        return CHASE_DEFAULT_PITCH_DEG;
+    }
+}
+
+function persistChasePitch(deg: number): void {
+    try {
+        localStorage.setItem(CHASE_PITCH_STORAGE_KEY, String(Math.round(deg)));
+    } catch {
+        // localStorage blocked (incognito) - tilt survives the session only.
+    }
+}
+
+function loadChaseAdaptiveZoom(): boolean {
+    try {
+        // Default ON: absent key -> true. Only an explicit "0" disables it.
+        return localStorage.getItem(CHASE_ADAPTIVE_STORAGE_KEY) !== "0";
+    } catch {
+        return true;
+    }
+}
+
+function persistChaseAdaptiveZoom(on: boolean): void {
+    try {
+        localStorage.setItem(CHASE_ADAPTIVE_STORAGE_KEY, on ? "1" : "0");
+    } catch {
+        // see persistChasePitch
+    }
+}
+
+/** First symbol layer id, so the 3D building extrusion is inserted UNDER the
+ *  labels (street names / POIs stay readable on top of the buildings). */
+function firstSymbolLayerId(map: maplibregl.Map): string | undefined {
+    const layers = map.getStyle().layers ?? [];
+    for (const l of layers) {
+        if (l.type === "symbol") return l.id;
+    }
+    return undefined;
+}
+
+/**
+ * Adds the 3D building extrusion layer if it is not already present and the map
+ * carries the OpenFreeMap vector source. Idempotent. `theme` picks the wall
+ * color (the export snapshotter passes its own base-layer theme, independent of
+ * the app UI theme). The flat "building" fill in the style has maxzoom 14, so it
+ * is already hidden at the z14+ where this extrusion (minzoom 14) renders - no
+ * z-fighting, nothing to toggle off.
+ *
+ * Exported so the export-overlay snapshotter renders the exact same buildings as
+ * the live chase map (one source of truth for the layer definition).
+ */
+export function addBuildings3dLayer(map: maplibregl.Map, theme: MapStyleId): void {
+    if (map.getLayer(BUILDINGS_3D_LAYER_ID)) return;
+    // Style may still be EMPTY_STYLE (tiles unavailable) or mid-swap - bail
+    // silently; the live style.load handler re-adds it once chase is active.
+    if (!map.getSource(VECTOR_SOURCE_ID)) return;
+    // Neon: lit amber walls so buildings glow with the rest of the slot. Dark:
+    // near-black. Light: bone.
+    const walls = theme === "neon" ? "#7a4a16" : theme === "dark" ? "#2b2b30" : "#e4ddcd";
+    map.addLayer(
+        {
+            id: BUILDINGS_3D_LAYER_ID,
+            type: "fill-extrusion",
+            source: VECTOR_SOURCE_ID,
+            "source-layer": BUILDING_SOURCE_LAYER,
+            minzoom: 14,
+            paint: {
+                "fill-extrusion-color": walls,
+                // OpenMapTiles carries render_height/render_min_height; fall back
+                // to height/min_height, then a 5 m default so footprints without
+                // a height still read as low buildings rather than vanishing.
+                "fill-extrusion-height": ["coalesce", ["get", "render_height"], ["get", "height"], 5],
+                "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], ["get", "min_height"], 0],
+                // Fade in across z14->15.5 so buildings do not pop at the minzoom
+                // edge while the user is zooming into chase.
+                "fill-extrusion-opacity": ["interpolate", ["linear"], ["zoom"], 14, 0, 15.5, 0.92],
+            } as never,
+        },
+        firstSymbolLayerId(map),
+    );
+}
+
+/** Removes the 3D building extrusion. Idempotent. Exported alongside
+ *  addBuildings3dLayer so the export preview can drop it when switching back to
+ *  north-up (else the flat extrusion footprints linger on a top-down view). */
+export function removeBuildings3dLayer(map: maplibregl.Map): void {
+    if (map.getLayer(BUILDINGS_3D_LAYER_ID)) map.removeLayer(BUILDINGS_3D_LAYER_ID);
+}
+
+/** Live-map wrapper: buildings track the current app map theme. (Removal needs
+ *  no theme, so leaveChaseCamera calls removeBuildings3dLayer directly.) */
+function ensure3dBuildings(map: maplibregl.Map): void {
+    addBuildings3dLayer(map, currentMapTheme());
+}
+
+/**
+ * Enters the chase camera: adds 3D buildings and eases to a tilted, heading-up,
+ * street-level view. `pos` is the current interpolated car position (may be null
+ * if the playhead is outside the GPS window - we still tilt, just without a
+ * center/bearing target). Zoom on entry is the speed-adaptive target (if on) or
+ * the user's current zoom bumped up to at least street level.
+ */
+function enterChaseCamera(
+    map: maplibregl.Map,
+    pos: { lat: number; lon: number; bearingDeg: number; speedMs: number } | null,
+): void {
+    ensure3dBuildings(map);
+    chaseSmoothedSpeedMs = pos?.speedMs ?? 0;
+    const duration = 500;
+    const opts: maplibregl.EaseToOptions = { pitch: chasePitchDeg, duration };
+    if (pos) {
+        opts.center = [pos.lon, pos.lat];
+        opts.bearing = pos.bearingDeg;
+        opts.zoom = chaseAdaptiveZoom ? chaseZoomForSpeed(pos.speedMs) : Math.max(map.getZoom(), CHASE_DEFAULT_ZOOM);
+    }
+    suspendFollowEase(duration);
+    map.easeTo(opts);
+}
+
+/**
+ * Leaves the chase camera: removes 3D buildings and eases the tilt back to flat.
+ * Bearing/center are handled by the caller's mode-switch ease (or left as-is for
+ * the "off" target, which does not recenter).
+ */
+function leaveChaseCamera(map: maplibregl.Map): void {
+    removeBuildings3dLayer(map);
+}
+
+/**
+ * One smooth re-aim back to the car after the post-interaction grace window
+ * expired. Chase re-enters fully (re-tilt + re-aim + adaptive zoom + buildings),
+ * so a drag/zoom that flattened or zoomed the view glides back into the 3D chase.
+ * follow/rotate ease to the car, flatten any user tilt, and (follow) undo a user
+ * rotation back to north-up. Called only from the marker loop, with followMode
+ * guaranteed non-"off"; the follow camera stays suspended for the transition via
+ * suspendFollowEase (inside enterChaseCamera / here).
+ */
+function resumeFollowAfterInteraction(): void {
+    const map = state.map;
+    if (!map) return;
+    const pos = currentInterpolatedPosition();
+    if (state.followMode === "chase") {
+        enterChaseCamera(map, pos);
+        return;
+    }
+    if (!pos) return;
+    const duration = 500;
+    const opts: maplibregl.EaseToOptions = { center: [pos.lon, pos.lat], duration };
+    // rotate is heading-up; follow is north-up, so undo a rotation done during the pause.
+    if (isHeadingUpMode(state.followMode)) opts.bearing = pos.bearingDeg;
+    else if (Math.abs(map.getBearing()) > 0.5) opts.bearing = 0;
+    // Non-chase is flat: undo a two-finger tilt the user may have applied.
+    if (map.getPitch() > 1) opts.pitch = 0;
+    suspendFollowEase(duration);
+    map.easeTo(opts);
+}
+
+/**
+ * Tilts the big map into chase when it becomes visible while chase is the active
+ * mode but the camera is still flat - the default-chase first expand. The follow
+ * loop maintains center / bearing / zoom but never pitch, so the one-off tilt has
+ * to be applied here (and re-applied if a later flat episode ever drops it).
+ *
+ * Pitch-guarded: an already-tilted chase map is left alone, so re-expanding the
+ * panel does not re-ease. fitBounds (trip switch) keeps the pitch, so chase
+ * survives trip changes without a re-entry here.
+ */
+function ensureChaseEngaged(): void {
+    const map = state.map;
+    if (!map || !state.mapExpanded || !state.hasTrack || state.followMode !== "chase") return;
+    if (map.getPitch() > 1) {
+        // Already tilted - just make sure the buildings are present (cheap,
+        // idempotent; covers a style swap that dropped them while collapsed).
+        ensure3dBuildings(map);
+        return;
+    }
+    enterChaseCamera(map, currentInterpolatedPosition());
+}
+
+/** Syncs the chase sub-controls (tilt slider + adaptive-zoom toggle) visibility
+ *  and values to the current mode/state. Called from syncMapFollowButton. */
+function syncChaseControls(): void {
+    if (dom.mapChaseControls) dom.mapChaseControls.hidden = state.followMode !== "chase";
+    if (dom.mapChaseAdaptive) {
+        dom.mapChaseAdaptive.setAttribute("aria-pressed", chaseAdaptiveZoom ? "true" : "false");
+        dom.mapChaseAdaptive.classList.toggle("active", chaseAdaptiveZoom);
+    }
+}
+
+/**
+ * Attaches all map-related event listeners (follow toggle, recenter,
+ * expand/collapse, mini-map, style error retry/dismiss, theme change, drag).
+ * Call once at startup after ensureMap/ensureMiniMap.
+ */
+export function initMap(cb: MapCallbacks): void {
+    callbacks = cb;
+
+    // UX-18: 3-button segmented control with a delegated listener on the container.
+    // Each button directly selects a mode (no cycle), making all options visible.
+    dom.mapFollowSegments.addEventListener("click", (e) => {
+        const target = e.target;
+        if (!(target instanceof Element)) return;
+        const btn = target.closest<HTMLButtonElement>(".map-follow-seg");
+        if (!btn) return;
+        const mode = btn.dataset.followMode as FollowMode | undefined;
+        if (!mode) return;
+        applyFollowMode(mode);
+    });
+
+    // Recenter button: snaps the camera to the current car position and clears any
+    // pending post-interaction pause, so an active follow mode resumes immediately
+    // instead of waiting out the grace window. In "off" mode it just centers.
+    dom.mapRecenterBtn.addEventListener("click", () => {
+        if (!state.map) return;
+        const pos = currentInterpolatedPosition();
+        if (!pos) return;
+        // Clear the pause + its resume latch so an active follow mode re-engages
+        // now instead of waiting out the grace window (and without a double re-aim).
+        resetFollowInteractionPause();
+        const duration = 400;
+        // Adjust bearing only in heading-up modes (rotate/chase); preserve the
+        // user's orientation otherwise. Pitch is sticky, so a chase recenter
+        // keeps its tilt without setting it here.
+        const easeOptions: maplibregl.EaseToOptions = { center: [pos.lon, pos.lat], duration };
+        if (isHeadingUpMode(state.followMode)) {
+            easeOptions.bearing = pos.bearingDeg;
+        }
+        suspendFollowEase(duration);
+        state.map.easeTo(easeOptions);
+    });
+
+    // Chase camera sub-controls. Hydrate persisted prefs once, then wire the
+    // tilt slider and the speed-adaptive-zoom toggle. Both only matter in chase
+    // mode; the container is hidden otherwise via syncChaseControls.
+    chasePitchDeg = loadChasePitch();
+    chaseAdaptiveZoom = loadChaseAdaptiveZoom();
+    dom.mapChaseTilt.max = String(CHASE_MAX_PITCH_DEG);
+    dom.mapChaseTilt.value = String(chasePitchDeg);
+    dom.mapChaseTilt.addEventListener("input", () => {
+        chasePitchDeg = clampPitch(Number(dom.mapChaseTilt.value));
+        persistChasePitch(chasePitchDeg);
+        // setPitch is instant (no animation): the right feel while dragging and
+        // cheaper than a per-input easeTo. Only act while chase is live.
+        if (state.map && state.followMode === "chase") state.map.setPitch(chasePitchDeg);
+    });
+    dom.mapChaseAdaptive.addEventListener("click", () => {
+        chaseAdaptiveZoom = !chaseAdaptiveZoom;
+        persistChaseAdaptiveZoom(chaseAdaptiveZoom);
+        syncChaseControls();
+        // Turning it ON while chasing: seed the smoothed speed from the current
+        // car so the next tick eases zoom to the speed target instead of lurching
+        // from a stale value. Turning it OFF leaves zoom where it is (user owns it).
+        if (chaseAdaptiveZoom && state.followMode === "chase") {
+            const pos = currentInterpolatedPosition();
+            if (pos) chaseSmoothedSpeedMs = pos.speedMs;
+        }
+    });
+    // Reflect the hydrated toggle state (aria-pressed/active) on first paint.
+    syncChaseControls();
+
+    dom.mapCollapseBtn.addEventListener("click", collapseMap);
+    // Player-bar map toggle: single entry point for mobile users to expand or
+    // collapse the map (mini-map circle is hidden via CSS on mobile). Force
+    // userWantsMap=true on expand so the click works regardless of the View
+    // menu state - on mobile that menu is buried inside the overflow kebab
+    // and users would otherwise hit a no-op button on the first tap. Collapse
+    // does NOT flip userWantsMap off: a user who explicitly enabled the map
+    // panel may want it shown as the mini-map circle on desktop later.
+    dom.playerMapBtn.addEventListener("click", () => {
+        if (state.mapExpanded) {
+            collapseMap();
+        } else {
+            if (!getViewPanels().map) setPanelVisible("map", true);
+            expandMap();
+        }
+    });
+    // Close-X on the mini-map: morph into "View" button + flip menu state.
+    dom.miniMapClose.addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeMiniMapToViewMenu();
+    });
+    // Re-apply map layout when the user toggles mini-map via "View" menu. The
+    // menu sets dom.miniMap.hidden directly; applyMapLayout reads getViewPanels()
+    // for the source of truth and re-runs MapLibre resize so the canvas
+    // matches the new container size.
+    subscribeViewPanels(() => applyMapLayout());
+    // Entering/leaving export mode hides/restores the viewer's map + mini-map
+    // (see applyMapLayout's exportSuppressed branch). Recompute on every
+    // export-state change; cheap (a few class/hidden toggles + a gated resize).
+    subscribeExportState(() => applyMapLayout());
+
+    // Map style error banner. Retry re-fetches style.json; on success applyLoadedStyle
+    // updates both maps. Dismiss/Escape just hide the banner - it reappears on the
+    // next initialization attempt (e.g. after reload).
+    //
+    // Retry the theme that actually failed, not the current UI theme. The export-
+    // overlay code path always fetches "light" regardless of UI theme - if that
+    // failed for a dark user, retrying currentMapTheme() would re-fetch the
+    // already-cached "dark" (instant success), hide the banner, and leave the
+    // real broken fetch unaddressed.
+    dom.mapStyleRetry.addEventListener("click", () => {
+        dom.mapStyleRetry.disabled = true;
+        const theme = lastFailedTheme ?? currentMapTheme();
+        loadMapStyle(theme, true)
+            .then((style) => {
+                if (style) applyLoadedStyle(style, theme);
+            })
+            .finally(() => {
+                dom.mapStyleRetry.disabled = false;
+            });
+    });
+
+    dom.mapStyleDismiss.addEventListener("click", hideMapStyleError);
+
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && !dom.mapStyleError.hidden) {
+            hideMapStyleError();
+        }
+    });
+
+    initMiniMapDrag();
+    initMiniMapHover();
+
+    // Toggle cooperative gestures if the pointer type flips (a mouse attached to /
+    // detached from a convertible, which switches coarse<->fine). The map is
+    // created lazily, so the handler no-ops until ensureMap has run.
+    window.matchMedia?.(COARSE_POINTER_QUERY).addEventListener("change", syncCooperativeGestures);
+}
+
+/**
+ * Overwrites title and aria-label on MapLibre NavigationControl buttons.
+ * MapLibre renders buttons with classes .maplibregl-ctrl-zoom-in /
+ * .maplibregl-ctrl-zoom-out / .maplibregl-ctrl-compass; their labels come from
+ * map._locale (private) at addControl time. There is no public setLocale API,
+ * so we patch attributes directly via querySelector - stable and private-field
+ * independent. Idempotent: no-op if buttons are absent.
+ */
+function localizeMapNavControls(): void {
+    if (!state.map) return;
+    const container = state.map.getContainer();
+    const setBtn = (selector: string, key: "map.ctrl.zoomIn" | "map.ctrl.zoomOut" | "map.ctrl.resetBearing") => {
+        const btn = container.querySelector<HTMLElement>(selector);
+        if (!btn) return;
+        const label = t(key);
+        btn.setAttribute("title", label);
+        btn.setAttribute("aria-label", label);
+    };
+    setBtn(".maplibregl-ctrl-zoom-in", "map.ctrl.zoomIn");
+    setBtn(".maplibregl-ctrl-zoom-out", "map.ctrl.zoomOut");
+    setBtn(".maplibregl-ctrl-compass", "map.ctrl.resetBearing");
+}
+
+/**
+ * MapLibre locale patch for the cooperative-gestures overlay. Only the mobile
+ * "two fingers" message is set: cooperative gestures are touch-only here, so the
+ * desktop Ctrl/Cmd-scroll message never renders (and is not in our dictionaries).
+ */
+function cooperativeLocale(): Record<string, string> {
+    return { "CooperativeGesturesHandler.MobileHelpText": t("map.coop.twoFingers") };
+}
+
+/**
+ * Enables cooperative gestures on touch (one finger scrolls the page, two move
+ * the map), disables them on a mouse. Idempotent; no-op until the map exists.
+ * Called on pointer-type flips; the construction option sets the initial state.
+ */
+function syncCooperativeGestures(): void {
+    const map = state.map;
+    if (!map) return;
+    const handler = map.cooperativeGestures;
+    const want = isCoarsePointer();
+    if (want && !handler.isEnabled()) {
+        handler.enable();
+        // enable() rebuilds the overlay from map._locale, which still holds the
+        // construction-time language - patch it to the current one.
+        localizeCooperativeOverlay();
+    } else if (!want && handler.isEnabled()) {
+        handler.disable();
+    }
+}
+
+/**
+ * Patches the cooperative-gestures overlay text to the current language. The text
+ * is baked into the DOM at enable() time, so a mid-session language switch needs
+ * an explicit patch (same approach as localizeMapNavControls). No-op when the
+ * overlay is absent (cooperative disabled, or the map not built yet).
+ */
+function localizeCooperativeOverlay(): void {
+    if (!state.map) return;
+    const msg = state.map
+        .getContainer()
+        .querySelector<HTMLElement>(".maplibregl-cooperative-gesture-screen .maplibregl-mobile-message");
+    if (msg) msg.textContent = t("map.coop.twoFingers");
+}
+
+/**
+ * Fetches and applies the map style for the current theme. Both themes are
+ * prefetched in ensureMap, so this is usually a cache hit. applyLoadedStyle
+ * verifies theme freshness before applying so a stale result from a double-
+ * switch is discarded.
+ */
+export function reloadMapStyleForCurrentTheme(): void {
+    // No map yet (user is on the landing page, initTripUi not called) - skip the
+    // fetch; applyLoadedStyle would no-op anyway, but we also save the network request.
+    if (!state.map) return;
+    const theme = currentMapTheme();
+    loadMapStyle(theme).then((style) => {
+        if (style) {
+            applyLoadedStyle(style, theme);
+            return;
+        }
+        // null = either an in-flight prefetch (or a previous call) failed
+        // and resolved this awaited promise, OR a fresh fetch we just
+        // initiated failed (cache null + promise null = real new request).
+        // In the prefetch-inflight case the catch was silent because source
+        // was "prefetch"; in the fresh-fetch case the source was "main" and
+        // the catch already surfaced the banner. The defensive set+show
+        // below covers the prefetch-inflight branch without re-firing
+        // analytics (prefetch failures don't fire it at all - see catch).
+        lastFailedTheme = theme;
+        showMapStyleError();
+    });
+}

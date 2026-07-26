@@ -1,0 +1,1182 @@
+/* =========================================================================
+   LANDING (body.no-trips - empty state before first ingest)
+   --------------------------------------------------------------------------
+   Layout: single-column .landing-inner with stacked blocks - hero (split),
+   works (OS + browsers), how (3 steps), faq, built-with credits. Visible only while
+   body.no-trips. After the first successful ingest landing.ts removes the
+   class and src/ui/landing.ts FLIP-animates #landing-cta into #sidebar-cta.
+   ========================================================================= */
+.landing {
+    display: none;
+    flex: 1;
+    overflow-y: auto;
+    background: var(--bg);
+    color: var(--fg);
+}
+body.no-trips .landing {
+    display: block;
+}
+/* In body.no-trips we hide everything belonging to the "normal" mode:
+   sidebar+resize-handle, the player, both empty-state/codec-unsupported
+   cards, sidebar-cta. The layout grid switches to 1fr - the viewer takes the full width. */
+body.no-trips main.layout {
+    grid-template-columns: 1fr;
+}
+body.no-trips .sidebar,
+body.no-trips .sidebar-resize {
+    display: none;
+}
+body.no-trips .player-wrap,
+body.no-trips .empty-state,
+body.no-trips .codec-unsupported-state {
+    display: none !important;
+}
+body.no-trips .sidebar-cta {
+    display: none;
+}
+
+.landing-inner {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: var(--dc-space-7) var(--dc-space-6) var(--dc-space-8);
+}
+@media (max-width: 880px) {
+    .landing-inner {
+        padding: var(--dc-space-6) var(--dc-space-4) var(--dc-space-8);
+    }
+}
+@media (max-width: 560px) {
+    .landing-inner {
+        padding: var(--dc-space-5) var(--dc-space-3) var(--dc-space-7);
+    }
+}
+/* Room for the docked CTA pill (.landing-dock): it overlays the viewport
+   bottom edge, and it is up whenever the page is scrolled to the footer.
+   The clearance sits on the footer - the LAST scrollable element of the
+   landing (a sibling of .landing-inner, so inner padding would not help) -
+   letting it scroll fully above the pill. Scoped to .landing: the same
+   footer on SEO pages has no dock. */
+.landing {
+    --landing-dock-clearance: calc(56px + var(--dc-space-4) + env(safe-area-inset-bottom, 0px));
+}
+.landing .site-footer {
+    margin-bottom: var(--landing-dock-clearance);
+}
+
+/* ============================================================
+   HERO - two-column split. Left = copy + drop CTA + caps.
+   Right = always-dark safety wall + CSP card.
+   ============================================================ */
+.landing-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    gap: var(--dc-space-5);
+    align-items: stretch;
+}
+@media (max-width: 1024px) {
+    .landing-hero {
+        grid-template-columns: 1fr;
+    }
+}
+@media (max-width: 880px) {
+    .landing-hero {
+        gap: var(--dc-space-4);
+    }
+}
+
+.landing-hero-main {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-5);
+    min-width: 0;
+}
+@media (max-width: 880px) {
+    .landing-hero-main {
+        gap: var(--dc-space-5);
+    }
+}
+
+.landing-hero-h1 {
+    font-family: var(--dc-font-body);
+    font-weight: 800;
+    font-size: clamp(30px, 4.2vw, 56px);
+    line-height: 1.04;
+    letter-spacing: -0.025em;
+    margin: 0;
+    text-wrap: balance;
+    color: var(--fg);
+}
+.landing-hero-h1-hl {
+    /* --accent-ink, not --accent: raw orange on the light bone background is
+       ~2.1:1 - under even the 3:1 display-text floor. The ink variant darkens
+       only when orange is used AS TEXT on light surfaces (see tokens.css). */
+    color: var(--accent-ink);
+}
+
+.landing-hero-kicker {
+    font-family: var(--dc-font-body);
+    font-weight: 600;
+    font-size: clamp(16px, 1.8vw, 20px);
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+    color: var(--fg);
+    margin: -6px 0 0 0;
+    text-wrap: balance;
+}
+
+.landing-hero-lead {
+    font-size: var(--dc-text-lg);
+    line-height: 1.55;
+    color: var(--fg-dim);
+    max-width: 54ch;
+    margin: 0;
+}
+/* Inline link in hero-lead / FAQ Q2 / caps.e: inherits font, uses accent color
+   with a dotted underline to stay visually quieter than the orange .hl. */
+.landing-brand-link {
+    color: var(--fg);
+    text-decoration: none;
+    border-bottom: 1px dotted var(--border-strong);
+    transition:
+        color var(--dc-dur-fast) var(--dc-ease),
+        border-bottom-color var(--dc-dur-fast) var(--dc-ease);
+}
+/* In the hero lead the eight brand anchors are SEO-load-bearing but visually
+   secondary - a dotted line under every brand name made the paragraph noisier
+   than the h1. Resting decoration goes; hover/focus (below, wins by source
+   order) keeps the affordance, and "All supported brands →" stays the
+   discoverable path. caps.e / FAQ links keep the resting underline - in
+   running prose it is the only thing marking them as links. */
+.landing-hero-lead .landing-brand-link {
+    border-bottom-color: transparent;
+}
+.landing-brand-link:hover,
+.landing-brand-link:focus-visible {
+    color: var(--accent-ink);
+    border-bottom-color: var(--accent-ink);
+    outline: none;
+}
+
+/* Pointer/touch copy pairs. Drag-centric strings ("drop the folder here")
+   are meaningless when the primary pointer can't drag a folder onto the page;
+   each such string ships in two variants in the static HTML (each with its
+   own data-i18n key, so the prerender translates both) and this media toggle
+   picks one - no JS, no flash of wrong copy before hydration. */
+.landing-copy-touch {
+    display: none;
+}
+@media (pointer: coarse) {
+    .landing-copy-pointer {
+        display: none;
+    }
+    .landing-copy-touch {
+        display: inline;
+    }
+}
+
+/* ----- Drop CTA card ----- */
+/* Grid, not flex: the trust footer (.landing-drop-foot) must span the full
+   card width under both the text block and the CTA button. */
+.landing-drop {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+        "text cta"
+        "foot foot";
+    align-items: center;
+    column-gap: var(--dc-space-4);
+    row-gap: var(--dc-space-3);
+    padding: var(--dc-space-4) var(--dc-space-4) var(--dc-space-4) var(--dc-space-5);
+    background: var(--bg-elev);
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--dc-radius-lg);
+    cursor: pointer;
+    transition:
+        border-color var(--dc-dur-slow) var(--dc-ease),
+        background var(--dc-dur-slow) var(--dc-ease);
+}
+.landing-drop:hover,
+.landing-drop:focus-within {
+    border-color: var(--accent);
+    background: var(--bg-elev-2);
+}
+.landing-drop-text {
+    grid-area: text;
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-1);
+    min-width: 0;
+}
+.landing-drop-t1 {
+    font-size: var(--dc-text-base);
+    font-weight: 600;
+    color: var(--fg);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+}
+.landing-drop-folder {
+    color: var(--accent);
+    flex: none;
+}
+.landing-drop-t2 {
+    font-size: var(--dc-text-md);
+    /* --fg-dim, not --fg-mute: this line instructs the page's main action -
+       at mute (1.8:1 on the light theme) it was decoration, not text. */
+    color: var(--fg-dim);
+    font-family: var(--dc-font-mono);
+    letter-spacing: var(--dc-tracking-normal);
+}
+.landing-codecs {
+    display: inline-flex;
+    gap: var(--dc-space-1);
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: var(--dc-space-1);
+    font-family: var(--dc-font-mono);
+    font-size: var(--dc-text-xs);
+    color: var(--fg-mute);
+}
+.landing-codec {
+    padding: 2px var(--dc-space-2);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-sm);
+    color: var(--fg);
+}
+.landing-codecs-hint {
+    /* Same contrast reasoning as .landing-drop-t2; the old mute + 0.85
+       opacity landed at 1.65:1 on light - illegible, not "subtle". */
+    color: var(--fg-dim);
+}
+/* Trust footer inside the drop card. Deliberately NOT the mono/--fg-mute
+   styling of .landing-drop-t2 - that twinning is what made it read as fine
+   print. Body font + --fg-dim + a green check: green is the page's
+   "verified" idiom (the CSP pill), and pointedly not orange, so the CTA
+   button stays the only orange element in the card. */
+.landing-drop-foot {
+    grid-area: foot;
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+    margin: 0;
+    padding-top: var(--dc-space-3);
+    border-top: 1px solid var(--border);
+    font-size: var(--dc-text-md);
+    font-weight: 600;
+    color: var(--fg-dim);
+}
+.landing-drop-foot::before {
+    content: "\2713";
+    color: var(--ok);
+    font-weight: 700;
+    line-height: 1;
+}
+/* Hero CTA = .dc-btn dc-btn--primary (appearance, hover, focus ring, states)
+   plus this hero-size modifier. The FLIP morph into the compact sidebar CTA
+   deep-clones the node, so the .dc-btn classes ride along with the clone. */
+.landing-cta {
+    grid-area: cta;
+    padding: var(--dc-space-3) var(--dc-space-4);
+    font-size: var(--dc-text-base);
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+}
+@media (max-width: 880px) {
+    .landing-drop {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+            "text"
+            "cta"
+            "foot";
+        padding: var(--dc-space-4);
+    }
+    .landing-cta {
+        width: 100%;
+    }
+}
+
+/* ----- Capability bullets (3x2 grid) ----- */
+.landing-caps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--dc-space-3) var(--dc-space-5);
+}
+@media (max-width: 640px) {
+    .landing-caps {
+        grid-template-columns: 1fr;
+    }
+}
+.landing-caps li {
+    display: flex;
+    gap: var(--dc-space-3);
+    align-items: flex-start;
+}
+.landing-cap-ico {
+    flex: none;
+    width: 22px;
+    height: 22px;
+    border-radius: var(--dc-radius-md);
+    background: var(--bg-elev-2);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+    margin-top: 1px;
+}
+.landing-cap-ico svg {
+    width: 13px;
+    height: 13px;
+}
+.landing-caps b {
+    display: block;
+    font-weight: 600;
+    font-size: var(--dc-text-base);
+    color: var(--fg);
+    letter-spacing: -0.005em;
+    margin-bottom: 1px;
+}
+/* caps.e body holds inline .landing-brand-link anchors - cover <a> too so the
+   links share the body metrics (the brand-link class only adds the affordance). */
+.landing-caps span,
+.landing-caps a {
+    font-size: var(--dc-text-md);
+    color: var(--fg-dim);
+    line-height: 1.45;
+}
+
+/* ============================================================
+   SAFETY WALL (right column) - always-dark surface regardless
+   of theme, plus a 38%-width orange accent stripe on top.
+   ============================================================ */
+/* Right hero column: the safety card + the product glimpse stacked under it.
+   The wrapper (not the card) is the grid item, so the card keeps its content
+   height - no stretched black void - and the shot fills the space below. */
+.landing-hero-side {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-5);
+    min-width: 0;
+}
+
+.landing-safety {
+    position: relative;
+    background: #0a0a0a;
+    border: 1px solid #1c1c1c;
+    border-radius: var(--dc-radius-lg);
+    padding: var(--dc-space-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-4);
+    overflow: hidden;
+    color: var(--dc-white);
+}
+.landing-safety::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent) 0%, var(--accent) 38%, transparent 38%);
+}
+@media (max-width: 880px) {
+    .landing-safety {
+        padding: var(--dc-space-4);
+        gap: var(--dc-space-3);
+    }
+}
+
+/* Product glimpse under the safety card: the desktop shot with the phone shot
+   overlapping its bottom-right corner (same composite idiom as the README
+   hero) - proof of both form factors in one thumb. Two separate buttons:
+   each opens the lightbox with its own full-size variant
+   (src/ui/landing-shot.ts). */
+.landing-hero-shot {
+    position: relative;
+    width: 100%;
+    /* Room for the phone hanging below the desktop shot's bottom edge. */
+    padding-bottom: var(--dc-space-5);
+}
+.landing-hero-shot-main {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: none;
+    background: none;
+    border-radius: var(--dc-radius-lg);
+    cursor: zoom-in;
+    outline: none;
+}
+.landing-hero-shot-desktop {
+    display: block;
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--dc-radius-lg);
+    box-shadow: var(--dc-shadow-sheet);
+    transition: border-color var(--dc-dur-fast) var(--dc-ease);
+}
+.landing-hero-shot-phone-btn {
+    position: absolute;
+    right: var(--dc-space-4);
+    bottom: 0;
+    /* ~22% of the column, same proportion the old preview composite used. */
+    width: clamp(84px, 22%, 120px);
+    padding: 0;
+    border: none;
+    background: none;
+    border-radius: 12px;
+    cursor: zoom-in;
+    outline: none;
+}
+.landing-hero-shot-phone {
+    display: block;
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    box-shadow: var(--dc-shadow-popup);
+    transition: border-color var(--dc-dur-fast) var(--dc-ease);
+}
+.landing-hero-shot-main:hover .landing-hero-shot-desktop,
+.landing-hero-shot-main:focus-visible .landing-hero-shot-desktop,
+.landing-hero-shot-phone-btn:hover .landing-hero-shot-phone,
+.landing-hero-shot-phone-btn:focus-visible .landing-hero-shot-phone {
+    border-color: var(--accent);
+}
+
+/* Full-size viewer for the hero shot. The whole surface closes it (zoom-out
+   cursor everywhere, no card, no close button - see landing-shot.ts). */
+.landing-shot-lightbox {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: var(--dc-space-5);
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: var(--dc-z-modal);
+    cursor: zoom-out;
+    outline: none;
+}
+.landing-shot-lightbox.is-open {
+    display: flex;
+}
+.landing-shot-lightbox img {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--dc-radius-lg);
+    box-shadow: var(--dc-shadow-popup);
+}
+@media (prefers-reduced-motion: no-preference) {
+    .landing-shot-lightbox.is-open img {
+        animation: landing-shot-in var(--dc-dur-fast) var(--dc-ease);
+    }
+}
+@keyframes landing-shot-in {
+    from {
+        opacity: 0;
+        transform: scale(0.97);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Open-source line at the bottom of the safety card. */
+.landing-oss {
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+    margin: 0;
+    padding-top: var(--dc-space-3);
+    border-top: 1px solid #1c1c1c;
+    font-size: var(--dc-text-md);
+    color: var(--dc-ash-6);
+}
+.landing-oss-link {
+    color: var(--accent);
+    text-decoration: none;
+}
+.landing-oss-link:hover,
+.landing-oss-link:focus-visible {
+    text-decoration: underline;
+    outline: none;
+}
+
+.landing-safety-eyebrow {
+    font-family: var(--dc-font-mono);
+    font-size: var(--dc-text-xs);
+    letter-spacing: var(--dc-tracking-caps);
+    text-transform: uppercase;
+    color: var(--accent);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+    margin: 0;
+}
+.landing-safety-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 12px var(--accent);
+}
+.landing-safety h2 {
+    font-family: var(--dc-font-body);
+    font-weight: 700;
+    font-size: var(--dc-text-2xl);
+    letter-spacing: -0.015em;
+    line-height: 1.18;
+    color: var(--dc-white);
+    margin: 0;
+}
+@media (max-width: 880px) {
+    .landing-safety h2 {
+        font-size: var(--dc-text-xl);
+    }
+}
+@media (max-width: 560px) {
+    .landing-safety h2 {
+        font-size: var(--dc-text-xl);
+    }
+}
+.landing-safety h2 em {
+    font-style: normal;
+    color: var(--accent);
+}
+
+.landing-guarantees {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+}
+.landing-guarantees li {
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-3);
+    padding: var(--dc-space-3) 0;
+    border-top: 1px solid #1b1b1b;
+    color: #dadada;
+    font-size: var(--dc-text-base);
+}
+.landing-guarantees li:first-child {
+    border-top: none;
+}
+.landing-guarantees b {
+    font-weight: 600;
+    color: var(--dc-white);
+}
+.landing-guarantee-ico {
+    flex: none;
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+}
+.landing-guarantee-ico svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* ----- CSP card (inside safety) ----- */
+.landing-csp {
+    margin-top: var(--dc-space-1);
+    padding: var(--dc-space-3);
+    background: var(--dc-black);
+    border: 1px solid #1c1c1c;
+    border-radius: var(--dc-radius-md);
+    display: flex;
+    gap: var(--dc-space-3);
+    align-items: flex-start;
+}
+@media (max-width: 880px) {
+    .landing-csp {
+        padding: var(--dc-space-3);
+    }
+}
+.landing-csp-ico {
+    flex: none;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--dc-radius-md);
+    background: var(--accent-dim);
+    color: var(--accent);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.landing-csp-ico svg {
+    width: 15px;
+    height: 15px;
+}
+.landing-csp-body {
+    min-width: 0;
+}
+.landing-csp-title {
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+    flex-wrap: wrap;
+    font-size: var(--dc-text-md);
+    color: var(--dc-white);
+    margin-bottom: var(--dc-space-1);
+    line-height: 1.3;
+}
+@media (max-width: 560px) {
+    .landing-csp-title b {
+        font-size: var(--dc-text-sm);
+    }
+}
+.landing-csp-title b {
+    font-weight: 600;
+}
+.landing-csp-pill {
+    font-family: var(--dc-font-mono);
+    font-size: var(--dc-text-2xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ok);
+    background: color-mix(in srgb, var(--ok) 12%, transparent);
+    padding: 1px var(--dc-space-1);
+    border-radius: var(--dc-radius-sm);
+}
+.landing-csp-info {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.06);
+    color: #8a8a8a;
+    font-family: var(--dc-font-mono);
+    font-weight: 600;
+    font-size: var(--dc-text-xs);
+    line-height: 1;
+    text-decoration: none;
+    flex: none;
+    transition:
+        background var(--dc-dur-base) var(--dc-ease),
+        color var(--dc-dur-base) var(--dc-ease);
+}
+/* Touch: keep the visible 18px disc but extend the tap area to the touch floor
+   via a centered transparent pseudo (the disc lives in a stacked mobile hero). */
+@media (pointer: coarse) {
+    .landing-csp-info::before {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: var(--dc-iconbtn-touch);
+        height: var(--dc-iconbtn-touch);
+        transform: translate(-50%, -50%);
+    }
+}
+.landing-csp-info:hover,
+.landing-csp-info:focus-visible {
+    background: var(--accent-dim);
+    color: var(--accent);
+    outline: none;
+}
+.landing-csp-code {
+    font-family: var(--dc-font-mono);
+    font-size: var(--dc-text-xs);
+    color: #8a8a8a;
+    line-height: 1.5;
+    word-break: break-all;
+}
+@media (max-width: 560px) {
+    .landing-csp-code {
+        font-size: var(--dc-text-2xs);
+    }
+}
+.landing-csp-k {
+    color: var(--dc-white);
+}
+.landing-csp-v {
+    color: var(--accent);
+}
+.landing-csp-link {
+    display: inline-block;
+    margin-top: var(--dc-space-2);
+    padding: 0 0 1px 0;
+    font-size: var(--dc-text-sm);
+    font-family: var(--dc-font-body);
+    color: var(--accent);
+    background: none;
+    border: none;
+    border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    cursor: pointer;
+    text-align: left;
+}
+.landing-csp-link:hover {
+    border-bottom-color: var(--accent);
+}
+
+/* ============================================================
+   DOCKED CTA - fixed pill at the bottom edge, shown only while
+   the inline drop card is scrolled out of view (see
+   src/ui/landing-dock.ts). Lives inside .landing, so it
+   disappears with the landing after the first ingest.
+   ============================================================ */
+.landing-dock {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(var(--dc-space-4) + env(safe-area-inset-bottom, 0px));
+    z-index: var(--dc-z-drawer);
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-3);
+    max-width: calc(100vw - 2 * var(--dc-space-3));
+    padding: var(--dc-space-2) var(--dc-space-2) var(--dc-space-2) var(--dc-space-4);
+    background: var(--bg-elev);
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    box-shadow: var(--dc-shadow-popup);
+    cursor: pointer;
+}
+.landing-dock[hidden] {
+    display: none;
+}
+.landing-dock-folder {
+    color: var(--accent);
+    flex: none;
+}
+.landing-dock-hint {
+    font-size: var(--dc-text-md);
+    color: var(--fg-dim);
+    white-space: nowrap;
+}
+.landing-dock-cta {
+    flex: none;
+}
+/* A square-cornered button inside the pill clashes with its curvature -
+   the CTA follows the container's pill radius. Dock-scoped: the global
+   .dc-btn radius stays untouched. */
+.landing-dock .landing-dock-cta {
+    border-radius: 999px;
+}
+@media (prefers-reduced-motion: no-preference) {
+    /* Replays on every unhide: [hidden] toggles display, which restarts
+       the animation - exactly the slide-in we want each time it docks. */
+    .landing-dock {
+        animation: landing-dock-in var(--dc-dur-fast) var(--dc-ease);
+    }
+}
+@keyframes landing-dock-in {
+    from {
+        opacity: 0;
+        transform: translate(-50%, 8px);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
+}
+
+/* ============================================================
+   WORKS - OS + browsers chips. 2 stacked rows with a 200px
+   label column and chips-grid on the right.
+   ============================================================ */
+.landing-works {
+    margin-top: var(--dc-space-7);
+    padding: var(--dc-space-5);
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-4);
+}
+@media (max-width: 880px) {
+    .landing-works {
+        padding: var(--dc-space-4);
+        gap: var(--dc-space-3);
+    }
+}
+.landing-works-head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--dc-space-3);
+    flex-wrap: wrap;
+}
+.landing-works-title {
+    margin: 0;
+    font-size: var(--dc-text-xl);
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    color: var(--fg);
+}
+@media (max-width: 880px) {
+    .landing-works-title {
+        font-size: var(--dc-text-xl);
+    }
+}
+.landing-works-sub {
+    margin: 0;
+    font-size: var(--dc-text-md);
+    color: var(--fg-dim);
+    line-height: var(--dc-leading-normal);
+}
+.landing-works-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--dc-space-4);
+    align-items: start;
+}
+.landing-works-col {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    align-items: center;
+    gap: var(--dc-space-4);
+    padding-top: var(--dc-space-3);
+    border-top: 1px solid var(--border);
+}
+.landing-works-col:first-child {
+    padding-top: 0;
+    border-top: none;
+}
+@media (max-width: 880px) {
+    .landing-works-col {
+        grid-template-columns: 1fr;
+        gap: var(--dc-space-2);
+    }
+}
+.landing-works-col-label {
+    font-family: var(--dc-font-mono);
+    font-size: var(--dc-text-xs);
+    letter-spacing: var(--dc-tracking-caps);
+    text-transform: uppercase;
+    color: var(--fg-mute);
+}
+.landing-works-chips {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    gap: var(--dc-space-1);
+    flex-wrap: wrap;
+}
+.landing-plat {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+    padding: var(--dc-space-1) var(--dc-space-3) var(--dc-space-1) var(--dc-space-2);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-pill);
+    font-size: var(--dc-text-sm);
+    color: var(--fg);
+    font-weight: 500;
+    white-space: nowrap;
+}
+.landing-plat svg {
+    width: 14px;
+    height: 14px;
+    flex: none;
+    opacity: 0.92;
+}
+
+/* Browser tiers. The chips still list every browser (SEO + the "opens
+   anywhere" claim); the tier labels carry the honest "best in the
+   Chrome family" nuance without dropping a name or scaring anyone off
+   Firefox/Safari. */
+.landing-works-col-browsers {
+    /* top-align the "Browsers" label with the first tier, not the
+       vertical centre of the taller two-tier cell */
+    align-items: start;
+}
+.landing-works-tier-label {
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-1);
+    margin: 0 0 var(--dc-space-2);
+    font-family: var(--dc-font-mono);
+    font-size: var(--dc-text-2xs);
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--fg-mute);
+}
+/* gap above the second tier; tiers are flat siblings in one cell */
+.landing-works-chips + .landing-works-tier-label {
+    margin-top: var(--dc-space-3);
+}
+.landing-works-tier-rec {
+    color: var(--fg-dim);
+}
+/* accent star marks the recommended group as preferred - a positive cue,
+   not dimming the others (which would read as "broken") */
+.landing-works-tier-rec::before {
+    content: "\2605";
+    font-size: var(--dc-text-xs);
+    line-height: 1;
+    color: var(--accent);
+}
+/* faint warm border so the eye lands on the recommended chips first */
+.landing-works-chips-rec .landing-plat {
+    border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
+}
+.landing-works-note {
+    margin: 0;
+    font-size: var(--dc-text-sm);
+    line-height: 1.45;
+    color: var(--fg-dim);
+}
+
+/* ============================================================
+   HOW - 3-step strip with arrows between cards.
+   ============================================================ */
+.landing-how {
+    margin-top: var(--dc-space-7);
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--dc-space-4);
+}
+@media (max-width: 880px) {
+    .landing-how {
+        grid-template-columns: 1fr;
+    }
+}
+.landing-step {
+    position: relative;
+    padding: var(--dc-space-4);
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-1);
+}
+@media (max-width: 880px) {
+    .landing-step {
+        padding: var(--dc-space-4);
+    }
+}
+.landing-step-num {
+    font-family: var(--dc-font-mono);
+    font-size: var(--dc-text-xs);
+    letter-spacing: 0.12em;
+    color: var(--accent);
+}
+.landing-step h3 {
+    margin: 0;
+    font-size: var(--dc-text-lg);
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    color: var(--fg);
+}
+.landing-step p {
+    margin: 0;
+    color: var(--fg-dim);
+    font-size: var(--dc-text-md);
+    line-height: 1.5;
+}
+.landing-step-arrow {
+    position: absolute;
+    top: 50%;
+    right: -14px;
+    width: 24px;
+    height: 24px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--fg-mute);
+    transform: translateY(-50%);
+    z-index: 2;
+}
+.landing-step:last-child .landing-step-arrow {
+    display: none;
+}
+@media (max-width: 880px) {
+    .landing-step-arrow {
+        display: none;
+    }
+}
+
+/* ============================================================
+   FAQ - sticky title + native <details> accordion.
+   ============================================================ */
+.landing-faq {
+    margin-top: var(--dc-space-7);
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: var(--dc-space-6);
+    align-items: start;
+}
+@media (max-width: 880px) {
+    .landing-faq {
+        grid-template-columns: 1fr;
+        gap: var(--dc-space-4);
+        margin-top: var(--dc-space-6);
+    }
+}
+.landing-faq-head {
+    position: sticky;
+    top: calc(var(--dc-topbar-h) + 20px);
+}
+@media (max-width: 880px) {
+    .landing-faq-head {
+        position: static;
+    }
+}
+.landing-faq-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+    font-family: var(--dc-font-mono);
+    font-size: var(--dc-text-xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    margin: 0;
+}
+.landing-faq-eyebrow::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+.landing-faq-h2 {
+    margin: var(--dc-space-2) 0 0 0;
+    font-size: var(--dc-text-3xl);
+    font-weight: 700;
+    letter-spacing: var(--dc-tracking-tight);
+    line-height: 1.1;
+    color: var(--fg);
+}
+@media (max-width: 880px) {
+    .landing-faq-h2 {
+        font-size: var(--dc-text-2xl);
+    }
+}
+.landing-faq-list {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--border);
+}
+.landing-faq-item {
+    border-bottom: 1px solid var(--border);
+}
+.landing-faq-item summary {
+    list-style: none;
+    cursor: pointer;
+    padding: var(--dc-space-4) var(--dc-space-1);
+    font-size: var(--dc-text-lg);
+    font-weight: 600;
+    color: var(--fg);
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-3);
+    letter-spacing: -0.005em;
+}
+.landing-faq-item summary::-webkit-details-marker {
+    display: none;
+}
+.landing-faq-chev {
+    margin-left: auto;
+    color: var(--fg-mute);
+    transition:
+        transform var(--dc-dur-entrance) var(--dc-ease),
+        color var(--dc-dur-base) var(--dc-ease);
+    flex: none;
+}
+.landing-faq-item[open] .landing-faq-chev {
+    transform: rotate(180deg);
+    color: var(--accent);
+}
+.landing-faq-item summary:hover {
+    color: var(--accent);
+}
+.landing-faq-item summary:hover .landing-faq-chev {
+    color: var(--accent);
+}
+.landing-faq-body {
+    padding: 0 var(--dc-space-1) var(--dc-space-4) var(--dc-space-1);
+    font-size: var(--dc-text-base);
+    line-height: var(--dc-leading-loose);
+    color: var(--fg-dim);
+    max-width: 62ch;
+}
+.landing-inline-link {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: var(--accent);
+    border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    cursor: pointer;
+}
+.landing-inline-link:hover,
+.landing-inline-link:focus-visible {
+    border-bottom-color: var(--accent);
+    outline: none;
+}
+
+/* ============================================================
+   BUILT-WITH credits - attribution strip at the end of the landing
+   page. Logos are dimmed by default; on hover the whole link
+   (logo+caption) lights up in the accent color; the logos themselves
+   are not recolored. Names are visible; the row wraps on narrow screens.
+   ============================================================ */
+
+/* ============================================================
+   SIDEBAR CTA - appears AFTER first ingest in the sidebar header
+   (the FLIP target for #landing-cta). Same styling as before.
+   ============================================================ */
+.sidebar-cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--dc-space-1);
+    background: var(--bg-elev-2);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-sm);
+    padding: var(--dc-space-1) var(--dc-space-2);
+    margin-bottom: var(--dc-space-2);
+    color: var(--fg);
+    font-family: var(--dc-font-body);
+    font-size: var(--dc-text-xs);
+    font-weight: 700;
+    cursor: pointer;
+    transition:
+        border-color var(--dc-dur-fast) var(--dc-ease),
+        background var(--dc-dur-fast) var(--dc-ease),
+        color var(--dc-dur-fast) var(--dc-ease);
+    width: 100%;
+    box-sizing: border-box;
+    text-decoration: none;
+    user-select: none;
+}
+.sidebar-cta:hover,
+.sidebar-cta:focus-visible {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    color: var(--accent);
+    outline: none;
+}

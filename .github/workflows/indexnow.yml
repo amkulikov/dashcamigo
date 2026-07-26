@@ -1,0 +1,38 @@
+# Manual IndexNow re-ping: an ad-hoc submission of the live sitemap's URLs
+# without a deploy (assumes the live site is current). The regular ping runs
+# as the `ping` job of release.yml, chained after the production deploy -
+# this button exists for re-pinging after a ping-only failure or an
+# out-of-band content change.
+#
+# Repo Actions secrets:
+#   INDEXNOW_KEY - same value the production build bakes into the served key
+#                  file (vite-plugins/indexnow-key.ts). Unset -> the job
+#                  self-skips, so forks stay green. Rotation runbook:
+#                  docs/seo.md, "IndexNow".
+
+name: IndexNow
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Ping IndexNow engines
+        env:
+          INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}
+        run: |
+          if [ -z "${INDEXNOW_KEY}" ]; then
+            echo "::notice::INDEXNOW_KEY secret is not set - IndexNow is off for this repo, skipping"
+            exit 0
+          fi
+          node scripts/indexnow-ping.mjs

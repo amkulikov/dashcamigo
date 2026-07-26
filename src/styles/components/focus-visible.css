@@ -1,0 +1,16 @@
+/* =========================================================================
+   FOCUS VISIBLE - a shared style for interactive controls without their own :focus.
+   Loaded at the end of the cascade, to beat the browser's default outlines
+   and any component rules that forgot about :focus-visible.
+   ========================================================================= */
+.sort-btn:focus-visible,
+.trip-chevron:focus-visible,
+.map-control-btn:focus-visible,
+.mini-map-close:focus-visible,
+.dc-onb__skip:focus-visible,
+.dc-onb__back:focus-visible,
+.dc-onb__next:focus-visible,
+.dc-onb__x:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}

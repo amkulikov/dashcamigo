@@ -1,0 +1,59 @@
+/* --- Window Controls Overlay (WCO) ---
+   Active when the PWA runs in a standalone window with display_override:
+   window-controls-overlay. The browser hides its title bar and hands that
+   strip to us as client area. env(titlebar-area-*) marks the safe zone
+   between left/right window controls (close/min/max - right on Windows,
+   left on macOS). We make .topbar a drag-region of that strip; interactive
+   elements inside must opt out via no-drag, otherwise clicks turn into
+   window drags. Docs: https://developer.mozilla.org/en-US/docs/Web/CSS/env
+
+   Height is max(env, --dc-topbar-h): env(titlebar-area-height) is typically
+   30-35px across platforms - smaller than our 40x40 buttons. Clamping to
+   >= --dc-topbar-h keeps the button row visually intact; the browser still
+   paints window controls in the corners of the strip regardless of our height. */
+@media (display-mode: window-controls-overlay) {
+    .topbar {
+        position: fixed;
+        top: 0;
+        /* left:0 + right:0 makes the topbar exactly viewport-wide; the
+           padding-right formula below uses `100%` of this element, which
+           only equals the viewport because of this anchoring. Do not
+           change to width:something or add horizontal margins without
+           updating that calc(). */
+        left: 0;
+        right: 0;
+        z-index: var(--dc-z-drawer);
+        height: max(env(titlebar-area-height, 44px), var(--dc-topbar-h));
+        min-height: var(--dc-topbar-h);
+        /* Carve out space for native window controls on both sides. The safe
+           zone reported by env(titlebar-area-*) is the rectangle WITHOUT
+           the OS controls:
+             - on macOS the controls sit on the left -> titlebar-area-x > 0,
+             - on Windows/Linux the controls sit on the right -> the gap is
+               between (titlebar-area-x + titlebar-area-width) and the right
+               edge of the window.
+           padding-left covers the left controls, padding-right covers the
+           right ones. max(..., 16px) clamps to our default gutter when the
+           env vars are 0 or the OS controls are narrower than the gutter. */
+        padding-left: max(16px, calc(env(titlebar-area-x, 0px) + 16px));
+        padding-right: max(16px, calc(100% - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100%) + 16px));
+        -webkit-app-region: drag;
+        app-region: drag;
+    }
+    .topbar button,
+    .topbar a,
+    .topbar input,
+    .topbar select,
+    .topbar [role="button"],
+    .topbar .lang-wrap,
+    .topbar .overflow-wrap,
+    .topbar .theme-toggle {
+        -webkit-app-region: no-drag;
+        app-region: no-drag;
+    }
+    /* Push body content below the fixed topbar. Must match the height
+       expression above so the first row of content isn't covered. */
+    body {
+        padding-top: max(env(titlebar-area-height, 44px), var(--dc-topbar-h));
+    }
+}

@@ -1,0 +1,1509 @@
+/* Player composition layout.
+ *
+ * Two concerns live here:
+ *  1) Output frame letterbox in export-mode. The player becomes a WYSIWYG
+ *     preview of the exported clip: when --dc-output-aspect is set, the
+ *     video grid maintains that aspect inside the .video-frame, with black
+ *     letterbox bars filling the remainder. In casual mode the aspect var
+ *     is unset; the grid fills the entire video-frame naturally.
+ *  2) Layouts that the legacy data-view-mode + data-channel-count cascade
+ *     doesn't express (v2, left1right2, left2right1). The legacy rules
+ *     in viewer.css still drive h2 / grid2x2 / pip / single; this file
+ *     only adds the missing layout shapes.
+ *
+ * Slot ordering. tile.dataset.slot is set by player.ts from
+ * state.composition.channelOrder.indexOf(channel). This lets the user
+ * reorder channels via the top-panel without DOM reflow - CSS reads the
+ * slot index from the attribute. Tiles not in channelOrder keep no slot
+ * attribute and stay hidden via tile.hidden.
+ */
+
+/* === Output letterbox === */
+
+body.export-mode .video-frame {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* Pasteboard tint. The area outside the export frame (.video-grid) is NOT
+       part of the exported video - just editor padding. A muted brand tint
+       distinguishes it from the real black/blurred letterbox baked INSIDE the
+       frame, so the user can tell which black is "in the clip" and which is
+       just the canvas around it. Base is --bg-elev (a clearly-visible dark
+       surface, not near-black like --bg) so the pasteboard reads as distinct
+       from the pure-black exported letterbox; --accent warms it on-brand. */
+    background: color-mix(in srgb, var(--accent) 16%, var(--bg-elev));
+}
+
+body.export-mode .video-grid {
+    aspect-ratio: var(--dc-output-aspect, 16 / 9);
+    max-width: 100%;
+    max-height: 100%;
+    /* aspect-ratio reads naturally only when one of width/height is auto. */
+    width: auto;
+    height: auto;
+    margin: auto;
+    /* The frame interior is the real exported area: black letterbox (the tiles
+       paint it; in blur mode a blurred video fills it - see body.letterbox-blur
+       below). */
+    background: var(--dc-black);
+    /* Own stacking context so the ::after frame ring reliably paints above the
+       position:relative tiles (which are z-auto); without it the ring can hide
+       behind the video. */
+    isolation: isolate;
+}
+
+/* Accent ring marking the exact exported-frame boundary. A pseudo-element
+   (not outline/box-shadow) because .video-frame clips overflow (outset
+   outline would be cut) and an inset shadow would hide behind the opaque
+   tiles. Drawn above tiles, below the crop editor (z7). */
+body.export-mode .video-grid::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: 2px solid var(--accent);
+    box-sizing: border-box;
+    pointer-events: none;
+    z-index: 6;
+}
+
+/* === Blurred letterbox preview (export-mode, letterboxFill="blur") ===
+ * A live blurred cover-fit copy of each tile's video sits behind the contain
+ * video, filling the letterbox bars with the same blur the pipeline burns in.
+ * The copy mirrors the master's frames via captureStream (player-overlays.ts).
+ * z-index:-1 inside an isolated tile keeps it behind the sharp video and the
+ * channel label but in front of the (now-transparent) tile background, so it
+ * shows only through the contain bars. */
+.tile-blur-bg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    /* scale over-fills to hide the transparent edge bleed CSS blur leaves at
+       the element borders. */
+    filter: blur(16px);
+    transform: scale(1.08);
+    z-index: -1;
+    pointer-events: none;
+    display: none;
+}
+
+/* Only paint the backdrop in blur mode; JS toggles [hidden] per visible tile. */
+body.letterbox-blur .video-tile > .tile-blur-bg:not([hidden]) {
+    display: block;
+}
+
+body.letterbox-blur .video-tile {
+    background: transparent;
+    /* Contain the z-index:-1 backdrop within the tile's own stacking context
+       so it can't slip behind the grid/pasteboard. */
+    isolation: isolate;
+}
+
+/* Contain bars become see-through so the blurred backdrop shows in them. */
+body.letterbox-blur .video-tile > video:not(.tile-blur-bg) {
+    background: transparent;
+}
+
+/* === New layouts not covered by legacy data-view-mode CSS === */
+
+/* v2: vertical 2 - one column, two equal rows. The legacy split template keys
+   off [data-view-mode="split"][data-channel-count="2"] (specificity 0,3,0) and
+   sets 2 columns x 1 row; the bare [data-layout="v2"] (0,2,0) loses to it, while
+   the per-slot grid-row rules below DO apply - the mismatch dumped both tiles
+   into the left column and blacked out the right. Matching the legacy
+   specificity ([data-view-mode][data-layout] = 0,3,0) and relying on source
+   order (this file is @imported after viewer.css - order fixed in index.css)
+   lets the data-layout template win. Same battle for left1right2/left2right1. */
+.video-grid[data-view-mode="split"][data-layout="v2"] {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 0;
+}
+.video-grid[data-layout="v2"] .video-tile[data-slot="0"] {
+    grid-row: 1;
+}
+.video-grid[data-layout="v2"] .video-tile[data-slot="1"] {
+    grid-row: 2;
+}
+
+/* left1right2: large left fills full height; two small stacked on right. */
+.video-grid[data-view-mode="split"][data-layout="left1right2"] {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 0;
+}
+.video-grid[data-layout="left1right2"] .video-tile[data-slot="0"] {
+    grid-column: 1;
+    grid-row: 1 / -1;
+}
+.video-grid[data-layout="left1right2"] .video-tile[data-slot="1"] {
+    grid-column: 2;
+    grid-row: 1;
+}
+.video-grid[data-layout="left1right2"] .video-tile[data-slot="2"] {
+    grid-column: 2;
+    grid-row: 2;
+}
+
+/* left2right1: symmetric - two small stacked on left, large right. */
+.video-grid[data-view-mode="split"][data-layout="left2right1"] {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 0;
+}
+.video-grid[data-layout="left2right1"] .video-tile[data-slot="0"] {
+    grid-column: 2;
+    grid-row: 1 / -1;
+}
+.video-grid[data-layout="left2right1"] .video-tile[data-slot="1"] {
+    grid-column: 1;
+    grid-row: 1;
+}
+.video-grid[data-layout="left2right1"] .video-tile[data-slot="2"] {
+    grid-column: 1;
+    grid-row: 2;
+}
+
+/* === Slot order for flat (h2 / grid2x2) layouts ===
+ * Legacy CSS for these uses auto-flow + the fixed DOM order, which means
+ * channel reorder via top-panel didn't actually change visual placement.
+ * The `order` property reorders flex/grid children visually without DOM
+ * mutation - cheap and lets the existing data-channel-count cascade stay.
+ *
+ * order is computed as data-slot + 1 so the auto-flow position of an
+ * unset (= -1) is treated as "after the rest" - hidden tiles stay tucked
+ * away even with display:none stripped.
+ */
+.video-grid[data-layout="h2"] .video-tile,
+.video-grid[data-layout="grid2x2"] .video-tile {
+    order: 999;
+}
+.video-grid[data-layout="h2"] .video-tile[data-slot="0"],
+.video-grid[data-layout="grid2x2"] .video-tile[data-slot="0"] {
+    order: 0;
+}
+.video-grid[data-layout="h2"] .video-tile[data-slot="1"],
+.video-grid[data-layout="grid2x2"] .video-tile[data-slot="1"] {
+    order: 1;
+}
+.video-grid[data-layout="grid2x2"] .video-tile[data-slot="2"] {
+    order: 2;
+}
+.video-grid[data-layout="grid2x2"] .video-tile[data-slot="3"] {
+    order: 3;
+}
+
+/* === Export trim bar (export-mode) ===
+ * Clip-range controls docked between the video and the timeline stack: the
+ * grid area "trim" exists only under body.export-mode (viewer.css), and the
+ * [hidden] flag is owned by export-trim-bar.ts (off outside export mode and
+ * during an export run). The inputs share the field look from forms.css;
+ * this owns layout only. One wrapping row: set-to-playhead + inputs +
+ * length on the left, the action cluster pushed to the trailing edge. */
+.export-trim-bar {
+    grid-area: trim;
+    display: flex;
+    flex-direction: column;
+    row-gap: var(--dc-space-1);
+    padding: var(--dc-space-1) var(--dc-space-2);
+    background: var(--bg-elev);
+    border-top: 1px solid var(--border);
+}
+
+.export-trim-bar[hidden] {
+    display: none;
+}
+
+.export-trim-bar__row {
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+    flex-wrap: wrap;
+    row-gap: var(--dc-space-1);
+}
+
+.export-trim-bar__input {
+    width: 5.5em;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.export-trim-bar__sep {
+    color: var(--fg-mute);
+    flex-shrink: 0;
+}
+
+.export-trim-bar__length {
+    color: var(--fg-mute);
+    font-size: var(--dc-text-sm);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Set-to-playhead icon buttons flanking the inputs - the touch counterpart of
+   the I/O hotkeys. Compact square matching the input height; grows to the
+   touch floor on coarse pointers. */
+.export-trim-bar__set {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    background: transparent;
+    color: var(--fg-mute);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-sm);
+    cursor: pointer;
+    transition:
+        color var(--dc-dur-fast) var(--dc-ease),
+        border-color var(--dc-dur-fast) var(--dc-ease);
+}
+.export-trim-bar__set:hover:not(:disabled) {
+    color: var(--fg);
+    border-color: var(--border-strong);
+}
+.export-trim-bar__set:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+.export-trim-bar__set:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Action cluster: reset-to-full (appears only when trimmed), preview-clip,
+   use-zoomed-view. Small ghost text buttons - deliberately quieter than the
+   Save CTA; pushed to the row's trailing edge, wraps under the inputs on
+   narrow widths. */
+.export-trim-bar__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--dc-space-2);
+    margin-left: auto;
+}
+.export-trim-bar__actions:not(:has(button:not([hidden]))) {
+    display: none;
+}
+.export-trim-bar__action {
+    padding: 2px var(--dc-space-2);
+    background: transparent;
+    color: var(--fg-mute);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-sm);
+    font-size: var(--dc-text-sm);
+    cursor: pointer;
+    user-select: none;
+    transition:
+        color var(--dc-dur-fast) var(--dc-ease),
+        border-color var(--dc-dur-fast) var(--dc-ease);
+}
+.export-trim-bar__action:hover:not(:disabled) {
+    color: var(--fg);
+    border-color: var(--border-strong);
+}
+.export-trim-bar__action:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+.export-trim-bar__action:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.export-trim-bar__action[hidden] {
+    display: none;
+}
+/* Press feedback - mirrors .dc-btn:active and the export panel's own action
+   buttons; without it these are the only buttons in the export flow that give
+   no press confirmation on a phone. */
+.export-trim-bar__set:active:not(:disabled),
+.export-trim-bar__action:active:not(:disabled) {
+    transform: translateY(1px);
+}
+
+/* Transient range feedback (invalid input / 1s minimum / trip-switch reset).
+   A polite live region: emptied rather than hidden so announcements keep
+   firing; :empty collapses the reserved space. */
+.export-trim-bar__feedback {
+    font-size: var(--dc-text-sm);
+    color: var(--fg-mute);
+}
+.export-trim-bar__feedback.is-error {
+    color: var(--err);
+}
+.export-trim-bar__feedback:empty {
+    display: none;
+}
+
+/* Invalid-timecode shake on the range inputs. Reduced motion keeps only the
+   error outline (aria-invalid styling below). */
+.export-trim-bar__input.is-invalid {
+    animation: dc-range-input-shake 0.3s var(--dc-ease);
+}
+.export-trim-bar__input[aria-invalid="true"] {
+    border-color: var(--err);
+}
+@keyframes dc-range-input-shake {
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+    25% {
+        transform: translateX(-3px);
+    }
+    75% {
+        transform: translateX(3px);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .export-trim-bar__input.is-invalid {
+        animation: none;
+    }
+}
+
+/* Touch floor for the compact trim controls (same rationale as .dc-btn's
+   coarse-pointer floor). */
+@media (pointer: coarse) {
+    .export-trim-bar__set {
+        width: var(--dc-iconbtn-touch);
+        height: var(--dc-iconbtn-touch);
+    }
+    .export-trim-bar__action {
+        min-height: var(--dc-iconbtn-touch);
+        padding-inline: var(--dc-space-3);
+    }
+}
+
+/* === Timeline range overlay (export-mode) ===
+ * Lives inside #player-chart-canvas-wrap; spans full wrap area. Tabs and
+ * masks are positioned absolutely in chart-canvas pixel space (so the
+ * timeline-range.ts module can read chart.scales.x.getPixelForValue and
+ * write the result directly into left/width).
+ */
+.timeline-range {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 6;
+}
+
+.timeline-range[hidden] {
+    display: none;
+}
+
+.timeline-range__mask {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.45);
+    pointer-events: none;
+}
+
+.timeline-range__tab {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 16px;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    border: 0;
+    cursor: ew-resize;
+    pointer-events: auto;
+    touch-action: none;
+}
+
+/* Per-edge tab color (green start / red end - see tokens.css rationale):
+   the spine and grip read the edge's own color, never the playhead accent. */
+.timeline-range__tab--start {
+    --range-tab-color: var(--range-handle-start);
+}
+.timeline-range__tab--end {
+    --range-tab-color: var(--range-handle-end);
+}
+
+.timeline-range__tab::before {
+    /* Visible spine in the middle of the touch target. */
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 2px;
+    transform: translateX(-50%);
+    background: var(--range-tab-color);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+}
+
+.timeline-range__tab::after {
+    /* Pull-handle "grip" hint at the top so the tab reads as draggable. */
+    content: "";
+    position: absolute;
+    top: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 10px;
+    height: 14px;
+    border-radius: var(--dc-radius-sm);
+    background: var(--range-tab-color);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+
+/* Boundary beyond the visible zoom window (timeline-range.ts toggles the
+   class): the tab is only PINNED to the viewport edge, the real edge is
+   off-screen. Dim the spine and swap the grip for an outward chevron so it
+   reads "further this way", not "the boundary is here" - zooming never moves
+   the range. The tab stays draggable (pulling it into the window is valid). */
+.timeline-range__tab.is-offscreen::before {
+    opacity: 0.35;
+}
+.timeline-range__tab.is-offscreen::after {
+    width: 10px;
+    height: 12px;
+    border-radius: 0;
+    box-shadow: none;
+    opacity: 0.85;
+}
+.timeline-range__tab--start.is-offscreen::after {
+    clip-path: polygon(100% 0, 100% 100%, 0 50%);
+}
+.timeline-range__tab--end.is-offscreen::after {
+    clip-path: polygon(0 0, 0 100%, 100% 50%);
+}
+
+.timeline-range__tab:hover::after,
+.timeline-range__tab:focus-visible::after {
+    filter: brightness(1.15);
+}
+
+/* One-shot highlight after an indirect edit (the I/O set-to-playhead paths):
+   the spine+grip pulse marks WHICH edge just moved. Fill-mode keeps the frame
+   until animationend removes the class; reduced motion skips it entirely. */
+.timeline-range__tab.is-flash::before,
+.timeline-range__tab.is-flash::after {
+    animation: dc-range-tab-flash 0.6s var(--dc-ease);
+}
+@keyframes dc-range-tab-flash {
+    0%,
+    100% {
+        filter: brightness(1);
+    }
+    30% {
+        filter: brightness(1.8);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .timeline-range__tab.is-flash::before,
+    .timeline-range__tab.is-flash::after {
+        animation: none;
+    }
+}
+
+/* Floating timecode above the dragged/hovered tab. Body-attached +
+   position:fixed (like the scrubber tooltip) so the timeline stack's overflow
+   cannot clip it; left/top come from JS. Pointer-events:none - it must never
+   steal the drag's pointer capture. */
+.timeline-range__bubble {
+    position: fixed;
+    left: 0;
+    top: 0;
+    padding: 2px var(--dc-space-2);
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-sm);
+    box-shadow: var(--dc-shadow-popup);
+    font-size: var(--dc-text-sm);
+    font-variant-numeric: tabular-nums;
+    color: var(--fg);
+    pointer-events: none;
+    /* Same body-level transient layer as the scrubber hover tooltip. */
+    z-index: 60;
+}
+.timeline-range__bubble[hidden] {
+    display: none;
+}
+
+/* Touch: the 16px hit area is too thin to grab on a phone over a ~100px-tall
+   chart - the finger lands on the click-through mask and seeks instead of
+   dragging the boundary. Widen the invisible hit area on mobile; the 2px spine
+   and grip stay centered (::before/::after at 50%) so the visual is unchanged.
+   timeline-range.ts centers the tab via offsetWidth, so this width is the single
+   source of truth and the spine stays exactly on the boundary. The grip also
+   grows into a knob that clears the fingertip - the 10x14 desktop pill is
+   invisible under a thumb mid-drag. */
+@media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {
+    .timeline-range__tab {
+        width: 36px;
+    }
+    .timeline-range__tab::after {
+        width: 16px;
+        height: 22px;
+        border-radius: var(--dc-radius-md);
+    }
+    /* Off-screen chevron grows with the touch grip (the higher-specificity
+       is-offscreen rule would otherwise keep the desktop 10x12 triangle). */
+    .timeline-range__tab.is-offscreen::after {
+        width: 14px;
+        height: 18px;
+    }
+}
+
+/* === Export-mode preview overlays (watermark + speed + coords) ===
+ * Visible only in export-mode. Positions are set by JS (anchor for
+ * watermark; xPct/yPct for text overlays). The white-on-shadow style
+ * mirrors what the export pipeline burns into the output frame.
+ */
+/* Output-frame reference box for the export overlays: spans the FULL grid (the
+   output frame), always. The export burns overlays relative to the output frame
+   (independent of any crop), so overlays positioned/sized as % of this box match
+   the burned output - an overlay may sit over a letterbox bar, exactly as it
+   will in the file. pointer-events:none so empty areas pass clicks through to
+   the tiles (double-click crop); the overlay children re-enable pointer-events
+   themselves. */
+.player-overlay-frame {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 5;
+    pointer-events: none;
+}
+
+.player-watermark,
+.player-overlay {
+    position: absolute;
+    z-index: 5;
+    color: var(--dc-white);
+    user-select: none;
+}
+
+/* Watermark preview mirrors the burned-in mark from src/transcode/watermark.ts
+   (wordmark + camera icon, 50% alpha). Same composition as the header .dc-mark
+   - inline-flex, brand font, 0.22em gap, 1.1em icon, lowercase - but WITHOUT
+   the .dc-mark class, whose env-indicator override would tint it red on
+   localhost. font-size is set from JS (3.3% of grid height) to match the
+   pipeline's HEIGHT_RATIO. Draggable to reposition (snaps to a corner). */
+.player-watermark {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.22em;
+    font-family: var(--dc-font-brand);
+    font-weight: 700;
+    line-height: 1;
+    /* Literal -0.02em mirrors the header .dc-mark (and the burned-in mark in
+       src/transcode/watermark.ts) so preview == export. */
+    letter-spacing: -0.02em;
+    text-transform: lowercase;
+    opacity: 0.5;
+    pointer-events: auto;
+    cursor: grab;
+    /* Subtle shadow so the white mark holds on bright frames, mirroring the
+       pipeline's SHADOW_COLOR. */
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+    touch-action: none;
+}
+
+.player-watermark.is-dragging {
+    cursor: grabbing;
+}
+
+/* Watermark drop-target hints. Shown only while dragging the watermark (JS
+   toggles .is-visible); the 4 corners mark where it can snap, the nearest one
+   lights up in the accent color. */
+.wm-corner-targets {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    pointer-events: none;
+    display: none;
+}
+
+.wm-corner-targets.is-visible {
+    display: block;
+}
+
+.wm-corner-target {
+    position: absolute;
+    width: 44px;
+    height: 44px;
+    border: 2px dashed rgba(255, 255, 255, 0.55);
+    border-radius: var(--dc-radius-md);
+    transition:
+        border-color var(--dc-dur-fast) var(--dc-ease),
+        background var(--dc-dur-fast) var(--dc-ease);
+}
+
+.wm-corner-target[data-corner="tl"] {
+    top: var(--dc-space-2);
+    left: var(--dc-space-2);
+}
+.wm-corner-target[data-corner="tr"] {
+    top: var(--dc-space-2);
+    right: var(--dc-space-2);
+}
+.wm-corner-target[data-corner="bl"] {
+    bottom: var(--dc-space-2);
+    left: var(--dc-space-2);
+}
+.wm-corner-target[data-corner="br"] {
+    bottom: var(--dc-space-2);
+    right: var(--dc-space-2);
+}
+
+.wm-corner-target.is-active {
+    border-style: solid;
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.player-watermark .dc-mark__icon {
+    width: 1.1em;
+    height: 1.1em;
+    flex-shrink: 0;
+}
+
+.player-overlay {
+    /* Draggable in export-mode (see attachOverlayDrag); small footprint so it
+       does not meaningfully block tile clicks. */
+    pointer-events: auto;
+    cursor: grab;
+    touch-action: none;
+    font-weight: 600;
+    text-shadow:
+        0 0 2px rgba(0, 0, 0, 0.85),
+        0 1px 3px rgba(0, 0, 0, 0.7);
+    font-size: clamp(var(--dc-text-md), 3cqi, var(--dc-text-3xl));
+    font-variant-numeric: tabular-nums;
+}
+
+.player-overlay.is-dragging {
+    cursor: grabbing;
+}
+
+.player-watermark[hidden],
+.player-overlay[hidden] {
+    display: none;
+}
+
+/* Telemetry preview canvas: the same draw code the export runs, painted over
+   the player. Sits behind the map DOM overlay + watermark + drag hit-boxes;
+   click-through (the hit-boxes own dragging). */
+.player-telemetry-canvas {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 4;
+    pointer-events: none;
+}
+
+.player-telemetry-canvas[hidden] {
+    display: none;
+}
+
+/* speed/coords are repurposed as transparent drag hit-boxes (the readout is on
+   the canvas) - drop the inherited text styling so they are invisible grab
+   zones sized from JS. */
+.player-speed-overlay,
+.player-coords-overlay {
+    text-shadow: none;
+    font-size: 0;
+}
+
+/* Drag hit-boxes for the canvas-rendered widgets. The container is
+   click-through; each box opts back into pointer events to grab. */
+.player-overlay-hitboxes {
+    position: absolute;
+    inset: 0;
+    z-index: 6;
+    pointer-events: none;
+}
+
+.player-overlay-hitbox {
+    position: absolute;
+    z-index: 6;
+    pointer-events: auto;
+    cursor: grab;
+    touch-action: none;
+}
+
+.player-overlay-hitbox.is-dragging {
+    cursor: grabbing;
+}
+
+.player-overlay-hitbox[hidden] {
+    display: none;
+}
+
+/* === Map mini-overlay (export-mode) ===
+ * WYSIWYG preview of the burned-in route map. Sized/positioned from JS
+ * (player-overlays.ts). Draggable; the corner handle resizes it.
+ * No border/box-shadow: the map dissolves into the video via the canvas feather
+ * mask below, matching the burned-in export (transcode/map-overlay.ts). */
+.player-map-overlay {
+    position: absolute;
+    z-index: 5;
+    overflow: hidden;
+    cursor: grab;
+    touch-action: none;
+    /* Re-enable pointer events: the parent .player-overlay-frame is
+       pointer-events:none (click-through for crop), so a direct child that
+       must be draggable has to opt back in - same as .player-watermark /
+       .player-overlay above. Without this the mini-map is immobile. */
+    pointer-events: auto;
+}
+
+.player-map-overlay.is-dragging,
+.player-map-overlay.is-resizing {
+    cursor: grabbing;
+}
+
+.player-map-overlay[hidden] {
+    display: none;
+}
+
+/* Feathered dissolve - mirrors transcode/map-overlay.ts (MAP_FEATHER_FRAC 0.08,
+   smoothstep). Applied to the canvas, NOT the parent, so the resize grip sibling
+   stays crisp. Rect = two crossed smoothstep gradients (intersected); the circle
+   variant below swaps in a radial rim. The smoothstep alpha stops (0 / .104 /
+   .352 / .648 / .896 / 1) ease the ramp at both ends so there is no hard
+   threshold where the fade meets the solid core. */
+.player-map-overlay__canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    pointer-events: none;
+    /* The snapshot is 4:3; on a circle (square) slot, center-crop instead of
+       squishing so the preview matches the export's coverFit center-crop. */
+    object-fit: cover;
+    /* Defined once, reused for -webkit- and standard mask so the long stop list
+       is not duplicated four times. */
+    --feather-x: linear-gradient(
+        to right,
+        rgba(0, 0, 0, 0) 0%,
+        rgba(0, 0, 0, 0.104) 1.6%,
+        rgba(0, 0, 0, 0.352) 3.2%,
+        rgba(0, 0, 0, 0.648) 4.8%,
+        rgba(0, 0, 0, 0.896) 6.4%,
+        #000 8%,
+        #000 92%,
+        rgba(0, 0, 0, 0.896) 93.6%,
+        rgba(0, 0, 0, 0.648) 95.2%,
+        rgba(0, 0, 0, 0.352) 96.8%,
+        rgba(0, 0, 0, 0.104) 98.4%,
+        rgba(0, 0, 0, 0) 100%
+    );
+    --feather-y: linear-gradient(
+        to bottom,
+        rgba(0, 0, 0, 0) 0%,
+        rgba(0, 0, 0, 0.104) 1.6%,
+        rgba(0, 0, 0, 0.352) 3.2%,
+        rgba(0, 0, 0, 0.648) 4.8%,
+        rgba(0, 0, 0, 0.896) 6.4%,
+        #000 8%,
+        #000 92%,
+        rgba(0, 0, 0, 0.896) 93.6%,
+        rgba(0, 0, 0, 0.648) 95.2%,
+        rgba(0, 0, 0, 0.352) 96.8%,
+        rgba(0, 0, 0, 0.104) 98.4%,
+        rgba(0, 0, 0, 0) 100%
+    );
+    -webkit-mask-image: var(--feather-x), var(--feather-y);
+    -webkit-mask-composite: source-in;
+    mask-image: var(--feather-x), var(--feather-y);
+    mask-composite: intersect;
+}
+
+/* Circle: a single radial rim feather (solid core, smoothstep-dissolving edge)
+   replaces the two-axis rect mask. */
+.player-map-overlay[data-shape="circle"] .player-map-overlay__canvas {
+    --feather-radial: radial-gradient(
+        circle closest-side at 50% 50%,
+        #000 84%,
+        rgba(0, 0, 0, 0.896) 87.2%,
+        rgba(0, 0, 0, 0.648) 90.4%,
+        rgba(0, 0, 0, 0.352) 93.6%,
+        rgba(0, 0, 0, 0.104) 96.8%,
+        rgba(0, 0, 0, 0) 100%
+    );
+    -webkit-mask-image: var(--feather-radial);
+    -webkit-mask-composite: source-over;
+    mask-image: var(--feather-radial);
+    mask-composite: add;
+}
+
+.player-map-overlay__resize {
+    position: absolute;
+    /* Inset onto the solid (non-feathered) map core so the grip reads as attached
+       to the map, not floating over bare video: the canvas now dissolves at its
+       edges (no border/box), so a corner-anchored grip would land in the
+       feathered-to-transparent band. 8% clears the rect edge feather
+       (MAP_FEATHER_FRAC 0.08); the circle variant below insets further. */
+    right: 8%;
+    bottom: 8%;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    background: var(--accent);
+    cursor: nwse-resize;
+    touch-action: none;
+    /* Inherits pointer-events:auto from the (now-auto) .player-map-overlay
+       parent; stated explicitly so the resize grip is self-documenting and
+       robust to future changes of the parent rule. */
+    pointer-events: auto;
+    /* Grip triangle in the corner. */
+    clip-path: polygon(100% 0, 100% 100%, 0 100%);
+}
+
+/* Circle: the visible area is the inscribed disc, so the box corners are fully
+   transparent. Inset the grip further (onto the ~solid radial core, which
+   reaches ~0.42x the box from center) so it lands on the map, not bare video. */
+.player-map-overlay[data-shape="circle"] .player-map-overlay__resize {
+    right: 20%;
+    bottom: 20%;
+}
+
+/* Touch: enlarge the corner resize grip on a coarse pointer so it can be
+   grabbed with a finger (16px is a near-impossible tap). Stays a corner grip,
+   not a full 44px - that would cover half the mini-map; the arrow-key fallback
+   in attachMapResizeHandle covers fine adjustment. */
+@media (pointer: coarse) {
+    .player-map-overlay__resize {
+        width: 28px;
+        height: 28px;
+    }
+}
+
+/* === True PiP overlays (export-mode) ===
+ * In pip layouts the main slot fills the output frame; the others are
+ * absolute insets positioned by player.ts (syncPipOverlays via getSplitSlots).
+ * Casual viewing keeps the legacy focus side-column. */
+/* Keep the grid's display (the aspect-ratio box sizing relies on it); just
+   make it the positioning context so the absolute insets anchor to it. The
+   tiles are taken out of grid flow by position:absolute, so the focus-mode
+   grid template no longer places them. */
+body.export-mode .video-grid.pip-overlay-mode {
+    position: relative;
+}
+
+/* Neutralize the focus-mode grid placement that still matches here: the tiles
+   keep data-tile-role (thumb-0/1/...) and the grid keeps data-view-mode=focus,
+   so viewer.css's `grid-column:2; grid-row:N` rules apply. For an absolutely
+   positioned grid item a DEFINITE grid placement makes its %-offsets resolve
+   against the assigned GRID AREA, not the grid container. With the single-cell
+   1fr/1fr template syncPipOverlays sets, `grid-column:2` lands on an implicit
+   zero-width track at the right edge - collapsing every inset to ~0px off-frame
+   (the "pip overlays vanish in export-mode" bug). auto placement restores the
+   grid container's padding box as the containing block, so the JS left/top/
+   width/height percentages map to the visible frame. The body type selector
+   tips specificity over the focus rules. */
+body.export-mode .video-grid.pip-overlay-mode .video-tile {
+    grid-column: auto;
+    grid-row: auto;
+}
+
+.video-tile.pip-inset {
+    border: 2px solid rgba(255, 255, 255, 0.85);
+    border-radius: var(--dc-radius-md);
+    overflow: hidden;
+    box-shadow: var(--dc-shadow-popup);
+    cursor: move;
+    touch-action: none;
+}
+
+.video-tile.pip-inset.pip-dragging {
+    cursor: grabbing;
+    border-color: var(--accent);
+}
+
+.video-tile.pip-inset video {
+    object-fit: cover;
+}
+
+/* Resize grip - only on pip insets in export-mode. */
+.pip-resize {
+    display: none;
+}
+
+.video-tile.pip-inset .pip-resize {
+    display: block;
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    background: var(--accent);
+    cursor: nwse-resize;
+    touch-action: none;
+    z-index: 3;
+    clip-path: polygon(100% 0, 100% 100%, 0 100%);
+}
+/* Touch: a fixed 18px corner triangle is thumb-hostile. Grow it to a comfortable
+   grab size on coarse pointers, matching the crop-handle / map-overlay__resize
+   coarse rules. The clip-path keeps it a corner triangle. */
+@media (pointer: coarse) {
+    .video-tile.pip-inset .pip-resize {
+        width: 28px;
+        height: 28px;
+    }
+}
+
+/* === Per-slot crop editor (export-mode, dblclick a tile) ===
+ * Overlay covering the tile while editing; the crop rect dims everything
+ * outside it via a huge box-shadow. Positions in tile px (player-crop.ts maps
+ * source coords to the video's contain-fit display rect). */
+.crop-editor {
+    position: absolute;
+    inset: 0;
+    z-index: 7;
+    touch-action: none;
+}
+
+.crop-rect {
+    position: absolute;
+    box-sizing: border-box;
+    border: 1.5px solid var(--dc-white);
+    cursor: move;
+}
+
+/* Dim the excluded area ONLY while dragging (selecting a region on the full
+   source frame). In the idle/result view the video is zoomed to the crop, so a
+   dim would just darken the letterbox bars and any overlay sitting in them. */
+.crop-editor.is-dragging .crop-rect {
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+}
+
+.crop-handle {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    background: var(--accent);
+    border: 1px solid var(--dc-black);
+    border-radius: var(--dc-radius-xs);
+}
+
+/* Discoverability: default crop is full-frame, so opening the editor changes
+   nothing on screen and the crop controls can read as non-functional.
+   A short attention pulse on mount draws the eye to the rect/handles without
+   touching layout or crop math. Scoped to .crop-attention so it only plays
+   once per mount (player-crop.ts removes the class on animationend). */
+.crop-editor.crop-attention .crop-rect {
+    animation: crop-attention-rect 1.2s ease-in-out 2;
+}
+.crop-editor.crop-attention .crop-handle {
+    animation: crop-attention-handle 1.2s ease-in-out 2;
+}
+@keyframes crop-attention-rect {
+    0%,
+    100% {
+        border-color: var(--dc-white);
+    }
+    50% {
+        border-color: var(--accent);
+    }
+}
+@keyframes crop-attention-handle {
+    0%,
+    100% {
+        box-shadow: none;
+    }
+    50% {
+        box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 45%, transparent);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .crop-editor.crop-attention .crop-rect,
+    .crop-editor.crop-attention .crop-handle {
+        animation: none;
+    }
+}
+
+.crop-handle--tl {
+    left: -7px;
+    top: -7px;
+    cursor: nwse-resize;
+}
+.crop-handle--tr {
+    right: -7px;
+    top: -7px;
+    cursor: nesw-resize;
+}
+.crop-handle--bl {
+    left: -7px;
+    bottom: -7px;
+    cursor: nesw-resize;
+}
+.crop-handle--br {
+    right: -7px;
+    bottom: -7px;
+    cursor: nwse-resize;
+}
+
+/* Requirement 3: export.crop.hint is also rendered as a static note in the
+   export panel (export-panel.ts renderCropGroup), but that panel sits in a
+   separate scroll region (a right-side drawer on desktop, below the video in
+   the mobile in-flow layout) - not guaranteed on screen while the user's
+   attention is on the on-video editor. Reusing the same key here anchors it
+   right where the editing happens. */
+.crop-editor-hint {
+    position: absolute;
+    left: 50%;
+    top: var(--dc-space-2);
+    transform: translateX(-50%);
+    max-width: calc(100% - var(--dc-space-4));
+    z-index: 8;
+    background: rgba(0, 0, 0, 0.6);
+    color: var(--dc-white);
+    font-size: var(--dc-text-xs);
+    padding: var(--dc-space-1) var(--dc-space-2);
+    border-radius: var(--dc-radius-md);
+    text-align: center;
+    pointer-events: none;
+}
+
+.crop-aspect-bar {
+    position: absolute;
+    left: 50%;
+    bottom: var(--dc-space-2);
+    transform: translateX(-50%);
+    display: flex;
+    /* Wrap to a second centered line on narrow tiles (full-width on a phone,
+       worse in ru/de where labels are longer) instead of bleeding past the tile
+       edge, which is clipped by .video-frame{overflow:hidden}. */
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: calc(100% - var(--dc-space-4));
+    gap: var(--dc-space-1);
+    z-index: 8;
+    background: rgba(0, 0, 0, 0.6);
+    padding: var(--dc-space-1);
+    border-radius: var(--dc-radius-md);
+}
+
+.crop-aspect-btn {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: var(--dc-white);
+    font-size: var(--dc-text-xs);
+    padding: 2px var(--dc-space-2);
+    border-radius: var(--dc-radius-sm);
+    cursor: pointer;
+}
+
+.crop-aspect-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* Active aspect: the currently locked ratio (or "free"). Accent outline marks
+   which preset constrains handle-resize, distinct from the solid-fill Done btn. */
+.crop-aspect-btn.is-active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+/* Primary confirm action in the crop toolbar. Accent fill separates it from the
+   outline aspect-preset buttons so it reads as "I'm done selecting". The accent
+   fill alone carries the separation, so no extra margin - that keeps Done
+   centered when the bar wraps to a second line. */
+.crop-done-btn {
+    padding: 2px var(--dc-space-2);
+    border: 1px solid var(--accent);
+    border-radius: var(--dc-radius-sm);
+    background: var(--accent);
+    color: var(--dc-black);
+    font-size: var(--dc-text-xs);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.crop-done-btn:hover {
+    filter: brightness(1.08);
+}
+
+/* Touch: the crop editor is reachable on mobile (export-panel "Crop frame").
+   Grow the corner handles to a finger-grabbable 28px (corner-centered, so the
+   offset is half the size) and the toolbar buttons to the touch floor. Keyed on
+   coarse pointer so the fine-pointer 14px handles / compact buttons stay. */
+@media (pointer: coarse) {
+    .crop-handle {
+        width: 28px;
+        height: 28px;
+    }
+    .crop-handle--tl {
+        left: -14px;
+        top: -14px;
+    }
+    .crop-handle--tr {
+        right: -14px;
+        top: -14px;
+    }
+    .crop-handle--bl {
+        left: -14px;
+        bottom: -14px;
+    }
+    .crop-handle--br {
+        right: -14px;
+        bottom: -14px;
+    }
+    .crop-aspect-btn,
+    .crop-done-btn {
+        min-height: var(--dc-iconbtn-touch);
+        display: inline-flex;
+        align-items: center;
+        padding: var(--dc-space-1) var(--dc-space-3);
+    }
+}
+
+/* === Privacy blur zones (player-blur.ts) ===================================
+   Layering inside a tile: preview canvas paints the redaction patches just
+   above the video; the box layer (outlines + handles) sits above the canvas;
+   the draw layer (armed "add zone" mode) captures pointers above everything
+   except the crop editor, which always wins the tile when open (blur UI on a
+   crop-editing tile is hidden by the module). */
+
+.blur-preview-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 3;
+}
+
+.blur-box-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 4;
+}
+
+.blur-box {
+    position: absolute;
+    pointer-events: auto;
+    border: 1.5px dashed var(--accent);
+    border-radius: 2px;
+    cursor: move;
+    touch-action: none;
+}
+
+.blur-box--marquee {
+    pointer-events: none;
+    border-style: solid;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.blur-box-handle {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background: var(--accent);
+    border: 1px solid var(--dc-black);
+    border-radius: 50%;
+    touch-action: none;
+}
+
+/* Fat hit area on coarse pointers - the visible dot stays small. */
+@media (pointer: coarse) {
+    .blur-box-handle::before {
+        content: "";
+        position: absolute;
+        inset: -14px;
+    }
+}
+
+.blur-box-handle--tl {
+    left: -6px;
+    top: -6px;
+    cursor: nwse-resize;
+}
+.blur-box-handle--tr {
+    right: -6px;
+    top: -6px;
+    cursor: nesw-resize;
+}
+.blur-box-handle--bl {
+    left: -6px;
+    bottom: -6px;
+    cursor: nesw-resize;
+}
+.blur-box-handle--br {
+    right: -6px;
+    bottom: -6px;
+    cursor: nwse-resize;
+}
+
+.blur-draw-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    cursor: crosshair;
+    touch-action: none;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.blur-draw-hint {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 90%;
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.7);
+    color: var(--dc-white);
+    font-size: var(--dc-text-sm);
+    pointer-events: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Panel bits */
+.export-panel__blur-explainer {
+    margin-bottom: 8px;
+}
+
+/* Sub-section labels inside the blur group (automatic vs manual). Same voice
+   as the fieldset legend, kept inside one group - they split the tools, not
+   the fieldset. */
+.export-panel__blur-subhead {
+    margin-top: var(--dc-space-3);
+    font-size: var(--dc-text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: var(--dc-tracking-wide);
+    color: var(--fg-mute);
+}
+
+.export-panel__blur-subhead:first-of-type {
+    margin-top: 0;
+}
+
+/* "beta" pill on the automatic subhead. Accent-tinted so it reads as a status
+   marker, not another control; uppercase/tracking inherit from the subhead. */
+.export-panel__blur-beta-badge {
+    margin-left: var(--dc-space-2);
+    padding: 1px var(--dc-space-1);
+    border-radius: var(--dc-radius-pill);
+    font-size: var(--dc-text-3xs);
+    line-height: 1;
+    color: var(--accent-ink);
+    border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    vertical-align: 1px;
+}
+
+.export-panel__blur-style-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+/* display:flex would defeat the [hidden] attribute (it maps to display:none
+   only at UA-default specificity) - restate it. */
+.export-panel__blur-style-row[hidden] {
+    display: none;
+}
+
+.export-panel__blur-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+/* Stacked lines: header (name + span + delete), optional state pill, actions.
+   Cramming them onto one line crushes the labels in the narrow drawer. */
+.export-panel__blur-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+    font-variant-numeric: tabular-nums;
+}
+
+.export-panel__blur-row:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+}
+
+.export-panel__blur-row-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.export-panel__blur-row-name {
+    flex: 0 0 auto;
+    font-weight: 600;
+}
+
+/* Zone state pill ("Following" / "Tracked"): accent-tinted, low weight. Sits on
+   its own line under the header - sharing a line with the range truncated the
+   "check end" privacy warning, so it wraps instead of ellipsizing. */
+.export-panel__blur-row-state {
+    align-self: flex-start;
+    font-size: var(--dc-text-xs);
+    line-height: 1.4;
+    padding: 0 6px;
+    border-radius: var(--dc-radius-pill);
+    color: var(--accent-ink);
+    border: 1px solid var(--accent);
+}
+
+/* "· check end": the last follow lost the target early, so the tail may miss a
+   moved/reappearing subject - caution tone until the user verifies or re-follows. */
+.export-panel__blur-row-state.is-warn {
+    color: var(--warn);
+    border-color: var(--warn);
+}
+
+/* Doubles as the "jump to zone start" control - a button reset styled as the
+   muted range text, right-aligned so the delete glyph sits at the row's edge. */
+.export-panel__blur-row-range {
+    flex: 1 1 auto;
+    text-align: right;
+    color: var(--fg-mute);
+    /* nowrap: without it "10:28-11:15" line-breaks at the hyphen when squeezed */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    appearance: none;
+    border: 0;
+    background: none;
+    padding: 0;
+    font: inherit;
+    cursor: pointer;
+}
+
+.export-panel__blur-row-range:hover {
+    color: var(--fg);
+    text-decoration: underline;
+}
+
+/* Delete sits in the header (destructive - kept away from the mode controls). */
+.export-panel__blur-del-btn {
+    flex: 0 0 auto;
+    appearance: none;
+    border: 0;
+    background: none;
+    padding: 0 2px;
+    font-size: var(--dc-text-md);
+    line-height: 1;
+    color: var(--fg-mute);
+    cursor: pointer;
+}
+
+.export-panel__blur-del-btn:hover {
+    color: var(--warn);
+}
+
+.export-panel__blur-row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.export-panel__blur-row-btn {
+    flex: 0 0 auto;
+    min-width: 26px;
+    padding: 2px 6px;
+}
+
+/* Follow is a Duration segment (styled by .seg-btn / .active). While a track
+   pass runs it pulses - alongside the live % - so a long async pass, which only
+   applies its result on settle, never reads as stuck. */
+.export-panel__blur-follow-btn.is-running {
+    animation: blur-follow-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes blur-follow-pulse {
+    50% {
+        opacity: 0.55;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .export-panel__blur-follow-btn.is-running {
+        animation: none;
+    }
+}
+
+/* One-time model-download strips (Follow's + the detect checkboxes') and the
+   detect status row: consent / progress / offline / error / found-counts. */
+.export-panel__blur-tracker,
+.export-panel__blur-detect-strip,
+.export-panel__blur-detect-status {
+    margin-top: 8px;
+    padding: var(--dc-space-2) var(--dc-space-3);
+    border: 1px solid var(--accent);
+    border-radius: var(--dc-radius-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-2);
+}
+
+.export-panel__blur-tracker[hidden],
+.export-panel__blur-detect-strip[hidden],
+.export-panel__blur-detect-status[hidden] {
+    display: none;
+}
+
+.export-panel__blur-tracker.is-error,
+.export-panel__blur-detect-strip.is-error {
+    border-color: var(--err);
+}
+
+.export-panel__blur-tracker-msg {
+    font-size: var(--dc-text-sm);
+    line-height: var(--dc-leading-normal);
+    color: var(--fg);
+}
+
+.export-panel__blur-tracker-bar {
+    height: 6px;
+    margin-top: 6px;
+    border-radius: var(--dc-radius-pill);
+    background: var(--bg-hover);
+    overflow: hidden;
+}
+
+.export-panel__blur-tracker-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    transition: width var(--dc-dur-fast) var(--dc-ease);
+}
+
+/* Buttons in the strip sit side by side, not full-width like the Save CTA. */
+.export-panel__blur-tracker-actions {
+    display: flex;
+    gap: var(--dc-space-2);
+}
+
+.export-panel__blur-tracker-actions .export-panel__primary-btn,
+.export-panel__blur-tracker-actions .export-panel__secondary-btn {
+    width: auto;
+    flex: 0 0 auto;
+    margin-bottom: 0;
+    padding: var(--dc-space-1) var(--dc-space-3);
+    font-size: var(--dc-text-sm);
+}
+
+.export-panel__blur-add-btn.is-armed {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}

@@ -1,0 +1,74 @@
+// Filename / path metadata techniques - aggregate walk API.
+//
+// Each process (time / channel / mode / sequence) is a flat list of
+// FilenameTechnique entries (see types.ts). The walk takes the first non-null
+// extract and reports both the value and the matching technique id (for
+// diagnostics).
+//
+// Adding support for a new camera typically means adding one or two entries
+// to the relevant per-field file - never a new "vendor file". When a
+// technique applies to several brands it is shared across them by virtue of
+// living in a per-field list rather than per-vendor file.
+
+import type { RecordingMode, VendorFile } from "../types.js";
+import { FILENAME_CAMERA_KEY } from "./camera-key.js";
+import { FILENAME_CHANNEL } from "./channel.js";
+import { FILENAME_MODE } from "./mode.js";
+import { FILENAME_SEQUENCE } from "./sequence.js";
+import { FILENAME_TIME } from "./time.js";
+import { FILENAME_TIMELAPSE } from "./timelapse.js";
+import type { ChannelMatch, FilenameMatch, FilenameTechnique } from "./types.js";
+
+export type { FilenameMatch } from "./types.js";
+
+function walk<T>(techniques: readonly FilenameTechnique<T>[], file: VendorFile): FilenameMatch<T> {
+    for (const t of techniques) {
+        const value = t.extract(file);
+        if (value !== null) return { value, matchedId: t.id };
+    }
+    return { value: null, matchedId: null };
+}
+
+// Walk results with the matched technique id - for diagnostics.
+export function matchFilenameTime(file: VendorFile): FilenameMatch<Date> {
+    return walk(FILENAME_TIME, file);
+}
+
+export function matchFilenameChannel(file: VendorFile): FilenameMatch<ChannelMatch> {
+    return walk(FILENAME_CHANNEL, file);
+}
+
+export function matchFilenameMode(file: VendorFile): FilenameMatch<RecordingMode> {
+    return walk(FILENAME_MODE, file);
+}
+
+export function matchFilenameSequence(file: VendorFile): FilenameMatch<number> {
+    return walk(FILENAME_SEQUENCE, file);
+}
+
+// Convenience shortcuts for callers that don't need the matched id.
+export function classifyFilenameTime(file: VendorFile): Date | null {
+    return matchFilenameTime(file).value;
+}
+export function classifyFilenameChannel(file: VendorFile): ChannelMatch | null {
+    return matchFilenameChannel(file).value;
+}
+export function classifyFilenameMode(file: VendorFile): RecordingMode | null {
+    return matchFilenameMode(file).value;
+}
+export function classifyFilenameSequence(file: VendorFile): number | null {
+    return matchFilenameSequence(file).value;
+}
+/** Whether the filename marks a time-lapse recording (see FILENAME_TIMELAPSE).
+ *  Defaults to false - only an explicit vendor time-lapse marker flips it. */
+export function classifyFilenameTimelapse(file: VendorFile): boolean {
+    return walk(FILENAME_TIMELAPSE, file).value ?? false;
+}
+/**
+ * Cross-channel camera key - first non-null technique match, or null when no
+ * technique recognises the format. Callers that need a guaranteed-non-null
+ * key wrap this with a fallback - see `cameraFingerprint`.
+ */
+export function classifyFilenameCameraKey(file: VendorFile): string | null {
+    return walk(FILENAME_CAMERA_KEY, file).value;
+}

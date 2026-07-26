@@ -1,0 +1,167 @@
+/* ===== Offline banner ======================================================
+   Thin fixed strip pinned to the very top, shown when connectivity drops (see
+   src/ui/connectivity.ts + offline-banner.ts). Visible content is compact -
+   a wifi-off icon + "Offline" + an info button; the info popover carries the
+   detail (degraded map + auto-update).
+
+   LAYOUT: the banner is position:fixed so it never participates in the flex
+   column, but the chrome below it must move down by its height. Rather than
+   offset each top-anchored layer (mobile drawer, toasts, export drawer, landing
+   sticky, viewer fit-height) one by one, we raise --dc-topbar-h /
+   --dc-topbar-h-mobile by the banner height under body.has-offline-banner: those
+   tokens are the single source of truth every layer already reads, so they all
+   follow together. The topbar's own min-height grows with the token, and its
+   padding-top drops its content below the banner. The banner owns the top
+   safe-area (it is the topmost element), so the topbar no longer adds its own.
+
+   THEME: uses semantic surfaces (--bg-elev/--fg) + the brand accent for the
+   status icon and the hairline, so it reads correctly in dark and light.
+   ========================================================================= */
+
+body.has-offline-banner {
+    /* Banner height = its content row + the top safe-area it absorbs. Feeds both
+       the banner box and the token re-base below. 30px ~= sm text line + 8px
+       vertical padding + the 1px hairline. */
+    --dc-offline-banner-h: calc(max(var(--dc-space-2), env(safe-area-inset-top)) + 30px);
+
+    /* Re-base the topbar-bottom anchors by the banner height (see header). The
+       mobile value intentionally drops the topbar's own safe-area term (the
+       banner now owns it) and folds the banner height in instead. */
+    --dc-topbar-h: calc(44px + var(--dc-offline-banner-h));
+    --dc-topbar-h-mobile: calc(var(--dc-iconbtn-touch) + var(--dc-space-2) + 1px + var(--dc-offline-banner-h));
+}
+
+/* Push the in-flow topbar content below the fixed banner. The bumped
+   --dc-topbar-h* above grows the topbar box; this places its row in the lower
+   part, clear of the banner. */
+body.has-offline-banner .topbar {
+    padding-top: var(--dc-offline-banner-h);
+}
+
+.offline-banner {
+    position: fixed;
+    inset: 0 0 auto 0; /* top:0; left:0; right:0 */
+    z-index: var(--dc-z-header); /* above the in-flow topbar, below menus/modals */
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+    box-sizing: border-box;
+    min-height: var(--dc-offline-banner-h);
+    /* The banner is the topmost element -> it absorbs the top + side safe-area
+       insets. env() is 0 on non-notched devices, so max() keeps the base inset. */
+    padding: var(--dc-space-1) max(var(--dc-space-4), env(safe-area-inset-right)) var(--dc-space-1)
+        max(var(--dc-space-4), env(safe-area-inset-left));
+    padding-top: max(var(--dc-space-1), env(safe-area-inset-top));
+    background: var(--bg-elev);
+    color: var(--fg);
+    border-bottom: 2px solid var(--accent);
+    font-family: var(--dc-font-body);
+    font-size: var(--dc-text-sm);
+    animation: offline-banner-in var(--dc-dur-entrance) var(--dc-ease-out);
+}
+.offline-banner[hidden] {
+    display: none;
+}
+@keyframes offline-banner-in {
+    from {
+        transform: translateY(-100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .offline-banner {
+        animation: none;
+    }
+}
+
+.offline-banner-status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+    /* Take the row so the info button is pushed to the trailing edge, where its
+       popover drops from. min-width:0 lets the label ellipsize if ever needed. */
+    flex: 1;
+    min-width: 0;
+}
+.offline-banner-icon {
+    flex-shrink: 0;
+    color: var(--accent);
+}
+.offline-banner-label {
+    font-weight: 600;
+    color: var(--fg);
+    white-space: nowrap;
+}
+
+/* Info button - mini icon button, brand-consistent with the other icon buttons.
+   Pushed to the trailing edge by the flex:1 status block; its popover drops
+   from underneath it. */
+.offline-banner-info {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--dc-iconbtn-mini);
+    height: var(--dc-iconbtn-mini);
+    padding: 0;
+    border: none;
+    border-radius: var(--dc-radius-sm);
+    background: transparent;
+    color: var(--fg-mute);
+    cursor: pointer;
+    transition:
+        color var(--dc-dur-base) var(--dc-ease),
+        background var(--dc-dur-base) var(--dc-ease);
+}
+.offline-banner-info:hover,
+.offline-banner-info.is-open {
+    color: var(--accent);
+    background: var(--bg-hover);
+}
+.offline-banner-info:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* Detail popover - small brand card under the info button. Anchored to the
+   fixed banner (its positioning context), clamped so it never overflows the
+   viewport on a phone. */
+.offline-banner-popover {
+    position: absolute;
+    top: calc(100% + var(--dc-space-1));
+    right: max(var(--dc-space-3), env(safe-area-inset-right));
+    z-index: var(--dc-z-menu);
+    width: min(320px, calc(100vw - 2 * var(--dc-space-4)));
+    box-sizing: border-box;
+    padding: var(--dc-space-3) var(--dc-space-4);
+    background: var(--bg-elev-2);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-md);
+    box-shadow: var(--dc-shadow-popup);
+}
+.offline-banner-popover[hidden] {
+    display: none;
+}
+.offline-banner-detail {
+    margin: 0;
+    /* Full --fg (not --fg-mute): this is the primary content of the popover, and
+       muted grey on the elevated surface read as unreadable. */
+    color: var(--fg);
+    font-size: var(--dc-text-md);
+    line-height: var(--dc-leading-loose);
+}
+
+/* Touch: bump the info button to the mobile touch floor without changing the
+   thin banner height (the larger hit area extends via negative margin). */
+@media (pointer: coarse) {
+    .offline-banner-info {
+        width: var(--dc-iconbtn-touch);
+        height: var(--dc-iconbtn-touch);
+        margin: calc(-1 * var(--dc-space-2)) 0;
+    }
+}

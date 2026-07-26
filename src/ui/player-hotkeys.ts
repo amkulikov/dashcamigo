@@ -1,0 +1,296 @@
+// Global player keyboard shortcuts. One central listener on document.keydown.
+//
+// Skipped when focus is in an editable control (input/select/textarea/
+// [contenteditable]) so shortcuts don't break text input. Modifier combos
+// (Cmd/Ctrl/Alt) are not intercepted - Shift is the only modifier we use
+// (Shift+arrow = long seek step, Shift+. = >, Shift+I/O = jump to clip edge).
+// Arrow seek steps are user-configurable in settings; defaults 5s / 30s.
+
+import { dom } from "./dom.js";
+import { exportPanelState, setRangeEdge, toggleExportMode } from "./export-state.js";
+import { isAnyModalOpen } from "./modal-helper.js";
+import { stepFrame } from "./player-frame-step.js";
+import { getSeekStepSec, getSeekStepShiftSec } from "./seek-step-pref.js";
+import { activeCandidate, state } from "./state.js";
+import { flashRangeTab } from "./timeline-range.js";
+
+interface HotkeyDeps {
+    getTripCurrentTime: () => number;
+    seekTripTime: (sec: number) => void;
+    /** Restart the trip from the first frame (used by play button at trip end too). */
+    playFrameFromStart: () => void;
+    isAtTripEnd: () => boolean;
+    toggleMuted: () => void;
+    toggleFullscreen: () => void;
+    /** Toggles loop-vs-stop trip-end behavior (R). */
+    toggleLoop: () => void;
+    /** Flashes a center play/pause glyph on the active tile after a toggle.
+     *  forcePlaying overrides the read for deferred restarts (trip-end). */
+    flashPlaybackToggle: (forcePlaying?: boolean) => void;
+    /** Zooms the timeline one step in (1) / out (-1) around the window centre. */
+    zoomTimeline: (dir: 1 | -1) => void;
+    cyclePlaybackRate: (dir: 1 | -1) => void;
+    captureFrame: () => void;
+    resetVideoZoom: () => void;
+    /** Pans a zoomed timeline window so `sec` is inside it (no-op otherwise).
+     *  Pre-step for the Shift+I/O jumps: seeks clamp to the zoom window, so a
+     *  clip boundary outside it would otherwise be unreachable. */
+    panTimelineToInclude: (sec: number) => void;
+    /** True iff the speed dropdown is currently open. */
+    isSpeedMenuOpen: () => boolean;
+    closeSpeedMenu: () => void;
+    focusSpeedButton: () => void;
+}
+
+/** True if the event target is an editable element. */
+function isEditableTarget(target: HTMLElement | null): boolean {
+    if (!target) return false;
+    const tag = target.tagName;
+    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return true;
+    if (target.isContentEditable) return true;
+    return false;
+}
+
+/** True if Space/Enter would natively activate the focused element (button,
+ *  link, summary, or an ARIA control). Used to bail out of the global Space
+ *  handler so a focused toolbar button is not toggled twice (native click +
+ *  play/pause). Letter hotkeys are NOT gated by this - they keep working with
+ *  a button focused. */
+function isNativeActivationTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) return false;
+    const tag = target.tagName;
+    if (tag === "BUTTON" || tag === "SUMMARY") return true;
+    if (tag === "A" && target.hasAttribute("href")) return true;
+    const role = target.getAttribute("role");
+    return role === "button" || role === "menuitem" || role === "tab" || role === "link";
+}
+
+export function initPlayerHotkeys(deps: HotkeyDeps): void {
+    // Click on the player-bar play button also lives here so the "restart at
+    // trip end" branch shares the same playFrameFromStart hook as Space/K.
+    dom.playerBar.play.addEventListener("click", () => {
+        if (!state.active) return;
+        if (dom.player.paused) {
+            // At trip end (last frame finished, tripEndBehavior=stop) the play
+            // button restarts from the beginning of the whole trip rather
+            // than resuming the last file. Standard YouTube/VLC pattern.
+            if (deps.isAtTripEnd()) {
+                deps.playFrameFromStart();
+                return;
+            }
+            dom.player.play().catch(() => {});
+        } else {
+            dom.player.pause();
+        }
+    });
+
+    document.addEventListener("keydown", (e) => {
+        // Escape closes the speed menu ALWAYS, before any other filter - even
+        // if focus moved into a speed-menu li, Escape must close it.
+        if (e.key === "Escape" && deps.isSpeedMenuOpen()) {
+            deps.closeSpeedMenu();
+            deps.focusSpeedButton();
+            return;
+        }
+
+        // A modal owns the keyboard while open. modal-helper's capture-phase
+        // trap only swallows Escape/Tab; every other key (F/U/S/E, digits,
+        // arrows) would otherwise reach here and mutate the player behind the
+        // backdrop - e.g. F focused on a modal button toggles fullscreen.
+        if (isAnyModalOpen()) return;
+
+        // Skip when focus is in an editable control.
+        if (e.target instanceof HTMLElement && isEditableTarget(e.target)) return;
+
+        // Space/Enter on a focused button/link natively activate it. Bail so we
+        // don't double-fire (native click + the global play/pause below). Only
+        // Space/Enter are gated; letter hotkeys still work with a button focused.
+        if ((e.code === "Space" || e.key === "Enter") && isNativeActivationTarget(e.target)) return;
+
+        // Skip system/browser combos - Cmd+R, Ctrl+T, etc. Allow Shift through.
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+        // Don't touch the player while the speed menu is open.
+        if (deps.isSpeedMenuOpen()) return;
+
+        // Most shortcuts require an active file. Exception: F (fullscreen).
+        const hasActive = state.active !== null;
+
+        // e.code is layout-independent (KeyM fires on a Russian 'ь' too);
+        // for Space/arrows we need e.key.
+        const code = e.code;
+        const key = e.key;
+
+        // Space and K: play/pause. Space scrolls the page by default.
+        if (code === "Space" || code === "KeyK") {
+            if (!hasActive) return;
+            e.preventDefault();
+            if (dom.player.paused) {
+                // Same restart-at-trip-end branch as the play button above -
+                // without it Space at trip end replays only the LAST file
+                // (HTMLMediaElement.play() rewinds the ended element), while
+                // the button restarts the whole trip.
+                if (deps.isAtTripEnd()) {
+                    deps.playFrameFromStart();
+                    // Restart starts playback (deferred), so force the play glyph -
+                    // reading dom.player.paused here would still be true.
+                    deps.flashPlaybackToggle(true);
+                    return;
+                }
+                dom.player.play().catch(() => {});
+            } else {
+                dom.player.pause();
+            }
+            deps.flashPlaybackToggle();
+            return;
+        }
+
+        // Arrows: seek. Step (in sec) is user-configurable via settings.
+        if (key === "ArrowLeft" || key === "ArrowRight") {
+            if (!hasActive) return;
+            e.preventDefault();
+            const step = e.shiftKey ? getSeekStepShiftSec() : getSeekStepSec();
+            const sign = key === "ArrowLeft" ? -1 : 1;
+            deps.seekTripTime(deps.getTripCurrentTime() + sign * step);
+            return;
+        }
+
+        // J / L - YouTube-style +-10s.
+        if (code === "KeyJ" || code === "KeyL") {
+            if (!hasActive) return;
+            e.preventDefault();
+            const sign = code === "KeyJ" ? -1 : 1;
+            deps.seekTripTime(deps.getTripCurrentTime() + sign * 10);
+            return;
+        }
+
+        // U - mute toggle (was M; relocated so M can drive view-menu mini-map toggle).
+        // Guarded by hasActive like the other media keys: muting an empty player
+        // on the landing screen silently flips the persisted mute preference with
+        // no visible feedback (the mute icon lives in the hidden player bar).
+        if (code === "KeyU") {
+            if (!hasActive) return;
+            e.preventDefault();
+            deps.toggleMuted();
+            return;
+        }
+
+        // F - fullscreen toggle.
+        if (code === "KeyF") {
+            e.preventDefault();
+            deps.toggleFullscreen();
+            return;
+        }
+
+        // R - loop on/off. Guarded by hasActive like the other media keys so it
+        // doesn't flip the persisted preference on the empty landing player.
+        if (code === "KeyR") {
+            if (!hasActive) return;
+            e.preventDefault();
+            deps.toggleLoop();
+            return;
+        }
+
+        // + / - : zoom the timeline in/out around the window centre (keyboard
+        // counterpart of the wheel/pinch zoom). Matched by e.key (the produced
+        // character), NOT e.code: unlike letters, the +/- characters move
+        // between physical keys across layouts (German QWERTZ has "+" on
+        // BracketRight and "-" on Slash), so the code match left the documented
+        // keys dead there. "=" keeps the unshifted US key zooming in; numpad
+        // +/- produce the same e.key. Reset is the overview button / dblclick.
+        if (key === "+" || key === "=") {
+            if (!hasActive) return;
+            e.preventDefault();
+            deps.zoomTimeline(1);
+            return;
+        }
+        if (key === "-") {
+            if (!hasActive) return;
+            e.preventDefault();
+            deps.zoomTimeline(-1);
+            return;
+        }
+
+        // Z: reset digital zoom. At scale=1 do not swallow the key - it may
+        // be needed for future shortcuts.
+        if (code === "KeyZ") {
+            if (state.videoZoom.scale === 1) return;
+            e.preventDefault();
+            deps.resetVideoZoom();
+            return;
+        }
+
+        // S: save the current frame as JPG. Only fires when there is a
+        // playable active file (same logic as the player-bar button).
+        if (code === "KeyS") {
+            if (!state.active) return;
+            const video = activeCandidate();
+            if (!video?.canPlay) return;
+            e.preventDefault();
+            deps.captureFrame();
+            return;
+        }
+
+        // E: toggle export-mode (open/close the export panel + chrome).
+        // The view-menu strip toggle moved to KeyT (was KeyE) to free this up.
+        if (code === "KeyE") {
+            if (!hasActive) return;
+            e.preventDefault();
+            toggleExportMode();
+            return;
+        }
+
+        // I / O: set the clip start/end to the playhead (the mark-in/mark-out
+        // convention from NLEs); Shift+I / Shift+O: jump the playhead to that
+        // boundary to inspect the cut. Export-mode only - outside it the range
+        // chrome is not on screen and a stray press would edit invisible state.
+        if (code === "KeyI" || code === "KeyO") {
+            if (!hasActive || !state.exportModeOpen) return;
+            const range = exportPanelState.range;
+            if (!range) return;
+            e.preventDefault();
+            const which = code === "KeyI" ? "start" : "end";
+            if (e.shiftKey) {
+                const target = which === "start" ? range.startTripSec : range.endTripSec;
+                // Zoomed timeline clamps every seek to its window - pan it over
+                // the boundary first so the jump lands on the real edge.
+                deps.panTimelineToInclude(target);
+                deps.seekTripTime(target);
+            } else {
+                // Crossing the opposite edge is absorbed by the shared
+                // MIN_RANGE_SEC clamp; the flash marks which tab moved (the
+                // only other trace is the mask jumping).
+                setRangeEdge(which, deps.getTripCurrentTime());
+                flashRangeTab(which);
+            }
+            return;
+        }
+
+        // Comma / Period - dual role:
+        //   with Shift (i.e. < / >) - cycle speed down/up
+        //   without Shift - frame-step (pauses first when playing); shared
+        //   with the player-bar step buttons, see player-frame-step.ts
+        if (code === "Comma" || code === "Period") {
+            if (!hasActive) return;
+            e.preventDefault();
+            if (e.shiftKey) {
+                deps.cyclePlaybackRate(code === "Period" ? 1 : -1);
+            } else {
+                stepFrame(code === "Period" ? 1 : -1);
+            }
+            return;
+        }
+
+        // Digits 0..9: jump to 0..90% of trip duration.
+        if (code.startsWith("Digit") && code.length === 6) {
+            if (!state.active) return;
+            const digit = Number(code.slice(5));
+            if (!Number.isInteger(digit) || digit < 0 || digit > 9) return;
+            e.preventDefault();
+            const trip = state.trips[state.active.trip];
+            if (!trip) return;
+            deps.seekTripTime((trip.timeline.contentDurationSec * digit) / 10);
+            return;
+        }
+    });
+}

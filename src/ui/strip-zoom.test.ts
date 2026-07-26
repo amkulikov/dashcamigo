@@ -1,0 +1,101 @@
+import { describe, expect, it } from "vitest";
+
+import { applyPinchZoom, computeFollowPan, type ZoomViewState } from "./strip-zoom.js";
+
+// applyPinchZoom is pure + deterministic - no DOM, safe to run in parallel.
+describe("applyPinchZoom", () => {
+    const dur = 600; // 10 min trip - minSpan = max(0.001, 1/600) ~= 0.00167
+
+    it("zooms in around a centered centroid, halving the span", () => {
+        const start: ZoomViewState = { viewStartPct: 0.2, viewEndPct: 0.6 }; // span 0.4
+        // distRatio 2 = fingers spread to twice the start distance.
+        const next = applyPinchZoom(start, 0.5, 0.5, 2, dur);
+        expect(next.viewStartPct).toBeCloseTo(0.3, 6);
+        expect(next.viewEndPct).toBeCloseTo(0.5, 6);
+    });
+
+    it("zooms out (fingers pinched together), doubling the span", () => {
+        const start: ZoomViewState = { viewStartPct: 0.3, viewEndPct: 0.5 }; // span 0.2
+        const next = applyPinchZoom(start, 0.5, 0.5, 0.5, dur);
+        expect(next.viewStartPct).toBeCloseTo(0.2, 6);
+        expect(next.viewEndPct).toBeCloseTo(0.6, 6);
+    });
+
+    it("keeps the start-centroid content point under the moving centroid (zoom + pan)", () => {
+        // Centroid starts at 0.0 (left edge of window 0.2..0.6 -> content 0.2) and
+        // ends at 1.0; zooming in by 2x should pin content 0.2 to the right edge.
+        const start: ZoomViewState = { viewStartPct: 0.2, viewEndPct: 0.6 };
+        const next = applyPinchZoom(start, 0, 1, 2, dur);
+        const span = next.viewEndPct - next.viewStartPct;
+        expect(span).toBeCloseTo(0.2, 6);
+        // content 0.2 under currentCentroidRatio 1 -> it sits at viewEndPct.
+        expect(next.viewEndPct).toBeCloseTo(0.2, 6);
+        // ...so the window clamps to [0, 0.2] (newStart would be 0, never negative).
+        expect(next.viewStartPct).toBeCloseTo(0, 6);
+    });
+
+    it("clamps to the right edge without overshooting 1", () => {
+        const start: ZoomViewState = { viewStartPct: 0.6, viewEndPct: 1 }; // span 0.4
+        const next = applyPinchZoom(start, 1, 1, 2, dur);
+        expect(next.viewStartPct).toBeCloseTo(0.8, 6);
+        expect(next.viewEndPct).toBeCloseTo(1, 6);
+    });
+
+    it("clamps zoom-out to the full [0, 1] overview", () => {
+        const start: ZoomViewState = { viewStartPct: 0.2, viewEndPct: 0.6 };
+        const next = applyPinchZoom(start, 0.5, 0.5, 0.1, dur);
+        expect(next.viewStartPct).toBe(0);
+        expect(next.viewEndPct).toBe(1);
+    });
+
+    it("never shrinks below the minimum span for the trip duration", () => {
+        const shortDur = 10; // minSpan = max(0.001, min(0.5, 0.1)) = 0.1
+        const start: ZoomViewState = { viewStartPct: 0, viewEndPct: 0.1 }; // span 0.1 (already min)
+        const next = applyPinchZoom(start, 0.5, 0.5, 100, shortDur);
+        expect(next.viewEndPct - next.viewStartPct).toBeCloseTo(0.1, 6);
+    });
+
+    it("does not produce NaN when fingers report zero distance ratio", () => {
+        const start: ZoomViewState = { viewStartPct: 0.2, viewEndPct: 0.6 };
+        const next = applyPinchZoom(start, 0.5, 0.5, 0, dur);
+        expect(Number.isFinite(next.viewStartPct)).toBe(true);
+        expect(Number.isFinite(next.viewEndPct)).toBe(true);
+        // distRatio 0 -> span explodes -> clamps to full overview.
+        expect(next.viewStartPct).toBe(0);
+        expect(next.viewEndPct).toBe(1);
+    });
+});
+
+// computeFollowPan is pure + deterministic - no DOM, safe to run in parallel.
+describe("computeFollowPan", () => {
+    it("does not pan while the playhead sits comfortably inside the window", () => {
+        // span 0.2, playhead at rel 0.5 - well below the 0.85 trigger.
+        expect(computeFollowPan(0.4, 0.6, 0.5)).toBeNull();
+    });
+
+    it("pans forward once the playhead crosses the trailing trigger, re-seating it at the anchor", () => {
+        // span 0.2; playhead at 0.58 = rel 0.9 (>= 0.85). New start puts it at
+        // rel 0.15 -> newStart = 0.58 - 0.15*0.2 = 0.55.
+        const next = computeFollowPan(0.4, 0.6, 0.58);
+        expect(next).not.toBeNull();
+        expect(next!).toBeCloseTo(0.55, 6);
+        // Same span preserved (caller keeps viewEnd = newStart + span).
+    });
+
+    it("recenters when the playhead fell left of the window after a backward seek", () => {
+        // playhead at 0.30, window [0.4, 0.6] -> rel < 0. newStart = 0.30 - 0.03 = 0.27.
+        const next = computeFollowPan(0.4, 0.6, 0.3);
+        expect(next).not.toBeNull();
+        expect(next!).toBeCloseTo(0.27, 6);
+    });
+
+    it("clamps at the trip end and returns null when the window is already pinned there", () => {
+        // span 0.2, window already at the right edge [0.8, 1.0], playhead near end.
+        // Desired newStart clamps to 1 - span = 0.8 = current start -> null (no churn).
+        expect(computeFollowPan(0.8, 1.0, 0.98)).toBeNull();
+    });
+
+    it("returns null for a full-overview (non-zoomed) view", () => {
+        expect(computeFollowPan(0, 1, 0.9)).toBeNull();
+    });
+});

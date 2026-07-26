@@ -1,0 +1,175 @@
+# Browser & OS support
+
+What dashcamigo actually needs from a browser, which versions provide it, how we
+detect gaps, and what the user sees when something is missing.
+
+We advertise "opens anywhere with a browser". That is true for the **core job**
+(load an SD-card folder, watch a recording with the GPS map and speed chart) on
+any current-or-previous-major browser. It is not true feature-for-feature on
+every engine: editing/export, the map, and HEVC/TS playback each lean on a Web
+API that some browsers lack. This file is the source of truth for that boundary.
+
+Implementation:
+- Detection: `src/capabilities.ts` (pure, tested) - probes each API, classifies
+  it by severity, identifies the browser/OS for tailored advice.
+- Surfacing: `src/ui/capability-gate.ts` - the blocking gate (fatal) + the
+  proactive notice (degraded), called from `src/app.ts`.
+- Map degradation: `src/ui/map.ts` (`ensureMap`/`ensureMiniMap` preflight a
+  WebGL context, `refreshMapless` keeps the chart working without a map).
+- Export sink selection: `src/ui/export-flow.ts` chooses disk-stream vs
+  in-memory; the probe (`nativeFsaAvailable()`) and the RAM-backed handle live
+  in `src/ui/in-memory-file.ts`.
+
+## Severity model
+
+Each capability is one of three severities:
+
+- **blocking** - the core job is impossible and there is no graceful path. The
+  UI shows a full blocking gate ("won't run here" + cause + what to do) and
+  `app.ts` skips heavy init.
+- **degraded** - a real, user-visible feature is gone but the core still works.
+  The UI explains it proactively (a concise notice) and at the point of use.
+- **info** - invisible to the user (a background feature already covers it) or
+  only a diagnostic. Recorded for metrics, never surfaced on its own.
+
+The blocking set is small and fixed (the `"blocking"` entries in `SEVERITY`),
+and all of its members are universal on any browser modern enough to parse our
+ES-module bundle, so the gate is a genuine safety net rather than an everyday
+wall. The everyday value is in the **degraded** set (no map / no editor / iOS
+load friction).
+
+Per-capability severity assignment and the rationale behind each one: `SEVERITY`
+in `src/capabilities.ts` - one map, one comment per capability, the single place
+to revisit if a gap's classification should change.
+
+## What the user sees
+
+Which gap maps to which severity, which surface announces it (blocking gate,
+proactive notice, in-place overlay), and the wording of the advice live in
+three places: `SEVERITY` in `src/capabilities.ts`, the gate/notice wiring in
+`src/ui/capability-gate.ts`, and the `caps.*` keys in `src/i18n/`.
+
+## Minimum versions (first stable, no flag)
+
+Researched against MDN browser-compat-data, caniuse, and vendor release notes.
+Numbers are the first stable release where the feature is on by default.
+`n/a` = never shipped.
+
+| Web API | Chrome | Edge | Firefox | Safari (macOS) | Safari (iOS) | Android Chrome |
+|---|---|---|---|---|---|---|
+| WebCodecs (VideoDecoder/Encoder) | 94 | 94 | 130 | 16.4 | 16.4 | 94 (Firefox Android: n/a) |
+| WebGL2 | 56 | 79 | 51 | 15 | 15 | 58 |
+| File System Access pickers | 86 | 86 | n/a | n/a | n/a | 132 |
+| `<input webkitdirectory>` | 30 | 79 | 50 | 11.1 | 18.4 | 132 |
+| DnD folder (`webkitGetAsEntry`) | 13 | 79 | 50 | 11.1 | n/a | n/a |
+| Service Workers | 40 | 17 | 44 | 11.1 | 11.3 | 40 |
+| Module Workers (`{type:"module"}`) | 80 | 80 | 114 | 15 | 15 | 80 |
+| MediaSource | 31 | 12 | 42 | 8 | 13 (iPad only) | 31 |
+| ManagedMediaSource (iPhone MSE) | n/a | n/a | n/a | 17.0 | 17.1 | n/a |
+| OffscreenCanvas (2D) | 69 | 79 | 105 | 16.4 | 16.4 | 69 |
+| `structuredClone` | 98 | 98 | 94 | 15.4 | 15.4 | 98 |
+| `isSecureContext` | 47 | 15 | 49 | 11.1 | 11.3 | 47 |
+
+**Practical floor for the full app** (editor + map + viewing): roughly
+**Chrome/Edge 94, Firefox 130, Safari 16.4 (iOS 16.4)**, gated by WebCodecs.
+**Viewing-only** works much lower (native `<video>` + Workers + WebGL): roughly
+Safari 15 / Firefox 114 / Chrome 80.
+
+**Service Workers** in the table above gate only the offline PWA precache
+(`public/sw.js`) - export-to-disk does not depend on it (see Library floors
+below).
+
+### OS-level codecs
+
+Codec support comes from the OS/GPU + the browser distributor, not the engine
+version. The API existing does not mean a codec decodes - always probe.
+
+- **H.264 / AVC** - treat as a baseline everywhere, with two real exceptions:
+  open-source **Chromium without proprietary codecs** has no software H.264
+  (Linux bundled Chromium fails; macOS Chromium decodes via the OS - which is
+  why CI uses Google Chrome on Linux), and **Linux Firefox** needs system
+  codecs (gstreamer/ffmpeg/OpenH264).
+- **HEVC / H.265** - reliable on Apple platforms and macOS Chromium (OS
+  software fallback) and Android with a hardware HEVC decoder. On
+  **Windows/Linux Chrome/Edge it is hardware-only**; Windows Edge and Windows
+  Firefox additionally need the **paid** Microsoft "HEVC Video Extensions".
+  Flaky-to-absent on HW-less Windows/Linux desktops - which is why we keep the
+  MSE/WASM remux fallback and the `hevc` e2e test self-skips where decode is
+  absent.
+
+### Library floors
+
+- **mediabunny** (pinned version: `package.json`) - targets "ECMAScript 2021 or
+  later" (Chrome/Edge 85, FF 79, Safari 15). Container parse/demux and
+  stream-copy mux do **not** need WebCodecs (they run even in Node); only
+  decode/encode (re-encode export, previews) need it. So stream-copy export and
+  metadata work on mobile Safari + Android Chrome where decode might not.
+- **maplibre-gl** (pinned version: `package.json`) - **requires WebGL2**; the
+  WebGL1 fallback is gone, so a WebGL1-only GPU gets no map at all. `new Map()`
+  does not reliably throw on a context-less GPU, so we preflight the context
+  ourselves in `ensureMap`. Ships ESM-only and cannot resolve its own worker
+  through a bundler, so the consumer must hand it the worker URL before the
+  first map is constructed.
+- **native-file-system-adapter** (pinned version: `package.json`) - imported
+  only for its native `showSaveFilePicker` binding and types; `nativeFsaAvailable()`
+  (`src/ui/in-memory-file.ts`) gates entry, and the call to the package's
+  `showSaveFilePicker` only ever fires on that already-native branch. We do
+  **not** use the package's own ponyfill streaming-saver fallback: when native
+  FSA is absent (Firefox, Safari, mobile Chromium) the export instead builds
+  the whole MP4 in a resizable-`ArrayBuffer`-backed handle
+  (`src/ui/in-memory-file.ts`) and hands the result to a Blob download - a
+  streamed, write-once sink can't be re-read for the post-mux GPMF injection,
+  which is a hard product requirement.
+
+## Known limitations
+
+- **Pre-ES-module browsers** (no `<script type=module>`: IE11, old Edge, Chrome
+  <61, Safari <11) never execute our bundle, so the in-bundle gate cannot run.
+  They get the static prerendered landing + the splash watchdog and non-working
+  CTAs. We deliberately do not add a `nomodule` inline fallback: it would be a
+  new inline script that the CSP-hash build plugin (which hashes only
+  `#dc-bootstrap`) does not cover, so it would need a build/CSP change for a
+  near-zero, far-below-target-bar audience.
+- **iOS `webkitdirectory` no-op (iOS 11.3-18.3)** - the attribute is *present*
+  (so `'webkitdirectory' in input` returns true) but does nothing until iOS
+  18.4. Feature-detection cannot see this; the gap is documented, not gated. The
+  user can still select individual files.
+- **Firefox H.264 encode is broken in practice** -
+  `VideoEncoder.isConfigSupported()` returns true for H.264 but
+  `configure()`/`encode()` throw ([Bugzilla 1918769](https://bugzilla.mozilla.org/show_bug.cgi?id=1918769),
+  FF 130-145). So `webCodecsEncode` being present is not enough; the export
+  path probes real encodability before running - see
+  `src/transcode/capabilities.ts`. Stream-copy is unaffected.
+- **Firefox for Android** has no WebCodecs at all (no VideoDecoder/Encoder) - no
+  editor/export/previews there regardless of version.
+- **WebGL2 is also a hardware floor** - `getContext("webgl2")` can return null on
+  an old/blocklisted GPU no matter how new the browser. The map degradation path
+  covers this.
+- **WASM + CSP** - WebAssembly compilation needs `'wasm-unsafe-eval'` in
+  `script-src`. If a future feature relies on WASM (mediabunny/MapLibre core do
+  not), the CSP in `public/_headers` must be updated.
+
+## Manual verification (not automated)
+
+The e2e suite drives the export pipeline on a small synthetic sample under one
+engine (Chromium, or Chrome on CI for codecs). It validates *correctness* of the
+in-memory (no-native-FSA) export - resizable-buffer growth, staged GPMF
+injection, the Download button, byte-level container/`gpmd` markers - but it
+**cannot** validate two engine- and size-dependent things. Check these by hand
+before shipping a change that touches the export RAM path:
+
+1. **Real RAM peak on live Safari/Firefox with a multi-GB clip.** The whole MP4
+   is built in RAM (no streaming, no pre-cap - the cap is unmeasurable on Safari,
+   so we warn instead of block). Export a ~3 GB+ clip in desktop Safari and watch
+   memory: it should peak around 1x the output during mux+inject and ~2x briefly
+   during download, then settle. If allocation fails it must surface the "too
+   large, use desktop Chrome" message, not a silent tab crash.
+2. **Safari "open in tab" vs Downloads.** The done-view Download button hands a
+   `video/mp4` Blob to an `<a download>`. Confirm Safari actually files it in
+   Downloads rather than opening the MP4 in a new tab (the `File{type}` carries
+   the name without the `.html` artifact - verify the saved filename).
+3. **iOS quota / eviction.** Mobile WebKit has tighter memory and storage limits;
+   confirm a moderate clip exports without the tab being reclaimed mid-export.
+
+The native (Chromium desktop, `showSaveFilePicker` -> disk) path streams at any
+size and is not subject to these.

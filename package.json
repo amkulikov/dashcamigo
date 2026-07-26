@@ -1,0 +1,79 @@
+{
+  "name": "dashcamigo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "No-backend, in-browser dashcam recording viewer: multi-channel playback, GPS track on a map, speed/G-force chart, and re-encode-free clip export - all local, nothing uploaded.",
+  "license": "AGPL-3.0-only",
+  "author": "Alexander Kulikov",
+  "homepage": "https://dashcamigo.app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/amkulikov/dashcamigo.git"
+  },
+  "bugs": {
+    "url": "https://github.com/amkulikov/dashcamigo/issues"
+  },
+  "keywords": [
+    "dashcam",
+    "dashcam-viewer",
+    "gps",
+    "gpmf",
+    "webcodecs",
+    "maplibre",
+    "mp4",
+    "70mai",
+    "no-backend"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "vite",
+    "prebuild": "node scripts/validate-map-styles.mjs",
+    "build": "vite build && node scripts/check-lazy-chunks.mjs && node scripts/generate-third-party-notices.mjs",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "pretest": "node scripts/validate-map-styles.mjs",
+    "test": "TZ=UTC vitest run",
+    "test:watch": "TZ=UTC vitest",
+    "test:coverage": "TZ=UTC vitest run --coverage",
+    "test:perf": "playwright test --config=tests/playwright.perf.config.ts",
+    "test:e2e": "npm run build && playwright test --config=tests/playwright.e2e.config.ts",
+    "test:vrt": "npm run build && playwright test --config=tests/playwright.vrt.config.ts",
+    "test:vrt:update": "npm run build && playwright test --config=tests/playwright.vrt.config.ts --update-snapshots",
+    "test:bench": "vitest bench --run --config tests/vitest.bench.config.ts",
+    "lint": "biome lint src tests",
+    "format": "biome format src tests --write",
+    "check": "biome check src tests --write",
+    "knip": "knip",
+    "indexnow": "node scripts/indexnow-ping.mjs",
+    "validate:styles": "node scripts/validate-map-styles.mjs",
+    "screenshots:readme": "node scripts/generate-readme-screenshots.mjs"
+  },
+  "dependencies": {
+    "@sentry/browser": "^10.68.0",
+    "chart.js": "4.5.1",
+    "chartjs-plugin-zoom": "2.2.0",
+    "intl-messageformat": "^11.2.12",
+    "maplibre-gl": "6.0.0",
+    "mediabunny": "1.51.0",
+    "native-file-system-adapter": "3.0.1",
+    "onnxruntime-web": "^1.27.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.5",
+    "@maplibre/maplibre-gl-style-spec": "^26.2.1",
+    "@playwright/test": "^1.62.0",
+    "@sentry/vite-plugin": "^5.4.0",
+    "@types/html-minifier-terser": "^7.0.2",
+    "@types/node": "^26.1.1",
+    "@vitest/coverage-v8": "^4.1.10",
+    "@xmldom/xmldom": "^0.9.10",
+    "html-minifier-terser": "^7.2.0",
+    "knip": "^6.29.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.5",
+    "vitest": "^4.1.10"
+  }
+}

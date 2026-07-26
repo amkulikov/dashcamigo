@@ -1,0 +1,144 @@
+/* Styles for public/privacy.html. Standalone (does not inherit app styles),
+   self-hosted with no external dependencies, light/dark theme via
+   prefers-color-scheme. Extracted from an inline <style> for a clean CSP
+   without 'unsafe-inline' in style-src (even though the CSP currently allows
+   it - internal policy: external CSS). */
+
+:root {
+    --bg: #f5f4f1;
+    --fg: #16171a;
+    --fg-mute: #5a5e66;
+    --accent: #ff9000;
+    --border: #d8d5cf;
+    --bg-elev: #ffffff;
+    --link: #b35e00;
+}
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #0d0e10;
+        --fg: #f5f4f1;
+        --fg-mute: #8a8e96;
+        --accent: #ff9000;
+        --border: #2a2c30;
+        --bg-elev: #16171a;
+        --link: #ffaa3a;
+    }
+}
+
+* { box-sizing: border-box; }
+html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+}
+
+.lang-switcher {
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 16px;
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+    z-index: 1;
+}
+.lang-switcher button {
+    background: transparent;
+    color: var(--fg-mute);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    font-family: inherit;
+}
+.lang-switcher button.active {
+    background: var(--accent);
+    color: #16171a;
+    border-color: var(--accent);
+}
+
+main {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 32px 24px 64px;
+}
+
+h1 {
+    font-size: 28px;
+    margin: 0 0 8px;
+    line-height: 1.3;
+}
+h2 {
+    font-size: 19px;
+    margin: 32px 0 12px;
+    line-height: 1.3;
+}
+p, li {
+    color: var(--fg);
+}
+p.muted {
+    color: var(--fg-mute);
+    font-size: 14px;
+}
+ul {
+    padding-left: 22px;
+}
+a {
+    color: var(--link);
+}
+code {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-family: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, monospace;
+    font-size: 0.9em;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0 16px;
+    font-size: 14px;
+}
+th, td {
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    text-align: left;
+    vertical-align: top;
+}
+th {
+    background: var(--bg-elev);
+    font-weight: 600;
+}
+
+.home-link {
+    display: inline-block;
+    margin-top: 32px;
+    color: var(--fg-mute);
+}
+
+/* EN-prevails disclaimer on community-locale articles. Small, muted, italic -
+   does not distract from the main text but stays visible. */
+.prevails {
+    border-left: 3px solid var(--accent);
+    padding: 8px 12px;
+    margin: 16px 0 24px;
+    font-size: 13px;
+    font-style: italic;
+    background: var(--bg-elev);
+}
+
+[data-lang]:not([hidden]) {
+    display: block;
+}
+[hidden] {
+    display: none !important;
+}

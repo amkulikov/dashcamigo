@@ -1,0 +1,317 @@
+#!/usr/bin/env node
+// Anonymize a real SStar-firmware MP4 (Neoline Spectrum family) with a
+// 40-byte `ssmd` GPS meta track into a public-safe fixture.
+//
+// Anonymization (mirrors scripts/anonymize-rvmi-mp4.mjs):
+//   1. Walk the MP4, find the meta trak whose stsd entry is 'ssmd' and whose
+//      stsz is constant 40 bytes (the GPS track; the sibling JPEG-thumbnail
+//      and 12-byte telemetry ssmd tracks are dropped entirely).
+//   2. Read all its samples from mdat. On fix rows (flags base 0x047E or
+//      0x067E at +22 with the 0x0100 fix bit) round the lat/lon doubles to
+//      WHOLE degrees (~110 km precision). No-fix rows already carry the
+//      0xFFFFFFFF sentinel in both slots - untouched. A row with a foreign
+//      flags word is zeroed except the flags word: content this script
+//      cannot classify must never reach the fixture verbatim, and the
+//      scrubbed row still fails decode the same way.
+//      Timestamps, speed, course and the altitude-like word are NOT shifted
+//      (not sensitive once coordinates are gone; the parse regression needs
+//      them real).
+//   3. Assemble a minimal MP4: ftyp + moov with a single meta/ssmd trak
+//      (real media timescale, real per-sample stts cadence, header-fixed
+//      40-byte stsz like the real firmware writes) + mdat.
+//
+// Usage:
+//   node scripts/anonymize-sstar-ssmd-mp4.mjs <input.mp4> <output.mp4>
+
+import { closeSync, openSync, readSync, statSync, writeFileSync } from "node:fs";
+
+const SAMPLE_SIZE = 40;
+// Per-camera flags base + fix bit; mirrors SSTAR_FLAGS_* in
+// src/parsers/internal/sstar-ssmd-extract.ts.
+const FLAGS_FIX_BIT = 0x0100;
+const FLAGS_BASES = [0x047e, 0x067e];
+const HEADER_PROBE = 16;
+
+function readBoxHeader(fd, offset, fileSize) {
+    const buf = Buffer.alloc(Math.min(HEADER_PROBE, fileSize - offset));
+    readSync(fd, buf, 0, buf.length, offset);
+    if (buf.length < 8) return null;
+    let size = buf.readUInt32BE(0);
+    const type = buf.toString("ascii", 4, 8);
+    let headerSize = 8;
+    if (size === 1) {
+        if (buf.length < 16) return null;
+        size = buf.readUInt32BE(8) * 0x100000000 + buf.readUInt32BE(12);
+        headerSize = 16;
+    } else if (size === 0) {
+        size = fileSize - offset;
+    }
+    if (size < headerSize || offset + size > fileSize) return null;
+    return { type, size, headerSize };
+}
+
+function findFirstChild(fd, parent, fileSize, type) {
+    let pos = parent.offset + parent.headerSize;
+    const end = parent.offset + parent.size;
+    while (pos + 8 <= end) {
+        const h = readBoxHeader(fd, pos, fileSize);
+        if (!h) return null;
+        if (h.type === type) return { offset: pos, ...h };
+        pos += h.size;
+    }
+    return null;
+}
+
+function readBoxBuf(fd, h) {
+    const buf = Buffer.alloc(h.size);
+    readSync(fd, buf, 0, h.size, h.offset);
+    return buf;
+}
+
+function fourCC(s) { return Buffer.from(s, "ascii"); }
+function box(type, payload) {
+    const head = Buffer.alloc(8);
+    head.writeUInt32BE(8 + payload.length, 0);
+    fourCC(type).copy(head, 4);
+    return Buffer.concat([head, payload]);
+}
+function u32be(n) { const b = Buffer.alloc(4); b.writeUInt32BE(n, 0); return b; }
+
+const [, , inputPath, outputPath] = process.argv;
+if (!inputPath || !outputPath) {
+    console.error("usage: anonymize-sstar-ssmd-mp4.mjs <input.mp4> <output.mp4>");
+    process.exit(1);
+}
+
+const stat = statSync(inputPath);
+const fd = openSync(inputPath, "r");
+
+// Step 1: top-level walk, find moov.
+let moov = null;
+{
+    let pos = 0;
+    while (pos + 8 <= stat.size) {
+        const h = readBoxHeader(fd, pos, stat.size);
+        if (!h) break;
+        if (h.type === "moov") { moov = { offset: pos, ...h }; break; }
+        pos += h.size;
+    }
+}
+if (!moov) { console.error("no moov found"); process.exit(1); }
+
+// Step 2: find the meta/ssmd trak with constant 40-byte samples.
+let gpsTrak = null;
+{
+    let pos = moov.offset + moov.headerSize;
+    const end = moov.offset + moov.size;
+    while (pos + 8 <= end) {
+        const h = readBoxHeader(fd, pos, stat.size);
+        if (!h) break;
+        if (h.type === "trak") {
+            const trak = { offset: pos, ...h };
+            const mdia = findFirstChild(fd, trak, stat.size, "mdia");
+            const hdlr = mdia && findFirstChild(fd, mdia, stat.size, "hdlr");
+            const minf = mdia && findFirstChild(fd, mdia, stat.size, "minf");
+            const stbl = minf && findFirstChild(fd, minf, stat.size, "stbl");
+            const stsd = stbl && findFirstChild(fd, stbl, stat.size, "stsd");
+            const stsz = stbl && findFirstChild(fd, stbl, stat.size, "stsz");
+            if (hdlr && stsd && stsz) {
+                const hdlrBuf = readBoxBuf(fd, hdlr);
+                const handler = hdlrBuf.toString("ascii", hdlr.headerSize + 8, hdlr.headerSize + 12);
+                const stsdBuf = readBoxBuf(fd, stsd);
+                const entryType = stsdBuf.toString("ascii", stsd.headerSize + 12, stsd.headerSize + 16);
+                const stszBuf = readBoxBuf(fd, stsz);
+                const fixedSize = stszBuf.readUInt32BE(stsz.headerSize + 4);
+                if (handler === "meta" && entryType === "ssmd" && fixedSize === SAMPLE_SIZE) {
+                    gpsTrak = { ...trak, mdia, minf, stbl };
+                    break;
+                }
+            }
+        }
+        pos += h.size;
+    }
+}
+if (!gpsTrak) { console.error("no constant-40 meta/ssmd track found"); process.exit(1); }
+
+// Step 3: sample table of the GPS trak.
+function stblChildBuf(type) {
+    const h = findFirstChild(fd, gpsTrak.stbl, stat.size, type);
+    if (!h) throw new Error(`stbl missing ${type}`);
+    return { h, buf: readBoxBuf(fd, h) };
+}
+
+const stsz = stblChildBuf("stsz");
+const sampleCount = stsz.buf.readUInt32BE(stsz.h.headerSize + 8);
+
+const stco = stblChildBuf("stco");
+const chunkOffsets = [];
+{
+    const n = stco.buf.readUInt32BE(stco.h.headerSize + 4);
+    for (let i = 0; i < n; i++) chunkOffsets.push(stco.buf.readUInt32BE(stco.h.headerSize + 8 + i * 4));
+}
+
+const stsc = stblChildBuf("stsc");
+const stscEntries = [];
+{
+    const n = stsc.buf.readUInt32BE(stsc.h.headerSize + 4);
+    for (let i = 0; i < n; i++) {
+        const off = stsc.h.headerSize + 8 + i * 12;
+        stscEntries.push({
+            firstChunk: stsc.buf.readUInt32BE(off),
+            samplesPerChunk: stsc.buf.readUInt32BE(off + 4),
+        });
+    }
+}
+
+const stts = stblChildBuf("stts");
+const perSampleDeltas = [];
+{
+    const n = stts.buf.readUInt32BE(stts.h.headerSize + 4);
+    for (let i = 0; i < n; i++) {
+        const off = stts.h.headerSize + 8 + i * 8;
+        const count = stts.buf.readUInt32BE(off);
+        const delta = stts.buf.readUInt32BE(off + 4);
+        for (let j = 0; j < count; j++) perSampleDeltas.push(delta);
+    }
+}
+
+const mdhd = (() => {
+    const h = findFirstChild(fd, gpsTrak.mdia, stat.size, "mdhd");
+    if (!h) throw new Error("mdia missing mdhd");
+    return { h, buf: readBoxBuf(fd, h) };
+})();
+const mdhdVersion = mdhd.buf.readUInt8(mdhd.h.headerSize);
+const mediaTimescale = mdhdVersion === 1
+    ? mdhd.buf.readUInt32BE(mdhd.h.headerSize + 4 + 16)
+    : mdhd.buf.readUInt32BE(mdhd.h.headerSize + 4 + 8);
+
+// Expand per-sample absolute offsets.
+const sampleAbsOffsets = [];
+{
+    let sIdx = 0;
+    for (let ci = 0; ci < chunkOffsets.length && sIdx < sampleCount; ci++) {
+        let spc = 1;
+        for (const e of stscEntries) if (e.firstChunk <= ci + 1) spc = e.samplesPerChunk;
+        let off = chunkOffsets[ci];
+        for (let i = 0; i < spc && sIdx < sampleCount; i++) {
+            sampleAbsOffsets.push(off);
+            off += SAMPLE_SIZE;
+            sIdx++;
+        }
+    }
+}
+
+// Step 4: read + redact samples.
+let fixCount = 0;
+let junkCount = 0;
+const sampleBuffers = sampleAbsOffsets.map((off) => {
+    const buf = Buffer.alloc(SAMPLE_SIZE);
+    readSync(fd, buf, 0, SAMPLE_SIZE, off);
+    const flags = buf.readUInt16LE(22);
+    if (!FLAGS_BASES.includes(flags & ~FLAGS_FIX_BIT)) {
+        // Unclassifiable row: scrub everything but the flags word, so unknown
+        // content never reaches the fixture while the row still fails decode.
+        buf.fill(0);
+        buf.writeUInt16LE(flags, 22);
+        junkCount++;
+    } else if (flags & FLAGS_FIX_BIT) {
+        // Whole-degree rounding is the anonymization: ~110 km precision.
+        buf.writeDoubleLE(Math.round(buf.readDoubleLE(0)), 0);
+        buf.writeDoubleLE(Math.round(buf.readDoubleLE(8)), 8);
+        fixCount++;
+    }
+    return buf;
+});
+closeSync(fd);
+console.error(
+    `kept ${sampleBuffers.length} samples (${fixCount} fix rows redacted, ${junkCount} foreign rows scrubbed, timescale=${mediaTimescale})`,
+);
+
+// Step 5: minimal MP4 with a single meta/ssmd trak.
+const hdlrNew = (() => {
+    const p = Buffer.alloc(33);
+    fourCC("meta").copy(p, 8);
+    return box("hdlr", p);
+})();
+
+let totalDuration = 0;
+for (let i = 0; i < sampleBuffers.length; i++) totalDuration += perSampleDeltas[i] ?? 0;
+
+const mdhdNew = (() => {
+    const p = Buffer.alloc(24);
+    // creation/modification stay 0 - matches the real firmware.
+    p.writeUInt32BE(mediaTimescale, 12);
+    p.writeUInt32BE(totalDuration, 16);
+    p.writeUInt16BE(0x55c4, 20); // language 'und'
+    return box("mdhd", p);
+})();
+
+const stsdNew = (() => {
+    const entry = Buffer.alloc(16);
+    entry.writeUInt32BE(16, 0);
+    fourCC("ssmd").copy(entry, 4);
+    return box("stsd", Buffer.concat([Buffer.alloc(4), u32be(1), entry]));
+})();
+
+// Real stts cadence, run-length grouped.
+const sttsNew = (() => {
+    const runs = [];
+    let curDelta = -1;
+    let curCount = 0;
+    for (let i = 0; i < sampleBuffers.length; i++) {
+        const d = perSampleDeltas[i] ?? 0;
+        if (d === curDelta) curCount++;
+        else {
+            if (curCount > 0) runs.push({ count: curCount, delta: curDelta });
+            curDelta = d;
+            curCount = 1;
+        }
+    }
+    if (curCount > 0) runs.push({ count: curCount, delta: curDelta });
+    return box(
+        "stts",
+        Buffer.concat([Buffer.alloc(4), u32be(runs.length), ...runs.flatMap((r) => [u32be(r.count), u32be(r.delta)])]),
+    );
+})();
+
+const stscNew = box("stsc", Buffer.concat([Buffer.alloc(4), u32be(1), u32be(1), u32be(sampleBuffers.length), u32be(1)]));
+// Header-fixed stsz like the real firmware writes.
+const stszNew = box("stsz", Buffer.concat([Buffer.alloc(4), u32be(SAMPLE_SIZE), u32be(sampleBuffers.length)]));
+const stcoPlaceholder = box("stco", Buffer.concat([Buffer.alloc(4), u32be(1), u32be(0)]));
+
+const dinf = box(
+    "dinf",
+    box("dref", Buffer.concat([Buffer.alloc(4), u32be(1), u32be(12), fourCC("url "), Buffer.from([0, 0, 0, 1])])),
+);
+const stblNew = box("stbl", Buffer.concat([stsdNew, sttsNew, stscNew, stszNew, stcoPlaceholder]));
+const minfNew = box("minf", Buffer.concat([dinf, stblNew]));
+const mdiaNew = box("mdia", Buffer.concat([mdhdNew, hdlrNew, minfNew]));
+
+const tkhdNew = (() => {
+    const p = Buffer.alloc(84);
+    p.writeUInt32BE(7, 0); // version 0, flags enabled+in-movie+in-preview
+    p.writeUInt32BE(1, 12); // track_id
+    p.writeUInt32BE(totalDuration, 20);
+    return box("tkhd", p);
+})();
+
+const trakNew = box("trak", Buffer.concat([tkhdNew, mdiaNew]));
+const mvhdNew = (() => {
+    const p = Buffer.alloc(108);
+    p.writeUInt32BE(1000, 12); // timescale
+    // creation/duration stay 0 - the extractor must anchor to the filename.
+    return box("mvhd", p);
+})();
+const moovNew = box("moov", Buffer.concat([mvhdNew, trakNew]));
+const ftypNew = box("ftyp", Buffer.concat([fourCC("isom"), u32be(512), fourCC("isom"), fourCC("iso2"), fourCC("mp41")]));
+const mdat = box("mdat", Buffer.concat(sampleBuffers));
+
+// Patch the single chunk offset now that sizes are known.
+const mdatPayloadOffset = ftypNew.length + moovNew.length + 8;
+const stcoPos = moovNew.indexOf(stcoPlaceholder);
+const moovPatched = Buffer.from(moovNew);
+moovPatched.writeUInt32BE(mdatPayloadOffset, stcoPos + 8 + 4 + 4);
+
+const out = Buffer.concat([ftypNew, moovPatched, mdat]);
+writeFileSync(outputPath, out);
+console.error(`wrote ${out.length} bytes to ${outputPath}`);

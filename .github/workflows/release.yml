@@ -1,0 +1,314 @@
+# Release: a `v*` tag is the single promotion ritual. It (a) builds the site
+# with the production env and uploads it to Cloudflare Pages via wrangler
+# (the `deploy` job; deploy mechanics: docs/deploy.md),
+# (b) fast-forwards the machine-managed `release` branch so the repo records
+# what production runs, (c) publishes the prebuilt dist/ as a GitHub Release
+# (versioned zip + fixed-name tar.gz + ghcr image) for self-hosters who don't
+# want the Node toolchain (docs/self-hosting.md), and (d) pings IndexNow
+# after the deploy (the `ping` job; manual re-ping button: indexnow.yml).
+#
+# Trigger: push of a tag `v*` (cut from main - see docs/deploy.md, "Releases").
+# workflow_dispatch builds the same zip and uploads it as a run artifact
+# WITHOUT promoting or publishing a release - a dry-run for the artifact
+# pipeline.
+#
+# The build intentionally gets no VITE_*/SENTRY_* env: the published zip ships
+# with analytics and crash reporting compiled out (the tree-shake contract in
+# .env.example) - same env-less build ci.yml gates on every push. Unit tests
+# run here as a cheap sanity gate; the e2e suite already gated this code on
+# its way into main.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  # Book-keeping: move the `release` branch pointer to the tagged commit, so
+  # the repo records what production runs (the actual deploy is the `deploy`
+  # job below; CF does not build from git).
+  # force=false leaves the fast-forward check to the server: a non-fast-forward
+  # means the tag is not a descendant of the deployed history (tagged off the
+  # wrong base) and fails the job - resolve by hand, never force over it.
+  promote:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      # A ref update needs no working tree, and no clone depth can satisfy a
+      # git push here: checkout fetches the tag alone, so the runner cannot
+      # prove the fast-forward locally and git rejects it before contacting
+      # the server. The API moves the ref server-side, where the history is.
+      - name: Fast-forward release to the tagged commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # The commits API peels either tag kind to the commit; github.sha is
+          # the tag object for an annotated tag.
+          TAG_COMMIT="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_REF_NAME}" --jq .sha)"
+          echo "tag ${GITHUB_REF_NAME} -> commit ${TAG_COMMIT}"
+          # PATCH only updates an existing ref, so a repo that has never been
+          # promoted (a fresh clone of this setup, or this one re-created) needs
+          # the branch created once. Probed explicitly rather than by catching
+          # the 422: a non-fast-forward returns 422 too, and that one must stay
+          # fatal. Nothing to fast-forward from on creation.
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/release" >/dev/null 2>&1; then
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/heads/release" \
+              -f "sha=${TAG_COMMIT}" -F force=false
+          else
+            echo "no release branch yet - creating it at ${TAG_COMMIT}"
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f "ref=refs/heads/release" -f "sha=${TAG_COMMIT}"
+          fi
+
+  # Production deploy: a SECOND build, separate from the artifact one below -
+  # the site build carries the production env (Sentry crash reporting + source
+  # maps, the IndexNow key file), the artifact build stays env-less by
+  # contract. wrangler uploads dist/ as a deployment
+  # of `release` - the Pages project's production branch, which is what makes
+  # this THE production deploy (git plays no part - docs/deploy.md,
+  # "Deployment pipeline"). Forks without CF secrets
+  # self-skip and still get their GitHub Release from the jobs below.
+  deploy:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Check Cloudflare secrets
+        id: gate
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            echo "::notice::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID not set - production deploy is off for this repo, skipping"
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.deploy == 'true'
+        with:
+          # Full history: sitemap <lastmod> derives from git mtime
+          # (vite-plugins/git-mtime.ts); a shallow clone would drop it.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.deploy == 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+        if: steps.gate.outputs.deploy == 'true'
+
+      - name: Build (production env)
+        if: steps.gate.outputs.deploy == 'true'
+        env:
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}
+        run: npm run build
+
+      - name: Deploy to Cloudflare Pages (production branch release)
+        if: steps.gate.outputs.deploy == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # HEAD is the peeled commit even for an annotated tag - GITHUB_SHA
+          # would be the tag object.
+          npx wrangler@4.114.0 pages deploy dist \
+            --project-name=dashcamigo \
+            --branch=release \
+            --commit-hash="$(git rev-parse HEAD)" \
+            --commit-dirty=false
+
+  # IndexNow ping, chained after the production deploy. Engines fetch the
+  # submitted URLs and the served key file when they process a ping, so it
+  # must run against the live site - and as its own job so a ping failure
+  # cannot fail the deploy it follows. Red here with a green deploy = re-run
+  # the ping manually (indexnow.yml); the site is already live.
+  ping:
+    if: github.event_name == 'push'
+    needs: [deploy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Ping IndexNow engines
+        env:
+          INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}
+        run: |
+          if [ -z "${INDEXNOW_KEY}" ]; then
+            echo "::notice::INDEXNOW_KEY secret is not set - IndexNow is off for this repo, skipping"
+            exit 0
+          fi
+          node scripts/indexnow-ping.mjs
+
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      # Build-provenance attestation (attest step below).
+      id-token: write
+      attestations: write
+      # ghcr.io image push (container image step below).
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: sitemap <lastmod> derives from git mtime
+          # (vite-plugins/git-mtime.ts); a shallow clone would drop it.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build (no env - analytics/crash-reporting compiled out)
+        run: npm run build
+
+      # Build first: src/csp-hash.integration.test.ts asserts against dist/
+      # artifacts (same ordering rationale as ci.yml).
+      - name: Unit tests (vitest)
+        run: npm test
+
+      - name: Pack dist
+        id: pack
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            VERSION="dev-$(git rev-parse --short HEAD)"
+          fi
+          # Two archives of the same staged tree:
+          #   - versioned zip - the browser-download asset, version visible in
+          #     the filename;
+          #   - fixed-name tar.gz - the target of the copy-paste one-liner in
+          #     README / docs/self-hosting.md. releases/latest/download/<asset>
+          #     only resolves an asset whose name is stable across releases.
+          # The top-level folder is a fixed "dashcamigo" (not versioned) so the
+          # one-liner can `npx serve dashcamigo` without knowing the version;
+          # the version lives in the tag and in the app's baked build id. A
+          # single top-level folder, because a CLI `unzip` / `tar x` must not
+          # spray 40 entries into the user's cwd.
+          ZIP="dashcamigo-${VERSION}.zip"
+          TGZ="dashcamigo.tar.gz"
+          STAGE="dashcamigo"
+          cp -R dist "${STAGE}"
+          cp LICENSE "${STAGE}/"
+          zip -qr9 "${ZIP}" "${STAGE}"
+          tar -czf "${TGZ}" "${STAGE}"
+          sha256sum "${ZIP}" "${TGZ}" > SHA256SUMS
+          echo "zip=${ZIP}" >> "$GITHUB_OUTPUT"
+          echo "tgz=${TGZ}" >> "$GITHUB_OUTPUT"
+          unzip -l "${ZIP}" | tail -2
+
+      # Binds the zip's and SHA256SUMS' sha256 digests to this workflow run
+      # (repo, workflow file, commit) via Sigstore. Verification commands for
+      # users: docs/self-hosting.md. Runs BEFORE publish so an attestation
+      # failure leaves a re-runnable draft, not an immutable release without
+      # provenance. Pinned to a commit SHA: this step holds id-token: write, a
+      # moving tag is too much trust for it. Gated on visibility because
+      # attestations are free on public repos but need Enterprise Cloud on a
+      # private one - the step turns itself on when the repo goes public,
+      # instead of failing the whole job (and with it the image push and the
+      # release) while it is not.
+      - name: Attest build provenance (public repo, tag push only)
+        if: github.event_name == 'push' && !github.event.repository.private
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4
+        with:
+          subject-path: |
+            ${{ steps.pack.outputs.zip }}
+            ${{ steps.pack.outputs.tgz }}
+            SHA256SUMS
+
+      # Prebuilt container image: the SAME dist/ this run built, tested and
+      # attested, wrapped in nginx (docker/Dockerfile.prebuilt) - NOT a second
+      # in-Docker rebuild, so the image serves byte-identical files to the
+      # zip/tar.gz. The context is staged by hand: the root .dockerignore
+      # excludes dist/ (correct for the self-build Dockerfile), and an explicit
+      # minimal context beats fighting per-Dockerfile ignore rules. Pushed
+      # BEFORE the release publish: image tags are re-pushable, a published
+      # release is immutable - so a failed push here leaves a re-runnable
+      # draft, while the reverse order could strand a release without its
+      # image. The builder is created explicitly: the runner's default
+      # "docker" driver cannot push a multi-platform manifest. On
+      # workflow_dispatch the multi-arch build runs and is discarded - the
+      # dry-run validates this step too, publishing nothing.
+      - name: Publish container image (dry-run builds without pushing)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY}"
+          mkdir image-ctx
+          cp -R dist image-ctx/dist
+          cp docker/nginx.conf image-ctx/
+          docker buildx create --use
+          PUSH="--push"
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            PUSH=""
+          else
+            echo "${GH_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+          fi
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            -f docker/Dockerfile.prebuilt \
+            -t "${IMAGE}:${GITHUB_REF_NAME}" \
+            -t "${IMAGE}:latest" \
+            ${PUSH} image-ctx
+
+      # Draft-then-publish: with release immutability enabled (repo setting,
+      # docs/deploy.md) assets lock at PUBLISH time, so they must all be attached
+      # while the release is still a draft. A published release can never be
+      # updated - a re-release is a new tag, so a re-run of a released tag
+      # fails loudly instead of overwriting.
+      - name: Publish release (tag push only)
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          ZIP="${{ steps.pack.outputs.zip }}"
+          TGZ="${{ steps.pack.outputs.tgz }}"
+          isDraft="$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null || echo absent)"
+          if [ "$isDraft" = "false" ]; then
+            echo "::error::release $TAG is already published (immutable) - cut a new tag instead of re-running"
+            exit 1
+          elif [ "$isDraft" = "true" ]; then
+            # Leftover draft from an interrupted run - drafts are still mutable.
+            gh release delete "$TAG" --yes
+          fi
+          gh release create "$TAG" "$ZIP" "$TGZ" SHA256SUMS \
+            --draft --verify-tag --generate-notes --title "dashcamigo $TAG"
+          gh release edit "$TAG" --draft=false
+
+      - name: Upload dry-run artifact (manual run only)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pack.outputs.zip }}
+          path: |
+            ${{ steps.pack.outputs.zip }}
+            ${{ steps.pack.outputs.tgz }}
+            SHA256SUMS
+          retention-days: 7

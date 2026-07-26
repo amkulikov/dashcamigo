@@ -1,0 +1,122 @@
+/* ===== Site footer =======================================================
+   The last element inside .landing (the scroll container), so it scrolls with
+   the content rather than staying docked to the viewport edge - a docked strip
+   wrapped into several link rows on phones and permanently ate viewport
+   height. Visibility is inherited: .landing is display:none outside
+   body.no-trips, so in app-mode the footer is hidden with it (privacy is
+   reachable there via the settings-modal). No border-top / explicit background
+   - it doesn't cut the page with a horizontal line. Contains the word
+   "Privacy" in a link, as CalOPPA wants it: clear and conspicuous.
+
+   Two centered rows on one axis: links, then the "built with" credits half a
+   step quieter. Both rows separate their items with a middot rather than wide
+   gaps - wrapped, a row then reads as a sentence instead of a ragged column,
+   which is what a phone gets.
+   ========================================================================= */
+.site-footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--dc-space-2);
+    text-align: center;
+    /* Scrolled to the end, the footer sits against the physical bottom edge, so
+       fold in the iOS safe-area insets: links must clear the home indicator
+       (bottom) and a landscape side-notch (either side - rotation can put the
+       notch on either side). env()=0 elsewhere, so desktop/non-notched padding
+       is byte-identical to before. */
+    padding: var(--dc-space-5) max(clamp(16px, 4vw, 48px), env(safe-area-inset-right, 0px))
+        calc(var(--dc-space-4) + env(safe-area-inset-bottom, 0px))
+        max(clamp(16px, 4vw, 48px), env(safe-area-inset-left, 0px));
+    font-size: var(--dc-text-xs);
+    color: var(--fg-mute);
+}
+
+/* Flex, so the gap between items is the gap - inline flow would spend a
+   collapsible source whitespace on it, and the HTML minifier drops that
+   whitespace wherever a comment sat between two links, leaving some of the
+   separators glued to the next word. Each item carries its own separator
+   (::after below), so wrapping still cannot start a line with a dot. */
+.site-footer-links,
+.site-footer-credits {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: baseline;
+    column-gap: 0.5em;
+    row-gap: var(--dc-space-1);
+    margin: 0;
+}
+
+.site-footer-link {
+    color: var(--fg-mute);
+    /* A label never breaks mid-phrase: "Privacy policy" wrapping between its
+       two words reads as two separate links. The longest label in any locale
+       still fits a 320px-wide phone line. */
+    white-space: nowrap;
+    text-decoration: underline;
+    text-decoration-color: transparent;
+    text-underline-offset: 3px;
+    transition:
+        color var(--dc-dur-base) var(--dc-ease),
+        text-decoration-color var(--dc-dur-base) var(--dc-ease);
+    opacity: 0.7;
+}
+.site-footer-link:hover,
+.site-footer-link:focus-visible {
+    color: var(--accent);
+    text-decoration-color: currentColor;
+    opacity: 1;
+}
+
+/* Marks (the repo mark, the credit logos) ride the text baseline instead of
+   making their link a flex box: the rows are one inline flow, so an item and
+   its separator cannot be split apart by a wrap. */
+.site-footer-link--repo svg,
+.site-footer-credit-logo {
+    display: inline-block;
+    vertical-align: -0.3em;
+    margin-inline-end: 5px;
+}
+
+/* Separators. Generated inside the item they follow, so a wrap can only happen
+   AFTER the dot: a line ends with "Terms of use ·" and the next one starts on
+   a word. inline-block keeps the hover underline off it, and the pinned color
+   keeps it from lighting up with the link. */
+.site-footer-link:not(:last-child)::after,
+.site-footer-credit:not(:last-child)::after {
+    content: "·";
+    display: inline-block;
+    /* Mirrors the container's column-gap, so the dot sits midway between the
+       two items rather than hugging one of them. */
+    margin-inline-start: 0.5em;
+    color: var(--fg-mute);
+    opacity: 0.55;
+}
+
+/* Half a step quieter than the links row: it is attribution, not navigation. */
+.site-footer-credits {
+    opacity: 0.75;
+}
+.site-footer-credits-label {
+    opacity: 0.7;
+    margin-inline-end: 0.15em;
+}
+.site-footer-credit {
+    color: var(--fg-mute);
+    text-decoration: none;
+    opacity: 0.75;
+    /* The name must not be split from its logo when the row wraps. */
+    white-space: nowrap;
+    transition:
+        color var(--dc-dur-base) var(--dc-ease),
+        opacity var(--dc-dur-base) var(--dc-ease);
+}
+.site-footer-credit:hover,
+.site-footer-credit:focus-visible {
+    color: var(--fg);
+    opacity: 1;
+}
+.site-footer-credit-logo {
+    width: 18px;
+    height: 18px;
+}

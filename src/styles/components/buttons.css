@@ -1,0 +1,108 @@
+/* =========================================================================
+   BUTTONS - the project-wide button primitive.
+   --------------------------------------------------------------------------
+   One base geometry (.dc-btn) + four semantic variants
+   (--primary / --secondary / --ghost / --danger) + size modifiers
+   (--lg hero, --block full-width). Single source of truth for buttons in
+   modals, banners, panels and the landing hero. Bespoke per-component button
+   classes used to fold the focus ring and :disabled state inconsistently (the
+   export action had neither); they migrate onto this.
+
+   Canonical label size is --dc-text-md (the dominant button size in practice);
+   primary uses the semantic --accent, not the raw --dc-orange.
+   ========================================================================= */
+.dc-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--dc-space-2);
+    border: 1px solid transparent;
+    border-radius: var(--dc-radius-sm);
+    padding: var(--dc-space-2) var(--dc-space-4);
+    font-family: var(--dc-font-body);
+    font-size: var(--dc-text-md);
+    font-weight: 600;
+    line-height: var(--dc-leading-snug);
+    cursor: pointer;
+    /* Buttons carry no copy a user needs to select; suppressing selection also
+       stops the iOS long-press text loupe from hijacking a press. */
+    user-select: none;
+    transition:
+        background var(--dc-dur-fast) var(--dc-ease),
+        color var(--dc-dur-fast) var(--dc-ease),
+        border-color var(--dc-dur-fast) var(--dc-ease),
+        transform var(--dc-dur-fast) var(--dc-ease);
+}
+.dc-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+.dc-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+/* Pressed feedback - the only press signal on touch, where :hover never fires.
+   Variant-agnostic nudge; disabled stays flat. */
+.dc-btn:active:not(:disabled) {
+    transform: translateY(1px);
+}
+/* Touch floor for the shared primitive: text CTAs built on .dc-btn (dialog
+   Close/Got it, feedback Send/Cancel, onboarding Back/Next) otherwise compute
+   ~34px tall. The banner overrides only shrink padding, so min-height still
+   applies there. */
+@media (pointer: coarse) {
+    .dc-btn {
+        min-height: var(--dc-iconbtn-touch);
+    }
+}
+
+/* Primary: orange fill, the affirmative CTA (Allow, Close, Install, Export). */
+.dc-btn--primary {
+    background: var(--accent);
+    color: var(--dc-black);
+    border-color: var(--accent);
+}
+.dc-btn--primary:hover:not(:disabled) {
+    background: var(--accent-hot);
+    border-color: var(--accent-hot);
+}
+/* The shared focus ring is orange; on the orange-filled primary that ring is
+   weak against a light-theme surface (~2:1, below the 3:1 non-text target).
+   Swap to --fg so the ring reads strongly on both themes and stays distinct
+   from the fill. */
+.dc-btn--primary:focus-visible {
+    outline-color: var(--fg);
+}
+
+/* Ghost: muted text, no border, low-emphasis dismiss (Decline, Not now). */
+.dc-btn--ghost {
+    background: transparent;
+    color: var(--fg-mute);
+}
+.dc-btn--ghost:hover:not(:disabled) {
+    background: var(--bg-hover);
+    color: var(--fg);
+}
+
+/* Secondary: outlined neutral - paired with a destructive primary and used for
+   low-emphasis actions in settings rows. */
+.dc-btn--secondary {
+    background: transparent;
+    color: var(--fg);
+    border-color: var(--border-strong);
+}
+.dc-btn--secondary:hover:not(:disabled) {
+    background: var(--bg-hover);
+    border-color: var(--accent);
+}
+
+/* Danger: outlined in the error color, fills on hover (Reset everything). */
+.dc-btn--danger {
+    background: transparent;
+    color: var(--err);
+    border-color: var(--err);
+}
+.dc-btn--danger:hover:not(:disabled) {
+    background: var(--err);
+    color: var(--dc-black);
+}

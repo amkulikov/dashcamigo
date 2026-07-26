@@ -1,0 +1,659 @@
+// Tests for the SEO build pipeline. Run rendering in-memory (no file IO)
+// by directly invoking the helpers exported from seo-prerender.ts on a
+// representative source HTML fragment.
+
+import { describe, expect, it } from "vitest";
+
+import { dynamicBaselinePlugin } from "../../vite-plugins/dynamic-baseline.js";
+import { stringifyJsonLd } from "../../vite-plugins/html-utils.js";
+import { applyLocale, getPrerenderLocales, getSeoLocales } from "../../vite-plugins/seo-prerender.js";
+import { SUPPORTED_BRANDS, getAllBrandsCommaSeparated } from "../../vite-plugins/supported-brands.js";
+import { assertCommunityFaqParity, getVendorSitemapEntries, matchVendorRoute } from "../../vite-plugins/vendor-pages.js";
+import { SEO_LOCALES, getHreflangCodes, getIndexableSeoLocales } from "./seo-config.js";
+
+describe("getPrerenderLocales", () => {
+    it("returns one entry per indexable locale", () => {
+        const locales = getPrerenderLocales();
+        expect(locales.length).toBe(getIndexableSeoLocales().length);
+    });
+
+    it("backwards-compat alias getSeoLocales matches", () => {
+        expect(getSeoLocales().length).toBe(getPrerenderLocales().length);
+    });
+
+    it("every entry has an og title and description (either from override or derived)", () => {
+        for (const loc of getPrerenderLocales()) {
+            expect(loc.ogTitle.length).toBeGreaterThan(0);
+            expect(loc.ogDescription.length).toBeGreaterThan(0);
+            expect(loc.twitterDescription.length).toBeGreaterThan(0);
+        }
+    });
+
+    it("derived og title strips the site-name tail when present", () => {
+        // For locales without hand-written overrides, og title should be
+        // page.title minus the " | dashcamigo" SERP tail. Check at least one
+        // locale where derivation kicks in (de has no OG_OVERRIDES entry).
+        const de = getPrerenderLocales().find((l) => l.seo.lang === "de");
+        expect(de).toBeDefined();
+        expect(de?.ogTitle.includes(" | dashcamigo"), "OG title must not carry the SERP site-name tail").toBe(false);
+    });
+});
+
+describe("vendor sitemap entries", () => {
+    const entries = getVendorSitemapEntries();
+    const indexable = getIndexableSeoLocales();
+
+    it("includes /cameras/ index entry for every indexable locale", () => {
+        // 12 indexable locales × 1 /cameras/ index = 12 entries.
+        const indexEntries = entries.filter((e) => /\/cameras\/$/.test(e.loc));
+        expect(indexEntries.length).toBe(indexable.length);
+    });
+
+    it("includes 7 vendor pages × every indexable locale (84 entries)", () => {
+        const vendorEntries = entries.filter((e) => /\/cameras\/[^/]+\/$/.test(e.loc));
+        // 7 vendors × 12 locales = 84.
+        expect(vendorEntries.length).toBe(7 * indexable.length);
+    });
+
+    it("every entry URL ends with '/' (Cloudflare Pages trailing-slash invariant)", () => {
+        for (const entry of entries) {
+            expect(entry.loc, `entry ${entry.loc} must end with slash`).toMatch(/\/$/);
+            for (const alt of Object.values(entry.alternates)) {
+                expect(alt, `alternate ${alt} must end with slash`).toMatch(/\/$/);
+            }
+        }
+    });
+
+    it("every entry has alternates for every hreflang code incl. generic aliases (bidirectional complete graph)", () => {
+        const expectedHreflangs = new Set(indexable.flatMap((l) => getHreflangCodes(l)));
+        for (const entry of entries) {
+            const got = new Set(Object.keys(entry.alternates));
+            expect(got, `alternates for ${entry.loc}`).toEqual(expectedHreflangs);
+        }
+    });
+
+    it("generic pt alias targets the same URL as pt-BR in every entry", () => {
+        // pt-BR carries the extraHreflangs ["pt"] alias - both codes must
+        // resolve to the /pt/ variant of the SAME page, never diverge.
+        for (const entry of entries) {
+            expect(entry.alternates.pt, `pt alias for ${entry.loc}`).toBeDefined();
+            expect(entry.alternates.pt).toBe(entry.alternates["pt-BR"]);
+        }
+    });
+
+    it("alternates for vendor pages target the SAME vendor across locales (not site root)", () => {
+        // Pick the 70mai entry from the EN locale; its de alternate must be
+        // /de/cameras/70mai/, not /de/. English now lives under /en/ like
+        // every other locale, not at /.
+        const enVendor = entries.find((e) => e.loc === "https://dashcamigo.app/en/cameras/70mai/");
+        expect(enVendor).toBeDefined();
+        expect(enVendor?.alternates.de).toBe("https://dashcamigo.app/de/cameras/70mai/");
+        expect(enVendor?.alternates.ja).toBe("https://dashcamigo.app/ja/cameras/70mai/");
+    });
+});
+
+describe("community vendor FAQ parity (T4)", () => {
+    it("has a count-matching FAQ translation for every vendor × community locale", () => {
+        // Same guard the build runs in closeBundle: every indexable locale that
+        // falls back to VENDOR_TEMPLATES must have a COMMUNITY_FAQ block whose
+        // item count matches the en source. Throws with the offending
+        // vendor/lang list otherwise.
+        expect(() => assertCommunityFaqParity()).not.toThrow();
+    });
+});
+
+describe("hreflang graph completeness", () => {
+    // Spec invariant: every locale must reference every other locale + itself
+    // + x-default. This test catches drift where a locale is added to
+    // SEO_LOCALES but not surfaced in alternates somewhere.
+    it("homepage alternates map (used by sitemapPlugin) covers every indexable locale", () => {
+        const indexable = getIndexableSeoLocales();
+        const hreflangSet = new Set(indexable.map((l) => l.hreflang));
+        expect(hreflangSet.size).toBe(indexable.length); // each hreflang distinct
+    });
+
+    it("hreflang values across SEO_LOCALES are unique, generic aliases included", () => {
+        // Aliases live in the same namespace as primary codes - a duplicate
+        // (e.g. two locales both claiming "pt") would make the cluster
+        // ambiguous for crawlers.
+        const hreflangs = SEO_LOCALES.flatMap((l) => getHreflangCodes(l));
+        expect(new Set(hreflangs).size).toBe(hreflangs.length);
+    });
+
+    it("every locale has a non-empty urlSegment - root is a redirect stub, not a locale", () => {
+        for (const loc of SEO_LOCALES) {
+            expect(loc.urlSegment, `${loc.lang} must have non-empty urlSegment`).not.toBe("");
+        }
+    });
+
+    it("English is the default locale at /en/", () => {
+        const en = SEO_LOCALES.find((l) => l.lang === "en");
+        expect(en?.urlSegment).toBe("en");
+    });
+});
+
+// Minimal HTML fragment that mimics the post-minification baseline. Mirrors
+// the structure index.html ships: <html lang>, canonical, content-language,
+// 12 hreflang + x-default, og:locale + 11 og:locale:alternate, og:* / twitter:*
+// meta with content tags, WebApplication JSON-LD anchored by id, FAQ JSON-LD,
+// one data-i18n element, one data-i18n-attr element, one /cameras/ link.
+// Kept here (not in a fixture file) so a single test can verify all rewrites.
+function buildMinimalBaseline(): string {
+    return [
+        '<!doctype html><html lang="en"><head>',
+        '<link href="https://dashcamigo.app/" rel="canonical">',
+        '<meta content="en-US" http-equiv="content-language">',
+        // hreflang block - matches the attribute order html-minifier-terser
+        // produces (href, rel, hreflang) in the real dist/ output.
+        '<link href="https://dashcamigo.app/de/" rel="alternate" hreflang="de">',
+        '<link href="https://dashcamigo.app/" rel="alternate" hreflang="en">',
+        '<link href="https://dashcamigo.app/ru/" rel="alternate" hreflang="ru">',
+        '<link href="https://dashcamigo.app/" rel="alternate" hreflang="x-default">',
+        // og + twitter
+        '<meta content="https://dashcamigo.app/" property="og:url">',
+        '<meta content="Old EN title" property="og:title">',
+        '<meta content="Old EN description" property="og:description">',
+        '<meta content="https://dashcamigo.app/og-cover.png" property="og:image">',
+        '<meta content="en_US" property="og:locale">',
+        '<meta content="ru_RU" property="og:locale:alternate">',
+        '<meta content="de_DE" property="og:locale:alternate">',
+        '<meta name="twitter:title" content="Old EN title">',
+        '<meta name="twitter:description" content="Old EN twitter">',
+        '<meta name="twitter:image" content="https://dashcamigo.app/og-cover.png">',
+        // WebApplication JSON-LD with explicit id
+        '<script id="webapp-jsonld" type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","description":"OLD EN","url":"https://dashcamigo.app/","inLanguage":["en","ru"],"featureList":["x"]}</script>',
+        // FAQ JSON-LD (different id, should not be confused with WebApp)
+        '<script id="faq-jsonld" type="application/ld+json">{"@type":"FAQPage","mainEntity":[]}</script>',
+        "</head><body>",
+        '<a href="/cameras/70mai/">vendor chip</a>',
+        '<h1 data-i18n="page.title">EN literal</h1>',
+        '<meta content="EN-only-fallback" data-i18n-attr="content:meta.description" name="description">',
+        // i18n dictionary data island - empty in the baseline, filled per locale.
+        '<script id="dc-i18n" type="application/json"></script>',
+        "</body></html>",
+    ].join("");
+}
+
+describe("applyLocale", () => {
+    const ru = getPrerenderLocales().find((l) => l.seo.lang === "ru");
+    if (!ru) throw new Error("test setup: ru locale missing from getPrerenderLocales");
+
+    const out = applyLocale(buildMinimalBaseline(), ru, {});
+
+    it("flips <html lang> to the target locale", () => {
+        expect(out).toContain('<html lang="ru">');
+    });
+
+    it("rewrites canonical to the self-referencing locale URL", () => {
+        expect(out).toMatch(/<link[^>]*href="https:\/\/dashcamigo\.app\/ru\/"[^>]*rel="canonical"/);
+    });
+
+    it("rewrites og:url to the self-referencing locale URL", () => {
+        expect(out).toMatch(/<meta[^>]*content="https:\/\/dashcamigo\.app\/ru\/"[^>]*property="og:url"/);
+    });
+
+    it("rewrites content-language to BCP47 hyphen form", () => {
+        expect(out).toMatch(/<meta[^>]*content="ru-RU"[^>]*http-equiv="content-language"/);
+    });
+
+    it("rewrites og:locale to the BCP47 underscore form for self", () => {
+        expect(out).toMatch(/<meta[^>]*content="ru_RU"[^>]*property="og:locale">/);
+    });
+
+    it("rebuilds og:locale:alternate listing N-1 other locales (no self)", () => {
+        const alts = [...out.matchAll(/<meta[^>]*property="og:locale:alternate"[^>]*>/g)];
+        const indexable = getIndexableSeoLocales();
+        expect(alts.length).toBe(indexable.length - 1);
+        // self (ru_RU) must not appear in alternates
+        expect(alts.every((m) => !m[0].includes("ru_RU"))).toBe(true);
+        // every other locale must appear once
+        for (const loc of indexable) {
+            if (loc.lang === "ru") continue;
+            expect(alts.some((m) => m[0].includes(loc.ogLocale))).toBe(true);
+        }
+    });
+
+    it("rebuilds the hreflang cluster to the full graph + x-default", () => {
+        const links = [...out.matchAll(/<link[^>]*\bhreflang="([^"]+)"[^>]*>/g)];
+        const hreflangs = links.map((m) => m[1]);
+        // every hreflang code (generic aliases included) appears exactly once
+        for (const loc of getIndexableSeoLocales()) {
+            for (const code of getHreflangCodes(loc)) {
+                expect(hreflangs.filter((h) => h === code).length, `code ${code}`).toBe(1);
+            }
+        }
+        expect(hreflangs).toContain("x-default");
+    });
+
+    it("generic pt alias link targets the same URL as the pt-BR link", () => {
+        const links = [...out.matchAll(/<link[^>]*\bhreflang="([^"]+)"[^>]*\bhref="([^"]+)"[^>]*>/g)].map((m) => [m[1], m[2]] as const);
+        const byCode = new Map(links);
+        expect(byCode.get("pt")).toBeDefined();
+        expect(byCode.get("pt")).toBe(byCode.get("pt-BR"));
+    });
+
+    it("rewrites WebApplication JSON-LD description, url, inLanguage, featureList", () => {
+        const match = /<script[^>]*id="webapp-jsonld"[^>]*>([\s\S]*?)<\/script>/.exec(out);
+        expect(match).not.toBeNull();
+        const payload = JSON.parse(match![1]!);
+        expect(payload.description).toBe(ru.dict["meta.description"]);
+        expect(payload.url).toBe("https://dashcamigo.app/ru/");
+        expect(payload.inLanguage).toEqual(getIndexableSeoLocales().map((l) => l.hreflang));
+        // featureList: existing capability entries are preserved verbatim, a
+        // single "vendor support" entry is appended/rewritten from SUPPORTED_BRANDS.
+        expect(payload.featureList).toContain("x");
+        const vendorLine = payload.featureList.find((s: unknown) => typeof s === "string" && s.endsWith("vendor support"));
+        expect(vendorLine).toBeDefined();
+        // Vendor line must include the full SUPPORTED_BRANDS list (13 names).
+        expect(vendorLine).toMatch(/70mai.*Viofo.*BlackVue.*Vantrue.*Thinkware.*RVMI/);
+    });
+
+    it("does not touch FAQ JSON-LD's @type (only id=webapp-jsonld is rewritten)", () => {
+        const match = /<script[^>]*id="faq-jsonld"[^>]*>([\s\S]*?)<\/script>/.exec(out);
+        expect(match).not.toBeNull();
+        const payload = JSON.parse(match![1]!);
+        expect(payload["@type"]).toBe("FAQPage");
+    });
+
+    it("replaces data-i18n textContent with dictionary value", () => {
+        // The h1 carried "EN literal" in the baseline; for ru it must be the
+        // dict's page.title (which we don't hardcode here, just assert non-EN).
+        expect(out).not.toContain("EN literal</h1>");
+        expect(out).toContain(`>${ru.dict["page.title"]}</h1>`);
+    });
+
+    it("rewrites internal /cameras/ links to /ru/cameras/", () => {
+        expect(out).toContain('href="/ru/cameras/70mai/"');
+        expect(out).not.toContain('href="/cameras/70mai/"');
+    });
+
+    it("applies the OG description override to og:description / twitter:description", () => {
+        // og:description / twitter:description must end up as the locale's
+        // purpose-built social-card copy (OG_OVERRIDES for ru), not the generic
+        // dict["meta.description"]. ru has an override, so the two differ.
+        expect(ru.ogDescription).not.toBe(ru.dict["meta.description"]);
+        expect(out).toContain(`content="${ru.ogDescription}" property="og:description"`);
+        expect(out).toContain(`name="twitter:description" content="${ru.twitterDescription}"`);
+    });
+
+    it("OG override wins even when og:description carries data-i18n-attr (swap-order regression guard)", () => {
+        // Reproduces the index.html shape that caused the bug: og:description with
+        // data-i18n-attr="content:meta.description". The data-i18n-attr swap runs
+        // first and rewrites content to dict["meta.description"]; the OG override
+        // must run AFTER it and win. If the override ever moves back before the
+        // swap, content reverts to meta.description and this assertion fails.
+        const baseline = buildMinimalBaseline().replace('<meta content="Old EN description" property="og:description">', '<meta content="Old EN description" property="og:description" data-i18n-attr="content:meta.description">');
+        const localized = applyLocale(baseline, ru, {});
+        expect(localized).toContain(`content="${ru.ogDescription}" property="og:description"`);
+    });
+
+    it("does NOT inject noindex when options.noIndex is false/undefined", () => {
+        expect(out).not.toContain('content="noindex');
+    });
+
+    it("injects noindex meta-robots when options.noIndex is true", () => {
+        const withNoIndex = applyLocale(buildMinimalBaseline(), ru, { noIndex: true });
+        expect(withNoIndex).toMatch(/<head><meta name="robots" content="noindex, nofollow">/);
+    });
+});
+
+describe("applyLocale on default (en) locale", () => {
+    const en = getPrerenderLocales().find((l) => l.seo.lang === "en");
+    if (!en) throw new Error("test setup: en locale missing");
+
+    it("rewrites /cameras/ links with the /en/ prefix like any other locale", () => {
+        const out = applyLocale(buildMinimalBaseline(), en, {});
+        // Since English moved to /en/, vendor chip links must carry the
+        // /en/ prefix just like /de/cameras/... or /ja/cameras/...
+        expect(out).toContain('href="/en/cameras/70mai/"');
+        expect(out).not.toContain('href="/cameras/70mai/"');
+    });
+
+    it("canonical points at /en/, the English locale's home", () => {
+        const out = applyLocale(buildMinimalBaseline(), en, {});
+        expect(out).toMatch(/<link[^>]*href="https:\/\/dashcamigo\.app\/en\/"[^>]*rel="canonical"/);
+    });
+
+    it("hreflang x-default points at the default locale's home (/en/), not at the root stub", () => {
+        const out = applyLocale(buildMinimalBaseline(), en, {});
+        // Uniform "English variant" x-default policy - homepage hreflang
+        // x-default targets /en/ same as sub-page x-default targets
+        // /en/cameras/<slug>/. Earlier policy pointed homepage x-default
+        // at "/", which is a content-less redirect stub and a poor
+        // fallback target for crawlers that follow x-default.
+        expect(out).toMatch(/<link[^>]*hreflang="x-default"[^>]*href="https:\/\/dashcamigo\.app\/en\/"/);
+    });
+});
+
+// Throw-on-missing-anchor guards. Each rewrite function in seo-prerender uses
+// a specific anchor in the baseline HTML; if the anchor disappears the rewrite
+// would silently degrade SEO. Plugins throw instead - these tests pin that
+// contract.
+describe("applyLocale throws when baseline is missing required anchors", () => {
+    const ru = getPrerenderLocales().find((l) => l.seo.lang === "ru");
+    if (!ru) throw new Error("test setup: ru locale missing");
+
+    function baselineWithout(...removeRes: RegExp[]): string {
+        let html = buildMinimalBaseline();
+        for (const re of removeRes) html = html.replace(re, "");
+        return html;
+    }
+
+    it("throws when hreflang block is absent", () => {
+        // Note: don't put `\b` after the closing quote of "alternate" - that
+        // boundary doesn't match (both `"` and the following space are
+        // non-word chars). The applyLocale regex itself has the same fix.
+        const html = baselineWithout(/<link[^>]*\brel="alternate"[^>]*\bhreflang="[^"]+"[^>]*>/gi);
+        expect(() => applyLocale(html, ru, {})).toThrow(/hreflang/);
+    });
+
+    it("throws when og:locale:alternate tags are absent", () => {
+        const html = baselineWithout(/<meta[^>]*\bproperty="og:locale:alternate"[^>]*>/gi);
+        expect(() => applyLocale(html, ru, {})).toThrow(/og:locale:alternate/);
+    });
+
+    it('throws when <script id="webapp-jsonld"> is absent', () => {
+        const html = buildMinimalBaseline().replace(/<script[^>]*id="webapp-jsonld"[^>]*>[\s\S]*?<\/script>/, "");
+        expect(() => applyLocale(html, ru, {})).toThrow(/webapp-jsonld/);
+    });
+
+    it('throws when the <script id="dc-i18n"> data island is absent', () => {
+        const html = buildMinimalBaseline().replace(/<script[^>]*id="dc-i18n"[^>]*>[\s\S]*?<\/script>/, "");
+        expect(() => applyLocale(html, ru, {})).toThrow(/dc-i18n/);
+    });
+});
+
+describe("applyLocale bakes the i18n dictionary island", () => {
+    const ru = getPrerenderLocales().find((l) => l.seo.lang === "ru");
+    if (!ru) throw new Error("test setup: ru locale missing");
+
+    it("fills #dc-i18n with the locale's dictionary as valid JSON", () => {
+        const out = applyLocale(buildMinimalBaseline(), ru, {});
+        const m = out.match(/<script[^>]*id="dc-i18n"[^>]*>([\s\S]*?)<\/script>/);
+        expect(m, "dc-i18n island must be present after applyLocale").not.toBeNull();
+        const parsed = JSON.parse(m![1]!) as Record<string, string>;
+        // The baked dictionary is the ru dict - spot-check a stable key.
+        expect(parsed["buckets.today"]).toBe(ru.dict["buckets.today"]);
+    });
+
+    it('escapes "<" so a value containing "</script>" cannot break out of the tag', () => {
+        const out = applyLocale(buildMinimalBaseline(), ru, {});
+        const m = out.match(/<script[^>]*id="dc-i18n"[^>]*>([\s\S]*?)<\/script>/);
+        expect(m).not.toBeNull();
+        // No raw "<" survives inside the island body (all escaped to <),
+        // so the non-greedy </script> match above captured the whole dict.
+        expect(m![1]).not.toContain("<");
+        // And it is still valid JSON that round-trips every key.
+        const parsed = JSON.parse(m![1]!) as Record<string, string>;
+        expect(Object.keys(parsed).length).toBe(Object.keys(ru.dict).length);
+    });
+});
+
+// rewriteFeatureList is exercised indirectly through applyLocale on
+// baselines with various featureList shapes. Tests the contract: vendor
+// support entries are rewritten to the current SUPPORTED_BRANDS list,
+// duplicates are dropped, capability entries survive, non-Array → single
+// brands line, missing entry → appended.
+describe("WebApplication featureList rewriting", () => {
+    const ru = getPrerenderLocales().find((l) => l.seo.lang === "ru");
+    if (!ru) throw new Error("test setup: ru locale missing");
+
+    function baselineWithFeatureList(featureList: unknown): string {
+        const jsonLd = {
+            "@context": "https://schema.org",
+            "@type": "WebApplication",
+            description: "OLD",
+            url: "https://dashcamigo.app/",
+            inLanguage: ["en"],
+            featureList,
+        };
+        return buildMinimalBaseline().replace(/<script[^>]*id="webapp-jsonld"[^>]*>[\s\S]*?<\/script>/, `<script id="webapp-jsonld" type="application/ld+json">${JSON.stringify(jsonLd)}</script>`);
+    }
+
+    function getFeatureList(out: string): unknown[] {
+        const m = /<script[^>]*id="webapp-jsonld"[^>]*>([\s\S]*?)<\/script>/.exec(out);
+        if (!m) throw new Error("no webapp-jsonld in output");
+        return JSON.parse(m[1]!).featureList;
+    }
+
+    it("preserves capability entries and rewrites the vendor-support line", () => {
+        const out = applyLocale(baselineWithFeatureList(["Plays MP4", "GPS map", "old vendor list vendor support"]), ru, {});
+        const fl = getFeatureList(out);
+        expect(fl).toContain("Plays MP4");
+        expect(fl).toContain("GPS map");
+        const vendorLine = fl.find((s): s is string => typeof s === "string" && s.endsWith("vendor support"));
+        expect(vendorLine).toContain(getAllBrandsCommaSeparated());
+        expect(fl.length).toBe(3); // no append, replaced in place
+    });
+
+    it("deduplicates multiple vendor-support entries", () => {
+        const out = applyLocale(baselineWithFeatureList(["A vendor support", "B vendor support"]), ru, {});
+        const fl = getFeatureList(out);
+        // Only ONE vendor-support line should remain (deduped).
+        const vendorLines = fl.filter((s): s is string => typeof s === "string" && s.endsWith("vendor support"));
+        expect(vendorLines.length).toBe(1);
+    });
+
+    it("is case-insensitive for vendor-support suffix", () => {
+        const out = applyLocale(baselineWithFeatureList(["X VENDOR SUPPORT"]), ru, {});
+        const fl = getFeatureList(out);
+        // Mixed-case entry should be replaced (not appended-to).
+        expect(fl.length).toBe(1);
+        expect(fl[0]).toContain(getAllBrandsCommaSeparated());
+    });
+
+    it("appends a vendor-support entry when none exists", () => {
+        const out = applyLocale(baselineWithFeatureList(["Plays MP4", "GPS map"]), ru, {});
+        const fl = getFeatureList(out);
+        expect(fl.length).toBe(3);
+        expect(fl[fl.length - 1]).toContain(getAllBrandsCommaSeparated());
+    });
+
+    it("returns single-entry list when featureList is not an array", () => {
+        const out = applyLocale(baselineWithFeatureList("not an array"), ru, {});
+        const fl = getFeatureList(out);
+        expect(fl.length).toBe(1);
+        expect(fl[0]).toContain(getAllBrandsCommaSeparated());
+    });
+
+    it("preserves non-string entries unchanged (schema.org allows objects)", () => {
+        const out = applyLocale(baselineWithFeatureList([{ "@type": "Thing", name: "Capability" }, "A vendor support"]), ru, {});
+        const fl = getFeatureList(out);
+        // Non-string entry should survive.
+        const obj = fl.find((e) => typeof e === "object" && e !== null);
+        expect(obj).toEqual({ "@type": "Thing", name: "Capability" });
+    });
+});
+
+// dynamic-baseline plugin: unit-test the transformIndexHtml handler directly.
+// The handler is a pure function of the input HTML, so we can call it via
+// the Plugin object and assert on its output.
+describe("dynamic-baseline transformIndexHtml", () => {
+    const plugin = dynamicBaselinePlugin();
+
+    function runHandler(html: string): string {
+        const t = plugin.transformIndexHtml;
+        if (typeof t !== "object" || t === null || !("handler" in t)) {
+            throw new Error("test setup: transformIndexHtml is not the object-with-handler form");
+        }
+        // ctx is unused by our handler, pass undefined cast.
+        const result = (t.handler as (h: string) => string | Promise<string>)(html);
+        if (typeof result !== "string") {
+            throw new Error("test setup: handler returned non-string (Promise?)");
+        }
+        return result;
+    }
+
+    const MIN_BASELINE = ["<html><head>", "<script>var K=__DC_LANGS__;</script>", "<!--__DC_HREFLANG__-->", '<meta property="og:locale" content="en_US">', "<!--__DC_OG_LOCALE_ALTERNATES__-->", "</head></html>"].join("");
+
+    it("replaces __DC_LANGS__ with JSON array of locale codes", () => {
+        const out = runHandler(MIN_BASELINE);
+        expect(out).not.toContain("__DC_LANGS__");
+        // Output should contain a JSON array with all locale codes.
+        for (const loc of SEO_LOCALES) {
+            expect(out).toContain(`"${loc.lang}"`);
+        }
+    });
+
+    it("expands hreflang marker to the full graph + x-default, generic aliases included", () => {
+        const out = runHandler(MIN_BASELINE);
+        expect(out).not.toContain("<!--__DC_HREFLANG__-->");
+        for (const loc of getIndexableSeoLocales()) {
+            for (const code of getHreflangCodes(loc)) {
+                expect(out).toContain(`hreflang="${code}"`);
+            }
+        }
+        expect(out).toContain('hreflang="x-default"');
+    });
+
+    it("expands og:locale:alternate marker to N-1 locales (skips default)", () => {
+        const out = runHandler(MIN_BASELINE);
+        expect(out).not.toContain("<!--__DC_OG_LOCALE_ALTERNATES__-->");
+        // og:locale:alternate cluster covers every NON-default indexable locale.
+        for (const loc of getIndexableSeoLocales()) {
+            if (loc.urlSegment === "") continue;
+            expect(out).toContain(`content="${loc.ogLocale}"`);
+        }
+    });
+
+    it("throws when __DC_LANGS__ placeholder is missing", () => {
+        const html = MIN_BASELINE.replace("__DC_LANGS__", "[]");
+        expect(() => runHandler(html)).toThrow(/__DC_LANGS__/);
+    });
+
+    it("throws when __DC_HREFLANG__ marker is missing", () => {
+        const html = MIN_BASELINE.replace("<!--__DC_HREFLANG__-->", "");
+        expect(() => runHandler(html)).toThrow(/__DC_HREFLANG__/);
+    });
+
+    it("throws when __DC_OG_LOCALE_ALTERNATES__ marker is missing", () => {
+        const html = MIN_BASELINE.replace("<!--__DC_OG_LOCALE_ALTERNATES__-->", "");
+        expect(() => runHandler(html)).toThrow(/__DC_OG_LOCALE_ALTERNATES__/);
+    });
+
+    it("throws when an unknown __DC_ token survives expansion (vocabulary drift)", () => {
+        const html = `${MIN_BASELINE}<!--__DC_FUTURE_PLACEHOLDER__-->`;
+        expect(() => runHandler(html)).toThrow(/__DC_/);
+    });
+});
+
+// matchVendorRoute: URL parser for the dev middleware. Pure function, easy
+// to unit-test. The dev server relies on these branches to decide between
+// rendering a vendor page, a /cameras/ index, or falling through to SPA.
+describe("matchVendorRoute", () => {
+    it("returns null for root and empty paths", () => {
+        expect(matchVendorRoute("/")).toBeNull();
+        expect(matchVendorRoute("")).toBeNull();
+        expect(matchVendorRoute("//")).toBeNull();
+    });
+
+    it("returns null for bare locale homepage (handled by i18n-prerender, not vendor-pages)", () => {
+        expect(matchVendorRoute("/de/")).toBeNull();
+        expect(matchVendorRoute("/ru/")).toBeNull();
+    });
+
+    it("matches /cameras/ as the EN section index", () => {
+        const result = matchVendorRoute("/cameras/");
+        expect(result?.kind).toBe("index");
+        expect(result?.lang).toBe("en");
+    });
+
+    it("matches /<lang>/cameras/ as a localized section index", () => {
+        const ru = matchVendorRoute("/ru/cameras/");
+        expect(ru?.kind).toBe("index");
+        expect(ru?.lang).toBe("ru");
+
+        const ja = matchVendorRoute("/ja/cameras/");
+        expect(ja?.kind).toBe("index");
+        expect(ja?.lang).toBe("ja");
+    });
+
+    it("matches /cameras/<slug>/ as an EN vendor page", () => {
+        const result = matchVendorRoute("/cameras/70mai/");
+        expect(result?.kind).toBe("vendor");
+        expect(result?.lang).toBe("en");
+        if (result?.kind === "vendor") {
+            expect(result.vendor.slug).toBe("70mai");
+        }
+    });
+
+    it("matches /<lang>/cameras/<slug>/ as a localized vendor page", () => {
+        const result = matchVendorRoute("/de/cameras/blackvue/");
+        expect(result?.kind).toBe("vendor");
+        expect(result?.lang).toBe("de");
+        if (result?.kind === "vendor") {
+            expect(result.vendor.slug).toBe("blackvue");
+        }
+    });
+
+    it("returns null for unknown vendor slugs", () => {
+        expect(matchVendorRoute("/cameras/unknown-vendor/")).toBeNull();
+        expect(matchVendorRoute("/de/cameras/random/")).toBeNull();
+    });
+
+    it("returns null for paths deeper than /<lang>/cameras/<slug>/", () => {
+        expect(matchVendorRoute("/cameras/70mai/extra/")).toBeNull();
+        expect(matchVendorRoute("/de/cameras/blackvue/something/")).toBeNull();
+    });
+
+    it("returns null for non-cameras paths (handled by i18n-prerender or SPA)", () => {
+        expect(matchVendorRoute("/privacy.html")).toBeNull();
+        expect(matchVendorRoute("/sitemap.xml")).toBeNull();
+        expect(matchVendorRoute("/de/random/")).toBeNull();
+    });
+
+    it("collapses double-slash in path (filter drops empties)", () => {
+        // /cameras//70mai/ → segments ["cameras", "70mai"] - still resolves.
+        // This is a dev-only quirk; CF Pages would canonicalize in prod.
+        const result = matchVendorRoute("/cameras//70mai/");
+        expect(result?.kind).toBe("vendor");
+    });
+});
+
+// JSON-LD payloads are embedded inside <script type="application/ld+json">.
+// JSON.stringify alone does NOT escape "</script>" inside string values, so if
+// a dict or vendor template ever contains that literal, the embedded payload
+// would prematurely close the script tag and break the page. stringifyJsonLd
+// is the defensive wrapper; verify it does the right thing.
+describe("stringifyJsonLd", () => {
+    it("escapes < to keep </script> from breaking out of the surrounding tag", () => {
+        const out = stringifyJsonLd({ name: "broken </script><img onerror=alert(1)>" });
+        expect(out).not.toContain("</script>");
+        expect(out).toContain("\\u003c/script>");
+    });
+
+    it("escapes every < occurrence, not just the first", () => {
+        const out = stringifyJsonLd({ a: "<b>", c: "<d>" });
+        expect(out.includes("<")).toBe(false);
+    });
+
+    it("round-trips through JSON.parse to the original value", () => {
+        const value = { name: "</script>", arr: ["<x>", "y"] };
+        const out = stringifyJsonLd(value);
+        expect(JSON.parse(out)).toEqual(value);
+    });
+
+    it("leaves payloads without < untouched (still valid JSON)", () => {
+        const out = stringifyJsonLd({ "@context": "https://schema.org", name: "70mai" });
+        expect(out).toBe('{"@context":"https://schema.org","name":"70mai"}');
+    });
+});
+
+// SUPPORTED_BRANDS / VENDORS cross-check is a build-time assertion in
+// vendorPagesPlugin.closeBundle. Verify the assertion's positive case here.
+describe("SUPPORTED_BRANDS landing brands match VENDORS", () => {
+    it("every brand with hasLandingPage=true has a matching VendorContent block", () => {
+        // Each landing brand's slug appears in getVendorSitemapEntries() output,
+        // which iterates over VENDORS internally. If a brand is in
+        // SUPPORTED_BRANDS as hasLandingPage but missing in VENDORS, sitemap
+        // would not contain its URL. After the /en/ migration English vendor
+        // pages live at /en/cameras/<slug>/ - we look there instead of the
+        // pre-migration /cameras/<slug>/ path.
+        const entries = getVendorSitemapEntries();
+        for (const brand of SUPPORTED_BRANDS) {
+            if (!brand.hasLandingPage) continue;
+            const expectedUrl = `https://dashcamigo.app/en/cameras/${brand.slug}/`;
+            expect(entries.some((e) => e.loc === expectedUrl)).toBe(true);
+        }
+    });
+});

@@ -1,0 +1,303 @@
+// Main-thread wrapper over the transcode worker. Drop-in replacement for transcode()/transcodeSplit()
+// with one difference: accepts an already-opened FileSystemWritableFileStream, bridges it to the
+// worker over a MessagePort internally, and passes the worker's port end to the worker.
+//
+// Why a MessagePort bridge instead of direct FSA transfer: neither
+// FileSystemWritableFileStream (DataCloneError on postMessage) nor a handle from showSaveFilePicker
+// (createWritable fails in worker scope - permission state does not survive structured-clone) work.
+// A transferable WritableStream would, in Chromium/Firefox, but stable Safari throws DataCloneError
+// when you postMessage a stream (WebKit #215485). A MessagePort is transferable on every target
+// browser; backpressure is re-implemented over it (port-writable.ts) with the same 16-chunk depth.
+//
+// Each call creates its own Worker (transcoding is a rare user-initiated operation; keeping an idle
+// worker between exports wastes memory).
+
+import { createLogger } from "../log.js";
+import type { TranscodeArgs, TranscodeResult } from "../transcode/types.js";
+import type { TranscodeSplitArgs } from "../transcode/pipeline-split.js";
+
+import {
+    TRANSCODE_NOTIFY_MAP_SNAPSHOT_REQUEST,
+    TRANSCODE_NOTIFY_MAP_SNAPSHOT_RESPONSE,
+    TRANSCODE_NOTIFY_PROGRESS,
+    TRANSCODE_REQUEST_SINGLE,
+    TRANSCODE_REQUEST_SPLIT,
+    type MapSnapshotRequestNotification,
+    type MapSnapshotResponseNotification,
+    type TranscodeArgsForTransfer,
+    type TranscodeProgressNotificationData,
+    type TranscodeSingleRequestData,
+    type TranscodeSplitArgsForTransfer,
+    type TranscodeSplitRequestData,
+} from "../workers/transcode-protocol.js";
+import { createWorkerClient } from "../workers/_protocol/worker-client.js";
+
+import { state } from "./state.js";
+import { exportPanelState } from "./export-state.js";
+import { createWorkerWritableProxy } from "./writable-bridge.js";
+import type { OverlayPipelineArgs } from "../transcode/types.js";
+import { computeOutputSize } from "../transcode/compose.js";
+import { MAP_BASE_WIDTH_PCT } from "../transcode/map-overlay.js";
+import { type ChasePrewarmOpts, createExportMapSnapshotter, type ExportMapSnapshotter } from "./export-map-snapshot.js";
+
+const log = createLogger("transcode-shim");
+
+/**
+ * Runs a single-channel transcode in the worker. `onDiskCommit` (optional) brackets the final
+ * opaque disk flush so the caller can show an indeterminate bar (see writable-bridge.ts).
+ */
+export function transcodeViaWorker(
+    args: TranscodeArgs,
+    onDiskCommit?: (on: boolean) => void,
+): Promise<TranscodeResult> {
+    const { signal, onProgress, writable, ...rest } = args;
+    return runInWorker(
+        TRANSCODE_REQUEST_SINGLE,
+        rest as TranscodeArgsForTransfer,
+        writable,
+        signal,
+        onProgress,
+        args.output.overlays,
+        onDiskCommit,
+    );
+}
+
+/** Runs a split-screen transcode in the worker. Same `onDiskCommit` contract as transcodeViaWorker. */
+export function transcodeSplitViaWorker(
+    args: TranscodeSplitArgs,
+    onDiskCommit?: (on: boolean) => void,
+): Promise<TranscodeResult> {
+    const { signal, onProgress, writable, ...rest } = args;
+    return runInWorker(
+        TRANSCODE_REQUEST_SPLIT,
+        rest as TranscodeSplitArgsForTransfer,
+        writable,
+        signal,
+        onProgress,
+        args.output.overlays,
+        onDiskCommit,
+    );
+}
+
+function runInWorker(
+    kind: typeof TRANSCODE_REQUEST_SINGLE | typeof TRANSCODE_REQUEST_SPLIT,
+    transferArgs: TranscodeArgsForTransfer | TranscodeSplitArgsForTransfer,
+    writable: FileSystemWritableFileStream,
+    signal: AbortSignal,
+    onProgress: TranscodeArgs["onProgress"],
+    overlays: OverlayPipelineArgs | null,
+    onDiskCommit?: (on: boolean) => void,
+): Promise<TranscodeResult> {
+    // name is static - Vite's worker plugin requires static options.
+    const worker = new Worker(new URL("../workers/transcode-worker.ts", import.meta.url), {
+        type: "module",
+        name: "transcode-worker",
+    });
+
+    // MessagePort bridge over the real FSA writable. The main side keeps the real writable and
+    // applies write/close/abort the worker posts over the port; finalized resolves when the main-side
+    // close (and the FSA atomic rename) are done. See writable-bridge.ts / port-writable.ts.
+    const {
+        port: writablePort,
+        finalized: writableFinalized,
+        forceAbort: writableForceAbort,
+    } = createWorkerWritableProxy(writable, onDiskCommit);
+
+    // Map snapshot bridge. Lazy-created on first map-snapshot request from the
+    // worker - if the user did not enable the map overlay, we never allocate
+    // the hidden MapLibre instance. The snapshotter promise is cached so a
+    // burst of per-frame requests does not race the creation.
+    //
+    // Tracking via the promise (not a resolved instance) ensures cleanup runs
+    // dispose() even when the user cancels the export DURING MapLibre
+    // initialization - otherwise the hidden div + WebGL context would leak
+    // until page reload.
+    let snapshotterPromise: Promise<ExportMapSnapshotter> | null = null;
+    const ensureSnapshotter = (): Promise<ExportMapSnapshotter> => {
+        if (snapshotterPromise) return snapshotterPromise;
+        const records = overlays?.gpsRecords ?? [];
+        // Base-layer theme is a snapshot-render concern (which style.json the
+        // hidden MapLibre loads) - it never crosses into the worker, so we read
+        // the live panel state here rather than threading it through the worker
+        // args. The panel is locked in "progress" phase during export, so this
+        // matches what buildOverlayPipelineArgs snapshotted.
+        // Camera (theme/mode/tilt/adaptive) is a snapshot-render concern - it
+        // never crosses into the worker, so we read the live (locked) panel
+        // state here rather than threading it through the worker args.
+        const overlayMap = exportPanelState.overlayMap;
+        const mapTheme = overlayMap.theme;
+        const chase: ChasePrewarmOpts = {
+            headingUp: overlayMap.mode === "chase",
+            pitchDeg: overlayMap.pitchDeg,
+            adaptiveZoom: overlayMap.adaptiveZoom,
+        };
+        // Size the snapshot buffer to the overlay slot it lands in - frameWidth *
+        // MAP_BASE_WIDTH_PCT * userScale (the same geometry map-overlay.ts draws
+        // into) - so the hidden map is not rendered at devicePixelRatio and then
+        // thrown away on a small inset. The map scale is locked for the run (panel
+        // frozen in "progress"), so one ratio covers every frame. computeOutputSize
+        // mirrors the worker's own output-width derivation (same aspect + height).
+        const outputWidthPx = computeOutputSize(transferArgs.output.height, transferArgs.output.aspect).width;
+        const targetSlotWidthPx = outputWidthPx * MAP_BASE_WIDTH_PCT * (overlayMap.scalePct / 100);
+        snapshotterPromise = createExportMapSnapshotter(records, "export", mapTheme, targetSlotWidthPx).then(
+            async (snap) => {
+                // Pre-warm tiles immediately so the very first per-frame snapshot
+                // does not block on tile fetch. Aborted via the transcode signal:
+                // the user cancelled, no point loading more tiles.
+                if (overlays?.map) {
+                    try {
+                        await snap.prewarm(records, overlays.map.zoomKm, signal, chase);
+                    } catch (err) {
+                        log.warn("map snapshot prewarm threw", { err: String(err) });
+                    }
+                }
+                return snap;
+            },
+        );
+        return snapshotterPromise;
+    };
+
+    const client = createWorkerClient(worker, {
+        name: "transcode",
+        onNotification: (msg) => {
+            if (msg.type === TRANSCODE_NOTIFY_PROGRESS) {
+                const data = msg.data as TranscodeProgressNotificationData;
+                try {
+                    onProgress(data.progress);
+                } catch (cbErr) {
+                    log.warn("onProgress threw", cbErr);
+                }
+                return;
+            }
+            if (msg.type === TRANSCODE_NOTIFY_MAP_SNAPSHOT_REQUEST) {
+                const req = msg.data as MapSnapshotRequestNotification;
+                enqueueMapSnapshotRequest(req);
+                return;
+            }
+        },
+    });
+
+    // Serialize snapshot rendering. The snapshotter is ONE MapLibre instance with
+    // ONE reused composite canvas, so two snapshot() calls running concurrently
+    // would interleave their jumpTo/redraw/drawImage on that shared canvas and
+    // corrupt each other. The worker's per-frame prefetch (pipeline.ts) keeps the
+    // NEXT frame's request in flight while encoding the current frame, so two
+    // requests can now overlap on the wire - chain them through this tail so the
+    // map still renders exactly one frame at a time. The overlap we actually want
+    // (main-thread map render vs worker-thread encode) is across threads and is
+    // unaffected by this single-thread ordering. renderOneSnapshot swallows all
+    // errors into a response, so the tail never rejects and the chain never breaks.
+    let snapshotTail: Promise<void> = Promise.resolve();
+    const enqueueMapSnapshotRequest = (req: MapSnapshotRequestNotification): void => {
+        snapshotTail = snapshotTail.then(() => renderOneSnapshot(req));
+    };
+
+    const renderOneSnapshot = async (req: MapSnapshotRequestNotification): Promise<void> => {
+        try {
+            const snap = await ensureSnapshotter();
+            const om = exportPanelState.overlayMap;
+            const bitmap = await snap.snapshot({
+                lat: req.lat,
+                lon: req.lon,
+                bearingDeg: req.bearingDeg,
+                zoomKm: req.zoomKm,
+                speedMs: req.speedMs,
+                headingUp: om.mode === "chase",
+                pitchDeg: om.pitchDeg,
+                adaptiveZoom: om.adaptiveZoom,
+            });
+            if (client.disposed) {
+                // Export was cancelled while this snapshot rendered. notify()
+                // early-returns on a disposed client without posting, so the
+                // transfer list is never consumed - the ImageBitmap would be
+                // neither moved to the worker nor closed. Free its GPU surface
+                // here instead of leaking it until GC.
+                bitmap.close();
+                return;
+            }
+            const data: MapSnapshotResponseNotification = { reqId: req.reqId, bitmap };
+            client.notify(TRANSCODE_NOTIFY_MAP_SNAPSHOT_RESPONSE, data, { transfer: [bitmap] });
+        } catch (err) {
+            const data: MapSnapshotResponseNotification = {
+                reqId: req.reqId,
+                error: err instanceof Error ? err.message : String(err),
+            };
+            client.notify(TRANSCODE_NOTIFY_MAP_SNAPSHOT_RESPONSE, data);
+        }
+    };
+
+    // Lets the map rAF loop and chart hot-path skip work while the worker is writing,
+    // so the main thread stays free for the proxy sink callbacks (where the FSA write actually
+    // happens).
+    state.transcodeInProgress = true;
+    // CSS flag that hides the MapLibre canvas via display:none. The export modal visually overlays
+    // the map, but the WebGL layer still repaints every frame, keeping the GPU busy (~60-65% on
+    // Apple Silicon M-series). The encoder contends for the same GPU - display:none causes the
+    // compositor to skip it, freeing the GPU for the encoder.
+    if (typeof document !== "undefined") {
+        document.body.classList.add("dc-transcode-busy");
+    }
+
+    const cleanup = (success: boolean): void => {
+        client.dispose();
+        // Dispose via the promise so a still-initializing snapshotter (user
+        // cancelled mid-init) still gets cleaned up once MapLibre finishes
+        // loading the style. Without this the hidden div + WebGL context
+        // outlive the export.
+        const pendingSnap = snapshotterPromise;
+        snapshotterPromise = null;
+        if (pendingSnap) {
+            pendingSnap.then(
+                (snap) => {
+                    try {
+                        snap.dispose();
+                    } catch (err) {
+                        log.warn("snapshotter dispose threw", { err: String(err) });
+                    }
+                },
+                () => {
+                    // Init rejected - nothing to dispose.
+                },
+            );
+        }
+        state.transcodeInProgress = false;
+        if (typeof document !== "undefined") {
+            document.body.classList.remove("dc-transcode-busy");
+        }
+        // If the worker is terminated before calling writer.close/abort, the proxy sink methods
+        // never fire, writableFinalized hangs, and realWritable stays open (FSA temp file in hidden
+        // state). On the success path sink.close already ran normally through the worker - skip
+        // forceAbort then.
+        if (!success) {
+            writableForceAbort("transcode failed or cancelled").catch((err) => {
+                log.warn("forceAbort threw", err);
+            });
+        }
+    };
+
+    const reqData: TranscodeSingleRequestData | TranscodeSplitRequestData = {
+        args: transferArgs as TranscodeArgsForTransfer & TranscodeSplitArgsForTransfer,
+        writablePort,
+    };
+
+    return client
+        .request<TranscodeResult>(kind, reqData, {
+            signal,
+            transfer: [writablePort],
+        })
+        .then(
+            async (result) => {
+                // On the success path the worker's writer.close() has already resolved via ack, but
+                // the main-side sink.close() may not have finished the FSA atomic rename yet - wait
+                // explicitly via writableFinalized to avoid post-processing (gpmd inject) opening a
+                // file that isn't on disk yet and failing with "moov not found".
+                await writableFinalized.catch(() => undefined);
+                cleanup(true);
+                return result;
+            },
+            (err) => {
+                cleanup(false);
+                throw err;
+            },
+        );
+}

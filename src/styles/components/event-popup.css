@@ -1,0 +1,107 @@
+/* =========================================================================
+   13c. EVENT POPUP (UX-15: pop-action ±5/±10/±30s around an event marker)
+   ----------------------------------------------------------------
+   A small popup over the canvas, shown on hover/click on a chart event
+   marker. The three ±N buttons zoom the timeline around the event and seek
+   to its start; the accent button below commits the same window as the
+   export range and opens the export panel on it.
+   ========================================================================= */
+.event-popup {
+    position: fixed;
+    z-index: var(--dc-z-popover);
+    background: var(--bg-elev);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--dc-radius-sm);
+    padding: var(--dc-space-2) var(--dc-space-2);
+    box-shadow: var(--dc-shadow-popup);
+    font-family: var(--dc-font-body);
+    user-select: none;
+    pointer-events: auto;
+}
+.event-popup[hidden] {
+    display: none;
+}
+.event-popup-title {
+    font-size: var(--dc-text-xs);
+    color: var(--fg-dim);
+    margin-bottom: var(--dc-space-1);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+.event-popup-actions {
+    display: inline-flex;
+    align-items: stretch;
+    gap: 0;
+}
+.event-popup-btn {
+    font-family: var(--dc-font-mono);
+    font-size: var(--dc-text-sm);
+    font-weight: 600;
+    padding: var(--dc-space-1) var(--dc-space-2);
+    background: transparent;
+    color: var(--fg);
+    border: 0;
+    border-right: 1px solid var(--border);
+    cursor: pointer;
+    transition:
+        background var(--dc-dur-fast) var(--dc-ease),
+        color var(--dc-dur-fast) var(--dc-ease);
+}
+.event-popup-btn:last-child {
+    border-right: 0;
+}
+.event-popup-btn:hover {
+    background: var(--accent);
+    color: var(--dc-black);
+}
+/* Touch has no :hover, so mirror the hover fill on press for tactile feedback
+   before the popup closes (matches the bold hover state, not the subtle ash). */
+.event-popup-btn:active {
+    background: var(--accent);
+    color: var(--dc-black);
+}
+.event-popup-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+/* One-tap event -> export: full-width accent CTA under the zoom row. Outlined
+   (not filled) so the popup does not shout, but clearly the primary action. */
+.event-popup-export {
+    display: block;
+    width: 100%;
+    margin-top: var(--dc-space-1);
+    padding: var(--dc-space-1) var(--dc-space-2);
+    font-family: var(--dc-font-body);
+    font-size: var(--dc-text-sm);
+    font-weight: 600;
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: var(--dc-radius-sm);
+    cursor: pointer;
+    transition:
+        background var(--dc-dur-fast) var(--dc-ease),
+        color var(--dc-dur-fast) var(--dc-ease);
+}
+.event-popup-export:hover,
+.event-popup-export:active {
+    background: var(--accent);
+    color: var(--dc-black);
+}
+.event-popup-export:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+/* Touch: these ±5s/±10s/±30s buttons are tappable (sticky popup on tap), so
+   grow them to the touch floor. align-items:stretch on the row equalizes all
+   three; min-width carries the narrowest label past the floor. */
+@media (pointer: coarse) {
+    .event-popup-btn {
+        min-height: var(--dc-iconbtn-touch);
+        min-width: var(--dc-iconbtn-touch);
+        padding-inline: var(--dc-space-3);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+}

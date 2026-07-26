@@ -1,0 +1,129 @@
+/* ===== Language-suggestion banner ========================================
+   Popover anchored under the topbar lang-toggle. Shown when the URL carries
+   one locale (e.g. /ru/) but navigator.language points at a supported
+   different locale - typical share-link scenario where a Russian user kicks
+   a /ru/ URL to an English friend. No auto-redirect (URL is share-safe and
+   must win); the banner offers a one-click switch.
+
+   Visual contract:
+   - Desktop: popover under lang-toggle, max-width 320px, right-aligned.
+     Mounts inside .lang-wrap (position:relative) and pins via top:100%.
+   - Mobile (<= 767px): falls back to bottom-fixed toast - on narrow screens
+     a popover anchored to a right-aligned toolbar button would overflow
+     past the viewport, and the bottom-toast pattern is more readable.
+   - Lower z-index than the .sticky-banner layer (the PWA install toast), so if
+     both ever land in the bottom slot on mobile the install toast is not buried.
+   - Same .dc-btn--primary / --ghost button system as the other banner surfaces -
+     visual consistency across "modal-like" surfaces.
+   ========================================================================= */
+
+.lang-banner {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    /* Sits below .lang-menu (z=70) so opening the language menu over a
+       still-visible banner stacks correctly - menu wins, the banner peeks
+       from under. */
+    z-index: 7;
+    background: var(--bg-elev);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-md);
+    box-shadow: var(--dc-shadow-popup);
+    padding: var(--dc-space-3) var(--dc-space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-2);
+    font-family: var(--dc-font-body);
+    font-size: var(--dc-text-sm);
+    width: max-content;
+    max-width: 320px;
+    animation: lang-banner-in var(--dc-dur-entrance) var(--dc-ease-out);
+}
+.lang-banner[hidden] {
+    display: none;
+}
+@keyframes lang-banner-in {
+    from {
+        transform: translateY(-6px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.lang-banner-text {
+    line-height: var(--dc-leading-normal);
+    color: var(--fg);
+}
+
+.lang-banner-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--dc-space-1);
+}
+
+/* Compact button override - the banner is small, keep buttons proportional. */
+.lang-banner .dc-btn {
+    padding: var(--dc-space-2) var(--dc-space-3);
+    font-size: var(--dc-text-sm);
+}
+
+/* Dismiss is an icon button - keep it minimal so the primary CTA dominates. */
+.lang-banner-dismiss {
+    appearance: none;
+    background: transparent;
+    border: none;
+    color: var(--fg-mute);
+    cursor: pointer;
+    padding: var(--dc-space-1);
+    border-radius: var(--dc-radius-sm);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    transition:
+        background var(--dc-dur-fast) var(--dc-ease),
+        color var(--dc-dur-fast) var(--dc-ease);
+}
+.lang-banner-dismiss:hover {
+    background: var(--bg-hover);
+    color: var(--fg);
+}
+.lang-banner-dismiss:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+/* Touch: grow the dismiss to the touch floor (mirrors the toast close). The icon
+   stays centered via the inline-flex above; only the hit box grows. */
+@media (pointer: coarse) {
+    .lang-banner-dismiss {
+        min-width: var(--dc-iconbtn-touch);
+        min-height: var(--dc-iconbtn-touch);
+        padding: 0;
+    }
+}
+
+/* Mobile fallback: popover anchored to a right-aligned topbar button would
+   overflow the viewport on narrow screens. Bottom-fixed toast is friendlier
+   on tap targets and avoids the overflow. Compound trigger (incl. landscape
+   phones) matches the rest of the shell's mobile rules - a landscape phone is a
+   phone, not a desktop popover surface. */
+@media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {
+    .lang-banner {
+        position: fixed;
+        top: auto;
+        left: var(--dc-space-2);
+        right: var(--dc-space-2);
+        /* Clear the home indicator; env() is 0 on non-notched, max() keeps 8px. */
+        bottom: max(var(--dc-space-2), env(safe-area-inset-bottom));
+        /* Bottom-fixed toast needs to clear page content. Higher than the
+           desktop popover variant, lower than the .sticky-banner layer. */
+        z-index: var(--dc-z-modal);
+        max-width: none;
+        width: auto;
+    }
+}

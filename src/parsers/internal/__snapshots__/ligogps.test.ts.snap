@@ -1,0 +1,45 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`parseLigoGpsFromMp4 > parses synthetic CARCAM-style MP4: 3 LigoGPS samples 1`] = `
+{
+  "records": [
+    {
+      "accelXg": 0,
+      "accelYg": 0,
+      "accelZg": 0,
+      "active": true,
+      "bearingDeg": 0,
+      "lat": 50,
+      "lon": 30,
+      "mp4Filename": "REC20250607-180616-001-A.mp4",
+      "speedMs": 13.118322000000001,
+      "unixSeconds": 1749319576,
+    },
+    {
+      "accelXg": 0,
+      "accelYg": 0,
+      "accelZg": 0,
+      "active": true,
+      "bearingDeg": 0,
+      "lat": 50.0001,
+      "lon": 30.0002,
+      "mp4Filename": "REC20250607-180616-001-A.mp4",
+      "speedMs": 13.375544,
+      "unixSeconds": 1749319577,
+    },
+    {
+      "accelXg": 0,
+      "accelYg": 0,
+      "accelZg": 0,
+      "active": true,
+      "bearingDeg": 0,
+      "lat": 50.0002,
+      "lon": 30.0004,
+      "mp4Filename": "REC20250607-180616-001-A.mp4",
+      "speedMs": 13.632766,
+      "unixSeconds": 1749319578,
+    },
+  ],
+  "skipped": [],
+}
+`;

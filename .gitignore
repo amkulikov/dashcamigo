@@ -1,0 +1,49 @@
+# The private zone: real user recordings, incoming samples, internal plans and
+# research. Never tracked in THIS repo. Text notes inside are versioned by a
+# nested private git repo (private/.git) with its own .gitignore.
+/private/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+/.idea/
+/.vscode/
+/.run/
+
+# Claude Code: personal developer settings - not committed. Files inside
+# /.claude/ (settings.json, skills/) ARE committed, so everyone who clones
+# the repo gets the shared project-level config.
+/.claude/settings.local.json
+/.claude/launch.json
+/.claude/worktrees/
+
+# Node.js / Vite
+/node_modules/
+/dist/
+/.vite/
+*.tsbuildinfo
+
+# Vite env with local secrets. The template is .env.example - that one IS
+# committed. .env.local / .env.*.local are local, not committed (may contain
+# a staging Sentry DSN, source-map upload tokens, etc.).
+/.env
+/.env.local
+/.env.*.local
+
+# Playwright artifacts. The configs pin them here explicitly - Playwright's
+# defaults are cwd-relative, and every run starts from the repo root.
+/tests/test-results/
+/tests/playwright-report/
+/playwright/.cache/
+
+# e2e shot() review artifacts: PNGs of live video/map, non-deterministic by
+# frame timing - a committed diff is noise, not signal. Local/CI review aids
+# only (CI uploads them in the playwright-report on failure). Deterministic
+# visual review is the VRT suite (tests/e2e/*-snapshots/, which IS committed).
+/tests/e2e/screenshots/
+
+# Coverage reports (npm run test:coverage) - on-demand, never committed.
+/tests/coverage/
+

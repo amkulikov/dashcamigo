@@ -1,0 +1,105 @@
+/* =========================================================================
+   dashcamigo - component styles built on tokens from styles/tokens.css.
+   Default is dark, light comes via @media (prefers-color-scheme: light)
+   (the --bg/--fg/--accent/--border overrides live in tokens.css).
+
+   Structure:
+     1. Base / reset
+     2. Topbar + BrandMark + dropzone + status
+     3. Layout grid (sidebar + viewer)
+     4. Sidebar + sort + trip-card + trip-files
+     5. Sidebar resize handle
+     6. Viewer + player grid + resize handles
+     7. Video frame + the custom player (toolbar, chips, metrics, speed, volume)
+     8. Chart panel (event-toggles, close, canvas)
+     9. Player scrub (compact mode)
+    10. Map + map-controls + style-error
+    11. Mini-map (round, in the player's corner)
+    12. MapLibre overrides (popup, attribution)
+    13. Empty state
+    14. Drop overlay (full-screen drag-over)
+    15. Export modal
+    16. Mobile drawer (Phase 5 - a stub for now)
+
+   ========================================================================= */
+
+* {
+    box-sizing: border-box;
+}
+
+/* Suppress the default grey/blue iOS+Android tap flash on interactive elements.
+   The default highlight is a rectangle that bleeds outside rounded/pill controls
+   and is inconsistent across the UI. We replace it with app-controlled :active
+   states (per-component), so suppressing the OS flash does not leave taps silent.
+   No-op on fine pointers, so desktop is unaffected. */
+a,
+button,
+[role="button"],
+label,
+summary {
+    -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--dc-font-body);
+    font-size: var(--dc-text-base);
+    line-height: var(--dc-leading-normal);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    /* Disable pull-to-refresh and rubber-band scrolling: the app is an SPA
+       with no natural vertical scroll, these gestures only get in the way
+       (they unload the video on an accidental swipe-down in Chrome Android). */
+    overscroll-behavior: none;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    /* biome-ignore lint/suspicious/noDuplicateProperties: dvh fallback - old browsers without dvh fall back to vh */
+    height: 100dvh;
+    overflow: hidden;
+}
+
+/* On WebKit-based browsers (iOS Safari / Chrome) long-press on <img>
+   opens a haptic preview / the "Save image" menu. In our UI images are
+   thumbnails and icons, they don't need a preview. Drag isn't needed either. */
+img {
+    -webkit-touch-callout: none;
+    -webkit-user-drag: none;
+}
+
+main.layout {
+    overflow: hidden;
+}
+
+::selection {
+    background: var(--dc-orange);
+    color: var(--dc-black);
+}
+
+a {
+    color: var(--accent);
+    text-decoration: none;
+}
+a:hover {
+    color: var(--accent-hot);
+    text-decoration: underline;
+}
+
+.mono,
+code,
+kbd,
+samp {
+    font-family: var(--dc-font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings:
+        "tnum" 1,
+        "lnum" 1;
+}

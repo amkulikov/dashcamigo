@@ -1,0 +1,250 @@
+// Tests for the declarative GPS-source-hints registry.
+//
+// Guarantees:
+//  - Escort/DDPai files (basename-sidecar) DO NOT trigger embedded extraction
+//    even when no records exist yet (no sidecar -> embedded won't help either;
+//    the point is not to read 16 MB for nothing).
+//  - Tesla/FitCamX files (none formats) DO NOT trigger embedded.
+//  - GoPro/Novatek/Carcam/Navitel/iBox/BlackVue/Juscar/Thinkware/70mai (embedded
+//    formats) DO trigger embedded. 70mai is embedded because newer 4K models
+//    (A810/M500) embed a 70mai freeGPS block; older $V02-CSV models are caught
+//    first by the csv-70mai log-sidecar pass (records exist -> embedded skipped).
+//  - Generic .mp4 with no recognised pattern -> unknown -> try (safe default).
+//  - Files that already have records (from any source) skip embedded.
+
+import { describe, expect, it } from "vitest";
+
+import { classifyGpsSource, resolveSourceCollision, shouldTryEmbeddedGps } from "./gps-source-hints.js";
+import type { VendorFile } from "./types.js";
+
+function vf(name: string, relativePath: string = name): VendorFile {
+    return { file: new File([new Uint8Array(0)], name), relativePath };
+}
+
+describe("classifyGpsSource", () => {
+    it("basename-sidecar formats", () => {
+        expect(classifyGpsSource(vf("20240429_1830_CAM.mp4"))).toBe("basename-sidecar"); // Escort
+        expect(classifyGpsSource(vf("20190719161640_0060.mp4"))).toBe("basename-sidecar"); // DDPai normal
+        expect(classifyGpsSource(vf("S_20190719161640_120_30.mp4"))).toBe("basename-sidecar"); // DDPai timelapse
+        expect(classifyGpsSource(vf("G_20190719161640_0060_L.mp4"))).toBe("basename-sidecar"); // DDPai event
+        expect(classifyGpsSource(vf("FILE260625-144859.MP4"))).toBe("basename-sidecar"); // Mio/Navman MiVue (.NMEA)
+    });
+
+    it("mivue stays disjoint from the embedded iBox/Navitel FILE-patterns", () => {
+        // Same FILE prefix, but iBox carries a channel letter and Navitel a
+        // -sequence; only the bare FILE<YYMMDD>-<HHMMSS> shape is the .NMEA sidecar.
+        expect(classifyGpsSource(vf("FILE260625-144859.MP4"))).toBe("basename-sidecar"); // MiVue
+        expect(classifyGpsSource(vf("FILE230422-154515F.MOV"))).toBe("embedded"); // iBox
+        expect(classifyGpsSource(vf("FILE201104-163014-000429F.mov"))).toBe("embedded"); // Navitel
+    });
+
+    it("embedded formats", () => {
+        expect(classifyGpsSource(vf("20211011_141314_NF.mp4"))).toBe("embedded"); // BlackVue X
+        expect(classifyGpsSource(vf("REC20250607-180617-527-A.mp4"))).toBe("embedded"); // Carcam
+        expect(classifyGpsSource(vf("FILE201104-163014-000429F.mov"))).toBe("embedded"); // Navitel
+        expect(classifyGpsSource(vf("FILE230422-154515F.MOV"))).toBe("embedded"); // iBox (gps0 tail-atoms)
+        expect(classifyGpsSource(vf("2023_0821_180010_062F.MP4"))).toBe("embedded"); // Novatek VIOFO
+        // Viofo E (impact) / T (telephoto) letters ride the same novatek hint.
+        expect(classifyGpsSource(vf("2023_0412_111213_0042EF.MP4"))).toBe("embedded");
+        expect(classifyGpsSource(vf("2023_0412_111213_0042PT.MP4"))).toBe("embedded");
+        // Nextbase: subtitle-track NMEA (322GW+) / freeGPS (512GW).
+        expect(classifyGpsSource(vf("180919_100959_001_FH.MP4"))).toBe("embedded");
+        expect(classifyGpsSource(vf("20211011_141314_0001_N_A.MP4"))).toBe("embedded"); // Vantrue
+        expect(classifyGpsSource(vf("20260429_182640F.ts"))).toBe("embedded"); // Juscar
+        expect(classifyGpsSource(vf("REC_20210101_120000_F.mp4"))).toBe("embedded"); // Thinkware
+        // 70mai: embedded for newer 4K models (A810/M500). Older $V02-CSV models
+        // are handled first by the csv-70mai log-sidecar pass.
+        expect(classifyGpsSource(vf("NO20240702-094820-000029F.MP4"))).toBe("embedded"); // 70mai A810
+        expect(classifyGpsSource(vf("NO20260428-200501-000897-20260429120347.mp4"))).toBe("embedded"); // 70mai M500
+    });
+
+    it("70mai A510 LA/PA prefixes and the pre-stamp channel letter ride the same embedded hint", () => {
+        // The hint gates on the shared RX_70MAI, so the widened regex (LA/PA
+        // parking prefixes, channel letter BEFORE the app-export trailing
+        // stamp) must reach the embedded probe with no hint-side change.
+        expect(classifyGpsSource(vf("LA20260101-120000-000495F.MP4"))).toBe("embedded");
+        expect(classifyGpsSource(vf("PA20260101-120000-001496F.MP4"))).toBe("embedded");
+        expect(classifyGpsSource(vf("NO20260101-120000-000195R-20260101120642.mp4"))).toBe("embedded");
+    });
+
+    it("neoline / vueroid / novatek-ts filename shapes classify embedded", () => {
+        expect(classifyGpsSource(vf("INF20260520-214526-1-F.mp4"))).toBe("embedded"); // Neoline Spectrum (sstar-ssmd)
+        expect(classifyGpsSource(vf("20251111_085423_INF_F_N.mp4"))).toBe("embedded"); // Vueroid (vueroid-txet)
+        expect(classifyGpsSource(vf("20210318153933_000188.TS"))).toBe("embedded"); // Novatek PES in MPEG-TS
+        // The lowercase-extension twin must ride the same case-insensitive regex.
+        expect(classifyGpsSource(vf("20210318153933_000188.ts"))).toBe("embedded");
+    });
+
+    it("viofo names with no sequence counter keep the novatek embedded hint", () => {
+        // T130 parking clips and some OEM firmwares drop the counter
+        // (`..._F.mp4` / `..._PR.mp4`); freeGPS is real-sample-validated in
+        // them, so the optional-seq RX_NOVATEK_VIOFO must stay inside
+        // isNovatekFamilyFilename's embedded gate.
+        expect(classifyGpsSource(vf("2026_0708_180332_F.MP4"))).toBe("embedded");
+        expect(classifyGpsSource(vf("2022_0224_132829_PR.MP4"))).toBe("embedded");
+    });
+
+    it("none formats (no embedded GPS / not yet implemented)", () => {
+        expect(classifyGpsSource(vf("20260511134011_073648A.TS"))).toBe("none"); // FitCamX
+        expect(classifyGpsSource(vf("front.mp4", "TeslaCam/SentryClips/2026-04-29_18-30-15/front.mp4"))).toBe("none");
+        // Ford: claimed only inside FordFootage/ (the generic name alone is not enough).
+        expect(classifyGpsSource(vf("2026-04-29_18_26_00_f.ts", "FordFootage/2026-04-29_18_26_00_f.ts"))).toBe("none");
+    });
+
+    it("ford lookalike name outside FordFootage/ is unclaimed (generic .ts shape)", () => {
+        expect(classifyGpsSource(vf("2026-04-29_18_26_00_f.ts"))).toBe("unknown");
+        expect(classifyGpsSource(vf("2026-04-29_18_26_00_f.ts", "SomeOtherCam/2026-04-29_18_26_00_f.ts"))).toBe(
+            "unknown",
+        );
+    });
+
+    it("E-Ace flipped to embedded once the freeGPS Type-4 RC4 variant landed", () => {
+        expect(classifyGpsSource(vf("20240429_182640F.mp4"))).toBe("embedded");
+    });
+
+    it("Tesla RecentClips - timestamp in the filename", () => {
+        expect(
+            classifyGpsSource(
+                vf("2026-04-29_18-26-00-front.mp4", "TeslaCam/RecentClips/2026-04-29_18-26-00-front.mp4"),
+            ),
+        ).toBe("none");
+    });
+
+    it("unknown for generic .mp4 without a recognised pattern", () => {
+        expect(classifyGpsSource(vf("random.mp4"))).toBe("unknown");
+        expect(classifyGpsSource(vf("GH010001.MP4"))).toBe("unknown"); // GoPro (no distinctive name)
+        expect(classifyGpsSource(vf("clip.mp4"))).toBe("unknown");
+    });
+});
+
+describe("shouldTryEmbeddedGps", () => {
+    it("embedded source without records - try", () => {
+        const carcam = vf("REC20250607-180617-527-A.mp4");
+        expect(shouldTryEmbeddedGps(carcam, false)).toBe(true);
+    });
+
+    it("embedded source with records - skip (avoid duplicates)", () => {
+        const carcam = vf("REC20250607-180617-527-A.mp4");
+        expect(shouldTryEmbeddedGps(carcam, true)).toBe(false);
+    });
+
+    it("70mai - embedded probe when no CSV records, skipped once CSV records exist", () => {
+        // Newer 4K 70mai (A810/M500) embed freeGPS: probe when nothing parsed yet.
+        // Older $V02-CSV models produce records first, which short-circuits the probe.
+        const mai70 = vf("NO20240702-094820-000029F.MP4");
+        expect(shouldTryEmbeddedGps(mai70, false)).toBe(true);
+        expect(shouldTryEmbeddedGps(mai70, true)).toBe(false);
+        // A510 parking clips (LA/PA prefixes) carry the same embedded freeGPS.
+        const mai70Parking = vf("LA20260101-120000-000495F.MP4");
+        expect(shouldTryEmbeddedGps(mai70Parking, false)).toBe(true);
+    });
+
+    it("precisely-shaped basename-sidecar source - skip regardless of records", () => {
+        // Escort's `<8>_<4>_CAM.mp4` is distinctive, so the hard skip stands even
+        // without records (no sidecar -> embedded won't help, don't read 16 MB).
+        const escort = vf("20240429_1830_CAM.mp4");
+        expect(shouldTryEmbeddedGps(escort, false)).toBe(false);
+        expect(shouldTryEmbeddedGps(escort, true)).toBe(false);
+    });
+
+    it("generic-shaped basename-sidecar (ddpai-normal, mivue) - probe when no records, skip once records exist", () => {
+        // `<14>_<counter>.mp4` and `FILE<yymmdd>-<hhmmss>` are shared with cameras
+        // that DO embed GPS, so a lookalike must still be probed when its sidecar
+        // is absent/unparsed (no records). Once records exist the skip is trusted.
+        const ddpaiNormal = vf("20190719161640_0060.mp4");
+        expect(shouldTryEmbeddedGps(ddpaiNormal, false)).toBe(true);
+        expect(shouldTryEmbeddedGps(ddpaiNormal, true)).toBe(false);
+
+        const mivue = vf("FILE260625-144859.MP4");
+        expect(shouldTryEmbeddedGps(mivue, false)).toBe(true);
+        expect(shouldTryEmbeddedGps(mivue, true)).toBe(false);
+
+        // The distinctive ddpai variants (timelapse S_/Q_, event G_..._L) keep the
+        // unconditional skip - only the generic "normal" shape was demoted.
+        const ddpaiTimelapse = vf("S_20190719161640_120_30.mp4");
+        expect(shouldTryEmbeddedGps(ddpaiTimelapse, false)).toBe(false);
+        const ddpaiEvent = vf("G_20190719161640_0060_L.mp4");
+        expect(shouldTryEmbeddedGps(ddpaiEvent, false)).toBe(false);
+    });
+
+    it("ddpai-normal 6/7-digit counters (Novatek-family OEMs) keep the embedded probe alive", () => {
+        // Fujida Karma / Roadgid Tube name their clips `<14>_<6-7 digit
+        // counter>` and keep freeGPS INSIDE the MP4 - the widened
+        // RX_DDPAI_NORMAL must stay on the probeIfNoRecords path, or their
+        // embedded GPS would be silently skipped.
+        const sixDigit = vf("20260101120000_000551.MP4");
+        expect(classifyGpsSource(sixDigit)).toBe("basename-sidecar");
+        expect(shouldTryEmbeddedGps(sixDigit, false)).toBe(true);
+        expect(shouldTryEmbeddedGps(sixDigit, true)).toBe(false);
+
+        const sevenDigit = vf("20260101120000_0000013.MP4");
+        expect(classifyGpsSource(sevenDigit)).toBe("basename-sidecar");
+        expect(shouldTryEmbeddedGps(sevenDigit, false)).toBe(true);
+    });
+
+    it("ford is claimed only inside FordFootage/ - a lookalike .ts elsewhere is probed", () => {
+        // The name shape `YYYY-MM-DD_HH_MM_SS_x.ts` is generic; the folder is the
+        // real signal. Inside FordFootage/ the file is a known GPS-less .ts (skip);
+        // the identical name outside is unclaimed -> probe when no records.
+        const fordInside = vf("2026-04-29_18_26_00_f.ts", "FordFootage/2026-04-29_18_26_00_f.ts");
+        expect(shouldTryEmbeddedGps(fordInside, false)).toBe(false);
+        expect(shouldTryEmbeddedGps(fordInside, true)).toBe(false);
+
+        const lookalikeOutside = vf("2026-04-29_18_26_00_f.ts");
+        expect(shouldTryEmbeddedGps(lookalikeOutside, false)).toBe(true);
+    });
+
+    it("none source - skip always", () => {
+        const tesla = vf("front.mp4", "TeslaCam/SentryClips/2026-04-29_18-30-15/front.mp4");
+        expect(shouldTryEmbeddedGps(tesla, false)).toBe(false);
+        expect(shouldTryEmbeddedGps(tesla, true)).toBe(false);
+    });
+
+    it("unknown source - try when no records yet, skip otherwise", () => {
+        const generic = vf("GH010001.MP4");
+        expect(shouldTryEmbeddedGps(generic, false)).toBe(true);
+        expect(shouldTryEmbeddedGps(generic, true)).toBe(false);
+    });
+});
+
+// Production regexes are mostly disjoint, so real-world collisions are rare.
+// These tests pin the priority logic so a future hint that overlaps cannot
+// silently turn an "embedded" file into a "none" skip.
+describe("resolveSourceCollision (tie-breaking)", () => {
+    it("empty matched list -> unknown", () => {
+        expect(resolveSourceCollision([])).toBe("unknown");
+    });
+
+    it("embedded beats log-sidecar (most permissive wins)", () => {
+        expect(resolveSourceCollision(["log-sidecar", "embedded"])).toBe("embedded");
+        expect(resolveSourceCollision(["embedded", "log-sidecar"])).toBe("embedded");
+    });
+
+    it("embedded beats basename-sidecar", () => {
+        expect(resolveSourceCollision(["basename-sidecar", "embedded"])).toBe("embedded");
+    });
+
+    it("embedded beats none", () => {
+        expect(resolveSourceCollision(["none", "embedded"])).toBe("embedded");
+    });
+
+    it("log-sidecar beats none", () => {
+        expect(resolveSourceCollision(["none", "log-sidecar"])).toBe("log-sidecar");
+    });
+
+    it("basename-sidecar beats none", () => {
+        expect(resolveSourceCollision(["none", "basename-sidecar"])).toBe("basename-sidecar");
+    });
+
+    it("log-sidecar and basename-sidecar are siblings - first wins (deterministic)", () => {
+        // Equal priority. Behavioral contract: stable order by argument position.
+        expect(resolveSourceCollision(["log-sidecar", "basename-sidecar"])).toBe("log-sidecar");
+        expect(resolveSourceCollision(["basename-sidecar", "log-sidecar"])).toBe("basename-sidecar");
+    });
+
+    it("single matched source returns as-is", () => {
+        expect(resolveSourceCollision(["embedded"])).toBe("embedded");
+        expect(resolveSourceCollision(["none"])).toBe("none");
+        expect(resolveSourceCollision(["log-sidecar"])).toBe("log-sidecar");
+    });
+});

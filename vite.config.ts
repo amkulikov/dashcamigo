@@ -1,0 +1,428 @@
+/// <reference types="vitest/config" />
+import { execSync } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { sentryVitePlugin } from "@sentry/vite-plugin";
+import { minify as minifyHtml } from "html-minifier-terser";
+import { defineConfig, minify as minifyOxc } from "vite";
+import { cspHashPlugin } from "./vite-plugins/csp-hash.js";
+import { dynamicBaselinePlugin } from "./vite-plugins/dynamic-baseline.js";
+import { indexnowKeyPlugin } from "./vite-plugins/indexnow-key.js";
+import { llmsTxtPlugin } from "./vite-plugins/llms-txt.js";
+import { redirectsPlugin } from "./vite-plugins/redirects.js";
+import { rootStubPlugin } from "./vite-plugins/root-stub.js";
+import { computeTrackerAssets, trackerAssetsPlugin } from "./vite-plugins/tracker-assets.js";
+import { swPrecachePlugin } from "./vite-plugins/sw-precache.js";
+import { getSeoLocales, i18nPrerenderPlugin, sitemapPlugin } from "./vite-plugins/seo-prerender.js";
+import { alternativePagesPlugin } from "./vite-plugins/alternative-pages.js";
+import { featurePagesPlugin } from "./vite-plugins/feature-pages.js";
+import { vendorPagesPlugin } from "./vite-plugins/vendor-pages.js";
+
+// App version for logs and diagnostics. No backend, so the only reliable
+// build identifier is the git short SHA, tagged with -dirty if the working
+// copy has uncommitted changes. Computed once at vite startup (dev-server or
+// build) and passed into code via `define: { __APP_VERSION__: ... }`. If the
+// repo is not a git checkout (unpacked archive or CI without .git) - "unknown".
+function getAppVersion(): string {
+    try {
+        const sha = execSync("git rev-parse --short HEAD", { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] })
+            .trim();
+        let dirty = false;
+        try {
+            // exit 0 = clean, exit 1 = has changes (execSync throws).
+            execSync("git diff --quiet HEAD --", { stdio: "ignore" });
+        } catch {
+            dirty = true;
+        }
+        return dirty ? `${sha}-dirty` : sha;
+    } catch {
+        return "unknown";
+    }
+}
+const APP_VERSION = getAppVersion();
+
+// Post-build plugin: minifies dist/sw.js. Vite copies public/ into dist/
+// as-is (assets under public/ never go through the bundle pipeline and are
+// not minified), so without this step the SW would ship to prod unminified.
+// Run it through Vite's `minify` export (the Oxc minifier from rolldown/utils -
+// same toolchain as the rest of the bundle, no extra dependency; transformWithOxc
+// does NOT fit - it's a transformer, minify is not applied there). The ABI with
+// native-file-system-adapter (postMessage payload `{url, headers, readablePort}`)
+// is unaffected: the minifier compresses whitespace and local identifiers but does
+// NOT rename object keys - and those keys are exactly the SW contract.
+function minifyServiceWorker() {
+    return {
+        name: "minify-sw",
+        apply: "build" as const,
+        async closeBundle() {
+            // Same dist/sw.js path as swPrecachePlugin (they are a coupled
+            // inject->minify pair); keep one source of truth for its location.
+            const swPath = resolve(process.cwd(), "dist", "sw.js");
+            const code = readFileSync(swPath, "utf-8");
+            // minify signature is (filename, code) - filename drives the parser.
+            const { code: minified } = await minifyOxc("sw.js", code);
+            writeFileSync(swPath, minified);
+        },
+    };
+}
+
+// HTML minification (Vite does not do it by default, only JS/CSS). Applied
+// via transformIndexHtml in the "post" phase - after all asset-injection
+// processing. Strips comments, collapses whitespace, minifies inline scripts
+// (JSON-LD is left alone - its type is "application/ld+json", not text/javascript).
+// removeScriptTypeAttributes is disabled on purpose: otherwise Vite's entry
+// script loses its type="module" and the app fails to load.
+function minifyHtmlPlugin() {
+    return {
+        name: "minify-html",
+        apply: "build" as const,
+        transformIndexHtml: {
+            order: "post" as const,
+            handler: async (html: string) => {
+                return await minifyHtml(html, {
+                    collapseWhitespace: true,
+                    removeComments: true,
+                    minifyCSS: true,
+                    minifyJS: true,
+                    useShortDoctype: true,
+                    removeRedundantAttributes: true,
+                    removeStyleLinkTypeAttributes: true,
+                    removeScriptTypeAttributes: false,
+                    removeAttributeQuotes: false,
+                    sortAttributes: true,
+                    sortClassName: true,
+                });
+            },
+        },
+    };
+}
+
+// VITE_NO_INDEX flags a build whose output should stay out of search engine
+// indexes. Set as an env-var on the staging CF Pages project; production
+// project leaves it unset. When set:
+//   - <meta name="robots" content="noindex, nofollow"> goes into every
+//     prerendered HTML (landing /, /ru/, /cameras/, /ru/cameras/, all
+//     vendor pages), and the root stub gets its noindex
+//   - dist/_headers gets an `X-Robots-Tag: noindex` rule for /* (covers
+//     non-HTML responses: og-cover.png, sitemap.xml)
+//   - robots.txt is rewritten to ALLOW crawling - a Disallow would hide
+//     both noindex signals from crawlers (a disallowed URL is never
+//     fetched) and externally-linked URLs could be indexed content-less.
+//     See SeoBuildOptions in vite-plugins/seo-prerender.ts.
+const NO_INDEX = process.env.VITE_NO_INDEX === "1" || process.env.VITE_NO_INDEX === "true";
+
+// Source-map upload to Sentry runs ONLY when all three build-time secrets are
+// present (set on the CF Pages project env). Gating on presence keeps local dev,
+// CI and self-hosted forks free of any Sentry build step: no token => no upload,
+// no maps emitted (see build.sourcemap). sentryVitePlugin injects a debugId into
+// each chunk and uploads the matching hidden .map, so it MUST run inside the same
+// build that produces the deployed assets (CF Pages), not out-of-band - local
+// hashes/debugIds would not match what got deployed. The auth token is a build
+// secret, never shipped to the client.
+const SENTRY_UPLOAD = Boolean(
+    process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT,
+);
+
+export default defineConfig(({ command }) => {
+    // Cache-busted tracker asset URLs (versioned /ort/ dir + content-hashed
+    // models). Computed once here so the __DC_TRACKER_ASSETS__ define and
+    // trackerAssetsPlugin share one hash pass. Mode-aware: dev keeps the
+    // original URLs. See vite-plugins/tracker-assets.ts.
+    const trackerAssets = computeTrackerAssets(command);
+    return {
+    define: {
+        // Available across app code as `__APP_VERSION__: string`. Inlined
+        // literally by the minifier (Oxc) - typed in `src/version.ts`.
+        __APP_VERSION__: JSON.stringify(APP_VERSION),
+        // Cache-busted tracker asset URLs for src/ui/blur-assets.ts. Typed +
+        // guarded there (vitest gets no define). See tracker-assets.ts.
+        __DC_TRACKER_ASSETS__: JSON.stringify(trackerAssets.app),
+        // Tree-shake Sentry's tracing + debug scaffolding out of the errors-only
+        // build. Safe ONLY because src/sentry.ts never imports the tracing/replay
+        // integrations nor calls startSpan() - flipping __SENTRY_TRACING__ to
+        // false while using tracing APIs would break them. See Sentry's
+        // tree-shaking docs.
+        __SENTRY_DEBUG__: JSON.stringify(false),
+        __SENTRY_TRACING__: JSON.stringify(false),
+    },
+    plugins: [
+        // Dev-only: serve public/<slug>.html for its extension-less clean URL
+        // (/add-my-camera, /privacy, ...). Cloudflare Pages (prod) and `vite
+        // preview` resolve clean URLs to the .html automatically; `vite dev`
+        // does not - a bare /add-my-camera falls through to the app-shell
+        // index.html, so footer links open the main app while reviewing
+        // locally. Reads the file directly (order-independent, no reliance on
+        // the public-serving middleware position). The `public/<slug>.html`
+        // existence gate means this never shadows the app's locale routes
+        // (/en/, /ru/, ...) or hashed assets. Build/preview unaffected.
+        {
+            name: "dashcamigo-dev-clean-html",
+            apply: "serve",
+            configureServer(server) {
+                server.middlewares.use((req, res, next) => {
+                    const path = (req.url ?? "").split("?")[0] ?? "";
+                    if (/^\/[a-z0-9-]+$/i.test(path)) {
+                        const file = resolve(process.cwd(), "public", `${path.slice(1)}.html`);
+                        if (existsSync(file)) {
+                            res.setHeader("Content-Type", "text/html; charset=utf-8");
+                            res.end(readFileSync(file));
+                            return;
+                        }
+                    }
+                    next();
+                });
+            },
+        },
+        // Expands SEO-baseline placeholders in index.html (bootstrap lang list,
+        // hreflang cluster, og:locale:alternate cluster) from SEO_LOCALES.
+        // Runs in both dev and build; uses transformIndexHtml order:"pre" so
+        // the expansion happens BEFORE minifyHtmlPlugin (which is "post").
+        dynamicBaselinePlugin(),
+        // IndexNow proof-of-ownership file from INDEXNOW_KEY env; no env ->
+        // no file (forks, local dev). See vite-plugins/indexnow-key.ts for
+        // why the key is NOT a committed public/ file.
+        indexnowKeyPlugin(),
+        minifyHtmlPlugin(),
+        // SEO build pipeline. All three plugins run in closeBundle, AFTER vite
+        // has written dist/index.html and html-minifier has minified it. See
+        // vite-plugins/seo-prerender.ts for the rationale (hreflang, two
+        // static URLs for en + ru, FAQ-rich-snippets, sitemap). Vendor pages
+        // emit per-vendor /cameras/<slug>/ static HTML for SERP long-tail.
+        // noIndex flips staging deploys to noindex+Disallow without changing
+        // production behavior.
+        i18nPrerenderPlugin(getSeoLocales(), { noIndex: NO_INDEX }),
+        vendorPagesPlugin({ noIndex: NO_INDEX }),
+        // Competitor "alternative-to" landing pages: /<lang>/alternatives/<slug>/
+        // + the /<lang>/alternatives/ hub. Same machinery as vendor pages,
+        // captures navigational demand for named dashcam tools (RegistratorViewer,
+        // Dashcam Viewer, VLC). See vite-plugins/alternative-pages.ts.
+        alternativePagesPlugin({ noIndex: NO_INDEX }),
+        // Use-case landing pages: /<lang>/<feature-slug>/ (slug list =
+        // FeatureSlug in vite-plugins/feature-pages.ts). Same machinery as the
+        // vendor / alternative plugins; surfaces capabilities the homepage
+        // buries (merge, overlay, privacy blur).
+        featurePagesPlugin({ noIndex: NO_INDEX }),
+        sitemapPlugin({ noIndex: NO_INDEX }),
+        // rootStubPlugin overwrites dist/index.html with a redirect stub
+        // AFTER i18nPrerenderPlugin has read it as the baseline for the
+        // per-locale outputs. The stub redirects (meta refresh + JS) with
+        // canonical → /en/, contains the same bootstrap as locale pages
+        // (one CSP hash for both), and JS-redirects every visitor to
+        // /<lang>/ on the client. noIndex (staging) adds a robots noindex
+        // meta; production carries no robots meta - Google treats the
+        // instant meta-refresh as a redirect, and mixing noindex with a
+        // canonical sends conflicting signals. Must run BEFORE cspHashPlugin
+        // so the hash plugin sees the stub's bootstrap (identical to locale
+        // pages by construction).
+        rootStubPlugin({ noIndex: NO_INDEX }),
+        // Inject the precache manifest into dist/sw.js for offline support. MUST
+        // run AFTER i18nPrerenderPlugin + rootStubPlugin (all 12 shells + the
+        // stub must exist in dist/) and BEFORE minifyServiceWorker() (which then
+        // minifies the SW with the manifest already injected). See
+        // vite-plugins/sw-precache.ts.
+        swPrecachePlugin(),
+        // Self-hosts the blur-zone tracker's runtime assets (onnxruntime-web wasm
+        // + ONNX models) under cache-busted URLs; deliberately NOT precached, and
+        // injects the current URL set into sw.js so activate drops superseded
+        // TRACKER entries. See vite-plugins/tracker-assets.ts.
+        trackerAssetsPlugin(trackerAssets),
+        // Minify dist/sw.js LAST in the SW pipeline - after swPrecachePlugin has
+        // written the manifest into the readable source, so the injected manifest
+        // is minified together with the rest of the SW.
+        minifyServiceWorker(),
+        // _redirects file for Cloudflare Pages: 301 redirects from legacy
+        // /cameras/* paths (pre-2026-05 English vendor URLs) to the new
+        // /en/cameras/* locations. Edge-level 301, preserves link equity
+        // for any external backlinks pointing at the old paths.
+        redirectsPlugin(),
+        // llms.txt for AI agents (Claude, Perplexity, ChatGPT). Independent
+        // of noIndex - the file lists production URLs, so even on staging
+        // it points agents at the canonical site. See vite-plugins/llms-txt.ts.
+        llmsTxtPlugin(),
+        // CSP hash for the inline bootstrap in index.html. Registered last -
+        // reads the final dist/index.html (after html-minifier and the SEO
+        // plugins) and injects 'sha256-...' into dist/_headers. Without this
+        // the inline <script> gets blocked by CSP in prod.
+        cspHashPlugin(),
+        // Source maps -> Sentry (prod CF build only, gated by SENTRY_UPLOAD).
+        // Injects a debugId into every emitted chunk and uploads the matching
+        // hidden .map, then deletes all .map from dist (filesToDeleteAfterUpload)
+        // so nothing reaches the client. errorHandler swallows upload failures -
+        // a Sentry outage must never fail a production deploy. release.name =
+        // APP_VERSION (git SHA) matches the runtime `release` in sentry-init.ts,
+        // so crash events line up with the uploaded maps. It only mangles chunk
+        // assets, not the inline bootstrap, so the CSP hash above stays valid.
+        ...(SENTRY_UPLOAD
+            ? [
+                  sentryVitePlugin({
+                      org: process.env.SENTRY_ORG,
+                      project: process.env.SENTRY_PROJECT,
+                      authToken: process.env.SENTRY_AUTH_TOKEN,
+                      release: { name: APP_VERSION },
+                      telemetry: false,
+                      errorHandler: (err) => {
+                          // Build tooling, not shipped code - console is the CF build log.
+                          console.warn("[sentry] source map upload failed (non-fatal):", err.message);
+                      },
+                      sourcemaps: {
+                          filesToDeleteAfterUpload: ["./dist/**/*.map"],
+                      },
+                  }),
+              ]
+            : []),
+    ],
+    build: {
+        target: "es2022",
+        // Hidden source maps ONLY on the prod CF build (SENTRY_UPLOAD): emitted
+        // WITHOUT a `//# sourceMappingURL` comment, uploaded to Sentry, then
+        // deleted from dist by sentryVitePlugin - so they never ship to the
+        // client. No token (local/CI/fork) => no maps at all.
+        sourcemap: SENTRY_UPLOAD ? "hidden" : false,
+        outDir: "dist",
+        // SVG icons and small assets up to 8KB get inlined into JS/CSS - fewer HTTP requests.
+        assetsInlineLimit: 8192,
+        cssMinify: true,
+        // Our browser floor (current/previous major, 2025+) natively supports
+        // <link rel=modulepreload>, so Vite's polyfill fallback is dead weight
+        // on the landing page's critical path (CLAUDE.md: we don't write
+        // fallbacks for outdated APIs). Not needed for offline either - we load
+        // from the SW cache.
+        modulePreload: { polyfill: false },
+        // Oxc - Vite 8's default minifier (the unified Rust toolchain, Rolldown/Oxc).
+        // console is NOT dropped: all logs go through the runtime-gated logger
+        // (src/log.ts); prod default is warn, and the user can enable debug/info
+        // via localStorage for bug reports (the primary diagnostic channel, since
+        // there's no backend - see CLAUDE.md "Logging"). Oxc keeps console calls
+        // by default, which is exactly what we want.
+        minify: "oxc",
+        rolldownOptions: {
+            output: {
+                // Strip ALL comments, including dependency license banners
+                // (mediabunny MPL `/*!...`). Oxc keeps legal comments by
+                // default, and bundling duplicates them dozens of times (once
+                // per module/worker) - pure bloat. Matches the previous terser
+                // `format.comments:false`. This covers only the main-thread
+                // graph; workers are stripped via `worker.rolldownOptions` below.
+                comments: false,
+                // Vendor splitting: npm dependencies are moved into separate
+                // named chunks - on Cloudflare Pages this gives a good cache-hit
+                // rate for returning visitors (vendor changes rarely, the app
+                // chunk redeploys often). A group does NOT make its chunk eager:
+                // reachability decides that, so a lazily-imported package listed
+                // here still lands in an async chunk.
+                //
+                // vendor-media is the one group that exists for correctness, not
+                // caching. Left to itself, Rolldown slices mediabunny by which
+                // entries reach each module, and the slices end up importing each
+                // other: `sample.js` calls polyfillSymbolDispose() from
+                // `misc.js` at module top level while `index.js` re-exports
+                // `sample.js` back, so whichever chunk evaluates first reads a
+                // binding the other has not assigned yet. mediabunny's own module
+                // graph is acyclic - the cycle is created by the split - and it
+                // fails only at runtime ("... is not a function" on first
+                // ingest), never at build time. One group, one chunk, no cycle.
+                // The other lazy libs are left ungrouped - Rolldown splits
+                // chart.js too, but acyclically, and a split is only a hazard
+                // when the pieces reference each other's top-level bindings.
+                // (Workers bundle their own copy of mediabunny independently -
+                // this is main-thread graph only.)
+                // Build-time guard scripts/check-lazy-chunks.mjs (in `npm run
+                // build`) fails loudly if maplibre/chart/mediabunny end up in the
+                // landing page's eager preload - a bundler/dep change gets caught
+                // at build time.
+                //
+                // The object form of manualChunks was removed in Rolldown; the
+                // equivalent is codeSplitting.groups with { name, test }: test
+                // matches a module by its node_modules path, the group pulls in
+                // its dependencies too.
+                codeSplitting: {
+                    groups: [
+                        { name: "vendor-fsa", test: /node_modules[\\/]native-file-system-adapter[\\/]/ },
+                        { name: "vendor-i18n", test: /node_modules[\\/]intl-messageformat[\\/]/ },
+                        { name: "vendor-media", test: /node_modules[\\/]mediabunny[\\/]/ },
+                    ],
+                },
+            },
+        },
+    },
+    // Workers are a SEPARATE build graph (their own Rolldown pass); the
+    // build.rolldownOptions above does not reach them. Each worker bundles its
+    // own copy of mediabunny, so without this each one carries dozens of
+    // duplicated MPL license banners. Strip comments here too. We set ONLY
+    // output.comments - Vite fills in the worker format/entry itself (merged,
+    // not overwritten).
+    worker: {
+        rolldownOptions: {
+            output: {
+                comments: false,
+            },
+        },
+    },
+    // onnxruntime-web/wasm is only reachable through the blur-zone tracker
+    // worker, and Vite's cold-start dep scanner does not crawl worker entry
+    // points - so it is discovered LATE, on the first track pass, which forces a
+    // mid-session re-optimize + browserHash bump. That strands the mediabunny
+    // copy already loaded by the export/preview workers: two live instances
+    // ("Mediabunny was loaded twice"), and the cross-instance InputFormat
+    // instanceof check in `new Input({ formats })` then throws "options.formats
+    // must be an array of InputFormat". Pre-bundling it up front keeps the
+    // browserHash stable from the start. Dev-only concern - each worker
+    // self-bundles mediabunny once in the production build.
+    optimizeDeps: {
+        include: ["onnxruntime-web/wasm"],
+    },
+    server: {
+        port: 5173,
+        open: false,
+    },
+    preview: {
+        port: 4173,
+        // Cross-origin isolation for the perf-test harness:
+        // performance.measureUserAgentSpecificMemory() (single source of truth
+        // for total page memory including Web Workers) requires
+        // `crossOriginIsolated == true`, which in turn requires both COOP and
+        // COEP headers. Without them the API throws SecurityError and the
+        // harness can only see main-thread JS heap - tests for tracking memory
+        // regressions in transcode/preview/gps-extract workers are blind.
+        //
+        // Gated by PERF_TEST=1 so production preview (and dashcamigo.app
+        // itself) stay unchanged. COEP=require-corp can break third-party
+        // assets that lack CORP headers (map tiles, analytics scripts) -
+        // perf-tests run on an offline-ish localhost and don't depend on them.
+        headers:
+            process.env.PERF_TEST === "1"
+                ? {
+                      "Cross-Origin-Opener-Policy": "same-origin",
+                      "Cross-Origin-Embedder-Policy": "require-corp",
+                  }
+                : undefined,
+    },
+    test: {
+        environment: "node",
+        include: ["src/**/*.test.ts"],
+        // Coverage is a reporting lens, not a gate: run on demand via
+        // `npm run test:coverage`, read by a human to find untested logic. No
+        // CI threshold - a number-chasing gate rewards asserting-nothing tests
+        // and punishes DOM/worker code the node env cannot reach anyway. Only
+        // activates under --coverage, so plain `npm test` is unaffected.
+        coverage: {
+            provider: "v8",
+            reporter: ["text", "html", "json-summary"],
+            reportsDirectory: "tests/coverage",
+            include: ["src/**/*.ts"],
+            exclude: [
+                "src/**/*.test.ts",
+                "src/**/*.bench.ts",
+                "src/**/__fixtures__/**",
+                "src/types/**",
+            ],
+        },
+    },
+    // Disable PostCSS config auto-discovery. Without this, Vite walks the
+    // filesystem upward looking for postcss.config.* and may pick up a config
+    // from an unrelated nested repo (e.g. a clone inside private/
+    // for research) that depends on devDeps we do not have installed. Our CSS
+    // pipeline does not need PostCSS plugins - empty object short-circuits.
+    css: { postcss: {} },
+    };
+});

@@ -1,0 +1,361 @@
+// Single source of truth for per-locale SEO metadata. Used by:
+//  - vite-plugins/seo-prerender.ts to emit dist/<segment>/index.html for each
+//    locale, with self-referencing canonical, full hreflang graph, og:locale
+//    and Content-Language signals;
+//  - vite-plugins/vendor-pages.ts to emit /cameras/<vendor>/ under each locale;
+//  - vite-plugins/llms-txt.ts as the list of indexable URLs;
+//  - src/i18n/index.ts and src/ui/lang-switcher.ts to map URL segments to
+//    Lang codes (URL-first lang detection).
+//
+// Adding/removing a locale: edit SEO_LOCALES below + the corresponding entry
+// in i18n/index.ts (LANGS, dictionaries, LOCALES). The two arrays stay in
+// lockstep via the `lang` field - Lang is the union type from index.ts and
+// any drift fails to compile.
+//
+// hreflang policy: BCP 47 codes with hyphens. We emit "pt-BR" (region) and
+// "zh-Hans" (script) explicitly (the dictionaries are Brazilian Portuguese
+// and Simplified Chinese - see comments at the top of pt.ts / zh.ts). Other
+// locales emit the language-only form (en, ru, de, ...) - region/script is
+// not load-bearing for the actual content variant we ship.
+//
+// Generic-language aliases (extraHreflangs): a locale may additionally
+// claim the bare language code pointing at the SAME URL. pt does this
+// ("pt" + "pt-BR" → /pt/): without the alias a pt-PT visitor matches
+// nothing and falls through x-default to English, while Brazilian
+// Portuguese is obviously the closer fallback. Multiple hreflang entries
+// per URL are explicitly allowed by Google's localized-versions doc.
+// zh deliberately has NO generic alias: "zh" would claim Traditional
+// readers (zh-TW/zh-HK) for a Simplified page - whether that beats
+// English fallback is contested, so we keep the honest zh-Hans only.
+//
+// og:locale uses underscores (BCP 47 region form): en_US, ru_RU, etc.
+// Content-Language uses hyphens (HTTP / HTML form): en-US, ru-RU, etc.
+// These are different conventions for the same data, see the two columns
+// in SEO_LOCALES.
+
+import type { Lang } from "./index.js";
+
+// Absolute origin for the production deployment. Centralized so build plugins
+// (sitemap, llms.txt, prerender, vendor pages) share one source of truth and
+// stay in sync if the apex changes.
+export const SITE_ORIGIN = "https://dashcamigo.app";
+
+// Source repository. Same reason as SITE_ORIGIN: the generated pages, llms.txt
+// and the footers all point at it, and it must not drift between them. The two
+// copies in index.html are static markup that cannot import this.
+export const REPO_URL = "https://github.com/amkulikov/dashcamigo";
+
+// Absolute URL of the root redirect stub. This is NOT a locale's home URL -
+// it's the language-neutral entry point that JS-redirects every visitor to
+// /<lang>/ by localStorage > navigator > en priority. Used as:
+//  - the share-safe URL the marketing team gives out (always lands every
+//    visitor on their language),
+//  - the "root is a redirect" note in llms.txt (vite-plugins/llms-txt.ts).
+// It is NOT the hreflang x-default target: x-default points at the default
+// locale's home /en/ everywhere - a content-less redirect stub is a poor
+// fallback target for crawlers (see vite-plugins/seo-prerender.ts). The
+// stub's own <link rel=canonical> also points at /en/, not at itself
+// (vite-plugins/root-stub.ts).
+export const ROOT_URL = `${SITE_ORIGIN}/`;
+
+export interface SeoLocale {
+    // ISO 639-1 code, matches Lang in i18n/index.ts. Used for <html lang>,
+    // dictionary lookup, and as the slug we map URL segments to.
+    lang: Lang;
+    // Path segment under dist/: pages are written to dist/<segment>/index.html
+    // and live under /<segment>/... Always non-empty - every locale, including
+    // English, lives under its own segment; the root "/" is a redirect stub
+    // (vite-plugins/root-stub.ts), not a locale's home.
+    urlSegment: string;
+    // BCP 47 region form for og:locale (underscores). en_US, ru_RU, pt_BR.
+    ogLocale: string;
+    // BCP 47 hyphen form for hreflang. en, ru, pt-BR, zh-CN. We use language-
+    // only for most locales (region is not part of what differs between our
+    // copies); pt and zh are explicit because the dictionary is one specific
+    // variant (Brazilian, Simplified).
+    hreflang: string;
+    // Additional hreflang codes that point at the SAME URL as `hreflang`.
+    // Used for generic-language aliases (pt-BR also claims bare "pt" so
+    // pt-PT visitors get Portuguese instead of the x-default English).
+    // Emit via getHreflangCodes() - never read this field directly, or the
+    // alias will silently miss one of the cluster emitters.
+    extraHreflangs?: ReadonlyArray<string>;
+    // HTTP Content-Language / <meta http-equiv="content-language"> form
+    // (hyphens). Same as i18n/index.ts LOCALES - reused here so the meta
+    // tag stays consistent with Intl.* locale strings used at runtime.
+    // Yandex, Baidu, Naver, old Bing all read this when hreflang is absent
+    // or as a redundancy signal.
+    contentLanguage: string;
+    // Whether this locale should be referenced from hreflang clusters,
+    // included in sitemap.xml, and indexed by search engines. Currently
+    // true for all 12 - we ship LLM-quality translations and accept that
+    // tradeoff. Flag stays in the contract so a future locale can be
+    // temporarily excluded without ripping out the SEO pipeline.
+    indexable: boolean;
+    // 1200x630 social-card image filename (relative to site origin, no
+    // leading slash). og-cover.png (English) and og-cover-ru.png (Russian)
+    // are generated by scripts/generate-og-cover.mjs. Other 10 locales fall
+    // back to og-cover.png - acceptable because the OG image SEO impact is
+    // mostly on social-share unfurl previews, not search ranking.
+    ogImage: string;
+}
+
+// All 12 locales we ship. Order: alphabetical by lang code - lookup is by
+// code, not order; keeping this stable makes diffs in PRs readable.
+export const SEO_LOCALES: ReadonlyArray<SeoLocale> = [
+    {
+        lang: "de",
+        urlSegment: "de",
+        ogLocale: "de_DE",
+        hreflang: "de",
+        contentLanguage: "de-DE",
+        indexable: true,
+        ogImage: "og-cover.png",
+    },
+    {
+        // English lives under /en/ like every other locale - the root "/" is
+        // a redirect-only stub (rootStubPlugin), not English content. All 12
+        // locales stay symmetric under /<seg>/ so the root URL is share-safe:
+        // a returning user with localStorage="ru" never sees an EN baseline
+        // with an RU text swap on the same / URL.
+        lang: "en",
+        urlSegment: "en",
+        ogLocale: "en_US",
+        hreflang: "en",
+        contentLanguage: "en-US",
+        indexable: true,
+        ogImage: "og-cover.png",
+    },
+    {
+        lang: "es",
+        urlSegment: "es",
+        ogLocale: "es_ES",
+        hreflang: "es",
+        contentLanguage: "es-ES",
+        indexable: true,
+        ogImage: "og-cover.png",
+    },
+    {
+        lang: "fr",
+        urlSegment: "fr",
+        ogLocale: "fr_FR",
+        hreflang: "fr",
+        contentLanguage: "fr-FR",
+        indexable: true,
+        ogImage: "og-cover.png",
+    },
+    {
+        lang: "ja",
+        urlSegment: "ja",
+        ogLocale: "ja_JP",
+        hreflang: "ja",
+        contentLanguage: "ja-JP",
+        indexable: true,
+        ogImage: "og-cover.png",
+    },
+    {
+        lang: "ko",
+        urlSegment: "ko",
+        ogLocale: "ko_KR",
+        hreflang: "ko",
+        contentLanguage: "ko-KR",
+        indexable: true,
+        ogImage: "og-cover.png",
+    },
+    {
+        lang: "pl",
+        urlSegment: "pl",
+        ogLocale: "pl_PL",
+        hreflang: "pl",
+        contentLanguage: "pl-PL",
+        indexable: true,
+        ogImage: "og-cover.png",
+    },
+    {
+        lang: "pt",
+        urlSegment: "pt",
+        ogLocale: "pt_BR",
+        // pt.ts is Brazilian Portuguese - emit pt-BR explicitly so crawlers
+        // know which Portuguese variant this is. The generic "pt" alias
+        // points at the same URL: a pt-PT visitor otherwise matches nothing
+        // and falls through x-default to English, and Brazilian Portuguese
+        // beats English as a fallback for any Portuguese speaker.
+        hreflang: "pt-BR",
+        extraHreflangs: ["pt"],
+        contentLanguage: "pt-BR",
+        indexable: true,
+        ogImage: "og-cover.png",
+    },
+    {
+        lang: "ru",
+        urlSegment: "ru",
+        ogLocale: "ru_RU",
+        hreflang: "ru",
+        contentLanguage: "ru-RU",
+        indexable: true,
+        ogImage: "og-cover-ru.png",
+    },
+    {
+        lang: "zh",
+        urlSegment: "zh",
+        ogLocale: "zh_CN",
+        // zh.ts is Simplified Chinese. We emit zh-Hans (script subtag) rather
+        // than zh-CN (region subtag): the variant distinction here is script,
+        // not region - Simplified is used by Mainland + Singapore + Malaysia +
+        // diaspora, not just CN. A zh-TW user lands here and sees an unfamiliar
+        // variant, but at least the hreflang honestly says "Simplified" so
+        // search engines and zh-Hant readers know what to expect.
+        hreflang: "zh-Hans",
+        contentLanguage: "zh-CN",
+        indexable: true,
+        ogImage: "og-cover.png",
+    },
+];
+
+// English is the default locale. Like every other locale it lives under its
+// own segment (/en/) - the root "/" is a redirect stub, not English content.
+// hreflang x-default points at this locale's variant of each page (/en/ for
+// homepages, /en/<page>/ for sub-pages - see vite-plugins/seo-prerender.ts).
+// Several functions below assume this is non-null - we keep an English entry
+// in SEO_LOCALES at all times.
+export function getDefaultSeoLocale(): SeoLocale {
+    const en = SEO_LOCALES.find((l) => l.lang === "en");
+    if (!en) throw new Error("seo-config: no English locale in SEO_LOCALES (English is the required default)");
+    return en;
+}
+
+export function getSeoLocaleByLang(lang: Lang): SeoLocale | undefined {
+    return SEO_LOCALES.find((l) => l.lang === lang);
+}
+
+// Match a URL path's first segment to a locale. Empty string ("") means
+// "no locale segment in URL" - this is the root stub, NOT a locale. Returns
+// undefined for "" so callers can distinguish "root URL" from "a known
+// locale": the root URL has no canonical locale, it's a redirect stub that
+// resolves locale on the client.
+// Unknown segment → undefined (caller decides: 404, redirect, treat as root).
+export function getSeoLocaleByUrlSegment(segment: string): SeoLocale | undefined {
+    if (segment === "") return undefined;
+    return SEO_LOCALES.find((l) => l.urlSegment === segment);
+}
+
+// Locales that go into hreflang clusters and the sitemap. Currently equals
+// SEO_LOCALES (all are indexable), but keeping the filter so a future
+// "draft" locale can be hidden from search engines without removing it
+// from the runtime LANGS list.
+export function getIndexableSeoLocales(): ReadonlyArray<SeoLocale> {
+    return SEO_LOCALES.filter((l) => l.indexable);
+}
+
+// All hreflang codes a locale claims: the primary plus any generic-language
+// aliases, every one pointing at the same URL. Single accessor for every
+// hreflang-cluster emitter (head <link> blocks, sitemap xhtml:link maps) so
+// an alias added in SEO_LOCALES propagates everywhere at once.
+export function getHreflangCodes(locale: SeoLocale): ReadonlyArray<string> {
+    return [locale.hreflang, ...(locale.extraHreflangs ?? [])];
+}
+
+// Build the sitemap alternates map for one page: hreflang code → that
+// locale's URL of THIS page, generic aliases included (an alias maps to the
+// same URL as its primary code). makeUrl is called once per indexable
+// locale. Shared by the homepage / vendor / alternatives sitemap emitters
+// so they cannot drift on how aliases are handled.
+export function buildHreflangAlternatesMap(makeUrl: (locale: SeoLocale) => string): Record<string, string> {
+    const map: Record<string, string> = {};
+    for (const locale of getIndexableSeoLocales()) {
+        const url = makeUrl(locale);
+        for (const code of getHreflangCodes(locale)) {
+            map[code] = url;
+        }
+    }
+    return map;
+}
+
+// Pulls the lang out of a URL pathname when the first segment is a known
+// locale prefix. Returns null when there is no locale segment to read from -
+// the caller (detectInitialLang) then falls back to localStorage / navigator.
+//
+// Examples:
+//  - "/"                      → null  (root stub, no signal - bootstrap redirects)
+//  - "/index.html"            → null  (no signal)
+//  - "/en/"                   → "en"
+//  - "/ru/"                   → "ru"
+//  - "/de/cameras/70mai/"     → "de"
+//  - "/cameras/70mai/"        → null  (legacy path, server-side 301 to /en/cameras/70mai/)
+//  - "/privacy.html"          → null
+//  - "/foobar/"               → null  (unknown segment)
+//
+// Returning null on root matters because detectInitialLang needs to distinguish
+// "URL says ru" from "URL says nothing". On a known-locale URL (/ru/...) URL
+// always wins over localStorage; on the root stub there is no URL signal and
+// the bootstrap inline script picks the language by localStorage > navigator > en.
+//
+// Used in two places:
+//  - src/i18n/index.ts detectInitialLang: URL is the highest-priority signal.
+//  - src/ui/lang-switcher.ts buildLocaleUrl: figure out the non-locale tail
+//    of the current URL so the switcher can swap the locale segment.
+export function parseLangFromPath(pathname: string): Lang | null {
+    // Strip leading / trailing slashes for tokenization. "/ru/cameras/" → ["ru","cameras"].
+    const segments = pathname.split("/").filter((s) => s.length > 0);
+    if (segments.length === 0) return null;
+    // Single matcher for urlSegment -> locale (also used by buildLocaleUrl), so
+    // the membership rule has one source of truth.
+    return getSeoLocaleByUrlSegment(segments[0]!)?.lang ?? null;
+}
+
+// Build the URL for a different locale, preserving the page (root vs vendor)
+// and the trailing slash, plus the query string / fragment if present.
+// Every locale, including English, lives under /<segment>/ - there is no
+// "default locale renders at /" anymore (root is a redirect stub).
+//
+// Examples:
+//  buildLocaleUrl("de", "/")                  → "/de/"
+//  buildLocaleUrl("de", "/ru/")               → "/de/"
+//  buildLocaleUrl("en", "/ru/cameras/")       → "/en/cameras/"
+//  buildLocaleUrl("ja", "/en/cameras/70mai/") → "/ja/cameras/70mai/"
+//  buildLocaleUrl("en", "/de/cameras/70mai/") → "/en/cameras/70mai/"
+//  buildLocaleUrl("de", "/ru/?vendor=70mai")  → "/de/?vendor=70mai"
+//  buildLocaleUrl("de", "/ru/#section")       → "/de/#section"
+//
+// Trailing slash is preserved on the path portion - Cloudflare Pages serves
+// /dir/index.html for /dir/ and 308-redirects /dir to /dir/, so canonical
+// URLs must stay slash-terminated. Query string and fragment are passed
+// through untouched.
+//
+// Input is expected to be a path-only string (e.g. location.pathname plus
+// optional location.search/hash), not an absolute URL. We strip the
+// path/query/hash ourselves to avoid pulling in the heavyweight URL parser
+// just for tokenization - the format is well-known: /[path]?[query]#[hash].
+export function buildLocaleUrl(targetLang: Lang, currentPath: string): string {
+    const target = getSeoLocaleByLang(targetLang);
+    if (!target) return currentPath;
+
+    // Separate path, query, fragment. URL spec parses left-to-right: "#" can
+    // appear inside the query but we strip whatever comes first - same heuristic
+    // as `new URL().searchParams` / `hash`. For our internal paths neither
+    // contains escaped delimiters, so simple split is safe.
+    const hashIdx = currentPath.indexOf("#");
+    const pathAndQuery = hashIdx >= 0 ? currentPath.slice(0, hashIdx) : currentPath;
+    const fragment = hashIdx >= 0 ? currentPath.slice(hashIdx) : "";
+    const queryIdx = pathAndQuery.indexOf("?");
+    const pathOnly = queryIdx >= 0 ? pathAndQuery.slice(0, queryIdx) : pathAndQuery;
+    const query = queryIdx >= 0 ? pathAndQuery.slice(queryIdx) : "";
+
+    const segments = pathOnly.split("/").filter((s) => s.length > 0);
+
+    // Drop the existing locale segment if there is one. SEO_LOCALES knows
+    // which slugs are locale prefixes; everything else (cameras, etc.) is
+    // page content and survives.
+    const isLocaleSegment = (seg: string): boolean => getSeoLocaleByUrlSegment(seg) !== undefined;
+    if (segments.length > 0 && segments[0] !== undefined && isLocaleSegment(segments[0])) {
+        segments.shift();
+    }
+
+    // Every locale has a non-empty urlSegment now (including English at /en/),
+    // so we always prepend. Resulting URLs are always slash-terminated -
+    // Cloudflare Pages 308-redirects /dir to /dir/, so this matches what the
+    // server serves and avoids an extra hop on canonical URLs.
+    segments.unshift(target.urlSegment);
+    const path = `/${segments.join("/")}/`;
+    return `${path}${query}${fragment}`;
+}

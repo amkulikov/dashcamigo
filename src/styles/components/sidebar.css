@@ -1,0 +1,877 @@
+/* =========================================================================
+   4. SIDEBAR + SORT + TRIP CARDS
+   ========================================================================= */
+.sidebar {
+    background: var(--bg-elev);
+    border-right: 1px solid var(--border);
+    padding: var(--dc-space-3);
+    overflow-y: auto;
+    min-width: 0;
+    font-family: var(--dc-font-body);
+}
+
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--dc-space-2);
+}
+
+.sidebar h2 {
+    margin: 0;
+    font-family: var(--dc-font-heavy);
+    font-size: var(--dc-text-xs);
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: var(--dc-tracking-caps);
+    color: var(--accent);
+}
+
+.sort-controls {
+    display: flex;
+    gap: var(--dc-space-1);
+}
+.sort-select {
+    background: var(--bg-elev-2);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    font-family: var(--dc-font-body);
+    font-size: var(--dc-text-xs);
+    padding: 2px 4px;
+    border-radius: var(--dc-radius-sm);
+    cursor: pointer;
+    max-width: 110px;
+}
+.sort-select:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-color: var(--accent);
+}
+
+.sort-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-family: var(--dc-font-body);
+    font-size: var(--dc-text-xs);
+    padding: var(--dc-space-1) var(--dc-space-1);
+    min-width: 24px;
+    border-radius: var(--dc-radius-sm);
+    cursor: pointer;
+    transition: color var(--dc-dur-base) var(--dc-ease);
+}
+.sort-btn:hover {
+    color: var(--fg);
+    border-color: var(--accent);
+}
+/* Press feedback - :hover never fires on touch and base.css suppresses the OS
+   tap flash, so without this the sort toggle reads as unresponsive on a phone. */
+.sort-btn:active {
+    color: var(--fg);
+    border-color: var(--accent);
+    background: var(--bg-active);
+}
+
+/* Touch: the trip sorter is the first interaction in the mobile drawer / browse
+   list. Grow both controls to the touch floor, and lift the select font to 16px
+   so iOS does not auto-zoom on focus. Keyed on coarse pointer (an iPad in
+   portrait is touch yet >=768px); desktop keeps the compact toolbar density. */
+@media (pointer: coarse) {
+    .sort-btn {
+        min-height: 44px;
+        min-width: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .sort-select {
+        min-height: 44px;
+        font-size: var(--dc-text-lg);
+        padding: var(--dc-space-1) var(--dc-space-2);
+        /* Long-locale labels (e.g. Russian "Duration"/"Distance") need room:
+           the 110px fine-pointer cap clips them, but the drawer has space at 16px font. */
+        max-width: none;
+        min-width: 0;
+    }
+    /* Grow the corner badges to the 44px touch floor WITHOUT enlarging the small
+       visible discs: expand only the tap area via a pseudo-element, each biased
+       away from the other so the chevron and event-chip hit zones do not overlap
+       (chevron grows down/into the corner; chip grows down/left, never right). */
+    .trip-chevron::before {
+        content: "";
+        position: absolute;
+        inset: -9px -9px -14px -6px;
+    }
+    .trip-header > .trip-event-chip::before {
+        content: "";
+        position: absolute;
+        inset: -12px 0 -12px -16px;
+    }
+}
+
+.trip-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-1);
+}
+
+.trip-summary {
+    padding: var(--dc-space-1) var(--dc-space-1) var(--dc-space-2) var(--dc-space-1);
+    color: var(--fg-dim);
+    font-size: var(--dc-text-xs);
+    border-bottom: 1px dashed var(--border);
+    margin-bottom: var(--dc-space-2);
+    font-variant-numeric: tabular-nums;
+}
+
+.trip-date-sep {
+    color: var(--fg-mute);
+    font-family: var(--dc-font-heavy);
+    font-size: var(--dc-text-2xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: var(--dc-tracking-caps);
+    /* Extra top padding to set the date header apart from the card above. */
+    padding: var(--dc-space-2) var(--dc-space-1) var(--dc-space-1);
+}
+.trip-summary + .trip-date-sep {
+    margin-top: 0;
+}
+
+.trip {
+    background: var(--bg-elev-2);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-md);
+    overflow: hidden;
+    transition:
+        border-color var(--dc-dur-base) var(--dc-ease),
+        box-shadow var(--dc-dur-base) var(--dc-ease);
+}
+/* Active trip: an orange ring via box-shadow (not border, so as not to
+   shift content). On the hero card an inset-shadow on the left wouldn't
+   look clean - replaced with a full 2px ring. */
+.trip.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+}
+.trip:hover {
+    border-color: var(--fg-dim);
+}
+.trip.active:hover {
+    border-color: var(--accent);
+}
+
+/* Trip hero card: sidebar width, aspect 3:1, the first frame's preview as
+   a background-image, text overlaid on top of a bottom gradient darkening.
+   If has-preview isn't set, the background stays a placeholder (bg-elev-2)
+   and the gradient gets absorbed, text reads fine on the dark fill.
+   ::before renders the gradient, ::after is unused (reserved). */
+.trip-header {
+    position: relative;
+    /* width:100% is required: without it the header takes its intrinsic
+       size from absolutely-positioned children with nowrap content
+       (title), and the card balloons to the widest element's natural
+       width. With width 100% it's bounded by the parent .trip, and
+       absolute children correctly compute their size from left/right. */
+    width: 100%;
+    box-sizing: border-box;
+    aspect-ratio: 3 / 1;
+    min-height: 84px;
+    cursor: pointer;
+    background-color: var(--bg-elev-2);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    overflow: hidden;
+    /* The card is a tappable nav target, not selectable text - block the iOS
+       long-press selection loupe from hijacking a press/scroll. */
+    user-select: none;
+    transition: filter var(--dc-dur-fast) var(--dc-ease);
+}
+.trip-header.has-preview::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        to top,
+        rgba(0, 0, 0, 0.85) 0%,
+        rgba(0, 0, 0, 0.55) 35%,
+        rgba(0, 0, 0, 0.05) 70%,
+        transparent 100%
+    );
+    pointer-events: none;
+    z-index: 0;
+}
+.trip-header:hover {
+    filter: brightness(1.08);
+}
+/* Pressed feedback for the primary mobile nav target (reuses the declared filter
+   transition). Excludes the non-interactive unindexed card. */
+.trip:not(.unindexed-note) .trip-header:active {
+    filter: brightness(1.14);
+}
+
+/* Trip title - white over the gradient/placeholder, text-shadow for
+   contrast on light previews. */
+.trip-title {
+    position: absolute;
+    left: 12px;
+    /* The actions zone (chevron + event-chip) sits at top:6, title at
+       bottom:26 - vertically separated, so the title can safely take the
+       header's full width up to the right edge. On a 200px sidebar this
+       gives ~150px for the title text instead of ~85, and a standard
+       localized date range like "Apr 29, 17:00 - 18:30" fits precisely. */
+    right: 12px;
+    bottom: 26px;
+    color: var(--dc-white);
+    font-family: var(--dc-font-heavy);
+    font-weight: 700;
+    font-size: var(--dc-text-md);
+    line-height: 1.15;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+    z-index: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    /* On a placeholder without a preview the gradient is subtle - the
+       text-shadow still reads fine on bg-elev-2. */
+}
+.trip-header:not(.has-preview) .trip-title {
+    color: var(--fg);
+    text-shadow: none;
+}
+/* Active-state title isn't highlighted separately: the visual comes from
+   .trip's border, an extra highlight could clash with it. */
+
+.trip-chevron {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 2;
+    width: 26px;
+    height: 26px;
+    background: rgba(0, 0, 0, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: var(--dc-white);
+    font-size: var(--dc-text-xl);
+    line-height: 1;
+    padding: 0;
+    cursor: pointer;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition:
+        transform var(--dc-dur-base) var(--dc-ease),
+        background var(--dc-dur-fast) var(--dc-ease);
+}
+.trip-header:not(.has-preview) .trip-chevron {
+    background: var(--bg-elev);
+    border-color: var(--border);
+    color: var(--fg);
+}
+.trip-chevron:hover {
+    background: rgba(0, 0, 0, 0.7);
+}
+.trip-header:not(.has-preview) .trip-chevron:hover {
+    background: var(--bg-hover);
+    color: var(--accent);
+}
+.trip.expanded .trip-chevron {
+    transform: rotate(90deg);
+}
+
+.unindexed-note {
+    border-color: var(--warn);
+    border-left-color: var(--warn);
+    border-style: dashed;
+}
+.unindexed-note .trip-header {
+    cursor: default;
+}
+.unindexed-note .trip-header:hover {
+    background: transparent;
+}
+.unindexed-note .trip-meta {
+    color: var(--warn);
+}
+
+.trip-meta {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 8px;
+    z-index: 1;
+    font-size: var(--dc-text-xs);
+    color: rgba(255, 255, 255, 0.85);
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+    /* A single meta-text takes the full width; chips moved to the header's
+       top corners, so the flex-row with justify-between is no longer needed. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.trip-meta .trip-meta-text {
+    /* Single-line text with ellipsis on overflow - on a min-width sidebar
+       (200px) a long meta like "1h 32m - 14 files - 187 km" gets truncated
+       instead of wrapping/overflowing. min-width:0 is needed so the flex
+       item can shrink below its content-size (the chip on the right is fixed). */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+.trip-header:not(.has-preview) .trip-meta {
+    color: var(--fg-dim);
+    text-shadow: none;
+}
+.trip.active .trip-meta-text {
+    color: rgba(255, 255, 255, 0.95);
+}
+.trip.active .trip-header:not(.has-preview) .trip-meta-text {
+    color: var(--fg);
+}
+
+/* Top-left badge slot on the hero card: one flex row so the parking badge
+   and a warning chip coexist without overlapping. The slot owns the corner
+   positioning; the chips inside stay in flow. */
+.trip-badge-slot {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    z-index: 2;
+    display: flex;
+    gap: var(--dc-space-1);
+    max-width: calc(100% - 80px); /* yields room for chevron+event-chip on the right */
+    pointer-events: none;
+}
+/* Vendor badge chips. Subtle (semi-transparent dark bg, small text) - the
+   info matters, but must not compete with the title. On a placeholder
+   without a preview they switch to the standard chip style from the palette. */
+.trip-vendor-badge {
+    font-family: var(--dc-font-ui);
+    font-size: var(--dc-text-3xs);
+    line-height: 1;
+    letter-spacing: var(--dc-tracking-wide);
+    text-transform: uppercase;
+    padding: var(--dc-space-1) var(--dc-space-1);
+    border-radius: var(--dc-radius-pill);
+    background: rgba(0, 0, 0, 0.5);
+    color: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.trip-vendor-badge.warn {
+    /* Accent lightened toward white: pure --dc-orange is too dark for 9px
+       text on the dark photo scrim this badge always sits on. */
+    color: color-mix(in srgb, var(--accent) 70%, var(--dc-white));
+    border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+    background: rgba(40, 20, 0, 0.7);
+}
+.trip-vendor-badge.parking {
+    /* Blue "P" like the road sign; same lighten-toward-white trick as .warn
+       (pure --dc-blue is too dim for 9px text on the dark photo scrim). */
+    color: color-mix(in srgb, var(--dc-blue) 70%, var(--dc-white));
+    border-color: color-mix(in srgb, var(--dc-blue) 60%, transparent);
+    background: rgba(0, 20, 40, 0.7);
+}
+.trip-header:not(.has-preview) .trip-vendor-badge {
+    background: var(--bg-hover);
+    color: var(--fg-dim);
+    border-color: var(--border);
+}
+.trip-header:not(.has-preview) .trip-vendor-badge.warn {
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    color: var(--warn);
+    border-color: var(--warn);
+}
+.trip-header:not(.has-preview) .trip-vendor-badge.parking {
+    background: color-mix(in srgb, var(--dc-blue) 8%, transparent);
+    color: var(--dc-blue);
+    border-color: var(--dc-blue);
+}
+
+/* The trip-event-chip moved to the hero card's top-right corner, left of
+   the chevron - both are grouped as "actions/badges" in the top-right
+   corner. On a narrow sidebar, when there's no event-chip the chevron sits
+   alone. */
+.trip-header > .trip-event-chip {
+    position: absolute;
+    top: 6px;
+    right: 38px; /* chevron 26px + 6px margin + 6px gap */
+    z-index: 2;
+    background: rgba(0, 0, 0, 0.5);
+    /* --err lightened toward white (border less than text): the chip sits on
+       the dark photo scrim regardless of theme, full-strength --dc-red is too
+       dark to read there. */
+    border-color: color-mix(in srgb, color-mix(in srgb, var(--err) 70%, var(--dc-white)) 70%, transparent);
+    color: color-mix(in srgb, var(--err) 55%, var(--dc-white));
+    padding: var(--dc-space-1) var(--dc-space-1);
+    font-size: var(--dc-text-2xs);
+}
+.trip-header > .trip-event-chip:hover {
+    background: var(--err);
+    color: var(--dc-white);
+}
+.trip-header:not(.has-preview) > .trip-event-chip {
+    background: transparent;
+    border-color: var(--err);
+    color: var(--err);
+}
+.trip-header:not(.has-preview) > .trip-event-chip:hover {
+    background: var(--err);
+    color: var(--dc-white);
+}
+/* Highlight of the metadata strip when part of the trip's GPS data is still
+   waiting to be parsed (the user declined the bulk-load prompt). The trip
+   text is legible, but "…" in the distance position means "not a final number". */
+.trip-meta .trip-meta-text.lazy-pending {
+    color: var(--fg-dim);
+    font-style: italic;
+}
+/* Active background load of this trip's heavy embedded GPS. The ⟳ symbol
+   is already part of the text from formatTripMeta; spinning it as a
+   separate glyph via ::after fights transform-origin, so instead we give
+   the whole span an opacity-pulse, for a sense of "in progress". */
+.trip-meta .trip-meta-text.lazy-inflight {
+    color: var(--fg-dim);
+    animation: lazy-pulse 1.4s ease-in-out infinite;
+}
+@keyframes lazy-pulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.55;
+    }
+}
+/* The dimmed color + ⟳ glyph already mark the inflight state statically, so
+   killing the infinite pulse for reduced-motion users loses no information. */
+@media (prefers-reduced-motion: reduce) {
+    .trip-meta .trip-meta-text.lazy-inflight {
+        animation: none;
+    }
+}
+
+/* Filename-first lazy ingest: a card without a thumbnail yet (and one is still
+   coming) shows an animated skeleton sweep over the placeholder hero, so it reads
+   as "still loading" rather than a finished card with a black thumbnail. Driven
+   by PREVIEW absence, not hydration, so the indication runs continuously from the
+   filename-first render through hydration until the real preview lands - no gap.
+   The reserved ::after (see the .trip-header comment) sits under the title/meta
+   (z-index 0). :not(.has-preview) because a real first-frame preview replaces it. */
+.trip--loading .trip-header:not(.has-preview)::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        color-mix(in srgb, var(--accent) 14%, transparent) 45%,
+        color-mix(in srgb, var(--accent) 24%, transparent) 50%,
+        color-mix(in srgb, var(--accent) 14%, transparent) 55%,
+        transparent 100%
+    );
+    transform: translateX(-100%);
+    animation: chart-strip-shimmer-sweep 1.6s linear infinite;
+    pointer-events: none;
+    z-index: 0;
+}
+/* Reduced motion: drop the sweep, keep a static centered sheen - still marks the
+   card as loading without animation. */
+@media (prefers-reduced-motion: reduce) {
+    .trip--loading .trip-header:not(.has-preview)::after {
+        animation: none;
+        transform: none;
+    }
+}
+
+/* Click "opening" feedback: the moment a trip is clicked, a centered spinner +
+   dim appears on its card - instant acknowledgement that the click registered,
+   held until playback takes over (clearOpeningTrip, from playFrame). Independent
+   of how long hydration takes, so a fast backend (where the progress modal never
+   crosses its threshold) still gives visible feedback. */
+.trip--opening .trip-header {
+    filter: brightness(0.82);
+}
+.trip-opening-spinner {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    pointer-events: none;
+}
+.trip-opening-spinner::after {
+    content: "";
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 2.5px solid color-mix(in srgb, var(--accent) 28%, transparent);
+    border-top-color: var(--accent);
+    animation: trip-opening-spin 0.7s linear infinite;
+}
+@keyframes trip-opening-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+/* A loading spinner is functional, not decorative - keep it turning for
+   reduced-motion users, just slower. */
+@media (prefers-reduced-motion: reduce) {
+    .trip-opening-spinner::after {
+        animation-duration: 1.5s;
+    }
+}
+
+/* No thumbnail will come (read failed / undecodable frame): a muted film glyph
+   centered in the hero, so the card reads as "done, no preview" rather than
+   either a still-loading shimmer or a finished photo. */
+.trip-no-preview-icon {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--fg-mute);
+    z-index: 0;
+    pointer-events: none;
+}
+
+.trip-files {
+    list-style: none;
+    margin: 0;
+    padding: 0 0 var(--dc-space-1) 0;
+    border-top: 1px solid var(--border);
+    background: var(--bg-elev);
+    display: none;
+}
+.trip.expanded .trip-files {
+    display: block;
+}
+
+.trip-files li {
+    /* position: relative anchors the absolutely-placed details toggle; the extra
+       right padding reserves room so a long file name never slides under it. */
+    position: relative;
+    padding: var(--dc-space-1) var(--dc-space-6) var(--dc-space-1) var(--dc-space-5);
+    font-size: var(--dc-text-xs);
+    cursor: pointer;
+    border-left: 2px solid transparent;
+    color: var(--fg);
+    transition: background var(--dc-dur-fast) var(--dc-ease);
+}
+.trip-files li:hover {
+    background: var(--bg-hover);
+}
+.trip-files li.active {
+    border-left-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.trip-files li.no-gps {
+    color: var(--warn);
+}
+
+.trip-files .file-name {
+    font-family: var(--dc-font-mono);
+    font-size: var(--dc-text-xs);
+    word-break: break-all;
+}
+.trip-files .file-meta {
+    color: var(--fg-dim);
+    font-size: var(--dc-text-2xs);
+    margin-top: var(--dc-space-1);
+    font-variant-numeric: tabular-nums;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--dc-space-1);
+}
+.trip-files .file-meta-text {
+    /* The text part can wrap; the chip on the right is fixed. */
+    min-width: 0;
+}
+/* Wraps the right-side chips (recording-mode, no-gps) so a frame carrying both
+   stays grouped together under .file-meta's justify-content: space-between,
+   instead of being spread to opposite ends of the row. */
+.file-meta-chips {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-1);
+}
+
+/* Per-clip technical-details toggle (the "i" button). Absolutely placed in the
+   top-right of the clip row; muted until hover/focus/open so it does not compete
+   with the file name. */
+.file-details-toggle {
+    position: absolute;
+    top: var(--dc-space-1);
+    right: var(--dc-space-1);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    border-radius: var(--dc-radius-sm);
+    background: transparent;
+    color: var(--fg-mute);
+    cursor: pointer;
+    opacity: 0.55;
+    transition:
+        opacity var(--dc-dur-fast) var(--dc-ease),
+        background var(--dc-dur-fast) var(--dc-ease),
+        color var(--dc-dur-fast) var(--dc-ease);
+}
+.trip-files li:hover .file-details-toggle,
+.file-details-toggle:hover,
+.file-details-toggle:focus-visible {
+    opacity: 1;
+    color: var(--fg);
+}
+.file-details-toggle:hover {
+    background: var(--bg-hover);
+}
+.trip-files li.file-details-open .file-details-toggle {
+    opacity: 1;
+    color: var(--accent-ink);
+}
+
+/* The details panel: hidden until the row carries .file-details-open. Indented
+   under the clip row; not part of the clickable/playable area (cursor: default). */
+.file-details {
+    display: none;
+    margin-top: var(--dc-space-2);
+    padding: var(--dc-space-2);
+    border-radius: var(--dc-radius-sm);
+    background: var(--bg-hover);
+    cursor: default;
+}
+.trip-files li.file-details-open .file-details {
+    display: block;
+}
+.file-details-camera {
+    font-family: var(--dc-font-ui);
+    font-size: var(--dc-text-3xs);
+    text-transform: uppercase;
+    letter-spacing: var(--dc-tracking-wide);
+    color: var(--fg-mute);
+    font-weight: 600;
+    margin: var(--dc-space-2) 0 var(--dc-space-1);
+}
+.file-details-camera:first-child {
+    margin-top: 0;
+}
+.file-details-grid {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-1);
+}
+.file-details-row {
+    display: flex;
+    gap: var(--dc-space-2);
+    font-size: var(--dc-text-2xs);
+    color: var(--fg-dim);
+    line-height: 1.4;
+}
+.file-details-row.mono .file-details-value {
+    font-family: var(--dc-font-mono);
+    font-variant-numeric: tabular-nums;
+}
+.file-details-label {
+    flex: 0 0 5.5em;
+    color: var(--fg-mute);
+    text-transform: uppercase;
+    letter-spacing: var(--dc-tracking-wide);
+    font-size: var(--dc-text-3xs);
+    font-weight: 600;
+}
+.file-details-value {
+    min-width: 0;
+    flex: 1;
+    color: var(--fg);
+    word-break: break-word;
+}
+/* A small pill label with the name of the recognizing plugin. Used both in
+   the trip's file list and in the trip header. Per the design guide,
+   pill (999px) is only allowed for status-chips - this is exactly that
+   case. .mixed is a modifier for a trip where files were recognized by
+   different plugins. */
+.vendor-chip {
+    flex-shrink: 0;
+    font-family: var(--dc-font-ui);
+    font-size: var(--dc-text-3xs);
+    line-height: 1;
+    letter-spacing: var(--dc-tracking-wide);
+    text-transform: uppercase;
+    padding: var(--dc-space-1) var(--dc-space-1);
+    border-radius: var(--dc-radius-pill);
+    background: var(--bg-hover);
+    color: var(--fg-dim);
+    border: 1px solid var(--border);
+}
+/* Warn modifier: highlights the chip with a warn color. Used for the
+   "No GPS" and "⚠ mixed formats" signals - both need the user's
+   attention, but aren't critical. */
+.vendor-chip.warn {
+    color: var(--warn);
+    border-color: var(--warn);
+    /* A slightly transparent warn background, for a tint without a bright block. */
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+/* UX-08: a red outline-chip with the trip's event count. A clickable
+   shortcut to event markers. Outline (not fill) - so it doesn't compete
+   with the active trip's orange stripe. */
+.trip-event-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--dc-space-1);
+    padding: var(--dc-space-1) var(--dc-space-1);
+    background: transparent;
+    border: 1px solid var(--err);
+    color: var(--err);
+    font-family: var(--dc-font-mono);
+    font-size: var(--dc-text-xs);
+    font-weight: 600;
+    line-height: 1;
+    border-radius: var(--dc-radius-sm);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition:
+        background var(--dc-dur-fast) var(--dc-ease),
+        color var(--dc-dur-fast) var(--dc-ease),
+        transform var(--dc-dur-fast) var(--dc-ease);
+}
+.trip-event-chip:hover {
+    background: var(--err);
+    color: var(--dc-white);
+}
+.trip-event-chip:active {
+    transform: scale(0.94);
+}
+.trip-event-chip:focus-visible {
+    outline: 2px solid var(--err);
+    outline-offset: 1px;
+}
+.trip-event-chip .num {
+    font-family: var(--dc-font-mono);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Channel-tag in the sidebar clip name ("+R"/"+I"). Separate from
+   vendor-chip because it lives in .file-name (next to the filename), not in .file-meta. */
+.file-name .channel-tag {
+    display: inline-block;
+    margin-left: var(--dc-space-1);
+    padding: 1px var(--dc-space-1);
+    font-family: var(--dc-font-ui);
+    font-size: var(--dc-text-3xs);
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: var(--dc-tracking-wide);
+    text-transform: uppercase;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    border-radius: var(--dc-radius-pill);
+    vertical-align: middle;
+}
+
+/* =========================================================================
+   5. SIDEBAR RESIZE HANDLE
+   ========================================================================= */
+.sidebar-resize {
+    width: 4px;
+    cursor: col-resize;
+    background: transparent;
+    transition: background var(--dc-dur-fast) var(--dc-ease);
+    position: relative;
+    z-index: 1;
+}
+.sidebar-resize:hover,
+.sidebar-resize.dragging,
+.sidebar-resize:focus-visible {
+    background: var(--accent);
+    outline: none;
+}
+
+/* =========================================================================
+   MOBILE DRAWER (< 768px)
+   On mobile the sidebar becomes an off-canvas drawer that slides in from
+   the left via translateX. Opening/closing is via the data-drawer-open
+   attribute; .drawer-scrim sits on top (a dimmed click-to-close layer).
+   ========================================================================= */
+.drawer-scrim {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 49;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--dc-dur-base) var(--dc-ease);
+}
+.drawer-scrim[hidden] {
+    display: none;
+}
+.drawer-scrim.open {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+@media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {
+    .sidebar-resize {
+        display: none;
+    }
+    .sidebar {
+        position: fixed;
+        /* Anchor to the REAL mobile topbar height (safe-area padding + 40px
+           burger row + border), not the 44px desktop --dc-topbar-h - the
+           mobile topbar is taller and the drawer would overlap its bottom.
+           Token formula lives in tokens.css next to --dc-topbar-h. */
+        top: var(--dc-topbar-h-mobile);
+        left: 0;
+        bottom: 0;
+        width: min(320px, 85vw);
+        z-index: var(--dc-z-drawer);
+        transform: translateX(-100%);
+        transition: transform var(--dc-dur-base) var(--dc-ease);
+        box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);
+        /* Contain the trip-list scroll so a flick past its end does not chain to
+           the viewer/page behind the scrim. */
+        overscroll-behavior: contain;
+        /* Landscape: a punch-hole / ear on the left edge requires
+           padding-left. Bottom: the home indicator overlaps the last
+           trip-card, push it away via padding-bottom on the scroll container. */
+        /* Keep the base inset (var(--dc-space-3)) on every phone; only grow it
+           where the notch / home indicator actually intrudes. A bare env()
+           zeroed the left/bottom padding in portrait, so trip cards touched the
+           screen edge. */
+        padding-left: max(var(--dc-space-3), env(safe-area-inset-left));
+        padding-bottom: max(var(--dc-space-3), env(safe-area-inset-bottom));
+    }
+    .sidebar[data-drawer-open="true"] {
+        transform: translateX(0);
+    }
+    /* Browse state: trips loaded, none active yet. The list is the main surface,
+       not an off-canvas drawer - full width, on screen, no shadow/scrim. The
+       burger is hidden (topbar.css), so the only thing on screen is the list.
+       On the first pick body.browsing is dropped and the list slides/collapses
+       back to the off-canvas drawer (the FLIP in mobile-drawer.ts). */
+    body.browsing .sidebar {
+        width: 100%;
+        transform: none;
+        box-shadow: none;
+    }
+}

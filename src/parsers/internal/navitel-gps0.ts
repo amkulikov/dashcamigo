@@ -1,0 +1,543 @@
+// Extractor for the `gps0` tail atom (Navitel R-series and compatible
+// Ambarella-tail firmware). Format-agnostic utility wrapped by the
+// navitel-tail primitive.
+//
+// Tail atom layout (top-level boxes after moov):
+//
+//   IDIT  size + 'IDIT' + 20-byte ASCIIZ "YYYY-MM-DD HH:MM:SS" + trailing 0x00
+//         Local recording-start time (camera TZ, not UTC). gps0 records carry
+//         their own year/month (bytes 22-23); IDIT year+month is only the
+//         fallback baseline for firmware that zero-fills those bytes.
+//
+//   gpsa  size + 'gpsa' + 4 bytes flags/record-size (not parsed in v1)
+//
+//   gps0  size + 'gps0' + N × 32-byte records
+//         Each record (LE), layout per ExifTool QuickTimeStream.pl
+//         Process_gps0 (DuDuBell M1 / VSYS M6L family), field-by-field
+//         verified on both real samples (Navitel R600-1, iBOX iCON):
+//           [0..7]   double lat in NMEA format `DDmm.mmmm`
+//                      DD = floor(value/100), minutes = value % 100
+//           [8..15]  double lon in NMEA format `DDDmm.mmmm`
+//           [16..19] i32 altitude, metres (slow drift 128..158 on real
+//                      samples; GpsRecord has no altitude field - not
+//                      extracted, documented so nobody re-misreads it)
+//           [20..21] u16 speed in km/h (0..68 / 40..77 on real samples,
+//                      matches haversine; the PRE-FIX parser misread the
+//                      altitude bytes at 16 as speed - constant ~14 km/h)
+//           [22]     u8 year - 2000
+//           [23]     u8 month 1..12 (so records are self-describing; the
+//                      IDIT baseline below stays as fallback for firmware
+//                      that zero-fills these two bytes)
+//           [24]     u8 day-of-month
+//           [25]     u8 hour (UTC, not TZ - confirmed by IDIT comparison)
+//           [26]     u8 minute
+//           [27]     u8 second
+//           [28]     u8 course / 2, degrees (ExifTool marks it "NC" =
+//                      not confirmed; on both real samples it tracks the
+//                      trajectory bearing, so we take it; values >= 180
+//                      would mean >= 360 deg - treated as absent)
+//           [29..31] constant 0x01 0x01 0x00 (undecoded per ExifTool)
+//
+//   gsea + gsen - g-sensor tail atoms. gsen is parsed (parseGsenAtom); the
+//                 known local sample carries 0 records, so the decode itself
+//                 is upstream-derived only.
+//
+// Hemisphere/direction: the known sample has positive doubles (Russia, northern
+// hemisphere, eastern longitude). No direction-letter field was found - assuming
+// negative values = S/W (signed DDmm.mmmm convention). Verify on S/W samples
+// if they appear.
+
+import { haversineKm } from "../../parser.js";
+import { KMH_TO_MS } from "../types.js";
+import type { AccelSample, GpsRecord, ParsedRecords, SkippedLine } from "../types.js";
+import { ddmmToDegrees } from "./ddmm.js";
+import { removeGravityBaselineOrZero } from "./accel-baseline.js";
+import { decodeXorAsciiGpsText, decryptXorAscii } from "./xor-ascii-gps.js";
+
+// ===== gsen g-sensor atom (ExifTool Process_gsen) =====
+//
+// 3-byte records, one signed byte per axis, each divided by 16. The records
+// carry NO timestamps of any kind; upstream notes its test video sampled them
+// at 5 Hz, which is the only cadence anyone has observed.
+//
+// That 5 Hz is therefore assumed, not read - and the assumption is made in the
+// safe direction. Pacing by a fixed rate means a clip recorded at some other
+// rate runs long and its tail simply lands past the video window, where
+// mergeAccelSamples finds no record to attach to and drops it. Pacing by
+// duration/count instead (stretching the samples to fit) would keep every
+// sample but move them onto the WRONG seconds, inventing braking where there
+// was none. Losing a tail beats fabricating an event.
+//
+// Gravity is left in: mergeAccelSamples removes the per-file per-axis mean.
+//
+// Implemented from foreign source (ExifTool 13.55 QuickTimeStream.pl:2769-2790),
+// not validated against a real sample - the local one's gsen atom is empty.
+const GSEN_RECORD_SIZE = 3;
+const GSEN_SCALE = 16;
+const GSEN_SAMPLE_INTERVAL_MS = 200; // 5 Hz
+
+/**
+ * Decodes the `gsen` atom (8-byte box header included) into accelerometer
+ * samples paced at the assumed 5 Hz. Returns an empty array when the atom
+ * holds no complete record - the known real sample's case.
+ */
+export function parseGsenAtom(gsenBytes: Uint8Array): AccelSample[] {
+    const payloadStart = 8;
+    if (gsenBytes.byteLength <= payloadStart) return [];
+    const dv = new DataView(gsenBytes.buffer, gsenBytes.byteOffset, gsenBytes.byteLength);
+    const count = Math.floor((gsenBytes.byteLength - payloadStart) / GSEN_RECORD_SIZE);
+
+    const samples: AccelSample[] = [];
+    for (let i = 0; i < count; i++) {
+        const at = payloadStart + i * GSEN_RECORD_SIZE;
+        samples.push({
+            msSinceStart: i * GSEN_SAMPLE_INTERVAL_MS,
+            accelXg: dv.getInt8(at) / GSEN_SCALE,
+            accelYg: dv.getInt8(at + 1) / GSEN_SCALE,
+            accelZg: dv.getInt8(at + 2) / GSEN_SCALE,
+        });
+    }
+    return samples;
+}
+
+// Size of one gps0 record (after the 8-byte atom header).
+const GPS0_RECORD_SIZE = 32;
+
+// How many leading records the IDIT-less marker probe inspects. Cold-start
+// records can be fully zero-filled (no fix, no date), so a record-0-only probe
+// would reject a parseable file; 8 records (256 B + header) is a cheap slice
+// that covers a realistic cold-start prefix.
+const GPS0_DATE_PROBE_RECORDS = 8;
+
+// Byte length the marker needs to slice for gps0HasSelfDescribedDates.
+export const GPS0_DATE_PROBE_BYTES = 8 + GPS0_DATE_PROBE_RECORDS * GPS0_RECORD_SIZE;
+
+/**
+ * Plausibility check for the in-record date bytes (22 = year-2000, 23 = month).
+ * Mirrors recordDateValid in decodeGps0Record except year 0 is excluded: a
+ * zero year byte cannot be told apart from a blank (zero-filled) byte, and no
+ * dashcam recorded in year 2000.
+ */
+function isPlausibleRecordDate(yearByte: number, monthByte: number): boolean {
+    return monthByte >= 1 && monthByte <= 12 && yearByte >= 1 && yearByte <= 99;
+}
+
+/**
+ * True when any of the first GPS0_DATE_PROBE_RECORDS complete records in the
+ * gps0 atom bytes (8-byte box header included) carries a plausible
+ * self-described date. The navitel-tail marker uses this to accept files
+ * whose gps0 atom comes WITHOUT an IDIT baseline - the records then must
+ * date themselves (see the IDIT-less path in parseNavitelTail).
+ */
+export function gps0HasSelfDescribedDates(gps0Bytes: Uint8Array): boolean {
+    const payloadStart = 8;
+    const completeRecords = Math.floor((gps0Bytes.byteLength - payloadStart) / GPS0_RECORD_SIZE);
+    const probeCount = Math.min(GPS0_DATE_PROBE_RECORDS, completeRecords);
+    for (let i = 0; i < probeCount; i++) {
+        const off = payloadStart + i * GPS0_RECORD_SIZE;
+        const yearByte = gps0Bytes[off + 22]!;
+        const monthByte = gps0Bytes[off + 23]!;
+        if (isPlausibleRecordDate(yearByte, monthByte)) return true;
+    }
+    return false;
+}
+
+// Stale-row glitch filter. The real iBOX iCON sample interleaves the valid
+// 1 Hz track with firmware ring-buffer leftovers every ~8-10 rows (a third of
+// the file): full-stale rows (timestamp ~1 min in the past + position from
+// the already-driven path) and half-stale rows (fresh timestamp, stale
+// position ~800 m back). Two passes:
+//   A) greedy keep-max by time - a row older than the last accepted one is
+//      stale by construction (buffered rows are always from the past, never
+//      the future), so the pass cannot eat valid data;
+//   B) isolated position outliers - a row whose implied speed from the last
+//      kept fix is impossible AND whose removal restores continuity to the
+//      next row. The continuity check protects legitimate teleports (GPS
+//      re-acquisition after a tunnel has a large dt, so implied speed stays
+//      plausible).
+// 100 m/s = 360 km/h - no dashcam-bearing vehicle reaches it.
+const GLITCH_MAX_IMPLIED_SPEED_MS = 100;
+
+// IDIT payload: 19-byte date string + trailing nulls.
+const IDIT_DATE_LEN = 19; // "YYYY-MM-DD HH:MM:SS"
+
+export interface IditDate {
+    year: number;
+    month: number; // 1..12
+    day: number;
+    hour: number;
+    minute: number;
+    second: number;
+}
+
+/**
+ * Parses the IDIT payload (local recording-start time, camera TZ) as a full
+ * date. Returns null if the payload does not look like "YYYY-MM-DD HH:MM:SS".
+ * The parsed year+month serve as the FALLBACK baseline for records whose own
+ * date bytes (22-23) are zero-filled, including the month/year rollover if
+ * the recording crosses a UTC month boundary.
+ */
+export function parseIditDate(payload: Uint8Array): IditDate | null {
+    if (payload.byteLength < IDIT_DATE_LEN) return null;
+    // Read first 19 bytes as ASCII; the rest is padding/null-terminator.
+    let text = "";
+    for (let i = 0; i < IDIT_DATE_LEN; i++) {
+        const c = payload[i]!;
+        if (c === 0) break;
+        text += String.fromCharCode(c);
+    }
+    const m = text.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
+    if (!m) return null;
+    const year = Number(m[1]);
+    const month = Number(m[2]);
+    const day = Number(m[3]);
+    const hour = Number(m[4]);
+    const minute = Number(m[5]);
+    const second = Number(m[6]);
+    if (![year, month, day, hour, minute, second].every(Number.isFinite)) return null;
+    if (year < 2000 || year > 2099) return null;
+    if (month < 1 || month > 12) return null;
+    if (day < 1 || day > 31 || hour > 23 || minute > 59 || second > 59) return null;
+    return { year, month, day, hour, minute, second };
+}
+
+/**
+ * Decodes one 32-byte gps0 record into a GpsRecord. Year/month are read from
+ * the record itself (bytes 22-23); baselineYear/Month from IDIT are used only
+ * when the in-record month byte is out of range (defensive fallback for
+ * firmware that zero-fills those bytes). Returns null for an empty fix
+ * (lat=0 && lon=0) or corrupt data (out-of-range coordinates, NaN double).
+ */
+export function decodeGps0Record(
+    view: DataView,
+    offset: number,
+    baselineYear: number,
+    baselineMonth: number,
+    mp4Filename: string,
+): GpsRecord | null {
+    const latRaw = view.getFloat64(offset, true);
+    const lonRaw = view.getFloat64(offset + 8, true);
+    if (!Number.isFinite(latRaw) || !Number.isFinite(lonRaw)) return null;
+    if (latRaw === 0 && lonRaw === 0) return null;
+
+    const lat = ddmmToDegrees(latRaw);
+    const lon = ddmmToDegrees(lonRaw);
+    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+
+    // bytes 16..19 = altitude i32 (metres) - GpsRecord has no altitude field,
+    // intentionally not extracted.
+    const speedKmh = view.getUint16(offset + 20, true);
+
+    const yearByte = view.getUint8(offset + 22);
+    const monthByte = view.getUint8(offset + 23);
+    const day = view.getUint8(offset + 24);
+    const hour = view.getUint8(offset + 25);
+    const minute = view.getUint8(offset + 26);
+    const second = view.getUint8(offset + 27);
+    const courseByte = view.getUint8(offset + 28);
+    // bytes 29..31 - constant 0x01 0x01 0x00, not validated.
+
+    if (day < 1 || day > 31 || hour > 23 || minute > 59 || second > 59) return null;
+
+    // Prefer the in-record year/month (verified on both real samples: 20/11
+    // matches IDIT 2020-11, 23/4 matches 2023-04). Fall back to the
+    // IDIT-calibrated baseline when the month byte is implausible.
+    const recordDateValid = monthByte >= 1 && monthByte <= 12 && yearByte <= 99;
+    const year = recordDateValid ? 2000 + yearByte : baselineYear;
+    const month = recordDateValid ? monthByte : baselineMonth;
+
+    // UTC: date/time fields are real UTC (verified on sample: IDIT=16:30:14
+    // local MSK, first record = 13:30:15 UTC).
+    const baseMs = Date.UTC(year, month - 1, day, hour, minute, second);
+    if (!Number.isFinite(baseMs)) return null;
+
+    // Course is stored halved (u8 can't hold 0..359). >= 180 raw would mean
+    // >= 360 deg - treat as "no course" and let the dispatcher forward-fill
+    // from the trajectory.
+    const bearingDeg = courseByte < 180 ? courseByte * 2 : 0;
+
+    return {
+        unixSeconds: baseMs / 1000,
+        active: true,
+        lat,
+        lon,
+        bearingDeg,
+        speedMs: speedKmh * KMH_TO_MS,
+        // gps0 has no acceleration (gsen tail atom is separate and empty on the
+        // known sample); 0/0/0 means "no measurement".
+        accelXg: 0,
+        accelYg: 0,
+        accelZg: 0,
+        mp4Filename,
+    };
+}
+
+/**
+ * Parses the gps0 atom (+ optional IDIT) into GpsRecord array. Receives
+ * pre-read bytes (caller fetched them via sparse reads using Mp4Index
+ * offsets); both include the size+type box header.
+ *
+ * Two time-base modes:
+ *   - iditBytes present: IDIT year/month is the fallback baseline for records
+ *     with zero-filled date bytes (the original, real-validated path: Navitel
+ *     R600-1, iBOX iCON both carry IDIT). Returns null if IDIT is corrupt.
+ *   - iditBytes === null: IDIT-less mode. Records MUST self-describe their
+ *     date (bytes 22-23); records with blank date bytes are skipped (normal
+ *     during GPS cold start). Implemented from foreign source (ExifTool 13.59
+ *     QuickTimeStream.pl:2715-2745 Process_gps0 has no IDIT requirement), NOT
+ *     validated against a real sample - n=0 real IDIT-less files seen so far;
+ *     "DuDuBell M1 / VSYS M6L lack IDIT" is inferred from upstream's IDIT-free
+ *     processing, not byte-verified. If a real IDIT-less file turns out to
+ *     have blank in-record dates, it is rejected here (never misparsed).
+ */
+export function parseNavitelTail(
+    iditBytes: Uint8Array | null,
+    gps0Bytes: Uint8Array,
+    mp4Filename: string,
+): ParsedRecords | null {
+    // gps0: first 8 bytes are the box header; the rest is 32-byte records.
+    if (gps0Bytes.byteLength < 8 + GPS0_RECORD_SIZE) return null;
+    const payloadStart = 8;
+    const payloadLen = gps0Bytes.byteLength - payloadStart;
+
+    // Foreign-dialect bail-outs run BEFORE the IDIT branch on purpose: both
+    // dialects can carry valid-looking bytes at offsets 22-23 of their first
+    // 32 bytes (Miltona's committed test record has 0x15 0x0c there), so they
+    // pass the IDIT-less marker probe and must be rejected here.
+    //
+    // A DIFFERENT `gps0` dialect exists in the wild (Miltona MNCD60,
+    // NovaTek-family): 56-byte records with scrambled f64 coordinates and a
+    // `3c 99 a7 3a` framing magic at offset 44 of every record. Parsing it
+    // with a 32-byte stride would misalign and risk garbage records, and the
+    // coordinate encoding is not cracked (a per-clip linear fit exists in
+    // trip-viewer, but the constants are location-bound) - recognize-and-bail.
+    if (isMiltonaGps0Dialect(gps0Bytes, payloadStart)) return null;
+    // Lamax S9 writes yet another gps0 dialect: XOR-0xAA encrypted text in
+    // 311-byte records. Same payload format as the Azdome freeGPS blocks and
+    // the Rove gpmd track, so it decodes through the shared helper instead of
+    // the 32-byte stride below.
+    if (isLamaxS9Gps0Dialect(gps0Bytes, payloadStart)) {
+        return parseLamaxS9Gps0(gps0Bytes, payloadStart, mp4Filename);
+    }
+
+    // IDIT: first 8 bytes are the box header (size+'IDIT'); payload is the
+    // date string. null = IDIT-less mode (see the contract above). An IDIT
+    // that is present but corrupt still rejects the file - a firmware that
+    // writes a broken IDIT is not a known-good signal.
+    let idit: IditDate | null = null;
+    if (iditBytes !== null) {
+        if (iditBytes.byteLength < 8 + IDIT_DATE_LEN) return null;
+        idit = parseIditDate(iditBytes.subarray(8));
+        if (!idit) return null;
+    }
+
+    const recordCount = Math.floor(payloadLen / GPS0_RECORD_SIZE);
+    if (recordCount === 0) return null;
+
+    const view = new DataView(gps0Bytes.buffer, gps0Bytes.byteOffset + payloadStart, recordCount * GPS0_RECORD_SIZE);
+    const records: GpsRecord[] = [];
+    const skipped: SkippedLine[] = [];
+
+    // FALLBACK year/month baseline (IDIT mode only). Records normally carry
+    // their own year/month (bytes 22-23, used by decodeGps0Record); this
+    // machinery only matters for firmware that zero-fills those bytes. IDIT is
+    // local-time and gps0 is UTC, so two cases:
+    //   1) Initial month for the first valid record: IDIT.day may differ from
+    //      first-record.day by 1 (TZ offset up to ±14h). If first-record.day
+    //      is far from IDIT.day (e.g. IDIT=Feb 1 local, first UTC record day=31
+    //      from January), the naive Date.UTC(idit.year, idit.month-1, 31) is
+    //      either invalid or off by ~30 days. Pick the (year, month) among
+    //      {-1, 0, +1} months from IDIT whose timestamp is closest to IDIT.
+    //   2) Cross-midnight UTC mid-recording: when a record's day suddenly
+    //      drops (e.g. 31 -> 1), the month has rolled over. Without this
+    //      the post-midnight portion would be timestamped ~30 days back.
+    // In IDIT-less mode there is no baseline to calibrate or roll over -
+    // records with blank date bytes are skipped instead.
+    let curYear = idit?.year ?? 0;
+    let curMonth = idit?.month ?? 0;
+    let prevDay: number | null = null;
+
+    for (let i = 0; i < recordCount; i++) {
+        // Peek the record's day to decide on month, then decode with the
+        // adjusted year/month. decodeGps0Record will validate the rest.
+        const day = view.getUint8(i * GPS0_RECORD_SIZE + 24);
+
+        if (idit === null) {
+            // IDIT-less mode: the record must self-describe its date. Blank
+            // date bytes are skipped silently - normal at recording start
+            // while GPS acquires satellites, same policy as empty fixes.
+            const yearByte = view.getUint8(i * GPS0_RECORD_SIZE + 22);
+            const monthByte = view.getUint8(i * GPS0_RECORD_SIZE + 23);
+            if (!isPlausibleRecordDate(yearByte, monthByte)) continue;
+            // curYear/curMonth stay 0/0 - unreachable in decodeGps0Record
+            // because the in-record date is valid and always wins.
+        } else if (prevDay === null) {
+            // First valid record - calibrate month against IDIT.
+            const iditMs = Date.UTC(idit.year, idit.month - 1, idit.day, idit.hour, idit.minute, idit.second);
+            const hour = view.getUint8(i * GPS0_RECORD_SIZE + 25);
+            const minute = view.getUint8(i * GPS0_RECORD_SIZE + 26);
+            const second = view.getUint8(i * GPS0_RECORD_SIZE + 27);
+            let bestDist = Infinity;
+            for (let dm = -1; dm <= 1; dm++) {
+                let y = idit.year;
+                let m = idit.month + dm;
+                if (m < 1) {
+                    m = 12;
+                    y--;
+                }
+                if (m > 12) {
+                    m = 1;
+                    y++;
+                }
+                const ms = Date.UTC(y, m - 1, day, hour, minute, second);
+                if (!Number.isFinite(ms)) continue;
+                const dist = Math.abs(ms - iditMs);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    curYear = y;
+                    curMonth = m;
+                }
+            }
+        } else if (day < prevDay - 7) {
+            // Day jumped backwards by more than a week - rollover into the
+            // next month. The -7 threshold tolerates noisy single-byte day
+            // values without false-firing on intra-month transitions.
+            curMonth++;
+            if (curMonth > 12) {
+                curMonth = 1;
+                curYear++;
+            }
+        }
+
+        const rec = decodeGps0Record(view, i * GPS0_RECORD_SIZE, curYear, curMonth, mp4Filename);
+        if (rec === null) {
+            // Silent skip - empty fixes are normal at recording start while
+            // GPS acquires satellites. Do NOT update prevDay for an empty fix
+            // (its day field is still valid, but skipping the prevDay update
+            // keeps the rollover heuristic anchored to a known-good record).
+            continue;
+        }
+
+        // Pass A of the stale-row glitch filter: backward time step.
+        const prev = records[records.length - 1];
+        if (prev && rec.unixSeconds < prev.unixSeconds) {
+            skipped.push({ line: i + 1, raw: `<gps0 record ${i}>`, reason: "backward time step (stale firmware row)" });
+            continue;
+        }
+        prevDay = day;
+        records.push(rec);
+    }
+
+    const cleaned = dropPositionOutliers(records, skipped);
+    if (cleaned.length === 0) return null;
+    return { records: cleaned, skipped };
+}
+
+/**
+ * Pass B of the stale-row glitch filter: drops half-stale rows (fresh
+ * timestamp, stale position). A row is an outlier when the implied speed from
+ * the last kept fix is impossible (> GLITCH_MAX_IMPLIED_SPEED_MS) and either
+ * skipping it restores continuity to the following row, or it is the last row
+ * (no follower to confirm a genuine new position). Appends a SkippedLine per
+ * dropped row.
+ */
+function dropPositionOutliers(records: GpsRecord[], skipped: SkippedLine[]): GpsRecord[] {
+    if (records.length < 2) return records;
+    const kept: GpsRecord[] = [records[0]!];
+    for (let i = 1; i < records.length; i++) {
+        const rec = records[i]!;
+        const prev = kept[kept.length - 1]!;
+        const dt = rec.unixSeconds - prev.unixSeconds;
+        // dt=0 (duplicate second) has no defined implied speed - keep.
+        if (dt >= 1) {
+            const impliedMs = (haversineKm(prev.lat, prev.lon, rec.lat, rec.lon) * 1000) / dt;
+            if (impliedMs > GLITCH_MAX_IMPLIED_SPEED_MS) {
+                const next = records[i + 1];
+                const nextDt = next ? next.unixSeconds - prev.unixSeconds : 0;
+                const nextPlausible =
+                    next !== undefined &&
+                    nextDt >= 1 &&
+                    (haversineKm(prev.lat, prev.lon, next.lat, next.lon) * 1000) / nextDt <=
+                        GLITCH_MAX_IMPLIED_SPEED_MS;
+                if (nextPlausible || next === undefined) {
+                    skipped.push({
+                        line: i + 1,
+                        raw: `<gps0 record kept-index ${i}>`,
+                        reason: "implausible displacement (stale firmware row)",
+                    });
+                    continue;
+                }
+                // Both this row and the next disagree with the previous fix -
+                // a genuine new reality (e.g. recording resumed far away);
+                // accept it as the new anchor.
+            }
+        }
+        kept.push(rec);
+    }
+    return kept;
+}
+
+// Miltona 56-byte gps0 record size and the framing magic at offset 44.
+const MILTONA_RECORD_SIZE = 56;
+const MILTONA_MAGIC_OFFSET = 44;
+const MILTONA_MAGIC = [0x3c, 0x99, 0xa7, 0x3a] as const;
+
+/**
+ * Detects the Miltona 56-byte gps0 dialect by its framing magic, checked in
+ * the first two records (one match could be a coincidence inside coordinate
+ * bytes of the 32-byte dialect; two aligned matches cannot).
+ */
+function isMiltonaGps0Dialect(gps0Bytes: Uint8Array, payloadStart: number): boolean {
+    const hasMagicAt = (recordStart: number): boolean => {
+        const off = payloadStart + recordStart + MILTONA_MAGIC_OFFSET;
+        if (off + MILTONA_MAGIC.length > gps0Bytes.byteLength) return false;
+        return MILTONA_MAGIC.every((b, i) => gps0Bytes[off + i] === b);
+    };
+    if (!hasMagicAt(0)) return false;
+    // Single-record payloads: one magic match is all the evidence there is.
+    if (gps0Bytes.byteLength < payloadStart + 2 * MILTONA_RECORD_SIZE) return true;
+    return hasMagicAt(MILTONA_RECORD_SIZE);
+}
+
+// Lamax S9 gps0 dialect: XOR-0xAA encrypted ASCII in 311-byte records,
+// signature bytes f2 e1 f0 ee 54 54 98 ('TT' = 0x54 0x54) at payload offsets
+// 2..8 (ExifTool QuickTimeStream.pl:2724-2735, v13.55, regex
+// /^.{2}\xf2\xe1\xf0\xeeTT\x98/s). Implemented from foreign source, not
+// validated against a real sample.
+const LAMAX_S9_SIGNATURE = [0xf2, 0xe1, 0xf0, 0xee, 0x54, 0x54, 0x98] as const;
+const LAMAX_S9_SIGNATURE_OFFSET = 2;
+
+/** Detects the Lamax S9 encrypted gps0 dialect by its payload signature. */
+function isLamaxS9Gps0Dialect(gps0Bytes: Uint8Array, payloadStart: number): boolean {
+    const off = payloadStart + LAMAX_S9_SIGNATURE_OFFSET;
+    if (off + LAMAX_S9_SIGNATURE.length > gps0Bytes.byteLength) return false;
+    return LAMAX_S9_SIGNATURE.every((b, i) => gps0Bytes[off + i] === b);
+}
+
+// Record stride of that dialect - upstream re-checks the signature at every
+// record start and stops at the first miss, which is also the terminator here.
+const LAMAX_S9_RECORD_SIZE = 311;
+
+/**
+ * Decodes the Lamax S9 dialect. The two leading bytes before the signature are
+ * part of the record, so the decrypt starts at the record itself and the shared
+ * decoder skips its own 8-byte preamble.
+ *
+ * Accel comes back gravity-INCLUDED (see the shared decoder), so the per-file
+ * axis mean is removed here - the same treatment the freegps primitive gives
+ * the Azdome carrier.
+ */
+function parseLamaxS9Gps0(gps0Bytes: Uint8Array, payloadStart: number, mp4Filename: string): ParsedRecords | null {
+    const records: GpsRecord[] = [];
+    for (let at = payloadStart; at + LAMAX_S9_RECORD_SIZE <= gps0Bytes.byteLength; at += LAMAX_S9_RECORD_SIZE) {
+        if (!isLamaxS9Gps0Dialect(gps0Bytes, at)) break;
+        const text = decryptXorAscii(gps0Bytes, at, LAMAX_S9_RECORD_SIZE);
+        const record = decodeXorAsciiGpsText(text, mp4Filename);
+        // A record with no fix carries accel and a clock only - skipped, not an
+        // error (the firmware writes them whenever GPS has no lock).
+        if (record) records.push(record);
+    }
+    if (records.length === 0) return null;
+    removeGravityBaselineOrZero(records);
+    return { records, skipped: [] };
+}

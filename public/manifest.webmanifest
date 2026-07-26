@@ -1,0 +1,66 @@
+{
+  "id": "/",
+  "name": "dashcamigo",
+  "short_name": "dashcamigo",
+  "description": "View dashcam recordings with synchronized GPS and speed graphs. Local in your browser.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "background_color": "#000000",
+  "theme_color": "#ff9000",
+  "orientation": "any",
+  "categories": ["productivity", "utilities", "photo", "video"],
+  "related_applications": [
+    {
+      "platform": "webapp",
+      "url": "https://dashcamigo.app/manifest.webmanifest",
+      "id": "https://dashcamigo.app/"
+    }
+  ],
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/pwa-install-card-wide.png",
+      "sizes": "1280x800",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "dashcamigo — online dashcam player"
+    },
+    {
+      "src": "/pwa-install-card-narrow.png",
+      "sizes": "824x1464",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "dashcamigo — online dashcam player"
+    }
+  ]
+}

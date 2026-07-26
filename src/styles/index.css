@@ -1,0 +1,52 @@
+/* =========================================================================
+   dashcamigo - aggregator stylesheet.
+   --------------------------------------------------------------------------
+   This file is the single entry-point for component styles. It is loaded
+   via a <link> in index.html (so CSS loads in parallel with JS, no FOUC
+   at startup) and simultaneously via an import in app.ts (so Vite inlines
+   the same set of files into the prod bundle).
+
+   The @import order is fixed and mirrors the cascade of the former
+   monolithic styles.css. Do not reorder without checking specific
+   selectors - some rules rely on their position in the cascade
+   (focus-visible, mobile-drawer, and WCO below everything else).
+
+   tokens.css and fonts.css are NOT imported here: they are loaded via
+   separate <link>s in index.html before this file, so CSS vars and
+   @font-face are available independent of JS loading.
+   ========================================================================= */
+
+@import "./components/base.css";
+@import "./components/buttons.css";
+@import "./components/topbar.css";
+@import "./components/overflow.css";
+@import "./components/layout.css";
+@import "./components/sidebar.css";
+@import "./components/viewer.css";
+@import "./components/player-composition.css";
+@import "./components/top-panel.css";
+@import "./components/export-panel.css";
+@import "./components/player-bar.css";
+@import "./components/chart.css";
+@import "./components/map.css";
+@import "./components/empty-state.css";
+@import "./components/landing.css";
+@import "./components/event-popup.css";
+@import "./components/drop-overlay.css";
+@import "./components/ingest.css";
+@import "./modals/dialog-shared.css";
+@import "./components/onboarding.css";
+@import "./modals/feedback.css";
+@import "./modals/hotkeys.css";
+@import "./modals/csp-modal.css";
+@import "./modals/capability-gate.css";
+@import "./components/focus-visible.css";
+@import "./components/footer.css";
+@import "./components/sticky-banner.css";
+@import "./components/offline-banner.css";
+@import "./components/settings.css";
+@import "./modals/install-pwa.css";
+@import "./components/notifications.css";
+@import "./components/lang-banner.css";
+@import "./components/forms.css";
+@import "./components/wco.css";

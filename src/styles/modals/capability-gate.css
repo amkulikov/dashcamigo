@@ -1,0 +1,68 @@
+/* Blocking browser-compatibility gate. Shown by src/ui/capability-gate.ts when a
+   fatal capability is missing (no Web Workers / <video> / file load). Full
+   viewport, above the splash loader (#dc-loader is z-index 9999). Non-dismissible
+   by design - the app genuinely cannot run, so we only explain and advise. */
+.capability-gate {
+    position: fixed;
+    inset: 0;
+    z-index: var(--dc-z-gate);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--dc-space-5);
+    background: var(--bg);
+    color: var(--fg);
+    overflow: auto;
+}
+.capability-gate-card {
+    max-width: 460px;
+    width: 100%;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--dc-space-3);
+}
+.capability-gate-icon {
+    color: var(--warn);
+}
+.capability-gate-title {
+    margin: 0;
+    font-size: var(--dc-text-xl);
+    font-weight: 700;
+    line-height: var(--dc-leading-snug);
+}
+.capability-gate-body {
+    margin: 0;
+    font-size: var(--dc-text-md);
+    color: var(--fg-dim);
+    line-height: 1.5;
+}
+.capability-gate-advice {
+    margin: 0;
+    font-size: var(--dc-text-md);
+    line-height: 1.5;
+}
+.capability-gate-details {
+    margin-top: var(--dc-space-1);
+    width: 100%;
+    font-size: var(--dc-text-xs);
+    color: var(--fg-dim);
+}
+.capability-gate-details summary {
+    cursor: pointer;
+    user-select: none;
+}
+.capability-gate-tech {
+    margin: var(--dc-space-2) 0 0;
+    padding: var(--dc-space-2);
+    text-align: left;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-sm);
+    font-family: var(--dc-font-mono);
+    font-size: var(--dc-text-xs);
+    color: var(--fg-dim);
+}

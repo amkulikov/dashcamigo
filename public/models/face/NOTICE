@@ -1,0 +1,14 @@
+yolov9s-face-960-fp16.onnx
+
+Face-detection model, GPL-3.0 (see LICENSE).
+
+Provenance:
+- Trained weights: lindevs/yolov9-face release 1.0.0, file
+  yolov9s-face-lindevs.pt (https://github.com/lindevs/yolov9-face). The
+  repository badge says MIT, but the weights are fine-tuned from
+  WongKinYiu/yolov9 base weights, which are GPL-3.0 - the effective license
+  of the derived weights is therefore GPL-3.0.
+- This file is our re-export of that .pt: ultralytics ONNX export at static
+  imgsz=960, then fp16 weight conversion (fp32 inputs/outputs, Resize ops
+  kept fp32) via onnxconverter-common.
+- sha256: e3c117a93584f7d3cf595f97df7391c3ad4c4a7e88b8e38149e1b18014e4005d

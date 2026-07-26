@@ -1,0 +1,753 @@
+/* =========================================================================
+   10. MAP + CONTROLS + STYLE-ERROR
+   ========================================================================= */
+.map-wrap {
+    position: relative;
+    background: var(--bg-elev);
+    overflow: hidden;
+    min-width: 0;
+    min-height: 0;
+    animation: map-fade-in var(--dc-dur-page) var(--dc-ease);
+}
+@keyframes map-fade-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+.map {
+    width: 100%;
+    height: 100%;
+}
+
+/* Cooperative-gestures hint overlay ("move the map with two fingers"). MapLibre
+   renders it in its default Helvetica; align the font with the rest of the UI.
+   Touch-only here, so it never appears on desktop. The dark scrim + white text
+   from maplibre-gl.css read fine over the map, so only the font is overridden. */
+.maplibregl-cooperative-gesture-screen {
+    font-family: var(--dc-font-body);
+}
+@media (prefers-reduced-motion: reduce) {
+    .maplibregl-cooperative-gesture-screen {
+        transition-duration: 0.01ms;
+    }
+}
+
+.map-controls {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-1);
+    z-index: 4;
+}
+
+/* Collapse button - shrinks the expanded map back to a mini-map. Top-right
+   corner is the standard "close" spot, kept distinct from follow/recenter in
+   the top-left. Orange highlight on hover from the standard palette. */
+.map-collapse-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 5;
+    /* Standard control square (was 36, an outlier next to the 30px controls). */
+    width: var(--dc-iconbtn);
+    height: var(--dc-iconbtn);
+    border-radius: var(--dc-radius-sm);
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--dc-shadow-card);
+    transition:
+        background var(--dc-dur-fast) var(--dc-ease),
+        color var(--dc-dur-fast) var(--dc-ease),
+        border-color var(--dc-dur-fast) var(--dc-ease);
+}
+.map-collapse-btn:hover {
+    background: var(--accent);
+    color: var(--dc-black);
+    border-color: var(--accent);
+}
+.map-collapse-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* MapLibre's NavigationControl sits in top-right (zoom +/- + compass) and
+   by default hugs the top-right corner - it would visually overlap our
+   collapse button. Push the control container down by the collapse height
+   + gap so they stack into a column. */
+.maplibregl-ctrl-top-right {
+    /* collapse-btn height (--dc-iconbtn 30) + top inset 8 + gap 8. */
+    margin-top: 46px;
+}
+
+.map-control-btn {
+    width: var(--dc-iconbtn);
+    height: var(--dc-iconbtn);
+    border-radius: var(--dc-radius-sm);
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--dc-text-md);
+    line-height: 1;
+    box-shadow: var(--dc-shadow-card);
+    transition:
+        background var(--dc-dur-fast) var(--dc-ease),
+        color var(--dc-dur-fast) var(--dc-ease);
+}
+.map-control-btn:hover {
+    background: var(--bg-hover);
+    color: var(--accent);
+}
+/* Pressed feedback - the only press signal on touch, where :hover never fires. */
+.map-control-btn:active {
+    background: var(--bg-active);
+}
+.map-control-btn.active {
+    background: var(--accent);
+    color: var(--dc-black);
+    border-color: var(--accent);
+}
+.map-control-btn.active:hover {
+    background: var(--accent-hot);
+    color: var(--dc-black);
+}
+.map-control-btn[hidden] {
+    display: none;
+}
+
+/* Custom mini attribution control (see MiniAttributionControl in src/ui/map.ts).
+   Replaces the default MapLibre AttributionControl - that one starts in an
+   <details open> state on first paint and floods the bottom of the map. We
+   keep a tiny pill that opens a popup only on click. Styled to match
+   .map-control-btn for visual consistency with the rest of the controls. */
+.dc-map-attrib {
+    /* maplibregl-ctrl already gives outer margin; we just need the pill geometry. */
+    position: relative;
+}
+.dc-map-attrib-btn {
+    width: var(--dc-iconbtn-mini);
+    height: var(--dc-iconbtn-mini);
+    border-radius: 50%;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font: italic 700 var(--dc-text-sm) / 1 var(--dc-font-body);
+    box-shadow: var(--dc-shadow-card);
+    padding: 0;
+}
+.dc-map-attrib-btn:hover {
+    color: var(--accent);
+}
+.dc-map-attrib-text {
+    position: absolute;
+    bottom: 28px;
+    right: 0;
+    min-width: 260px;
+    max-width: 340px;
+    padding: var(--dc-space-1) var(--dc-space-2);
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-sm);
+    box-shadow: var(--dc-shadow-card);
+    font-size: var(--dc-text-xs);
+    color: var(--fg-dim);
+    line-height: 1.45;
+    pointer-events: auto;
+    white-space: normal;
+}
+.dc-map-attrib-text a {
+    color: var(--fg);
+    text-decoration: underline;
+}
+.dc-map-attrib-text a:hover {
+    color: var(--accent);
+}
+.dc-map-attrib-text[hidden] {
+    display: none;
+}
+
+/* UX-18: segmented control - 3 follow-mode buttons (off/follow/rotate)
+   glued into one group. The active one is highlighted orange. Lucide stroke
+   icons (locate-off / locate-fixed / compass), same as the old single
+   cycling button used. */
+.map-follow-segments {
+    display: inline-flex;
+    box-shadow: var(--dc-shadow-card);
+    border-radius: var(--dc-radius-sm);
+}
+.map-follow-segments .map-follow-seg {
+    box-shadow: none;
+    border-radius: 0;
+}
+.map-follow-segments .map-follow-seg:first-child {
+    border-radius: var(--dc-radius-sm) 0 0 var(--dc-radius-sm);
+}
+.map-follow-segments .map-follow-seg:last-child {
+    border-radius: 0 var(--dc-radius-sm) var(--dc-radius-sm) 0;
+}
+.map-follow-segments .map-follow-seg + .map-follow-seg {
+    /* Merged borders between buttons - the left border merges into the neighbor's right one. */
+    border-left: 0;
+}
+.map-follow-segments .map-follow-seg[aria-pressed="true"] {
+    background: var(--accent);
+    color: var(--dc-black);
+    border-color: var(--accent);
+}
+.map-follow-segments .map-follow-seg[aria-pressed="true"]:hover {
+    background: var(--accent-hot);
+    color: var(--dc-black);
+}
+
+/* Chase-mode sub-controls: tilt slider + speed-adaptive-zoom toggle. Stack
+   under the follow segmented control; shown only while followMode === "chase"
+   (JS toggles [hidden]). The toggle button reuses .map-control-btn (+ .active). */
+.map-chase-controls {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-1);
+    align-items: flex-start;
+}
+.map-chase-controls[hidden] {
+    display: none;
+}
+.map-chase-tilt {
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-1);
+    height: var(--dc-iconbtn);
+    padding: 0 var(--dc-space-2);
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-sm);
+    box-shadow: var(--dc-shadow-card);
+    color: var(--fg-dim);
+}
+.map-chase-tilt-icon {
+    flex: none;
+    opacity: 0.8;
+}
+.map-chase-tilt-range {
+    width: 92px;
+    height: 4px;
+    margin: 0;
+    appearance: none;
+    -webkit-appearance: none;
+    background: var(--border);
+    border-radius: 999px;
+    cursor: pointer;
+}
+.map-chase-tilt-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg-elev);
+    box-shadow: 0 0 0 1px var(--border);
+    cursor: pointer;
+}
+.map-chase-tilt-range::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg-elev);
+    cursor: pointer;
+}
+.map-chase-tilt-range:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.map-style-error {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-elev);
+    border: 1px solid var(--warn);
+    border-radius: var(--dc-radius-md);
+    padding: var(--dc-space-2) var(--dc-space-3);
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+    z-index: 5;
+    box-shadow: var(--dc-shadow-popup);
+    font-size: var(--dc-text-xs);
+    color: var(--fg);
+    max-width: calc(100% - 24px);
+}
+.map-style-error[hidden] {
+    display: none;
+}
+.map-style-error-text {
+    flex: 1;
+}
+.map-style-error-btn,
+.map-style-error-close {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    border-radius: var(--dc-radius-sm);
+    padding: var(--dc-space-1) var(--dc-space-2);
+    cursor: pointer;
+    font-size: var(--dc-text-xs);
+    font-family: var(--dc-font-body);
+}
+.map-style-error-close {
+    width: var(--dc-iconbtn-mini);
+    height: var(--dc-iconbtn-mini);
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.map-style-error-btn:hover,
+.map-style-error-close:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent);
+}
+
+/* Map unavailable (no WebGL context at all). Permanent centered notice over the
+   blank/absent map canvas - distinct from the dismissible top toast for tile
+   failures. The big map only ever shows when expanded, so the notice is centered
+   in that area; the mini-map circle is hidden entirely (an empty ring is worse
+   than nothing) via the body class below.
+
+   These notice rules are scoped to the #map-unavailable id ON PURPOSE, not to a
+   bare ".map-unavailable" class: the same "map-unavailable" token is also a flag
+   class on <body> (set by handleMapInitFailure in ui/map.ts). A bare class rule
+   here would also match <body> and turn the whole document into a content-sized
+   absolutely-positioned card (and recolor every svg/span). Keep the notice on the
+   id and the body flag on the class - never share a bare class between them. */
+#map-unavailable {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: max-content;
+    max-width: calc(100% - 32px);
+    height: max-content;
+    /* Column: the icon+message notice row on top, the optional "turn the map on"
+       button below it. */
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--dc-space-2);
+    padding: var(--dc-space-3) var(--dc-space-4);
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-md);
+    box-shadow: var(--dc-shadow-popup);
+    font-size: var(--dc-text-sm);
+    line-height: var(--dc-leading-normal);
+    color: var(--fg);
+    z-index: 5;
+    text-align: left;
+}
+#map-unavailable[hidden] {
+    display: none;
+}
+#map-unavailable svg {
+    flex: 0 0 auto;
+    color: var(--warn);
+}
+#map-unavailable span {
+    max-width: 30ch;
+}
+/* Icon + message form the live region (role=status); the action button sits
+   below as a sibling outside it. flex-start keeps the warning icon beside the
+   FIRST line of the message even when the message wraps or the button shows -
+   align-items:center would float the icon to the middle of the taller block. */
+.map-unavailable-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--dc-space-2);
+}
+/* No WebGL: hide the mini-map circle, its close-X and the mobile map toggle -
+   none of them can render a map. The big-map notice above carries the message. */
+body.map-unavailable .mini-map,
+body.map-unavailable .mini-map-close,
+body.map-unavailable #player-map {
+    display: none !important;
+}
+
+/* =========================================================================
+   11. MINI-MAP - the round GPS map, default in the TOP-LEFT corner of the
+   video frame (the zoom birds-eye preview .video-minimap takes top-right -
+   see viewer.css). The user can drag it anywhere; see the anchor note below.
+   ========================================================================= */
+.mini-map,
+/* The duplicated .mini-map.maplibregl-map selector is needed because of CSS
+   order in prod: maplibre-gl.css is imported in app.ts FIRST, but Vite in
+   build mode bundles our styles.css BEFORE maplibre-gl.css. Once
+   ensureMiniMap creates the MapLibre Map, the container gets an extra
+   .maplibregl-map class whose styles include position:relative - which, at
+   equal specificity (one class) and later order in the bundle, beats our
+   position:absolute. The mini-map falls out of absolute positioning, top/
+   right stop working, and .video-frame's overflow:hidden clips it outside
+   the frame - the user only sees the close cross, which has its own
+   mini-map-close class that MapLibre does not touch. The duplicated
+   double selector doubles specificity (0,0,2,0) and reliably beats
+   .maplibregl-map (0,0,1,0) regardless of bundle order. */
+.mini-map.maplibregl-map {
+    /* Positioned inside .video-frame (the parent is also relative).
+       Default position is the frame's top-left corner. Drag via JS changes
+       --mini-map-offset-x/y, applied as a translate. We deliberately do NOT
+       do a CSS hover-scale - it would conflict with the drag-translate.
+       Do NOT move this top:16/left:16 default in CSS alone: the drag
+       clamping and the persisted {xPct,yPct} position in ui/map.ts
+       (applyOffset/dragRangeForFrame) measure offsets FROM this anchor,
+       and .mini-map-close below derives its left:134 from it. */
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    z-index: 5;
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    background: var(--bg-elev);
+    border: 2px solid var(--accent);
+    cursor: grab;
+    overflow: hidden;
+    box-shadow: var(--dc-shadow-popup);
+    transform: translate(var(--mini-map-offset-x, 0px), var(--mini-map-offset-y, 0px));
+    /* touch-action: none - so pointer events are not handed to the browser
+       as scroll/pinch while dragging on a touchscreen. */
+    touch-action: none;
+}
+.mini-map.is-dragging {
+    cursor: grabbing;
+    /* Drop the transition during drag so movement is instant
+       (doesn't lag behind the mouse). */
+    transition: none;
+}
+.mini-map[hidden] {
+    display: none;
+}
+.mini-map:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+}
+
+.mini-map-close {
+    /* Mini-map is a 140x140 circle in the video-frame's top-left corner
+       (top:16, left:16). We place the 22x22 close button in the top-right
+       corner of the circle's bbox - the circle itself doesn't cover the
+       bbox corners, so the button fits there without overlapping the mini-
+       map itself. Coordinates: top matches the mini-map (16), left = 16
+       + 140 (mini-map width) - 22 (close width) = 134. It moves together
+       with the mini-map via the same transform var. */
+    position: absolute;
+    top: 16px;
+    left: 134px;
+    z-index: 6;
+    width: var(--dc-iconbtn-mini);
+    height: var(--dc-iconbtn-mini);
+    border-radius: 50%;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    cursor: pointer;
+    font-size: var(--dc-text-xs);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    transform: translate(var(--mini-map-offset-x, 0px), var(--mini-map-offset-y, 0px));
+}
+.mini-map-close:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+.mini-map-close[hidden] {
+    display: none;
+}
+
+/* Mobile (any orientation): drop the mini-map circle entirely. On phone
+   the full map is one tap away via the bar button - the corner circle
+   covers the front camera and is a bad touch target on top of that.
+   max-height + landscape catches landscape phones (width >767, height
+   <500), which the plain max-width: 767 rule used to miss. This block sits
+   AFTER the `.mini-map-close { display: flex }` declaration so the mobile
+   hide wins the cascade (same specificity, later wins). */
+@media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {
+    .mini-map,
+    .mini-map.maplibregl-map,
+    .mini-map-close {
+        display: none;
+    }
+}
+
+/* =========================================================================
+   12. MAPLIBRE OVERRIDES (popup, attribution, scale, navigation)
+   ========================================================================= */
+.maplibregl-map {
+    font-family: var(--dc-font-body);
+}
+
+.maplibregl-ctrl-attrib {
+    background: rgba(0, 0, 0, 0.4);
+    color: var(--fg-dim);
+    font-size: var(--dc-text-2xs);
+}
+.maplibregl-ctrl-attrib a {
+    color: var(--fg-dim);
+}
+.maplibregl-ctrl-attrib a:hover {
+    color: var(--accent);
+}
+
+.maplibregl-ctrl-group {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    box-shadow: var(--dc-shadow-card);
+    border-radius: var(--dc-radius-sm);
+}
+.maplibregl-ctrl-group button {
+    background: transparent;
+    border-color: var(--border);
+}
+.maplibregl-ctrl-group button:hover {
+    background: var(--bg-hover);
+}
+.maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+    /* MapLibre ships these icons as a black SVG embedded as background-image.
+       Light theme leaves them black (visible on near-white --bg-elev). Dark
+       theme inverts to white (visible on near-black --bg-elev). The previous
+       rule applied invert(1) unconditionally and made the buttons look
+       disabled on the light map. */
+    opacity: 0.85;
+}
+:root.dc-dark .maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+    filter: invert(1);
+}
+@media (prefers-color-scheme: dark) {
+    :root:not(.dc-light) .maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+        filter: invert(1);
+    }
+}
+
+.maplibregl-popup.ez-popup .maplibregl-popup-content,
+.ez-chart-tooltip {
+    background: var(--bg-elev);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-md);
+    padding: var(--dc-space-2) var(--dc-space-3);
+    box-shadow: var(--dc-shadow-popup);
+    font-family: var(--dc-font-body);
+    font-size: var(--dc-text-xs);
+}
+.maplibregl-popup.ez-popup .maplibregl-popup-tip {
+    border-top-color: var(--bg-elev);
+    border-bottom-color: var(--bg-elev);
+}
+/* On touch the route popup gets a close button (map.ts) - keep its glyph on-brand
+   instead of the bare browser default sitting on a design-tokened popup. */
+.maplibregl-popup.ez-popup .maplibregl-popup-close-button {
+    color: var(--fg);
+}
+
+/* Touch: the expanded map fills the screen, so its controls must be finger-sized.
+   Grow the custom controls + collapse + native MapLibre zoom group to the touch
+   floor, and re-derive the native group's top offset from the larger collapse
+   button (40 + 8 inset + 8 gap). The chase-tilt thumb grows for an easier grab. */
+@media (pointer: coarse) {
+    .map-control-btn,
+    .map-collapse-btn,
+    /* The attribution pill is the only path to the map credits on the expanded
+       touch map; grow it like the other corner controls. */
+    .dc-map-attrib-btn,
+    /* The tile-error close (×) - Retry only needs a taller min-height (below). */
+    .map-style-error-close {
+        width: var(--dc-iconbtn-touch);
+        height: var(--dc-iconbtn-touch);
+    }
+    .map-style-error-btn {
+        min-height: var(--dc-iconbtn-touch);
+    }
+    .map-chase-tilt {
+        height: var(--dc-iconbtn-touch);
+    }
+    .maplibregl-ctrl-group button {
+        width: var(--dc-iconbtn-touch);
+        height: var(--dc-iconbtn-touch);
+    }
+    .maplibregl-ctrl-top-right {
+        margin-top: 56px;
+    }
+    .map-chase-tilt-range::-webkit-slider-thumb {
+        width: 22px;
+        height: 22px;
+    }
+    .map-chase-tilt-range::-moz-range-thumb {
+        width: 22px;
+        height: 22px;
+    }
+}
+
+.ez-chart-tooltip {
+    position: absolute;
+    pointer-events: none;
+    z-index: 7;
+    transition: opacity var(--dc-dur-fast) var(--dc-ease);
+    /* Hard cap on width. The tooltip contains a FILE row with long
+       camera-source names (e.g. "NO20260101-120002-000002F.MP4"); without
+       max-width the tooltip used to stretch over half the viewport and
+       covered neighboring content. 320 gives a compact popover; long
+       strings wrap via the .track-popup-line word-break rule below. */
+    max-width: min(320px, calc(100vw - 24px));
+    box-sizing: border-box;
+}
+/* "anywhere" breaks are needed only for the long FILE name (last row,
+   class .mono). Applied to ALL rows it broke short values like "31.1
+   km/h" between characters on narrow tooltips. .mono rows are
+   aXYZ / coords / file; only file is truly long and has no spaces,
+   breaking inside coords/aXYZ is harmless (they are short anyway). */
+.ez-chart-tooltip .track-popup-row.mono > span:last-child {
+    overflow-wrap: anywhere;
+    min-width: 0;
+}
+/* Non-mono rows (speed, gMag) - disallow wrapping between value and
+   unit. "31.1 km/h" must stay one visual unit. */
+.ez-chart-tooltip .track-popup-row:not(.mono) > span:last-child {
+    white-space: nowrap;
+}
+/* Mobile (any orientation): hover-tooltip is a desktop-only pattern.
+   Touch devices fire synthetic mouse events on pointerdown (a single
+   "hover" on tap), and the 200+px tooltip would cover half the video.
+   Until a proper drag-scrub thumb lands (spec/02-scrub-thumb.md
+   "Mini-thumb on mobile uses simple layout always") the tooltip is
+   force-hidden. */
+@media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {
+    .ez-chart-tooltip {
+        display: none;
+    }
+}
+.track-popup-thumb {
+    /* Hover preview of the frame. A stable canvas - not recreated on
+       hover-key change, so we don't redecode a frame on every mousemove. */
+    display: block;
+    width: 200px;
+    height: 112px;
+    border-radius: var(--dc-radius-sm);
+    margin: -4px -8px 6px;
+    background: var(--dc-black);
+    /* The hidden=true attribute removes it from layout until the first draw. */
+}
+.track-popup-thumb[hidden] {
+    display: none;
+}
+.track-popup-thumb-skeleton {
+    /* Placeholder for the preview while extractFrameAt is deferred behind the
+       idle-delay. Same box as .track-popup-thumb so the tooltip card does not
+       jump when the real thumb arrives. Reuses the strip shimmer keyframe. */
+    display: block;
+    width: 200px;
+    height: 112px;
+    border-radius: var(--dc-radius-sm);
+    margin: -4px -8px 6px;
+    background: var(--bg-elev);
+    position: relative;
+    overflow: hidden;
+}
+.track-popup-thumb-skeleton[hidden] {
+    display: none;
+}
+.track-popup-thumb-skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        color-mix(in srgb, var(--accent) 18%, transparent) 40%,
+        color-mix(in srgb, var(--accent) 28%, transparent) 50%,
+        color-mix(in srgb, var(--accent) 18%, transparent) 60%,
+        transparent 100%
+    );
+    transform: translateX(-100%);
+    animation: chart-strip-shimmer-sweep 1.6s linear infinite;
+}
+.track-popup-body {
+    /* Body container for the innerHTML rebuild on hover-key change.
+       Existence: thumb-canvas is stable, body is separate. */
+}
+
+.track-popup-title {
+    font-family: var(--dc-font-heavy);
+    font-weight: 700;
+    font-size: var(--dc-text-sm);
+    margin-bottom: var(--dc-space-1);
+    color: var(--fg);
+}
+.track-popup-row {
+    font-size: var(--dc-text-xs);
+    color: var(--fg-dim);
+    margin-top: var(--dc-space-1);
+    display: flex;
+    gap: var(--dc-space-1);
+}
+.track-popup-row.mono {
+    font-family: var(--dc-font-mono);
+    font-variant-numeric: tabular-nums;
+}
+.track-popup-label {
+    color: var(--fg-mute);
+    text-transform: uppercase;
+    letter-spacing: var(--dc-tracking-wide);
+    font-size: var(--dc-text-2xs);
+    font-weight: 600;
+}
+.track-popup-event {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--dc-space-1);
+    padding: var(--dc-space-1) var(--dc-space-2);
+    border-radius: var(--dc-radius-pill);
+    background: var(--bg-hover);
+    color: var(--fg);
+    font-family: var(--dc-font-heavy);
+    font-size: var(--dc-text-2xs);
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: var(--dc-tracking-caps);
+    margin-bottom: var(--dc-space-1);
+}
+.track-popup-event.ev-brake {
+    background: var(--ev-brake);
+    color: var(--dc-white);
+}
+
+.car-marker-wrap,
+.endpoint-marker-wrap {
+    cursor: pointer;
+    will-change: transform;
+}
+
+.car-marker {
+    /* The SVG arrow rotates via the CSS variable --bearing, which
+       app.ts sets on every rAF. */
+    transform: rotate(var(--bearing, 0deg));
+    transition: transform 60ms linear;
+}

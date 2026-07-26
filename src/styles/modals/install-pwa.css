@@ -1,0 +1,89 @@
+/* install-modal body: intro paragraph, ordered list of steps, optional CTA
+   block. Header and wrapper styles come from .export-modal / .export-modal-card,
+   same as every other modal in the project. */
+.install-modal-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-3);
+    color: var(--fg);
+    font-size: var(--dc-text-base);
+    line-height: 1.5;
+    padding: var(--dc-space-1) 0 var(--dc-space-2);
+}
+.install-modal-intro {
+    margin: 0;
+    color: var(--fg-mute);
+}
+.install-modal-steps {
+    margin: 0;
+    padding-left: var(--dc-space-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-1);
+}
+.install-modal-steps li {
+    color: var(--fg);
+}
+.install-modal-cta-wrap {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: var(--dc-space-1);
+}
+
+/* "Turn the map on" modal reuses the install-modal body classes; this is the
+   one extra: the label above the per-browser steps. */
+.webgl-enable-steps-title {
+    margin: 0;
+    font-weight: 600;
+    color: var(--fg);
+}
+.install-modal-cta-wrap a {
+    /* Anchors don't inherit the button line-height/font-weight by default -
+       duplicate so it looks identical to .dc-btn. */
+    display: inline-flex;
+    align-items: center;
+    gap: var(--dc-space-1);
+    text-decoration: none;
+}
+
+/* Inline glyph inside Chromium guide step 1 - same monitor-down icon Chrome
+   shows in the address bar. Boxed in a chip so the user reads it as the
+   thing they're looking for, not random body text. */
+.install-modal-inline-glyph {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    margin-left: 2px; /* fine nudge off the preceding word, not a grid gap */
+    border-radius: var(--dc-radius-sm);
+    background: var(--bg-elev-2);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    vertical-align: -5px;
+}
+
+/* Pulse the topbar #install-btn on its first reveal so the user notices
+   the new affordance. JS removes the class after ~4.5s. Animation only
+   touches box-shadow and transform - no layout reflow. */
+@keyframes install-btn-pulse {
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 50%, transparent);
+        transform: scale(1);
+    }
+    50% {
+        box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 0%, transparent);
+        transform: scale(1.08);
+    }
+}
+.topbar-iconbtn.install-btn-pulse {
+    animation: install-btn-pulse 1.4s ease-out 3;
+}
+/* Respect users who asked for reduced motion - the pulse is decorative,
+   they still see the button appear, that's enough. */
+@media (prefers-reduced-motion: reduce) {
+    .topbar-iconbtn.install-btn-pulse {
+        animation: none;
+    }
+}

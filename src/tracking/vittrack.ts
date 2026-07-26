@@ -1,0 +1,245 @@
+// VitTrack single-object tracker on onnxruntime-web (WASM EP, single thread; the
+// build is chosen by the caller via loadOrt - see VitTrackerSession.create).
+//
+// The ORT session is stateless (template is passed on every run - see the
+// contract note below), so ONE VitTrackerSession can drive MANY concurrent
+// VitTrack instances, each carrying its own template/last-box/size-cap. The
+// detection pass tracks several plates/faces at once off a single loaded model;
+// the Follow pass uses one track. Split accordingly: the session owns the model,
+// a VitTrack owns per-object state.
+//
+// Pre/post-processing is a TypeScript port of OpenCV's
+// modules/video/src/tracking/tracker_vit.cpp (Apache-2.0); the model is
+// opencv_zoo's object_tracking_vittrack (Apache-2.0, 715 KB fp32,
+// sha256 2990f0b7cd44d92afa48cd97db6de7be113fc1d9594fddb74e2725c10478e91d,
+// from huggingface.co/opencv/object_tracking_vittrack). Validated
+// against a synthetic scale-growth + occlusion scene: ~3 px mean center error,
+// score drops below the 0.20 threshold under occlusion and recovers after
+// (see private/research/vittrack-spike/).
+//
+// Contract: init() crops a 128x128 template around the seed box (factor 2),
+// update() crops a 256x256 search window around the last box (factor 4), runs
+// the model with BOTH tensors (ORT sessions are stateless - unlike OpenCV DNN,
+// where setInput("template") persists across forward() calls) and decodes the
+// 16x16 confidence/size/offset maps into the next box. On score < threshold
+// the box deliberately does NOT move (OpenCV behavior): the target is likely
+// occluded and following the noise would drag the box away; the caller decides
+// when a low-score streak means the target is gone. Beyond OpenCV we also reject
+// a confident-but-physically-implausible step (teleport across the frame, sudden
+// size jump, runaway that fills the frame) - a `rejected` update behaves like a
+// low-score one (guards + rationale in track-guards.ts).
+//
+// Runs in a worker. No logging - per-frame hot path.
+
+import { loadOrt, type OrtModule, type OrtRuntime } from "./ort-runtime.js";
+import { isPlausibleStep, seedSizeCap, type SizeCap, type TrackBox } from "./track-guards.js";
+
+/** ort's Tensor instance type - both builds expose the same class. */
+type OrtTensor = InstanceType<OrtModule["Tensor"]>;
+type OrtSession = Awaited<ReturnType<OrtModule["InferenceSession"]["create"]>>;
+
+export type { TrackBox } from "./track-guards.js";
+
+const TEMPLATE_SIZE = 128;
+const SEARCH_SIZE = 256;
+const MAP_SIZE = 16;
+/** OpenCV default: "safe threshold to filter out black frames". */
+export const VITTRACK_SCORE_THRESHOLD = 0.2;
+/** blobFromImageWithParams equivalent: (p/255 - mean)/std, BGR plane order
+ *  (OpenCV Mat channel order, swapRB=false - the model was exported for it). */
+const MEAN = [0.485, 0.456, 0.406] as const;
+const STD = [0.229, 0.224, 0.225] as const;
+
+/** hann2d(16, centered) flattened row-major - the confidence-map window that
+ *  penalizes detections far from the previous position. */
+function buildHannWindow(): Float32Array {
+    const h1 = new Float32Array(MAP_SIZE);
+    for (let i = 0; i < MAP_SIZE; i++) {
+        h1[i] = 0.5 * (1 - Math.cos(((2 * Math.PI) / (MAP_SIZE + 1)) * (i + 1)));
+    }
+    const out = new Float32Array(MAP_SIZE * MAP_SIZE);
+    for (let r = 0; r < MAP_SIZE; r++) {
+        for (let c = 0; c < MAP_SIZE; c++) out[r * MAP_SIZE + c] = h1[r]! * h1[c]!;
+    }
+    return out;
+}
+const HANN = buildHannWindow();
+
+interface CropResult {
+    crop: OffscreenCanvas;
+    cropSz: number;
+    /** Crop origin in frame coordinates (may be negative - black padding). */
+    x0: number;
+    y0: number;
+}
+
+/** tracker_vit.cpp crop_image: square side ceil(sqrt(w*h)*factor) centered on
+ *  the box center, black-padded where it leaves the frame. C++ integer
+ *  division truncates toward zero - Math.trunc, not floor. */
+function cropImage(
+    frame: CanvasImageSource,
+    frameW: number,
+    frameH: number,
+    box: TrackBox,
+    factor: number,
+): CropResult {
+    const cropSz = Math.ceil(Math.sqrt(box.w * box.h) * factor);
+    const x1 = box.x + Math.trunc((box.w - cropSz) / 2);
+    const y1 = box.y + Math.trunc((box.h - cropSz) / 2);
+    const x2 = x1 + cropSz;
+    const y2 = y1 + cropSz;
+    const x1pad = Math.max(0, -x1);
+    const y1pad = Math.max(0, -y1);
+    const x2pad = Math.max(x2 - frameW + 1, 0);
+    const y2pad = Math.max(y2 - frameH + 1, 0);
+    const roiW = x2 - x2pad - x1 - x1pad;
+    const roiH = y2 - y2pad - y1 - y1pad;
+    const crop = new OffscreenCanvas(Math.max(1, cropSz), Math.max(1, cropSz));
+    const ctx = crop.getContext("2d", { alpha: false });
+    if (!ctx) throw new Error("vittrack: crop canvas ctx unavailable");
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, crop.width, crop.height);
+    if (roiW > 0 && roiH > 0) {
+        ctx.drawImage(frame, x1 + x1pad, y1 + y1pad, roiW, roiH, x1pad, y1pad, roiW, roiH);
+    }
+    return { crop, cropSz, x0: x1, y0: y1 };
+}
+
+/** Resize crop -> size, normalize into a CHW float tensor (BGR planes). */
+function preprocess(ort: OrtModule, cropCanvas: OffscreenCanvas, size: number, scratch: OffscreenCanvas): OrtTensor {
+    scratch.width = size;
+    scratch.height = size;
+    const ctx = scratch.getContext("2d", { alpha: false });
+    if (!ctx) throw new Error("vittrack: preprocess ctx unavailable");
+    ctx.drawImage(cropCanvas, 0, 0, size, size);
+    const rgba = ctx.getImageData(0, 0, size, size).data;
+    const n = size * size;
+    const data = new Float32Array(3 * n);
+    for (let i = 0; i < n; i++) {
+        const r = rgba[i * 4]!;
+        const g = rgba[i * 4 + 1]!;
+        const b = rgba[i * 4 + 2]!;
+        data[i] = (b / 255 - MEAN[0]) / STD[0];
+        data[n + i] = (g / 255 - MEAN[1]) / STD[1];
+        data[2 * n + i] = (r / 255 - MEAN[2]) / STD[2];
+    }
+    return new ort.Tensor("float32", data, [1, 3, size, size]);
+}
+
+/** A loaded vittrack model. Stateless across runs, so it spawns any number of
+ *  independent VitTrack instances that share this one session. */
+export class VitTrackerSession {
+    private constructor(
+        private readonly ort: OrtModule,
+        private readonly session: OrtSession,
+    ) {}
+
+    /** Loads the model on the given ORT build and prepares a wasm-EP session.
+     *  `ortRuntime` only selects WHICH build to piggyback on - the tracker always
+     *  runs the wasm EP (validated there). The Follow pass loads the plain "wasm"
+     *  build; the detection pass passes "webgpu" so the tracker reuses the
+     *  asyncify runtime the detectors already loaded, sparing a second ~13 MB wasm
+     *  download (the wasm-EP kernels are identical between the two builds). Thread
+     *  count + wasmPaths are set by loadOrt (single thread - see ort-runtime.ts). */
+    static async create(ortRuntime: OrtRuntime, modelUrl: string, wasmDir: string): Promise<VitTrackerSession> {
+        const ort = await loadOrt(ortRuntime, wasmDir);
+        const session = await ort.InferenceSession.create(modelUrl, { executionProviders: ["wasm"] });
+        return new VitTrackerSession(ort, session);
+    }
+
+    /** A fresh single-object track bound to this session. init() before update(). */
+    newTrack(): VitTrack {
+        return new VitTrack(this.ort, this.session);
+    }
+}
+
+/** One tracked object: template + last box + size cap. Cheap to allocate, so the
+ *  detection pass makes one per plate/face and the Follow pass makes one. */
+export class VitTrack {
+    private template: OrtTensor | null = null;
+    private rectLast: TrackBox = { x: 0, y: 0, w: 0, h: 0 };
+    /** Frames since init - gates the size-ratio guard's warmup (track-guards.ts). */
+    private sinceInit = 0;
+    /** Seed-derived size ceiling for this pass - set in init(). */
+    private cap: SizeCap = { maxW: 0, maxH: 0 };
+    /** Reused resize target for preprocess - one allocation per track. */
+    private readonly scratch = new OffscreenCanvas(SEARCH_SIZE, SEARCH_SIZE);
+
+    constructor(
+        private readonly ort: OrtModule,
+        private readonly session: OrtSession,
+    ) {}
+
+    /** Current box (last confident position). */
+    get box(): TrackBox {
+        return { ...this.rectLast };
+    }
+
+    /** Seeds (or RE-seeds) the track: template crop (factor 2) around the box.
+     *  Re-calling it re-anchors on a fresh box - the detection pass does this on
+     *  every detector hit to null out drift, which also re-derives the size cap
+     *  from the now-closer object and restarts the warmup. */
+    init(frame: CanvasImageSource, frameW: number, frameH: number, box: TrackBox): void {
+        const { crop } = cropImage(frame, frameW, frameH, box, 2);
+        this.template = preprocess(this.ort, crop, TEMPLATE_SIZE, this.scratch);
+        this.rectLast = { ...box };
+        this.sinceInit = 0;
+        this.cap = seedSizeCap(box, frameW, frameH);
+    }
+
+    /** Advances the tracker by one analyzed frame, `dtSec` seconds after the
+     *  previous one (used to scale the plausibility guards). Returns the tracking
+     *  score, the current box (unchanged when score < threshold OR the step was
+     *  rejected as implausible - see the header and track-guards.ts), and whether
+     *  this step was rejected. */
+    async update(
+        frame: CanvasImageSource,
+        frameW: number,
+        frameH: number,
+        dtSec: number,
+    ): Promise<{ box: TrackBox; score: number; rejected: boolean }> {
+        if (!this.template) throw new Error("vittrack: update before init");
+        this.sinceInit++;
+        const { crop, cropSz, x0, y0 } = cropImage(frame, frameW, frameH, this.rectLast, 4);
+        const search = preprocess(this.ort, crop, SEARCH_SIZE, this.scratch);
+        const outs = await this.session.run({ template: this.template, search });
+        const conf = outs.output1!.data as Float32Array;
+        const sizeMap = outs.output2!.data as Float32Array;
+        const offMap = outs.output3!.data as Float32Array;
+
+        let maxVal = Number.NEGATIVE_INFINITY;
+        let maxIdx = 0;
+        for (let i = 0; i < MAP_SIZE * MAP_SIZE; i++) {
+            const v = conf[i]! * HANN[i]!;
+            if (v > maxVal) {
+                maxVal = v;
+                maxIdx = i;
+            }
+        }
+        let rejected = false;
+        if (maxVal >= VITTRACK_SCORE_THRESHOLD) {
+            const mx = maxIdx % MAP_SIZE;
+            const my = Math.trunc(maxIdx / MAP_SIZE);
+            const plane = MAP_SIZE * MAP_SIZE;
+            const cx = (mx + offMap[my * MAP_SIZE + mx]!) / MAP_SIZE;
+            const cy = (my + offMap[plane + my * MAP_SIZE + mx]!) / MAP_SIZE;
+            const w = sizeMap[my * MAP_SIZE + mx]!;
+            const h = sizeMap[plane + my * MAP_SIZE + mx]!;
+            const cand: TrackBox = {
+                x: Math.floor((cx - w / 2) * cropSz + x0),
+                y: Math.floor((cy - h / 2) * cropSz + y0),
+                w: Math.floor(w * cropSz),
+                h: Math.floor(h * cropSz),
+            };
+            // Confident localization, but an implausible step (teleport / balloon)
+            // means the peak landed on a distractor: reject it and keep the last
+            // good box so the next search stays anchored on the target.
+            if (isPlausibleStep(this.rectLast, cand, this.cap, frameW, frameH, this.sinceInit, dtSec)) {
+                this.rectLast = cand;
+            } else {
+                rejected = true;
+            }
+        }
+        return { box: { ...this.rectLast }, score: maxVal, rejected };
+    }
+}

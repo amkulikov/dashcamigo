@@ -1,0 +1,105 @@
+/* =========================================================================
+   SHARED MODAL SCAFFOLD
+   --------------------------------------------------------------------------
+   .modal-overlay + .modal-card are the single source of truth for centered
+   dialogs: the info/settings/reset/install modals here (.export-modal*),
+   plus feedback and hotkeys (their files add only z-index + card sizing).
+   Add both classes in index.html; per-modal files override only what truly
+   differs. The full-page CSP sheet (.landing-csp-modal-backdrop) is a
+   different pattern (block + scroll + .is-open) and does NOT use this
+   scaffold - it only mirrors the same backdrop look.
+
+   Backdrop is unified at blur(8px)/rgba(0,0,0,.6) across all modals. */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    /* Center a content-sized card. */
+    align-items: center;
+    justify-content: center;
+    z-index: var(--dc-z-modal);
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    font-family: var(--dc-font-body);
+}
+.modal-overlay[hidden] {
+    display: none;
+}
+.modal-card {
+    background: var(--bg-elev);
+    color: var(--fg);
+    overflow-y: auto;
+    box-shadow: var(--dc-shadow-popup);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-lg);
+    box-sizing: border-box;
+}
+
+/* Info / settings / reset / install dialogs. Reuse the .export-modal* class
+   names that the deleted Save-clip modal once owned. */
+.export-modal {
+    /* Breathing room so the card never touches the viewport edges, and an
+       upper bound for its height on short screens. */
+    padding: clamp(var(--dc-space-4), 5vh, var(--dc-space-7)) var(--dc-space-4);
+}
+
+.export-modal-card {
+    width: min(540px, 100%);
+    /* Height follows content; scroll inside only if the list is very long. */
+    max-height: 100%;
+    padding: var(--dc-space-4) clamp(var(--dc-space-4), 3vw, var(--dc-space-6));
+}
+
+.export-modal-title {
+    font-family: var(--dc-font-display);
+    font-size: var(--dc-text-2xl);
+    letter-spacing: var(--dc-tracking-tight);
+    margin-bottom: var(--dc-space-3);
+    color: var(--fg);
+}
+
+.export-modal-section[hidden] {
+    display: none;
+}
+
+.export-modal-warn {
+    background: color-mix(in srgb, var(--warn) 12%, transparent);
+    border: 1px solid var(--warn);
+    border-radius: var(--dc-radius-sm);
+    padding: var(--dc-space-2) var(--dc-space-3);
+    font-size: var(--dc-text-xs);
+    color: var(--fg);
+    margin-bottom: var(--dc-space-3);
+    line-height: var(--dc-leading-snug);
+}
+
+.export-modal-summary {
+    font-size: var(--dc-text-sm);
+    color: var(--fg-dim);
+    margin-bottom: var(--dc-space-3);
+    font-family: var(--dc-font-mono);
+    font-variant-numeric: tabular-nums;
+    line-height: var(--dc-leading-snug);
+}
+
+.export-modal-actions {
+    display: flex;
+    gap: var(--dc-space-2);
+    justify-content: flex-end;
+}
+
+/* Short landscape: the on-screen keyboard eats the bottom half of the screen,
+   but it does NOT shrink vh/svh/dvh - so a center-anchored fixed card keeps its
+   lower half (textarea tail + Send) behind the keyboard. Pin the card to the top
+   instead so the focused field floats above the keyboard. A height-unit swap
+   would not help (the keyboard does not resize the viewport units); top-anchoring
+   is the part that actually keeps the input reachable. */
+@media (max-height: 500px) and (orientation: landscape) {
+    .modal-overlay {
+        align-items: flex-start;
+    }
+    .modal-card {
+        margin-top: max(var(--dc-space-3), env(safe-area-inset-top));
+    }
+}

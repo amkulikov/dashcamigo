@@ -1,0 +1,118 @@
+# Cloudflare Pages headers (https://developers.cloudflare.com/pages/configuration/headers/).
+# Vite copies public/_headers into dist/_headers, CF Pages picks it up at deploy time.
+
+# Immutable assets - cache for a year. The hash in the filename (e.g. index-CCFPuCH8.js)
+# guarantees a new build = a new name, so stale cache is impossible.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Fonts are self-hosted, filenames are fixed (see scripts/fetch-fonts.mjs).
+# Year-long cache - when fonts change the script overwrites the files; if cache
+# invalidation is ever needed, add a version suffix to the filename.
+/fonts/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Blur-zone auto-tracker models. Content-hashed filenames at build
+# (<name>.<hash>.onnx - see vite-plugins/tracker-assets.ts), so any byte change
+# lands a new URL and a year-long immutable cache is safe (same guarantee as
+# /assets/*). Without this a model falls to CF's max-age=0 default and
+# revalidates every session on the opt-in Track path.
+/models/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# onnxruntime-web wasm runtime, served under a version-stamped dir
+# (/ort/<version>/ - see vite-plugins/tracker-assets.ts). The version in the path
+# makes the URL a content key exactly like a hashed /assets/ name: a dependency
+# bump lands a new path, so a year-long immutable cache is safe and never serves
+# wasm mismatched against the freshly-hashed JS glue in /assets/. (Offline PWA use
+# is a separate concern - these paths are runtime-cached by the SW, not precached.)
+/ort/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Service worker - always fresh. Otherwise users get stuck on a stale SW version
+# (the SW itself is cached by the browser, and the update check only runs on the
+# next page load, and only if the SW file changed byte-for-byte).
+/sw.js
+  Cache-Control: public, max-age=0, must-revalidate
+
+# HTML - revalidate every time. Long-cached hash assets are on the CDN anyway, so
+# the overhead is minimal and users get new builds without an F5.
+/
+  Cache-Control: public, max-age=0, must-revalidate
+/*.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+# Security headers for every response.
+/*
+  # Block MIME-sniffing - the browser uses the declared Content-Type, does not guess.
+  X-Content-Type-Options: nosniff
+
+  # Block embedding this page in an <iframe> on other sites (clickjacking defense).
+  # frame-ancestors in the CSP below does the same for modern browsers;
+  # X-Frame-Options is kept as a fallback for older ones.
+  X-Frame-Options: DENY
+
+  # Referrer does not leak to third-party sites on cross-origin navigation.
+  Referrer-Policy: strict-origin-when-cross-origin
+
+  # Block browser APIs the app does not use. Any DOM injection could not, e.g.,
+  # request geolocation or activate the camera.
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=(), bluetooth=(), midi=(), interest-cohort=()
+
+  # HSTS for 2 years + preload + includeSubDomains. The .app TLD is already
+  # HSTS-preloaded at the TLD level (Google), but the explicit header guarantees
+  # the behavior even if a user opens the site through a proxy / VPN with spoofed DNS.
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+
+  # Browsing-context isolation: the window cannot be opened from a cross-origin window.opener.
+  Cross-Origin-Opener-Policy: same-origin
+
+  # DNS-prefetch to speed up cross-origin requests (map, fonts).
+  X-DNS-Prefetch-Control: on
+
+  # CSP in enforcing mode - violations are blocked by the browser, not just
+  # reported. The policy previously ran as Content-Security-Policy-Report-Only,
+  # was road-tested in prod with no real violations, then switched to enforce.
+  # If something breaks for users (e.g. the MapLibre tile provider starts
+  # hitting a new openfreemap.org subdomain) - revert to Report-Only,
+  # see the violation in DevTools, update the allowlist, switch back.
+  #
+  # Directive breakdown:
+  # - default-src 'self' - root policy, anything not explicitly allowed is blocked.
+  # - script-src 'self' static.cloudflareinsights.com - our JS chunks + the CF
+  #   Web Analytics beacon (auto-injected at the edge, see Pages Settings ->
+  #   Web Analytics).
+  #   No 'unsafe-eval': the build (Rolldown + Oxc minify) emits no eval() /
+  #   new Function(). No 'unsafe-inline' either - the one inline bootstrap
+  #   script runs via a build-time 'sha256-...' hash spliced into this
+  #   directive by csp-hash.ts, and the JSON-LD block is
+  #   type="application/ld+json", which does not fall under script-src.
+  #   'wasm-unsafe-eval' allows WebAssembly COMPILATION only (not JS eval) -
+  #   required by onnxruntime-web (blur-zone auto-tracker; /ort/ runtime +
+  #   /models/ ONNX weights are self-hosted, same-origin).
+  # - style-src 'self' 'unsafe-inline' - 'unsafe-inline' is needed for
+  #   style="..." attributes on SVG icons (a few spots in the HTML). Moving them
+  #   into CSS classes would drop 'unsafe-inline' - see backlog.
+  # - font-src 'self' - all fonts are self-hosted under /fonts/, no external
+  #   CDN like fonts.gstatic.com.
+  # - img-src 'self' data: blob: openfreemap - data:/blob: for inline SVG and
+  #   canvas snapshots, openfreemap - tile images.
+  # - connect-src - fetch for the tile style + CF Web Analytics beacon events
+  #   on cloudflareinsights.com/cdn-cgi/rum.
+  #   Plus Sentry crash reporting: envelope POST to the project's ingest host
+  #   o4511528520843264.ingest.de.sentry.io (one host shared by beta and prod -
+  #   they differ by project id inside the DSN, not by host).
+  # - worker-src 'self' blob: - our own bundled workers (MapLibre's included)
+  #   are same-origin; blob: covers onnxruntime-web, which can wrap its worker
+  #   script in a blob URL.
+  # - media-src 'self' blob: - blob: URLs from MediaSource during MP4 export.
+  # - manifest-src 'self' - the PWA manifest.
+  # - object-src 'none', frame-src 'none', child-src 'none' - block
+  #   <object>/<embed>/<iframe>, unused in the project.
+  # - base-uri 'self' - block <base> injection to hijack relative URLs.
+  # - form-action 'none' - block <form action="...">, no forms in the project.
+  # - frame-ancestors 'none' - block embedding our page in someone else's iframe.
+  # - upgrade-insecure-requests - http:// → https:// upgrade (defense-in-depth
+  #   on top of the .app HSTS preload; ignored in Report-Only, works correctly
+  #   in enforce).
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://tiles.openfreemap.org https://*.openfreemap.org; connect-src 'self' https://tiles.openfreemap.org https://*.openfreemap.org https://cloudflareinsights.com https://o4511528520843264.ingest.de.sentry.io; worker-src 'self' blob:; media-src 'self' blob:; manifest-src 'self'; object-src 'none'; frame-src 'none'; child-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'; upgrade-insecure-requests

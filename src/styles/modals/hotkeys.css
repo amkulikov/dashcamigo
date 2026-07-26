@@ -1,0 +1,82 @@
+/* =========================================================================
+   15b. HOTKEYS CHEATSHEET MODAL (UX-10)
+   ----------------------------------------------------------------
+   Opened via the ? button in the player or Shift+/. A list of kbd rows grouped by category.
+   ========================================================================= */
+/* Overlay/card scaffold comes from .modal-overlay/.modal-card (dialog-shared.css);
+   here only the bits that differ from the centered-dialog defaults. */
+.hotkeys-modal {
+    z-index: var(--dc-z-modal-top);
+}
+.hotkeys-modal-card {
+    border-color: var(--border-strong);
+    padding: var(--dc-space-5) var(--dc-space-6);
+    min-width: 360px;
+    max-width: 540px;
+    max-height: 80vh;
+}
+/* On a 360px phone min-width:360px leaves zero edge gap (border/shadow bleed off)
+   and clips below 360px. Shrink the card and keep a side gap on mobile. */
+@media (max-width: 767px) {
+    .hotkeys-modal-card {
+        min-width: 0;
+        width: min(360px, calc(100vw - var(--dc-space-6)));
+    }
+}
+.hotkeys-modal-title {
+    font-family: var(--dc-font-display);
+    font-size: var(--dc-text-2xl);
+    font-weight: 800;
+    letter-spacing: var(--dc-tracking-tight);
+    margin-bottom: var(--dc-space-4);
+    color: var(--fg);
+}
+.hotkeys-modal-group + .hotkeys-modal-group {
+    margin-top: var(--dc-space-4);
+}
+.hotkeys-modal-group h3 {
+    font-family: var(--dc-font-heavy);
+    font-size: var(--dc-text-xs);
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: var(--dc-tracking-caps);
+    color: var(--accent);
+    margin: 0 0 var(--dc-space-2);
+}
+.hotkeys-modal-group dl {
+    margin: 0;
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    column-gap: var(--dc-space-4);
+    row-gap: var(--dc-space-2);
+    align-items: center;
+}
+.hotkeys-modal-group dt {
+    display: inline-flex;
+    gap: var(--dc-space-1);
+    align-items: center;
+}
+.hotkeys-modal-group dd {
+    margin: 0;
+    font-size: var(--dc-text-sm);
+    color: var(--fg-dim);
+}
+.hotkeys-modal-group kbd {
+    font-family: var(--dc-font-mono);
+    font-size: var(--dc-text-sm);
+    line-height: 1;
+    padding: var(--dc-space-1) var(--dc-space-2);
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--dc-radius-sm);
+    box-shadow: 0 1px 0 var(--border-strong);
+}
+.hotkeys-modal-foot {
+    margin-top: var(--dc-space-4);
+    padding-top: var(--dc-space-3);
+    border-top: 1px solid var(--border);
+    font-size: var(--dc-text-xs);
+    color: var(--fg-mute);
+    text-align: center;
+}

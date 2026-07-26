@@ -1,0 +1,199 @@
+/* ===== Bottom-sticky banner and settings-modal ==============================
+   .sticky-banner - a shared bottom-sticky bar. The PWA install toast
+   (#install-banner) uses it.
+
+   Banner buttons use the shared .dc-btn (src/styles/components/buttons.css).
+
+   Settings-modal uses the base .export-modal classes (overlay/card/section);
+   only the extra rules for the Privacy tab live here.
+   ========================================================================= */
+
+.sticky-banner {
+    position: fixed;
+    left: var(--dc-space-4);
+    right: var(--dc-space-4);
+    bottom: var(--dc-space-4);
+    z-index: var(--dc-z-banner);
+    background: var(--bg-elev);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-md);
+    box-shadow: var(--dc-shadow-popup);
+    padding: var(--dc-space-4) var(--dc-space-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-3);
+    font-family: var(--dc-font-body);
+    font-size: var(--dc-text-sm);
+    max-width: 560px;
+    margin: 0 auto;
+    /* A light slide-up animation on appearance - the banner shows up after
+       the first ingest, and an instant "pop-in" is jarring. */
+    animation: sticky-banner-in var(--dc-dur-entrance) var(--dc-ease-out);
+}
+.sticky-banner[hidden] {
+    display: none;
+}
+@keyframes sticky-banner-in {
+    from {
+        transform: translateY(12px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.sticky-banner-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-2);
+}
+.sticky-banner-title {
+    font-weight: 700;
+    color: var(--fg);
+    font-size: var(--dc-text-lg);
+    line-height: var(--dc-leading-snug);
+}
+.sticky-banner-lead {
+    margin: 0;
+    color: var(--fg-mute);
+    line-height: 1.5;
+}
+
+.sticky-banner-footer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-1);
+    border-top: 1px solid var(--border);
+    padding-top: var(--dc-space-3);
+}
+.sticky-banner-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+}
+.sticky-banner-actions-spacer {
+    flex: 1;
+}
+
+/* On mobile (any orientation) the action-row collapses so the buttons span
+   full width. */
+@media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {
+    .sticky-banner {
+        /* Clear the home indicator / gesture pill (bottom) AND the landscape
+           side notch (left/right) so Accept/Deny don't sit under a cutout. env()
+           is 0 on non-notched, so max() keeps the base 8px inset. Covers
+           #install-banner too (it shares .sticky-banner). */
+        left: max(var(--dc-space-2), env(safe-area-inset-left));
+        right: max(var(--dc-space-2), env(safe-area-inset-right));
+        bottom: max(var(--dc-space-2), env(safe-area-inset-bottom));
+        padding: var(--dc-space-3) var(--dc-space-4);
+        max-width: none;
+    }
+    .sticky-banner-actions {
+        flex-wrap: wrap;
+    }
+    .sticky-banner-actions-spacer {
+        display: none;
+    }
+    .sticky-banner .dc-btn {
+        flex: 1;
+        padding: var(--dc-space-2) var(--dc-space-3);
+    }
+}
+
+/* Settings privacy tab. We use .export-modal as the container; only
+   the toggle and desc-block styles live here. */
+.settings-section-title {
+    font-size: var(--dc-text-md);
+    font-weight: 600;
+    color: var(--fg-mute);
+    margin: 0 0 var(--dc-space-3);
+    text-transform: uppercase;
+    letter-spacing: var(--dc-tracking-wide);
+}
+
+.settings-row {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-2);
+    margin-bottom: var(--dc-space-4);
+}
+
+/* Custom toggle: the checkbox is hidden, a visible slider-like control via
+   ::before/::after. Compatible with keyboard navigation (focus moves to the
+   hidden input, the slider reacts via :checked). */
+.settings-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+    cursor: pointer;
+    user-select: none;
+}
+.settings-toggle input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    width: 0;
+    height: 0;
+}
+.settings-toggle-slider {
+    position: relative;
+    flex-shrink: 0;
+    width: 36px;
+    height: 20px;
+    background: var(--border);
+    border-radius: var(--dc-radius-pill);
+    transition: background var(--dc-dur-base) var(--dc-ease);
+}
+.settings-toggle-slider::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background: var(--bg);
+    border-radius: 50%;
+    transition: transform var(--dc-dur-base) var(--dc-ease);
+}
+.settings-toggle input:checked + .settings-toggle-slider {
+    background: var(--accent);
+}
+.settings-toggle input:checked + .settings-toggle-slider::after {
+    transform: translateX(16px);
+}
+.settings-toggle input:focus-visible + .settings-toggle-slider {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+.settings-toggle-label {
+    color: var(--fg);
+    font-size: var(--dc-text-md);
+}
+.settings-toggle-desc {
+    color: var(--fg-mute);
+    font-size: var(--dc-text-sm);
+    line-height: 1.5;
+    margin: 0;
+}
+/* The 46px slider-width indent only makes sense under a toggle row; reused under
+   number-input / button rows (seek-step, About, Danger zone) it aligned to
+   nothing. Scope it to the toggle context (~ not +: the events/ingest rows put a
+   select-row between the toggle and its desc). */
+.settings-toggle ~ .settings-toggle-desc {
+    margin-left: 46px;
+}
+.settings-policy-link {
+    color: var(--fg-mute);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    font-size: var(--dc-text-sm);
+    margin-left: 46px;
+    align-self: flex-start;
+}
+.settings-policy-link:hover {
+    color: var(--accent);
+}

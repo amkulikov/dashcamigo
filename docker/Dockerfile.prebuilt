@@ -1,0 +1,14 @@
+# CI packaging image: wraps an ALREADY-BUILT dist/ in nginx. Used only by
+# .github/workflows/release.yml, which stages a minimal context (dist/ +
+# nginx.conf) and pushes the result to ghcr.io - so the published image serves
+# byte-identical files to the release zip/tar.gz built and attested in the
+# same run, instead of a second, unverified in-Docker rebuild.
+#
+# No RUN instructions on purpose: buildx can then assemble the arm64 variant
+# by layer composition alone, no qemu emulation in CI.
+#
+# Self-hosters building from a clone use the root Dockerfile instead (it runs
+# the full build inside the image).
+FROM nginx:alpine
+COPY dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf

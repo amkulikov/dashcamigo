@@ -1,0 +1,96 @@
+/* =========================================================================
+   14. DROP OVERLAY (full-screen drag-over)
+   ========================================================================= */
+.drop-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: var(--dc-z-scrim);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--dc-dur-base) var(--dc-ease);
+}
+.drop-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+.drop-overlay[hidden] {
+    display: none;
+}
+
+.drop-overlay-card {
+    /* The drop overlay has its own fullscreen backdrop (rgba black 0.55 +
+       blur); the card on top is theme-neutral. */
+    background: var(--bg-elev);
+    border: 2px dashed var(--accent);
+    border-radius: var(--dc-radius-md);
+    padding: var(--dc-space-7) var(--dc-space-8);
+    text-align: center;
+    color: var(--fg);
+    box-shadow: var(--dc-shadow-popup);
+    /* The overlay has no scroll (body is overflow:hidden), so the centered card
+       must never exceed the viewport or it clips on both edges. The 280px bullet
+       block + mobile padding (below) is the real width driver. */
+    max-width: calc(100vw - 2 * var(--dc-space-4));
+}
+@media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {
+    .drop-overlay-card {
+        /* 48/64px padding would push min-width past a 390px phone; tighten it so
+           the 280px bullet block fits with room. */
+        padding: var(--dc-space-5);
+    }
+}
+.drop-overlay-icon {
+    margin: 0 auto var(--dc-space-3);
+    line-height: 1;
+    color: var(--accent);
+    display: inline-flex;
+}
+.drop-overlay-title {
+    font-family: var(--dc-font-display);
+    font-size: var(--dc-text-2xl);
+    letter-spacing: var(--dc-tracking-tight);
+    margin-bottom: var(--dc-space-1);
+}
+.drop-overlay-hint {
+    font-size: var(--dc-text-sm);
+    color: var(--fg-dim);
+}
+
+/* UX-04: bullet clarifications under the hint. Mono font, small, orange
+   dot marker. These are short clarifications of "what exactly we expect", not fluff. */
+.drop-overlay-bullets {
+    list-style: none;
+    margin: var(--dc-space-3) 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-2);
+    text-align: left;
+    max-width: 280px;
+    margin-left: auto;
+    margin-right: auto;
+}
+.drop-overlay-bullets li {
+    font-family: var(--dc-font-mono);
+    font-size: var(--dc-text-sm);
+    color: var(--fg-dim);
+    padding-left: var(--dc-space-3);
+    position: relative;
+    line-height: var(--dc-leading-snug);
+}
+.drop-overlay-bullets li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.55em;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--accent);
+}

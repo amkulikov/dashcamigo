@@ -1,0 +1,11 @@
+# dashcamigo.app robots.txt
+#
+# Public web app, no backend, no private routes. We want everyone to index.
+# AI crawlers (GPTBot, ClaudeBot, CCBot, etc.) are intentionally NOT blocked
+# - this is a free public tool, and being recommended by AI assistants is a
+# valid discovery channel for users searching for "free dashcam player".
+
+User-agent: *
+Allow: /
+
+Sitemap: https://dashcamigo.app/sitemap.xml

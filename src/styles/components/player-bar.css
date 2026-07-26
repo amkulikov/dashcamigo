@@ -1,0 +1,757 @@
+/* =========================================================================
+   7. PLAYER BAR (custom toolbar)
+   ========================================================================= */
+.player-bar {
+    /* Container query scope for all internal responsive rules.
+       The player-bar reacts to its own width (= the viewer's width, which
+       depends on the sidebar/map-pane), not the window width: a user with
+       an open map gets a narrow bar even on a 1440px desktop.
+       container-type: inline-size - @container queries measure width only,
+       height is free (the bar does not grow taller). */
+    container-type: inline-size;
+    container-name: pbar;
+
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+    padding: var(--dc-space-1) var(--dc-space-2);
+    background: var(--bg-elev);
+    border-top: 1px solid var(--border);
+    color: var(--fg);
+    /* flex-wrap: nowrap - on a narrow bar, progressive hide via @container
+       (see below) + overflow-bar.ts remove low-priority elements.
+       Wrap would create a second row of controls, breaking the bar's fixed
+       height and the player-wrap grid-template-rows (row "bar" = auto).
+       We do NOT set overflow: hidden - that would clip child popovers
+       (.player-speed-menu goes up, so does .player-volume-popover, and
+       overflow-menu too). Guarding against visual overflow on an extremely
+       narrow bar is overflow-bar's job; once all of its items are already
+       hidden, the remaining buttons physically just barely fit and are
+       fully visible. */
+    flex-wrap: nowrap;
+    font-family: var(--dc-font-body);
+}
+
+/* Toolbar buttons. Square, square-radius. The main Play button is orange. */
+.player-btn {
+    background: transparent;
+    color: var(--fg);
+    border: 0;
+    width: var(--dc-iconbtn);
+    height: var(--dc-iconbtn);
+    padding: 0;
+    border-radius: var(--dc-radius-sm);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--dc-text-base);
+    line-height: 1;
+    transition: background var(--dc-dur-fast) var(--dc-ease);
+}
+.player-btn:hover {
+    background: var(--bg-hover);
+}
+/* Pressed feedback - the only press signal on touch, where :hover never fires.
+   Play keeps its orange identity (accent-hot); the rest use the neutral pressed
+   surface. */
+.player-btn:not(#player-play):active {
+    background: var(--bg-active);
+}
+#player-play:active {
+    background: var(--accent-hot);
+}
+.player-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+/* Frame-step pair (player-frame-step.ts). touch-action: none - a touch hold
+   drives auto-repeat, so the browser must not steal the gesture for scrolling
+   (pointercancel would kill the repeat mid-hold). */
+.player-step {
+    touch-action: none;
+    flex-shrink: 0;
+}
+/* Narrow bar: the step pair leaves entirely. It is deliberately NOT in the
+   overflow priority list (player-bar-overflow.ts) - a hold-to-repeat control
+   inside the kebab menu degenerates into open-menu-tap-once - and on a
+   portrait-phone-width bar the mandatory controls already just fit. Landscape
+   phones and desktop keep it. */
+@container pbar (max-width: 640px) {
+    .player-step {
+        display: none;
+    }
+}
+/* #player-map: mobile-only entry to expand/collapse the map. On desktop the
+   mini-map circle is the click target (and the dedicated button would be
+   redundant). On mobile the circle is hidden in map.css, so this button is
+   the only way in - it gets unhidden in the mobile media block below. */
+#player-map {
+    display: none;
+}
+/* aria-pressed=true means "map is currently expanded" - mark with orange
+   accent so the toggle state is glanceable, matching .player-btn.active
+   conventions elsewhere in the bar. */
+#player-map[aria-pressed="true"] {
+    color: var(--accent);
+}
+.player-btn[hidden] {
+    display: none;
+}
+/* SVG icons inside buttons: hidden is controlled via the attribute.
+   Without explicit display:block, centering via the flex button is preserved. */
+.player-btn svg,
+.map-control-btn svg,
+.mini-map-close svg,
+.map-style-error-close svg,
+.topbar-burger svg {
+    display: block;
+}
+.player-btn svg[hidden],
+.map-control-btn svg[hidden] {
+    display: none;
+}
+/* The active Play button (playing) - based on the paused state, to draw
+   the eye. We apply an accent background when the player is paused - the
+   user sees "click here". */
+#player-play[data-paused="true"] {
+    background: var(--accent);
+    color: var(--dc-black);
+}
+#player-play[data-paused="true"]:hover {
+    background: var(--accent-hot);
+}
+
+.player-btn[aria-pressed="true"] {
+    color: var(--accent);
+}
+
+.player-btn-text {
+    width: auto;
+    padding: var(--dc-space-1) var(--dc-space-2);
+    font-family: var(--dc-font-mono);
+    font-size: var(--dc-text-sm);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.player-time {
+    font-family: var(--dc-font-mono);
+    font-size: var(--dc-text-sm);
+    color: var(--fg-dim);
+    font-variant-numeric: tabular-nums;
+}
+.player-time + .player-time {
+    color: var(--fg-dim);
+}
+.player-time:first-of-type {
+    color: var(--fg);
+}
+.player-time-sep {
+    color: var(--fg-mute);
+    padding: 0 var(--dc-space-1);
+}
+
+.player-spacer {
+    flex: 1;
+}
+
+/* UX-25: trust-line - a quiet mini-note to the right of the fullscreen
+   button. Always visible, opacity 0.6 so it doesn't distract. Opacity
+   1.0 on hover. Mono 11px text, doesn't compete for attention with the
+   metrics and buttons. */
+.trust-mini {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--dc-space-1);
+    margin-left: var(--dc-space-2);
+    font-family: var(--dc-font-mono);
+    font-size: var(--dc-text-xs);
+    color: var(--fg-mute);
+    cursor: help;
+    opacity: 0.6;
+    transition:
+        opacity var(--dc-dur-base) var(--dc-ease),
+        color var(--dc-dur-base) var(--dc-ease);
+    user-select: none;
+    flex-shrink: 0;
+}
+.trust-mini:hover {
+    opacity: 1;
+    color: var(--fg-dim);
+}
+.trust-mini svg {
+    flex-shrink: 0;
+}
+/* On a very narrow player-bar trust-mini doesn't fit - hide it, freeing
+   room for the required controls. Container query - the bar can be narrow
+   on desktop too (open map), not just on mobile. */
+@container pbar (max-width: 720px) {
+    .trust-mini {
+        display: none;
+    }
+}
+
+/* A thin vertical divider in the player bar. Separates the group of
+   player settings from the Export button - a visual cue that this
+   is an action of a different class. */
+.player-bar-divider {
+    width: 1px;
+    height: 18px;
+    background: var(--border);
+    margin: 0 var(--dc-space-1);
+    flex-shrink: 0;
+}
+
+/* The Export button - a permanent fixture in the player bar. Secondary
+   style: neutral background, not orange (Play is primary in the bar).
+   Noticeable via label and border, but doesn't pull focus. */
+.player-export-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px; /* deliberate, between --dc-space-1 (4) and --dc-space-2 (8) */
+    height: 30px;
+    padding: 0 var(--dc-space-3);
+    background: var(--bg-elev-2);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-sm);
+    font-family: var(--dc-font-heavy);
+    font-size: var(--dc-text-md);
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    transition: background var(--dc-dur-fast) var(--dc-ease);
+    flex-shrink: 0;
+}
+.player-export-btn:hover:not(:disabled) {
+    background: var(--bg-hover);
+}
+.player-export-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+.player-export-btn:active:not(:disabled) {
+    background: var(--bg-active);
+}
+.player-export-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.player-export-btn svg {
+    display: block;
+    flex-shrink: 0;
+}
+/* Very narrow bar: hide the label, only the icon remains. Container query,
+   not media: the size depends on the player-bar, not the window. */
+@container pbar (max-width: 420px) {
+    .player-export-btn__label {
+        display: none;
+    }
+    .player-export-btn {
+        padding: 0 var(--dc-space-2);
+    }
+}
+
+/* Speed dropdown - the menu above the 1x button. */
+.player-speed-wrap {
+    position: relative;
+}
+.player-speed-menu {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    right: 0;
+    list-style: none;
+    margin: 0;
+    padding: var(--dc-space-1) 0;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-md);
+    box-shadow: var(--dc-shadow-popup);
+    min-width: 80px;
+    z-index: 8;
+}
+.player-speed-menu[hidden] {
+    display: none;
+}
+.player-speed-menu li {
+    padding: var(--dc-space-1) var(--dc-space-3);
+    cursor: pointer;
+    font-family: var(--dc-font-mono);
+    font-size: var(--dc-text-sm);
+    color: var(--fg);
+    transition: background var(--dc-dur-fast) var(--dc-ease);
+}
+.player-speed-menu li:hover {
+    background: var(--bg-hover);
+}
+.player-speed-menu li.active {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    font-weight: 700;
+}
+
+/* Volume - a vertical popover above the mute button.
+   A wrap container so the hover zone includes the popover itself (the slider doesn't disappear). */
+.player-mute-wrap {
+    position: relative;
+}
+.player-volume-popover {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-md);
+    box-shadow: var(--dc-shadow-popup);
+    padding: var(--dc-space-2) var(--dc-space-1);
+    z-index: 8;
+}
+.player-volume-popover::before {
+    content: "";
+    position: absolute;
+    bottom: -5px;
+    left: 50%;
+    transform: translateX(-50%) rotate(45deg);
+    width: 8px;
+    height: 8px;
+    background: var(--bg-elev);
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+}
+.player-volume-popover[hidden] {
+    display: none;
+}
+.player-volume-popover input[type="range"] {
+    /* Vertical slider via writing-mode (the standard way). Before Chrome 125
+       this only worked via `appearance: slider-vertical`, which is now
+       deprecated and spams a warning in DevTools. At our minimum support bar
+       (current/previous major Chromium/Firefox), writing-mode already
+       works - see CLAUDE.md "Browsers". */
+    writing-mode: vertical-lr;
+    direction: rtl;
+    width: 16px;
+    height: 90px;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+/* Metrics to the right of Play - speed, coordinates, time. */
+.player-metrics {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--dc-space-1);
+    margin-left: var(--dc-space-2);
+    font-family: var(--dc-font-mono);
+    font-variant-numeric: tabular-nums;
+    flex-wrap: wrap;
+}
+.player-metrics .pm-item {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--dc-space-1);
+}
+/* "View" dropdown - toggles chart/strip/map visibility. Wrap is
+   position:relative so the popover can be anchored to the button. The
+   button uses the text+chevron style of player-btn-text (like the playback
+   speed button). */
+.view-menu-wrap {
+    position: relative;
+    display: inline-flex;
+}
+.view-menu-button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--dc-space-1);
+    padding: var(--dc-space-1) var(--dc-space-2);
+    border-radius: var(--dc-radius-sm);
+    font-family: var(--dc-font-ui);
+    font-size: var(--dc-text-xs);
+}
+.view-menu-button.is-open {
+    background: var(--accent-dim);
+    color: var(--fg);
+}
+.view-menu-button__chevron {
+    font-size: var(--dc-text-3xs);
+    color: var(--fg-dim);
+    line-height: 1;
+}
+.view-menu-popover {
+    position: absolute;
+    right: 0;
+    bottom: 100%;
+    margin-bottom: var(--dc-space-1);
+    min-width: 260px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-sm);
+    box-shadow: var(--dc-shadow-popup);
+    padding: var(--dc-space-1) var(--dc-space-1);
+    z-index: var(--dc-z-menu);
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-1);
+}
+.view-menu-popover[hidden] {
+    display: none;
+}
+.view-menu-popover__header {
+    font-family: var(--dc-font-display);
+    font-weight: 700;
+    font-size: var(--dc-text-2xs);
+    color: var(--fg-dim);
+    text-transform: uppercase;
+    letter-spacing: var(--dc-tracking-caps);
+    padding: var(--dc-space-1) var(--dc-space-2) var(--dc-space-2);
+}
+.view-menu-row {
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+    padding: var(--dc-space-2) var(--dc-space-2);
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    border-radius: var(--dc-radius-sm);
+    min-height: 36px;
+}
+.view-menu-row:hover,
+.view-menu-row:focus-visible {
+    background: var(--bg-elev-2);
+    outline: none;
+}
+.view-menu-row[data-disabled="true"] {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none; /* skip hover background, clicks reach nothing */
+}
+.view-menu-row__check {
+    flex: 0 0 14px;
+    width: 14px;
+    height: 14px;
+    border: 1.5px solid var(--dc-ash-5);
+    border-radius: var(--dc-radius-xs);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: transparent;
+    background: transparent;
+}
+.view-menu-row[aria-checked="true"] .view-menu-row__check {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--dc-black);
+}
+.view-menu-row__label {
+    flex: 1 1 auto;
+    color: var(--fg);
+    font-family: var(--dc-font-ui);
+    font-size: var(--dc-text-md);
+}
+.view-menu-row__hint {
+    flex: 0 0 auto;
+    color: var(--fg-mute);
+    font-family: var(--dc-font-mono);
+    font-size: var(--dc-text-xs);
+}
+
+/* Speed pill is also a button (click flips km/h <-> mph). Strip the default
+   <button> chrome so it sits visually identical to the non-clickable pills
+   beside it; the affordance is the cursor change on hover. */
+.player-metrics .pm-speed-toggle {
+    appearance: none;
+    background: none;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+.player-metrics .pm-speed-toggle:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--dc-radius-xs);
+}
+/* Touch: the unit toggle stays visible on mobile but its hit box is just the
+   ~16px text. Expand the tap area to the touch floor via a pseudo so the
+   baseline-aligned metrics row geometry is untouched (no padding/min-height
+   that would shift the row's baseline). */
+@media (pointer: coarse) {
+    .player-metrics .pm-speed-toggle {
+        position: relative;
+    }
+    .player-metrics .pm-speed-toggle::before {
+        content: "";
+        position: absolute;
+        inset: -14px -6px;
+    }
+}
+.player-metrics .pm-speed .pm-value {
+    font-size: var(--dc-text-base);
+    font-weight: 600;
+    color: var(--fg);
+}
+.player-metrics .pm-unit {
+    font-size: var(--dc-text-3xs);
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: var(--dc-tracking-wide);
+    /* Localized speed units like "mph" / "km/h" contain a slash, a soft
+       line-break opportunity, so on a narrow mobile bar the unit's tail
+       wraps to a second line. Pin the unit on a single line - the pill
+       flex-wraps as a whole instead. */
+    white-space: nowrap;
+}
+.player-metrics .pm-coords,
+.player-metrics .pm-time {
+    color: var(--fg-dim);
+    font-size: var(--dc-text-xs);
+}
+/* Time-lapse clip: the clock runs at playback speed, not real elapsed time.
+   A dotted underline + help cursor flag it as not real-time; the full
+   explanation is in the title tooltip. */
+.player-metrics .pm-time.is-timelapse {
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+    cursor: help;
+}
+.player-metrics .pm-sep {
+    color: var(--fg-mute);
+    padding: 0 var(--dc-space-1);
+}
+
+/* Progressive hide of metrics as the bar shrinks. Container query - we
+   react to the bar's width, not the window's: at 1440px with an open map
+   the bar can also be down to 700px, and then coordinates spill onto a
+   second line via flex-wrap. */
+@container pbar (max-width: 900px) {
+    .player-metrics .pm-coords,
+    .player-metrics .pm-coords + .pm-sep {
+        display: none;
+    }
+}
+@container pbar (max-width: 700px) {
+    .player-metrics .pm-time,
+    .player-metrics .pm-speed + .pm-sep {
+        display: none;
+    }
+}
+
+/* Very narrow bar (<=520) - mobile-player threshold. At this width, even
+   after all the hide rules, the bar still contains: play + time
+   (current/sep/total) + pm-speed + spacer + speed + mute + show-map +
+   capture + loop + view-mode + help + fullscreen + kebab + divider +
+   export. With gap=10 that is ~500+px - export and kebab slide past
+   overflow:hidden and become effectively unreachable. We hide the time
+   section and the metrics entirely - the current time is visible in the
+   chart strip, and pm-speed alone loses meaning without time context. */
+@container pbar (max-width: 520px) {
+    .player-time,
+    .player-time-sep,
+    .player-metrics {
+        display: none;
+    }
+}
+
+/* ==========================================================================
+   MOBILE PLAYER BAR
+   At <=767px the bar becomes touch-friendly:
+     - Play 44x44 orange primary
+     - Mute/Fullscreen/Overflow 40x40
+     - Export stays in the bar and is the LAST control to overflow into the
+       kebab (player-bar-overflow.ts) - reachable in both orientations
+     - Speed pill stays (the one relevant metric); coords/abs-time hidden
+       (secondary actions are reachable through the kebab overflow)
+   @media (not @container): we measure the window. On desktop with a narrow
+   window tablet-mode applies too - the user expects touch-friendly when
+   width <= 768. Landscape phones (height <= 500) get the same compact
+   bar - their width is wider than 768 but the layout is touch-oriented. */
+@media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {
+    .player-bar {
+        gap: var(--dc-space-2);
+        /* Bottom padding tracks env(safe-area-inset-bottom) so the iOS home
+           indicator (a ~21px translucent bar overlaying the bottom edge in
+           landscape) does not cover play/pause; min-height grows by the same
+           amount so total bar height = 60 + safe-area. viewer.css mirrors
+           this via --mobile-bar-h so video max-height stays in sync.
+           Left/right track the side insets too: in landscape with
+           viewport-fit=cover the notch/ear sits on a side and the bar is
+           full-bleed, so without this the leftmost Play or rightmost kebab lands
+           under the cutout. env() is 0 in portrait, so max() keeps the 12px base. */
+        padding: 8px max(12px, env(safe-area-inset-right, 0px)) max(8px, env(safe-area-inset-bottom, 8px))
+            max(12px, env(safe-area-inset-left, 0px));
+        min-height: calc(60px + env(safe-area-inset-bottom, 0px));
+        /* Sticky-bottom inside the scrollable mobile viewer (see viewer.css
+           "Mobile scroll model" block). Keeps play/pause + seek reachable
+           when the user has scrolled past the video to see chart/map.
+           bg-elev background so chart curves don't bleed through the bar
+           on the slight transparency border. z-index above the chart's
+           cursor overlays. */
+        position: sticky;
+        bottom: 0;
+        background: var(--bg-elev);
+        z-index: 10;
+    }
+    /* Play - large 44x44 orange primary. data-paused already provides an
+       orange background via #player-play[data-paused="true"]; on mobile we make
+       it orange always (it stays visually dominant in the playing state too). */
+    #player-play {
+        width: 44px;
+        height: 44px;
+        background: var(--accent);
+        color: var(--dc-black);
+        border-radius: var(--dc-radius-sm);
+        flex-shrink: 0;
+    }
+    #player-play:hover {
+        background: var(--accent-hot);
+    }
+    #player-play .i-play,
+    #player-play .i-pause {
+        width: 18px;
+        height: 18px;
+    }
+    /* Other buttons 40x40 - touch-target floor. */
+    .player-bar .player-btn:not(#player-play) {
+        width: var(--dc-iconbtn-touch);
+        height: var(--dc-iconbtn-touch);
+    }
+    .player-bar .player-btn:not(#player-play) svg {
+        width: 18px;
+        height: 18px;
+    }
+    /* Time stays visible - mm:ss / mm:ss. Compact font. */
+    .player-time {
+        font-size: var(--dc-text-md);
+    }
+    /* Hide elements that on mobile live elsewhere or in the kebab:
+       - divider -> not needed (export now sits among the other bar buttons)
+       - trust-mini -> non-critical decoration (present in landing/topbar)
+       Export itself STAYS in the bar and participates in the overflow priority
+       (player-bar-overflow.ts) as the LAST control to move into the kebab, so it
+       is reachable in both portrait and landscape without a separate strip. */
+    .player-bar .player-bar-divider,
+    .player-bar .trust-mini {
+        display: none;
+    }
+    /* Touch floor for the export button when it lives in the mobile bar. */
+    .player-export-btn {
+        min-height: 40px;
+    }
+    /* Unhide the map-toggle button: on mobile the mini-map circle is gone
+       and this is the only way to expand the map. Same 40px touch target
+       as the other player-btn entries below. */
+    #player-map {
+        display: inline-flex;
+    }
+    /* Speed pill, view-menu, view-mode button etc. stay in the bar on
+       mobile only until overflow-bar moves them into the kebab. After the
+       first resize overflow-bar tags them with data-overflow-hidden="true"
+       and they are hidden by the universal rule in overflow.css. */
+    /* View-menu button - on mobile we show only the icon (label/chevron
+       are dropped); this fits it into the 40x40 touch-target like the rest. */
+    .view-menu-button {
+        padding: 0;
+        width: var(--dc-iconbtn-touch);
+        height: var(--dc-iconbtn-touch);
+        justify-content: center;
+    }
+    .view-menu-button__label,
+    .view-menu-button__chevron {
+        display: none;
+    }
+    /* View-menu popover on mobile - drops up as before but wider so the
+       targets are touch-friendly (44+px rows). */
+    .view-menu-popover {
+        min-width: 240px;
+    }
+    .view-menu-row {
+        min-height: 44px;
+        padding: var(--dc-space-2) var(--dc-space-3);
+    }
+    .view-menu-row__label {
+        font-size: var(--dc-text-base);
+    }
+    /* Playback-speed dropdown rows get the same 44px touch floor as the
+       view-menu rows next to them. */
+    .player-speed-menu li {
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        padding: var(--dc-space-2) var(--dc-space-3);
+    }
+    /* Cap the drop-up menus to the space ABOVE the sticky bar and scroll inside.
+       These open with bottom:100% from the player-bar pinned at the screen bottom;
+       in landscape (height ~390) the 9-row speed menu (~400px) and the view-menu
+       both run off the TOP of the viewport with no way to reach the upper rows.
+       Limit = viewport - mobile topbar - the bar's own height - a small gap, then
+       overflow-y:auto. 100dvh (not vh) tracks the iOS URL-bar like the rest of the
+       mobile layout; --mobile-bar-h inherits from .player-wrap (viewer.css). In
+       portrait the cap is huge and never bites. */
+    .player-speed-menu,
+    .view-menu-popover {
+        max-height: calc(100dvh - var(--dc-topbar-h-mobile) - var(--mobile-bar-h, 60px) - var(--dc-space-3));
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+    /* overflow-bar.ts (see player-bar-overflow.ts) moves the secondary controls
+       into the kebab by priority when content does not fit. We do NOT hide them
+       via CSS - if we did, the width measurement would not reflect real demand
+       and overflow-bar would think everything fits.
+       MANDATORY (never collapse) on mobile = play + current-time + speed metric +
+       playback-speed + view-menu + Export + kebab. Collapsible (dropped
+       high-priority-first): help/capture/loop/view-mode/mute/fullscreen/map -
+       so Export (priority 1, last) always stays inline. The narrow-band gap shrink below keeps the mandatory floor under
+       the viewport down to ~320px. */
+    /* Compact timing: only current "0:00" without " / 0:00" total.
+       Total on mobile is not informative (the user sees the export bar /
+       scrubber). Specificity bump via #player-bar to beat the @container
+       pbar (max-width: 520) rule lower in the cascade. */
+    #player-bar .player-time-sep,
+    #player-bar #player-total {
+        display: none;
+    }
+    /* pm-speed (current speed + unit) is the only metric that stays
+       relevant on mobile. Coordinates and absolute time remain hidden
+       (@container pbar max-width 700 below). */
+    #player-bar .player-time:first-of-type,
+    #player-bar .player-metrics,
+    #player-bar .player-metrics .pm-speed {
+        display: inline-flex;
+    }
+    /* Metrics more compact on mobile: smaller gap and margin, otherwise at
+       390px there is no room for the kebab + other buttons. */
+    #player-bar .player-metrics {
+        gap: var(--dc-space-1);
+        margin-left: var(--dc-space-1);
+    }
+    #player-bar .player-metrics .pm-speed .pm-value {
+        font-size: var(--dc-text-md);
+    }
+    /* On mobile we still hide pm-coords/pm-time - even with metrics
+       visible they do not fit. */
+    #player-bar .player-metrics .pm-coords,
+    #player-bar .player-metrics .pm-coords + .pm-sep,
+    #player-bar .player-metrics .pm-time {
+        display: none;
+    }
+}
+
+/* Narrow portrait phones: tighten the inter-control gap from 8px to 4px. The
+   mandatory floor (play + time + speed metric + playback-speed + view-menu +
+   Export + kebab) is ~266px of controls; at the 8px gap it overflows a ~320-360px
+   bar and overflow-bar's final-check would drop Export into the kebab. Reclaiming
+   4px per gap (~28px over the row) keeps Export inline down to ~320px. Scoped to
+   <=420px so wide landscape phones keep the roomier 8px spacing. Touch targets
+   stay 40px, so 4px between them is still comfortably tappable. */
+@media (max-width: 420px) {
+    .player-bar {
+        gap: var(--dc-space-1);
+    }
+}

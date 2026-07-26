@@ -1,0 +1,403 @@
+// Ephemeral export-mode state. Lives only while the export-panel is open;
+// reset on close so a fresh open starts clean (except for in-session user
+// preferences mirrored here intentionally). Composition (layout / channels /
+// audio / per-slot crops) lives in state.composition - it is shared between
+// casual playback and export, and persists across mode toggles.
+//
+// This module owns the open/close transition: openExportMode flips
+// state.exportModeOpen and notifies subscribers; closeExportMode reverses.
+// All UI modules that need to render export-only chrome (top-panel output
+// preset, export-panel itself, range pull-tabs, watermark overlay) subscribe
+// here.
+
+import type { BlurStyle } from "../blur-regions.js";
+import type { MapShape, OverlayStyleId, WatermarkAnchor } from "../transcode/types.js";
+import type { Trip } from "../trips.js";
+
+import { activeTrip, state } from "./state.js";
+import type { MapStyleId } from "./theme.js";
+
+/**
+ * Bitrate quality preset. "original" is the top tier: stream-copy (lossless)
+ * when the composition permits it (output=source, no crop/split/overlays/speed),
+ * otherwise a source-matched re-encode - the panel relabels it "High" in that
+ * case to signal the re-encode. "medium"/"low" are source-relative size-saver
+ * tiers (a fraction of the capped source bitrate - smaller shareable files that
+ * still scale with the footage). See canStreamCopy / streamCopyEligibleConfig in
+ * the export-flow logic.
+ */
+export type Quality = "original" | "medium" | "low";
+
+/**
+ * Output dimensions preset id. "source" = master channel dims (largest tile
+ * in current layout). Named presets fix the output aspect + a 1080p/720p
+ * height. "custom" reads outputCustomW/outputCustomH.
+ */
+export type OutputPresetId =
+    | "source"
+    | "1080_16x9"
+    | "720_16x9"
+    | "1080_9x16"
+    | "720_9x16"
+    | "1080_1x1"
+    | "1080_4x5"
+    | "custom";
+
+/** Phase of the export panel: configure -> encode -> finished summary, with a
+ *  terminal error branch that offers a way back to the configure view. */
+export type ExportPhase = "options" | "progress" | "done" | "error";
+
+/**
+ * What the panel produces. "video" = the MP4 clip (with its optional gpx
+ * sidecar, audio, telemetry, overlays). "gpx" = the GPS track only, no video
+ * at all - a fast, picker-free download straight from trip.records, for users
+ * who just want the route. Offered only when the active trip carries GPS.
+ */
+export type ExportOutputKind = "video" | "gpx";
+
+/**
+ * Position + scale of a text overlay (speed, coords) burned into the output
+ * frame. xPct/yPct = top-left of the rendered text box in output-frame
+ * fractions. scalePct = percentage of base font size (default base ~4.5% of
+ * frame height).
+ */
+export interface OverlayTextState {
+    enabled: boolean;
+    xPct: number;
+    yPct: number;
+    scalePct: number;
+}
+
+/**
+ * Position + size + zoom for the map overlay. PiP-style rectangular slot:
+ * xPct/yPct = top-left, scalePct = percentage of the default width (base width
+ * defined in transcode/map-overlay.ts); zoomKm = approximate diameter of the
+ * visible area in kilometers, capped by latitude.
+ */
+/** Map overlay camera: north-up (legacy) vs the tilted heading-up "chase" view.
+ *  A render-only concern (never crosses into the transcode worker - the
+ *  snapshotter reads it on the main thread, like `theme`). */
+export type MapViewMode = "north" | "chase";
+
+export interface OverlayMapState {
+    enabled: boolean;
+    xPct: number;
+    yPct: number;
+    scalePct: number;
+    zoomKm: number;
+    /** Clip shape of the mini-map slot. Default "rect" (legacy rounded box). */
+    shape: MapShape;
+    /** Base-layer style of the mini-map. Default "light" (the snapshotter's
+     *  historical choice: higher contrast against the orange car marker and the
+     *  typical daytime recording). The user can switch to "dark" or "neon" (a
+     *  semi-transparent black slot with orange-glowing features). Independent of
+     *  the app UI theme. */
+    theme: MapStyleId;
+    /** Camera view. "north" = north-up (the legacy look); "chase" = tilted,
+     *  heading-up (the car points up, road ahead in view). Default "north". */
+    mode: MapViewMode;
+    /** Chase camera tilt in degrees (0..70). Ignored when mode === "north". */
+    pitchDeg: number;
+    /** Chase: zoom out as speed rises so more of the road ahead stays visible.
+     *  The whole zoom range stays above the tile source maxzoom, so it never
+     *  refetches tiles. Ignored when mode === "north". */
+    adaptiveZoom: boolean;
+}
+
+/**
+ * Time range selected for export, in trip-local seconds. The pull-tabs on the
+ * timeline mutate these directly; the chart-zoom view-window is independent
+ * (zoom is just a visual aid for picking precise endpoints).
+ */
+export interface ExportRange {
+    /** Footage-axis (content) seconds. Bounded by [0, trip.timeline.contentDurationSec].
+     *  Pauses are removed from this axis, so the range maps 1:1 to the exported clip. */
+    startTripSec: number;
+    endTripSec: number;
+}
+
+/**
+ * Minimum export clip length, in content-axis seconds. Below it the two range
+ * boundaries collapse onto each other and the clip is too short to be useful.
+ * Enforced only inside setRangeEdge, which both the timeline pull-tabs and the
+ * trim bar's numeric range inputs funnel through - so the floor lives as one
+ * literal in one place, not duplicated per control.
+ */
+const MIN_RANGE_SEC = 1;
+
+export interface ExportPanelState {
+    phase: ExportPhase;
+    /** Video clip vs GPS-track-only. See ExportOutputKind. The panel hides every
+     *  video control in "gpx" mode and turns Save into a plain .gpx download. */
+    outputKind: ExportOutputKind;
+    quality: Quality;
+    outputPresetId: OutputPresetId;
+    outputCustomW: number;
+    outputCustomH: number;
+    /** Range; full trip on first open per session, last-edited on subsequent opens. */
+    range: ExportRange | null;
+    /** What to fill letterbox bars with: black or blurred source. */
+    letterboxFill: "black" | "blur";
+    watermarkAnchor: WatermarkAnchor;
+    /** Timelapse speed-up factor (1 = real time). One of SPEED_FACTORS. Forces
+     *  re-encode and mutes audio when > 1. */
+    speedFactor: number;
+    /** true = keep the source audio track in the output. Default true; the panel
+     *  renders this inverted as a "remove audio" checkbox (unchecked = keep), so
+     *  do not flip this default to chase an all-unchecked fresh panel. */
+    withAudio: boolean;
+    /** true = embed the GPS track (GPMF) into the output MP4. Default true; like
+     *  withAudio it is shown inverted as a "remove GPS" checkbox. Distinct from
+     *  withGpx (a separate sidecar file, genuinely additive / default off). */
+    withGpmf: boolean;
+    withGpx: boolean;
+    /** Visual style applied to every overlay widget. Default "min" reproduces
+     *  the pre-telemetry plate-less look (text + drop shadow). */
+    overlayStyle: OverlayStyleId;
+    /** Accent color (hex) for units / dials / brackets. Default brand orange. */
+    overlayAccent: string;
+    /** Dark scrim behind the widgets for legibility on bright footage. */
+    overlayScrim: boolean;
+    overlaySpeed: OverlayTextState;
+    overlayCoords: OverlayTextState;
+    overlayMap: OverlayMapState;
+    overlayClock: OverlayTextState;
+    overlayCompass: OverlayTextState;
+    overlayGforce: OverlayTextState;
+    overlayDistance: OverlayTextState;
+    overlayGraph: OverlayTextState;
+    /** Redaction style for privacy blur zones. One style for all zones (kept
+     *  per-region in the data model for a future per-zone override); changing
+     *  it in the panel re-styles every zone of the active trip. */
+    blurStyle: BlurStyle;
+}
+
+/** Default brand-orange accent for new overlays. Mirrors --dc-orange. */
+export const OVERLAY_ACCENT_DEFAULT = "#FF9000";
+
+/** Accent swatches offered in the constructor (brand + 5 common alternates). */
+export const OVERLAY_ACCENT_SWATCHES = ["#FF9000", "#FFFFFF", "#1AA7EC", "#1FA463", "#E5102B", "#F5C518"] as const;
+
+/** Initial / reset values for the export panel. See field semantics on
+ *  ExportPanelState. Kept as a function so callers always get a fresh object
+ *  (mutating the defaults would silently leak across opens). */
+function freshExportPanelState(): ExportPanelState {
+    return {
+        phase: "options",
+        outputKind: "video",
+        quality: "original",
+        outputPresetId: "source",
+        outputCustomW: 1920,
+        outputCustomH: 1080,
+        range: null,
+        letterboxFill: "black",
+        // br matches drawWatermark's default and keeps the mark clear of the
+        // mini-map (top-left by default), so it stays grabbable for drag.
+        watermarkAnchor: "br",
+        speedFactor: 1,
+        withAudio: true,
+        withGpmf: true,
+        withGpx: false,
+        overlayStyle: "min",
+        overlayAccent: OVERLAY_ACCENT_DEFAULT,
+        overlayScrim: false,
+        // Default positions form collision-free corner slots (the design
+        // handoff's slot model as a starting layout): speed + coords stacked
+        // bottom-left, clock top-right, map top-left; the user drags from there.
+        // The advanced dials/graph/distance get plausible empty spots on the
+        // right and bottom so enabling one does not land on another.
+        overlaySpeed: { enabled: false, xPct: 0.035, yPct: 0.78, scalePct: 100 },
+        overlayCoords: { enabled: false, xPct: 0.035, yPct: 0.9, scalePct: 100 },
+        overlayMap: {
+            enabled: false,
+            xPct: 0.045,
+            yPct: 0.05,
+            scalePct: 100,
+            zoomKm: 1,
+            // Default look: a neon circle in the tilted "chase" view - the most
+            // cinematic combination, shown as soon as the user enables the map
+            // overlay. Still fully switchable (rect/light/dark, north-up) in the
+            // inspector.
+            shape: "circle",
+            theme: "neon",
+            mode: "chase",
+            pitchDeg: 58,
+            adaptiveZoom: true,
+        },
+        overlayClock: { enabled: false, xPct: 0.8, yPct: 0.045, scalePct: 100 },
+        overlayCompass: { enabled: false, xPct: 0.81, yPct: 0.28, scalePct: 100 },
+        overlayGforce: { enabled: false, xPct: 0.81, yPct: 0.56, scalePct: 100 },
+        overlayDistance: { enabled: false, xPct: 0.035, yPct: 0.68, scalePct: 100 },
+        overlayGraph: { enabled: false, xPct: 0.32, yPct: 0.86, scalePct: 100 },
+        blurStyle: "pixelate",
+    };
+}
+
+/**
+ * Live mutable state. Direct mutation is the convention across this codebase
+ * (see state.ts); call notifyExportStateChanged() after batch edits to wake
+ * subscribers.
+ */
+export const exportPanelState: ExportPanelState = freshExportPanelState();
+
+/** Stable id for each overlay widget. Single source shared by the panel UI, the
+ *  stream-copy gate and the pipeline args, so adding a widget touches one list. */
+export type OverlayWidgetId = "speed" | "coords" | "map" | "clock" | "compass" | "gforce" | "distance" | "graph";
+
+/** Canonical ordered list pairing each overlay-widget id with an accessor to its
+ *  live enable+placement state. The single source of "which overlays exist and in
+ *  what order": the export panel builds its widget defs from this (attaching the
+ *  UI-only labelKey/isMap), and the export flow derives the enabled-flag set from
+ *  it - so adding an overlay is one entry here, not three parallel edits. */
+export const OVERLAY_STATE_ACCESSORS: ReadonlyArray<{
+    id: OverlayWidgetId;
+    state: () => OverlayTextState | OverlayMapState;
+}> = [
+    { id: "speed", state: () => exportPanelState.overlaySpeed },
+    { id: "coords", state: () => exportPanelState.overlayCoords },
+    { id: "map", state: () => exportPanelState.overlayMap },
+    { id: "clock", state: () => exportPanelState.overlayClock },
+    { id: "compass", state: () => exportPanelState.overlayCompass },
+    { id: "gforce", state: () => exportPanelState.overlayGforce },
+    { id: "distance", state: () => exportPanelState.overlayDistance },
+    { id: "graph", state: () => exportPanelState.overlayGraph },
+];
+
+type Listener = () => void;
+const listeners = new Set<Listener>();
+
+/** Subscribes to export-state changes (open/close + panel field edits).
+ *  Returns an unsubscribe function. */
+export function subscribeExportState(listener: Listener): () => void {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+}
+
+/** Notifies subscribers. Called by openExportMode/closeExportMode and by any
+ *  UI module that batched a state change. */
+export function notifyExportStateChanged(): void {
+    for (const l of listeners) l();
+}
+
+/**
+ * Opens export-mode: flips state.exportModeOpen, populates the default range
+ * from the active trip if no range survives from a prior open, and wakes
+ * subscribers. No-op if already open.
+ *
+ * Preserved across opens within a session: quality, output preset, watermark
+ * anchor, audio/gpmf/gpx toggles, overlay enabled+position. Reset on page
+ * reload (the singleton lives only in memory).
+ */
+export function openExportMode(): void {
+    if (state.exportModeOpen) return;
+    state.exportModeOpen = true;
+    if (!exportPanelState.range) {
+        const trip = activeTrip();
+        if (trip) {
+            exportPanelState.range = { startTripSec: 0, endTripSec: trip.timeline.contentDurationSec };
+        }
+    }
+    notifyExportStateChanged();
+}
+
+/**
+ * Closes export-mode. Phase resets to "options" so a re-open lands on the
+ * configure view, but per-session preferences (quality, watermark anchor,
+ * etc.) stay. The range is also kept - leaving export-mode and coming back
+ * should not silently widen the range to full trip.
+ *
+ * Exception: a RUNNING export ("progress") keeps its phase. The export does
+ * not stop when the panel closes (E hotkey mid-export), and resetting to
+ * "options" re-armed the Save button over the live run - the second flow then
+ * clobbered the first one's abort controller. Re-opening lands back on the
+ * progress view; the terminal hooks (done/error/cancel) move the phase on.
+ */
+export function closeExportMode(): void {
+    if (!state.exportModeOpen) return;
+    state.exportModeOpen = false;
+    if (exportPanelState.phase !== "progress") {
+        exportPanelState.phase = "options";
+    }
+    notifyExportStateChanged();
+}
+
+/**
+ * Resets the export range to the full span of the given trip. Called when the
+ * active trip changes: a range picked on the previous (possibly longer) trip
+ * must not leak into a shorter one - endTripSec past the new trip's duration
+ * slices no files and throws "range covers no files". Resetting to the full new
+ * trip matches what a first open of the panel would pick anyway.
+ */
+export function resetExportRangeForTrip(trip: Trip): void {
+    exportPanelState.range = { startTripSec: 0, endTripSec: trip.timeline.contentDurationSec };
+    notifyExportStateChanged();
+}
+
+/**
+ * Moves one edge of the export range to `tripSec` (content-axis seconds),
+ * clamped so the range stays inside [0, contentDuration] and keeps
+ * end - start >= MIN_RANGE_SEC. The single choke point every range edit funnels
+ * through - the timeline pull-tabs, the trim bar's numeric inputs and the
+ * set-to-playhead actions all call it - so the controls, the chart shading and
+ * the estimate never diverge.
+ * Mutates exportPanelState.range in place and notifies subscribers. No-op when
+ * no range is set.
+ *
+ * Returns whether the MIN_RANGE_SEC floor moved the value (the edges would have
+ * collided) - callers surface that as feedback; the benign trip-bounds clamp is
+ * not reported.
+ */
+export function setRangeEdge(which: "start" | "end", tripSec: number): { clampedToMinLength: boolean } {
+    const range = exportPanelState.range;
+    if (!range) return { clampedToMinLength: false };
+    let clampedToMinLength = false;
+    if (which === "start") {
+        // start is bounded above by end - MIN_RANGE_SEC (itself <= contentDuration),
+        // so it never needs an explicit contentDuration cap of its own.
+        const maxStart = range.endTripSec - MIN_RANGE_SEC;
+        clampedToMinLength = tripSec > maxStart;
+        range.startTripSec = Math.max(0, Math.min(tripSec, maxStart));
+    } else {
+        const trip = activeTrip();
+        const max = trip ? trip.timeline.contentDurationSec : tripSec;
+        const minEnd = range.startTripSec + MIN_RANGE_SEC;
+        clampedToMinLength = tripSec < minEnd;
+        range.endTripSec = Math.min(max, Math.max(tripSec, minEnd));
+    }
+    notifyExportStateChanged();
+    return { clampedToMinLength };
+}
+
+/**
+ * Sets both range edges at once (content-axis seconds), clamped to
+ * [0, contentDuration] and widened to MIN_RANGE_SEC if the requested span is
+ * shorter. One atomic commit + one notify - two sequential setRangeEdge calls
+ * would cross-clamp against the STALE opposite edge when the new window does
+ * not overlap the old one (e.g. "export this moment" on an event far outside
+ * the current range). Mutates in place: replacing the object identity is
+ * reserved for resetExportRangeForTrip, whose new identity is what the panel
+ * reads as "trip switched under me". No-op when no range or no active trip.
+ */
+export function setRange(startTripSec: number, endTripSec: number): void {
+    const range = exportPanelState.range;
+    const trip = activeTrip();
+    if (!range || !trip) return;
+    const dur = trip.timeline.contentDurationSec;
+    let start = Math.max(0, Math.min(startTripSec, dur - MIN_RANGE_SEC));
+    let end = Math.min(dur, Math.max(endTripSec, start + MIN_RANGE_SEC));
+    // A trip shorter than MIN_RANGE_SEC cannot honor the floor - fall back to
+    // its full span rather than producing an inverted range.
+    if (end <= start) {
+        start = 0;
+        end = dur;
+    }
+    range.startTripSec = start;
+    range.endTripSec = end;
+    notifyExportStateChanged();
+}
+
+/** Toggles export-mode. Used by the E hotkey and the player-bar Export button. */
+export function toggleExportMode(): void {
+    if (state.exportModeOpen) closeExportMode();
+    else openExportMode();
+}

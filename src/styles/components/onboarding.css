@@ -1,0 +1,300 @@
+/* =========================================================================
+   ONBOARDING TOUR - spotlight + coachmark overlay
+   --------------------------------------------------------------------------
+   Built by src/ui/onboarding.ts. The dim and the "hole" around the highlighted
+   element are drawn by ONE element (.dc-onb__spot) whose large box-shadow
+   paints everything outside its rect. That way we never raise the z-index of
+   the highlighted control (which may live in any stacking context - the
+   top-panel sits at z-index 9999), and the cutout still shows it lit.
+
+   z-index 10000 deliberately matches the capability gate: the two never coexist
+   (a fatal browser shows the gate and has no app to tour), and 10000 is the
+   only value that clears the top-panel/splash layer at 9999. Notifications
+   (200) sit below; toasts are intentionally hidden behind a running tour.
+   ========================================================================= */
+
+.dc-onb {
+    position: fixed;
+    inset: 0;
+    z-index: var(--dc-z-gate);
+    isolation: isolate; /* own stacking context: blocker < spot < popover */
+    font-family: var(--dc-font-body);
+}
+
+/* Transparent full-screen layer that swallows clicks: the tour is guided, the
+   highlighted element is shown but not interactive - "Next" advances. */
+.dc-onb__blocker {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    cursor: default;
+}
+
+/* The spotlight: a positioned rect whose box-shadow is the page dim, plus an
+   accent ring. pointer-events:none so it never blocks the blocker beneath. */
+.dc-onb__spot {
+    position: fixed;
+    z-index: 1;
+    border-radius: var(--dc-radius-md);
+    pointer-events: none;
+    box-shadow:
+        0 0 0 100vmax rgba(0, 0, 0, 0.55),
+        0 0 0 2px var(--accent),
+        0 0 0 7px color-mix(in srgb, var(--accent) 22%, transparent);
+    transition:
+        top var(--dc-dur-slow) var(--dc-ease),
+        left var(--dc-dur-slow) var(--dc-ease),
+        width var(--dc-dur-slow) var(--dc-ease),
+        height var(--dc-dur-slow) var(--dc-ease);
+}
+
+/* Target-less (centered) step: keep the dim, drop the ring around the zero-size
+   spot so no stray dot shows at the center. */
+.dc-onb[data-mode="center"] .dc-onb__spot {
+    box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.55);
+}
+/* While tracking a scrolled/resized target the spot is repositioned on every
+   event; killing the positional transition there makes the cutout follow the
+   element frame-by-frame instead of easing ~160ms behind it (the visible
+   "shift" when the trip list is scrolled under the ingest tour). renderStep
+   clears the class so Next/Back keep their ease. Specificity 0,2,0 beats the
+   base .dc-onb__spot transition (0,1,0). */
+.dc-onb--tracking .dc-onb__spot {
+    transition: none;
+}
+
+/* Coachmark card. */
+.dc-onb__pop {
+    position: fixed;
+    z-index: 2;
+    box-sizing: border-box;
+    width: clamp(260px, 92vw, 360px);
+    padding: var(--dc-space-4) var(--dc-space-4) var(--dc-space-4);
+    background: var(--bg-elev);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-lg);
+    box-shadow: var(--dc-shadow-popup);
+    animation: dc-onb-pop-in var(--dc-dur-base) var(--dc-ease);
+}
+.dc-onb__pop[data-placement="center"] {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+/* data-placement="float" gets top/left from JS (no transform). */
+
+/* Mobile / target-less-on-phone: dock to the bottom as a sheet. */
+.dc-onb__pop[data-placement="sheet"] {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    border-radius: var(--dc-radius-lg) var(--dc-radius-lg) 0 0;
+    border-bottom: none;
+    padding-bottom: max(18px, env(safe-area-inset-bottom));
+    /* Full-width sheet docked to an edge: clear a landscape side-notch so the
+       close X and Next button never sit under the cutout. */
+    padding-left: max(var(--dc-space-4), env(safe-area-inset-left));
+    padding-right: max(var(--dc-space-4), env(safe-area-inset-right));
+    animation: dc-onb-sheet-in var(--dc-dur-entrance) var(--dc-ease-out);
+}
+
+/* Mobile, target sits low (player bar / lower export options): dock to the TOP
+   so the sheet does not cover the highlighted control. */
+.dc-onb__pop[data-placement="sheet-top"] {
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: auto;
+    width: 100%;
+    border-radius: 0 0 var(--dc-radius-lg) var(--dc-radius-lg);
+    border-top: none;
+    padding-top: max(16px, env(safe-area-inset-top));
+    /* Full-width sheet docked to an edge: clear a landscape side-notch. */
+    padding-left: max(var(--dc-space-4), env(safe-area-inset-left));
+    padding-right: max(var(--dc-space-4), env(safe-area-inset-right));
+    animation: dc-onb-sheet-top-in var(--dc-dur-entrance) var(--dc-ease-out);
+}
+/* The X is absolutely positioned, so the sheet's padding does not move it -
+   shift it in past the right inset on the docked sheets. */
+.dc-onb__pop[data-placement="sheet"] .dc-onb__x,
+.dc-onb__pop[data-placement="sheet-top"] .dc-onb__x {
+    right: max(8px, env(safe-area-inset-right));
+}
+
+.dc-onb__x {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: grid;
+    place-items: center;
+    width: var(--dc-iconbtn);
+    height: var(--dc-iconbtn);
+    padding: 0;
+    color: var(--fg-dim);
+    background: transparent;
+    border: none;
+    border-radius: var(--dc-radius-sm);
+    cursor: pointer;
+}
+.dc-onb__x:hover {
+    color: var(--fg);
+    background: var(--bg-hover);
+}
+/* Touch: grow the dismiss to the touch floor (icon stays centered via grid). */
+@media (pointer: coarse) {
+    .dc-onb__x {
+        width: var(--dc-iconbtn-touch);
+        height: var(--dc-iconbtn-touch);
+    }
+}
+
+.dc-onb__count {
+    font-size: var(--dc-text-xs);
+    letter-spacing: var(--dc-tracking-caps);
+    text-transform: uppercase;
+    color: var(--fg-mute);
+    font-variant-numeric: tabular-nums;
+    margin-bottom: var(--dc-space-1);
+}
+
+.dc-onb__title {
+    margin: 0 0 var(--dc-space-1);
+    padding-right: var(--dc-space-6); /* clear the close (X) button */
+    font-family: var(--dc-font-display);
+    font-size: var(--dc-text-lg);
+    letter-spacing: var(--dc-tracking-tight);
+    color: var(--fg);
+}
+
+.dc-onb__body {
+    margin: 0 0 var(--dc-space-3);
+    font-size: var(--dc-text-base);
+    line-height: var(--dc-leading-snug);
+    color: var(--fg-dim);
+    /* Defensive: some locales run ~30% longer than English - never let a long
+       token blow out the card width. */
+    overflow-wrap: break-word;
+}
+
+.dc-onb__foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--dc-space-3);
+    /* Long-locale skip labels (Russian "Do not show again", Portuguese "Não
+       mostrar novamente") can exceed the float card's width; wrap the nav
+       cluster to a second row instead of letting the lone skip grow taller and misalign. */
+    flex-wrap: wrap;
+    row-gap: var(--dc-space-2);
+}
+
+.dc-onb__nav {
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+}
+
+.dc-onb__dots {
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-1);
+    margin-right: var(--dc-space-1);
+}
+.dc-onb__dot {
+    width: 6px;
+    height: 6px;
+    border-radius: var(--dc-radius-pill);
+    background: var(--border-strong);
+    transition: background var(--dc-dur-base) var(--dc-ease);
+}
+.dc-onb__dot.is-active {
+    background: var(--accent);
+}
+
+/* Buttons. Skip = subtle text link; Back = secondary; Next = primary accent. */
+.dc-onb__skip {
+    padding: 6px 2px;
+    font-size: var(--dc-text-sm);
+    color: var(--fg-mute);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    /* Keep the label on one line so a tight row wraps the nav cluster instead
+       of breaking the skip label across two lines. */
+    white-space: nowrap;
+}
+.dc-onb__skip:hover {
+    color: var(--fg-dim);
+}
+
+/* Back = .dc-btn dc-btn--secondary, Next = .dc-btn dc-btn--primary (geometry,
+   colors, hover, focus ring and :disabled all from the shared primitive). Only
+   the mobile touch-size override below is onboarding-specific. */
+
+@keyframes dc-onb-pop-in {
+    from {
+        opacity: 0;
+        transform: scale(0.96);
+    }
+    to {
+        opacity: 1;
+    }
+}
+/* center placement keeps its translate; animate opacity only there. */
+.dc-onb__pop[data-placement="center"] {
+    animation-name: dc-onb-fade-in;
+}
+@keyframes dc-onb-fade-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+@keyframes dc-onb-sheet-in {
+    from {
+        transform: translateY(100%);
+    }
+    to {
+        transform: translateY(0);
+    }
+}
+@keyframes dc-onb-sheet-top-in {
+    from {
+        transform: translateY(-100%);
+    }
+    to {
+        transform: translateY(0);
+    }
+}
+
+/* Touch targets a touch larger on phones. */
+@media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {
+    .dc-onb__pop {
+        width: 100%;
+    }
+    .dc-onb__back,
+    .dc-onb__next {
+        padding: 9px 16px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dc-onb__spot {
+        transition: none;
+    }
+    /* [data-placement] qualifier (0,2,0) so this beats the mobile sheet
+       slide-in selectors (.dc-onb__pop[data-placement="sheet"/"sheet-top"], also
+       0,2,0); a bare .dc-onb__pop (0,1,0) would lose the cascade and the full
+       sheet would still translate in - the vestibular motion this gate must kill
+       (WCAG 2.3.3). Every popover carries a data-placement, so this covers all. */
+    .dc-onb__pop[data-placement] {
+        animation: none !important;
+    }
+}

@@ -1,0 +1,366 @@
+// Filename recording-mode techniques. One entry = one way to recognise the
+// recording mode (normal / event / parking / manual) from filename or path.
+// Walk picks first non-null.
+
+import type { RecordingMode, VendorFile } from "../types.js";
+import {
+    RX_70MAI,
+    RX_70MAI_PATH_MODE,
+    RX_70MAI_PREFIX_MODE,
+    RX_BLACKVUE,
+    RX_CARCAM,
+    RX_CARCAM_PATH_EVENT,
+    RX_CARCAM_PATH_PARKING,
+    RX_DDPAI_EVENT,
+    RX_DDPAI_NORMAL,
+    RX_DDPAI_TIMELAPSE,
+    RX_E_ACE,
+    RX_ESCORT_PATH_EVENT,
+    RX_ESCORT_PATH_MANUAL,
+    RX_ESCORT_PATH_NORMAL,
+    RX_FITCAMX_PATH_EVENT,
+    RX_FITCAMX_PATH_NORMAL,
+    RX_FORD,
+    RX_IBOX,
+    RX_IBOX_PATH_EVENT,
+    RX_IBOX_PATH_PARKING,
+    RX_JUSCAR_PATH_EVENT,
+    RX_JUSCAR_PATH_VIDEO,
+    RX_MIVUE,
+    RX_MIVUE_PATH_MODE,
+    RX_NOVATEK_PATH_RO,
+    RX_NOVATEK_SINGLE,
+    RX_NOVATEK_VANTRUE,
+    RX_NOVATEK_VIOFO,
+    RX_TESLA_PATH,
+    RX_TESLA_PATH_RECENT,
+    RX_TESLA_PATH_SAVED,
+    RX_TESLA_PATH_SENTRY,
+    RX_THINKWARE,
+    RX_VUEROID,
+    RX_WOLFBOX,
+    RX_WOLFBOX_PATH_EVENT,
+    RX_WOLFBOX_PATH_NORMAL,
+} from "./_patterns.js";
+import type { FilenameModeTechnique } from "./types.js";
+
+const mai70Mode: FilenameModeTechnique = {
+    id: "70mai-mode",
+    extract(file: VendorFile): RecordingMode | null {
+        // Path wins over the filename prefix: the folder layout carries manual,
+        // which no filename prefix does. A foldered drop keeps that granularity,
+        // and the two signals agree anyway (an event clip is both EV-prefixed
+        // and stored under Event/).
+        const pm = file.relativePath.match(RX_70MAI_PATH_MODE);
+        if (pm) {
+            switch (pm[1]!.toLowerCase()) {
+                case "normal":
+                    return "normal";
+                case "event":
+                    return "event";
+                case "lapse":
+                    return "parking";
+                case "manual":
+                    return "manual";
+                // "parking" (A810: Parking/ holds PA g-sensor captures) falls
+                // through to the prefix branch on purpose: the prefix is more
+                // precise than the folder (PA = parked incident -> event,
+                // mirroring the flat-drop mapping below).
+            }
+        }
+        // Flat drop (user copied files out of their folders): recover the mode
+        // from the filename prefix. Gate on RX_70MAI so only real 70mai names
+        // are read - the prefix regex alone would claim "NOTES.mp4".
+        if (!RX_70MAI.test(file.file.name)) return null;
+        const prefix = file.file.name.match(RX_70MAI_PREFIX_MODE);
+        if (!prefix) return null;
+        switch (prefix[1]!.toUpperCase()) {
+            case "EV":
+                return "event";
+            case "LA":
+                // A510 parking timelapse - the same slot the Lapse/ folder maps
+                // to above, so foldered and flat drops agree.
+                return "parking";
+            case "PA":
+                // A510 parking g-sensor/motion capture: an incident that fired
+                // while parked. It mirrors EV -> event rather than "parking" -
+                // the clip marks an incident, not the background parking loop
+                // (that is LA's slot).
+                return "event";
+            default:
+                return "normal"; // NO
+        }
+    },
+};
+
+const blackvueMode: FilenameModeTechnique = {
+    id: "blackvue-mode",
+    extract(file: VendorFile): RecordingMode | null {
+        const m = file.file.name.match(RX_BLACKVUE);
+        if (!m) return null;
+        switch (m[3]!.toUpperCase()) {
+            case "N":
+                return "normal";
+            case "E":
+                return "event";
+            case "P":
+                return "parking";
+            case "M":
+                return "manual";
+            default:
+                return null;
+        }
+    },
+};
+
+const carcamMode: FilenameModeTechnique = {
+    id: "carcam-mode",
+    extract(file: VendorFile): RecordingMode | null {
+        const lower = file.relativePath.toLowerCase();
+        if (RX_CARCAM_PATH_EVENT.test(lower)) return "event";
+        if (RX_CARCAM_PATH_PARKING.test(lower)) return "parking";
+        if (RX_CARCAM.test(file.file.name)) return "normal";
+        return null;
+    },
+};
+
+const ddpaiMode: FilenameModeTechnique = {
+    id: "ddpai-mode",
+    extract(file: VendorFile): RecordingMode | null {
+        if (RX_DDPAI_TIMELAPSE.test(file.file.name)) return "parking";
+        const ev = file.file.name.match(RX_DDPAI_EVENT);
+        if (ev) return ev[3]!.toUpperCase() === "X" ? "parking" : "event";
+        if (RX_DDPAI_NORMAL.test(file.file.name)) return "normal";
+        return null;
+    },
+};
+
+const eaceMode: FilenameModeTechnique = {
+    id: "e-ace-mode",
+    extract(file: VendorFile): RecordingMode | null {
+        return RX_E_ACE.test(file.file.name) ? "normal" : null;
+    },
+};
+
+const escortMode: FilenameModeTechnique = {
+    id: "escort-mode",
+    extract(file: VendorFile): RecordingMode | null {
+        const path = file.relativePath;
+        if (RX_ESCORT_PATH_EVENT.test(path)) return "event";
+        if (RX_ESCORT_PATH_MANUAL.test(path)) return "manual";
+        if (RX_ESCORT_PATH_NORMAL.test(path)) return "normal";
+        return null;
+    },
+};
+
+const fitcamxMode: FilenameModeTechnique = {
+    id: "fitcamx-mode",
+    extract(file: VendorFile): RecordingMode | null {
+        const path = file.relativePath;
+        if (RX_FITCAMX_PATH_EVENT.test(path)) return "event";
+        if (RX_FITCAMX_PATH_NORMAL.test(path)) return "normal";
+        return null;
+    },
+};
+
+const fordMode: FilenameModeTechnique = {
+    id: "ford-mode",
+    extract(file: VendorFile): RecordingMode | null {
+        // Single-mode in the corpus - normal recording only (no event/parking
+        // marker in the name). Assert "normal" on a name match, like the other
+        // single-mode name-only families (e-ace, carcam, ibox), so Ford clips
+        // carry a mode instead of null. Event/parking modes are unknown; revisit
+        // if a sample with one surfaces.
+        return RX_FORD.test(file.file.name) ? "normal" : null;
+    },
+};
+
+const iboxMode: FilenameModeTechnique = {
+    id: "ibox-mode",
+    extract(file: VendorFile): RecordingMode | null {
+        const lower = file.relativePath.toLowerCase();
+        if (RX_IBOX_PATH_EVENT.test(lower)) return "event";
+        if (RX_IBOX_PATH_PARKING.test(lower)) return "parking";
+        return RX_IBOX.test(file.file.name) ? "normal" : null;
+    },
+};
+
+const juscarMode: FilenameModeTechnique = {
+    id: "juscar-mode",
+    extract(file: VendorFile): RecordingMode | null {
+        const path = file.relativePath;
+        if (RX_JUSCAR_PATH_EVENT.test(path)) return "event";
+        if (RX_JUSCAR_PATH_VIDEO.test(path)) return "normal";
+        return null;
+    },
+};
+
+const mivueMode: FilenameModeTechnique = {
+    id: "mivue-mode",
+    extract(file: VendorFile): RecordingMode | null {
+        // Name gate first: the Normal/Event/Parking folder names are generic and
+        // must not claim foreign files on the path alone.
+        if (!RX_MIVUE.test(file.file.name)) return null;
+        const m = file.relativePath.match(RX_MIVUE_PATH_MODE);
+        if (m) {
+            switch (m[1]!.toLowerCase()) {
+                case "event":
+                    return "event";
+                case "parking":
+                    return "parking";
+                case "normal":
+                    return "normal";
+            }
+        }
+        // MiVue name but no mode folder (flat drop) - loop recordings are the
+        // bulk, so default to normal like the other single-mode FILE-named
+        // families (ibox, ford).
+        return "normal";
+    },
+};
+
+const novatekMode: FilenameModeTechnique = {
+    id: "novatek-mode",
+    extract(file: VendorFile): RecordingMode | null {
+        // Locked clips (g-sensor or manual lock) are MOVED by firmware into
+        // DCIM/Movie/RO/ with unchanged filenames - the lock is not inferable
+        // from the name (viofosync web/services/scanner.py:57-63; a119_join.py
+        // ingests the same RO subdir on single-channel A119). "event" is the
+        // closest RecordingMode for "protected", matching the iBox/Juscar/
+        // CarCam protected-folder convention; a manual lock lands there too -
+        // indistinguishable. The Novatek name gate keeps the short "ro"
+        // segment from claiming foreign files.
+        const viofo = file.file.name.match(RX_NOVATEK_VIOFO);
+        if (viofo) {
+            if (RX_NOVATEK_PATH_RO.test(file.relativePath)) return "event";
+            // Mode letter: P = parking, E = impact event, "" (the optional
+            // group captures an empty string, never undefined) = normal
+            // driving (viofosync web/services/scanner.py:48-66).
+            switch (viofo[5]!.toUpperCase()) {
+                case "P":
+                    return "parking";
+                case "E":
+                    return "event";
+                default:
+                    return "normal";
+            }
+        }
+        if (RX_NOVATEK_SINGLE.test(file.file.name)) {
+            return RX_NOVATEK_PATH_RO.test(file.relativePath) ? "event" : "normal";
+        }
+        const vantrue = file.file.name.match(RX_NOVATEK_VANTRUE);
+        if (vantrue) {
+            switch (vantrue[4]!.toUpperCase()) {
+                case "N":
+                    return "normal";
+                case "E":
+                    return "event";
+                case "P":
+                    return "parking";
+                default:
+                    return null;
+            }
+        }
+        return null;
+    },
+};
+
+const vueroidMode: FilenameModeTechnique = {
+    id: "vueroid-mode",
+    extract(file: VendorFile): RecordingMode | null {
+        const m = file.file.name.match(RX_VUEROID);
+        if (!m) return null;
+        // N = normal is real-sample-validated; E = event and P = parking are
+        // assumed from the mnemonic (no E/P sample in the corpus yet).
+        switch (m[4]!.toUpperCase()) {
+            case "N":
+                return "normal";
+            case "E":
+                return "event";
+            case "P":
+                return "parking";
+            default:
+                return null;
+        }
+    },
+};
+
+const teslaMode: FilenameModeTechnique = {
+    id: "tesla-mode",
+    extract(file: VendorFile): RecordingMode | null {
+        const lower = file.relativePath.toLowerCase();
+        if (!RX_TESLA_PATH.test(lower)) return null;
+        if (RX_TESLA_PATH_RECENT.test(lower)) return "normal";
+        if (RX_TESLA_PATH_SAVED.test(lower)) return "manual";
+        if (RX_TESLA_PATH_SENTRY.test(lower)) return "event";
+        return null;
+    },
+};
+
+const thinkwareMode: FilenameModeTechnique = {
+    id: "thinkware-mode",
+    extract(file: VendorFile): RecordingMode | null {
+        const m = file.file.name.match(RX_THINKWARE);
+        if (!m) return null;
+        switch (m[1]!.toUpperCase()) {
+            case "REC":
+                return "normal";
+            case "EVT":
+                return "event";
+            case "PARK":
+                return "parking";
+            case "MAN":
+                return "manual";
+            default:
+                return null;
+        }
+    },
+};
+
+const wolfboxMode: FilenameModeTechnique = {
+    id: "wolfbox-mode",
+    extract(file: VendorFile): RecordingMode | null {
+        const m = file.file.name.match(RX_WOLFBOX);
+        if (m) {
+            // EE event code: 00 = normal loop, 02 = g-sensor event. Other
+            // values exist in the wild but their meaning is unconfirmed -
+            // fall through to the folder signal instead of guessing.
+            const ee = m[5]!;
+            if (ee === "00") return "normal";
+            if (ee === "02") return "event";
+        }
+        const path = file.relativePath;
+        if (RX_WOLFBOX_PATH_EVENT.test(path)) return "event";
+        if (RX_WOLFBOX_PATH_NORMAL.test(path)) return "normal";
+        return null;
+    },
+};
+
+export const FILENAME_MODE: readonly FilenameModeTechnique[] = [
+    // mivue-mode and vueroid-mode are filename-gated and must precede the
+    // path-only techniques (70mai-mode, escort-mode) whose Normal/Event/Parking
+    // folder regexes would otherwise greedily claim their clips and mislabel
+    // the technique. Safe at the front: both return null for any foreign name.
+    mivueMode,
+    vueroidMode,
+    mai70Mode,
+    blackvueMode,
+    carcamMode,
+    ddpaiMode,
+    eaceMode,
+    escortMode,
+    // novatek-mode must precede fitcamx-mode: fitcamx's claim is path-only
+    // (Movie/ with no filename gate) and would otherwise label every Viofo
+    // clip under DCIM/Movie/ "normal", shadowing the P/E mode letter and the
+    // Movie/RO/ lock folder. Mirrors FILENAME_CHANNEL, where the novatek*
+    // techniques already precede fitcamx. Safe: novatek regexes are
+    // name-gated and cannot match FitCamX's \d{14}_\d{6}[A-Z].ts names.
+    novatekMode,
+    fitcamxMode,
+    fordMode,
+    iboxMode,
+    juscarMode,
+    teslaMode,
+    thinkwareMode,
+    wolfboxMode,
+];

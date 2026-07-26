@@ -1,0 +1,75 @@
+# CI gate: type-check, lint, unit tests (vitest), and the e2e regression suite
+# (playwright). The e2e job is the assertion-driven replacement for manual
+# click-through testing - it builds dist/ and drives a real browser.
+#
+# Browser = Google Chrome (PW_CHANNEL=chrome), NOT the bundled Chromium: the
+# bundled open-source Chromium has no proprietary codecs, so an H.264 trip shows
+# the "no decoder" overlay and the player never activates (verified on a Linux
+# container). Chrome ships H.264/AAC, so playback + export work. HEVC decode is
+# still OS-dependent and the HEVC test self-skips when absent.
+#
+# WebGL (MapLibre) runs via SwiftShader. The suite is hermetic (the tile server
+# is aborted in tests/e2e/_fixtures.ts), so no external network is needed;
+# retries: 2 on CI absorbs the occasional software-render hiccup.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # Build BEFORE the unit tests: src/csp-hash.integration.test.ts asserts
+      # against dist/ artifacts and fails loudly in CI when they are absent
+      # (it would otherwise silently self-skip and never gate anything).
+      - name: Build
+        run: npm run build
+
+      - name: Unit tests (vitest)
+        run: npm test
+
+      - name: Install Playwright + Google Chrome
+        run: npx playwright install --with-deps chrome
+
+      # Bare `playwright test` instead of `npm run test:e2e` (which is
+      # `npm run build && playwright test ...`): dist/ was built fresh by the
+      # Build step of this same job, so the "stale dist masks fixes" foot-gun
+      # the npm script guards against (CLAUDE.md, Tests) does not apply here,
+      # and we skip a second identical build.
+      - name: E2E tests (playwright)
+        run: npx playwright test --config=tests/playwright.e2e.config.ts
+        env:
+          PW_CHANNEL: chrome
+
+      # always(), not failure(): retries: 2 means a flake can retry-then-pass and
+      # leave the job green. We still want its trace/report (a retry-only pass is a
+      # flake to investigate, per the config header). The github reporter also
+      # annotates failures inline in the PR diff.
+      - name: Upload e2e report (incl. flaky retries)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: tests/playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore

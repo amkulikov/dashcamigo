@@ -1,0 +1,99 @@
+/* --- PWA install ---
+   #install-banner reuses the shared .sticky-banner slide-up-with-actions
+   visual pattern (see sticky-banner.css), one z-index notch below the base
+   banner layer. */
+.sticky-banner.install-banner {
+    z-index: calc(var(--dc-z-banner) - 1);
+}
+
+/* --- Settings: Playback / Ingest / About ---
+   Shared controls for non-toggle preferences: select rows for Playback
+   (units) and Ingest (trip grouping), info rows for About (version,
+   storage), and secondary buttons for diagnostics actions. */
+.settings-select-row {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-1);
+}
+.settings-select-label {
+    color: var(--fg);
+    font-size: var(--dc-text-sm);
+    font-weight: 600;
+}
+/* Layout only - appearance + focus ring come from forms.css (shared select base).
+   align-self prevents the parent flex column from stretching the select to full
+   width; min/max keep it readable on both narrow and wide viewports. */
+.settings-select {
+    align-self: flex-start;
+    min-width: 220px;
+    max-width: 100%;
+}
+
+/* number input + unit suffix, used for the trip-gap minutes control. */
+.settings-numeric-row {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--dc-space-2);
+}
+/* Width only - appearance, spinner removal and focus ring come from forms.css. */
+.settings-number-input {
+    width: 90px;
+}
+.settings-number-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.settings-numeric-unit {
+    color: var(--fg-mute);
+    font-size: var(--dc-text-sm);
+}
+
+.settings-info-row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--dc-space-2);
+    color: var(--fg);
+    font-size: var(--dc-text-sm);
+    line-height: 1.5;
+}
+.settings-info-label {
+    color: var(--fg-mute);
+}
+.settings-info-value {
+    font-family: var(--dc-font-mono);
+    color: var(--fg);
+}
+
+/* --- Settings danger zone ---
+   Red-accented section in settings modal hosting the "Reset everything"
+   action. Visually separated from Privacy with a top divider so it does
+   not feel like just another preference row. */
+.settings-danger {
+    border-top: 1px solid var(--border);
+    margin-top: var(--dc-space-2);
+    padding-top: var(--dc-space-4);
+}
+.settings-danger .settings-section-title {
+    color: var(--err);
+}
+
+/* Settings-row context: action buttons in a flex column are left-aligned
+   and do not stretch full-width. In action rows (flex-row + justify-content:
+   flex-end) these overrides are irrelevant. */
+.settings-row .dc-btn--secondary,
+.settings-row .dc-btn--danger {
+    align-self: flex-start;
+}
+.settings-row .dc-btn--danger {
+    margin-top: var(--dc-space-2);
+}
+
+/* Reset-confirm modal: note paragraph (about PWA shortcut / browser
+   permissions surviving the reset) is muted to keep visual weight on
+   the main body copy and the action buttons. */
+.reset-confirm-note {
+    margin: 0;
+    color: var(--fg-mute);
+    font-size: var(--dc-text-xs);
+    line-height: 1.5;
+}

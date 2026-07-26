@@ -1,0 +1,160 @@
+/* =========================================================================
+   13. EMPTY STATE
+   ========================================================================= */
+.empty-state {
+    flex: 1;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    padding: var(--dc-space-6);
+}
+.viewer.empty .empty-state {
+    display: flex;
+}
+.viewer.empty .player-wrap {
+    display: none;
+}
+
+.empty-state-card {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-md);
+    padding: var(--dc-space-6) var(--dc-space-6);
+    max-width: 520px;
+    color: var(--fg);
+    font-family: var(--dc-font-body);
+}
+
+.empty-state-title {
+    font-family: var(--dc-font-display);
+    font-size: var(--dc-text-3xl);
+    line-height: var(--dc-leading-tight);
+    letter-spacing: var(--dc-tracking-tight);
+    margin: 0 0 var(--dc-space-2) 0;
+    color: var(--fg);
+}
+
+.empty-state-steps {
+    margin: var(--dc-space-3) 0 0;
+    padding-left: var(--dc-space-4);
+    color: var(--fg-dim);
+    font-size: var(--dc-text-md);
+    line-height: var(--dc-leading-loose);
+}
+.empty-state-steps li b {
+    color: var(--fg);
+}
+
+.empty-state-hint {
+    margin-top: var(--dc-space-4);
+    padding: var(--dc-space-2) 0 0;
+    border-top: 1px solid var(--border);
+    font-size: var(--dc-text-xs);
+    color: var(--fg-dim);
+}
+
+/* "Something look off? Tell us" - a quiet link into the feedback form, for a
+   trip that loaded but recognition may be wrong (front/rear swapped, etc.). */
+.empty-state-report {
+    margin-top: var(--dc-space-3);
+    padding: 0;
+    background: transparent;
+    border: 0;
+    color: var(--fg-mute);
+    font-family: var(--dc-font-body);
+    font-size: var(--dc-text-xs);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    transition: color var(--dc-dur-fast) var(--dc-ease);
+}
+.empty-state-report:hover,
+.empty-state-report:focus-visible {
+    color: var(--accent);
+}
+
+/* Codec-unsupported overlay - the same visual pattern as .empty-state, but
+   shown when state.active is set but video.canPlay=false (mediabunny's
+   .canDecodeVideo returned false). Then .empty-state doesn't fit (active is
+   set), but neither does .player-wrap - hide it and show this card instead. */
+.codec-unsupported-state {
+    flex: 1;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    padding: var(--dc-space-6);
+}
+.viewer.codec-unsupported .codec-unsupported-state {
+    display: flex;
+}
+.viewer.codec-unsupported .player-wrap {
+    display: none;
+}
+
+.codec-unsupported-card {
+    background: var(--bg-elev);
+    border: 1px solid var(--warn);
+    border-radius: var(--dc-radius-md);
+    padding: var(--dc-space-6) var(--dc-space-6);
+    max-width: 520px;
+    color: var(--fg);
+    font-family: var(--dc-font-body);
+}
+
+.codec-unsupported-title {
+    font-family: var(--dc-font-display);
+    font-size: var(--dc-text-2xl);
+    line-height: var(--dc-leading-tight);
+    letter-spacing: var(--dc-tracking-tight);
+    margin: 0 0 var(--dc-space-3) 0;
+    color: var(--fg);
+}
+.codec-unsupported-hint {
+    color: var(--fg-dim);
+    font-size: var(--dc-text-md);
+    line-height: var(--dc-leading-loose);
+}
+
+/* UX-26: feedback button in the codec-unsupported card. Outline style (not
+   primary) - so it doesn't compete with the "try Safari" instruction.
+   The user tries the workaround first, and only reports it if that fails. */
+.codec-unsupported-feedback {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--dc-space-1);
+    margin-top: var(--dc-space-4);
+    padding: var(--dc-space-2) var(--dc-space-3);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-sm);
+    color: var(--fg-dim);
+    font-family: var(--dc-font-body);
+    font-size: var(--dc-text-sm);
+    cursor: pointer;
+    transition:
+        color var(--dc-dur-fast) var(--dc-ease),
+        border-color var(--dc-dur-fast) var(--dc-ease);
+}
+.codec-unsupported-feedback:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+/* Short / landscape phone: a centered card taller than the viewport clips at the
+   top, hiding the title and pushing the "Report" button off-screen - exactly when
+   the user hit a "can't play" error and wants to report it. Top-align and trim
+   padding so the parent .viewer (overflow-y:auto on mobile) can scroll the whole
+   card from title to button. */
+@media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {
+    .empty-state,
+    .codec-unsupported-state {
+        align-items: flex-start;
+        padding-block: var(--dc-space-4);
+    }
+    .empty-state-card,
+    .codec-unsupported-card {
+        padding: var(--dc-space-4);
+    }
+}
