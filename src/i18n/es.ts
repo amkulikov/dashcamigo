@@ -7,8 +7,8 @@
 import type { I18nKey } from "./keys.js";
 
 export const esDict = {
-    "page.title": "Reproductor y editor de dashcam online — mapa GPS, recortar y exportar | dashcamigo",
-    "meta.description": "Reproductor y editor de dashcam gratis en tu navegador. Une la cámara frontal, trasera y de cabina en un vídeo, superpón velocidad, GPS y un mapa en movimiento, y exporta. Sin subidas, instalación ni anuncios.",
+    "page.title": "Reproductor y editor de dashcam online gratis — mapa GPS, recortar y exportar | dashcamigo",
+    "meta.description": "Reproductor y editor de dashcam gratis y de código abierto en tu navegador. Une varias cámaras en un vídeo, superpón velocidad, GPS y un mapa en movimiento, y exporta. Sin subidas, instalación ni anuncios.",
     "noscript.continue": "Continuar a dashcamigo",
 
     "topbar.trips": "Trayectos",

@@ -136,18 +136,18 @@ interface OgOverride {
 
 const OG_OVERRIDES: Partial<Record<Lang, OgOverride>> = {
     en: {
-        ogTitle: "Dashcam Player & Editor Online — GPS map, trim & export",
+        ogTitle: "Free Dashcam Player & Editor — GPS map, trim & export",
         ogDescription:
-            "Free online dashcam player and editor. View, trim and export 70mai, Viofo, BlackVue, GoPro, Garmin and Vantrue recordings in your browser. GPS map, speed chart, overlay. No upload, no install, no ads.",
+            "Free, open-source dashcam player and editor. View, trim and export 70mai, Viofo, BlackVue, GoPro, Garmin and Vantrue recordings in your browser. GPS map, speed chart, overlay. No upload, no install, no ads.",
         twitterDescription:
-            "Free online dashcam player and editor. View, trim and export recordings from 70mai, Viofo, BlackVue, GoPro and more, right in your browser.",
+            "Free, open-source dashcam player and editor. View, trim and export recordings from 70mai, Viofo, BlackVue, GoPro and more, right in your browser.",
     },
     ru: {
-        ogTitle: "Плеер и редактор видеорегистратора онлайн — карта GPS, обрезка",
+        ogTitle: "Бесплатный плеер и редактор видеорегистратора — GPS, обрезка",
         ogDescription:
-            "Бесплатный плеер и редактор видео с регистратора в браузере. Смотри, обрезай и экспортируй записи 70mai, Viofo, BlackVue, GoPro, Garmin и Vantrue. Карта GPS, график скорости. Без загрузки, установки и рекламы.",
+            "Бесплатный плеер и редактор видео с регистратора в браузере, с открытым кодом. Смотри, обрезай и экспортируй записи 70mai, Viofo, BlackVue, GoPro, Garmin и Vantrue. Карта GPS, график скорости. Без загрузки, установки и рекламы.",
         twitterDescription:
-            "Бесплатный плеер и редактор видео с регистратора. 70mai, Viofo, BlackVue, GoPro и другие — прямо в браузере.",
+            "Бесплатный плеер и редактор видео с регистратора, с открытым кодом. 70mai, Viofo, BlackVue, GoPro и другие — прямо в браузере.",
     },
 };
 

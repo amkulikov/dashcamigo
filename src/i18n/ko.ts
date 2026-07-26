@@ -16,8 +16,8 @@
 import type { I18nKey } from "./keys.js";
 
 export const koDict = {
-    "page.title": "블랙박스 플레이어 & 편집기 온라인 — GPS 지도, 자르기 & 내보내기 | dashcamigo",
-    "meta.description": "브라우저에서 쓰는 무료 블랙박스 플레이어 및 편집기. 전방·후방·실내 카메라를 한 영상으로 합치고, 속도·GPS·움직이는 지도를 얹어 내보내요 — 전부 브라우저 안에서. 업로드 없이, 설치 없이, 광고 없이.",
+    "page.title": "무료 블랙박스 플레이어 & 편집기 온라인 — GPS 지도, 자르기 & 내보내기 | dashcamigo",
+    "meta.description": "브라우저에서 쓰는 무료 오픈소스 블랙박스 플레이어 및 편집기. 여러 카메라를 한 영상으로 합치고, 속도·GPS·움직이는 지도를 얹어 내보내요 — 전부 브라우저 안에서. 업로드 없이, 설치 없이, 광고 없이.",
     "noscript.continue": "dashcamigo로 이동",
 
     "topbar.trips": "주행 목록",

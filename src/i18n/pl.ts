@@ -7,8 +7,8 @@
 import type { I18nKey } from "./keys.js";
 
 export const plDict = {
-    "page.title": "Odtwarzacz i edytor wideorejestratora online — mapa GPS, przycinanie i eksport | dashcamigo",
-    "meta.description": "Darmowy odtwarzacz i edytor wideorejestratora w przeglądarce. Złóż kamerę przednią, tylną i z wnętrza w jedno wideo, nałóż prędkość, GPS i ruchomą mapę, zapisz. Bez wysyłania, bez instalacji, bez reklam.",
+    "page.title": "Darmowy odtwarzacz i edytor wideorejestratora online — mapa GPS, przycinanie i eksport | dashcamigo",
+    "meta.description": "Darmowy odtwarzacz i edytor wideorejestratora typu open source w przeglądarce. Złóż kilka kamer w jedno wideo, nałóż prędkość, GPS i ruchomą mapę, zapisz. Bez wysyłania, bez instalacji, bez reklam.",
     "noscript.continue": "Przejdź do dashcamigo",
 
     "topbar.trips": "Przejazdy",

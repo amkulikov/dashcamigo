@@ -7,8 +7,8 @@
 import type { I18nKey } from "./keys.js";
 
 export const frDict = {
-    "page.title": "Lecteur et éditeur dashcam en ligne — carte GPS, découper et exporter | dashcamigo",
-    "meta.description": "Lecteur et éditeur dashcam gratuit, dans le navigateur. Combine les caméras avant, arrière et habitacle en une vidéo, incruste vitesse, GPS et carte animée, puis exporte. Sans envoi, sans installation et sans pub.",
+    "page.title": "Lecteur et éditeur dashcam en ligne gratuit — carte GPS, découper et exporter | dashcamigo",
+    "meta.description": "Lecteur et éditeur dashcam gratuit et open source, dans le navigateur. Combine plusieurs caméras en une vidéo, incruste vitesse, GPS et carte animée, puis exporte. Sans envoi, sans installation et sans pub.",
     "noscript.continue": "Continuer vers dashcamigo",
 
     "topbar.trips": "Trajets",

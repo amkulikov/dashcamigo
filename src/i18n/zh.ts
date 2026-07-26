@@ -6,8 +6,8 @@
 import type { I18nKey } from "./keys.js";
 
 export const zhDict = {
-    "page.title": "在线行车记录仪播放器和编辑器 — GPS 地图、剪辑与导出 | dashcamigo",
-    "meta.description": "免费的在线行车记录仪播放器和编辑器。把前置、后置和车内摄像头拼成一段视频，叠加速度、GPS 和动态地图，再导出 — 全在你的浏览器里完成。无需上传，无需安装，无广告。",
+    "page.title": "免费在线行车记录仪播放器和编辑器 — GPS 地图、剪辑与导出 | dashcamigo",
+    "meta.description": "免费开源的在线行车记录仪播放器和编辑器。把多路摄像头拼成一段视频，叠加速度、GPS 和动态地图，再导出 — 全在你的浏览器里完成。无需上传，无需安装，无广告。",
     "noscript.continue": "前往 dashcamigo",
 
     "topbar.trips": "行程列表",

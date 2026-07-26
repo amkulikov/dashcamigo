@@ -5,8 +5,8 @@
 import type { I18nKey } from "./keys.js";
 
 export const deDict = {
-    "page.title": "Dashcam-Player & -Editor online — GPS-Karte, schneiden & exportieren | dashcamigo",
-    "meta.description": "Kostenloser Dashcam-Player & -Editor im Browser. Front-, Heck- und Innenkamera zu einem Video kombinieren, Geschwindigkeit, GPS und Karte einblenden, dann exportieren. Kein Upload, keine Installation, keine Werbung.",
+    "page.title": "Kostenloser Dashcam-Player & -Editor online — GPS-Karte, schneiden & exportieren | dashcamigo",
+    "meta.description": "Kostenloser Open-Source-Dashcam-Player & -Editor im Browser. Mehrere Kameras zu einem Video kombinieren, Geschwindigkeit, GPS und Karte einblenden, dann exportieren. Kein Upload, keine Installation, keine Werbung.",
     "noscript.continue": "Weiter zu dashcamigo",
 
     "topbar.trips": "Fahrten",

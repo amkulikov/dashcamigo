@@ -7,8 +7,8 @@
 import type { I18nKey } from "./keys.js";
 
 export const ptDict = {
-    "page.title": "Player e editor de câmera veicular online — mapa GPS, cortar e exportar | dashcamigo",
-    "meta.description": "Player e editor de câmera veicular grátis no navegador. Junte câmera frontal, traseira e interna num vídeo só, sobreponha velocidade, GPS e um mapa em movimento, e exporte. Sem upload, sem instalação, sem anúncios.",
+    "page.title": "Player e editor de câmera veicular online grátis — mapa GPS, cortar e exportar | dashcamigo",
+    "meta.description": "Player e editor de câmera veicular grátis e de código aberto no navegador. Junte várias câmeras num vídeo só, sobreponha velocidade, GPS e um mapa em movimento, e exporte. Sem upload, sem instalação, sem anúncios.",
     "noscript.continue": "Ir para o dashcamigo",
 
     "topbar.trips": "Viagens",

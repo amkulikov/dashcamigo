@@ -5,8 +5,8 @@
 import type { I18nKey } from "./keys.js";
 
 export const enDict = {
-    "page.title": "Dashcam Player & Editor Online — GPS map, trim & export | dashcamigo",
-    "meta.description": "Free online dashcam player & editor. Combine front, rear and cabin cameras into one video, overlay speed, GPS and a moving map, then export — right in your browser. No upload, no install, no ads.",
+    "page.title": "Free Dashcam Player & Editor Online — GPS map, trim & export | dashcamigo",
+    "meta.description": "Free, open-source online dashcam player & editor. Combine multiple cameras into one video, overlay speed, GPS and a moving map, then export — right in your browser. No upload, no install, no ads.",
     "noscript.continue": "Continue to dashcamigo",
 
     "topbar.trips": "Trips",

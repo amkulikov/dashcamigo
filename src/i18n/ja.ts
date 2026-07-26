@@ -17,8 +17,8 @@
 import type { I18nKey } from "./keys.js";
 
 export const jaDict = {
-    "page.title": "ドライブレコーダー再生・編集（オンライン）— GPSマップ、カット＆書き出し | dashcamigo",
-    "meta.description": "ブラウザで使える無料のドラレコ再生・編集ツール。フロント・リア・車内のカメラを 1 本の動画にまとめ、速度・GPS・動く地図を重ねて、そのまま書き出し — ぜんぶブラウザの中で。アップロード不要、インストール不要、広告なし。",
+    "page.title": "無料のドライブレコーダー再生・編集（オンライン）— GPSマップ、カット＆書き出し | dashcamigo",
+    "meta.description": "ブラウザで使える無料・オープンソースのドラレコ再生・編集ツール。複数のカメラを 1 本の動画にまとめ、速度・GPS・動く地図を重ねて、そのまま書き出し — ぜんぶブラウザの中で。アップロード不要、インストール不要、広告なし。",
     "noscript.continue": "dashcamigo を開く",
 
     "topbar.trips": "走行一覧",

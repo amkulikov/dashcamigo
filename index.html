@@ -90,7 +90,7 @@
          For the static /ru/ version, the prerender plugin in vite.config.ts puts
          Russian content here - so Yandex/Google.ru sees Russian without JS. -->
     <meta name="description"
-          content="Free online dashcam player & editor. Combine front, rear and cabin cameras into one video, overlay speed, GPS and a moving map, then export — right in your browser. No upload, no install, no ads."
+          content="Free, open-source online dashcam player & editor. Combine multiple cameras into one video, overlay speed, GPS and a moving map, then export — right in your browser. No upload, no install, no ads."
           data-i18n-attr="content:meta.description">
 
     <!-- Open Graph and Twitter Card. Without them, unfurl bots (Slack, Discord,
@@ -102,7 +102,7 @@
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://dashcamigo.app/">
     <meta property="og:site_name" content="dashcamigo">
-    <meta property="og:title" content="Dashcam Player & Editor Online — GPS map, trim & export">
+    <meta property="og:title" content="Free Dashcam Player & Editor — GPS map, trim & export">
     <!-- og:description carries NO data-i18n-attr on purpose. seo-prerender
          overrides it per locale from OG_OVERRIDES (snappier social-card copy,
          falling back to meta.description for locales without an override). If
@@ -111,7 +111,7 @@
          comment guards against. The meta name="description" tag above DOES keep
          data-i18n-attr; only the social cards intentionally diverge. -->
     <meta property="og:description"
-          content="Free online dashcam player. Open recordings from 70mai, Viofo, BlackVue, GoPro and more in your browser. Synchronized GPS map and speed chart. No upload, no install, no ads.">
+          content="Free, open-source dashcam player. Open recordings from 70mai, Viofo, BlackVue, GoPro and more in your browser. Synchronized GPS map and speed chart. No upload, no install, no ads.">
     <meta property="og:image" content="https://dashcamigo.app/og-cover.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
@@ -126,11 +126,11 @@
     <meta property="og:locale" content="en_US">
     <!--__DC_OG_LOCALE_ALTERNATES__-->
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Dashcam Player & Editor Online — GPS map, trim & export">
+    <meta name="twitter:title" content="Free Dashcam Player & Editor — GPS map, trim & export">
     <!-- twitter:description: no data-i18n-attr, same reason as og:description
          above - seo-prerender sets it per locale (twitterDescription override). -->
     <meta name="twitter:description"
-          content="Free online dashcam player. Open recordings from 70mai, Viofo, BlackVue, GoPro and more in your browser.">
+          content="Free, open-source dashcam player. Open recordings from 70mai, Viofo, BlackVue, GoPro and more in your browser.">
     <meta name="twitter:image" content="https://dashcamigo.app/og-cover.png">
 
     <!-- Preconnect to OpenFreeMap: the handshake to the tile CDN starts in
@@ -195,10 +195,10 @@
         "url": "https://dashcamigo.app/",
         "isPartOf": { "@id": "https://dashcamigo.app/#website" },
         "publisher": { "@id": "https://dashcamigo.app/#organization" },
-        "description": "Free online dashcam player & editor. Combine front, rear and cabin cameras into one video, overlay speed, GPS and a moving map, then export — right in your browser. No upload, no install, no ads.",
+        "description": "Free, open-source online dashcam player & editor. Combine multiple cameras into one video, overlay speed, GPS and a moving map, then export — right in your browser. No upload, no install, no ads.",
         "applicationCategory": "MultimediaApplication",
         "operatingSystem": "Web",
-        "browserRequirements": "Requires WebGL2, WebCodecs and File System Access API",
+        "browserRequirements": "Works in any current browser; the GPS map needs WebGL2, re-encoded export needs WebCodecs",
         "inLanguage": ["de", "en", "es", "fr", "ja", "ko", "pl", "pt-BR", "ru", "zh-Hans"],
         "isAccessibleForFree": true,
         "keywords": "dashcam player, dashcam editor, dashcam viewer, dashcam video editor, trim dashcam video, combine front and rear dashcam, dashcam split screen video, add speed overlay to dashcam video, dashcam gps overlay, online dashcam player, web dashcam player, dashcam gps viewer, dashcam app for pc, 70mai, viofo, blackvue, gopro, garmin, vantrue, thinkware, fitcamx",
@@ -374,7 +374,7 @@
          unfurl bots (they don't execute JS). For Russian-speaking users
          applyStaticI18n() swaps to Russian after first paint - the English
          flash before that runs is accepted as a trade-off in favor of SEO. -->
-    <title data-i18n="page.title">Dashcam Player & Editor Online — GPS map, trim & export | dashcamigo</title>
+    <title data-i18n="page.title">Free Dashcam Player & Editor Online — GPS map, trim & export | dashcamigo</title>
     <!-- Stylesheets are also imported from src/app.ts (for the prod bundle
          and for dev HMR), but are ADDITIONALLY linked here SYNCHRONOUSLY so
          first paint already has layout rules applied. Without an explicit
