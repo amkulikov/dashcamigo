@@ -82,7 +82,8 @@ uploaded:
 - `ci.yml` - typecheck / lint / unit / e2e on pushes to `main` and PRs.
 - `deploy.yml` - staging build + `wrangler pages deploy` on every `main` push.
 - `release.yml` (on `v*` tags) - the production build + deploy, the `release`
-  promote, the self-host artifacts, and the chained IndexNow ping.
+  promote, the self-host artifacts, the chained IndexNow ping, and the
+  Pages-mirror dispatch.
 - `indexnow.yml` - the manual re-ping button.
 
 The Pages project's git integration is unused - Pages cannot re-link a
@@ -275,8 +276,10 @@ cannot always reach (notably RU networks). The mirror serves the same bytes
 from GitHub's infrastructure: `mirror.yml` unpacks the published release
 artifact (`dashcamigo.tar.gz` - the self-host build: crash reporting
 compiled out, CSP delivered as a `<meta>` tag since Pages cannot send
-headers) and deploys it to GitHub Pages on every release publish; a
-`workflow_dispatch` re-deploys from the latest release.
+headers) and deploys it to GitHub Pages. `release.yml` dispatches it right
+after publishing a release - a GITHUB_TOKEN-published release never fires
+the release-published trigger (the WHY sits at the dispatch step in
+release.yml); a `workflow_dispatch` re-deploys from the latest release.
 
 One-time setup:
 
@@ -288,9 +291,9 @@ One-time setup:
 3. Settings -> Environments -> `github-pages` -> Deployment branches and
    tags: add a **tag rule `v*`**. Enabling Pages auto-creates this
    environment restricted to the default branch, and the release-published
-   trigger runs with the tag as its ref - without the rule every
-   post-release mirror deploy fails on environment protection while the
-   manual (main-ref) run passes.
+   trigger (a release published by hand) runs with the tag as its ref -
+   without the rule that path fails on environment protection while
+   main-ref runs (release.yml's dispatch, a manual dispatch) pass.
 4. GitHub account Settings -> Pages -> **Add verified domain** for
    `gh.dashcamigo.app` (one TXT record). Without it, a dangling CNAME after
    any future Pages teardown lets another GitHub user claim the subdomain

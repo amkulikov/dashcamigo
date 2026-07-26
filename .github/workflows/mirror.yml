@@ -5,8 +5,12 @@
 # artifact build carries its CSP as a <meta> tag (META_CSP in release.yml),
 # because Pages cannot send response headers.
 #
-# Triggers: every published release re-deploys the mirror; workflow_dispatch
-# re-deploys from the latest release without cutting a tag.
+# Triggers: release.yml dispatches this workflow right after publishing a
+# release - the release-published event cannot start it there, because
+# events created with GITHUB_TOKEN never trigger workflows (GitHub's
+# anti-recursion rule). The release trigger below covers only a release
+# published by hand from the UI; workflow_dispatch re-deploys from the
+# latest release without cutting a tag.
 #
 # One-time setup and the DNS contract: docs/deploy.md, "GitHub Pages mirror".
 
