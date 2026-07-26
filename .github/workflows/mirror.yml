@@ -1,0 +1,61 @@
+# GitHub Pages mirror: serves the published release artifact - the same
+# dashcamigo.tar.gz bytes self-hosters download - at the Pages custom domain.
+# Purpose: an origin off the Cloudflare edge, which parts of the audience
+# cannot always reach; GitHub Pages rides different infrastructure. The
+# artifact build carries its CSP as a <meta> tag (META_CSP in release.yml),
+# because Pages cannot send response headers.
+#
+# Triggers: every published release re-deploys the mirror; workflow_dispatch
+# re-deploys from the latest release without cutting a tag.
+#
+# One-time setup and the DNS contract: docs/deploy.md, "GitHub Pages mirror".
+
+name: Mirror
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+# Two runs must not interleave their Pages deployments; the newer one wins.
+concurrency:
+  group: pages-mirror
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    # The mirror serves this repo's brand at its domain. A fork that wants its
+    # own Pages copy flips this guard and the custom domain to its own.
+    if: github.repository == 'amkulikov/dashcamigo'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Download the release artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # A release event mirrors THAT release; a manual run - the latest.
+          TAG="${{ github.event.release.tag_name }}"
+          if [ -z "${TAG}" ]; then
+            TAG="$(gh release view --repo "${GITHUB_REPOSITORY}" --json tagName --jq .tagName)"
+          fi
+          echo "mirroring release ${TAG}"
+          gh release download "${TAG}" --repo "${GITHUB_REPOSITORY}" --pattern dashcamigo.tar.gz
+          # The archive unpacks into a fixed-name "dashcamigo" folder
+          # (release.yml, "Pack dist").
+          tar -xzf dashcamigo.tar.gz
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dashcamigo
+
+      - id: deploy
+        uses: actions/deploy-pages@v5

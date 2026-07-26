@@ -268,6 +268,35 @@ Consequences the workflow is built around:
   note a repo admin can delete the ruleset, so it guards against accidents,
   not a compromised owner - the immutability above is the real lock.
 
+## GitHub Pages mirror (gh.dashcamigo.app)
+
+The primary site rides the Cloudflare edge, which parts of the audience
+cannot always reach (notably RU networks). The mirror serves the same bytes
+from GitHub's infrastructure: `mirror.yml` unpacks the published release
+artifact (`dashcamigo.tar.gz` - the self-host build: crash reporting
+compiled out, CSP delivered as a `<meta>` tag since Pages cannot send
+headers) and deploys it to GitHub Pages on every release publish; a
+`workflow_dispatch` re-deploys from the latest release.
+
+One-time setup:
+
+1. Repo Settings -> Pages: Source = **GitHub Actions**; Custom domain =
+   `gh.dashcamigo.app`; enable Enforce HTTPS once the certificate is issued.
+2. DNS (zone dashcamigo.app): CNAME `gh` -> `amkulikov.github.io`,
+   **DNS-only** (grey cloud) - proxying it through Cloudflare would put the
+   mirror behind the same edge it exists to bypass.
+
+The custom domain gives the mirror the site root, so the root-only build
+constraint (see "Serving rules" in docs/self-hosting.md) holds without a
+subpath flavor. What the mirror lacks: response headers (no header CSP -
+the meta CSP covers it; no cache tuning - GitHub's default is acceptable
+and sw.js updates use `updateViaCache: "none"`), and the legacy
+`_redirects` 301s, which only ever mattered for old dashcamigo.app URLs.
+Canonicals point at dashcamigo.app, so the mirror does not compete with
+the primary in search. Scope of the hedge: it survives a Cloudflare-edge
+outage, not a block of the dashcamigo.app domain itself - the subdomain
+dies with the zone.
+
 ## What the repo ships for deployment
 
 - `vite.config.ts` - the production build (minifiers, vendor splitting, the
