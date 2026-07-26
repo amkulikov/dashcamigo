@@ -1,7 +1,10 @@
 # dashcamigo - dashcam player in your browser
 
-[![Live app](https://img.shields.io/badge/live-dashcamigo.app-ff9000)](https://dashcamigo.app)
-[![Beta](https://img.shields.io/badge/beta-beta.dashcamigo.app-8250df)](https://beta.dashcamigo.app)
+<p>
+  <a href="https://dashcamigo.app"><kbd>&nbsp;&nbsp;dashcamigo.app&nbsp;&nbsp;</kbd></a>&ensp;
+  <a href="https://gh.dashcamigo.app"><kbd>&nbsp;gh.dashcamigo.app · mirror&nbsp;</kbd></a>&ensp;
+  <a href="https://beta.dashcamigo.app"><kbd>&nbsp;beta.dashcamigo.app&nbsp;</kbd></a>
+</p>
 
 <p align="center">
   <a href="https://dashcamigo.app">
@@ -23,7 +26,7 @@ tiles and anonymized opt-out analytics
 ([privacy](https://dashcamigo.app/privacy)); a self-hosted build has no
 analytics at all unless you configure it.
 
-[Open the app](https://dashcamigo.app) | [Supported cameras](#supported-cameras) | [Self-hosting](#self-hosting) | [Contributing](CONTRIBUTING.md) | [License](#license)
+[Supported cameras](#supported-cameras) | [Self-hosting](#self-hosting) | [Contributing](CONTRIBUTING.md) | [License](#license)
 
 ## Features
 
