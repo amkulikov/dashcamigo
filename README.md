@@ -28,6 +28,18 @@ analytics at all unless you configure it.
 
 [Supported cameras](#supported-cameras) | [Self-hosting](#self-hosting) | [Contributing](CONTRIBUTING.md) | [License](#license)
 
+## Getting started
+
+- [**dashcamigo.app**](https://dashcamigo.app) - the app, latest release.
+- [**gh.dashcamigo.app**](https://gh.dashcamigo.app) - the same release served
+  from GitHub Pages, for when the main domain is unreachable.
+- [**beta.dashcamigo.app**](https://beta.dashcamigo.app) - the upcoming
+  version, updated on every push to `main`.
+- **Install it** - any of the domains installs as an app straight from the
+  browser; after that it opens with no network at all.
+- [**Self-host it**](#self-hosting) - plain static files: one command with
+  Node or Docker.
+
 ## Features
 
 - **Sync:** the route is colored by speed and a marker follows playback;
@@ -103,10 +115,6 @@ Then open http://localhost:8080.
 Everything else - building from a clone, dropping the files into a web
 server you already run, serving rules, the HTTPS caveat for the editor
 features - lives in [docs/self-hosting.md](docs/self-hosting.md).
-
-Just want the app to work offline? Installing
-[dashcamigo.app](https://dashcamigo.app) as an app from the browser does that
-with no setup at all.
 
 ## Built with
 
