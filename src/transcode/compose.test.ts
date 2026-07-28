@@ -13,6 +13,7 @@ import {
     computeAutoCrop,
     computeEffectiveAspect,
     computeOutputSize,
+    fitHidesBackdrop,
     fitKeepAspect,
     fitKeepAspectCover,
     mapRegionRectToDest,
@@ -564,5 +565,28 @@ describe("mapRegionRectToDest sliver cover", () => {
         expect(r).not.toBeNull();
         expect(r!.x).toBe(0);
         expect(r!.w).toBeGreaterThanOrEqual(1);
+    });
+});
+
+describe("fitHidesBackdrop", () => {
+    it("is true when the fit covers the output exactly and the format is opaque", () => {
+        expect(fitHidesBackdrop({ dx: 0, dy: 0, dw: 1920, dh: 1080 }, 1920, 1080, "I420")).toBe(true);
+        expect(fitHidesBackdrop({ dx: 0, dy: 0, dw: 1920, dh: 1080 }, 1920, 1080, "NV12")).toBe(true);
+    });
+
+    it("is false when letterbox bars remain", () => {
+        // 4:3 source fitted into a 16:9 output: pillarbox on both sides.
+        expect(fitHidesBackdrop({ dx: 240, dy: 0, dw: 1440, dh: 1080 }, 1920, 1080, "I420")).toBe(false);
+        // 21:9 source into 16:9: letterbox top and bottom.
+        expect(fitHidesBackdrop({ dx: 0, dy: 129, dw: 1920, dh: 822 }, 1920, 1080, "I420")).toBe(false);
+    });
+
+    it("keeps the backdrop for a format carrying alpha", () => {
+        expect(fitHidesBackdrop({ dx: 0, dy: 0, dw: 1920, dh: 1080 }, 1920, 1080, "RGBA")).toBe(false);
+        expect(fitHidesBackdrop({ dx: 0, dy: 0, dw: 1920, dh: 1080 }, 1920, 1080, "I420A")).toBe(false);
+    });
+
+    it("keeps the backdrop when the format is unknown", () => {
+        expect(fitHidesBackdrop({ dx: 0, dy: 0, dw: 1920, dh: 1080 }, 1920, 1080, null)).toBe(false);
     });
 });

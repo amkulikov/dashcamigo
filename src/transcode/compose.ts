@@ -495,6 +495,25 @@ function fillBackdrop(
 }
 
 /**
+ * True when the fitted draw is guaranteed to overpaint every pixel of the
+ * output, so the backdrop underneath it can never show through: the fit rect
+ * covers the frame exactly AND the source pixels are opaque. `sampleFormat` is
+ * the VideoSample pixel format - one carrying alpha ("...A") would blend with
+ * whatever the previous frame left on the reused canvas, so it keeps the
+ * backdrop; an unknown (null) format is treated as possibly-transparent for the
+ * same reason.
+ */
+export function fitHidesBackdrop(
+    fit: { dx: number; dy: number; dw: number; dh: number },
+    outputW: number,
+    outputH: number,
+    sampleFormat: string | null,
+): boolean {
+    if (fit.dx !== 0 || fit.dy !== 0 || fit.dw !== outputW || fit.dh !== outputH) return false;
+    return sampleFormat !== null && !sampleFormat.includes("A");
+}
+
+/**
  * Draws the main sample onto ctx. crop=null - fits the full source frame into
  * output; crop set - fits the selected zone. Both cases use keep-aspect-fit:
  * if the selected zone's aspect differs from the output aspect, letterbox bars
@@ -531,8 +550,14 @@ export function drawMain(
         sw = sourceW;
         sh = sourceH;
     }
-    fillBackdrop(ctx, sample, sourceW, sourceH, 0, 0, outputW, outputH, opts, regionBlurs);
     const fit = fitKeepAspect(sw, sh, outputW, outputH);
+    // The backdrop exists for the letterbox bars only. On a same-aspect export
+    // (the common 16:9 source -> 16:9 output) the fit covers the frame, so both
+    // the full-canvas black fill and the far pricier blurred cover would be
+    // overpainted whole - on every frame of the run.
+    if (!fitHidesBackdrop(fit, outputW, outputH, sample.format)) {
+        fillBackdrop(ctx, sample, sourceW, sourceH, 0, 0, outputW, outputH, opts, regionBlurs);
+    }
     sample.draw(ctx, sx, sy, sw, sh, fit.dx, fit.dy, fit.dw, fit.dh);
     if (regionBlurs?.length) {
         paintRegionBlursForView(
