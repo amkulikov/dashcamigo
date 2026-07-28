@@ -131,6 +131,12 @@ export interface ExportPanelState {
      *  video control in "gpx" mode and turns Save into a plain .gpx download. */
     outputKind: ExportOutputKind;
     quality: Quality;
+    /** Explicit encode bitrate in Mbit/s, or null for the quality tier's own
+     *  budget. Set, it overrides the tier outright on the re-encode path (the
+     *  device encoder probe still applies) and the panel disables the tiers, so
+     *  the two never claim to be in charge at once. Ignored by a stream-copy,
+     *  which encodes nothing at all. See clampManualBitrateMbps for the range. */
+    manualBitrateMbps: number | null;
     outputPresetId: OutputPresetId;
     outputCustomW: number;
     outputCustomH: number;
@@ -191,6 +197,7 @@ function freshExportPanelState(): ExportPanelState {
         phase: "options",
         outputKind: "video",
         quality: "original",
+        manualBitrateMbps: null,
         outputPresetId: "source",
         outputCustomW: 1920,
         outputCustomH: 1080,

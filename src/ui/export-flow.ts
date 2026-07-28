@@ -22,13 +22,13 @@ import { showSaveFilePicker } from "native-file-system-adapter";
 // run-time call sites to keep that graph out of the landing entry chunk
 // (guarded by scripts/check-lazy-chunks.mjs). Type-only imports stay static.
 import type { ExportClipResult } from "../export.js";
-import { buildClipGpx } from "../export-range.js";
+import { reencodeBitrateForQuality } from "../export-bitrate.js";
+import { buildClipGpx, rangeSourceBitrateBps, rangeSourceFps, sliceCandidatesForRange } from "../export-range.js";
 import { recordsHaveGps } from "../parser.js";
 import { t, getCurrentLang, getDateLocale, type Lang } from "../i18n/index.js";
 import type { I18nKey } from "../i18n/keys.js";
 import { createLogger } from "../log.js";
 import { captureSentryException } from "../sentry.js";
-import type { Channel } from "../parsers/types.js";
 import { aspectRatio, ensureEven, type CapturedMoovBytes } from "../transcode/types.js";
 import type {
     AspectId,
@@ -72,21 +72,6 @@ const log = createLogger("export-flow");
 /** H.264 requires even dimensions; custom inputs clamp to [240, 3840]. */
 const OUTPUT_CUSTOM_MIN = 240;
 const OUTPUT_CUSTOM_MAX = 3840;
-
-// "medium"/"low" are fractions of the (capped) SOURCE bitrate, not a
-// content-blind constant: smaller files for sharing that still scale with the
-// real footage - a 25 Mbps source gets a proportionally richer "medium" than a
-// 10 Mbps one - and always stay BELOW the source (a genuine size saving), even
-// for a source under the top tier's w*h*4 floor. See reencodeBitrateForQuality.
-const QUALITY_BITRATE_FACTOR: Record<"medium" | "low", number> = {
-    medium: 0.6,
-    low: 0.35,
-};
-
-/** Re-encode bitrate cap (bps). Bounds the source-matched top tier so a
- *  high-bitrate 4K source does not blow the target up to an absurd value;
- *  medium/low cap the same source before taking their fraction. */
-const REENCODE_BITRATE_CAP = 25_000_000;
 
 interface OutputDims {
     width: number;
@@ -141,36 +126,49 @@ function clampCustomDim(n: number): number {
 }
 
 /**
- * Video bitrate (bps) a quality tier targets on the re-encode path, at the given
- * output dims.
- *  - "original" (the top tier): source-matched, clamped to [w*h*4, CAP]. Floored
- *    at w*h*4 so a low-bitrate source is not re-encoded even lower; capped so a
- *    60 Mbps 4K source does not produce an absurd target. When the top tier cannot
- *    stream-copy (overlay / crop / resize / split / speed) it re-encodes at ~source
- *    bitrate - visually close to the source after one generation, instead of the
- *    old fixed 4 bits/px that sat far below a 15-25 Mbps dashcam source. The panel
- *    labels this re-encode state "High".
- *  - "medium" / "low": a fraction (0.6 / 0.35) of the CAPPED source bitrate - a
- *    smaller shareable file that scales with the real footage and is ALWAYS below
- *    the source (a real size saving). NOT floored at w*h*4 (unlike the top tier):
- *    dropping below base is the whole point of a size-saver tier, and the floor
- *    would otherwise make medium exceed a sub-base source.
+ * What the footage inside the selected range actually looks like: its average
+ * bitrate (summed over the visible cameras - a split composites them all into
+ * one output frame, so the content the encoder faces is their sum) and the
+ * frame rate the export must run at (the busiest camera's).
+ *
+ * Measured over the RANGE, not the whole trip: see rangeSourceBitrateBps. Falls
+ * back to the whole trip only when no range is set, which is what a save would
+ * export anyway.
  */
-function reencodeBitrateForQuality(quality: Quality, width: number, height: number, sourceBitrate: number): number {
-    if (quality === "original") {
-        const base = width * height * 4;
-        return Math.min(Math.max(sourceBitrate, base), REENCODE_BITRATE_CAP);
+function measureRangeSource(trip: Trip): { bitrate: number; fps: number | null } {
+    const range = exportPanelState.range;
+    const startSec = range ? range.startTripSec : 0;
+    const endSec = range ? range.endTripSec : trip.timeline.contentDurationSec;
+    let bitrate = 0;
+    let fps: number | null = null;
+    for (const channel of state.composition.channelOrder) {
+        const segments = sliceCandidatesForRange(
+            tripCandidatesByChannel(trip, channel),
+            trip.timeline,
+            startSec,
+            endSec,
+        );
+        bitrate += rangeSourceBitrateBps(segments);
+        const channelFps = rangeSourceFps(segments);
+        if (channelFps !== null && (fps === null || channelFps > fps)) fps = channelFps;
     }
-    const cappedSource = Math.min(sourceBitrate, REENCODE_BITRATE_CAP);
-    return Math.round(cappedSource * QUALITY_BITRATE_FACTOR[quality]);
+    return { bitrate, fps };
 }
 
-/** Single source of truth for the re-encode target bitrate, so the estimate and
- *  both real-export branches (split + single-channel) agree. Reads the current
- *  panel quality and the measured source bitrate. */
+/**
+ * Single source of truth for the re-encode target bitrate, so the estimate and
+ * both real-export branches (split + single-channel) agree.
+ *
+ * A manual bitrate wins outright over the tier: it is the user overriding our
+ * arithmetic on purpose, and silently clamping it to a computed range would make
+ * the control a lie. The device encoder probe still applies afterwards - that
+ * one is a hard capability limit, not an opinion about quality.
+ */
 function resolveReencodeBitrate(trip: Trip, dims: OutputDims): number {
-    const sourceBitrate = estimateSourceBitrateBps(trip, state.composition.channelOrder);
-    return reencodeBitrateForQuality(exportPanelState.quality, dims.width, dims.height, sourceBitrate);
+    const manualMbps = exportPanelState.manualBitrateMbps;
+    if (manualMbps !== null) return manualMbps * 1_000_000;
+    const source = measureRangeSource(trip);
+    return reencodeBitrateForQuality(exportPanelState.quality, dims.width, dims.height, source.bitrate, source.fps);
 }
 
 /** Corner the mark is burned into, or null when the user opted out. Never gates
@@ -351,21 +349,6 @@ export function buildOverlayPipelineArgs(trip: Trip): OverlayPipelineArgs | null
     };
 }
 
-function estimateSourceBitrateBps(trip: Trip, channels: Channel[]): number {
-    let total = 0;
-    for (const ch of channels) {
-        const cands = tripCandidatesByChannel(trip, ch);
-        let bytes = 0;
-        let dur = 0;
-        for (const c of cands) {
-            bytes += c.file.size;
-            dur += c.durationSec;
-        }
-        if (dur >= 0.001) total += (bytes * 8) / dur;
-    }
-    return total;
-}
-
 /* --------------------- device encode ceiling (re-encode) ------------------ */
 
 // Cache of "what bitrate can THIS device actually encode at the current
@@ -476,6 +459,10 @@ export interface ExportEstimate {
     /** Video data-rate (bytes/sec) per quality preset at the current output dims,
      *  for the per-row "~X/s" hint. "original" reflects the source bitrate. */
     rateByQuality: Record<Quality, number>;
+    /** Measured average bitrate (bps) of the footage inside the selected range,
+     *  across the visible cameras. Shown next to the manual bitrate field as the
+     *  reference point for picking a number. 0 when it could not be measured. */
+    sourceBitrate: number;
     /** Re-encode path only: the device cannot encode the requested bitrate and
      *  the export will step down to a lower one (bytes already reflects the cap).
      *  False on the stream-copy path and while the device probe is still pending. */
@@ -505,20 +492,23 @@ export function estimateExport(): ExportEstimate | null {
     const speedFactor = Math.max(1, exportPanelState.speedFactor);
     const durationSec = Math.max(0, range.endTripSec - range.startTripSec) / speedFactor;
     const dims = resolveOutputDims();
-    const sourceBitrate = estimateSourceBitrateBps(trip, state.composition.channelOrder);
+    const source = measureRangeSource(trip);
+    const sourceBitrate = source.bitrate;
     const topEligible = streamCopyEligibleConfig();
 
     // Per-tier "~/s" data rate. The top ("original") row shows what it will
     // actually output: the raw source bitrate when it stream-copies, else the
     // source-matched re-encode target. medium/low are fractions of the capped
-    // source. All three stay monotonic (original >= medium >= low).
+    // source. All three stay monotonic (original >= medium >= low). Shown for
+    // the tiers themselves even while a manual bitrate overrides them - the rows
+    // then read as "what this tier would give", which is what they are.
     const rateByQuality: Record<Quality, number> = {
         original:
             (topEligible
                 ? sourceBitrate
-                : reencodeBitrateForQuality("original", dims.width, dims.height, sourceBitrate)) / 8,
-        medium: reencodeBitrateForQuality("medium", dims.width, dims.height, sourceBitrate) / 8,
-        low: reencodeBitrateForQuality("low", dims.width, dims.height, sourceBitrate) / 8,
+                : reencodeBitrateForQuality("original", dims.width, dims.height, sourceBitrate, source.fps)) / 8,
+        medium: reencodeBitrateForQuality("medium", dims.width, dims.height, sourceBitrate, source.fps) / 8,
+        low: reencodeBitrateForQuality("low", dims.width, dims.height, sourceBitrate, source.fps) / 8,
     };
 
     const stream = canStreamCopy();
@@ -546,7 +536,7 @@ export function estimateExport(): ExportEstimate | null {
     // reencodeAudio). On the re-encode path the source audio is usually
     // stream-copied untouched (AAC/MP3 passthrough), so its real bitrate may differ
     // from 128k - a rough stand-in is fine for a size estimate. NOT added on
-    // stream-copy: sourceBitrate derives from whole-file sizes, which already
+    // stream-copy: sourceBitrate derives from file sizes, which already
     // include the source audio track - adding 128k would double-count it. (When
     // audio is dropped the stream-copy estimate still carries the source audio
     // bytes; accepted - a small fraction, and an over-estimate is the safe
@@ -565,6 +555,7 @@ export function estimateExport(): ExportEstimate | null {
         durationSec,
         codecLabel: stream ? sourceCodecLabel(trip) : "H.264",
         rateByQuality,
+        sourceBitrate,
         deviceCapped,
         blocked,
         topStreamCopyEligible: topEligible,

@@ -40,7 +40,7 @@ import { BlobSource, Input, type VideoSample, VideoSampleSink } from "mediabunny
 import { openAdpcmAudioAuto } from "./adpcm-audio.js";
 import { createVideoSourceResolver } from "./normalize-degenerate-video.js";
 import { probeAudioUniformity } from "../export.js";
-import { sliceCandidatesForRange } from "../export-range.js";
+import { rangeSourceFps, sliceCandidatesForRange } from "../export-range.js";
 import { createLogger } from "../log.js";
 import { tripCandidatesByChannel, contentToWallUtc } from "../trips.js";
 import { VIDEO_INPUT_FORMATS } from "../video-formats.js";
@@ -62,7 +62,8 @@ import { hasAnyOverlay, isFinitePosition } from "./overlay-pipeline-helpers.js";
 import { ensureOverlayFontsReady } from "./overlay-styles.js";
 import { type FramePos, interpScalar, recordsHaveAccel, resolveFramePos } from "./frame-pos.js";
 import {
-    OUTPUT_FPS,
+    achievedKbps,
+    resolveOutputFps,
     type ActiveAudioPlan,
     cancelOutputQuietly,
     consumeMapSnapshot,
@@ -124,8 +125,11 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
     // so the audio loop below never runs - no need to speed-adjust audio here.
     const speedFactor = clampSpeedFactor(output.speedFactor);
 
+    // Every source frame in range is kept (at 1x), so the frame count - and the
+    // progress bar and ETA built on it - must follow the source's real rate.
+    const outputFps = resolveOutputFps(rangeSourceFps(mainSegments));
     const totalOutputSec = source.endTripSec - source.startTripSec;
-    const framesTotal = framesForSpeed(totalOutputSec, OUTPUT_FPS, speedFactor);
+    const framesTotal = framesForSpeed(totalOutputSec, outputFps, speedFactor);
 
     log.info("transcode started", {
         channel: source.channel,
@@ -133,7 +137,7 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
         outputH: heightPx,
         aspect: output.aspect,
         bitrateKbps: Math.round(bitrate / 1000),
-        fps: OUTPUT_FPS,
+        fps: outputFps,
         speedFactor,
         audio: output.withAudio,
         watermarkAnchor: output.watermarkAnchor,
@@ -173,7 +177,7 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
     // Encoder config shared with pipeline-split via createH264VideoSource
     // (one place for the load-bearing hardwareAcceleration rationale).
     const videoSource = createH264VideoSource(canvas, bitrate);
-    out.addVideoTrack(videoSource, { frameRate: OUTPUT_FPS });
+    out.addVideoTrack(videoSource, { frameRate: outputFps });
 
     // Audio plan: passthrough (stream-copy AAC/MP3 packets, no encoder), encode
     // (decode + re-encode to AAC, or Opus when AAC encode is unavailable), or
@@ -656,6 +660,12 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
         framesEncoded: framesDone,
         durationSec: round2(outputDurationSec),
         sizeBytes: totalBytesWritten,
+        // Requested vs delivered. A "the export looks soft" report is otherwise
+        // undiagnosable: it separates a budget we set too low from an encoder
+        // that undershot the budget we asked for, and only the first is ours to
+        // fix. Both numbers are already in this file; the ratio is not.
+        bitrateKbps: Math.round(bitrate / 1000),
+        achievedKbps: achievedKbps(totalBytesWritten, outputDurationSec),
         elapsedMs: Math.round(performance.now() - startMs),
         mapOverlayDropped: mapOverlayFailed,
         decodeTruncated,

@@ -298,10 +298,11 @@ export const AUDIO_TARGET_CHANNELS = 2;
 export const AUDIO_TARGET_BITRATE = 128_000;
 
 /**
- * Default bitrate (bps) derived from output pixel area. 4 bps/pixel is
- * calibrated for dashcam dynamic content: 720p (~920k px) → 3.7 Mbps,
- * 1080p (~2.07M px) → 8.3 Mbps, 4K (~8.3M px) → 33 Mbps. Takes width+height
- * (not height + aspect) because a custom output may have an arbitrary ratio.
+ * Last-resort bitrate (bps) for a caller that expressed no preference at all
+ * (output.bitrate === null). Pixel area alone, knowing nothing about the source
+ * - the real budget is chosen from the measured footage in src/export-bitrate.ts
+ * and every UI-driven export passes an explicit number. Takes width+height (not
+ * height + aspect) because a custom output may have an arbitrary ratio.
  */
 export function resolveBitrate(width: number, height: number): number {
     return Math.round(width * height * 4);

@@ -185,5 +185,15 @@ export async function resolveEncodableH264(
             bad = mid;
         }
     }
+    // Only fires when the device actually forced a reduction, and how far it
+    // went is the difference between "this device is limited" and "the probe
+    // misfired" in a quality report. The panel only tells the user THAT it was
+    // capped, never by how much.
+    log.info("encode ceiling below request", {
+        width,
+        height,
+        desiredKbps: Math.round(desiredBitrate / 1000),
+        acceptedKbps: Math.round(good / 1000),
+    });
     return { bitrate: good, degraded: true };
 }

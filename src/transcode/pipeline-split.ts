@@ -12,7 +12,7 @@
 import { BlobSource, Input, type VideoSample, VideoSampleSink } from "mediabunny";
 
 import { probeAudioUniformity } from "../export.js";
-import { sliceCandidatesForRange, type FileSegment } from "../export-range.js";
+import { rangeSourceFps, sliceCandidatesForRange, type FileSegment } from "../export-range.js";
 import { resolveRegionBlursAt, type BlurRegion } from "../blur-regions.js";
 import { openAdpcmAudioAuto } from "./adpcm-audio.js";
 import { createLogger } from "../log.js";
@@ -46,7 +46,8 @@ import { hasAnyOverlay, isFinitePosition } from "./overlay-pipeline-helpers.js";
 import { ensureOverlayFontsReady } from "./overlay-styles.js";
 import { interpScalar, recordsHaveAccel, resolveFramePos } from "./frame-pos.js";
 import {
-    OUTPUT_FPS,
+    achievedKbps,
+    resolveOutputFps,
     type ActiveAudioPlan,
     applyAudioPlan,
     cancelOutputQuietly,
@@ -208,8 +209,18 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
     // speedFactor frames (see the main loop). Audio is dropped upstream at N > 1.
     const speedFactor = clampSpeedFactor(output.speedFactor);
 
+    // Split renders onto ONE fixed grid (N slots with independent source clocks
+    // have to be sampled onto a common one), so this rate is the output's real
+    // frame rate - not just a metadata hint. Take the busiest slot's: sampling a
+    // 60 fps camera onto a 30 fps grid would throw away half its motion.
+    const outputFps = resolveOutputFps(
+        slotSegments.reduce<number | null>((best, segs) => {
+            const fps = rangeSourceFps(segs);
+            return fps !== null && (best === null || fps > best) ? fps : best;
+        }, null),
+    );
     const totalOutputSec = source.endTripSec - source.startTripSec;
-    const framesTotal = framesForSpeed(totalOutputSec, OUTPUT_FPS, speedFactor);
+    const framesTotal = framesForSpeed(totalOutputSec, outputFps, speedFactor);
 
     log.info("split transcode started", {
         layout: output.layout,
@@ -218,7 +229,7 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
         outputH: heightPx,
         aspect: output.aspect,
         bitrateKbps: Math.round(bitrate / 1000),
-        fps: OUTPUT_FPS,
+        fps: outputFps,
         speedFactor,
         watermarkAnchor: output.watermarkAnchor,
         masterSegmentsCount: masterSegments.length,
@@ -252,7 +263,7 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
     // Encoder + AAC target shared with pipeline.ts via pipeline-common - one
     // place so a tuning fix cannot land on one pipeline only.
     const videoSource = createH264VideoSource(canvas, bitrate);
-    out.addVideoTrack(videoSource, { frameRate: OUTPUT_FPS });
+    out.addVideoTrack(videoSource, { frameRate: outputFps });
 
     // Audio plan from the master channel: passthrough (stream-copy AAC/MP3, no
     // encoder), encode (AAC, or Opus when AAC encode is unavailable), or skip.
@@ -418,7 +429,7 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
 
     const reportProgress = createTranscodeProgressReporter(framesTotal, onProgress);
 
-    const frameDur = 1 / OUTPUT_FPS;
+    const frameDur = 1 / outputFps;
 
     /**
      * Prepares the slot for reading samples around tripTimeSec: on a segment
@@ -805,7 +816,7 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
         framesDone,
         framesTotal,
         bytesWritten: totalBytesWritten,
-        durationSec: framesDone * (1 / OUTPUT_FPS),
+        durationSec: framesDone * (1 / outputFps),
     });
 
     // Opus fallback (the encode path could not use AAC) means audio is present
@@ -814,8 +825,12 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
 
     log.info("split transcode done", {
         framesEncoded: framesDone,
-        durationSec: round2(framesDone * (1 / OUTPUT_FPS)),
+        durationSec: round2(framesDone * (1 / outputFps)),
         sizeBytes: totalBytesWritten,
+        // See pipeline.ts: requested vs delivered is the one pair that tells a
+        // too-low budget apart from an encoder that undershot it.
+        bitrateKbps: Math.round(bitrate / 1000),
+        achievedKbps: achievedKbps(totalBytesWritten, framesDone / outputFps),
         elapsedMs: Math.round(performance.now() - startMs),
         mapOverlayDropped: mapOverlayFailed,
         decodeTruncated,
