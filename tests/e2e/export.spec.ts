@@ -126,6 +126,52 @@ test.describe("export", () => {
         await shot(page, "export-03b-quality-tier-relabel");
     });
 
+    test("a manual bitrate takes over from the quality tiers and reverts on an empty field", async ({ page }) => {
+        const manual = page.locator("#export-panel-bitrate");
+        const topRadio = page.locator('.export-panel__radio input[value="original"]');
+        // Folded away by default - the tiers are the answer for almost everyone.
+        await expect(manual).toBeHidden();
+        await expect(topRadio).toBeEnabled();
+
+        await page.locator(".export-panel__manual-bitrate > summary").click();
+        await expect(manual).toBeVisible();
+        // Empty means auto, so opening the block alone changes nothing.
+        await expect(topRadio).toBeEnabled();
+        // The source's own rate is the reference for picking a number.
+        await expect(page.locator(".export-panel__manual-bitrate .export-panel__note").first()).toBeVisible();
+
+        // 2 Mbit/s sits well under this sample's automatic budget and under any
+        // device encode ceiling, so the estimate has to visibly shrink - which is
+        // what proves the field reaches the real bitrate resolver.
+        const size = page.locator(".export-panel__estimate-size");
+        const autoSize = await size.textContent();
+        await manual.fill("2");
+        await manual.blur();
+        await expect(size).not.toHaveText(autoSize ?? "");
+        // The override wins over the tiers, and the panel says so rather than
+        // leaving two controls both claiming to set quality.
+        await expect(topRadio).toBeDisabled();
+        await expect(page.locator('.export-panel__radio:has(input[value="original"])')).toHaveClass(/is-disabled/);
+        await shot(page, "export-03c-manual-bitrate");
+
+        await manual.fill("");
+        await manual.blur();
+        await expect(topRadio).toBeEnabled();
+        await expect(size).toHaveText(autoSize ?? "");
+    });
+
+    test("an out-of-range manual bitrate is clamped rather than accepted", async ({ page }) => {
+        await page.locator(".export-panel__manual-bitrate > summary").click();
+        const manual = page.locator("#export-panel-bitrate");
+        await manual.fill("99999");
+        await manual.blur();
+        await expect(manual).toHaveValue("400");
+        await manual.fill("0");
+        await manual.blur();
+        // Zero is not a bitrate - it reads as "no override" and clears the field.
+        await expect(manual).toHaveValue("");
+    });
+
     test("vertical 9:16 preset paints the export-frame ring", async ({ page }) => {
         await page.locator("#export-panel-output").selectOption("1080_9x16");
         // The ::after ring on the grid marks the baked output boundary.

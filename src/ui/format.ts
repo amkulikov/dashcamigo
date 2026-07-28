@@ -222,6 +222,21 @@ export function formatBytes(b: number): string {
 }
 
 /**
+ * Same scale as formatBytes but one decimal in the MB band, for a per-second
+ * data rate. Whole megabytes are too coarse here: the quality tiers and the
+ * source reference sit next to each other and differ by tens of percent, which
+ * rounding to "2 MB" vs "2 MB" erases exactly where the reader is comparing.
+ * The caller appends the "/s".
+ */
+export function formatRateBytes(bytesPerSecond: number): string {
+    if (bytesPerSecond < 1024 * 1024) return `${(bytesPerSecond / 1024).toFixed(0)} ${t("units.kb")}`;
+    if (bytesPerSecond < 1024 * 1024 * 1024) {
+        return `${(bytesPerSecond / 1024 / 1024).toFixed(1)} ${t("units.mb")}`;
+    }
+    return `${(bytesPerSecond / 1024 / 1024 / 1024).toFixed(2)} ${t("units.gb")}`;
+}
+
+/**
  * Base filename for the exported clip.
  *
  * Format:

@@ -289,6 +289,61 @@ fieldset.export-panel__group {
     color: var(--fg-mute);
 }
 
+/* Tier row while a manual bitrate overrides it (mirrors the disabled checkbox
+   rows: the control is still readable, just visibly not in charge). */
+.export-panel__radio.is-disabled,
+.export-panel__radio.is-disabled input[type="radio"] {
+    opacity: 0.45;
+    cursor: default;
+}
+
+/* Manual bitrate: a folded-away escape hatch under the quality tiers. Low
+   visual weight - the tiers are the answer for almost everyone. */
+.export-panel__manual-bitrate {
+    margin-top: var(--dc-space-3);
+}
+
+.export-panel__manual-bitrate > summary {
+    font-size: var(--dc-text-sm);
+    color: var(--fg-mute);
+    cursor: pointer;
+    /* The default disclosure triangle is a UA glyph that differs per browser;
+       ::marker below restores a consistent one. */
+    list-style: none;
+}
+.export-panel__manual-bitrate > summary::-webkit-details-marker {
+    display: none;
+}
+.export-panel__manual-bitrate > summary::before {
+    content: "▸ ";
+}
+.export-panel__manual-bitrate[open] > summary::before {
+    content: "▾ ";
+}
+.export-panel__manual-bitrate > summary:hover {
+    color: var(--fg);
+}
+.export-panel__manual-bitrate > summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.export-panel__manual-bitrate-row {
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+    margin-top: var(--dc-space-2);
+}
+
+.export-panel__manual-bitrate-row input[type="number"] {
+    width: 6.5em;
+}
+
+.export-panel__manual-bitrate-unit {
+    font-size: var(--dc-text-sm);
+    color: var(--fg-mute);
+}
+
 /* Map-scale slider row. Indented under the Map checkbox; dims when disabled
    (Map overlay off). */
 .export-panel__slider {

@@ -9,6 +9,7 @@
 // stream-copy vs transcode vs split routing.
 
 import { identifyBrowser } from "../capabilities.js";
+import { clampManualBitrateMbps, MANUAL_BITRATE_MAX_MBPS, MANUAL_BITRATE_MIN_MBPS } from "../export-bitrate.js";
 import { createLogger } from "../log.js";
 import { dom } from "./dom.js";
 import { activateModal, deactivateModal, wireBackdropDismiss } from "./modal-helper.js";
@@ -38,7 +39,7 @@ import {
 } from "./export-flow.js";
 import type { ExportDoneSummary } from "./export-flow.js";
 import { nativeFsaAvailable } from "./in-memory-file.js";
-import { clipBasename, formatBytes, formatTime, randomFilenameSuffix } from "./format.js";
+import { clipBasename, formatBytes, formatRateBytes, formatTime, randomFilenameSuffix } from "./format.js";
 import { setExportInProgress, syncExportButton } from "./player-export-button.js";
 import { activeTrip, activeTripHasGps, state } from "./state.js";
 import { downloadBlob } from "../download.js";
@@ -646,6 +647,10 @@ function renderQualityGroup(): HTMLElement {
     // re-encode) when an overlay/crop/resize/split/speed forces a re-encode -
     // flipped by syncEstimate. Medium/Light keep a static label + one-word use
     // note; the live "~/s" rate (appended below) is the size hint.
+
+    // Rebuilt with the group (the options section wipes itself on render), so the
+    // ref list must start empty or a rebuild would leave stale rows behind.
+    qualityRows.length = 0;
     const opts: Array<{ id: Quality; label: string; sub: string }> = [
         { id: "original", label: t("export.quality.original"), sub: t("export.quality.original.sub") },
         { id: "medium", label: t("export.quality.medium"), sub: t("export.quality.medium.sub") },
@@ -689,8 +694,111 @@ function renderQualityGroup(): HTMLElement {
         label.appendChild(rate);
         row.appendChild(label);
         wrap.appendChild(row);
+        qualityRows.push({ row, input: r });
     }
+    // Says WHY the tiers just went grey. Shown only while the override is on.
+    const active = document.createElement("div");
+    active.className = "export-panel__note";
+    active.textContent = t("export.quality.manual.active");
+    active.hidden = true;
+    manualBitrateActiveEl = active;
+    wrap.appendChild(active);
+    wrap.appendChild(renderManualBitrate());
+    syncManualBitrateUi(null);
     return wrap;
+}
+
+// Tier rows + their radios, so a manual bitrate can visibly take them out of
+// play (it overrides them; two controls claiming to own quality is a lie).
+const qualityRows: Array<{ row: HTMLElement; input: HTMLInputElement }> = [];
+let manualBitrateSourceEl: HTMLElement | null = null;
+let manualBitrateActiveEl: HTMLElement | null = null;
+
+/**
+ * Collapsed "set the bitrate manually" disclosure under the quality tiers: an
+ * empty field means auto (the tier decides), a number overrides it outright.
+ *
+ * Folded away rather than inline because the tiers are the answer for almost
+ * everyone - but the number is the only answer for someone who already knows
+ * the figure their footage needs, and burying it in nothing at all is what
+ * sent them to write in.
+ */
+function renderManualBitrate(): HTMLElement {
+    const details = document.createElement("details");
+    details.className = "export-panel__manual-bitrate";
+    const summary = document.createElement("summary");
+    summary.textContent = t("export.quality.manual.toggle");
+    details.appendChild(summary);
+
+    const row = document.createElement("div");
+    row.className = "export-panel__manual-bitrate-row";
+
+    const input = document.createElement("input");
+    input.type = "number";
+    input.id = "export-panel-bitrate";
+    // Numeric soft keyboard; the value is whole megabits (clampManualBitrateMbps).
+    input.inputMode = "numeric";
+    input.min = String(MANUAL_BITRATE_MIN_MBPS);
+    input.max = String(MANUAL_BITRATE_MAX_MBPS);
+    input.step = "1";
+    input.placeholder = t("export.quality.manual.auto");
+    input.setAttribute("aria-label", `${t("export.quality.manual.label")}, ${t("export.quality.manual.unit")}`);
+    input.value = exportPanelState.manualBitrateMbps === null ? "" : String(exportPanelState.manualBitrateMbps);
+    input.addEventListener("change", () => {
+        // An empty (or unparseable) field is the way back to auto - clamping it
+        // to the minimum instead would make the control impossible to undo.
+        const mbps = input.value.trim() === "" ? null : clampManualBitrateMbps(Number.parseFloat(input.value));
+        exportPanelState.manualBitrateMbps = mbps;
+        input.value = mbps === null ? "" : String(mbps);
+        notifyExportStateChanged();
+    });
+    row.appendChild(input);
+
+    const unit = document.createElement("span");
+    unit.className = "export-panel__manual-bitrate-unit";
+    unit.textContent = t("export.quality.manual.unit");
+    row.appendChild(unit);
+    details.appendChild(row);
+
+    // What the camera itself wrote - the only reference point that makes a
+    // number meaningful. Filled by syncManualBitrateUi from the live estimate.
+    const source = document.createElement("div");
+    source.className = "export-panel__note";
+    source.hidden = true;
+    manualBitrateSourceEl = source;
+    details.appendChild(source);
+
+    return details;
+}
+
+/**
+ * Reflects the manual-bitrate override: greys out and disables the quality tiers
+ * while a number is set (it wins over them - see resolveReencodeBitrate), and
+ * shows the source's own bitrate as the reference for choosing one. `est` may be
+ * null before the first estimate resolves, which only hides the reference line.
+ */
+function syncManualBitrateUi(est: ReturnType<typeof estimateExport>): void {
+    const manual = exportPanelState.manualBitrateMbps !== null;
+    for (const { row, input } of qualityRows) {
+        input.disabled = manual;
+        row.classList.toggle("is-disabled", manual);
+    }
+    if (manualBitrateActiveEl) manualBitrateActiveEl.hidden = !manual;
+    if (manualBitrateSourceEl) {
+        const bps = est && est.sourceBitrate > 0 ? est.sourceBitrate : 0;
+        manualBitrateSourceEl.hidden = bps <= 0;
+        if (bps > 0) {
+            const mbit = bps / 1_000_000;
+            // Both units on purpose. The field takes Mbit/s (what a bitrate is
+            // conventionally quoted in) while the tier rows above quote bytes per
+            // second, so a bare "32 Mbit/s" under a row reading "5 MB/s" looks
+            // like a contradiction until you do the x8 in your head.
+            manualBitrateSourceEl.textContent = t("export.quality.manual.source", {
+                mbit: mbit < 10 ? mbit.toFixed(1) : String(Math.round(mbit)),
+                perSecond: formatRateBytes(bps / 8),
+            });
+        }
+    }
 }
 
 // Per-quality data-rate spans (filled by syncEstimate from estimateExport).
@@ -771,6 +879,9 @@ function syncTopTierLabel(streamCopyEligible: boolean): void {
  *  estimated-output block. Cheap pure read; called from syncExportPanel. */
 function syncEstimate(): void {
     const est = estimateExport();
+    // The manual-bitrate block tracks the estimate (it shows the source's own
+    // rate), so it is reconciled on both branches - including the no-estimate one.
+    syncManualBitrateUi(est);
     if (!est) {
         for (const el of qualityRateEls.values()) el.textContent = "";
         if (estimateSizeEl) estimateSizeEl.textContent = "";
@@ -781,7 +892,7 @@ function syncEstimate(): void {
     }
     syncTopTierLabel(est.topStreamCopyEligible);
     for (const [q, el] of qualityRateEls) {
-        el.textContent = t("export.quality.rate", { rate: formatBytes(est.rateByQuality[q]) });
+        el.textContent = t("export.quality.rate", { rate: formatRateBytes(est.rateByQuality[q]) });
     }
     if (estimateSizeEl) {
         // Exact stream-copy size vs VBR re-encode floor - shared wording with

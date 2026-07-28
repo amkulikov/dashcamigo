@@ -1,7 +1,7 @@
 // Formatter tests. Currently only clipBasename; the logic is pure and cheap to cover without DOM/i18n deps.
 
 import { describe, it, expect } from "vitest";
-import { clipBasename, dateBucketLabel, formatTripTitle } from "./format.js";
+import { clipBasename, dateBucketLabel, formatBytes, formatRateBytes, formatTripTitle } from "./format.js";
 import { t } from "../i18n/index.js";
 import { buildTripTimeline, type Trip, type TripFrame } from "../trips.js";
 
@@ -119,5 +119,24 @@ describe("dateBucketLabel", () => {
 
     it("labels a future timestamp explicitly (clock skew / bad mtime guard)", () => {
         expect(dateBucketLabel(secOf(new Date(2026, 5, 20, 8, 0, 0)), now)).toBe(t("buckets.future"));
+    });
+});
+
+describe("formatRateBytes", () => {
+    it("keeps a decimal in the MB band so nearby rates stay distinguishable", () => {
+        // The case that motivated it: a tier at 1.3x the source rounded to the
+        // same whole megabyte as the source, hiding the whole difference.
+        const source = formatRateBytes(2_000_000);
+        const withHeadroom = formatRateBytes(2_600_000);
+        expect(formatBytes(2_000_000)).toBe(formatBytes(2_600_000));
+        expect(withHeadroom).not.toBe(source);
+    });
+
+    it("stays on whole kilobytes below a megabyte", () => {
+        expect(formatRateBytes(500_000)).toBe(`488 ${t("units.kb")}`);
+    });
+
+    it("switches to gigabytes at the top of the scale", () => {
+        expect(formatRateBytes(3 * 1024 ** 3)).toBe(`3.00 ${t("units.gb")}`);
     });
 });
