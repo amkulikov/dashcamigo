@@ -214,6 +214,9 @@ function syncExportPanel(): void {
         // Overlay style/accent/scrim appear only once a widget is on (widget
         // toggles notify through here).
         syncOverlayExtras();
+        // The watermark plea follows the opt-out checkbox, which the preview's
+        // own state changes can never flip - but the tick keeps them paired.
+        syncWatermarkOpt();
     } else {
         syncGpxSummary();
     }
@@ -1806,7 +1809,38 @@ function renderToggleGroup(): HTMLElement {
             },
         ),
     );
+    // Watermark opt-out, last in the group so revealing the plea below it shifts
+    // nothing the user is about to click (same rule as the overlay extras block).
+    wrap.appendChild(
+        renderCheckbox("export-panel-watermark", t("export.opt.watermark"), !exportPanelState.withWatermark, (v) => {
+            exportPanelState.withWatermark = !v;
+            // The preview mark lives in player-overlays and re-reads this on notify.
+            notifyExportStateChanged();
+        }),
+    );
+    const plea = document.createElement("div");
+    plea.id = "export-panel-watermark-plea";
+    plea.className = "export-panel__note export-panel__watermark-plea";
+    plea.textContent = t("export.opt.watermark.plea");
+    plea.hidden = true;
+    watermarkPleaEl = plea;
+    wrap.appendChild(plea);
+    syncWatermarkOpt();
     return wrap;
+}
+
+// The "why the mark is there" note under the opt-out checkbox, plus the checkbox
+// itself - both reconciled per state tick by syncWatermarkOpt.
+let watermarkPleaEl: HTMLElement | null = null;
+
+/** Mirrors the watermark opt-out into the DOM: the inverted checkbox reflects
+ *  !withWatermark, and the plea is shown only once the user actually asks to
+ *  remove the mark - unticked it would be a lecture nobody asked for. */
+function syncWatermarkOpt(): void {
+    const removing = !exportPanelState.withWatermark;
+    const cb = document.getElementById("export-panel-watermark") as HTMLInputElement | null;
+    if (cb) cb.checked = removing;
+    if (watermarkPleaEl) watermarkPleaEl.hidden = !removing;
 }
 
 // --- Overlay constructor --------------------------------------------------

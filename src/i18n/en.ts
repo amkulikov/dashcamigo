@@ -544,6 +544,8 @@ export const enDict = {
     "export.estimate.details": "{res} · {dur} · {codec}",
     "export.estimate.deviceCapped": "This device can't save at full quality — it'll be lowered to fit.",
     "export.opt.letterboxBlur": "Blurred letterbox",
+    "export.opt.watermark": "Remove the watermark",
+    "export.opt.watermark.plea": "The watermark helps people discover dashcamigo. If this clip is going somewhere public, it would be great if you left it on. If it's in the way, drag it to another corner. And taking it off is entirely your call.",
     "export.crop.aspect.original": "Original",
     "export.crop.aspect.free": "Free",
     "export.crop.button": "Crop frame...",

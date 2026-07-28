@@ -545,6 +545,8 @@ export const esDict = {
     "export.estimate.details": "{res} · {dur} · {codec}",
     "export.estimate.deviceCapped": "Este dispositivo no puede guardar a calidad completa — se reducirá para ajustarse.",
     "export.opt.letterboxBlur": "Fondo desenfocado",
+    "export.opt.watermark": "Quitar la marca de agua",
+    "export.opt.watermark.plea": "La marca de agua ayuda a que la gente descubra dashcamigo. Si este clip acaba en algún sitio público, sería genial que la dejaras. Si te estorba en esa esquina, arrástrala a otra. Y quitarla es decisión tuya, sin más.",
     "export.crop.aspect.original": "Original",
     "export.crop.aspect.free": "Libre",
     "export.crop.button": "Recortar fotograma...",

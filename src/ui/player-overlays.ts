@@ -469,10 +469,14 @@ function syncPlayerOverlays(): void {
     }
 
     if (wm) {
-        wm.hidden = false;
-        // Anchor by exportPanelState.watermarkAnchor (tl/tr/bl/br).
-        applyAnchor(wm, exportPanelState.watermarkAnchor);
-        sizeWatermark();
+        // Opted out of the mark -> it must be gone from the preview too, or the
+        // panel would promise a watermark the export does not burn in.
+        wm.hidden = !exportPanelState.withWatermark;
+        if (!wm.hidden) {
+            // Anchor by exportPanelState.watermarkAnchor (tl/tr/bl/br).
+            applyAnchor(wm, exportPanelState.watermarkAnchor);
+            sizeWatermark();
+        }
     }
 
     // The map overlay stays a DOM element (it owns the snapshot + resize). On a

@@ -139,6 +139,11 @@ export interface ExportPanelState {
     /** What to fill letterbox bars with: black or blurred source. */
     letterboxFill: "black" | "blur";
     watermarkAnchor: WatermarkAnchor;
+    /** true = burn the dashcamigo mark into the output. Default true; the panel
+     *  renders this inverted as a "remove the watermark" checkbox, like withAudio
+     *  and withGpmf. Off means the pipelines get a null anchor - the preview drops
+     *  the mark too, so what the user sees is still what they get. */
+    withWatermark: boolean;
     /** Timelapse speed-up factor (1 = real time). One of SPEED_FACTORS. Forces
      *  re-encode and mutes audio when > 1. */
     speedFactor: number;
@@ -194,6 +199,7 @@ function freshExportPanelState(): ExportPanelState {
         // br matches drawWatermark's default and keeps the mark clear of the
         // mini-map (top-left by default), so it stays grabbable for drag.
         watermarkAnchor: "br",
+        withWatermark: true,
         speedFactor: 1,
         withAudio: true,
         withGpmf: true,
@@ -285,8 +291,8 @@ export function notifyExportStateChanged(): void {
  * subscribers. No-op if already open.
  *
  * Preserved across opens within a session: quality, output preset, watermark
- * anchor, audio/gpmf/gpx toggles, overlay enabled+position. Reset on page
- * reload (the singleton lives only in memory).
+ * anchor + opt-out, audio/gpmf/gpx toggles, overlay enabled+position. Reset on
+ * page reload (the singleton lives only in memory).
  */
 export function openExportMode(): void {
     if (state.exportModeOpen) return;

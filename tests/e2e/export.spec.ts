@@ -580,6 +580,26 @@ test.describe("export", () => {
         await shot(page, "export-06-watermark-tl");
     });
 
+    test("watermark opt-out hides the preview mark and reveals the plea", async ({ page }) => {
+        const cb = page.locator("#export-panel-watermark");
+        const plea = page.locator("#export-panel-watermark-plea");
+        const wm = page.locator("#player-watermark");
+        // Default: the mark ships, so the box is clear and the note stays out of
+        // the way.
+        await expect(cb).not.toBeChecked();
+        await expect(plea).toBeHidden();
+        await expect(wm).toBeVisible();
+
+        await cb.check();
+        await expect(plea).toBeVisible();
+        // WYSIWYG: opting out drops the mark from the preview, not just the export.
+        await expect(wm).toBeHidden();
+
+        await cb.uncheck();
+        await expect(plea).toBeHidden();
+        await expect(wm).toBeVisible();
+    });
+
     test("crop edit: source frame while dragging, zoom result on release", async ({ page }) => {
         await page.locator('#video-grid .video-tile[data-channel="front"]').dblclick();
         const editor = page.locator(".crop-editor");

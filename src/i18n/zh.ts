@@ -542,6 +542,8 @@ export const zhDict = {
     "export.estimate.details": "{res} · {dur} · {codec}",
     "export.estimate.deviceCapped": "此设备无法以完整画质保存 — 画质将自动降低以适配。",
     "export.opt.letterboxBlur": "模糊背景",
+    "export.opt.watermark": "去掉水印",
+    "export.opt.watermark.plea": "水印能帮更多人知道 dashcamigo。如果这个片段要公开发出去，留着它会很有帮助。它挡到画面了，就拖到另一个角。当然，去不去掉完全由你决定。",
     "export.crop.aspect.original": "原始",
     "export.crop.aspect.free": "自由",
     "export.crop.button": "裁剪画面...",

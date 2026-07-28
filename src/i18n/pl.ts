@@ -544,6 +544,8 @@ export const plDict = {
     "export.estimate.details": "{res} · {dur} · {codec}",
     "export.estimate.deviceCapped": "To urządzenie nie zapisze w pełnej jakości — zostanie ona obniżona, aby się zmieścić.",
     "export.opt.letterboxBlur": "Rozmyte tło",
+    "export.opt.watermark": "Usuń znak wodny",
+    "export.opt.watermark.plea": "Znak wodny pomaga ludziom odkryć dashcamigo. Jeśli ten klip trafi gdzieś publicznie, byłoby świetnie zostawić go na miejscu. Przeszkadza w tym rogu — przeciągnij go w inny. A usunięcie to w pełni twoja decyzja.",
     "export.crop.aspect.original": "Oryginał",
     "export.crop.aspect.free": "Dowolnie",
     "export.crop.button": "Przytnij kadr...",

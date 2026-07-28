@@ -544,6 +544,8 @@ export const ptDict = {
     "export.estimate.details": "{res} · {dur} · {codec}",
     "export.estimate.deviceCapped": "Este dispositivo não consegue salvar na qualidade total — ela será reduzida para caber.",
     "export.opt.letterboxBlur": "Fundo desfocado",
+    "export.opt.watermark": "Remover a marca d'água",
+    "export.opt.watermark.plea": "A marca d'água ajuda as pessoas a descobrir o dashcamigo. Se este clipe for parar em algum lugar público, seria ótimo se você a deixasse. Se ela atrapalha nesse canto, arraste para outro. E tirar é uma decisão totalmente sua.",
     "export.crop.aspect.original": "Original",
     "export.crop.aspect.free": "Livre",
     "export.crop.button": "Recortar quadro...",

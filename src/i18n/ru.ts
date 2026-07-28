@@ -549,6 +549,8 @@ export const ruDict = {
     "export.estimate.details": "{res} · {dur} · {codec}",
     "export.estimate.deviceCapped": "Это устройство не тянет полное качество — оно будет снижено.",
     "export.opt.letterboxBlur": "Размытый фон",
+    "export.opt.watermark": "Убрать водяной знак",
+    "export.opt.watermark.plea": "Водяной знак помогает людям узнавать о dashcamigo. Если ролик пойдёт в публичный доступ, будет здорово, если ты его оставишь. Мешает в этом углу — перетащи в другой. Ну а убрать совсем — твоё полное право.",
     "export.crop.aspect.original": "Оригинал",
     "export.crop.aspect.free": "Произвольно",
     "export.crop.button": "Кадрировать...",

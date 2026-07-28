@@ -552,6 +552,8 @@ export const koDict = {
     "export.estimate.details": "{res} · {dur} · {codec}",
     "export.estimate.deviceCapped": "이 기기에서는 최고 화질로 저장할 수 없어 화질을 낮춰서 맞춰요.",
     "export.opt.letterboxBlur": "흐림 배경",
+    "export.opt.watermark": "워터마크 지우기",
+    "export.opt.watermark.plea": "워터마크는 사람들이 dashcamigo를 알게 되는 데 도움이 돼요. 이 클립을 공개할 거라면 그대로 두면 정말 큰 힘이 돼요. 거슬리면 다른 모서리로 끌어다 놓으세요. 물론 지우는 것도 온전히 마음대로예요.",
     "export.crop.aspect.original": "원본",
     "export.crop.aspect.free": "자유",
     "export.crop.button": "프레임 자르기...",

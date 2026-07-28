@@ -735,6 +735,8 @@ export type I18nKey =
     | "export.opt.gpmf"
     | "export.opt.gpx"
     | "export.opt.letterboxBlur"
+    | "export.opt.watermark"
+    | "export.opt.watermark.plea"
     | "export.overlays.legend"
     | "export.overlays.speed"
     | "export.overlays.coords"

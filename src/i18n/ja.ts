@@ -554,6 +554,8 @@ export const jaDict = {
     "export.estimate.details": "{res} · {dur} · {codec}",
     "export.estimate.deviceCapped": "この端末ではフル画質で保存できません — 画質を下げて書き出します。",
     "export.opt.letterboxBlur": "ぼかし背景",
+    "export.opt.watermark": "ウォーターマークを消す",
+    "export.opt.watermark.plea": "ウォーターマークは dashcamigo を知ってもらう助けになります。このクリップを公開するなら、残していただけるととても助かります。じゃまなときは、別の角にドラッグしてください。もちろん、外すかどうかはあなたの自由です。",
     "export.crop.aspect.original": "元のまま",
     "export.crop.aspect.free": "自由",
     "export.crop.button": "フレームを切り抜く...",

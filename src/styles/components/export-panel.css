@@ -400,6 +400,14 @@ fieldset.export-panel__group {
     color: var(--fg-mute);
 }
 
+/* Watermark plea, revealed under the opt-out checkbox. An accent rule on the
+   left marks it as a note from the project rather than another control hint,
+   and separates it from the checkbox stack it sits under. */
+.export-panel__watermark-plea {
+    padding-left: var(--dc-space-2);
+    border-left: 2px solid var(--accent);
+}
+
 /* Resulting clip length under the speed selector: full-contrast (it is a value
    the user reads off), tabular figures so it does not jitter as the range drags. */
 .export-panel__speed-result {

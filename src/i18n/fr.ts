@@ -546,6 +546,8 @@ export const frDict = {
     "export.estimate.details": "{res} · {dur} · {codec}",
     "export.estimate.deviceCapped": "Cet appareil ne peut pas enregistrer en pleine qualité — elle sera réduite pour s'adapter.",
     "export.opt.letterboxBlur": "Arrière-plan flou",
+    "export.opt.watermark": "Retirer le filigrane",
+    "export.opt.watermark.plea": "Le filigrane aide les gens à découvrir dashcamigo. Si ce clip part quelque part en public, ce serait super que tu le laisses. S'il gêne dans ce coin, fais-le glisser dans un autre. Et le retirer, c'est ton choix, tout simplement.",
     "export.crop.aspect.original": "Original",
     "export.crop.aspect.free": "Libre",
     "export.crop.button": "Recadrer l'image...",

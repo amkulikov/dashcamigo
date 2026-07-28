@@ -37,6 +37,7 @@ import type {
     OverlayTextPipelineOpts,
     TranscodeProgress,
     TranscodeResult,
+    WatermarkAnchor,
 } from "../transcode/types.js";
 import { contentToWallUtc, tripCandidatesByChannel } from "../trips.js";
 import type { Trip } from "../trips.js";
@@ -170,6 +171,13 @@ function reencodeBitrateForQuality(quality: Quality, width: number, height: numb
 function resolveReencodeBitrate(trip: Trip, dims: OutputDims): number {
     const sourceBitrate = estimateSourceBitrateBps(trip, state.composition.channelOrder);
     return reencodeBitrateForQuality(exportPanelState.quality, dims.width, dims.height, sourceBitrate);
+}
+
+/** Corner the mark is burned into, or null when the user opted out. Never gates
+ *  stream-copy: that path leaves the frames untouched and so carries no mark
+ *  either way, which is exactly what the opt-out asks for. */
+function watermarkAnchorForExport(): WatermarkAnchor | null {
+    return exportPanelState.withWatermark ? exportPanelState.watermarkAnchor : null;
 }
 
 /** The quality-independent half of the stream-copy gate: single channel +
@@ -1135,7 +1143,7 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
                             aspect: dims.aspect,
                             layout: state.composition.layout,
                             bitrate,
-                            watermarkAnchor: exportPanelState.watermarkAnchor,
+                            watermarkAnchor: watermarkAnchorForExport(),
                             withAudio: reencodeAudio,
                             speedFactor,
                             slotCrops: state.composition.perSlotCrops,
@@ -1167,7 +1175,7 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
                             aspect: dims.aspect,
                             bitrate,
                             crop: state.composition.perSlotCrops[0] ?? null,
-                            watermarkAnchor: exportPanelState.watermarkAnchor,
+                            watermarkAnchor: watermarkAnchorForExport(),
                             withAudio: reencodeAudio,
                             speedFactor,
                             letterboxFill: exportPanelState.letterboxFill,

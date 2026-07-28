@@ -544,6 +544,8 @@ export const deDict = {
     "export.estimate.details": "{res} · {dur} · {codec}",
     "export.estimate.deviceCapped": "Dieses Gerät kann nicht in voller Qualität speichern — sie wird passend reduziert.",
     "export.opt.letterboxBlur": "Unscharfer Hintergrund",
+    "export.opt.watermark": "Wasserzeichen entfernen",
+    "export.opt.watermark.plea": "Das Wasserzeichen hilft anderen, dashcamigo zu entdecken. Wenn dieser Clip irgendwo öffentlich landet, wäre es großartig, wenn du es drauflässt. Stört es in dieser Ecke — zieh es einfach in eine andere. Und es zu entfernen ist ganz allein deine Entscheidung.",
     "export.crop.aspect.original": "Original",
     "export.crop.aspect.free": "Frei",
     "export.crop.button": "Bild zuschneiden...",
