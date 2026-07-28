@@ -20,6 +20,7 @@ import {
     presetLocalStorage,
     readExportResult,
     readInMemoryDownload,
+    readTranscodeDoneFields,
     test,
 } from "./_fixtures.js";
 
@@ -94,6 +95,48 @@ test.describe("export run", () => {
         // stream-copies its packets through the compositing export with NO audio
         // encoder (the codec-stripped-Chromium fix). A regression here = silent clip.
         expect(r!.soun, "audio (AAC passthrough) must survive the re-encode export").toBe(true);
+    });
+
+    test("re-encode single channel takes the composite-free path", async ({ page, browserName }) => {
+        // One channel, source dimensions, no overlays, no watermark: nothing is
+        // painted over the video, so the pipeline hands decoded frames straight to
+        // the encoder instead of routing them through the composition canvas. The
+        // only coverage of that branch - a source whose frames the encoder rejects
+        // (or silently mis-renders) would otherwise ship a broken file.
+        test.skip(browserName === "firefox", "Firefox WebCodecs H.264 encode is broken (Bugzilla 1918769)");
+        test.skip(
+            !(await canEncodeHighProfileH264(page)),
+            "WebCodecs High-profile H.264 encode not available on this platform",
+        );
+        test.setTimeout(120_000);
+
+        const includes = page.locator(".top-panel__channel-include");
+        await includes.nth(2).click();
+        await includes.nth(1).click();
+        await expect(page.locator(".top-panel__channel-include:checked")).toHaveCount(1);
+
+        // Below the top tier -> re-encode (the top tier would stream-copy instead).
+        await page.locator('input[name="export-panel-quality"][value="medium"]').check();
+        // The checkbox is the opt-OUT: ticked means "remove the mark".
+        await page.locator("#export-panel-watermark").check();
+
+        await page.locator("#export-panel-save-btn").click();
+        await expect(page.locator("#export-panel-done-summary")).toBeVisible({ timeout: 100_000 });
+
+        const r = await readExportResult(page);
+        expect(r, "re-encode must have written bytes").not.toBeNull();
+        expect(r!.len, "re-encoded MP4 must be non-trivial").toBeGreaterThan(1024);
+        expect(r!.ftyp).toBe(true);
+        expect(r!.moov).toBe(true);
+        expect(r!.mdat).toBe(true);
+        expect(r!.soun, "audio must survive the composite-free re-encode").toBe(true);
+
+        // The done-line reports how many frames skipped the canvas. Without this
+        // the test would still pass with the fast path silently never engaging.
+        const done = await readTranscodeDoneFields(page);
+        expect(done, "the transcode worker must have logged its done line").not.toBeNull();
+        expect(done!.framesEncoded, "frames must have been encoded").toBeGreaterThan(0);
+        expect(done!.framesDirect, "every frame should have bypassed the canvas").toBe(done!.framesEncoded);
     });
 });
 

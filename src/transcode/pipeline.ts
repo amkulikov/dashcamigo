@@ -9,11 +9,12 @@
 // 2. For each segment:
 //    - open Input + VideoSampleSink, iterate samples in [startInFile, endInFile)
 //      decoding via the mediabunny WebCodecs decoder;
-//    - per frame: clear canvas → drawMain (with crop) →
-//      drawWatermark (if watermarkAnchor != null);
-//    - push the composited canvas to a CanvasSource via add(timestamp, duration)
-//      with the shifted output-timeline timestamp - mediabunny captures the
-//      canvas, runs it through the WebCodecs encoder, and writes to the muxer.
+//    - per frame: drawMain (with crop) → overlays → drawWatermark (if
+//      watermarkAnchor != null), then push the composited canvas to the video
+//      source with the shifted output-timeline timestamp - mediabunny runs it
+//      through the WebCodecs encoder and writes to the muxer.
+//    - a run that paints NOTHING over the video takes the composite-free path:
+//      the decoded frame goes to the encoder as-is (see noOverlayLayer).
 //
 // 3. Audio in parallel: AudioSampleSink → AudioSampleSource (re-encoded as
 //    AAC-LC 48k/stereo). Forced resample - dashcams with mono 16k would fail
@@ -35,7 +36,7 @@
 //    (limit ~60 in the decoder queue); forgetting close stalls the decoder.
 //  - canvas - one OffscreenCanvas for the entire exec, reused.
 
-import { BlobSource, Input, type VideoSample, VideoSampleSink } from "mediabunny";
+import { BlobSource, Input, VideoSample, VideoSampleSink } from "mediabunny";
 
 import { openAdpcmAudioAuto } from "./adpcm-audio.js";
 import { createVideoSourceResolver } from "./normalize-degenerate-video.js";
@@ -67,6 +68,7 @@ import {
     type ActiveAudioPlan,
     cancelOutputQuietly,
     consumeMapSnapshot,
+    createH264SampleSource,
     createH264VideoSource,
     createMp4StreamOutput,
     createTranscodeProgressReporter,
@@ -75,6 +77,8 @@ import {
     feedSegmentAudioCopy,
     applyAudioPlan,
     finalizeTranscodeOutput,
+    frameNeedsNoComposite,
+    joinAllOrThrowFirst,
     nextTolerant,
     round2,
 } from "./pipeline-common.js";
@@ -164,8 +168,8 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
         },
     );
 
-    // Composition canvas: created up front because the video source is now a
-    // CanvasSource bound to it (mediabunny captures the canvas on each add()).
+    // Composition canvas: created up front because the canvas-flavour video
+    // source binds to it (mediabunny captures the canvas on each add()).
     const canvas = new OffscreenCanvas(widthPx, heightPx);
     const ctx = canvas.getContext("2d", { alpha: false });
     if (!ctx) throw new Error("OffscreenCanvas 2d context unavailable");
@@ -174,10 +178,35 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
     // mini-map overlay, which already requests "high".
     ctx.imageSmoothingQuality = "high";
 
-    // Encoder config shared with pipeline-split via createH264VideoSource
-    // (one place for the load-bearing hardwareAcceleration rationale).
-    const videoSource = createH264VideoSource(canvas, bitrate);
-    out.addVideoTrack(videoSource, { frameRate: outputFps });
+    // Nothing is painted over the video for this run, so a decoded frame that
+    // already matches the output frame exactly can be handed to the encoder
+    // untouched - skipping the decode -> RGBA canvas -> capture round trip, which
+    // is two colour conversions and a texture copy on every frame. The run-wide
+    // half of the gate is here; frameNeedsNoComposite checks each frame itself,
+    // so a resize, a rotated source or a non-square pixel aspect still routes
+    // through the canvas.
+    const noOverlayLayer = !output.crop && !output.watermarkAnchor && !anyOverlay && !output.blurRegions?.length;
+    // Encoder config shared with pipeline-split (one place for the load-bearing
+    // hardwareAcceleration rationale). The sample flavour is a superset of the
+    // canvas one: composited frames are wrapped in a VideoSample here, which is
+    // exactly what CanvasSource does internally.
+    const canvasSource = noOverlayLayer ? null : createH264VideoSource(canvas, bitrate);
+    const sampleSource = noOverlayLayer ? createH264SampleSource(bitrate) : null;
+    out.addVideoTrack(canvasSource ?? sampleSource!, { frameRate: outputFps });
+
+    /** Encodes the frame currently on the canvas at the output-axis timing. */
+    const encodeCanvas = async (outTs: number, duration: number): Promise<void> => {
+        if (canvasSource) {
+            await canvasSource.add(outTs, duration);
+            return;
+        }
+        const framed = new VideoSample(canvas, { timestamp: outTs, duration });
+        try {
+            await sampleSource!.add(framed);
+        } finally {
+            framed.close();
+        }
+    };
 
     // Audio plan: passthrough (stream-copy AAC/MP3 packets, no encoder), encode
     // (decode + re-encode to AAC, or Opus when AAC encode is unavailable), or
@@ -271,6 +300,12 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
     // coordinates of the actual moment each kept frame was recorded.
     let videoAccumOutSec = 0;
     let framesDone = 0;
+    // Frames that went to the encoder without touching the composition canvas.
+    // Reported once at the end: a "the export is slow" report is otherwise
+    // undiagnosable on this axis - it separates "the fast path never engaged"
+    // (a resize, a rotated source, an overlay the user forgot about) from a
+    // genuinely encoder-bound run, and only the first is ours to fix.
+    let framesDirect = 0;
     // Counts in-range frames (after the pre-roll guard) to drive the timelapse
     // frame-drop: keep one every speedFactor frames. Global across segments so
     // the cadence does not reset at file boundaries.
@@ -327,6 +362,20 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
         let snapHandled = !p.snapPromise;
         try {
             if (signal.aborted) throw new DOMException("aborted", "AbortError");
+            if (sampleSource && frameNeedsNoComposite(p.sample, widthPx, heightPx)) {
+                // Untouched frame: retime it onto the output axis and hand it
+                // straight to the encoder. Mutating the sample is safe - we own
+                // it, and add() does not take ownership, so we still close it.
+                p.sample.setTimestamp(p.outTs);
+                p.sample.setDuration(p.duration);
+                await sampleSource.add(p.sample);
+                p.sample.close();
+                sampleClosed = true;
+                framesDirect++;
+                framesDone++;
+                reportProgress(framesDone, totalBytesWritten, false);
+                return;
+            }
             // Privacy blur rects for this frame's content time (empty -> null,
             // so drawMain skips the paint pass entirely on unaffected frames).
             const regionBlurs = output.blurRegions?.length
@@ -363,12 +412,12 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
                 drawWatermark(ctx, widthPx, heightPx, output.watermarkAnchor);
             }
             // The composited frame is already on `canvas` (drawMain + overlays
-            // above). CanvasSource.add captures the canvas synchronously here, so
-            // the decoded source frame can be closed right after; the next frame is
-            // drawn in the following flushFrame, after this add() resolves.
+            // above). The capture is synchronous here, so the decoded source frame
+            // can be closed right after; the next frame is drawn in the following
+            // flushFrame, after this add() resolves.
             p.sample.close();
             sampleClosed = true;
-            await videoSource.add(p.outTs, p.duration);
+            await encodeCanvas(p.outTs, p.duration);
             framesDone++;
             reportProgress(framesDone, totalBytesWritten, false);
         } finally {
@@ -389,7 +438,9 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
             // finally below can close a leftover frame on an error/abort that
             // escaped the loop. Flushed (and nulled) at the end of the video loop,
             // so it never crosses a segment boundary - output stays strictly ordered.
-            let pending: PendingFrame | null = null;
+            // A box, not a bare `let`: the video loop is a closure now, and a local
+            // assigned only from inside one stays narrowed to null for the finally.
+            const decodeAhead: { frame: PendingFrame | null } = { frame: null };
 
             // Video source: a clean stream-copy MP4 for a degenerate-packet MKV,
             // else seg.file unchanged. Audio always reads the ORIGINAL seg.file -
@@ -422,142 +473,149 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
                     continue;
                 }
                 const videoSink = new VideoSampleSink(videoTrack);
+                // Both producers place samples relative to the segment's base on
+                // the output axis. Captured before either starts so neither reads
+                // it mid-advance (the loop bumps it only after both finish).
+                const segBaseOutSec = videoAccumOutSec;
 
-                // Manual iterator drive (not `for await`) so a decode error from
-                // .next() is told apart from a body error: nextTolerant swallows
-                // the former (damaged source tail -> stop this segment, keep what
-                // we have), while drawMain / muxer add / abort still propagate.
-                const sampleIter = videoSink.samples(seg.startInFile, seg.endInFile)[Symbol.asyncIterator]();
-                for (;;) {
-                    const pull = await nextTolerant(sampleIter);
-                    if (pull.done) {
-                        if (pull.truncated) {
-                            decodeTruncated = true;
-                            log.warn("decode stopped early on damaged source", { file: seg.file.name, framesDone });
-                            await sampleIter.return?.();
+                const runSegmentVideo = async (): Promise<void> => {
+                    // Manual iterator drive (not `for await`) so a decode error from
+                    // .next() is told apart from a body error: nextTolerant swallows
+                    // the former (damaged source tail -> stop this segment, keep what
+                    // we have), while drawMain / muxer add / abort still propagate.
+                    const sampleIter = videoSink.samples(seg.startInFile, seg.endInFile)[Symbol.asyncIterator]();
+                    for (;;) {
+                        const pull = await nextTolerant(sampleIter);
+                        if (pull.done) {
+                            if (pull.truncated) {
+                                decodeTruncated = true;
+                                log.warn("decode stopped early on damaged source", { file: seg.file.name, framesDone });
+                                await sampleIter.return?.();
+                            }
+                            break;
                         }
-                        break;
-                    }
-                    const sample = pull.value;
-                    // Decide keep/skip and, for kept frames, ISSUE the map snapshot
-                    // (it renders on the main thread while flushFrame(prev) encodes
-                    // below). try/finally closes a SKIPPED sample here; a KEPT sample
-                    // is handed to `pending` and closed later by flushFrame. The
-                    // snapshot request is the last thing issued before keep=true,
-                    // with no await/throw after it, so a kept frame always reaches
-                    // `pending` and its in-flight bitmap is never orphaned here.
-                    let keep = false;
-                    let outTs = 0;
-                    let frameContentSec = 0;
-                    let framePos: FramePos | null = null;
-                    let snapPromise: Promise<ImageBitmap> | null = null;
-                    try {
-                        if (signal.aborted) {
-                            throw new DOMException("aborted", "AbortError");
-                        }
+                        const sample = pull.value;
+                        // Decide keep/skip and, for kept frames, ISSUE the map snapshot
+                        // (it renders on the main thread while flushFrame(prev) encodes
+                        // below). try/finally closes a SKIPPED sample here; a KEPT sample
+                        // is handed to `pending` and closed later by flushFrame. The
+                        // snapshot request is the last thing issued before keep=true,
+                        // with no await/throw after it, so a kept frame always reaches
+                        // `pending` and its in-flight bitmap is never orphaned here.
+                        let keep = false;
+                        let outTs = 0;
+                        let frameContentSec = 0;
+                        let framePos: FramePos | null = null;
+                        let snapPromise: Promise<ImageBitmap> | null = null;
+                        try {
+                            if (signal.aborted) {
+                                throw new DOMException("aborted", "AbortError");
+                            }
 
-                        // Source-relative timestamp. Guard: drop samples whose
-                        // timestamp is before startInFile (mediabunny snapped to
-                        // the keyframe BEFORE startInFile); without this a negative
-                        // ts would reach the muxer. Computed before any compositing
-                        // so dropped/skipped frames are never drawn (wasted work).
-                        const srcRelTs = videoAccumOutSec + (sample.timestamp - seg.startInFile);
-                        if (srcRelTs < -1e-3) {
-                            continue;
-                        }
+                            // Source-relative timestamp. Guard: drop samples whose
+                            // timestamp is before startInFile (mediabunny snapped to
+                            // the keyframe BEFORE startInFile); without this a negative
+                            // ts would reach the muxer. Computed before any compositing
+                            // so dropped/skipped frames are never drawn (wasted work).
+                            const srcRelTs = segBaseOutSec + (sample.timestamp - seg.startInFile);
+                            if (srcRelTs < -1e-3) {
+                                continue;
+                            }
 
-                        // Timelapse frame-drop: keep one frame every speedFactor.
-                        // At 1x this keeps every frame. Skipped frames still decode
-                        // (inter-frame deps) but are not drawn or encoded, and never
-                        // enter the decode-ahead pipeline.
-                        inRangeFrameIdx++;
-                        if (speedFactor > 1 && inRangeFrameIdx % speedFactor !== 0) {
-                            continue;
-                        }
+                            // Timelapse frame-drop: keep one frame every speedFactor.
+                            // At 1x this keeps every frame. Skipped frames still decode
+                            // (inter-frame deps) but are not drawn or encoded, and never
+                            // enter the decode-ahead pipeline.
+                            inRangeFrameIdx++;
+                            if (speedFactor > 1 && inRangeFrameIdx % speedFactor !== 0) {
+                                continue;
+                            }
 
-                        // Output (muxer) timestamp: compress by speedFactor. Clamp
-                        // near-zero double-precision drift to 0, else
-                        // muxer.validateAndNormalize throws "Timestamps must be
-                        // non-negative".
-                        outTs = Math.max(0, srcRelTs) / speedFactor;
+                            // Output (muxer) timestamp: compress by speedFactor. Clamp
+                            // near-zero double-precision drift to 0, else
+                            // muxer.validateAndNormalize throws "Timestamps must be
+                            // non-negative".
+                            outTs = Math.max(0, srcRelTs) / speedFactor;
 
-                        // The frame's ABSOLUTE footage-axis position. Shared by
-                        // the GPS overlays (below) and the blur-region resolve
-                        // in flushFrame. Deliberately NOT the startTripSec+
-                        // srcRelTs form: videoAccumOutSec collapses inter-segment
-                        // gaps, so with a missing file mid-range every post-gap
-                        // frame would resolve GPS / blur rects from a moment
-                        // earlier by the gap length (stale overlays).
-                        frameContentSec = seg.tripStart + sample.timestamp;
-                        if (overlays && anyOverlay) {
-                            // Interpolate GPS once per frame; reuse for all widgets.
-                            // Skip if the interpolated record is non-finite -
-                            // active=false records or upstream parser quirks can
-                            // produce NaN lat/lon; painting them gives "NaN km/h"
-                            // text or breaks zoom math in the map snapshotter.
-                            // Map footage-axis position to wall-clock UTC
-                            // (skipping paused time) for GPS interpolation.
-                            const frameUtc = contentToWallUtc(source.trip.timeline, frameContentSec);
-                            const base = interpolatePosition(overlays.gpsRecords, frameUtc);
-                            if (base && isFinitePosition(base)) {
-                                const span = rangeEndUtc - rangeStartUtc;
-                                const progress = span > 0 ? (frameUtc - rangeStartUtc) / span : 0;
-                                framePos = resolveFramePos({
-                                    records: overlays.gpsRecords,
-                                    base,
-                                    cumulative: overlays.cumulativeDistanceM,
-                                    distanceBaseM,
-                                    frameUtc,
-                                    progress,
-                                });
-                                // Issue (do NOT await) the snapshot now so it renders
-                                // on the main thread while flushFrame(prev) composites
-                                // + encodes below - this is the decode-ahead overlap
-                                // that the prewarm + synchronous redraw make cheap.
-                                // It is consumed one iteration later in flushFrame.
-                                if (overlays.map && mapSnapshotter && !mapOverlayFailed) {
-                                    snapPromise = mapSnapshotter.snapshot({
-                                        lat: base.lat,
-                                        lon: base.lon,
-                                        bearingDeg: base.bearingDeg,
-                                        zoomKm: overlays.map.zoomKm,
-                                        speedMs: base.speedMs,
+                            // The frame's ABSOLUTE footage-axis position. Shared by
+                            // the GPS overlays (below) and the blur-region resolve
+                            // in flushFrame. Deliberately NOT the startTripSec+
+                            // srcRelTs form: videoAccumOutSec collapses inter-segment
+                            // gaps, so with a missing file mid-range every post-gap
+                            // frame would resolve GPS / blur rects from a moment
+                            // earlier by the gap length (stale overlays).
+                            frameContentSec = seg.tripStart + sample.timestamp;
+                            if (overlays && anyOverlay) {
+                                // Interpolate GPS once per frame; reuse for all widgets.
+                                // Skip if the interpolated record is non-finite -
+                                // active=false records or upstream parser quirks can
+                                // produce NaN lat/lon; painting them gives "NaN km/h"
+                                // text or breaks zoom math in the map snapshotter.
+                                // Map footage-axis position to wall-clock UTC
+                                // (skipping paused time) for GPS interpolation.
+                                const frameUtc = contentToWallUtc(source.trip.timeline, frameContentSec);
+                                const base = interpolatePosition(overlays.gpsRecords, frameUtc);
+                                if (base && isFinitePosition(base)) {
+                                    const span = rangeEndUtc - rangeStartUtc;
+                                    const progress = span > 0 ? (frameUtc - rangeStartUtc) / span : 0;
+                                    framePos = resolveFramePos({
+                                        records: overlays.gpsRecords,
+                                        base,
+                                        cumulative: overlays.cumulativeDistanceM,
+                                        distanceBaseM,
+                                        frameUtc,
+                                        progress,
                                     });
+                                    // Issue (do NOT await) the snapshot now so it renders
+                                    // on the main thread while flushFrame(prev) composites
+                                    // + encodes below - this is the decode-ahead overlap
+                                    // that the prewarm + synchronous redraw make cheap.
+                                    // It is consumed one iteration later in flushFrame.
+                                    if (overlays.map && mapSnapshotter && !mapOverlayFailed) {
+                                        snapPromise = mapSnapshotter.snapshot({
+                                            lat: base.lat,
+                                            lon: base.lon,
+                                            bearingDeg: base.bearingDeg,
+                                            zoomKm: overlays.map.zoomKm,
+                                            speedMs: base.speedMs,
+                                        });
+                                    }
                                 }
                             }
+                            keep = true;
+                        } finally {
+                            if (!keep) sample.close();
                         }
-                        keep = true;
-                    } finally {
-                        if (!keep) sample.close();
-                    }
 
-                    // Publish THIS frame as pending BEFORE flushing the previous one:
-                    // if flushFrame throws (abort mid-encode), the segment finally
-                    // then still sees this frame in `pending` and closes its sample +
-                    // drains its snapshot (flushFrame closes the previous frame itself).
-                    const prev = pending;
-                    pending = {
-                        sample,
-                        outTs,
-                        duration: sample.duration,
-                        contentSec: frameContentSec,
-                        framePos,
-                        snapPromise,
-                    };
-                    if (prev) await flushFrame(prev);
-                }
-                // Flush the segment's last decoded frame before the audio loop, so
-                // `pending` never crosses a segment boundary (keeps output ordered).
-                if (pending) {
-                    await flushFrame(pending);
-                    pending = null;
-                }
+                        // Publish THIS frame as pending BEFORE flushing the previous one:
+                        // if flushFrame throws (abort mid-encode), the segment finally
+                        // then still sees this frame in `pending` and closes its sample +
+                        // drains its snapshot (flushFrame closes the previous frame itself).
+                        const prev = decodeAhead.frame;
+                        decodeAhead.frame = {
+                            sample,
+                            outTs,
+                            duration: sample.duration,
+                            contentSec: frameContentSec,
+                            framePos,
+                            snapPromise,
+                        };
+                        if (prev) await flushFrame(prev);
+                    }
+                    // Flush the segment's last decoded frame here, so `pending` never
+                    // crosses a segment boundary (keeps output ordered).
+                    if (decodeAhead.frame) {
+                        await flushFrame(decodeAhead.frame);
+                        decodeAhead.frame = null;
+                    }
+                };
 
                 // === Audio for this segment ===
                 // Single-channel segments are back-to-back on the output axis
-                // (videoAccumOutSec); the feed helpers cover an audio-less segment
+                // (segBaseOutSec); the feed helpers cover an audio-less segment
                 // (silence on encode, a gap on passthrough) internally.
-                if (audioPlan && output.withAudio) {
+                const runSegmentAudio = async (): Promise<void> => {
+                    if (!audioPlan || !output.withAudio) return;
                     if (audioPlan.mode === "passthrough") {
                         // Stream-copy the source AAC/MP3 packets - no encoder.
                         const res = await feedSegmentAudioCopy({
@@ -565,7 +623,7 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
                             input: audioInput,
                             startInFile: seg.startInFile,
                             endInFile: seg.endInFile,
-                            segBaseOutSec: videoAccumOutSec,
+                            segBaseOutSec,
                             audioLastEndSec: audioCopyLastEndSec,
                             pushDecoderConfig: !audioConfigPushed,
                             signal,
@@ -585,7 +643,7 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
                             reader,
                             startInFile: seg.startInFile,
                             endInFile: seg.endInFile,
-                            segBaseOutSec: videoAccumOutSec,
+                            segBaseOutSec,
                             silenceFormat: audioPlan.silenceFormat,
                             signal,
                         });
@@ -595,7 +653,7 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
                             input: audioInput,
                             startInFile: seg.startInFile,
                             endInFile: seg.endInFile,
-                            segBaseOutSec: videoAccumOutSec,
+                            segBaseOutSec,
                             silenceFormat: audioPlan.silenceFormat,
                             signal,
                             fileName: seg.file.name,
@@ -604,21 +662,29 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
                             },
                         });
                     }
-                }
+                };
+
+                // Concurrently, not back-to-back. The two producers feed separate
+                // muxer tracks (mediabunny guards the muxer with its own mutex) and
+                // share nothing else, so the audio pass used to leave the video
+                // decoder and encoder completely idle once per segment - on a trip
+                // split into per-minute files that is a stall per file.
+                await joinAllOrThrowFirst([runSegmentVideo(), runSegmentAudio()]);
             } finally {
                 // Decode-ahead leftover: on an error/abort that escaped the loop
-                // before the final flush, `pending` still holds one decoded frame
+                // before the final flush, the box still holds one decoded frame
                 // and its in-flight snapshot. Close them so we neither leak a
                 // VideoSample (Chromium's ~60-frame decoder queue -> stall) nor a
-                // GPU bitmap. No-op on the normal path (pending was nulled above).
-                if (pending) {
+                // GPU bitmap. No-op on the normal path (the box was nulled above).
+                const leftover = decodeAhead.frame;
+                if (leftover) {
                     try {
-                        pending.sample.close();
+                        leftover.sample.close();
                     } catch {
                         /* already closed */
                     }
-                    pending.snapPromise?.then((bm) => bm.close()).catch(() => {});
-                    pending = null;
+                    leftover.snapPromise?.then((bm) => bm.close()).catch(() => {});
+                    decodeAhead.frame = null;
                 }
                 // firstInput (segIdx 0) is held for the whole loop and disposed
                 // once in the finally below, not here. The audio input is a
@@ -658,6 +724,7 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
 
     log.info("transcode done", {
         framesEncoded: framesDone,
+        framesDirect,
         durationSec: round2(outputDurationSec),
         sizeBytes: totalBytesWritten,
         // Requested vs delivered. A "the export looks soft" report is otherwise

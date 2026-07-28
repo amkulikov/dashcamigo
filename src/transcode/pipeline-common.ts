@@ -15,8 +15,10 @@ import {
     Mp4OutputFormat,
     Output,
     StreamTarget,
+    VideoSampleSource,
     type AudioCodec,
     type VideoCodec,
+    type VideoEncodingConfig,
 } from "mediabunny";
 
 import { createLogger } from "../log.js";
@@ -458,14 +460,11 @@ export async function feedSegmentAudioCopy(opts: {
 }
 
 /**
- * H.264 video source with the encoder config both pipelines must share - one
- * place so a tuning fix cannot land on one pipeline only. A CanvasSource bound
- * to the composition canvas: the encode loop calls `add(timestamp, duration)`
- * and mediabunny captures the canvas state at that call (no per-frame
- * VideoSample to allocate and close).
+ * The encoder config both pipelines and both source flavours must share - one
+ * place so a tuning fix cannot land on one path only.
  */
-export function createH264VideoSource(canvas: OffscreenCanvas, bitrate: number): CanvasSource {
-    return new CanvasSource(canvas, {
+function h264EncodingConfig(bitrate: number): VideoEncodingConfig {
+    return {
         // mediabunny's universal H.264 type - it selects the avcC
         // profile/level automatically from the encoded stream.
         codec: "avc" satisfies VideoCodec,
@@ -491,7 +490,30 @@ export function createH264VideoSource(canvas: OffscreenCanvas, bitrate: number):
         // without a hardware H.264 encoder (headless Linux CI, software-only
         // desktops) instead of degrading. See media-source.js encoder init.
         hardwareAcceleration: "no-preference",
-    });
+    };
+}
+
+/**
+ * H.264 source bound to the composition canvas: the encode loop calls
+ * `add(timestamp, duration)` and mediabunny captures the canvas state at that
+ * call (no per-frame VideoSample to allocate and close). Used wherever every
+ * frame is composited - the split pipeline, and single-channel exports that
+ * paint anything on top of the video.
+ */
+export function createH264VideoSource(canvas: OffscreenCanvas, bitrate: number): CanvasSource {
+    return new CanvasSource(canvas, h264EncodingConfig(bitrate));
+}
+
+/**
+ * H.264 source fed whole VideoSamples. Same encoder config as the canvas
+ * flavour; the difference is upstream - a decoded frame that needs no
+ * compositing can go to the encoder as-is, skipping the decode -> RGBA canvas ->
+ * capture round trip (two colour conversions and a texture copy per frame). The
+ * caller wraps its canvas in a VideoSample for the frames that DO need
+ * compositing, which is exactly what CanvasSource does internally.
+ */
+export function createH264SampleSource(bitrate: number): VideoSampleSource {
+    return new VideoSampleSource(h264EncodingConfig(bitrate));
 }
 
 /**
@@ -743,4 +765,49 @@ export function createMp4StreamOutput(
         format: new Mp4OutputFormat({ fastStart: false, onMoov }),
         target: new StreamTarget(targetWritable, { chunked: true, chunkSize: 4 * 1024 * 1024 }),
     });
+}
+
+/**
+ * Awaits every task, then rethrows the first rejection. Used to run a segment's
+ * video and audio producers concurrently: Promise.all would surface the first
+ * failure while the other task is still reading the segment's inputs (which the
+ * caller's finally is about to dispose), and would leave its rejection
+ * unhandled. Settling both first costs nothing on the happy path - both tasks
+ * observe the same AbortSignal.
+ */
+export async function joinAllOrThrowFirst(tasks: ReadonlyArray<Promise<void>>): Promise<void> {
+    const results = await Promise.allSettled(tasks);
+    for (const r of results) {
+        if (r.status === "rejected") throw r.reason;
+    }
+}
+
+/**
+ * True when a decoded frame is already exactly the output frame, so it can go to
+ * the encoder untouched instead of through the composition canvas.
+ *
+ * All four dimensions are compared, not just the display pair: a non-square
+ * pixel aspect (coded != display) or a rotation flag is applied by
+ * VideoSample.draw, and an encoder fed the raw frame would silently drop it -
+ * the export would come out squashed or sideways. Callers must separately
+ * establish that nothing is painted on top (overlays, watermark, blur, crop).
+ */
+export function frameNeedsNoComposite(
+    frame: {
+        rotation: number;
+        codedWidth: number;
+        codedHeight: number;
+        displayWidth: number;
+        displayHeight: number;
+    },
+    outputW: number,
+    outputH: number,
+): boolean {
+    return (
+        frame.rotation === 0 &&
+        frame.codedWidth === outputW &&
+        frame.codedHeight === outputH &&
+        frame.displayWidth === outputW &&
+        frame.displayHeight === outputH
+    );
 }

@@ -60,6 +60,7 @@ import {
     feedSegmentAudioAdpcm,
     feedSegmentAudioCopy,
     finalizeTranscodeOutput,
+    joinAllOrThrowFirst,
     nextTolerant,
     round2,
 } from "./pipeline-common.js";
@@ -559,142 +560,154 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
         // Main loop over output frames: fixed fps, each tick fetches a sample
         // from every slot in parallel via Promise.all - independent decoders +
         // one composition canvas. Watch the WebCodecs decoder limit (~10-16):
-        // at split-4 + audio + encoder the peak is 6 resources simultaneously,
-        // which is safe. Add throttling if expanding further.
+        // at split-4, the concurrent audio pass and the encoder the peak is 7
+        // resources simultaneously, which is safe. Add throttling if expanding
+        // further.
         // Each output tick advances the source clock by speedFactor frames, so
         // the same trip range is covered in framesTotal/speedFactor ticks. outTs
         // is the (compressed) muxer timestamp; tripTimeSec is the real source
         // time used to fetch slot samples and interpolate GPS overlays.
         const srcStep = frameDur * speedFactor;
-        for (let f = 0; f < framesTotal; f++) {
-            if (signal.aborted) throw new DOMException("aborted", "AbortError");
-            const outTs = f * frameDur;
-            const tripTimeSec = source.startTripSec + f * srcStep;
+        const runVideoTicks = async (): Promise<void> => {
+            for (let f = 0; f < framesTotal; f++) {
+                if (signal.aborted) throw new DOMException("aborted", "AbortError");
+                const outTs = f * frameDur;
+                const tripTimeSec = source.startTripSec + f * srcStep;
 
-            // GPS interpolation and the map snapshot request both depend
-            // only on (lat, lon, bearing, zoom) - not on decoded pixels.
-            // Compute them BEFORE the Promise.all wait so the snapshot
-            // round-trip (5-30 ms to main thread and back) overlaps slot
-            // decode instead of sitting in series after it. Without this
-            // overlap, split-4 + map exports run ~2-3x slower because the
-            // hot loop pays full snapshot latency per frame on top of
-            // decode and composite.
-            const overlays = output.overlays;
-            const overlayMapOpts = overlays?.map ?? null;
-            let pos: ReturnType<typeof interpolatePosition> = null;
-            // tripTimeSec is an absolute footage-axis position; map it to
-            // wall-clock UTC (skipping pauses) once per frame, reused for GPS
-            // interpolation and resolveFramePos below.
-            const frameUtc = overlays ? contentToWallUtc(source.trip.timeline, tripTimeSec) : 0;
-            if (overlays && hasAnyOverlay(overlays)) {
-                const interp = interpolatePosition(overlays.gpsRecords, frameUtc);
-                if (interp && isFinitePosition(interp)) pos = interp;
-            }
-            let snapPromise: Promise<ImageBitmap> | null = null;
-            if (pos && overlayMapOpts && mapSnapshotter && !mapOverlayFailed) {
-                snapPromise = mapSnapshotter.snapshot({
-                    lat: pos.lat,
-                    lon: pos.lon,
-                    bearingDeg: pos.bearingDeg,
-                    zoomKm: overlayMapOpts.zoomKm,
-                    speedMs: pos.speedMs,
-                });
-                // Attach a noop drain so a rejection that lands BEFORE we
-                // reach `await snapPromise` (e.g. Promise.all below throws
-                // first) does not surface as "unhandled promise rejection".
-                // The real rejection is still observed by the await in the
-                // consumer block - .catch() returns a new promise, it does
-                // not swallow the original one.
-                snapPromise.catch(() => {});
-            }
-
-            let samples: (VideoSample | null)[];
-            try {
-                samples = await Promise.all(
-                    source.slotChannels.map((_, slotIdx) => getSlotSampleForFrame(slotIdx, tripTimeSec)),
-                );
-            } catch (err) {
-                // Slot decode / abort threw before the snapshot was consumed.
-                // Free the in-flight bitmap (consumeMapSnapshot is below and now
-                // unreachable) so a cancelled split+map export does not strand a
-                // GPU surface per outstanding frame.
-                if (snapPromise)
-                    snapPromise.then(
-                        (b) => b.close(),
-                        () => {},
-                    );
-                throw err;
-            }
-
-            // Master (slot 0) decode died on a damaged tail: it can no longer
-            // supply frames, so end the clip here instead of padding the
-            // remaining ticks with its last frozen frame. A non-master slot that
-            // died just keeps showing rt.current until this point. decodeTruncated
-            // was already latched in advanceSlotIter.
-            if (slotRuntimes[0]!.decodeFailed) {
-                // Same as the catch above: the snapshot for this frame is never
-                // consumed past the break, so release it.
-                if (snapPromise)
-                    snapPromise.then(
-                        (b) => b.close(),
-                        () => {},
-                    );
-                log.warn("split master slot exhausted by decode failure, finalizing early", { framesDone });
-                break;
-            }
-
-            // Compose split-screen directly into the final output canvas.
-            // Blur rects resolve at the content time of the frame each slot
-            // ACTUALLY shows - a slot in a gap (or after a decode failure)
-            // keeps displaying an earlier frozen frame, and resolving at the
-            // tick time would leave a frozen plate uncovered whenever the
-            // region span does not include the gap.
-            const slotRegionBlurs = output.blurRegions?.length
-                ? source.slotChannels.map((ch, slotIdx) => {
-                      const rt = slotRuntimes[slotIdx]!;
-                      const shownSec = rt.current ? rt.segTripStart + rt.current.timestamp : tripTimeSec;
-                      return resolveRegionBlursAt(output.blurRegions ?? [], ch, shownSec);
-                  })
-                : undefined;
-            drawSplitScreen(ctx, samples, splitSlots, widthPx, heightPx, output.slotCrops, renderOpts, slotRegionBlurs);
-            if (pos && overlays) {
-                const span = rangeEndUtc - rangeStartUtc;
-                const progress = span > 0 ? (frameUtc - rangeStartUtc) / span : 0;
-                const framePos = resolveFramePos({
-                    records: overlays.gpsRecords,
-                    base: pos,
-                    cumulative: overlays.cumulativeDistanceM,
-                    distanceBaseM,
-                    frameUtc,
-                    progress,
-                });
-                drawTelemetryOverlays(ctx, widthPx, heightPx, overlays, framePos);
-                if (snapPromise && overlayMapOpts) {
-                    // Failure policy (disable-for-the-run latch, AbortError
-                    // rethrow, bitmap close) lives in the shared
-                    // consumeMapSnapshot.
-                    mapOverlayFailed = await consumeMapSnapshot(
-                        ctx,
-                        widthPx,
-                        heightPx,
-                        overlayMapOpts,
-                        snapPromise,
-                        framesDone,
-                    );
+                // GPS interpolation and the map snapshot request both depend
+                // only on (lat, lon, bearing, zoom) - not on decoded pixels.
+                // Compute them BEFORE the Promise.all wait so the snapshot
+                // round-trip (5-30 ms to main thread and back) overlaps slot
+                // decode instead of sitting in series after it. Without this
+                // overlap, split-4 + map exports run ~2-3x slower because the
+                // hot loop pays full snapshot latency per frame on top of
+                // decode and composite.
+                const overlays = output.overlays;
+                const overlayMapOpts = overlays?.map ?? null;
+                let pos: ReturnType<typeof interpolatePosition> = null;
+                // tripTimeSec is an absolute footage-axis position; map it to
+                // wall-clock UTC (skipping pauses) once per frame, reused for GPS
+                // interpolation and resolveFramePos below.
+                const frameUtc = overlays ? contentToWallUtc(source.trip.timeline, tripTimeSec) : 0;
+                if (overlays && hasAnyOverlay(overlays)) {
+                    const interp = interpolatePosition(overlays.gpsRecords, frameUtc);
+                    if (interp && isFinitePosition(interp)) pos = interp;
                 }
-            }
-            // Watermark last - on top of scrim + telemetry.
-            if (output.watermarkAnchor) {
-                drawWatermark(ctx, widthPx, heightPx, output.watermarkAnchor);
-            }
+                let snapPromise: Promise<ImageBitmap> | null = null;
+                if (pos && overlayMapOpts && mapSnapshotter && !mapOverlayFailed) {
+                    snapPromise = mapSnapshotter.snapshot({
+                        lat: pos.lat,
+                        lon: pos.lon,
+                        bearingDeg: pos.bearingDeg,
+                        zoomKm: overlayMapOpts.zoomKm,
+                        speedMs: pos.speedMs,
+                    });
+                    // Attach a noop drain so a rejection that lands BEFORE we
+                    // reach `await snapPromise` (e.g. Promise.all below throws
+                    // first) does not surface as "unhandled promise rejection".
+                    // The real rejection is still observed by the await in the
+                    // consumer block - .catch() returns a new promise, it does
+                    // not swallow the original one.
+                    snapPromise.catch(() => {});
+                }
 
-            // CanvasSource captures the canvas synchronously here. The per-slot
-            // source samples are borrowed from rt.current (closed on the next iter
-            // advance or in the slots' finally), so there is nothing to close here.
-            await videoSource.add(outTs, frameDur);
-            framesDone++;
-            reportProgress(framesDone, totalBytesWritten, false);
-        }
+                let samples: (VideoSample | null)[];
+                try {
+                    samples = await Promise.all(
+                        source.slotChannels.map((_, slotIdx) => getSlotSampleForFrame(slotIdx, tripTimeSec)),
+                    );
+                } catch (err) {
+                    // Slot decode / abort threw before the snapshot was consumed.
+                    // Free the in-flight bitmap (consumeMapSnapshot is below and now
+                    // unreachable) so a cancelled split+map export does not strand a
+                    // GPU surface per outstanding frame.
+                    if (snapPromise)
+                        snapPromise.then(
+                            (b) => b.close(),
+                            () => {},
+                        );
+                    throw err;
+                }
+
+                // Master (slot 0) decode died on a damaged tail: it can no longer
+                // supply frames, so end the clip here instead of padding the
+                // remaining ticks with its last frozen frame. A non-master slot that
+                // died just keeps showing rt.current until this point. decodeTruncated
+                // was already latched in advanceSlotIter.
+                if (slotRuntimes[0]!.decodeFailed) {
+                    // Same as the catch above: the snapshot for this frame is never
+                    // consumed past the break, so release it.
+                    if (snapPromise)
+                        snapPromise.then(
+                            (b) => b.close(),
+                            () => {},
+                        );
+                    log.warn("split master slot exhausted by decode failure, finalizing early", { framesDone });
+                    break;
+                }
+
+                // Compose split-screen directly into the final output canvas.
+                // Blur rects resolve at the content time of the frame each slot
+                // ACTUALLY shows - a slot in a gap (or after a decode failure)
+                // keeps displaying an earlier frozen frame, and resolving at the
+                // tick time would leave a frozen plate uncovered whenever the
+                // region span does not include the gap.
+                const slotRegionBlurs = output.blurRegions?.length
+                    ? source.slotChannels.map((ch, slotIdx) => {
+                          const rt = slotRuntimes[slotIdx]!;
+                          const shownSec = rt.current ? rt.segTripStart + rt.current.timestamp : tripTimeSec;
+                          return resolveRegionBlursAt(output.blurRegions ?? [], ch, shownSec);
+                      })
+                    : undefined;
+                drawSplitScreen(
+                    ctx,
+                    samples,
+                    splitSlots,
+                    widthPx,
+                    heightPx,
+                    output.slotCrops,
+                    renderOpts,
+                    slotRegionBlurs,
+                );
+                if (pos && overlays) {
+                    const span = rangeEndUtc - rangeStartUtc;
+                    const progress = span > 0 ? (frameUtc - rangeStartUtc) / span : 0;
+                    const framePos = resolveFramePos({
+                        records: overlays.gpsRecords,
+                        base: pos,
+                        cumulative: overlays.cumulativeDistanceM,
+                        distanceBaseM,
+                        frameUtc,
+                        progress,
+                    });
+                    drawTelemetryOverlays(ctx, widthPx, heightPx, overlays, framePos);
+                    if (snapPromise && overlayMapOpts) {
+                        // Failure policy (disable-for-the-run latch, AbortError
+                        // rethrow, bitmap close) lives in the shared
+                        // consumeMapSnapshot.
+                        mapOverlayFailed = await consumeMapSnapshot(
+                            ctx,
+                            widthPx,
+                            heightPx,
+                            overlayMapOpts,
+                            snapPromise,
+                            framesDone,
+                        );
+                    }
+                }
+                // Watermark last - on top of scrim + telemetry.
+                if (output.watermarkAnchor) {
+                    drawWatermark(ctx, widthPx, heightPx, output.watermarkAnchor);
+                }
+
+                // CanvasSource captures the canvas synchronously here. The per-slot
+                // source samples are borrowed from rt.current (closed on the next iter
+                // advance or in the slots' finally), so there is nothing to close here.
+                await videoSource.add(outTs, frameDur);
+                framesDone++;
+                reportProgress(framesDone, totalBytesWritten, false);
+            }
+        };
 
         // Audio from master segments. Each segment's audio anchors at its
         // ABSOLUTE content-axis position relative to the range start - the same
@@ -703,103 +716,112 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
         // channel is missing a file mid-range (TripFrame.channels is Partial, so
         // that input is structurally possible): every post-gap audio sample
         // would play earlier than its video.
-        if (audioPlan && output.withAudio) {
-            if (audioPlan.mode === "passthrough") {
-                // Stream-copy master AAC/MP3 packets - no encoder, no silence
-                // synthesis. A master-channel gap is just an audio hole; the
-                // absolute segBaseOutSec keeps later audio aligned and
-                // feedSegmentAudioCopy's max(segBaseOutSec, audioLastEndSec) base
-                // keeps the track monotonic.
-                let audioCopyLastEndSec = 0;
-                let audioConfigPushed = false;
-                for (const seg of masterSegments) {
-                    if (signal.aborted) throw new DOMException("aborted", "AbortError");
-                    const segBaseOutSec = Math.max(0, seg.tripStart + seg.startInFile - source.startTripSec);
-                    const input = new Input({ source: new BlobSource(seg.file), formats: VIDEO_INPUT_FORMATS });
-                    try {
-                        const res = await feedSegmentAudioCopy({
-                            audioSource: audioPlan.source,
-                            input,
-                            startInFile: seg.startInFile,
-                            endInFile: seg.endInFile,
-                            segBaseOutSec,
-                            audioLastEndSec: audioCopyLastEndSec,
-                            pushDecoderConfig: !audioConfigPushed,
-                            signal,
-                            onTruncated: () => {
-                                decodeTruncated = true;
-                            },
-                        });
-                        audioCopyLastEndSec = res.audioLastEndSec;
-                        if (res.configPushed) audioConfigPushed = true;
-                    } finally {
-                        input.dispose();
-                    }
-                }
-            } else {
-                // Encode path: re-encode master audio, filling master-channel gaps
-                // AND audio-less segments with silence so the muxer sees a
-                // continuous timeline aligned with the composited video.
-                const silenceFormat = audioPlan.silenceFormat;
-                let nextExpectedOutSec = 0;
-                for (const [segIdx, seg] of masterSegments.entries()) {
-                    if (signal.aborted) throw new DOMException("aborted", "AbortError");
-                    const segDur = seg.endInFile - seg.startInFile;
-                    const segBaseOutSec = Math.max(0, seg.tripStart + seg.startInFile - source.startTripSec);
-                    if (segBaseOutSec > nextExpectedOutSec + 1e-3) {
-                        // Master-channel gap: cover it with silence so the muxer
-                        // sees a continuous audio timeline and later segments stay
-                        // aligned with their video. Silence at the tracked source
-                        // format, not 48k/2: it is fed before the source's transform
-                        // like a real sample, and the input-constancy guard rejects
-                        // a format change.
-                        await emitSilence(
-                            audioPlan.source,
-                            nextExpectedOutSec,
-                            segBaseOutSec - nextExpectedOutSec,
-                            silenceFormat.sampleRate,
-                            silenceFormat.numberOfChannels,
-                            signal,
-                        );
-                    }
-                    if (audioPlan.adpcmReader) {
-                        // ADPCM master: decode this segment ourselves (mediabunny
-                        // can't). Reuse the first reader for segment 0; open a fresh
-                        // one per later file. No mediabunny Input needed.
-                        const reader = segIdx === 0 ? audioPlan.adpcmReader : await openAdpcmAudioAuto(seg.file);
-                        await feedSegmentAudioAdpcm({
-                            audioSource: audioPlan.source,
-                            reader,
-                            startInFile: seg.startInFile,
-                            endInFile: seg.endInFile,
-                            segBaseOutSec,
-                            silenceFormat,
-                            signal,
-                        });
-                    } else {
+        const runAudio = async (): Promise<void> => {
+            if (audioPlan && output.withAudio) {
+                if (audioPlan.mode === "passthrough") {
+                    // Stream-copy master AAC/MP3 packets - no encoder, no silence
+                    // synthesis. A master-channel gap is just an audio hole; the
+                    // absolute segBaseOutSec keeps later audio aligned and
+                    // feedSegmentAudioCopy's max(segBaseOutSec, audioLastEndSec) base
+                    // keeps the track monotonic.
+                    let audioCopyLastEndSec = 0;
+                    let audioConfigPushed = false;
+                    for (const seg of masterSegments) {
+                        if (signal.aborted) throw new DOMException("aborted", "AbortError");
+                        const segBaseOutSec = Math.max(0, seg.tripStart + seg.startInFile - source.startTripSec);
                         const input = new Input({ source: new BlobSource(seg.file), formats: VIDEO_INPUT_FORMATS });
                         try {
-                            await feedSegmentAudio({
+                            const res = await feedSegmentAudioCopy({
                                 audioSource: audioPlan.source,
                                 input,
                                 startInFile: seg.startInFile,
                                 endInFile: seg.endInFile,
                                 segBaseOutSec,
-                                silenceFormat,
+                                audioLastEndSec: audioCopyLastEndSec,
+                                pushDecoderConfig: !audioConfigPushed,
                                 signal,
-                                fileName: seg.file.name,
                                 onTruncated: () => {
                                     decodeTruncated = true;
                                 },
                             });
+                            audioCopyLastEndSec = res.audioLastEndSec;
+                            if (res.configPushed) audioConfigPushed = true;
                         } finally {
                             input.dispose();
                         }
                     }
-                    nextExpectedOutSec = segBaseOutSec + segDur;
+                } else {
+                    // Encode path: re-encode master audio, filling master-channel gaps
+                    // AND audio-less segments with silence so the muxer sees a
+                    // continuous timeline aligned with the composited video.
+                    const silenceFormat = audioPlan.silenceFormat;
+                    let nextExpectedOutSec = 0;
+                    for (const [segIdx, seg] of masterSegments.entries()) {
+                        if (signal.aborted) throw new DOMException("aborted", "AbortError");
+                        const segDur = seg.endInFile - seg.startInFile;
+                        const segBaseOutSec = Math.max(0, seg.tripStart + seg.startInFile - source.startTripSec);
+                        if (segBaseOutSec > nextExpectedOutSec + 1e-3) {
+                            // Master-channel gap: cover it with silence so the muxer
+                            // sees a continuous audio timeline and later segments stay
+                            // aligned with their video. Silence at the tracked source
+                            // format, not 48k/2: it is fed before the source's transform
+                            // like a real sample, and the input-constancy guard rejects
+                            // a format change.
+                            await emitSilence(
+                                audioPlan.source,
+                                nextExpectedOutSec,
+                                segBaseOutSec - nextExpectedOutSec,
+                                silenceFormat.sampleRate,
+                                silenceFormat.numberOfChannels,
+                                signal,
+                            );
+                        }
+                        if (audioPlan.adpcmReader) {
+                            // ADPCM master: decode this segment ourselves (mediabunny
+                            // can't). Reuse the first reader for segment 0; open a fresh
+                            // one per later file. No mediabunny Input needed.
+                            const reader = segIdx === 0 ? audioPlan.adpcmReader : await openAdpcmAudioAuto(seg.file);
+                            await feedSegmentAudioAdpcm({
+                                audioSource: audioPlan.source,
+                                reader,
+                                startInFile: seg.startInFile,
+                                endInFile: seg.endInFile,
+                                segBaseOutSec,
+                                silenceFormat,
+                                signal,
+                            });
+                        } else {
+                            const input = new Input({ source: new BlobSource(seg.file), formats: VIDEO_INPUT_FORMATS });
+                            try {
+                                await feedSegmentAudio({
+                                    audioSource: audioPlan.source,
+                                    input,
+                                    startInFile: seg.startInFile,
+                                    endInFile: seg.endInFile,
+                                    segBaseOutSec,
+                                    silenceFormat,
+                                    signal,
+                                    fileName: seg.file.name,
+                                    onTruncated: () => {
+                                        decodeTruncated = true;
+                                    },
+                                });
+                            } finally {
+                                input.dispose();
+                            }
+                        }
+                        nextExpectedOutSec = segBaseOutSec + segDur;
+                    }
                 }
             }
-        }
+        };
+
+        // Concurrently, not back-to-back. Audio reads its own Inputs and feeds a
+        // separate muxer track (mediabunny guards the muxer with its own mutex),
+        // so running it after the ticks left every decoder and the video encoder
+        // idle for the whole audio pass. It also interleaves the mdat properly:
+        // serial passes wrote the entire video track before the first audio byte.
+        await joinAllOrThrowFirst([runVideoTicks(), runAudio()]);
     } catch (err) {
         log.error("split transcode aborted or failed", { framesDone, err: String(err) });
         disposeAllSlots();

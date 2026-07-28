@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { nextTolerant, resolveAudioPlan } from "./pipeline-common.js";
+import { frameNeedsNoComposite, joinAllOrThrowFirst, nextTolerant, resolveAudioPlan } from "./pipeline-common.js";
 
 // Builds an async iterator that yields each value in turn, then either ends
 // cleanly or throws `throwAtEnd` in place of the final {done:true}.
@@ -129,3 +129,78 @@ describe("resolveAudioPlan", () => {
 // audio + warns), so there is no on-our-side resampler left to unit-test. The
 // audio re-encode path (transform to 48k/stereo, silence-gap fill) is exercised
 // end-to-end by tests/e2e/export-run.spec.ts on a real re-encode export.
+
+describe("joinAllOrThrowFirst", () => {
+    it("resolves once every task resolved", async () => {
+        const order: string[] = [];
+        await joinAllOrThrowFirst([
+            (async () => {
+                order.push("a");
+            })(),
+            (async () => {
+                order.push("b");
+            })(),
+        ]);
+        expect(order).toEqual(["a", "b"]);
+    });
+
+    it("rethrows the first rejection", async () => {
+        const boom = new Error("video died");
+        await expect(joinAllOrThrowFirst([Promise.reject(boom), Promise.resolve()])).rejects.toBe(boom);
+    });
+
+    it("waits for the surviving task before rethrowing", async () => {
+        // The caller's finally disposes the segment's Inputs right after this
+        // resolves, so a still-running producer must never outlive it.
+        let audioFinished = false;
+        const audio = new Promise<void>((resolve) => {
+            setTimeout(() => {
+                audioFinished = true;
+                resolve();
+            }, 5);
+        });
+        await expect(joinAllOrThrowFirst([Promise.reject(new Error("video died")), audio])).rejects.toThrow(
+            "video died",
+        );
+        expect(audioFinished, "audio settled before the rejection surfaced").toBe(true);
+    });
+
+    it("surfaces the first rejection when both fail", async () => {
+        const first = new Error("first");
+        await expect(joinAllOrThrowFirst([Promise.reject(first), Promise.reject(new Error("second"))])).rejects.toBe(
+            first,
+        );
+    });
+});
+
+describe("frameNeedsNoComposite", () => {
+    const frame = (over: Partial<Record<string, number>> = {}) => ({
+        rotation: 0,
+        codedWidth: 1920,
+        codedHeight: 1080,
+        displayWidth: 1920,
+        displayHeight: 1080,
+        ...over,
+    });
+
+    it("accepts a frame that already is the output frame", () => {
+        expect(frameNeedsNoComposite(frame(), 1920, 1080)).toBe(true);
+    });
+
+    it("rejects a resize in either direction", () => {
+        expect(frameNeedsNoComposite(frame(), 1280, 720)).toBe(false);
+        expect(frameNeedsNoComposite(frame({ codedWidth: 1280, displayWidth: 1280 }), 1920, 1080)).toBe(false);
+    });
+
+    it("rejects a rotated source", () => {
+        expect(frameNeedsNoComposite(frame({ rotation: 90 }), 1920, 1080)).toBe(false);
+        expect(frameNeedsNoComposite(frame({ rotation: 180 }), 1920, 1080)).toBe(false);
+    });
+
+    it("rejects a non-square pixel aspect", () => {
+        // Anamorphic: 1440 coded pixels displayed as 1920 square ones. Only
+        // VideoSample.draw applies that stretch, so the raw frame must not go
+        // straight to the encoder.
+        expect(frameNeedsNoComposite(frame({ codedWidth: 1440 }), 1920, 1080)).toBe(false);
+    });
+});

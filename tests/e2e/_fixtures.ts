@@ -473,6 +473,35 @@ export async function installInMemoryExportCapture(page: Page): Promise<void> {
     });
 }
 
+/** The frame counters the single-channel pipeline reports when it finishes. */
+export interface TranscodeDoneFields {
+    framesEncoded: number;
+    /** Frames handed to the encoder without going through the composition canvas. */
+    framesDirect: number;
+}
+
+/**
+ * Pulls the transcode worker's "transcode done" counters out of the log ring
+ * buffer (worker records are bridged into the main-thread buffer). Null when the
+ * line is absent - i.e. the single-channel pipeline never ran to completion.
+ */
+export async function readTranscodeDoneFields(page: Page): Promise<TranscodeDoneFields | null> {
+    return page.evaluate(() => {
+        const dump = (window as unknown as { __dashcamigo?: { dumpLog: () => unknown[] } }).__dashcamigo?.dumpLog;
+        if (!dump) return null;
+        const rec = dump()
+            .reverse()
+            .find((r) => (r as { msg?: string }).msg === "transcode done") as
+            | { ctx?: { framesEncoded?: number; framesDirect?: number } }
+            | undefined;
+        if (!rec?.ctx) return null;
+        return {
+            framesEncoded: rec.ctx.framesEncoded ?? 0,
+            framesDirect: rec.ctx.framesDirect ?? 0,
+        };
+    });
+}
+
 export interface ExportResult {
     len: number;
     ftyp: boolean;
