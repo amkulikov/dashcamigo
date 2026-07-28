@@ -5,7 +5,7 @@
 // STYLE_CHROME + the run accent. Sizes are a fraction of the frame's shorter
 // side so a widget reads the same on 16:9 / 9:16 / 1:1.
 
-import { circlePath, clamp, roundRectPath } from "./canvas-draw.js";
+import { circlePath, clamp, measureTextWidth, roundRectPath } from "./canvas-draw.js";
 import { composeFont, resolveStyleColor, STYLE_CHROME } from "./overlay-styles.js";
 import type { OverlayStyleId } from "./types.js";
 import type { FramePos } from "./frame-pos.js";
@@ -126,7 +126,7 @@ export function drawCompass(
     const degText = `${Math.round(pos.headingDeg)}°`;
     // Reserve the widest heading ("888°") so the centered pill keeps a constant
     // width as the value crosses 9->99->359 (textAlign stays centered below).
-    const textW = Math.max(ctx.measureText(degText).width, ctx.measureText("888°").width);
+    const textW = Math.max(measureTextWidth(ctx, degText), measureTextWidth(ctx, "888°"));
     const pillH = Math.round(degPx * 1.5);
     const pillW = Math.ceil(textW) + Math.round(degPx * 0.9);
     ctx.shadowColor = "transparent";

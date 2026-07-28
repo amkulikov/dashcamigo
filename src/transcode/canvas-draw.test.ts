@@ -2,9 +2,9 @@
 // node, but we can assert the path verbs each shape emits (so the mini-map clip
 // and its border trace the same outline) and the NaN-safe clamp.
 
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
-import { circlePath, clamp, shapePath } from "./canvas-draw.js";
+import { _resetForTests, circlePath, clamp, measureTextWidth, shapePath } from "./canvas-draw.js";
 
 /** A 2D context stub that records the path verbs it receives. */
 function makeCtx(): { ctx: CanvasRenderingContext2D; verbs: string[] } {
@@ -50,5 +50,57 @@ describe("shapePath", () => {
         shapePath(ctx, "rect", 0, 0, 40, 30, 6);
         expect(verbs).toContain("arcTo");
         expect(verbs).not.toContain("arc");
+    });
+});
+
+/** A 2D context stub whose measureText counts calls and varies with the font,
+ *  so a stale cache entry (wrong font reused) shows up as a wrong width. */
+function makeTextCtx(): { ctx: CanvasRenderingContext2D; calls: () => number } {
+    let calls = 0;
+    const state = {
+        font: "10px A",
+        letterSpacing: "0px",
+        measureText: (text: string) => {
+            calls++;
+            return { width: text.length * Number.parseInt(state.font, 10) };
+        },
+    };
+    return { ctx: state as unknown as CanvasRenderingContext2D, calls: () => calls };
+}
+
+describe("measureTextWidth", () => {
+    beforeEach(() => {
+        _resetForTests();
+    });
+
+    it("measures once per (font, text) and serves repeats from the cache", () => {
+        const { ctx, calls } = makeTextCtx();
+        expect(measureTextWidth(ctx, "abc")).toBe(30);
+        expect(measureTextWidth(ctx, "abc")).toBe(30);
+        expect(measureTextWidth(ctx, "abc")).toBe(30);
+        expect(calls()).toBe(1);
+    });
+
+    it("re-measures when the font changes", () => {
+        const { ctx, calls } = makeTextCtx();
+        expect(measureTextWidth(ctx, "abc")).toBe(30);
+        ctx.font = "20px A";
+        expect(measureTextWidth(ctx, "abc"), "same string at a bigger font").toBe(60);
+        expect(calls()).toBe(2);
+    });
+
+    it("re-measures when letter spacing changes", () => {
+        const { ctx, calls } = makeTextCtx();
+        measureTextWidth(ctx, "abc");
+        (ctx as unknown as { letterSpacing: string }).letterSpacing = "4px";
+        measureTextWidth(ctx, "abc");
+        expect(calls()).toBe(2);
+    });
+
+    it("keys on the string, not just the font", () => {
+        const { ctx, calls } = makeTextCtx();
+        expect(measureTextWidth(ctx, "ab")).toBe(20);
+        expect(measureTextWidth(ctx, "abcd")).toBe(40);
+        expect(calls()).toBe(2);
     });
 });

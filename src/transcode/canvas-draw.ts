@@ -4,6 +4,44 @@
 
 type AnyCanvas2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
+// Text shaping is the single most expensive per-call operation the overlay
+// widgets do, and the export loop repeats the SAME measurements every frame:
+// the font is derived from the output height (constant for a run) and most
+// strings repeat ("km/h", the reserve template, a speed that only changes a few
+// times a second). One entry per (font, letterSpacing, text) triple is enough to
+// collapse thousands of shaping calls per second into map lookups.
+const textWidthCache = new Map<string, number>();
+// Bound: a run's distinct strings are dominated by the changing numeric values,
+// so the set is small - the cap only guards a pathological input (e.g. a
+// coordinate readout at full precision on a long trip) from growing unbounded.
+const TEXT_WIDTH_CACHE_MAX = 4096;
+
+/**
+ * ctx.measureText(text).width, memoized on the context's text state. Only the
+ * font and letter spacing affect the advance width, so those plus the string
+ * form the key; textAlign/baseline/fillStyle do not and are ignored.
+ *
+ * Callers must have set ctx.font (and any letterSpacing) BEFORE calling, exactly
+ * as they would for a raw measureText.
+ */
+export function measureTextWidth(ctx: AnyCanvas2D, text: string): number {
+    // letterSpacing is not in every lib.dom we build against; read it defensively
+    // rather than assume "0px" - a stale entry would misplace every glyph.
+    const spacing = (ctx as { letterSpacing?: string }).letterSpacing ?? "";
+    const key = `${ctx.font}\u0000${spacing}\u0000${text}`;
+    const hit = textWidthCache.get(key);
+    if (hit !== undefined) return hit;
+    const width = ctx.measureText(text).width;
+    if (textWidthCache.size >= TEXT_WIDTH_CACHE_MAX) textWidthCache.clear();
+    textWidthCache.set(key, width);
+    return width;
+}
+
+/** Drops the memoized text widths. Module-level state, so tests reset it. */
+export function _resetForTests(): void {
+    textWidthCache.clear();
+}
+
 /**
  * Clamps n into [lo, hi]. NaN/Infinity map to lo - overlay placement comes
  * from user-controlled percentages, and a non-finite value must not leak into

@@ -10,7 +10,7 @@
 // frame; the UI preview calls the same code so what the user arranges matches
 // the file.
 
-import { clamp, roundRectPath } from "./canvas-draw.js";
+import { clamp, measureTextWidth, roundRectPath } from "./canvas-draw.js";
 import { composeFont, resolveStyleColor, type StyleChrome, STYLE_CHROME } from "./overlay-styles.js";
 import type { OverlayStyleId } from "./types.js";
 
@@ -136,16 +136,16 @@ export function drawWidgetBox(
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
     ctx.font = numFont;
-    const valueW = Math.ceil(ctx.measureText(content.value).width);
+    const valueW = Math.ceil(measureTextWidth(ctx, content.value));
     // Reserved value-field width: the wider of the actual value and the
     // worst-case sample, so the plate edge and unit position hold steady as the
     // digit count changes (max() so an over-long value is never clipped).
-    const reserveW = content.reserveValue ? Math.ceil(ctx.measureText(content.reserveValue).width) : 0;
+    const reserveW = content.reserveValue ? Math.ceil(measureTextWidth(ctx, content.reserveValue)) : 0;
     const valueFieldW = Math.max(valueW, reserveW);
     ctx.font = unitFont;
-    const unitW = content.unit ? Math.ceil(ctx.measureText(content.unit).width) + Math.round(unitPx * 0.3) : 0;
+    const unitW = content.unit ? Math.ceil(measureTextWidth(ctx, content.unit)) + Math.round(unitPx * 0.3) : 0;
     ctx.font = secondaryFont;
-    const secondaryW = content.secondary ? Math.ceil(ctx.measureText(content.secondary).width) : 0;
+    const secondaryW = content.secondary ? Math.ceil(measureTextWidth(ctx, content.secondary)) : 0;
 
     const valueRowW = valueFieldW + unitW;
     const contentW = Math.max(valueRowW, secondaryW);
@@ -238,8 +238,8 @@ export function drawCoordsBox(
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
     ctx.font = font;
-    const keyW = Math.ceil(Math.max(ctx.measureText(parts.latKey).width, ctx.measureText(parts.lonKey).width));
-    const valW = Math.ceil(Math.max(ctx.measureText(parts.latVal).width, ctx.measureText(parts.lonVal).width));
+    const keyW = Math.ceil(Math.max(measureTextWidth(ctx, parts.latKey), measureTextWidth(ctx, parts.lonKey)));
+    const valW = Math.ceil(Math.max(measureTextWidth(ctx, parts.latVal), measureTextWidth(ctx, parts.lonVal)));
     const contentW = keyW + keyGap + valW;
     const contentH = px * 2 + lineGap;
     const boxW = contentW + pad * 2;
