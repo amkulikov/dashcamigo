@@ -161,6 +161,7 @@ export function dispatchParseVideoEmbeddedGpsViaWorker(
             errors: [],
             winningExtractorByFilename: new Map(),
             videoStartUtcHintByFilename: new Map(),
+            localClockOffsetHintByFilename: new Map(),
             accelByFilename: new Map(),
             heavyFiles: [],
         });
@@ -280,6 +281,7 @@ function mergeResults(results: DispatchedEmbeddedGpsResult[]): DispatchedEmbedde
     const errors: DispatchedEmbeddedGpsResult["errors"] = [];
     const winningExtractorByFilename = new Map<string, string>();
     const videoStartUtcHintByFilename = new Map<string, number>();
+    const localClockOffsetHintByFilename = new Map<string, number>();
     const accelByFilename = new Map<string, AccelSample[]>();
     const heavyFiles: ClassifiedFile[] = [];
     for (const r of results) {
@@ -292,6 +294,7 @@ function mergeResults(results: DispatchedEmbeddedGpsResult[]): DispatchedEmbedde
         extendArray(errors, r.errors);
         for (const [k, v] of r.winningExtractorByFilename) winningExtractorByFilename.set(k, v);
         for (const [k, v] of r.videoStartUtcHintByFilename) videoStartUtcHintByFilename.set(k, v);
+        for (const [k, v] of r.localClockOffsetHintByFilename) localClockOffsetHintByFilename.set(k, v);
         for (const [k, v] of r.accelByFilename) accelByFilename.set(k, v);
         extendArray(heavyFiles, r.heavyFiles);
     }
@@ -302,6 +305,7 @@ function mergeResults(results: DispatchedEmbeddedGpsResult[]): DispatchedEmbedde
         errors,
         winningExtractorByFilename,
         videoStartUtcHintByFilename,
+        localClockOffsetHintByFilename,
         accelByFilename,
         heavyFiles,
     };

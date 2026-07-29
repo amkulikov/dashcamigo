@@ -41,6 +41,14 @@ export interface GpsRecord {
     // instead of spreading them evenly by index - accurate on clips with a
     // cold-start or mid-file GPS gap. Absent = no offset (spread evenly).
     relStartSeconds?: number;
+    // Bookkeeping for the local-as-UTC correction (see
+    // applyLocalClockCorrections in trips.ts): how many seconds have already
+    // been SUBTRACTED from this record's original `unixSeconds` to restore
+    // true UTC. Lives on the record - not on the candidate - because record
+    // objects are shared between candidates and the gpsLog buckets; a
+    // per-record marker keeps the shift idempotent no matter how many owners
+    // revisit it. Absent = 0 (never shifted). Parsers never set this.
+    localClockOffsetAppliedSec?: number;
 }
 
 /**
@@ -133,6 +141,17 @@ export interface ParsedRecords {
     // e.g. the sstar-ssmd phantom-track gate). Empty records WITHOUT a hint
     // stays "matched the shape, carries no GPS" and lets siblings walk.
     videoStartUtcHint?: number;
+    // Optional: evidence that this file's record clocks are the camera's
+    // LOCAL wall time (zone baked in by the firmware) rather than UTC.
+    // Positive = the records run ahead of true UTC by this many seconds,
+    // always a multiple of the 15-min zone grid. Measured from the cold-start
+    // clock jump between pre-fix RTC blocks and the first satellite-synced
+    // record (freegps), gated on the filename clock matching the synced
+    // records - see the hint derivation in primitives/freegps.ts. Consumers
+    // aggregate per camera fingerprint and subtract from the record axis
+    // (applyLocalClockCorrections in trips.ts); a file without a cold start
+    // inherits its siblings' measurement there.
+    localClockOffsetHintSec?: number;
     // Optional: accelerometer samples the primitive found in the container
     // itself (an embedded `3gf ` child, a `gsen` atom, a binary preamble next
     // to the GPS record). Kept as AccelSample - the same type an accel-only

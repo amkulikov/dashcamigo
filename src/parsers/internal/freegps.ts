@@ -268,6 +268,11 @@ function hasValidSignature(payload: DataView, layout: FieldLayout): boolean {
     return true;
 }
 
+// Fixed Type-3 sub-layouts in pickLayout's frequency order. Shared by the
+// signature dispatch and the cold-start pre-fix datetime collection, which
+// must probe the same geometries.
+const TYPE3_LAYOUTS: readonly FieldLayout[] = [LAYOUT_DEFAULT, LAYOUT_LEGACY, LAYOUT_ALT, LAYOUT_KENWOOD_MN];
+
 function pickLayout(payload: DataView): FieldLayout | null {
     // Try layouts in order of real-world frequency: default (datetime@44) is
     // most common (2E Drive, SilverStone, VIOFO A229), legacy (datetime@16)
@@ -281,6 +286,26 @@ function pickLayout(payload: DataView): FieldLayout | null {
     if (hasValidSignature(payload, LAYOUT_ALT)) return LAYOUT_ALT;
     if (hasValidSignature(payload, LAYOUT_KENWOOD_MN) && hasKenwoodZeroGate(payload)) return LAYOUT_KENWOOD_MN;
     return null;
+}
+
+/**
+ * Reads the 6 x u32 LE Type-3 datetime (H,M,S,Y,mo,d) at the layout's base
+ * offset and validates it through the shared calendar gate. Returns null when
+ * the window is too short or any field is out of range. `yearRaw` is the
+ * stored year before the 2-digit expansion - the Kenwood local-clock
+ * quarantine keys on it.
+ */
+function readType3Datetime(payload: DataView, layout: FieldLayout): { unixSeconds: number; yearRaw: number } | null {
+    if (payload.byteLength < layout.datetime + 24) return null;
+    const h = payload.getUint32(layout.datetime, true);
+    const mi = payload.getUint32(layout.datetime + 4, true);
+    const s = payload.getUint32(layout.datetime + 8, true);
+    const y = payload.getUint32(layout.datetime + 12, true);
+    const mo = payload.getUint32(layout.datetime + 16, true);
+    const d = payload.getUint32(layout.datetime + 20, true);
+    const unixSeconds = utcSecondsFromYmdhms(y, mo, d, h, mi, s);
+    if (unixSeconds === null) return null;
+    return { unixSeconds, yearRaw: y };
 }
 
 /** Returns true when `text` (ASCII) sits at `offset` of the payload. */
@@ -545,16 +570,10 @@ function parseType3Block(
     const ns = payload.getUint8(layout.ns) === 0x4e ? 1 : -1;
     const ew = payload.getUint8(layout.ew) === 0x45 ? 1 : -1;
 
-    const h = payload.getUint32(layout.datetime, true);
-    const mi = payload.getUint32(layout.datetime + 4, true);
-    const s = payload.getUint32(layout.datetime + 8, true);
-    const y = payload.getUint32(layout.datetime + 12, true);
-    const mo = payload.getUint32(layout.datetime + 16, true);
-    const d = payload.getUint32(layout.datetime + 20, true);
-
     // VIOFO writes 2-digit year (21 = 2021); the shared helper expands it.
-    const unixSeconds = utcSecondsFromYmdhms(y, mo, d, h, mi, s);
-    if (unixSeconds === null) return null;
+    const datetime = readType3Datetime(payload, layout);
+    if (datetime === null) return null;
+    const { unixSeconds, yearRaw: y } = datetime;
 
     // IQS int32 sub-variant - gated on LAYOUT_DEFAULT identity: in other
     // layouts literal 12 is data (e.g. the LAYOUT_ALT datetime hour field),
@@ -2107,7 +2126,35 @@ export interface FreeGpsFileBlockParser extends ParseFreeGpsBlock {
      * Azdome accel baseline safely OFF in that case).
      */
     claimedVariantName(): string | null;
+    /**
+     * Cold-start clock jump between the last pre-fix RTC block and the first
+     * emitted record, snapped to the 15-min zone grid - or null when the file
+     * did not start unsynced, no pre-fix block carried a readable datetime at
+     * the emitting layout's geometry, or the jump does not look like a zone
+     * (below one grid step, past the widest real UTC offset, or too far off
+     * the grid). A non-null value alone does NOT prove local-as-UTC records -
+     * the caller must pair it with the filename-clock gate (see
+     * primitives/freegps.ts).
+     */
+    coldStartClockJumpSec(): number | null;
 }
+
+/** Zone grid for the cold-start jump: quarter-hour zones are real (Nepal
+ *  +5:45, Chatham +12:45), same reasoning as the TZ estimate grid in trips. */
+const CLOCK_JUMP_SNAP_SEC = 900;
+/** |snapped| below one grid step is RTC drift, not a zone. */
+const CLOCK_JUMP_MIN_ABS_SEC = 900;
+/** Widest real UTC offset (+14:00, Kiritimati). A jump past it is not a zone
+ *  but a stale RTC: a supercapacitor camera left unplugged comes back with a
+ *  frozen or restored clock, and the gap to the first satellite fix can be
+ *  hours or days. One in five such gaps lands close enough to the grid to
+ *  pass the residual check below, and the fleet-wide correction downstream
+ *  would then move the whole record axis by that garbage. */
+const CLOCK_JUMP_MAX_ABS_SEC = 14 * 3600;
+/** Max |raw - snapped|: covers the 1-2 s block cadence step plus modest RTC
+ *  drift. Only sub-grid drift is separable this way - an RTC off by a whole
+ *  number of quarter-hours snaps clean and reads as part of the zone. */
+const CLOCK_JUMP_RESIDUAL_MAX_SEC = 90;
 
 /**
  * Creates a per-file block parser: the strict variant registry first, then
@@ -2134,6 +2181,30 @@ export function createFreeGpsBlockParser(options: CreateFreeGpsBlockParserOption
     let claimedName: string | null = null;
     let mixedClaims = false;
     let fallbackEmitted = false;
+    // Cold-start clock-jump measurement. Pre-fix blocks on local-as-UTC
+    // firmware (A119 Mini 2: status bytes ' 00'/'V00') fail every variant
+    // signature but carry a valid RTC datetime at the fixed Type-3 offsets;
+    // the first satellite-synced record then jumps by exactly the camera's
+    // zone when the RTC runs UTC and the GPS stamps run local. Track the
+    // LAST pre-fix datetime per layout (per layout, not global: a wrong
+    // geometry can read a calendar-plausible garbage value, and the capture
+    // below pairs strictly with the emitting block's own layout). Collection
+    // stops at the first emission: post-fix signal-loss blocks carry the
+    // already-synced clock and would poison a re-measure. The state survives
+    // a jump-scan bail into the linear rerun by design (same closure).
+    const lastPreFixUnixByLayout = new Map<FieldLayout, number>();
+    let rawClockJumpSec: number | null = null;
+    let sawEmit = false;
+
+    const captureClockJump = (payload: DataView, first: GpsRecord): void => {
+        // timeUnsynced first record = placeholder clock, no jump to measure.
+        if (first.timeUnsynced === true) return;
+        const layout = pickLayout(payload);
+        if (layout === null) return; // non-Type-3 variant (NMEA text, doubles)
+        const preFixUnix = lastPreFixUnixByLayout.get(layout);
+        if (preFixUnix === undefined) return;
+        rawClockJumpSec = first.unixSeconds - preFixUnix;
+    };
 
     const parseOneBlock = (payload: DataView, mp4Filename: string, boxSizeDword?: number): GpsRecord[] => {
         for (const variant of FREE_GPS_VARIANTS) {
@@ -2142,6 +2213,10 @@ export function createFreeGpsBlockParser(options: CreateFreeGpsBlockParserOption
                 if (records.length > 0) {
                     if (claimedName === null) claimedName = variant.name;
                     else if (claimedName !== variant.name) mixedClaims = true;
+                    if (!sawEmit) {
+                        sawEmit = true;
+                        captureClockJump(payload, records[0]!);
+                    }
                 }
                 return records;
             }
@@ -2150,10 +2225,20 @@ export function createFreeGpsBlockParser(options: CreateFreeGpsBlockParserOption
         // supported formats can never regress through it.
         if (!startsWithMagic(payload)) return [];
 
+        // Unclaimed block: while the file is still in its cold-start window,
+        // remember its datetime candidates for the jump measurement.
+        if (!sawEmit) {
+            for (const layout of TYPE3_LAYOUTS) {
+                const datetime = readType3Datetime(payload, layout);
+                if (datetime !== null) lastPreFixUnixByLayout.set(layout, datetime.unixSeconds);
+            }
+        }
+
         if (pinnedAnchor !== null) {
             const record = parseAtAnchor(payload, pinnedAnchor, mp4Filename);
             if (!record) return [];
             fallbackEmitted = true;
+            sawEmit = true; // no capture - the anchor geometry has no pre-fix bucket
             return [record];
         }
 
@@ -2165,6 +2250,7 @@ export function createFreeGpsBlockParser(options: CreateFreeGpsBlockParserOption
         if (found.anchor === pendingAnchor) {
             pinnedAnchor = found.anchor;
             fallbackEmitted = true;
+            sawEmit = true;
             return [found.record];
         }
         pendingAnchor = found.anchor;
@@ -2173,6 +2259,14 @@ export function createFreeGpsBlockParser(options: CreateFreeGpsBlockParserOption
 
     return Object.assign(parseOneBlock, {
         claimedVariantName: (): string | null => (mixedClaims || fallbackEmitted ? null : claimedName),
+        coldStartClockJumpSec: (): number | null => {
+            if (rawClockJumpSec === null) return null;
+            const snapped = Math.round(rawClockJumpSec / CLOCK_JUMP_SNAP_SEC) * CLOCK_JUMP_SNAP_SEC;
+            if (Math.abs(snapped) < CLOCK_JUMP_MIN_ABS_SEC) return null;
+            if (Math.abs(snapped) > CLOCK_JUMP_MAX_ABS_SEC) return null;
+            if (Math.abs(rawClockJumpSec - snapped) > CLOCK_JUMP_RESIDUAL_MAX_SEC) return null;
+            return snapped;
+        },
     });
 }
 

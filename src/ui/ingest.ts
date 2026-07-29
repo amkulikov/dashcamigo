@@ -765,6 +765,9 @@ async function ingestFilesInternal(vfiles: VendorFile[], signal: AbortSignal): P
                         isMatroska: isMatroskaName(file.name),
                         audioNeedsTranscode: idx.audioNeedsTranscode,
                         embeddedStartUtcHint: null,
+                        // Filled by applyEmbeddedResultToState when the
+                        // extractor measured a cold-start clock jump.
+                        localClockOffsetHintSec: null,
                     });
                 }
 
@@ -866,6 +869,7 @@ async function ingestFilesInternal(vfiles: VendorFile[], signal: AbortSignal): P
         errors: [],
         winningExtractorByFilename: new Map(),
         videoStartUtcHintByFilename: new Map(),
+        localClockOffsetHintByFilename: new Map(),
         accelByFilename: new Map(),
         heavyFiles: [],
     };
@@ -1221,6 +1225,11 @@ function applyEmbeddedResultToState(result: DispatchedEmbeddedGpsResult, allCand
         // here - it survives later recomputes via the candidate field itself.
         const hint = result.videoStartUtcHintByFilename.get(c.file.name);
         if (hint !== undefined) c.embeddedStartUtcHint = hint;
+        // Local-as-UTC clock evidence (cold-start jump). Parse-time constant;
+        // recomputeAllStartUtc below aggregates it per fingerprint and
+        // restores true UTC on the record axis.
+        const clockHint = result.localClockOffsetHintByFilename.get(c.file.name);
+        if (clockHint !== undefined) c.localClockOffsetHintSec = clockHint;
     }
     // Diagnostic: confirm which files actually received embedded GPS. The
     // transport-stream breakdown is the one to watch - MPEG-TS (Juscar) was the

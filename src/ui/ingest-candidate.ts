@@ -176,6 +176,7 @@ export function buildProvisionalCandidate(params: ProvisionalCandidateParams): V
         isMatroska: isMatroskaName(file.file.name),
         audioNeedsTranscode: false,
         embeddedStartUtcHint: null,
+        localClockOffsetHintSec: null,
         hydrated: false,
     };
 }

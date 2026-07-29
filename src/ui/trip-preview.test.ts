@@ -42,6 +42,7 @@ function makeCandidate(file: File): VideoCandidate {
         isMatroska: false,
         audioNeedsTranscode: false,
         embeddedStartUtcHint: null,
+        localClockOffsetHintSec: null,
     };
 }
 

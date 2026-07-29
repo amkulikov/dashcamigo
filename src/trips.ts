@@ -110,6 +110,14 @@ export interface VideoCandidate {
     // Deliberately NOT mvhdTzSec-backed: honest-UTC-mvhd firmware yields 0
     // there and would flip the display from the viewer's zone to raw UTC.
     cameraTzSec: number | null;
+    // Per-file evidence that this file's GPS record clocks are the camera's
+    // LOCAL wall time (zone baked in): the extractor's cold-start clock-jump
+    // measurement (ParsedRecords.localClockOffsetHintSec). A parse-time
+    // constant - never recomputed. Aggregated per fingerprint and applied to
+    // the record axis by applyLocalClockCorrections; null = no evidence in
+    // this file (most files - only a clip that catches the GPS fix mid-file
+    // can measure the jump).
+    localClockOffsetHintSec: number | null;
     // mvhd.creation_time as Date (interpreted as UTC directly). Stored in the
     // candidate so startUtc can be recalculated after camera TZ is refined
     // from all indexed files' mvhd pairs (see TZ finalization in app.ts:ingestFiles).
@@ -2116,6 +2124,89 @@ export function reanchorUnsyncedTimes(records: GpsRecord[], startUtc: number, du
 }
 
 /**
+ * Subtracts the fleet-measured local-as-UTC clock offset from the record axis
+ * so records carry true UTC. Evidence is per-file
+ * (VideoCandidate.localClockOffsetHintSec - the cold-start clock jump, see
+ * primitives/freegps.ts) but the correction is per FINGERPRINT: most clips
+ * never catch a GPS fix mid-file, so they inherit the lower median of their
+ * siblings' measurements.
+ *
+ * Idempotent by construction: each record carries how much has already been
+ * subtracted (GpsRecord.localClockOffsetAppliedSec), so re-running the sweep
+ * - or visiting a record twice through candidates and gpsLog buckets that
+ * share the objects - applies only the delta. Late evidence (a cold-start
+ * clip hydrated after its siblings) shifts everything by the difference on
+ * the next sweep.
+ *
+ * A fingerprint with no evidence IN THIS CALL is left untouched rather than
+ * reset to zero: the per-trip lazy hydration sweep passes one trip's
+ * candidates, and the cold-start clip that measured the offset routinely sits
+ * in a different trip. Driving to zero there would revert an already-correct
+ * axis until the final full sweep - and permanently if the fill is cancelled
+ * first. Consequence of the same rule: a shift can only ever be replaced by
+ * new evidence, never withdrawn.
+ *
+ * Scoped to candidates whose GPS came from the extractor family that
+ * produces the hints ("freegps"): the offset describes THAT firmware's clock,
+ * and records from an unrelated source on the same fingerprint (a GPX
+ * sidecar with honest UTC) must not inherit it. The scope is per CANDIDATE,
+ * so a sidecar merged onto a file that already parsed as freegps rides along
+ * - records carry no source tag to filter on.
+ *
+ * One offset per fingerprint for the whole dump: a set spanning the camera's
+ * own DST re-sync gets the majority cluster's value on both sides, same
+ * exposure as the TZ estimate (see displayTzSec).
+ */
+function applyLocalClockCorrections(candidates: readonly VideoCandidate[]): void {
+    const hintsByFingerprint = new Map<string, number[]>();
+    for (const c of candidates) {
+        if (c.localClockOffsetHintSec === null) continue;
+        let bucket = hintsByFingerprint.get(c.fingerprint);
+        if (!bucket) {
+            bucket = [];
+            hintsByFingerprint.set(c.fingerprint, bucket);
+        }
+        bucket.push(c.localClockOffsetHintSec);
+    }
+    if (hintsByFingerprint.size === 0) return;
+
+    const offsetByFingerprint = new Map<string, number>();
+    for (const [fingerprint, hints] of hintsByFingerprint) {
+        hints.sort((a, b) => a - b);
+        // Lower median (an observed element) - same reasoning as
+        // snappedMedianTz: an even-count average could land between two
+        // real measurements on a value belonging to neither.
+        offsetByFingerprint.set(fingerprint, hints[(hints.length - 1) >> 1]!);
+    }
+
+    let movedRecords = 0;
+    for (const c of candidates) {
+        if (!c.appliedExtractors.includes("freegps")) continue;
+        const desired = offsetByFingerprint.get(c.fingerprint);
+        if (desired === undefined) continue;
+        for (const record of c.records) {
+            const applied = record.localClockOffsetAppliedSec ?? 0;
+            if (applied === desired) continue;
+            record.unixSeconds += applied - desired;
+            if (desired === 0) delete record.localClockOffsetAppliedSec;
+            else record.localClockOffsetAppliedSec = desired;
+            movedRecords++;
+        }
+    }
+    // The whole record axis just moved by hours, and a wrong offset surfaces
+    // as wrong dates everywhere at once - this line is what tells a bug report
+    // apart from a camera that really sits in that zone. Only on an actual
+    // shift: the sweep re-runs per indexing batch and is a no-op after the
+    // first one.
+    if (movedRecords > 0) {
+        log.info("local-as-UTC clock correction", {
+            offsetsSec: [...offsetByFingerprint.values()],
+            records: movedRecords,
+        });
+    }
+}
+
+/**
  * Re-derives startUtc/startSource for every candidate from its CURRENT
  * createdUtc + records: estimates per-fingerprint TZ and the precise clock
  * offset from this same set first, then runs deriveStartUtc per file and
@@ -2134,6 +2225,11 @@ export function rederiveStartUtcForCandidates(
     candidates: readonly VideoCandidate[],
     parseFilenameLocalTime: (file: VendorFile) => Date | null,
 ): void {
+    // Restore true UTC on the record axis FIRST: every estimate below
+    // (TZ medians, precise clock offsets, GPS windows) reads record times,
+    // and local-as-UTC records would bake the camera zone into all of them.
+    applyLocalClockCorrections(candidates);
+
     const tzSamples: TzSample[] = [];
     // Dedup by File IDENTITY, not basename: two DISTINCT files can share a
     // basename (a Viofo RO/ protected copy vs its Movie/ sibling, or the same

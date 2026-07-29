@@ -54,4 +54,44 @@ describe("real-anonymized Novatek MP4 fixtures", () => {
             expect(r.unixSeconds).toBeLessThan(Date.UTC(2019, 2, 1) / 1000);
         }
     });
+
+    // VIOFO A119 Mini 2: LAYOUT_ALT plus a cold-start prefix - pre-fix RTC
+    // blocks in UTC, satellite-synced records with the +3h zone baked in.
+    // The fixture keeps 4 pre-fix + 4 active blocks around the transition;
+    // the local-as-UTC evidence (localClockOffsetHintSec) must come out as
+    // the real measured jump.
+    describe("VIOFO A119 Mini 2 cold-start (local-as-UTC firmware)", () => {
+        const NAME = "20260406142122_000022.MP4";
+
+        async function parseFixture(filename: string) {
+            const buf = readFileSync(resolve(PUBLIC_FIXTURES, "viofo-a119-mini2-coldstart.mp4"));
+            const file = new File([buf], filename);
+            const index = await buildMp4Index(file);
+            return freegpsPrimitive.parse({ file, relativePath: filename }, index);
+        }
+
+        it("parses LAYOUT_ALT records with sentinel coords and measures the +3h jump", async () => {
+            const result = await parseFixture(NAME);
+            expect(result.records).toHaveLength(4);
+            for (let i = 0; i < 4; i++) {
+                const r = result.records[i]!;
+                expect(r.lat).toBeCloseTo(50 + i * 0.0001, 4);
+                expect(r.lon).toBeCloseTo(30 + i * 0.0001, 4);
+                expect(r.active).toBe(true);
+            }
+            // Records still carry the local clock at parse time (14:22:05
+            // local on 2026-04-06); the correction happens in trips.ts.
+            expect(result.records[0]!.unixSeconds).toBe(Date.UTC(2026, 3, 6, 14, 22, 5) / 1000);
+            expect(result.localClockOffsetHintSec).toBe(10_800);
+        });
+
+        it("withholds the hint when the filename clock disagrees with the records", async () => {
+            // Same bytes under a UTC-looking filename = the honest-camera
+            // shape (local RTC, UTC satellite stamps) - the jump means the
+            // opposite thing there and must not be published as evidence.
+            const result = await parseFixture("20260406112122_000022.MP4");
+            expect(result.records).toHaveLength(4);
+            expect(result.localClockOffsetHintSec).toBeUndefined();
+        });
+    });
 });

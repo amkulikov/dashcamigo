@@ -28,6 +28,7 @@ import {
     tryStructuralPath,
 } from "../internal/freegps.js";
 import { removeGravityBaselineOrZero } from "../internal/accel-baseline.js";
+import { classifyFilenameTime } from "../filename/index.js";
 import type { Primitive } from "./types.js";
 
 export const freegpsPrimitive: Primitive = {
@@ -61,6 +62,7 @@ export const freegpsPrimitive: Primitive = {
         const structural = await tryStructuralPath(file.file, index, parseBlock, signal);
         if (structural) {
             removeGravityIncludedAccelBaseline(structural.records, parseBlock);
+            attachLocalClockOffsetHint(structural, parseBlock, file);
             return structural;
         }
         // Streaming fallback. Can eat up to 4 GB IO on a long clip - the
@@ -79,9 +81,49 @@ export const freegpsPrimitive: Primitive = {
             );
         }
         removeGravityIncludedAccelBaseline(streamed.records, parseBlock);
+        attachLocalClockOffsetHint(streamed, parseBlock, file);
         return streamed;
     },
 };
+
+/** Max |filename clock - first synced record| for the local-stamp verdict:
+ *  covers a fix acquired minutes into the clip plus RTC drift, while staying
+ *  under half a zone-grid step so a real zone gap can never pass. */
+const LOCAL_STAMP_NAME_TOLERANCE_SEC = 450;
+
+/**
+ * Attaches ParsedRecords.localClockOffsetHintSec when this file proves its
+ * record clocks are the camera's LOCAL wall time. Two independent pieces of
+ * evidence must agree:
+ *
+ *  1. The cold-start clock jump (parseBlock.coldStartClockJumpSec): pre-fix
+ *     RTC blocks and the first satellite-synced record disagree by a clean
+ *     zone-grid step.
+ *  2. The filename clock matches the synced records. The filename is written
+ *     by the same clock the OSD shows, so agreement means the satellite
+ *     stamps run local. Without this gate the opposite firmware - a LOCAL
+ *     RTC with honest-UTC satellite stamps - would produce the same jump
+ *     with the opposite sign convention, and "correcting" it would corrupt
+ *     an already-true-UTC axis.
+ *
+ * No-op (hint absent) when either piece is missing.
+ */
+function attachLocalClockOffsetHint(result: ParsedRecords, parseBlock: FreeGpsFileBlockParser, file: VendorFile): void {
+    const jumpSec = parseBlock.coldStartClockJumpSec();
+    if (jumpSec === null) return;
+    const nameDate = classifyFilenameTime(file);
+    if (nameDate === null) return;
+    let firstSyncedUnix: number | null = null;
+    for (const record of result.records) {
+        if (record.timeUnsynced !== true) {
+            firstSyncedUnix = record.unixSeconds;
+            break;
+        }
+    }
+    if (firstSyncedUnix === null) return;
+    if (Math.abs(nameDate.getTime() / 1000 - firstSyncedUnix) > LOCAL_STAMP_NAME_TOLERANCE_SEC) return;
+    result.localClockOffsetHintSec = jumpSec;
+}
 
 /**
  * Some freeGPS variants store gravity-INCLUDED accel (Azdome/EEEkit XOR,

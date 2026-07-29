@@ -91,6 +91,7 @@ function makeCandidate(opts: {
         isMatroska: false,
         audioNeedsTranscode: false,
         embeddedStartUtcHint: null,
+        localClockOffsetHintSec: null,
     };
 }
 
@@ -2039,6 +2040,101 @@ describe("groupTrips: cameraTzSec lift", () => {
         const a = makeCandidate({ name: "a.mp4", startUtc: 1000 });
         const trips = groupTrips([a]);
         expect(trips[0]!.cameraTzSec).toBeNull();
+    });
+});
+
+// ===== local-as-UTC record-axis correction (A119 Mini 2 firmware) =====
+
+describe("applyLocalClockCorrections (via rederiveStartUtcForCandidates)", () => {
+    // Local-as-UTC camera in a +3h zone: the filename clock and the GPS
+    // record clocks agree (both local), true UTC is 3h behind both. The
+    // cold-start hint carries the measured +10800.
+    const NAME = "20260406142122_000022.MP4";
+    const NAME_NAIVE = Date.UTC(2026, 3, 6, 14, 21, 22) / 1000;
+    const ZONE = 10_800;
+
+    function makeLocalStampCandidate(): VideoCandidate {
+        const c = makeCandidate({
+            name: NAME,
+            startUtc: 0,
+            durationSec: 60,
+            records: [makeRecord(NAME_NAIVE + 43), makeRecord(NAME_NAIVE + 57)],
+        });
+        c.appliedExtractors = ["freegps"];
+        return c;
+    }
+
+    it("subtracts the measured offset and re-anchors on true UTC", () => {
+        const c = makeLocalStampCandidate();
+        c.localClockOffsetHintSec = ZONE;
+        rederiveStartUtcForCandidates([c], classifyFilenameTime);
+
+        expect(c.records[0]!.unixSeconds).toBe(NAME_NAIVE + 43 - ZONE);
+        expect(c.records[0]!.localClockOffsetAppliedSec).toBe(ZONE);
+        // Filename self-calibration over the corrected records: t=0 lands a
+        // full zone behind the (local) filename clock.
+        expect(c.startUtc).toBe(NAME_NAIVE - ZONE);
+        expect(c.startSource).toBe("name");
+        // Display estimate now reports the real zone, so the camera clock
+        // shown to the user stays 14:21 - same screen, honest axis.
+        expect(c.cameraTzSec).toBe(ZONE);
+    });
+
+    it("is idempotent across repeated sweeps", () => {
+        const c = makeLocalStampCandidate();
+        c.localClockOffsetHintSec = ZONE;
+        rederiveStartUtcForCandidates([c], classifyFilenameTime);
+        rederiveStartUtcForCandidates([c], classifyFilenameTime);
+        expect(c.records[0]!.unixSeconds).toBe(NAME_NAIVE + 43 - ZONE);
+        expect(c.startUtc).toBe(NAME_NAIVE - ZONE);
+    });
+
+    it("propagates the offset to same-fingerprint siblings without evidence", () => {
+        const c = makeLocalStampCandidate();
+        c.localClockOffsetHintSec = ZONE;
+        const siblingNaive = NAME_NAIVE + 60;
+        const sibling = makeCandidate({
+            name: "20260406142222_000023.MP4",
+            startUtc: 0,
+            durationSec: 60,
+            records: [makeRecord(siblingNaive + 43)],
+        });
+        sibling.appliedExtractors = ["freegps"];
+        rederiveStartUtcForCandidates([c, sibling], classifyFilenameTime);
+        expect(sibling.records[0]!.unixSeconds).toBe(siblingNaive + 43 - ZONE);
+    });
+
+    it("leaves records from other extractors on the same fingerprint alone", () => {
+        const c = makeLocalStampCandidate();
+        c.localClockOffsetHintSec = ZONE;
+        // A GPX-fed sibling already carries honest UTC - the freegps clock
+        // offset does not describe it.
+        const honest = makeCandidate({
+            name: "clip-gpx.mp4",
+            startUtc: 0,
+            durationSec: 60,
+            records: [makeRecord(NAME_NAIVE - ZONE + 200)],
+        });
+        honest.appliedExtractors = ["gpx"];
+        rederiveStartUtcForCandidates([c, honest], classifyFilenameTime);
+        expect(honest.records[0]!.unixSeconds).toBe(NAME_NAIVE - ZONE + 200);
+        expect(honest.records[0]!.localClockOffsetAppliedSec).toBeUndefined();
+    });
+
+    it("keeps an applied offset when a later sweep sees no evidence", () => {
+        // The per-trip lazy sweep passes one trip's candidates; the clip that
+        // measured the offset routinely sits in another trip. Reverting there
+        // would undo a correct axis - permanently if the fill is cancelled
+        // before the final full sweep.
+        const c = makeLocalStampCandidate();
+        c.localClockOffsetHintSec = ZONE;
+        rederiveStartUtcForCandidates([c], classifyFilenameTime);
+        expect(c.records[0]!.unixSeconds).toBe(NAME_NAIVE + 43 - ZONE);
+
+        c.localClockOffsetHintSec = null;
+        rederiveStartUtcForCandidates([c], classifyFilenameTime);
+        expect(c.records[0]!.unixSeconds).toBe(NAME_NAIVE + 43 - ZONE);
+        expect(c.records[0]!.localClockOffsetAppliedSec).toBe(ZONE);
     });
 });
 

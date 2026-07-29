@@ -247,6 +247,15 @@ export function applyLazyResultToState(
         // next regroup (refreshTrip deliberately keeps trip boundaries).
         const hint = result.videoStartUtcHintByFilename.get(cand.file.name);
         if (hint !== undefined) cand.embeddedStartUtcHint = hint;
+        // Local-as-UTC clock evidence, deferred the same way - and it must
+        // stay deferred: applyLocalClockCorrections moves records only, so
+        // firing it without re-anchoring the frames would drag the track off
+        // the trip window by a whole zone. Until the next regroup the trip is
+        // self-consistent on the camera's local clock (anchor and records both
+        // carry the zone) and renders in the viewer's zone like any trip with
+        // no zone estimate.
+        const clockHint = result.localClockOffsetHintByFilename.get(cand.file.name);
+        if (clockHint !== undefined) cand.localClockOffsetHintSec = clockHint;
     }
 }
 

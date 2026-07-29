@@ -187,6 +187,13 @@ export interface DispatchedEmbeddedGpsResult {
      */
     videoStartUtcHintByFilename: Map<string, number>;
     /**
+     * mp4 filename -> local-as-UTC clock offset evidence from the winning
+     * extractor (ParsedRecords.localClockOffsetHintSec). Aggregated per
+     * fingerprint and subtracted from the record axis by
+     * applyLocalClockCorrections in trips.ts. Absent for honest-UTC files.
+     */
+    localClockOffsetHintByFilename: Map<string, number>;
+    /**
      * mp4 filename -> accelerometer samples the winning extractor found inside
      * the container (embedded `3gf `, `gsen`, binary preambles). Same shape and
      * meaning as the accel-sidecar map, so both feed one mergeAccelSamples call
@@ -435,6 +442,7 @@ export async function dispatchParseVideoEmbeddedGps(
     const used = new Set<string>();
     const winningExtractorByFilename = new Map<string, string>();
     const videoStartUtcHintByFilename = new Map<string, number>();
+    const localClockOffsetHintByFilename = new Map<string, number>();
     const accelByFilename = new Map<string, AccelSample[]>();
     const heavyFiles: ClassifiedFile[] = [];
 
@@ -447,6 +455,7 @@ export async function dispatchParseVideoEmbeddedGps(
         records: GpsRecord[];
         skipped: SkippedLine[];
         videoStartUtcHint: number | undefined;
+        localClockOffsetHintSec: number | undefined;
         accelSamples: AccelSample[] | undefined;
     };
 
@@ -511,6 +520,7 @@ export async function dispatchParseVideoEmbeddedGps(
                     records: parsed.records,
                     skipped: parsed.skipped,
                     videoStartUtcHint: parsed.videoStartUtcHint,
+                    localClockOffsetHintSec: parsed.localClockOffsetHintSec,
                     accelSamples: parsed.accelSamples,
                 };
             } catch (err) {
@@ -613,6 +623,9 @@ export async function dispatchParseVideoEmbeddedGps(
                 if (result.videoStartUtcHint !== undefined) {
                     videoStartUtcHintByFilename.set(usedCandidate.file.file.name, result.videoStartUtcHint);
                 }
+                if (result.localClockOffsetHintSec !== undefined) {
+                    localClockOffsetHintByFilename.set(usedCandidate.file.file.name, result.localClockOffsetHintSec);
+                }
                 if (result.accelSamples && result.accelSamples.length > 0) {
                     accelByFilename.set(usedCandidate.file.file.name, result.accelSamples);
                 }
@@ -628,6 +641,11 @@ export async function dispatchParseVideoEmbeddedGps(
                     // and, for the same reason, the same accel stream.
                     if (result.videoStartUtcHint !== undefined) {
                         videoStartUtcHintByFilename.set(followerName, result.videoStartUtcHint);
+                    }
+                    // Byte-synchronized followers share the primary's clock,
+                    // so the local-stamp evidence transfers verbatim.
+                    if (result.localClockOffsetHintSec !== undefined) {
+                        localClockOffsetHintByFilename.set(followerName, result.localClockOffsetHintSec);
                     }
                     if (result.accelSamples && result.accelSamples.length > 0) {
                         accelByFilename.set(followerName, result.accelSamples);
@@ -655,6 +673,7 @@ export async function dispatchParseVideoEmbeddedGps(
         errors,
         winningExtractorByFilename,
         videoStartUtcHintByFilename,
+        localClockOffsetHintByFilename,
         accelByFilename,
         heavyFiles,
     };

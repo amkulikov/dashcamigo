@@ -87,6 +87,7 @@ function makeCandidate(vf: VendorFile, records: GpsRecord[]): VideoCandidate {
         isMatroska: false,
         audioNeedsTranscode: false,
         embeddedStartUtcHint: null,
+        localClockOffsetHintSec: null,
     };
 }
 

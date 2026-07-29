@@ -547,6 +547,92 @@ describe("LAYOUT_KENWOOD_MN (+48-shifted Type 3, DRV-A510W)", () => {
     });
 });
 
+describe("createFreeGpsBlockParser: cold-start clock jump", () => {
+    // Real A119 Mini 2 shape: pre-fix blocks carry the RTC datetime at the
+    // alt geometry (datetime@12) but their status bytes are 'V00' / ' 00' -
+    // no variant signature matches, so they land on the unclaimed path where
+    // the datetime collection lives.
+    function preFixBlock(h: number, mi: number, s: number): DataView {
+        const dv = buildCanonicalType3Block({ anchor: 36, active: "V", h, mi, s, y: 26, mo: 4, d: 6 });
+        setAscii(dv, 37, "00"); // real firmware writes '0''0' hemispheres before the fix
+        return dv;
+    }
+
+    function fixBlock(h: number, mi: number, s: number): DataView {
+        return buildCanonicalType3Block({ anchor: 36, h, mi, s, y: 26, mo: 4, d: 6 });
+    }
+
+    it("measures a +3h zone jump across the first fix", () => {
+        const parser = createFreeGpsBlockParser();
+        expect(parser(preFixBlock(11, 21, 20), "a.mp4")).toEqual([]);
+        expect(parser(preFixBlock(11, 22, 4), "a.mp4")).toEqual([]);
+        expect(parser(fixBlock(14, 22, 5), "a.mp4")).toHaveLength(1);
+        expect(parser.coldStartClockJumpSec()).toBe(10_800);
+    });
+
+    it("measures a negative zone jump (western hemisphere firmware)", () => {
+        const parser = createFreeGpsBlockParser();
+        expect(parser(preFixBlock(20, 0, 0), "a.mp4")).toEqual([]);
+        expect(parser(fixBlock(15, 0, 1), "a.mp4")).toHaveLength(1);
+        expect(parser.coldStartClockJumpSec()).toBe(-18_000);
+    });
+
+    it("returns null when the jump is below one zone-grid step", () => {
+        const parser = createFreeGpsBlockParser();
+        expect(parser(preFixBlock(11, 22, 4), "a.mp4")).toEqual([]);
+        expect(parser(fixBlock(11, 22, 5), "a.mp4")).toHaveLength(1);
+        expect(parser.coldStartClockJumpSec()).toBeNull();
+    });
+
+    it("returns null when the snap residual exceeds the drift tolerance", () => {
+        const parser = createFreeGpsBlockParser();
+        expect(parser(preFixBlock(11, 22, 4), "a.mp4")).toEqual([]);
+        // 3h 2min 1s after the last pre-fix block: 121 s past the grid point.
+        expect(parser(fixBlock(14, 24, 5), "a.mp4")).toHaveLength(1);
+        expect(parser.coldStartClockJumpSec()).toBeNull();
+    });
+
+    it("returns null when the jump is wider than any real UTC offset", () => {
+        const parser = createFreeGpsBlockParser();
+        // Stale RTC restored two days behind: 2d + 3h is an exact multiple of
+        // the grid, so the residual check waves it through - only the
+        // magnitude bound separates it from a zone.
+        const stale = buildCanonicalType3Block({ anchor: 36, active: "V", h: 11, mi: 22, s: 5, y: 26, mo: 4, d: 4 });
+        setAscii(stale, 37, "00");
+        expect(parser(stale, "a.mp4")).toEqual([]);
+        expect(parser(fixBlock(14, 22, 5), "a.mp4")).toHaveLength(1);
+        expect(parser.coldStartClockJumpSec()).toBeNull();
+    });
+
+    it("returns null on a warm start (first block already carries a fix)", () => {
+        const parser = createFreeGpsBlockParser();
+        expect(parser(fixBlock(14, 22, 5), "a.mp4")).toHaveLength(1);
+        expect(parser(preFixBlock(14, 22, 6), "a.mp4")).toEqual([]); // mid-file loss, ignored
+        expect(parser(fixBlock(14, 22, 7), "a.mp4")).toHaveLength(1);
+        expect(parser.coldStartClockJumpSec()).toBeNull();
+    });
+
+    it("pairs the fix only with its own layout's pre-fix datetime", () => {
+        const parser = createFreeGpsBlockParser();
+        // Pre-fix datetime readable ONLY at the default geometry (datetime@44);
+        // the fix arrives on the alt geometry - no alt bucket, no measurement.
+        const defaultPreFix = buildCanonicalType3Block({
+            anchor: 68,
+            active: "V",
+            h: 11,
+            mi: 22,
+            s: 4,
+            y: 26,
+            mo: 4,
+            d: 6,
+        });
+        setAscii(defaultPreFix, 69, "00");
+        expect(parser(defaultPreFix, "a.mp4")).toEqual([]);
+        expect(parser(fixBlock(14, 22, 5), "a.mp4")).toHaveLength(1);
+        expect(parser.coldStartClockJumpSec()).toBeNull();
+    });
+});
+
 describe("createFreeGpsBlockParser: backward anchor-scan fallback", () => {
     const NON_STANDARD_ANCHOR = 96; // not 68/40/36/84 - no fixed layout matches
 
