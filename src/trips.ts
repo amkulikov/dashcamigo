@@ -104,6 +104,12 @@ export interface VideoCandidate {
     // timeline segments, gap math and unsynced-record spreading.
     wallDurationSec: number | null;
     startSource: StartSource;
+    // Camera-clock zone for DISPLAY: snapshot of the per-fingerprint
+    // filenameTzSec estimate (see displayTzSec for the invariant it feeds).
+    // null when the fleet produced no filename/GPS pair for this camera.
+    // Deliberately NOT mvhdTzSec-backed: honest-UTC-mvhd firmware yields 0
+    // there and would flip the display from the viewer's zone to raw UTC.
+    cameraTzSec: number | null;
     // mvhd.creation_time as Date (interpreted as UTC directly). Stored in the
     // candidate so startUtc can be recalculated after camera TZ is refined
     // from all indexed files' mvhd pairs (see TZ finalization in app.ts:ingestFiles).
@@ -320,6 +326,11 @@ export interface Trip {
     // positional "Channel N" (their letter->mount mapping is a vendor
     // convention we can't verify). See VideoCandidate.channelConfident.
     confidentChannels: Set<Channel>;
+    // Camera-clock zone for DISPLAY, lifted from the trip's candidates (one
+    // fingerprint per trip - the grouping key - so any non-null value is THE
+    // camera's). Plain data on purpose: rides through structuredClone to the
+    // transcode worker for the burned-in overlay clock. See displayTzSec.
+    cameraTzSec: number | null;
     // First-frame preview of the first MP4 in the trip (JPEG dataURL).
     // Filled in background during ingest (see ui/trip-preview.ts) - does not
     // block ingest. Stays undefined if the decoder failed (corrupt codec / no
@@ -1122,6 +1133,19 @@ function finalizeTrip(frames: TripFrame[]): Trip {
     // separate trips, so one parking-class frame marks the whole trip.
     const isParking = frames.some((f) => frameTripClass(f) === "parking");
 
+    // One fingerprint per trip (the grouping key), so the first non-null
+    // estimate is the camera's - no cross-camera disagreement to arbitrate.
+    let cameraTzSec: number | null = null;
+    outer: for (const frame of frames) {
+        for (const ch of frameChannels(frame)) {
+            const c = frame.channels[ch];
+            if (c && c.cameraTzSec !== null) {
+                cameraTzSec = c.cameraTzSec;
+                break outer;
+            }
+        }
+    }
+
     return {
         isParking,
         frames,
@@ -1139,6 +1163,7 @@ function finalizeTrip(frames: TripFrame[]): Trip {
         events: projectEventsOntoTimeline(detectEvents(records, startUtc), timeline),
         inferredSegments: projectInferredOntoTimeline(detectInferredSegments(records, startUtc), startUtc, timeline),
         confidentChannels,
+        cameraTzSec,
     };
 }
 
@@ -1210,6 +1235,36 @@ export interface FingerprintTzEstimate {
  *  (Nepal +5:45, Chatham +12:45, Eucla +8:45) - a 30-minute grid misses
  *  them by 15 minutes. */
 const TZ_SNAP_SEC = 900;
+
+/**
+ * Seconds to ADD to a stored UTC timestamp so that rendering the sum via UTC
+ * accessors (Intl with timeZone:"UTC", getUTC*) shows the wall clock the UI
+ * should display: the camera's own clock when the per-fingerprint estimate is
+ * known, the browser zone otherwise.
+ *
+ * WHY the camera clock needs no firmware detection: an honest-UTC camera's
+ * estimate is its real zone; local-as-UTC firmware (zone baked into the GPS
+ * timestamps) yields estimate 0 with startUtc already carrying the zone -
+ * either way unix+offset reproduces the clock the camera showed on its OSD.
+ * With no estimate the per-instant browser offset preserves the previous
+ * behavior exactly, including DST transitions in the viewer's zone.
+ *
+ * Known limit: the estimate is one median per fingerprint, so a dump spanning
+ * the camera's own clock change (DST re-sync) displays the minority cluster
+ * shifted by that hour - same exposure the no-GPS anchors already have.
+ */
+export function displayTzSec(unixSec: number, cameraTzSec: number | null): number {
+    return cameraTzSec ?? -new Date(unixSec * 1000).getTimezoneOffset() * 60;
+}
+
+/**
+ * A Date whose UTC fields carry the display wall clock for `unixSec` (see
+ * displayTzSec). Read it ONLY via getUTC* or Intl with timeZone:"UTC" -
+ * local accessors would apply the browser zone a second time.
+ */
+export function displayClockDate(unixSec: number, cameraTzSec: number | null): Date {
+    return new Date((unixSec + displayTzSec(unixSec, cameraTzSec)) * 1000);
+}
 
 /** Median of `deltas` snapped to the TZ grid; null for an empty list.
  *  Mutates (sorts) the input - callers pass throwaway buckets.
@@ -2147,6 +2202,10 @@ export function rederiveStartUtcForCandidates(
         });
         c.startUtc = startUtc;
         c.startSource = source;
+        // Display-layer snapshot, NOT an anchor input: the UI renders
+        // startUtc + this (see displayTzSec). filenameTzSec only - the mvhd
+        // estimate reflects the container clock, not the OSD clock.
+        c.cameraTzSec = tzByFingerprint.get(c.fingerprint)?.filenameTzSec ?? null;
         if (mvhdRejected && c.createdUtc !== null) {
             const firstSynced = firstSyncedRecord(c.records);
             if (firstSynced) {

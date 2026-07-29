@@ -108,7 +108,7 @@ export function renderTrips(): void {
 
     displayed.forEach(({ trip, idx: tripIdx }) => {
         if (showDateBuckets) {
-            const bucket = dateBucketLabel(trip.startUtc);
+            const bucket = dateBucketLabel(trip.startUtc, trip.cameraTzSec);
             if (bucket !== lastBucket) {
                 const sep = document.createElement("li");
                 sep.className = "trip-date-sep";

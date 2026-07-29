@@ -347,8 +347,8 @@ function pad2(n: number): string {
  * Formats a frame epoch (unix seconds) into a wall-clock date+time, shifted by
  * tzOffsetMin (minutes). `monthsShort` is the localized Jan..Dec abbreviation
  * list resolved on the main thread (the worker has no Intl locale context). The
- * caller passes the viewer's browser-local offset (see export-flow.ts), so the
- * burned clock matches the player's chart ruler rather than raw UTC.
+ * caller passes the display-clock offset (see export-flow.ts), so the burned
+ * clock matches what the player showed rather than raw UTC.
  */
 export function formatClock(
     epochSec: number,

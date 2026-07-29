@@ -5,7 +5,7 @@
 
 import { getDateLocale, t } from "../i18n/index.js";
 import { findNearestIndex } from "../parser.js";
-import { contentToFrame, contentToWallUtc, type Trip } from "../trips.js";
+import { contentToFrame, contentToWallUtc, displayClockDate, type Trip } from "../trips.js";
 import type { GpsRecord } from "../parser.js";
 import { formatSpeedFromMs, subscribeUnitsChange, toggleUnits } from "../units-pref.js";
 import { dom } from "./dom.js";
@@ -31,13 +31,16 @@ function localTimeFormatter(): Intl.DateTimeFormat {
             minute: "2-digit",
             second: "2-digit",
             hour12: false,
+            // The zone shift lives inside the displayClockDate value, so the
+            // formatter is constant and the locale-keyed memoization holds.
+            timeZone: "UTC",
         });
         cachedTimeFmtLocale = locale;
     }
     return cachedTimeFmt;
 }
 
-function refreshMetrics(rec: GpsRecord | null): void {
+function refreshMetrics(rec: GpsRecord | null, cameraTzSec: number | null): void {
     if (!rec) {
         const ph = t("player.metrics.placeholder");
         dom.metrics.speed.textContent = ph;
@@ -54,9 +57,9 @@ function refreshMetrics(rec: GpsRecord | null): void {
     // 4 decimal places = ~11m accuracy at mid-latitudes, enough for viewing.
     // Full 5-place accuracy is in tooltip popups.
     dom.metrics.coords.textContent = `${rec.lat.toFixed(4)}, ${rec.lon.toFixed(4)}`;
-    // GPS time shown in browser local TZ. Locale from i18n so 24h/12h follows
-    // the UI language.
-    dom.metrics.time.textContent = localTimeFormatter().format(new Date(rec.unixSeconds * 1000));
+    // GPS time on the display clock (camera clock when known). Locale from
+    // i18n so 24h/12h follows the UI language.
+    dom.metrics.time.textContent = localTimeFormatter().format(displayClockDate(rec.unixSeconds, cameraTzSec));
     // Map marker updates via rAF-loop with GPS interpolation - it moves
     // smoothly without us setting position here.
 }
@@ -74,7 +77,7 @@ function refreshMetrics(rec: GpsRecord | null): void {
 export function refreshMetricsFromActiveFrame(tripCurrentSec: number): void {
     const af = activeFrame();
     if (!af || af.trip.records.length === 0) {
-        refreshMetrics(null);
+        refreshMetrics(null, null);
         // Clear on EVERY bail-out: state.active can go null outside playFrame
         // (a regroup that fails to relocate the active file), and a stale
         // marker would sit on the placeholder clock forever.
@@ -85,17 +88,17 @@ export function refreshMetricsFromActiveFrame(tripCurrentSec: number): void {
     const targetUnix = contentToWallUtc(af.trip.timeline, tripCurrentSec);
     const idx = findNearestIndex(af.trip.records, targetUnix);
     if (idx < 0) {
-        refreshMetrics(null);
+        refreshMetrics(null, null);
         markTimelapseClock(false);
         return;
     }
     const nearest = af.trip.records[idx]!;
     if (Math.abs(nearest.unixSeconds - targetUnix) > METRICS_TOLERANCE_SEC) {
-        refreshMetrics(null);
+        refreshMetrics(null, null);
         markTimelapseClock(false);
         return;
     }
-    refreshMetrics(nearest);
+    refreshMetrics(nearest, af.trip.cameraTzSec);
     markTimelapseClock(currentClipIsTimelapse(af.trip, tripCurrentSec));
 }
 
@@ -134,7 +137,7 @@ function markTimelapseClock(isTimelapse: boolean): void {
 
 /** Resets metric labels to placeholders. Used on trip change. */
 export function resetMetrics(): void {
-    refreshMetrics(null);
+    refreshMetrics(null, null);
     markTimelapseClock(false);
 }
 

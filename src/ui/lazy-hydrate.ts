@@ -262,6 +262,7 @@ export async function runLazyHydration(ctx: LazyHydrationContext): Promise<void>
                 fingerprint: d.fingerprint,
                 startUtc: d.startUtc,
                 startSource: d.source,
+                cameraTzSec: ctx.tzByFingerprint.get(d.fingerprint)?.filenameTzSec ?? null,
                 durationSec: provisionalDuration.get(d.fingerprint) ?? NOMINAL_DERIVE_DURATION_SEC,
                 records: d.records,
                 appliedExtractors,

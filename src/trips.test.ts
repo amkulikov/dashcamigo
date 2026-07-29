@@ -10,6 +10,8 @@ import {
     applyTimelapseCadenceWallSpans,
     deriveStartUtc,
     deriveWallDurationSec,
+    displayClockDate,
+    displayTzSec,
     estimatePreciseClockOffsetByFingerprint,
     estimateProvisionalDurationByFingerprint,
     estimateTzByFingerprint,
@@ -72,6 +74,7 @@ function makeCandidate(opts: {
         durationSec: opts.durationSec ?? 60,
         wallDurationSec: opts.wallDurationSec ?? null,
         startSource: "mp4",
+        cameraTzSec: null,
         createdUtc: null,
         records: opts.records ?? [],
         codec: null,
@@ -1983,6 +1986,59 @@ describe("rederiveStartUtcForCandidates: TZ-sample dedup keyed by File identity"
             expect(c.startSource).toBe("name");
             expect(c.startUtc).toBe(NAME_NAIVE - OFFSET); // == FIRST_GPS, not NAME_NAIVE - 46800
         }
+    });
+});
+
+// ===== display clock (camera clock when known) =====
+//
+// These run under the TZ=UTC pin (package.json test script), so the browser
+// offset is 0 and the two displayTzSec paths are cleanly separable.
+
+describe("displayTzSec / displayClockDate", () => {
+    it("applies the camera zone when the estimate exists", () => {
+        expect(displayTzSec(0, 10_800)).toBe(10_800);
+        expect(displayClockDate(1_000, 10_800).getTime()).toBe((1_000 + 10_800) * 1000);
+    });
+
+    it("falls back to the per-instant browser offset when unknown", () => {
+        // toBeCloseTo, not toBe: -offset*60 yields -0 under the TZ=UTC pin.
+        expect(displayTzSec(1_000, null)).toBeCloseTo(0);
+        expect(displayClockDate(1_000, null).getTime()).toBe(1_000_000);
+    });
+});
+
+describe("rederiveStartUtcForCandidates: camera-clock zone snapshot", () => {
+    it("stores the fingerprint's filenameTzSec on every candidate", () => {
+        // Filename clock 3h ahead of the GPS clock - the honest-UTC layout.
+        const nameNaive = Date.UTC(2026, 5, 11, 22, 16, 18) / 1000;
+        const c = makeCandidate({
+            name: "NO20260611-221618-003699F.MP4",
+            startUtc: 0,
+            records: [makeRecord(nameNaive - 10_800), makeRecord(nameNaive - 10_800 + 40)],
+        });
+        rederiveStartUtcForCandidates([c], classifyFilenameTime);
+        expect(c.cameraTzSec).toBe(10_800);
+    });
+
+    it("stays null when no filename time parses anywhere in the fleet", () => {
+        const c = makeCandidate({ name: "clip.mp4", startUtc: 0, records: [makeRecord(1_700_000_000)] });
+        rederiveStartUtcForCandidates([c], classifyFilenameTime);
+        expect(c.cameraTzSec).toBeNull();
+    });
+});
+
+describe("groupTrips: cameraTzSec lift", () => {
+    it("lifts the first non-null candidate estimate onto the trip", () => {
+        const a = makeCandidate({ name: "a.mp4", startUtc: 1000 });
+        a.cameraTzSec = 10_800;
+        const trips = groupTrips([a]);
+        expect(trips[0]!.cameraTzSec).toBe(10_800);
+    });
+
+    it("stays null when no candidate carries an estimate", () => {
+        const a = makeCandidate({ name: "a.mp4", startUtc: 1000 });
+        const trips = groupTrips([a]);
+        expect(trips[0]!.cameraTzSec).toBeNull();
     });
 });
 

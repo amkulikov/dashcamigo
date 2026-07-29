@@ -743,6 +743,9 @@ async function ingestFilesInternal(vfiles: VendorFile[], signal: AbortSignal): P
                         durationSec: idx.durationSec,
                         wallDurationSec,
                         startSource: source,
+                        // Pre-index estimate (no mvhd yet); the unconditional
+                        // recomputeAllStartUtc sweep refreshes it after indexing.
+                        cameraTzSec: tzByFingerprint.get(fingerprint)?.filenameTzSec ?? null,
                         records,
                         createdUtc: idx.createdUtc,
                         codec: idx.codec,

@@ -110,15 +110,51 @@ describe("dateBucketLabel", () => {
 
     it("buckets a timestamp by its day distance from now", () => {
         // Comparing against t() (not a hard-coded string) keeps this locale-agnostic.
-        expect(dateBucketLabel(secOf(new Date(2026, 5, 15, 8, 0, 0)), now)).toBe(t("buckets.today"));
-        expect(dateBucketLabel(secOf(new Date(2026, 5, 14, 8, 0, 0)), now)).toBe(t("buckets.yesterday"));
-        expect(dateBucketLabel(secOf(new Date(2026, 5, 12, 8, 0, 0)), now)).toBe(t("buckets.thisWeek")); // 3d
-        expect(dateBucketLabel(secOf(new Date(2026, 5, 1, 8, 0, 0)), now)).toBe(t("buckets.thisMonth")); // 14d
-        expect(dateBucketLabel(secOf(new Date(2026, 2, 1, 8, 0, 0)), now)).toBe(t("buckets.earlier")); // >30d
+        expect(dateBucketLabel(secOf(new Date(2026, 5, 15, 8, 0, 0)), null, now)).toBe(t("buckets.today"));
+        expect(dateBucketLabel(secOf(new Date(2026, 5, 14, 8, 0, 0)), null, now)).toBe(t("buckets.yesterday"));
+        expect(dateBucketLabel(secOf(new Date(2026, 5, 12, 8, 0, 0)), null, now)).toBe(t("buckets.thisWeek")); // 3d
+        expect(dateBucketLabel(secOf(new Date(2026, 5, 1, 8, 0, 0)), null, now)).toBe(t("buckets.thisMonth")); // 14d
+        expect(dateBucketLabel(secOf(new Date(2026, 2, 1, 8, 0, 0)), null, now)).toBe(t("buckets.earlier")); // >30d
     });
 
     it("labels a future timestamp explicitly (clock skew / bad mtime guard)", () => {
-        expect(dateBucketLabel(secOf(new Date(2026, 5, 20, 8, 0, 0)), now)).toBe(t("buckets.future"));
+        expect(dateBucketLabel(secOf(new Date(2026, 5, 20, 8, 0, 0)), null, now)).toBe(t("buckets.future"));
+    });
+});
+
+describe("display clock (camera clock when the trip carries a zone estimate)", () => {
+    it("formatTripTitle renders the camera clock, not the host zone", () => {
+        // 12:00 UTC + camera zone +3h -> 15:00 regardless of where the viewer sits.
+        const start = Date.UTC(2026, 3, 6, 12, 0, 0) / 1000;
+        const trip = { startUtc: start, endUtc: start + 60, cameraTzSec: 3 * 3600 } as unknown as Trip;
+        const title = formatTripTitle(trip, new Date(Date.UTC(2026, 0, 15)));
+        expect(title).toContain("15:00");
+        expect(title).toContain("15:01");
+    });
+
+    it("clipBasename shifts filename timestamps by the camera zone", () => {
+        const start = Date.UTC(2026, 3, 29, 19, 27, 47) / 1000;
+        const trip = makeTrip(start);
+        (trip as { cameraTzSec: number | null }).cameraTzSec = 3 * 3600;
+        expect(clipBasename(trip, 0, 28)).toBe("dashcamigo_20260429_222747-222815");
+    });
+
+    it("dateBucketLabel buckets by the camera-clock calendar day", () => {
+        // 23:00 UTC Jun 14 is already Jun 15 on a +2h camera clock -> "today"
+        // against a viewer now of Jun 15 noon (TZ=UTC pin); with a zero-zone
+        // estimate the same instant stays on Jun 14 -> "yesterday".
+        const now = new Date(Date.UTC(2026, 5, 15, 12, 0, 0));
+        const ts = Date.UTC(2026, 5, 14, 23, 0, 0) / 1000;
+        expect(dateBucketLabel(ts, 7200, now)).toBe(t("buckets.today"));
+        expect(dateBucketLabel(ts, 0, now)).toBe(t("buckets.yesterday"));
+    });
+
+    it("does not call a camera-clock day ahead of the viewer's a future trip", () => {
+        // Viewer at UTC (test pin), camera set to +13. A clip recorded an hour
+        // ago carries tomorrow's camera-clock date - a zone gap, not skew.
+        const now = new Date(Date.UTC(2026, 5, 15, 12, 0, 0));
+        const ts = Date.UTC(2026, 5, 15, 11, 0, 0) / 1000;
+        expect(dateBucketLabel(ts, 13 * 3600, now)).toBe(t("buckets.today"));
     });
 });
 

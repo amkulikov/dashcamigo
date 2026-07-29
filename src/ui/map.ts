@@ -27,7 +27,7 @@ import { interpolatePosition } from "../parser.js";
 import { captureSentryMessage } from "../sentry.js";
 import { COARSE_POINTER_QUERY, isCoarsePointer, prefersReducedMotion } from "./media-queries.js";
 import type { GpsRecord } from "../parser.js";
-import { wallToContentSec, type Trip, type TripFrame } from "../trips.js";
+import { displayClockDate, wallToContentSec, type Trip, type TripFrame } from "../trips.js";
 import { getViewPanels, setPanelAvailable, setPanelVisible, subscribeViewPanels } from "./view-menu.js";
 
 const log = createLogger("map");
@@ -1674,6 +1674,7 @@ export function buildRecordPopupHtml(rec: GpsRecord, trip: Trip): string {
     // "rel" label is the footage-axis position (matches the scrubber/chart);
     // "abs" below stays real wall-clock.
     const relSec = wallToContentSec(trip.timeline, rec.unixSeconds);
+    // Display clock (camera clock when known) - see displayClockDate contract.
     const absFmt = new Intl.DateTimeFormat(getDateLocale(), {
         day: "numeric",
         month: "short",
@@ -1681,10 +1682,11 @@ export function buildRecordPopupHtml(rec: GpsRecord, trip: Trip): string {
         minute: "2-digit",
         second: "2-digit",
         hour12: false,
+        timeZone: "UTC",
     });
     const titleStr = t("popup.title", {
         rel: formatTime(relSec),
-        abs: absFmt.format(new Date(rec.unixSeconds * 1000)),
+        abs: absFmt.format(displayClockDate(rec.unixSeconds, trip.cameraTzSec)),
     });
     // Show speed in the user-selected units (km/h or mph). The track color
     // gradient is still computed from km/h - we don't shift its breakpoints

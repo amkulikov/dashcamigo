@@ -20,7 +20,7 @@ import { getDateLocale, t } from "../i18n/index.js";
 import { createLogger } from "../log.js";
 import { buildStructureReport } from "../report-structure.js";
 import { captureSentryException } from "../sentry.js";
-import { wallToContentSec } from "../trips.js";
+import { displayClockDate, wallToContentSec } from "../trips.js";
 import { formatDistanceFromKm } from "../units-pref.js";
 import { APP_VERSION } from "../version.js";
 import { dom } from "./dom.js";
@@ -238,16 +238,17 @@ function currentContextSummary(): string {
     const lines: string[] = [t("feedback.body.context.title")];
     lines.push(t("feedback.body.context.file", { name: cand.file.name }));
 
-    // Trip: start → end time in browser local TZ + counters.
+    // Trip: start → end on the display clock (camera clock when known) + counters.
     const tripFmt = new Intl.DateTimeFormat(getDateLocale(), {
         day: "numeric",
         month: "short",
         hour: "2-digit",
         minute: "2-digit",
         hour12: false,
+        timeZone: "UTC",
     });
-    const start = tripFmt.format(new Date(af.trip.startUtc * 1000));
-    const end = tripFmt.format(new Date(af.trip.endUtc * 1000));
+    const start = tripFmt.format(displayClockDate(af.trip.startUtc, af.trip.cameraTzSec));
+    const end = tripFmt.format(displayClockDate(af.trip.endUtc, af.trip.cameraTzSec));
     let filesCount = 0;
     for (const frame of af.trip.frames) {
         for (const c of Object.values(frame.channels)) {

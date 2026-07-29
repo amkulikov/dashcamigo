@@ -25,6 +25,7 @@ function makeCandidate(file: File): VideoCandidate {
         durationSec: 60,
         wallDurationSec: null,
         startSource: "mp4",
+        cameraTzSec: null,
         createdUtc: null,
         records: [],
         codec: null,
@@ -62,6 +63,7 @@ function makeTrip(candidate: VideoCandidate, previewDataUrl?: string): Trip {
         inferredSegments: [],
         isParking: false,
         confidentChannels: new Set(),
+        cameraTzSec: null,
         previewDataUrl,
     };
 }

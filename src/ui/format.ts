@@ -5,18 +5,23 @@ import type { EventKind, TripEvent } from "../events.js";
 import { getDateLocale, t } from "../i18n/index.js";
 import { totalDistanceKm } from "../parser.js";
 import type { Channel, RecordingMode } from "../parsers/types.js";
-import { tripChannels, contentToWallUtc, type Trip, type VideoCandidate } from "../trips.js";
+import { displayClockDate, tripChannels, contentToWallUtc, type Trip, type VideoCandidate } from "../trips.js";
 import { formatDistanceFromKm } from "../units-pref.js";
 
 import type { TripSortKey } from "./state.js";
 
-/** True when both dates fall on the same calendar day in local time. */
-function isSameLocalDay(a: Date, b: Date): boolean {
-    return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+/** True when both display-clock dates (displayClockDate) fall on the same calendar day. */
+function isSameDisplayDay(a: Date, b: Date): boolean {
+    return (
+        a.getUTCFullYear() === b.getUTCFullYear() &&
+        a.getUTCMonth() === b.getUTCMonth() &&
+        a.getUTCDate() === b.getUTCDate()
+    );
 }
 
 /**
- * Trip title in the browser's local timezone.
+ * Trip title on the display clock - the camera's own clock when the
+ * per-fingerprint estimate exists, browser-local otherwise (displayClockDate).
  * "Apr 29, 18:26 → 18:42" for same-day trips, "Apr 29 18:26 → Apr 30 02:15" for overnight.
  * Year is shown only when the trip year differs from the current year.
  *
@@ -24,20 +29,29 @@ function isSameLocalDay(a: Date, b: Date): boolean {
  * branch is deterministically testable (and mockable) without freezing time.
  */
 export function formatTripTitle(trip: Trip, now: Date = new Date()): string {
-    const start = new Date(trip.startUtc * 1000);
-    const end = new Date(trip.endUtc * 1000);
-    const sameDay = isSameLocalDay(start, end);
+    const start = displayClockDate(trip.startUtc, trip.cameraTzSec);
+    const end = displayClockDate(trip.endUtc, trip.cameraTzSec);
+    const sameDay = isSameDisplayDay(start, end);
     // hour12:false forces 24-hour format regardless of system locale (en-US otherwise gives "04:43 PM").
     // Explicit locale from i18n (ru-RU or en-US) keeps date language in sync with UI language.
     const locale = getDateLocale();
-    const currentYear = now.getFullYear();
+    // `now` is the viewer's clock - project it the same way (browser zone) so
+    // the year comparison happens between display-clock values.
+    const currentYear = displayClockDate(now.getTime() / 1000, null).getUTCFullYear();
     // Show year if EITHER edge is in a different year - covers the rare Dec 31 crossing: both edges show the year for consistency.
-    const includeYear = start.getFullYear() !== currentYear || end.getFullYear() !== currentYear;
+    const includeYear = start.getUTCFullYear() !== currentYear || end.getUTCFullYear() !== currentYear;
+    // timeZone:"UTC" everywhere a displayClockDate is formatted - the shift is
+    // already inside the Date (see the displayClockDate contract).
     const dateOpts: Intl.DateTimeFormatOptions = includeYear
-        ? { day: "numeric", month: "short", year: "numeric" }
-        : { day: "numeric", month: "short" };
+        ? { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }
+        : { day: "numeric", month: "short", timeZone: "UTC" };
     const dateFmt = new Intl.DateTimeFormat(locale, dateOpts);
-    const timeFmt = new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", hour12: false });
+    const timeFmt = new Intl.DateTimeFormat(locale, {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+        timeZone: "UTC",
+    });
     if (sameDay) {
         return `${dateFmt.format(start)}, ${timeFmt.format(start)} → ${timeFmt.format(end)}`;
     }
@@ -46,19 +60,27 @@ export function formatTripTitle(trip: Trip, now: Date = new Date()): string {
 
 /**
  * Maps a trip's startUtc to a date bucket label for the sidebar separator.
- * Comparison in browser local TZ. `now` is injectable so bucket boundaries
- * (today/yesterday/week/month/future) are deterministically testable.
+ * The trip's calendar day is taken on the display clock (camera clock when
+ * known); "how long ago" compares against the viewer's own calendar day -
+ * that is what "today"/"yesterday" mean to the person looking at the screen.
+ * `now` is injectable so bucket boundaries are deterministically testable.
+ *
+ * "Future" keys on the INSTANT, not on the calendar difference: a camera set
+ * far enough east of the viewer puts a clip recorded hours ago on tomorrow's
+ * camera-clock date, and that is a zone gap, not the clock skew the bucket
+ * warns about.
  */
-export function dateBucketLabel(unixTs: number, now: Date = new Date()): string {
-    const d = new Date(unixTs * 1000);
-    const ds = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    const ns = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const dayDiff = Math.round((ns.getTime() - ds.getTime()) / 86400000);
-    if (dayDiff === 0) return t("buckets.today");
+export function dateBucketLabel(unixTs: number, cameraTzSec: number | null, now: Date = new Date()): string {
+    if (unixTs > now.getTime() / 1000) return t("buckets.future");
+    const d = displayClockDate(unixTs, cameraTzSec);
+    const n = displayClockDate(now.getTime() / 1000, null);
+    const ds = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    const ns = Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate());
+    const dayDiff = Math.round((ns - ds) / 86400000);
+    if (dayDiff <= 0) return t("buckets.today");
     if (dayDiff === 1) return t("buckets.yesterday");
-    if (dayDiff > 1 && dayDiff < 7) return t("buckets.thisWeek");
-    if (dayDiff >= 7 && dayDiff < 30) return t("buckets.thisMonth");
-    if (dayDiff < 0) return t("buckets.future"); // guard for timestamps in the future
+    if (dayDiff < 7) return t("buckets.thisWeek");
+    if (dayDiff < 30) return t("buckets.thisMonth");
     return t("buckets.earlier");
 }
 
@@ -243,16 +265,18 @@ export function formatRateBytes(bytesPerSecond: number): string {
  *   - same calendar day (typical): dashcamigo_YYYYMMDD_HHMMSS-HHMMSS
  *   - clip crossing midnight:       dashcamigo_YYYYMMDD_HHMMSS-YYYYMMDD_HHMMSS
  *
- * Date/time in browser local TZ. Single source of truth for both the FSA picker suggestedName and the export done summary.
+ * Date/time on the display clock (camera clock when known - matches the trip
+ * header the user sees). Single source of truth for both the FSA picker
+ * suggestedName and the export done summary.
  */
 export function clipBasename(trip: Trip, startTripSec: number, endTripSec: number): string {
     // start/end are footage-axis seconds; map to wall-clock for the filename's
     // real timestamps (so a clip across a pause shows its true end time).
-    const start = new Date(contentToWallUtc(trip.timeline, startTripSec) * 1000);
-    const end = new Date(contentToWallUtc(trip.timeline, endTripSec) * 1000);
-    const sameDay = isSameLocalDay(start, end);
-    const startStr = formatLocalForFilename(start, true);
-    const endStr = formatLocalForFilename(end, !sameDay);
+    const start = displayClockDate(contentToWallUtc(trip.timeline, startTripSec), trip.cameraTzSec);
+    const end = displayClockDate(contentToWallUtc(trip.timeline, endTripSec), trip.cameraTzSec);
+    const sameDay = isSameDisplayDay(start, end);
+    const startStr = formatClockForFilename(start, true);
+    const endStr = formatClockForFilename(end, !sameDay);
     return `dashcamigo_${startStr}-${endStr}`;
 }
 
@@ -281,12 +305,14 @@ export function randomFilenameSuffix(length = 4): string {
     return out;
 }
 
-/** Timestamp for a filename: YYYYMMDD_HHMMSS when withDate=true, HHMMSS otherwise (for same-day end timestamps). */
-function formatLocalForFilename(d: Date, withDate: boolean): string {
+/** Timestamp for a filename: YYYYMMDD_HHMMSS when withDate=true, HHMMSS otherwise
+ *  (for same-day end timestamps). `d` is a displayClockDate - UTC fields carry
+ *  the display clock. */
+function formatClockForFilename(d: Date, withDate: boolean): string {
     const pad = (n: number): string => String(n).padStart(2, "0");
-    const time = `${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+    const time = `${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}`;
     if (!withDate) return time;
-    return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${time}`;
+    return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}_${time}`;
 }
 
 // Labels are re-localized on each call (cheap, one Map lookup) to stay in sync with the current language.

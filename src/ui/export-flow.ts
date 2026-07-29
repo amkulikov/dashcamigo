@@ -39,7 +39,7 @@ import type {
     TranscodeResult,
     WatermarkAnchor,
 } from "../transcode/types.js";
-import { contentToWallUtc, tripCandidatesByChannel } from "../trips.js";
+import { contentToWallUtc, displayTzSec, tripCandidatesByChannel } from "../trips.js";
 import type { Trip } from "../trips.js";
 import { getBrakeThresholdG } from "../events.js";
 import { computeCumulativeDistanceM, sampleSpeedAcross } from "../transcode/frame-pos.js";
@@ -288,10 +288,11 @@ export function buildOverlayPipelineArgs(trip: Trip): OverlayPipelineArgs | null
     const range = s.range ?? { startTripSec: 0, endTripSec: trip.timeline.contentDurationSec };
     const startUtc = contentToWallUtc(trip.timeline, range.startTripSec);
     const endUtc = contentToWallUtc(trip.timeline, range.endTripSec);
-    // Browser-local offset for the clock readout, matching the chart's absolute
-    // ruler (Intl with no timeZone = browser local). A single offset at the
-    // range start is enough - a clip is minutes long, well within one DST side.
-    const tzOffsetMin = -new Date(startUtc * 1000).getTimezoneOffset();
+    // Zone for the burned-in clock readout, matching the on-screen chart/map:
+    // camera clock when known, browser zone otherwise (displayTzSec). A single
+    // offset at the range start is enough - a clip is minutes long, well
+    // within one DST side.
+    const tzOffsetMin = displayTzSec(startUtc, trip.cameraTzSec) / 60;
 
     // Burned-in text is localized here on the main thread - the worker has no
     // i18n. zh/ja/ko fall back to English labels/cardinals (their dict values

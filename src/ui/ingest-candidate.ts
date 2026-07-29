@@ -128,6 +128,8 @@ export interface ProvisionalCandidateParams {
     fingerprint: string;
     startUtc: number;
     startSource: StartSource;
+    /** Display-clock zone snapshot (per-fingerprint filenameTzSec), null when unknown. */
+    cameraTzSec: number | null;
     /** Per-fingerprint provisional duration (estimateProvisionalDurationByFingerprint). */
     durationSec: number;
     records: GpsRecord[];
@@ -155,6 +157,7 @@ export function buildProvisionalCandidate(params: ProvisionalCandidateParams): V
         // post-hydration rederive sweep fills the real value.
         wallDurationSec: null,
         startSource: params.startSource,
+        cameraTzSec: params.cameraTzSec,
         records: params.records,
         createdUtc: null,
         codec: null,

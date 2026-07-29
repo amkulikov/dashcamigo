@@ -70,6 +70,7 @@ function makeCandidate(vf: VendorFile, records: GpsRecord[]): VideoCandidate {
         durationSec: REAL_DURATION_SEC,
         wallDurationSec: null,
         startSource: "mtime",
+        cameraTzSec: null,
         createdUtc: new Date(REAL_MVHD),
         records,
         codec: null,

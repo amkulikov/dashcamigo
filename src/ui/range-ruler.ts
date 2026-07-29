@@ -7,18 +7,20 @@
 // vertical space.
 
 import { getDateLocale } from "../i18n/index.js";
-import { contentToWallUtc, type Trip } from "../trips.js";
+import { contentToWallUtc, displayClockDate, type Trip } from "../trips.js";
 
 import { formatTime } from "./format.js";
 import { pickRulerInterval } from "./strip-zoom.js";
 
-function formatAbsoluteClock(unixSec: number, withSeconds: boolean): string {
-    const d = new Date(unixSec * 1000);
+/** Display clock (camera clock when known) - see displayClockDate contract. */
+function formatAbsoluteClock(unixSec: number, withSeconds: boolean, cameraTzSec: number | null): string {
+    const d = displayClockDate(unixSec, cameraTzSec);
     return new Intl.DateTimeFormat(getDateLocale(), {
         hour: "2-digit",
         minute: "2-digit",
         ...(withSeconds ? { second: "2-digit" } : {}),
         hour12: false,
+        timeZone: "UTC",
     }).format(d);
 }
 
@@ -128,7 +130,7 @@ export function renderRangeRuler(
         const rel = formatTime(tick.t);
         // tick.t is footage-sec; map to wall-clock for the absolute clock label
         // (so it skips paused time and stays the real time of that footage).
-        const abs = formatAbsoluteClock(contentToWallUtc(trip.timeline, tick.t), withSeconds);
+        const abs = formatAbsoluteClock(contentToWallUtc(trip.timeline, tick.t), withSeconds, trip.cameraTzSec);
         labelEl.textContent = `${rel} | ${abs}`;
         frag.appendChild(labelEl);
     }

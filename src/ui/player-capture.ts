@@ -1,6 +1,7 @@
 // Capture current video frame as a JPG via canvas (not an OS screenshot -
 // player UI is excluded). The button + the S hotkey both call captureCurrentFrame.
-// Filename: dashcamigo_YYYYMMDD_HHMMSS_frame.jpg in the user's local TZ.
+// Filename: dashcamigo_YYYYMMDD_HHMMSS_frame.jpg on the display clock (camera
+// clock when known - matches the trip headers in the sidebar).
 
 import { resolveRegionBlursAt } from "../blur-regions.js";
 import { downloadBlob } from "../download.js";
@@ -8,8 +9,9 @@ import { t } from "../i18n/index.js";
 import { createLogger } from "../log.js";
 import { createRegionBlurHelper, paintRegionBlursForView } from "../transcode/compose.js";
 import { activeBlurRegions } from "./blur-regions-state.js";
+import { displayClockDate } from "../trips.js";
 import { activePlayer, effectiveMasterChannel, dom } from "./dom.js";
-import { activeCandidate, state } from "./state.js";
+import { activeCandidate, activeTrip, state } from "./state.js";
 
 const log = createLogger("player");
 
@@ -168,25 +170,25 @@ export async function captureCurrentFrame(
     // Snapshot trip anchor + trip-current AFTER awaits: filename now matches
     // the frame drawn above, not the click instant (which could be far behind
     // on a slow readyState wait - or even a different trip).
-    const filename = makeFrameFilename(getTripStartUtcSec(), getTripCurrentSec());
+    const filename = makeFrameFilename(getTripStartUtcSec(), getTripCurrentSec(), activeTrip()?.cameraTzSec ?? null);
     downloadBlob(blob, filename);
     log.info("capture saved", { filename, bytes: blob.size, ...ctxLog });
 }
 
 /**
  * Filename for a captured frame. Timestamp = tripStartUtcSec + tripCurrentSec
- * formatted in the user's local TZ (same as trip headers in the sidebar).
- * Falls back to system time when there is no active trip.
+ * on the display clock (camera clock when known - same as the trip headers in
+ * the sidebar). Falls back to system time when there is no active trip.
  */
-function makeFrameFilename(tripStartUtcSec: number | null, tripCurrentSec: number): string {
+function makeFrameFilename(tripStartUtcSec: number | null, tripCurrentSec: number, cameraTzSec: number | null): string {
     const unixSec = tripStartUtcSec !== null ? tripStartUtcSec + tripCurrentSec : Date.now() / 1000;
-    const d = new Date(unixSec * 1000);
-    const yy = d.getFullYear().toString().padStart(4, "0");
-    const mo = (d.getMonth() + 1).toString().padStart(2, "0");
-    const dd = d.getDate().toString().padStart(2, "0");
-    const hh = d.getHours().toString().padStart(2, "0");
-    const mi = d.getMinutes().toString().padStart(2, "0");
-    const ss = d.getSeconds().toString().padStart(2, "0");
+    const d = displayClockDate(unixSec, cameraTzSec);
+    const yy = d.getUTCFullYear().toString().padStart(4, "0");
+    const mo = (d.getUTCMonth() + 1).toString().padStart(2, "0");
+    const dd = d.getUTCDate().toString().padStart(2, "0");
+    const hh = d.getUTCHours().toString().padStart(2, "0");
+    const mi = d.getUTCMinutes().toString().padStart(2, "0");
+    const ss = d.getUTCSeconds().toString().padStart(2, "0");
     return `dashcamigo_${yy}${mo}${dd}_${hh}${mi}${ss}_frame.jpg`;
 }
 

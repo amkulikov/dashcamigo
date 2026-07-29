@@ -11,7 +11,7 @@ import type { AudioCodec } from "mediabunny";
 import type { GpsRecord } from "./parsers/types.js";
 import { serializeGpx } from "./parsers/sidecars/gpx.js";
 import type { Trip, TripTimeline, VideoCandidate } from "./trips.js";
-import { contentToWallUtc, wallToContentSec } from "./trips.js";
+import { contentToWallUtc, displayClockDate, wallToContentSec } from "./trips.js";
 
 export interface FileSegment {
     file: File;
@@ -174,17 +174,18 @@ export function clipRecordsForRange(trip: Trip, startContentSec: number, endCont
 export function buildClipGpx(trip: Trip, startContentSec: number, endContentSec: number): string {
     const inRange = clipRecordsForRange(trip, startContentSec, endContentSec);
     const startUtc = contentToWallUtc(trip.timeline, startContentSec);
-    const trackName = `dashcamigo clip ${formatLocalForGpxTrackName(startUtc)}`;
+    const trackName = `dashcamigo clip ${formatClockForGpxTrackName(startUtc, trip.cameraTzSec)}`;
     return serializeGpx({ records: inRange, trackName });
 }
 
 /**
- * Local date+time string for the GPX <name> element. NOT used for filenames -
- * those use clipBasename from ui/format.ts with "start-end" range and
- * midnight-crossing handling.
+ * Display-clock date+time string for the GPX <name> element (camera clock
+ * when known - matches the trip header the user exported from). NOT used for
+ * filenames - those use clipBasename from ui/format.ts with "start-end" range
+ * and midnight-crossing handling.
  */
-function formatLocalForGpxTrackName(unixSeconds: number): string {
-    const d = new Date(unixSeconds * 1000);
+function formatClockForGpxTrackName(unixSeconds: number, cameraTzSec: number | null): string {
+    const d = displayClockDate(unixSeconds, cameraTzSec);
     const pad = (n: number): string => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
 }

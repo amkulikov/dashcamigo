@@ -47,7 +47,14 @@ import { escapeHtml } from "../escape.js";
 import { getDateLocale, t } from "../i18n/index.js";
 import { emitLifecycle } from "../perf.js";
 import { findNearestIndex } from "../parser.js";
-import { pickFrameChannel, wallToContentSec, contentToWallUtc, contentToFrame, frameRecordingMode } from "../trips.js";
+import {
+    pickFrameChannel,
+    wallToContentSec,
+    contentToWallUtc,
+    contentToFrame,
+    displayClockDate,
+    frameRecordingMode,
+} from "../trips.js";
 import type { Trip, TripGap, VideoCandidate } from "../trips.js";
 import type { RecordingMode } from "../parsers/types.js";
 import { formatSpeedFromMs, subscribeUnitsChange } from "../units-pref.js";
@@ -2059,6 +2066,7 @@ function findFileForRelSec(trip: Trip, relSec: number): VideoCandidate | null {
 function buildNoGpsTooltipHtml(relSec: number, trip: Trip, file: VideoCandidate | null): string {
     // relSec is footage-axis; map to wall-clock for the absolute timestamp.
     const absUtc = contentToWallUtc(trip.timeline, relSec);
+    // Display clock (camera clock when known) - see displayClockDate contract.
     const absFmt = new Intl.DateTimeFormat(getDateLocale(), {
         day: "numeric",
         month: "short",
@@ -2066,10 +2074,11 @@ function buildNoGpsTooltipHtml(relSec: number, trip: Trip, file: VideoCandidate 
         minute: "2-digit",
         second: "2-digit",
         hour12: false,
+        timeZone: "UTC",
     });
     const titleStr = t("popup.title", {
         rel: formatTime(relSec),
-        abs: absFmt.format(new Date(absUtc * 1000)),
+        abs: absFmt.format(displayClockDate(absUtc, trip.cameraTzSec)),
     });
     // Filename comes from the local FS - user may have renamed it to anything,
     // including HTML/JS injection. Escape before innerHTML.

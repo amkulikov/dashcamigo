@@ -30,7 +30,7 @@
 import type { Channel } from "../parsers/types.js";
 import { getDateLocale, t } from "../i18n/index.js";
 import type { Trip } from "../trips.js";
-import { tripChannels } from "../trips.js";
+import { displayClockDate, tripChannels } from "../trips.js";
 import { dom } from "./dom.js";
 import { channelDisplayLabel, formatDuration } from "./format.js";
 import { notifyExportStateChanged, subscribeExportState } from "./export-state.js";
@@ -569,11 +569,22 @@ function hasMultipleChannels(trip: Trip): boolean {
 /** Compact trip identifier: start time + duration. Sidebar header shows the
  *  same data in a richer card; we use a single line here for the slim panel. */
 function formatTripHeader(trip: Trip): string {
-    const start = new Date(trip.startUtc * 1000);
+    // Display clock (camera clock when known) - must match the sidebar card.
+    const start = displayClockDate(trip.startUtc, trip.cameraTzSec);
     // Explicit UI locale (never undefined/OS default - i18n invariant) and
     // hour12:false to match formatTripTitle in the sidebar card.
     const locale = getDateLocale();
-    const dateStr = start.toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric" });
-    const timeStr = start.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", hour12: false });
+    const dateStr = start.toLocaleDateString(locale, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        timeZone: "UTC",
+    });
+    const timeStr = start.toLocaleTimeString(locale, {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+        timeZone: "UTC",
+    });
     return `${dateStr} · ${timeStr} · ${formatDuration(trip.timeline.contentDurationSec)}`;
 }
