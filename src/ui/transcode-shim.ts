@@ -101,6 +101,7 @@ function runInWorker(
         port: writablePort,
         finalized: writableFinalized,
         forceAbort: writableForceAbort,
+        sinkError: writableSinkError,
     } = createWorkerWritableProxy(writable, onDiskCommit);
 
     // Map snapshot bridge. Lazy-created on first map-snapshot request from the
@@ -297,6 +298,23 @@ function runInWorker(
             },
             (err) => {
                 cleanup(false);
+                // A sink failure reaches us twice: once as the real object thrown
+                // on THIS thread by the writable, and once as the plain Error the
+                // worker rebuilt from the wire and rejected with. Re-throw the real
+                // one - it is the only copy the export flow can classify (a
+                // DOMException subclass, carrying our sink tag). Cancel is decided
+                // by the signal, not the rejection's name: a user cancel aborts the
+                // sink too (its complaint is fallout, and the flow must see the
+                // AbortError), while a sink failure can surface from the worker AS
+                // an AbortError when the pipeline tears itself down - the name
+                // alone cannot tell the two apart.
+                const sinkErr = writableSinkError();
+                if (sinkErr && !signal.aborted) {
+                    log.warn("rethrowing the sink failure behind the worker error", {
+                        worker: err instanceof Error ? `${err.name}: ${err.message}` : String(err),
+                    });
+                    throw sinkErr;
+                }
                 throw err;
             },
         );

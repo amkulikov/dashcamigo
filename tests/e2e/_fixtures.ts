@@ -341,6 +341,15 @@ export async function masterVideoTime(page: Page): Promise<number> {
     return master.evaluate((v: HTMLVideoElement) => v.currentTime);
 }
 
+/** Makes the stubbed save target fail every write once it holds `afterBytes`,
+ *  with a DOMException named `errorName` (what a vanished destination throws).
+ *  0 fails the very first write - note the muxer buffers into multi-MiB chunks,
+ *  so a short clip only ever issues one write and any real threshold is unreachable. */
+export interface ExportSinkFailure {
+    afterBytes: number;
+    errorName: string;
+}
+
 /** Screenshot helper - artifacts for human review, written next to the suite. */
 export async function shot(page: Page, name: string): Promise<void> {
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, `${name}.png`), fullPage: false });
@@ -356,9 +365,13 @@ export async function shot(page: Page, name: string): Promise<void> {
  * re-encode / telemetry-injection pipeline, stubbing only the disk handle.
  *
  * Must be called before `gotoApp`. Read the result with `readExportResult`.
+ *
+ * Pass `failure` to make the stubbed destination start rejecting writes partway
+ * through - the only way to drive a real sink failure through the whole chain
+ * (worker -> port bridge -> the export flow's error mapping).
  */
-export async function installExportCapture(page: Page): Promise<void> {
-    await page.addInitScript(() => {
+export async function installExportCapture(page: Page, failure?: ExportSinkFailure): Promise<void> {
+    await page.addInitScript((fail: ExportSinkFailure | undefined) => {
         const enc = new TextEncoder();
         const toU8 = (data: unknown): Uint8Array => {
             if (data == null) return new Uint8Array(0);
@@ -404,6 +417,13 @@ export async function installExportCapture(page: Page): Promise<void> {
                     // form by its specific type values - a Blob also has a `.type`
                     // (its MIME), so a bare `"type" in chunk` check would misread it.
                     write: async (chunk: unknown) => {
+                        // Simulated destination failure: the save target stops
+                        // accepting writes once the file passes a threshold, the
+                        // way a disconnected drive or a swap file taken by another
+                        // app does mid-export.
+                        if (fail && h._buf.length >= fail.afterBytes) {
+                            throw new DOMException("the destination is gone", fail.errorName);
+                        }
                         const cmd = chunk as { type?: string; position?: number; size?: number; data?: unknown };
                         if (cmd && (cmd.type === "write" || cmd.type === "seek" || cmd.type === "truncate")) {
                             if (cmd.type === "seek") {
@@ -446,7 +466,7 @@ export async function installExportCapture(page: Page): Promise<void> {
             w.__lastExportHandle = h;
             return h;
         };
-    });
+    }, failure);
 }
 
 /**

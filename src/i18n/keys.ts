@@ -578,6 +578,7 @@ export type I18nKey =
     | "feedback.step1.preset.video"
     | "feedback.step1.preset.map"
     | "feedback.step1.preset.chart"
+    | "feedback.step1.preset.export"
     | "feedback.step1.preset.other"
     // Step 1 - recordings: real files help most; the user shares a download link
     // (or skips). mailPrompt is the link placeholder dropped into the email body
@@ -885,6 +886,7 @@ export type I18nKey =
     | "export.error.cannotEncodeResolution"
     | "export.error.tooLargeForMemory"
     | "export.error.diskFull"
+    | "export.error.destinationLost"
     | "export.error.sourceReadFailed"
     | "export.notify.gpmfFailed"
     | "export.notify.mapDropped"

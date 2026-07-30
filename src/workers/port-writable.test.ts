@@ -141,11 +141,25 @@ describe("wrapPortAsFsaWritable (worker side)", () => {
         for (let i = 0; i < PORT_WRITABLE_HWM; i++) await w.write(chunk(i));
 
         const parked = w.write(chunk(200));
-        port.deliver({ k: "error", message: "disk full" });
+        port.deliver({ k: "error", name: "Error", message: "disk full" });
 
         await expect(parked).rejects.toThrow("disk full");
         await expect(w.write(chunk(201))).rejects.toThrow("disk full");
         await expect(w.close()).rejects.toThrow("disk full");
+    });
+
+    it("restores the class name of a main-side failure", async () => {
+        const port = new FakePort();
+        const w = wrapPortAsFsaWritable(port);
+
+        port.deliver({ k: "error", name: "NotFoundError", message: "the file is gone" });
+
+        // The name is what the export flow classifies on - a bare Error here
+        // collapses an actionable failure into "something went wrong".
+        await expect(w.write(chunk(0))).rejects.toMatchObject({
+            name: "NotFoundError",
+            message: "the file is gone",
+        });
     });
 
     it("abort posts {abort} and unblocks anything still parked", async () => {
@@ -214,15 +228,19 @@ describe("servePortWritable (main side)", () => {
         const writes: unknown[] = [];
         const state = { aborted: false };
         let finalized = false;
+        let reported: unknown = null;
         servePortWritable(port, {
             write: async () => {
-                throw new Error("disk full");
+                const err = new Error("the file is gone");
+                err.name = "NotFoundError";
+                throw err;
             },
             close: async () => {},
             abort: async () => {
                 state.aborted = true;
             },
             onFinalized: () => (finalized = true),
+            onWriteError: (err) => (reported = err),
         });
 
         port.deliver({ k: "write", chunk: chunk(0) });
@@ -234,8 +252,37 @@ describe("servePortWritable (main side)", () => {
         expect(state.aborted).toBe(true);
         expect(finalized).toBe(true);
         const down = port.sent as PortWritableDown[];
-        expect(down.filter((m) => m.k === "error")).toHaveLength(1);
+        const errors = down.filter((m) => m.k === "error");
+        expect(errors).toHaveLength(1);
+        // The class name rides along - the worker rebuilds the error from it.
+        expect(errors[0]).toMatchObject({ name: "NotFoundError", message: "the file is gone" });
         expect(down.some((m) => m.k === "ack")).toBe(false);
+        // The RAW error goes to the caller: only this copy can still be tested
+        // with instanceof / carry the sink tag.
+        expect(reported, "onWriteError must receive the error object, not a string").toBeInstanceOf(Error);
+    });
+
+    it("a sink close failure reports the raw error and posts its name", async () => {
+        const port = new FakePort();
+        let reported: unknown = null;
+        servePortWritable(port, {
+            write: async () => {},
+            close: async () => {
+                const err = new Error("no space");
+                err.name = "QuotaExceededError";
+                throw err;
+            },
+            abort: async () => {},
+            onFinalized: () => {},
+            onWriteError: (err) => (reported = err),
+        });
+
+        port.deliver({ k: "close" });
+        await drain();
+
+        expect(reported).toBeInstanceOf(Error);
+        const errors = (port.sent as PortWritableDown[]).filter((m) => m.k === "error");
+        expect(errors[0]).toMatchObject({ name: "QuotaExceededError" });
     });
 
     it("an {abort} message discards the sink and finalizes", async () => {

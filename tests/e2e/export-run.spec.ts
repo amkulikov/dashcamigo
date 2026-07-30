@@ -7,8 +7,11 @@
 // We assert container validity by ISO-BMFF box markers (ftyp/moov/mdat) and the
 // GPMF telemetry track by the 'gpmd' handler, rather than re-decoding pixels.
 
+import type { Page } from "@playwright/test";
+
 import {
     DESKTOP,
+    type ExportSinkFailure,
     SAMPLE_70MAI,
     canEncodeHighProfileH264,
     expect,
@@ -137,6 +140,75 @@ test.describe("export run", () => {
         expect(done, "the transcode worker must have logged its done line").not.toBeNull();
         expect(done!.framesEncoded, "frames must have been encoded").toBeGreaterThan(0);
         expect(done!.framesDirect, "every frame should have bypassed the canvas").toBe(done!.framesEncoded);
+    });
+});
+
+// The destination dying mid-write. A sink failure is the one class of export
+// failure the user can act on, and it reaches the error mapping only if its
+// DOMException name survives - on the re-encode path that means surviving the
+// worker port, which flattens errors to text. These two tests are the gate on
+// that: a generic "something went wrong" here means the class was lost again.
+test.describe("export run (the destination goes away)", () => {
+    // The failure is injected on purpose, and the flow logs the raw cause to the
+    // ring buffer (which mirrors to console.error) exactly as designed.
+    test.use({ tolerateConsole: [/the destination is gone/] });
+
+    const setup = async (page: Page, failure: ExportSinkFailure): Promise<void> => {
+        await presetLocalStorage(page);
+        await installExportCapture(page, failure);
+        await page.setViewportSize(DESKTOP);
+        await gotoApp(page, "en");
+        await loadTrip(page, SAMPLE_70MAI);
+        await openExport(page);
+        // One channel: stream-copy eligible, and the cheapest re-encode too.
+        const includes = page.locator(".top-panel__channel-include");
+        await includes.nth(2).click();
+        await includes.nth(1).click();
+        await expect(page.locator(".top-panel__channel-include:checked")).toHaveCount(1);
+    };
+
+    test("stream-copy: names the real cause and offers a way to report it", async ({ page }) => {
+        await setup(page, { afterBytes: 0, errorName: "NotFoundError" });
+
+        await page.locator("#export-panel-save-btn").click();
+
+        const status = page.locator(".export-panel__error-status");
+        await expect(status).toBeVisible({ timeout: 60_000 });
+        await expect(status, "a lost destination must not read as the generic failure").toContainText(
+            "the file being written is gone",
+        );
+
+        // The report entry point: a failed export is where the ring buffer still
+        // holds the run that died.
+        const report = page.locator("#export-panel-error .feedback-link");
+        await expect(report).toBeVisible();
+        await report.click();
+        await expect(page.locator("#feedback-modal")).toBeVisible();
+    });
+
+    test("re-encode: the failure keeps its class across the worker bridge", async ({ page, browserName }) => {
+        test.skip(browserName === "firefox", "Firefox WebCodecs H.264 encode is broken (Bugzilla 1918769)");
+        test.setTimeout(120_000);
+        // Fail the first write. A byte threshold would not do: the muxer buffers
+        // into 4 MiB chunks, so a short clip reaches the destination as a single
+        // write at the end and a small file would slip under any threshold - the
+        // run would then only trip on the telemetry pass, which is a different
+        // (soft, notify-only) path.
+        await setup(page, { afterBytes: 0, errorName: "NotFoundError" });
+        test.skip(
+            !(await canEncodeHighProfileH264(page)),
+            "WebCodecs High-profile H.264 encode not available on this platform",
+        );
+
+        // Below the top tier -> re-encode in the worker (the top tier stream-copies).
+        await page.locator('input[name="export-panel-quality"][value="medium"]').check();
+        await page.locator("#export-panel-save-btn").click();
+
+        const status = page.locator(".export-panel__error-status");
+        await expect(status).toBeVisible({ timeout: 100_000 });
+        await expect(status, "the DOMException name must survive the port hop").toContainText(
+            "the file being written is gone",
+        );
     });
 });
 

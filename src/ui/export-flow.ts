@@ -48,6 +48,7 @@ import { getUnits } from "../units-pref.js";
 import { anyRegionIntersectsRange, type BlurRegion } from "../blur-regions.js";
 
 import { isAllocationFailure } from "./allocation-failure.js";
+import { isDestinationLostError, tagSinkFailures } from "./destination-error.js";
 import { isMediabunnyReadAssert } from "./mediabunny-read-assert.js";
 import { isQuotaExceededError } from "./quota-error.js";
 import { isSourceReadError } from "./source-read-error.js";
@@ -1047,7 +1048,9 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
             streamCopy = canStreamCopy();
         }
 
-        writable = await mp4Handle.createWritable();
+        // Tagged so a failure thrown by the SINK can be told apart from a
+        // source-side one that shares its DOMException name (see destination-error.ts).
+        writable = tagSinkFailures(await mp4Handle.createWritable());
 
         if (streamCopy) {
             // exportClip closes `writable` itself via output.finalize() on
@@ -1217,6 +1220,9 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
         //    (RangeError / out-of-memory). The no-native path is intentionally not
         //    pre-gated by size, so a too-large export surfaces HERE; the message
         //    points the user at desktop Chrome, which streams to disk at any size;
+        //  - the DESTINATION went away mid-write (drive unplugged, a sync client
+        //    or an antivirus took the staging file) - only ever read from a
+        //    sink-tagged throw, since a source-side failure shares the name;
         //  - a SOURCE file stopped being readable mid-export (card/drive dropped,
         //    file changed since it was picked) - the one failure the user can
         //    actually fix themselves, so it gets its own message.
@@ -1224,9 +1230,11 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
             ? "export.error.diskFull"
             : isAllocationFailure(err)
               ? "export.error.tooLargeForMemory"
-              : isSourceReadError(err)
-                ? "export.error.sourceReadFailed"
-                : "export.error.generic";
+              : isDestinationLostError(err)
+                ? "export.error.destinationLost"
+                : isSourceReadError(err)
+                  ? "export.error.sourceReadFailed"
+                  : "export.error.generic";
         hooks.onError(errorKey);
         // mediabunny's internal read-orchestrator assert during stream-copy (see
         // isMediabunnyReadAssert): an upstream-side failure class we want to COUNT

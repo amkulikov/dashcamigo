@@ -28,11 +28,17 @@ export type PortWritableUp =
     | { readonly k: "abort"; readonly reason: string };
 
 /** main -> worker. `ack` replenishes one credit; `closed` resolves the worker's
- *  close(); `error` fails the pending op and every subsequent one. */
+ *  close(); `error` fails the pending op and every subsequent one.
+ *
+ *  `error` carries the failing error's CLASS NAME alongside its text. A sink
+ *  failure is classified downstream by name (a vanished destination, a full
+ *  disk), and the DOMException itself cannot cross a MessagePort - so the name
+ *  travels as data and is re-attached on the worker side. Without it every
+ *  actionable sink failure collapses into the generic "something went wrong". */
 export type PortWritableDown =
     | { readonly k: "ack" }
     | { readonly k: "closed" }
-    | { readonly k: "error"; readonly message: string };
+    | { readonly k: "error"; readonly name: string; readonly message: string };
 
 /**
  * Minimal MessagePort surface both halves use. A real MessagePort satisfies it;
@@ -102,7 +108,12 @@ export function wrapPortAsFsaWritable(port: PortLike): FileSystemWritableFileStr
             closeResolve = null;
             closeReject = null;
         } else if (msg.k === "error") {
-            failAll(new Error(msg.message));
+            // Re-attach the main-side class name: the error travels as plain data,
+            // and the pipeline's failure surfaces (logs, Sentry, the export flow's
+            // error mapping) all read `name`.
+            const err = new Error(msg.message);
+            err.name = msg.name;
+            failAll(err);
         }
     };
     port.start?.();
@@ -158,8 +169,17 @@ export interface PortWritableSinkOps {
     /** Fires exactly once when the sink reaches a terminal state (closed or
      *  aborted) - resolves the caller's `finalized` promise. */
     onFinalized(): void;
-    /** Optional diagnostics for a mid-stream write failure. */
-    onWriteError?(message: string): void;
+    /** Optional diagnostics for a mid-stream write failure. Receives the RAW
+     *  error: the caller keeps it to classify the failure (a DOMException loses
+     *  its class the moment it is posted over the port). */
+    onWriteError?(err: unknown): void;
+}
+
+/** Splits an unknown throw into the two fields the wire carries. DOMException
+ *  extends Error on every target browser, so its name survives this. */
+function describeError(err: unknown): { name: string; message: string } {
+    if (err instanceof Error) return { name: err.name, message: err.message };
+    return { name: "Error", message: String(err) };
 }
 
 /** Handle the main side keeps to force teardown when the worker cannot. */
@@ -219,9 +239,9 @@ export function servePortWritable(port: PortLike, ops: PortWritableSinkOps): Por
             await ops.write(chunk);
             post({ k: "ack" });
         } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            ops.onWriteError?.(message);
-            post({ k: "error", message });
+            const { name, message } = describeError(err);
+            ops.onWriteError?.(err);
+            post({ k: "error", name, message });
             // Discard the partial file and release the handle (sets shutdownDone).
             await finalizeAbort(message);
         }
@@ -234,7 +254,11 @@ export function servePortWritable(port: PortLike, ops: PortWritableSinkOps): Por
             await ops.close();
             post({ k: "closed" });
         } catch (err) {
-            post({ k: "error", message: err instanceof Error ? err.message : String(err) });
+            // Same reporting path as a mid-stream write failure: the commit is
+            // where a full disk or a vanished destination usually surfaces, and
+            // the caller needs the raw error to classify it.
+            ops.onWriteError?.(err);
+            post({ k: "error", ...describeError(err) });
         } finally {
             ops.onFinalized();
             try {

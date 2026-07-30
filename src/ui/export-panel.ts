@@ -2756,6 +2756,18 @@ function renderErrorSection(): void {
         notifyExportStateChanged();
     });
     root.appendChild(backBtn);
+
+    // A failed export is where a report is worth most - the ring buffer still
+    // holds the run that just died, and the user is right there. .feedback-link
+    // is picked up by the delegated handler in feedback.ts, which opens the
+    // report wizard with the topic pre-tagged; the panel is a drawer (not a
+    // dialog), so it stays behind the wizard and keeps its error state.
+    const reportBtn = document.createElement("button");
+    reportBtn.type = "button";
+    reportBtn.className = "export-panel__secondary-btn feedback-link";
+    reportBtn.dataset.feedbackPreset = "export";
+    reportBtn.textContent = t("feedback.entry.title");
+    root.appendChild(reportBtn);
 }
 
 function setErrorStatus(text: string): void {

@@ -10,6 +10,10 @@
  *  an oversized export and an opaque error toast. */
 export function isAllocationFailure(err: unknown): boolean {
     if (err instanceof RangeError) return true;
+    // Wrapped/re-thrown: the subclass is gone but the name survives (an error
+    // rebuilt from worker-port data). Our own over-4-GiB throw is a RangeError
+    // whose message names no engine wording, so the name is all that is left.
+    if (typeof err === "object" && err !== null && (err as { name?: unknown }).name === "RangeError") return true;
     const message = err instanceof Error ? err.message : String(err);
     // Engine-specific OOM wording thrown as a plain Error (not RangeError):
     // V8 "Array buffer allocation failed", JSC "Out of memory", SpiderMonkey

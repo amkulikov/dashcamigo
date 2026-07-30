@@ -62,7 +62,7 @@ function getEl<T extends HTMLElement>(sel: string): T | null {
 }
 
 /** Valid preset keys - whitelist matches i18n/keys.ts (feedback.step1.preset.*). Unknown presets are ignored so t() does not throw MissingValueError on a corrupt data-attribute. */
-const VALID_PRESETS = ["load", "video", "map", "chart", "other"] as const;
+const VALID_PRESETS = ["load", "video", "map", "chart", "export", "other"] as const;
 type ValidPreset = (typeof VALID_PRESETS)[number];
 function isValidPreset(p: string): p is ValidPreset {
     return (VALID_PRESETS as readonly string[]).includes(p);

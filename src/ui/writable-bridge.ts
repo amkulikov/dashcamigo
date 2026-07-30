@@ -33,6 +33,14 @@ export interface WorkerWritableProxy {
      * realWritable.abort() and resolves finalized so the caller is not stuck waiting.
      */
     forceAbort: (reason: string) => Promise<void>;
+    /**
+     * The first failure the REAL writable threw, or null if it never did. The copy
+     * that comes back through the worker is a plain Error rebuilt from wire data,
+     * so it can no longer be tested with instanceof; the caller re-throws this
+     * object instead to keep the export flow's error mapping working (a full disk,
+     * a destination that went away).
+     */
+    sinkError: () => unknown;
 }
 
 /**
@@ -63,6 +71,9 @@ export function createWorkerWritableProxy(
     // Total bytes forwarded to the real sink, so the close watchdog can size its
     // deadline by output size (a multi-GB flush to slow media takes minutes).
     let bytesWritten = 0;
+    // First raw failure from the real writable - see WorkerWritableProxy.sinkError.
+    // First, not last: later throws are usually fallout from this one.
+    let firstSinkError: unknown = null;
     const server = servePortWritable(channel.port1, {
         write: (chunk) => {
             // mediabunny StreamTarget({chunked}) posts {type,position,data}; count data bytes.
@@ -82,8 +93,18 @@ export function createWorkerWritableProxy(
         },
         abort: (reason) => realWritable.abort(reason),
         onFinalized: resolveFinalized,
-        onWriteError: (message) => log.warn("transcode bridge write failed", { err: message }),
+        onWriteError: (err) => {
+            firstSinkError ??= err;
+            log.warn("transcode bridge write failed", {
+                err: err instanceof Error ? `${err.name}: ${err.message}` : String(err),
+            });
+        },
     });
 
-    return { port: channel.port2, finalized, forceAbort: server.forceAbort };
+    return {
+        port: channel.port2,
+        finalized,
+        forceAbort: server.forceAbort,
+        sinkError: () => firstSinkError,
+    };
 }

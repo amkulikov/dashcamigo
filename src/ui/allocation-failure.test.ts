@@ -19,6 +19,16 @@ describe("isAllocationFailure", () => {
         expect(isAllocationFailure(new Error("memory exhausted"))).toBe(true);
     });
 
+    it("matches a RangeError rebuilt from worker-port data, where instanceof no longer holds", () => {
+        // The in-memory buffer's over-4-GiB throw crosses the port as plain data
+        // and comes back as an Error carrying only the name. Its message names no
+        // engine wording, so without the name check it lands in the generic bucket.
+        const rebuilt = new Error("in-memory export exceeds 4294967296 bytes");
+        rebuilt.name = "RangeError";
+        expect(rebuilt).not.toBeInstanceOf(RangeError);
+        expect(isAllocationFailure(rebuilt)).toBe(true);
+    });
+
     it("matches the OOM wording case-insensitively", () => {
         expect(isAllocationFailure(new Error("ARRAY BUFFER allocation FAILED"))).toBe(true);
     });
