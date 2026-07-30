@@ -317,6 +317,8 @@ export function buildOverlayPipelineArgs(trip: Trip): OverlayPipelineArgs | null
 
     return {
         gpsRecords: trip.records,
+        rangeStartUtcSec: startUtc,
+        rangeEndUtcSec: endUtc,
         units,
         tzOffsetMin,
         unitSpeed,

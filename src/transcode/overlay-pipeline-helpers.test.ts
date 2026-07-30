@@ -6,7 +6,8 @@
 
 import { describe, it, expect } from "vitest";
 
-import { hasAnyOverlay, isFinitePosition } from "./overlay-pipeline-helpers.js";
+import type { GpsRecord } from "../parsers/types.js";
+import { hasAnyOverlay, isFinitePosition, recordsInWallWindow } from "./overlay-pipeline-helpers.js";
 import type { OverlayPipelineArgs } from "./types.js";
 
 // hasAnyOverlay only reads the 8 widget booleans; the rest of OverlayPipelineArgs
@@ -47,5 +48,44 @@ describe("isFinitePosition", () => {
     it("rejects Infinity as non-finite too", () => {
         expect(isFinitePosition({ ...finite, lat: Number.POSITIVE_INFINITY })).toBe(false);
         expect(isFinitePosition({ ...finite, speedMs: Number.NEGATIVE_INFINITY })).toBe(false);
+    });
+});
+
+describe("recordsInWallWindow", () => {
+    const rec = (unixSeconds: number): GpsRecord => ({
+        unixSeconds,
+        active: true,
+        lat: 50,
+        lon: 8,
+        bearingDeg: 0,
+        speedMs: 10,
+        accelXg: 0,
+        accelYg: 0,
+        accelZg: 0,
+        mp4Filename: "NO20260101-120000-000001F.MP4",
+    });
+    // 1 Hz track spanning 1000..1099.
+    const track = Array.from({ length: 100 }, (_, i) => rec(1000 + i));
+
+    it("keeps only records inside the window plus the margin", () => {
+        const got = recordsInWallWindow(track, 1030, 1040, 5);
+        expect(got.length).toBe(21);
+        expect(got[0]!.unixSeconds).toBe(1025);
+        expect(got[got.length - 1]!.unixSeconds).toBe(1045);
+    });
+
+    it("includes records exactly on the margin boundary", () => {
+        const got = recordsInWallWindow(track, 1050, 1050, 0);
+        expect(got.length).toBe(1);
+        expect(got[0]!.unixSeconds).toBe(1050);
+    });
+
+    it("returns empty when the window misses the track entirely", () => {
+        expect(recordsInWallWindow(track, 5000, 6000, 30)).toEqual([]);
+    });
+
+    it("preserves source order", () => {
+        const got = recordsInWallWindow(track, 1000, 1099, 0);
+        expect(got.map((r) => r.unixSeconds)).toEqual(track.map((r) => r.unixSeconds));
     });
 });

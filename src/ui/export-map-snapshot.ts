@@ -75,6 +75,14 @@ const EXPORT_ADAPTIVE_FULL_SPEED_MS = 33; // ~120 km/h -> full zoom-out
 // third under tilt, opening up the road ahead. North-up keeps zero padding.
 const CHASE_TOP_PADDING_FRAC = 0.34;
 
+// Hard elapsed-time cap for the prewarm walk. Prewarm is an optimization (a
+// missing tile is a bounded gray-fill that back-fills as the run proceeds), so
+// on a slow network we stop walking and let the export start rather than risk
+// the worker-side first-snapshot timeout - the budget must stay comfortably
+// below that ceiling (FIRST_SNAPSHOT_TIMEOUT_MS in map-snapshot-worker-client)
+// minus MapLibre init + style load.
+const PREWARM_BUDGET_MS = 60_000;
+
 function clampExportPitch(deg: number | undefined): number {
     if (deg === undefined || !Number.isFinite(deg)) return 0;
     return Math.max(0, Math.min(EXPORT_CHASE_MAX_PITCH, deg));
@@ -322,6 +330,8 @@ export async function createExportMapSnapshotter(
             const stepMeters = (zoomKm * 1000) / 2 || 5000;
             let lastLat = usable[0]!.lat;
             let lastLon = usable[0]!.lon;
+            const startedAtMs = Date.now();
+            let budgetExhausted = false;
             // Per-waypoint bearing (only in chase) so the tilted frustum we cache
             // points the same way the per-frame snapshot will; pitch extends it
             // forward to the horizon, which is the tiles a top-down walk misses.
@@ -337,12 +347,25 @@ export async function createExportMapSnapshotter(
             );
             for (const r of usable) {
                 if (signal.aborted) throw new DOMException("aborted", "AbortError");
+                if (Date.now() - startedAtMs > PREWARM_BUDGET_MS) {
+                    // Cap, do not fail: the un-walked stretch degrades to brief
+                    // gray fills that back-fill during the run, while blowing
+                    // the budget risks the first-snapshot timeout killing the
+                    // map for the WHOLE export.
+                    budgetExhausted = true;
+                    break;
+                }
                 if (distanceM(lastLat, lastLon, r.lat, r.lon) < stepMeters) continue;
                 await jumpAndIdle(map, r.lat, r.lon, targetZoom, signal, 2000, headingUp ? r.bearingDeg : 0, pitch);
                 lastLat = r.lat;
                 lastLon = r.lon;
             }
-            log.info("map snapshot prewarm done", { points: usable.length, chase: headingUp });
+            log.info("map snapshot prewarm done", {
+                points: usable.length,
+                chase: headingUp,
+                elapsedMs: Date.now() - startedAtMs,
+                budgetExhausted,
+            });
         },
         async snapshot(req, opts): Promise<ImageBitmap> {
             // Defensive guard: pipeline already filters non-finite positions,

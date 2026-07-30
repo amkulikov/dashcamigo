@@ -38,9 +38,15 @@ import { createWorkerWritableProxy } from "./writable-bridge.js";
 import type { OverlayPipelineArgs } from "../transcode/types.js";
 import { computeOutputSize } from "../transcode/compose.js";
 import { MAP_BASE_WIDTH_PCT } from "../transcode/map-overlay.js";
+import { recordsInWallWindow } from "../transcode/overlay-pipeline-helpers.js";
 import { type ChasePrewarmOpts, createExportMapSnapshotter, type ExportMapSnapshotter } from "./export-map-snapshot.js";
 
 const log = createLogger("transcode-shim");
+
+// Margin around the export range for the prewarm walk: covers the viewport
+// around the range edges (a viewport-width of track at highway speed is well
+// under 30 s) and the 1-second resolution of filename-derived record times.
+const PREWARM_RANGE_MARGIN_SEC = 30;
 
 /**
  * Runs a single-channel transcode in the worker. `onDiskCommit` (optional) brackets the final
@@ -104,10 +110,11 @@ function runInWorker(
         sinkError: writableSinkError,
     } = createWorkerWritableProxy(writable, onDiskCommit);
 
-    // Map snapshot bridge. Lazy-created on first map-snapshot request from the
-    // worker - if the user did not enable the map overlay, we never allocate
-    // the hidden MapLibre instance. The snapshotter promise is cached so a
-    // burst of per-frame requests does not race the creation.
+    // Map snapshot bridge. Created eagerly at export start when the map overlay
+    // is enabled (see the kick-off below ensureSnapshotter) and never allocated
+    // otherwise - the hidden MapLibre instance is not free. The snapshotter
+    // promise is cached so a burst of per-frame requests does not race the
+    // creation.
     //
     // Tracking via the promise (not a resolved instance) ensures cleanup runs
     // dispose() even when the user cancels the export DURING MapLibre
@@ -146,8 +153,19 @@ function runInWorker(
                 // does not block on tile fetch. Aborted via the transcode signal:
                 // the user cancelled, no point loading more tiles.
                 if (overlays?.map) {
+                    // Only the exported range (plus a viewport margin): the
+                    // export never snapshots outside the range, and a
+                    // whole-trip walk on a slow network can starve the first
+                    // snapshot's worker-side timeout, dropping the map from
+                    // the entire export.
+                    const prewarmRecords = recordsInWallWindow(
+                        records,
+                        overlays.rangeStartUtcSec,
+                        overlays.rangeEndUtcSec,
+                        PREWARM_RANGE_MARGIN_SEC,
+                    );
                     try {
-                        await snap.prewarm(records, overlays.map.zoomKm, signal, chase);
+                        await snap.prewarm(prewarmRecords, overlays.map.zoomKm, signal, chase);
                     } catch (err) {
                         log.warn("map snapshot prewarm threw", { err: String(err) });
                     }
@@ -157,6 +175,12 @@ function runInWorker(
         );
         return snapshotterPromise;
     };
+    // Eager start: kick off MapLibre init + prewarm at export start instead of
+    // on the worker's first snapshot request, overlapping them with worker
+    // startup and the first decodes. The catch only silences the unhandled
+    // rejection - the cached rejected promise resurfaces on the first snapshot
+    // request, which turns it into an error response for the pipeline.
+    if (overlays?.map) void ensureSnapshotter().catch(() => {});
 
     const client = createWorkerClient(worker, {
         name: "transcode",

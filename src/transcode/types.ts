@@ -94,6 +94,12 @@ export interface OverlayPipelineArgs {
     // resolution goes through contentToWallUtc(trip.timeline, ...) inside the
     // pipelines - a naive `tripStartUtc + contentSec` formula is wrong for
     // trips with recording pauses (the footage axis collapses them).
+    /** Wall-clock UTC bounds of the export range (pauses skipped). The map
+     *  snapshotter prewarms tiles only for records inside this window - the
+     *  export never snapshots outside the range, and a whole-trip walk can
+     *  outlast the worker-side first-snapshot timeout on slow networks. */
+    rangeStartUtcSec: number;
+    rangeEndUtcSec: number;
     /** User units snapshot resolved at modal open. */
     units: "metric" | "imperial";
     /** Browser-local offset (minutes) for the clock widget, matching the chart's

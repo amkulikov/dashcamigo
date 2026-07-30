@@ -29,6 +29,16 @@ interface Pending {
  */
 const SNAPSHOT_TIMEOUT_MS = 30_000;
 
+/**
+ * Wider ceiling for the FIRST request only: on the main thread it additionally
+ * awaits MapLibre init + style load + the range prewarm walk (itself capped by
+ * PREWARM_BUDGET_MS in export-map-snapshot.ts, which this must comfortably
+ * exceed). One timeout here latches the map off for the whole export, so the
+ * first request must not race legitimate warm-up work - only a truly dead
+ * main thread.
+ */
+const FIRST_SNAPSHOT_TIMEOUT_MS = 120_000;
+
 export class MapSnapshotWorkerClient implements MapSnapshotter {
     private nextId = 1;
     private pending = new Map<number, Pending>();
@@ -64,12 +74,13 @@ export class MapSnapshotWorkerClient implements MapSnapshotter {
 
     snapshot(req: MapSnapshotRequest): Promise<ImageBitmap> {
         const reqId = this.nextId++;
+        const timeoutMs = reqId === 1 ? FIRST_SNAPSHOT_TIMEOUT_MS : SNAPSHOT_TIMEOUT_MS;
         return new Promise((resolve, reject) => {
             const timeoutId = setTimeout(() => {
                 if (this.pending.delete(reqId)) {
                     reject(new Error("map snapshot timeout"));
                 }
-            }, SNAPSHOT_TIMEOUT_MS);
+            }, timeoutMs);
             this.pending.set(reqId, { resolve, reject, timeoutId });
             const data: MapSnapshotRequestNotification = {
                 reqId,
