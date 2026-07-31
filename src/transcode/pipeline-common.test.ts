@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { frameNeedsNoComposite, joinAllOrThrowFirst, nextTolerant, resolveAudioPlan } from "./pipeline-common.js";
+import {
+    createMp4StreamOutput,
+    discardOutputQuietly,
+    frameNeedsNoComposite,
+    joinAllOrThrowFirst,
+    nextTolerant,
+    resolveAudioPlan,
+} from "./pipeline-common.js";
 
 // Builds an async iterator that yields each value in turn, then either ends
 // cleanly or throws `throwAtEnd` in place of the final {done:true}.
@@ -59,6 +66,53 @@ describe("nextTolerant", () => {
         const readErr = new DOMException("read failed", "NotReadableError");
         const it = fakeIterator<number>([], readErr);
         await expect(nextTolerant(it)).rejects.toBe(readErr);
+    });
+});
+
+// Records the call sequence of an FSA-shaped writable. close() after abort()
+// rejects, mirroring both real sinks (the port wrapper stores the abort as its
+// failure; a native FSA stream is already errored) - a resolved close here
+// would mean the partial file committed.
+function recordingWritable() {
+    const calls: string[] = [];
+    let aborted = false;
+    let committed = false;
+    const writable = {
+        write: async (): Promise<void> => {
+            calls.push("write");
+        },
+        close: async (): Promise<void> => {
+            calls.push("close");
+            if (aborted) throw new TypeError("cannot close after abort");
+            committed = true;
+        },
+        abort: async (): Promise<void> => {
+            aborted = true;
+            calls.push("abort");
+        },
+    } as unknown as FileSystemWritableFileStream;
+    return { writable, calls, isCommitted: () => committed };
+}
+
+describe("discardOutputQuietly", () => {
+    it("aborts the writable first, then cancels the muxer, and never commits", async () => {
+        const { writable, calls, isCommitted } = recordingWritable();
+        const out = createMp4StreamOutput(writable, new AbortController().signal, () => {});
+
+        await discardOutputQuietly(out, writable);
+
+        expect(calls[0], "abort must precede whatever Output.cancel() does to its target").toBe("abort");
+        expect(isCommitted()).toBe(false);
+        expect(out.state).toBe("canceled");
+    });
+
+    it("still cancels the muxer when the writable is already terminal", async () => {
+        const { writable } = recordingWritable();
+        const out = createMp4StreamOutput(writable, new AbortController().signal, () => {});
+        await writable.abort("earlier failure");
+
+        await expect(discardOutputQuietly(out, writable)).resolves.toBeUndefined();
+        expect(out.state).toBe("canceled");
     });
 });
 

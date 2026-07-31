@@ -66,12 +66,12 @@ import {
     achievedKbps,
     resolveOutputFps,
     type ActiveAudioPlan,
-    cancelOutputQuietly,
     consumeMapSnapshot,
     createH264SampleSource,
     createH264VideoSource,
     createMp4StreamOutput,
     createTranscodeProgressReporter,
+    discardOutputQuietly,
     feedSegmentAudio,
     feedSegmentAudioAdpcm,
     feedSegmentAudioCopy,
@@ -698,7 +698,7 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
         }
     } catch (err) {
         log.error("transcode aborted or failed", { framesDone, err: String(err) });
-        await cancelOutputQuietly(out);
+        await discardOutputQuietly(out, writable);
         throw err;
     } finally {
         // Reused across the probe + segIdx 0; dispose exactly once here (the
@@ -710,6 +710,7 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
     const outputDurationSec = videoAccumOutSec / speedFactor;
     const result = await finalizeTranscodeOutput({
         out,
+        writable,
         signal,
         onProgress,
         framesDone,

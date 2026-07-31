@@ -173,6 +173,20 @@ describe("wrapPortAsFsaWritable (worker side)", () => {
         await expect(parked).rejects.toThrow("cancelled");
         expect(port.ups().some((m) => m.k === "abort")).toBe(true);
     });
+
+    it("rejects a close after abort without posting {close}", async () => {
+        // Output.cancel() closes its target even on the failure path
+        // (discardOutputQuietly aborts first, then cancels) - the abort must
+        // turn that close into a loud no-op, or the main side would COMMIT the
+        // partial file to the user's destination.
+        const port = new FakePort();
+        const w = wrapPortAsFsaWritable(port);
+
+        await w.abort("transcode failed");
+
+        await expect(w.close()).rejects.toThrow("transcode failed");
+        expect(port.ups().some((m) => m.k === "close")).toBe(false);
+    });
 });
 
 // Fake real FSA writable the main-side server drives.
@@ -296,6 +310,22 @@ describe("servePortWritable (main side)", () => {
 
         expect(sink.state.aborted).toBe(true);
         expect(finalized).toBe(true);
+    });
+
+    it("ignores a {close} that arrives after {abort} - the sink stays discarded", async () => {
+        // The worker-side wrapper already refuses to post close after abort,
+        // but the two can race on the wire; the terminal-once guard is the
+        // second line keeping an aborted export from committing.
+        const port = new FakePort();
+        const sink = fakeSink();
+        servePortWritable(port, { ...sink, onFinalized: () => {} });
+
+        port.deliver({ k: "abort", reason: "transcode failed" });
+        port.deliver({ k: "close" });
+        await drain();
+
+        expect(sink.state.aborted).toBe(true);
+        expect(sink.state.closed, "a committed sink after abort means the partial file landed").toBe(false);
     });
 
     it("forceAbort discards the sink once and is idempotent", async () => {

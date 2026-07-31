@@ -589,12 +589,30 @@ export async function nextTolerant<T>(iterator: AsyncIterator<T>): Promise<Toler
 
 /** Cancels the muxer output, swallowing any error - used on abort/failure
  *  paths where the original error (or AbortError) is what we care about. */
-export async function cancelOutputQuietly(out: Output): Promise<void> {
+async function cancelOutputQuietly(out: Output): Promise<void> {
     try {
         await out.cancel();
     } catch {
         /* ignore */
     }
+}
+
+/**
+ * Discards a partial output on a failed or cancelled transcode: aborts the
+ * writable FIRST, then cancels the muxer. The order is the point - Output.cancel()
+ * closes its target, and for an FSA-backed sink close means COMMIT: a
+ * minutes-long flush of a moov-less, unplayable file over the destination the
+ * user picked. Aborting first drops the temp file and turns that close into a
+ * no-op. Both steps swallow their errors - the caller rethrows the original
+ * failure (or AbortError), which is the only one worth surfacing.
+ */
+export async function discardOutputQuietly(out: Output, writable: FileSystemWritableFileStream): Promise<void> {
+    try {
+        await writable.abort("transcode failed or cancelled");
+    } catch {
+        /* writable already terminal */
+    }
+    await cancelOutputQuietly(out);
 }
 
 /**
@@ -677,6 +695,7 @@ export function createTranscodeProgressReporter(
  */
 export async function finalizeTranscodeOutput(opts: {
     out: Output;
+    writable: FileSystemWritableFileStream;
     signal: AbortSignal;
     onProgress: (p: TranscodeProgress) => void;
     framesDone: number;
@@ -684,10 +703,10 @@ export async function finalizeTranscodeOutput(opts: {
     bytesWritten: number;
     durationSec: number;
 }): Promise<TranscodeResult> {
-    const { out, signal, onProgress, framesDone, framesTotal, bytesWritten, durationSec } = opts;
+    const { out, writable, signal, onProgress, framesDone, framesTotal, bytesWritten, durationSec } = opts;
 
     if (signal.aborted) {
-        await cancelOutputQuietly(out);
+        await discardOutputQuietly(out, writable);
         throw new DOMException("aborted", "AbortError");
     }
 

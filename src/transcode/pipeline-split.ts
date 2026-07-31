@@ -50,7 +50,7 @@ import {
     resolveOutputFps,
     type ActiveAudioPlan,
     applyAudioPlan,
-    cancelOutputQuietly,
+    discardOutputQuietly,
     consumeMapSnapshot,
     createH264VideoSource,
     createMp4StreamOutput,
@@ -825,7 +825,7 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
     } catch (err) {
         log.error("split transcode aborted or failed", { framesDone, err: String(err) });
         disposeAllSlots();
-        await cancelOutputQuietly(out);
+        await discardOutputQuietly(out, writable);
         throw err;
     } finally {
         disposeAllSlots();
@@ -833,6 +833,7 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
 
     const result = await finalizeTranscodeOutput({
         out,
+        writable,
         signal,
         onProgress,
         framesDone,
