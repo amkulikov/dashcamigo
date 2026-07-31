@@ -15,7 +15,8 @@
 // and buzz after resampling. The packet pts is used only to find the start block,
 // bound the range, and anchor the first emitted frame on the output timeline.
 
-import { BlobSource, EncodedPacketSink, Input, MATROSKA } from "mediabunny";
+import { EncodedPacketSink, Input, MATROSKA } from "mediabunny";
+import { createRetryingBlobSource } from "../retrying-blob-source.js";
 import { AudioSample, type AudioSampleSource } from "mediabunny";
 
 import { createLogger } from "../log.js";
@@ -41,7 +42,7 @@ export async function openMatroskaAdpcmAudio(file: File): Promise<AdpcmAudioRead
     // Validate once on a throwaway Input; the feed methods open their own so no
     // Input lingers between calls (mediabunny Input has no idle release - dispose
     // is the documented lifecycle, and a per-call Input is also cancel-friendly).
-    const probe = new Input({ source: new BlobSource(file), formats: [MATROSKA] });
+    const probe = new Input({ source: createRetryingBlobSource(file), formats: [MATROSKA] });
     let channels: number;
     let sampleRate: number;
     try {
@@ -72,7 +73,7 @@ export async function openMatroskaAdpcmAudio(file: File): Promise<AdpcmAudioRead
         signal?: AbortSignal,
         onFirstEmit?: () => void,
     ): Promise<number> {
-        const input = new Input({ source: new BlobSource(file), formats: [MATROSKA] });
+        const input = new Input({ source: createRetryingBlobSource(file), formats: [MATROSKA] });
         try {
             const at = await input.getPrimaryAudioTrack();
             if (!at) return 0;

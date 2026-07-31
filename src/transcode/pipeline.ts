@@ -36,7 +36,8 @@
 //    (limit ~60 in the decoder queue); forgetting close stalls the decoder.
 //  - canvas - one OffscreenCanvas for the entire exec, reused.
 
-import { BlobSource, Input, VideoSample, VideoSampleSink } from "mediabunny";
+import { Input, VideoSample, VideoSampleSink } from "mediabunny";
+import { createRetryingBlobSource } from "../retrying-blob-source.js";
 
 import { openAdpcmAudioAuto } from "./adpcm-audio.js";
 import { createVideoSourceResolver } from "./normalize-degenerate-video.js";
@@ -227,7 +228,10 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
     // file is the whole trip, so reading its (large) moov twice dominated the
     // "Preparing" wait; sharing one Input reads it once. Disposed in the loop's
     // finally below (mirrors exportClip's firstInput pattern).
-    const firstInput = new Input({ source: new BlobSource(mainSegments[0]!.file), formats: VIDEO_INPUT_FORMATS });
+    const firstInput = new Input({
+        source: createRetryingBlobSource(mainSegments[0]!.file, signal),
+        formats: VIDEO_INPUT_FORMATS,
+    });
     // Turns a degenerate-packet MKV into a clean stream-copy MP4 for the video
     // decode path (identity for every other container). One instance per export;
     // memoizes per File so a multi-segment range remuxes once. Video only - audio
@@ -454,7 +458,7 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
             const input =
                 segIdx === 0 && !videoRedirected
                     ? firstInput
-                    : new Input({ source: new BlobSource(videoFile), formats: VIDEO_INPUT_FORMATS });
+                    : new Input({ source: createRetryingBlobSource(videoFile, signal), formats: VIDEO_INPUT_FORMATS });
             // Audio input over the original file. firstInput is over the original,
             // so reuse it at segIdx 0; otherwise reuse the video input when it was
             // not redirected, or open a dedicated original-file input when video
@@ -463,7 +467,7 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
                 segIdx === 0
                     ? firstInput
                     : videoRedirected
-                      ? new Input({ source: new BlobSource(seg.file), formats: VIDEO_INPUT_FORMATS })
+                      ? new Input({ source: createRetryingBlobSource(seg.file, signal), formats: VIDEO_INPUT_FORMATS })
                       : input;
             try {
                 const videoTrack = await input.getPrimaryVideoTrack();

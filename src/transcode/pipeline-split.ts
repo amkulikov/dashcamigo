@@ -9,7 +9,8 @@
 //  - if decoder is not open or is past the active segment: swap;
 //  - getSample(localTime) for that tripTime, one composition via drawSplitScreen.
 
-import { BlobSource, Input, type VideoSample, VideoSampleSink } from "mediabunny";
+import { Input, type VideoSample, VideoSampleSink } from "mediabunny";
+import { createRetryingBlobSource } from "../retrying-blob-source.js";
 
 import { probeAudioUniformity } from "../export.js";
 import { rangeSourceFps, sliceCandidatesForRange, type FileSegment } from "../export-range.js";
@@ -176,7 +177,10 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
         slotSegments.map(async (segs, slotIdx) => {
             const first = segs[0];
             if (!first) return widthPx / heightPx;
-            const input = new Input({ source: new BlobSource(first.file), formats: VIDEO_INPUT_FORMATS });
+            const input = new Input({
+                source: createRetryingBlobSource(first.file, signal),
+                formats: VIDEO_INPUT_FORMATS,
+            });
             try {
                 const vt = await input.getPrimaryVideoTrack();
                 if (!vt) return widthPx / heightPx;
@@ -474,7 +478,7 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
         // seg.file unchanged. This slot input feeds only the video decode; the
         // audio loop below reads the original seg.file through its own Input.
         const videoFile = await videoResolver.resolve(seg.file);
-        const input = new Input({ source: new BlobSource(videoFile), formats: VIDEO_INPUT_FORMATS });
+        const input = new Input({ source: createRetryingBlobSource(videoFile, signal), formats: VIDEO_INPUT_FORMATS });
         let videoTrack: Awaited<ReturnType<typeof input.getPrimaryVideoTrack>>;
         try {
             videoTrack = await input.getPrimaryVideoTrack();
@@ -729,7 +733,10 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
                     for (const seg of masterSegments) {
                         if (signal.aborted) throw new DOMException("aborted", "AbortError");
                         const segBaseOutSec = Math.max(0, seg.tripStart + seg.startInFile - source.startTripSec);
-                        const input = new Input({ source: new BlobSource(seg.file), formats: VIDEO_INPUT_FORMATS });
+                        const input = new Input({
+                            source: createRetryingBlobSource(seg.file, signal),
+                            formats: VIDEO_INPUT_FORMATS,
+                        });
                         try {
                             const res = await feedSegmentAudioCopy({
                                 audioSource: audioPlan.source,
@@ -791,7 +798,10 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
                                 signal,
                             });
                         } else {
-                            const input = new Input({ source: new BlobSource(seg.file), formats: VIDEO_INPUT_FORMATS });
+                            const input = new Input({
+                                source: createRetryingBlobSource(seg.file, signal),
+                                formats: VIDEO_INPUT_FORMATS,
+                            });
                             try {
                                 await feedSegmentAudio({
                                     audioSource: audioPlan.source,

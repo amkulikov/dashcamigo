@@ -28,16 +28,9 @@
 // pathological multi-minute MKV would double its video RAM for the export. The
 // remux is per unique File and cached, so a multi-segment range remuxes once.
 
-import {
-    BlobSource,
-    BufferTarget,
-    EncodedPacketSink,
-    EncodedVideoPacketSource,
-    Input,
-    Mp4OutputFormat,
-    Output,
-} from "mediabunny";
+import { BufferTarget, EncodedPacketSink, EncodedVideoPacketSource, Input, Mp4OutputFormat, Output } from "mediabunny";
 import { createLogger } from "../log.js";
+import { createRetryingBlobSource } from "../retrying-blob-source.js";
 import { isMatroskaName } from "../video-format-names.js";
 import { VIDEO_INPUT_FORMATS } from "../video-formats.js";
 
@@ -99,7 +92,7 @@ export function createVideoSourceResolver(): VideoSourceResolver {
  * not possible (no video track / unreadable codec config / unmuxable codec).
  */
 async function normalizeToCleanMp4(file: File): Promise<File> {
-    const input = new Input({ source: new BlobSource(file), formats: VIDEO_INPUT_FORMATS });
+    const input = new Input({ source: createRetryingBlobSource(file), formats: VIDEO_INPUT_FORMATS });
     try {
         const track = await input.getPrimaryVideoTrack();
         if (!track) return file;

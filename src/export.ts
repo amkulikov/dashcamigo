@@ -34,7 +34,6 @@
 import {
     Input,
     Output,
-    BlobSource,
     Mp4OutputFormat,
     StreamTarget,
     EncodedVideoPacketSource,
@@ -50,6 +49,7 @@ import { DEGENERATE_VIDEO_PACKET_MAX_BYTES } from "./transcode/normalize-degener
 import { type AdpcmAudioReader, openAdpcmAudioAuto } from "./transcode/adpcm-audio.js";
 import { createEncodeAudioSource, resolveEncodeAudioCodec } from "./transcode/capabilities.js";
 import { createLogger } from "./log.js";
+import { createRetryingBlobSource } from "./retrying-blob-source.js";
 import { type AudioTrackFormat, sliceCandidatesForRange } from "./export-range.js";
 import { injectClipGpmf, type CapturedMoov } from "./export/gpmd-inject.js";
 import { closeWritableWithWatchdog } from "./export/writable-finalize.js";
@@ -266,7 +266,7 @@ export async function exportClip({
     // codecs (HEVC/AVC, AAC) and register track sources. We keep this input
     // alive for the full export - its codecs define the output tracks.
     const firstInput = new Input({
-        source: new BlobSource(segments[0]!.file),
+        source: createRetryingBlobSource(segments[0]!.file, signal),
         formats: VIDEO_INPUT_FORMATS,
     });
 
@@ -431,7 +431,7 @@ export async function exportClip({
             const input =
                 segIdx === 0
                     ? firstInput
-                    : new Input({ source: new BlobSource(seg.file), formats: VIDEO_INPUT_FORMATS });
+                    : new Input({ source: createRetryingBlobSource(seg.file, signal), formats: VIDEO_INPUT_FORMATS });
 
             try {
                 const v = segIdx === 0 ? firstVideoTrack : await input.getPrimaryVideoTrack();
@@ -693,7 +693,7 @@ export async function probeAudioUniformity(
         // once across the probe + the export loop (see reuseFirstInput above). A
         // borrowed Input is never disposed here - the caller owns its lifecycle.
         const borrowed = i === 0 ? opts.reuseFirstInput : undefined;
-        const input = borrowed ?? new Input({ source: new BlobSource(file), formats: VIDEO_INPUT_FORMATS });
+        const input = borrowed ?? new Input({ source: createRetryingBlobSource(file), formats: VIDEO_INPUT_FORMATS });
         try {
             const track = await input.getPrimaryAudioTrack();
             if (!track) continue;
