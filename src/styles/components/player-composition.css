@@ -748,42 +748,9 @@ body.letterbox-blur .video-tile > video:not(.tile-blur-bg) {
  * mask below, matching the burned-in export (transcode/map-overlay.ts). */
 .player-map-overlay {
     position: absolute;
-    z-index: 5;
-    overflow: hidden;
-    cursor: grab;
-    touch-action: none;
-    /* Re-enable pointer events: the parent .player-overlay-frame is
-       pointer-events:none (click-through for crop), so a direct child that
-       must be draggable has to opt back in - same as .player-watermark /
-       .player-overlay above. Without this the mini-map is immobile. */
-    pointer-events: auto;
-}
-
-.player-map-overlay.is-dragging,
-.player-map-overlay.is-resizing {
-    cursor: grabbing;
-}
-
-.player-map-overlay[hidden] {
-    display: none;
-}
-
-/* Feathered dissolve - mirrors transcode/map-overlay.ts (MAP_FEATHER_FRAC 0.08,
-   smoothstep). Applied to the canvas, NOT the parent, so the resize grip sibling
-   stays crisp. Rect = two crossed smoothstep gradients (intersected); the circle
-   variant below swaps in a radial rim. The smoothstep alpha stops (0 / .104 /
-   .352 / .648 / .896 / 1) ease the ramp at both ends so there is no hard
-   threshold where the fade meets the solid core. */
-.player-map-overlay__canvas {
-    width: 100%;
-    height: 100%;
-    display: block;
-    pointer-events: none;
-    /* The snapshot is 4:3; on a circle (square) slot, center-crop instead of
-       squishing so the preview matches the export's coverFit center-crop. */
-    object-fit: cover;
-    /* Defined once, reused for -webkit- and standard mask so the long stop list
-       is not duplicated four times. */
+    /* Feather stops defined once, INHERITED: the __canvas mask and the no-fix
+       badge (::after) must dissolve identically, so the long stop list lives
+       here rather than being duplicated per consumer. */
     --feather-x: linear-gradient(
         to right,
         rgba(0, 0, 0, 0) 0%,
@@ -814,6 +781,70 @@ body.letterbox-blur .video-tile > video:not(.tile-blur-bg) {
         rgba(0, 0, 0, 0.104) 98.4%,
         rgba(0, 0, 0, 0) 100%
     );
+    z-index: 5;
+    overflow: hidden;
+    cursor: grab;
+    touch-action: none;
+    /* Re-enable pointer events: the parent .player-overlay-frame is
+       pointer-events:none (click-through for crop), so a direct child that
+       must be draggable has to opt back in - same as .player-watermark /
+       .player-overlay above. Without this the mini-map is immobile. */
+    pointer-events: auto;
+}
+
+.player-map-overlay.is-dragging,
+.player-map-overlay.is-resizing {
+    cursor: grabbing;
+}
+
+/* No-GPS-fix badge: covers the mini-map while the playhead sits outside GPS
+   coverage (receiver warm-up, long dropout), mirroring the burned export's
+   drawMapPlaceholder - dark plate + crossed-pin icon, icon-only so there is
+   nothing to localize. Colors match the canvas placeholder, not the UI theme:
+   this element previews burned output. */
+.player-map-overlay.is-no-fix::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    /* Same feather mask as the canvas, so the badge dissolves identically
+       instead of painting a hard-edged plate over a feathered map. */
+    -webkit-mask-image: var(--feather-x), var(--feather-y);
+    -webkit-mask-composite: source-in;
+    mask-image: var(--feather-x), var(--feather-y);
+    mask-composite: intersect;
+    background-color: rgba(16, 20, 24, 0.85);
+    background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 21c-4-4.5-6-7.7-6-10.5a6 6 0 1 1 12 0C18 13.3 16 16.5 12 21z' stroke='rgba(255,255,255,0.6)' stroke-width='2'/%3E%3Ccircle cx='12' cy='10.5' r='2' fill='rgba(255,255,255,0.6)'/%3E%3Cpath d='M4 4l16 16' stroke='rgba(0,0,0,0.55)' stroke-width='3.8'/%3E%3Cpath d='M4 4l16 16' stroke='rgba(255,255,255,0.6)' stroke-width='2'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 38%;
+}
+
+.player-map-overlay[data-shape="circle"].is-no-fix::after {
+    -webkit-mask-image: var(--feather-radial);
+    -webkit-mask-composite: source-over;
+    mask-image: var(--feather-radial);
+    mask-composite: add;
+}
+
+.player-map-overlay[hidden] {
+    display: none;
+}
+
+/* Feathered dissolve - mirrors transcode/map-overlay.ts (MAP_FEATHER_FRAC 0.08,
+   smoothstep). Applied to the canvas, NOT the parent, so the resize grip sibling
+   stays crisp. Rect = two crossed smoothstep gradients (intersected); the circle
+   variant below swaps in a radial rim. The smoothstep alpha stops (0 / .104 /
+   .352 / .648 / .896 / 1) ease the ramp at both ends so there is no hard
+   threshold where the fade meets the solid core. */
+.player-map-overlay__canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    pointer-events: none;
+    /* The snapshot is 4:3; on a circle (square) slot, center-crop instead of
+       squishing so the preview matches the export's coverFit center-crop. */
+    object-fit: cover;
     -webkit-mask-image: var(--feather-x), var(--feather-y);
     -webkit-mask-composite: source-in;
     mask-image: var(--feather-x), var(--feather-y);
@@ -822,7 +853,7 @@ body.letterbox-blur .video-tile > video:not(.tile-blur-bg) {
 
 /* Circle: a single radial rim feather (solid core, smoothstep-dissolving edge)
    replaces the two-axis rect mask. */
-.player-map-overlay[data-shape="circle"] .player-map-overlay__canvas {
+.player-map-overlay[data-shape="circle"] {
     --feather-radial: radial-gradient(
         circle closest-side at 50% 50%,
         #000 84%,
@@ -832,6 +863,9 @@ body.letterbox-blur .video-tile > video:not(.tile-blur-bg) {
         rgba(0, 0, 0, 0.104) 96.8%,
         rgba(0, 0, 0, 0) 100%
     );
+}
+
+.player-map-overlay[data-shape="circle"] .player-map-overlay__canvas {
     -webkit-mask-image: var(--feather-radial);
     -webkit-mask-composite: source-over;
     mask-image: var(--feather-radial);
@@ -855,6 +889,8 @@ body.letterbox-blur .video-tile > video:not(.tile-blur-bg) {
     background: var(--accent);
     cursor: nwse-resize;
     touch-action: none;
+    /* Above the no-fix badge (::after), which otherwise paints over it. */
+    z-index: 1;
     /* Inherits pointer-events:auto from the (now-auto) .player-map-overlay
        parent; stated explicitly so the resize grip is self-documenting and
        robust to future changes of the parent rule. */

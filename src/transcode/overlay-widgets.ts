@@ -5,7 +5,7 @@
 // STYLE_CHROME + the run accent. Sizes are a fraction of the frame's shorter
 // side so a widget reads the same on 16:9 / 9:16 / 1:1.
 
-import { circlePath, clamp, measureTextWidth, roundRectPath } from "./canvas-draw.js";
+import { circlePath, clamp, drawNoFixIcon, measureTextWidth, roundRectPath } from "./canvas-draw.js";
 import { composeFont, resolveStyleColor, STYLE_CHROME } from "./overlay-styles.js";
 import type { OverlayStyleId } from "./types.js";
 import type { FramePos } from "./frame-pos.js";
@@ -65,6 +65,26 @@ export function drawCompass(
     ctx.lineWidth = Math.max(1, d * 0.02);
     ctx.strokeStyle = resolveStyleColor(chrome.dialStroke, accent);
     ctx.stroke();
+
+    // No fix: keep the dial chrome (ring + ticks) so the widget holds its
+    // place, but no card rotation, cardinals, index, or readout - a heading
+    // without a fix would be an invention. The icon carries the "why".
+    if (!pos.hasFix) {
+        ctx.strokeStyle = "rgba(255,255,255,0.25)";
+        ctx.lineWidth = Math.max(1, d * 0.012);
+        for (let i = 0; i < 24; i++) {
+            const a = (i * 15 * Math.PI) / 180;
+            const r1 = r * 0.92;
+            const r2 = i % 2 === 0 ? r * 0.8 : r * 0.86;
+            ctx.beginPath();
+            ctx.moveTo(cx + r1 * Math.sin(a), cy - r1 * Math.cos(a));
+            ctx.lineTo(cx + r2 * Math.sin(a), cy - r2 * Math.cos(a));
+            ctx.stroke();
+        }
+        drawNoFixIcon(ctx, cx, cy, d * 0.34, "rgba(255,255,255,0.65)");
+        ctx.restore();
+        return;
+    }
 
     // Heading-up: the card (ticks + labels) is rotated by -heading so the
     // travel direction comes to the top under the fixed index. A bearing b on
@@ -178,6 +198,14 @@ export function drawGforce(
     ctx.moveTo(cx - r, cy);
     ctx.lineTo(cx + r, cy);
     ctx.stroke();
+
+    // No fix: crosshair chrome only - no dot, no magnitude (derived G IS a GPS
+    // quantity here). Icon in place of the readout.
+    if (!pos.hasFix) {
+        drawNoFixIcon(ctx, cx, cy, d * 0.34, "rgba(255,255,255,0.65)");
+        ctx.restore();
+        return;
+    }
 
     // acceleration dot: gLat -> x, -gLong -> y (braking pushes the dot down)
     const reach = r * 0.74;

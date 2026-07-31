@@ -45,7 +45,7 @@ import {
 import { drawWatermark, ensureWatermarkFontReady } from "./watermark.js";
 import { hasAnyOverlay, isFinitePosition } from "./overlay-pipeline-helpers.js";
 import { ensureOverlayFontsReady } from "./overlay-styles.js";
-import { interpScalar, recordsHaveAccel, resolveFramePos } from "./frame-pos.js";
+import { type FramePos, interpScalar, recordsHaveAccel, resolveFramePos, resolveNoFixFramePos } from "./frame-pos.js";
 import {
     achievedKbps,
     resolveOutputFps,
@@ -65,6 +65,7 @@ import {
     nextTolerant,
     round2,
 } from "./pipeline-common.js";
+import { drawMapPlaceholder } from "./map-overlay.js";
 import { drawTelemetryOverlays } from "./telemetry-overlays.js";
 import { createVideoSourceResolver } from "./normalize-degenerate-video.js";
 import { interpolatePosition } from "../parser.js";
@@ -593,12 +594,30 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
                 // wall-clock UTC (skipping pauses) once per frame, reused for GPS
                 // interpolation and resolveFramePos below.
                 const frameUtc = overlays ? contentToWallUtc(source.trip.timeline, tripTimeSec) : 0;
+                // Built for every overlay frame, fix or not: a no-fix frame
+                // renders widget placeholders instead of dropping the layer
+                // (see pipeline.ts for the single-channel mirror of this).
+                let framePos: FramePos | null = null;
                 if (overlays && hasAnyOverlay(overlays)) {
                     const interp = interpolatePosition(overlays.gpsRecords, frameUtc);
                     if (interp && isFinitePosition(interp)) pos = interp;
+                    const span = rangeEndUtc - rangeStartUtc;
+                    const progress = span > 0 ? (frameUtc - rangeStartUtc) / span : 0;
+                    framePos = pos
+                        ? resolveFramePos({
+                              records: overlays.gpsRecords,
+                              base: pos,
+                              cumulative: overlays.cumulativeDistanceM,
+                              distanceBaseM,
+                              frameUtc,
+                              progress,
+                          })
+                        : resolveNoFixFramePos(frameUtc, progress);
                 }
                 let snapPromise: Promise<ImageBitmap> | null = null;
-                if (pos && overlayMapOpts && mapSnapshotter && !mapOverlayFailed) {
+                // hasFix, not just pos: a long dropout interpolates fabricated
+                // coordinates - the placeholder is drawn instead of a snapshot.
+                if (framePos?.hasFix && pos && overlayMapOpts && mapSnapshotter && !mapOverlayFailed) {
                     snapPromise = mapSnapshotter.snapshot({
                         lat: pos.lat,
                         lon: pos.lon,
@@ -673,18 +692,13 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
                     renderOpts,
                     slotRegionBlurs,
                 );
-                if (pos && overlays) {
-                    const span = rangeEndUtc - rangeStartUtc;
-                    const progress = span > 0 ? (frameUtc - rangeStartUtc) / span : 0;
-                    const framePos = resolveFramePos({
-                        records: overlays.gpsRecords,
-                        base: pos,
-                        cumulative: overlays.cumulativeDistanceM,
-                        distanceBaseM,
-                        frameUtc,
-                        progress,
-                    });
+                if (framePos && overlays) {
                     drawTelemetryOverlays(ctx, widthPx, heightPx, overlays, framePos);
+                    // No fix -> no snapshot in flight; hold the slot with the
+                    // placeholder (same rationale as the single pipeline).
+                    if (overlayMapOpts && !framePos.hasFix && !mapOverlayFailed) {
+                        drawMapPlaceholder(ctx, widthPx, heightPx, overlayMapOpts);
+                    }
                     if (snapPromise && overlayMapOpts) {
                         // Failure policy (disable-for-the-run latch, AbortError
                         // rethrow, bitmap close) lives in the shared

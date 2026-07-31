@@ -99,3 +99,57 @@ export function shapePath(
     }
     roundRectPath(ctx, x, y, w, h, rectRadius);
 }
+
+/**
+ * Crossed-out location pin - the shared "no GPS fix" glyph for overlay
+ * placeholders (an icon, so nothing to localize). Drawn centered at (cx, cy)
+ * inside a sizePx square: stroked pin outline with a head dot, crossed by a
+ * diagonal slash over a darker underlay so the slash reads on the pin itself.
+ */
+export function drawNoFixIcon(ctx: AnyCanvas2D, cx: number, cy: number, sizePx: number, color: string): void {
+    const s = sizePx;
+    const lineW = Math.max(1.5, s * 0.09);
+    // Pin: head circle with the tip hanging below; tangent-ish joins at 45/135
+    // degrees keep the silhouette clean without real tangent math.
+    const headR = s * 0.26;
+    const headX = cx;
+    const headY = cy - s * 0.1;
+    const tipY = cy + s * 0.42;
+    const a1 = Math.PI * 0.25;
+    const a2 = Math.PI * 0.75;
+
+    ctx.save();
+    ctx.lineWidth = lineW;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+
+    ctx.beginPath();
+    ctx.moveTo(cx, tipY);
+    ctx.lineTo(headX + headR * Math.cos(a1), headY + headR * Math.sin(a1));
+    // Anticlockwise from the right-lower tangent over the top to the left-lower.
+    ctx.arc(headX, headY, headR, a1, a2, true);
+    ctx.closePath();
+    ctx.stroke();
+
+    circlePath(ctx, headX, headY, headR * 0.32);
+    ctx.fill();
+
+    // Slash, corner to corner. The underlay separates it from the pin strokes
+    // it crosses; drawn after the pin so the "off" reading wins.
+    const ext = s * 0.46;
+    ctx.strokeStyle = "rgba(0,0,0,0.55)";
+    ctx.lineWidth = lineW * 1.9;
+    ctx.beginPath();
+    ctx.moveTo(cx - ext, cy - ext);
+    ctx.lineTo(cx + ext, cy + ext);
+    ctx.stroke();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineW;
+    ctx.beginPath();
+    ctx.moveTo(cx - ext, cy - ext);
+    ctx.lineTo(cx + ext, cy + ext);
+    ctx.stroke();
+    ctx.restore();
+}

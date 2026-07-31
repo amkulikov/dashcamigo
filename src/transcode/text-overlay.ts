@@ -10,7 +10,7 @@
 // frame; the UI preview calls the same code so what the user arranges matches
 // the file.
 
-import { clamp, measureTextWidth, roundRectPath } from "./canvas-draw.js";
+import { clamp, drawNoFixIcon, measureTextWidth, roundRectPath } from "./canvas-draw.js";
 import { composeFont, resolveStyleColor, type StyleChrome, STYLE_CHROME } from "./overlay-styles.js";
 import type { OverlayStyleId } from "./types.js";
 
@@ -200,6 +200,46 @@ export function drawWidgetBox(
         );
     }
 
+    ctx.restore();
+}
+
+/**
+ * No-fix placeholder for a text widget: the same plate chrome at the same
+ * anchor, with the crossed-pin icon where the reading would be. `valueScale`
+ * mirrors the widget's own so the placeholder keeps a similar footprint (the
+ * width differs - readings vary anyway). Icon-only by design: an icon needs no
+ * localization.
+ */
+export function drawNoFixBox(
+    ctx: AnyCtx,
+    frameWidth: number,
+    frameHeight: number,
+    opts: TextOverlayDrawOpts,
+    style: OverlayStyleId,
+    accent: string,
+    valueScale: number,
+): void {
+    const chrome = STYLE_CHROME[style];
+    const scale = clamp(opts.scalePct, 50, 200) / 100;
+    const primaryPx = Math.max(10, Math.round(frameHeight * TEXT_OVERLAY_BASE_FONT_PCT * scale * valueScale));
+    const pad = chrome.plate ? Math.round(primaryPx * 0.36) : 0;
+    const side = Math.round(primaryPx * 1.2);
+    const boxW = side + pad * 2;
+    const boxH = primaryPx + pad * 2;
+
+    const xLeft = clamp(opts.xPct, 0, 1) * frameWidth;
+    const yTop = clamp(opts.yPct, 0, 1) * frameHeight;
+    const x = Math.min(Math.max(0, xLeft), Math.max(0, frameWidth - boxW));
+    const y = Math.min(Math.max(0, yTop), Math.max(0, frameHeight - boxH));
+
+    ctx.save();
+    drawPlate(ctx, chrome, x, y, boxW, boxH, Math.round(primaryPx * 0.12));
+    // Muted (unit) color, not the value color: the placeholder should read as
+    // chrome, not as a reading. Shadowed like the text it replaces - on the
+    // plate-less styles the icon sits straight on the video.
+    withShadow(ctx, chrome.shadow, primaryPx, () =>
+        drawNoFixIcon(ctx, x + boxW / 2, y + boxH / 2, primaryPx, resolveStyleColor(chrome.unitColor, accent)),
+    );
     ctx.restore();
 }
 

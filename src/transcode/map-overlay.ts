@@ -6,7 +6,7 @@
 // (player-composition.css, .player-map-overlay__canvas) mirrors this feather
 // with a CSS mask - keep the two in sync (MAP_FEATHER_FRAC below).
 
-import { clamp } from "./canvas-draw.js";
+import { clamp, drawNoFixIcon } from "./canvas-draw.js";
 import type { MapShape } from "./types.js";
 
 export interface MapOverlayDrawOpts {
@@ -150,6 +150,45 @@ export function drawMapOverlay(
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(bitmap, src.sx, src.sy, src.sw, src.sh, xClamped, yClamped, widthPx, heightPx);
+    ctx.restore();
+}
+
+/**
+ * No-fix placeholder for the map slot: the same geometry, feather, and shape as
+ * drawMapOverlay, but a dark plate with the crossed-pin icon instead of a
+ * snapshot - the receiver has no position to render, and freezing the last
+ * snapshot would lie about where the car is. Same-slot geometry means the map
+ * neither jumps nor pops when the fix returns.
+ */
+export function drawMapPlaceholder(
+    ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+    frameWidth: number,
+    frameHeight: number,
+    opts: MapOverlayDrawOpts,
+): void {
+    const scale = clamp(opts.scalePct, 50, 200) / 100;
+    const widthPx = Math.max(40, Math.round(frameWidth * MAP_BASE_WIDTH_PCT * scale));
+    const heightPx = opts.shape === "circle" ? widthPx : Math.max(30, Math.round(widthPx / MAP_SLOT_ASPECT));
+    const xLeft = clamp(opts.xPct, 0, 1) * frameWidth;
+    const yTop = clamp(opts.yPct, 0, 1) * frameHeight;
+    const xClamped = Math.min(Math.max(0, xLeft), Math.max(0, frameWidth - widthPx));
+    const yClamped = Math.min(Math.max(0, yTop), Math.max(0, frameHeight - heightPx));
+
+    const iconPx = Math.min(widthPx, heightPx) * 0.36;
+    const sctx = getScratch(widthPx, heightPx);
+    if (sctx) {
+        sctx.fillStyle = "rgba(16, 20, 24, 0.85)";
+        sctx.fillRect(0, 0, widthPx, heightPx);
+        drawNoFixIcon(sctx, widthPx / 2, heightPx / 2, iconPx, "rgba(255,255,255,0.6)");
+        featherEdges(sctx, widthPx, heightPx, opts.shape);
+        ctx.drawImage(sctx.canvas, xClamped, yClamped);
+        return;
+    }
+    // Degraded path (no scratch 2D context): hard-edged plate, like drawMapOverlay.
+    ctx.save();
+    ctx.fillStyle = "rgba(16, 20, 24, 0.85)";
+    ctx.fillRect(xClamped, yClamped, widthPx, heightPx);
+    drawNoFixIcon(ctx, xClamped + widthPx / 2, yClamped + heightPx / 2, iconPx, "rgba(255,255,255,0.6)");
     ctx.restore();
 }
 

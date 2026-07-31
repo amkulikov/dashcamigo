@@ -8,7 +8,14 @@
 
 import type { FramePos } from "./frame-pos.js";
 import { drawCompass, drawGforce, drawGraph } from "./overlay-widgets.js";
-import { drawCoordsBox, drawWidgetBox, formatClock, formatDistanceValue, formatSpeedValue } from "./text-overlay.js";
+import {
+    drawCoordsBox,
+    drawNoFixBox,
+    drawWidgetBox,
+    formatClock,
+    formatDistanceValue,
+    formatSpeedValue,
+} from "./text-overlay.js";
 import type { OverlayPipelineArgs } from "./types.js";
 
 /**
@@ -53,22 +60,35 @@ export function drawTelemetryOverlays(
         drawGforce(ctx, widthPx, heightPx, overlays.gforce, style, accent, pos, overlays.brakeThresholdG);
     }
 
+    // GPS-fed readouts swap to the no-fix placeholder (same plate, crossed-pin
+    // icon) when the frame has no usable fix - receiver warm-up at clip start,
+    // long dropouts. The clock stays live either way: it reads the timeline,
+    // not the receiver. Each placeholder reuses its widget's valueScale so the
+    // footprint stays familiar.
     if (overlays.speed) {
-        drawWidgetBox(ctx, widthPx, heightPx, overlays.speed, style, accent, {
-            value: formatSpeedValue(pos.speedMs, units),
-            unit: overlays.unitSpeed,
-            valueScale: 1,
-            // Reserve 3 digits (0-999 km/h / mph) so the plate does not breathe
-            // as the reading crosses 9->10->100.
-            reserveValue: "000",
-            // bold style turns this into the hero readout (accent + hazard
-            // stripe); min/card draw it plainly.
-            hero: true,
-        });
+        if (pos.hasFix) {
+            drawWidgetBox(ctx, widthPx, heightPx, overlays.speed, style, accent, {
+                value: formatSpeedValue(pos.speedMs, units),
+                unit: overlays.unitSpeed,
+                valueScale: 1,
+                // Reserve 3 digits (0-999 km/h / mph) so the plate does not breathe
+                // as the reading crosses 9->10->100.
+                reserveValue: "000",
+                // bold style turns this into the hero readout (accent + hazard
+                // stripe); min/card draw it plainly.
+                hero: true,
+            });
+        } else {
+            drawNoFixBox(ctx, widthPx, heightPx, overlays.speed, style, accent, 1);
+        }
     }
     if (overlays.coords) {
-        // Two-line "N 55.7521° / E 37.6173°" with accent hemisphere keys.
-        drawCoordsBox(ctx, widthPx, heightPx, overlays.coords, style, accent, pos.lat, pos.lon, 0.55);
+        if (pos.hasFix) {
+            // Two-line "N 55.7521° / E 37.6173°" with accent hemisphere keys.
+            drawCoordsBox(ctx, widthPx, heightPx, overlays.coords, style, accent, pos.lat, pos.lon, 0.55);
+        } else {
+            drawNoFixBox(ctx, widthPx, heightPx, overlays.coords, style, accent, 0.8);
+        }
     }
     if (overlays.clock) {
         // Date on top, time below (dim secondary), e.g. "29 Apr 2026 / 18:32:04".
@@ -81,14 +101,18 @@ export function drawTelemetryOverlays(
         });
     }
     if (overlays.distance) {
-        drawWidgetBox(ctx, widthPx, heightPx, overlays.distance, style, accent, {
-            value: formatDistanceValue(pos.distanceM, units),
-            unit: overlays.unitDistance,
-            valueScale: 0.85,
-            // Reserve 2 integer digits + decimal so the readout holds steady
-            // across the 9.9->10.0 step (longer trips just widen the field).
-            reserveValue: "88.8",
-        });
+        if (pos.hasFix) {
+            drawWidgetBox(ctx, widthPx, heightPx, overlays.distance, style, accent, {
+                value: formatDistanceValue(pos.distanceM, units),
+                unit: overlays.unitDistance,
+                valueScale: 0.85,
+                // Reserve 2 integer digits + decimal so the readout holds steady
+                // across the 9.9->10.0 step (longer trips just widen the field).
+                reserveValue: "88.8",
+            });
+        } else {
+            drawNoFixBox(ctx, widthPx, heightPx, overlays.distance, style, accent, 0.85);
+        }
     }
 }
 

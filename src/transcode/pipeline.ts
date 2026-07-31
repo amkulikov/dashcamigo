@@ -62,7 +62,7 @@ import {
 import { ensureWatermarkFontReady } from "./watermark.js";
 import { hasAnyOverlay, isFinitePosition } from "./overlay-pipeline-helpers.js";
 import { ensureOverlayFontsReady } from "./overlay-styles.js";
-import { type FramePos, interpScalar, recordsHaveAccel, resolveFramePos } from "./frame-pos.js";
+import { type FramePos, interpScalar, recordsHaveAccel, resolveFramePos, resolveNoFixFramePos } from "./frame-pos.js";
 import {
     achievedKbps,
     resolveOutputFps,
@@ -83,6 +83,7 @@ import {
     nextTolerant,
     round2,
 } from "./pipeline-common.js";
+import { drawMapPlaceholder } from "./map-overlay.js";
 import { drawTelemetryOverlays } from "./telemetry-overlays.js";
 import { interpolatePosition } from "../parser.js";
 
@@ -390,6 +391,12 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
             drawMain(ctx, p.sample, output.crop, widthPx, heightPx, renderOpts, regionBlurs);
             if (p.framePos && overlays) {
                 drawTelemetryOverlays(ctx, widthPx, heightPx, overlays, p.framePos);
+                // No fix -> no snapshot was issued; hold the slot with the
+                // placeholder so the map neither vanishes nor freezes on a
+                // stale position. Skipped once the map is disabled for the run.
+                if (overlays.map && !p.framePos.hasFix && !mapOverlayFailed) {
+                    drawMapPlaceholder(ctx, widthPx, heightPx, overlays.map);
+                }
                 if (p.snapPromise && overlays.map) {
                     snapHandled = true;
                     if (mapOverlayFailed) {
@@ -551,39 +558,43 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
                             frameContentSec = seg.tripStart + sample.timestamp;
                             if (overlays && anyOverlay) {
                                 // Interpolate GPS once per frame; reuse for all widgets.
-                                // Skip if the interpolated record is non-finite -
-                                // active=false records or upstream parser quirks can
-                                // produce NaN lat/lon; painting them gives "NaN km/h"
-                                // text or breaks zoom math in the map snapshotter.
                                 // Map footage-axis position to wall-clock UTC
                                 // (skipping paused time) for GPS interpolation.
                                 const frameUtc = contentToWallUtc(source.trip.timeline, frameContentSec);
                                 const base = interpolatePosition(overlays.gpsRecords, frameUtc);
-                                if (base && isFinitePosition(base)) {
-                                    const span = rangeEndUtc - rangeStartUtc;
-                                    const progress = span > 0 ? (frameUtc - rangeStartUtc) / span : 0;
-                                    framePos = resolveFramePos({
-                                        records: overlays.gpsRecords,
-                                        base,
-                                        cumulative: overlays.cumulativeDistanceM,
-                                        distanceBaseM,
-                                        frameUtc,
-                                        progress,
+                                const span = rangeEndUtc - rangeStartUtc;
+                                const progress = span > 0 ? (frameUtc - rangeStartUtc) / span : 0;
+                                // A frame without a usable position (warm-up, long
+                                // dropout, NaN from active=false records) still gets a
+                                // FramePos: widgets render their no-fix placeholder
+                                // instead of vanishing and popping back at first fix.
+                                framePos =
+                                    base && isFinitePosition(base)
+                                        ? resolveFramePos({
+                                              records: overlays.gpsRecords,
+                                              base,
+                                              cumulative: overlays.cumulativeDistanceM,
+                                              distanceBaseM,
+                                              frameUtc,
+                                              progress,
+                                          })
+                                        : resolveNoFixFramePos(frameUtc, progress);
+                                // Issue (do NOT await) the snapshot now so it renders
+                                // on the main thread while flushFrame(prev) composites
+                                // + encodes below - this is the decode-ahead overlap
+                                // that the prewarm + synchronous redraw make cheap.
+                                // It is consumed one iteration later in flushFrame.
+                                // Gated on hasFix, not just finiteness: a long dropout
+                                // interpolates finite-but-fabricated coordinates, and
+                                // the map placeholder is drawn instead.
+                                if (framePos.hasFix && base && overlays.map && mapSnapshotter && !mapOverlayFailed) {
+                                    snapPromise = mapSnapshotter.snapshot({
+                                        lat: base.lat,
+                                        lon: base.lon,
+                                        bearingDeg: base.bearingDeg,
+                                        zoomKm: overlays.map.zoomKm,
+                                        speedMs: base.speedMs,
                                     });
-                                    // Issue (do NOT await) the snapshot now so it renders
-                                    // on the main thread while flushFrame(prev) composites
-                                    // + encodes below - this is the decode-ahead overlap
-                                    // that the prewarm + synchronous redraw make cheap.
-                                    // It is consumed one iteration later in flushFrame.
-                                    if (overlays.map && mapSnapshotter && !mapOverlayFailed) {
-                                        snapPromise = mapSnapshotter.snapshot({
-                                            lat: base.lat,
-                                            lon: base.lon,
-                                            bearingDeg: base.bearingDeg,
-                                            zoomKm: overlays.map.zoomKm,
-                                            speedMs: base.speedMs,
-                                        });
-                                    }
                                 }
                             }
                             keep = true;

@@ -9,10 +9,13 @@ import {
     computeCumulativeDistanceM,
     deriveGLat,
     deriveGLong,
+    FIX_TOLERANCE_SEC,
+    hasFixAt,
     haversineMeters,
     interpScalar,
     recordsHaveAccel,
     resolveFramePos,
+    resolveNoFixFramePos,
     sampleSpeedAcross,
 } from "./frame-pos.js";
 
@@ -193,5 +196,64 @@ describe("recordsHaveAccel", () => {
     it("detects a recorded accelerometer", () => {
         expect(recordsHaveAccel(series(3, { accel: true }))).toBe(true);
         expect(recordsHaveAccel(series(3))).toBe(false);
+    });
+});
+
+describe("hasFixAt", () => {
+    it("covers frames near a record and refuses frames outside the tolerance", () => {
+        const recs = series(3); // unix 1000..1002
+        expect(hasFixAt(recs, 1001), "inside coverage").toBe(true);
+        expect(hasFixAt(recs, 1000 - FIX_TOLERANCE_SEC), "warm-up edge, still tolerated").toBe(true);
+        expect(hasFixAt(recs, 1000 - FIX_TOLERANCE_SEC - 0.5), "warm-up beyond tolerance").toBe(false);
+        expect(hasFixAt(recs, 1002 + FIX_TOLERANCE_SEC + 0.5), "tail beyond tolerance").toBe(false);
+        expect(hasFixAt([], 1000), "no records at all").toBe(false);
+    });
+
+    it("keeps short interior gaps and rejects the middle of a long one", () => {
+        // Records at 1000..1002, then a 20 s hole, then 1022..1024.
+        const recs = [...series(3), ...series(3, { base: 1022 })];
+        expect(hasFixAt(recs, 1004), "near the gap's left edge").toBe(true);
+        expect(hasFixAt(recs, 1012), "middle of a 20 s dropout").toBe(false);
+        expect(hasFixAt(recs, 1020), "near the gap's right edge").toBe(true);
+    });
+
+    it("ignores active=false records - the receiver's own no-fix markers", () => {
+        const recs = series(3).map((r) => ({ ...r, active: false }));
+        expect(hasFixAt(recs, 1001)).toBe(false);
+    });
+});
+
+describe("resolveNoFixFramePos", () => {
+    it("keeps the timeline fields real and everything GPS-fed NaN", () => {
+        const fp = resolveNoFixFramePos(1234, 0.5);
+        expect(fp.hasFix).toBe(false);
+        expect(fp.epochSec).toBe(1234);
+        expect(fp.progress).toBe(0.5);
+        expect(fp.speedMs).toBeNaN();
+        expect(fp.lat).toBeNaN();
+        expect(fp.distanceM).toBeNaN();
+    });
+
+    it("resolveFramePos flags a frame inside a long dropout even with a finite base", () => {
+        const recs = [...series(3), ...series(3, { base: 1022 })];
+        const base = { lat: 47, lon: 30, speedMs: 10, bearingDeg: 0 };
+        const inGap = resolveFramePos({
+            records: recs,
+            base,
+            cumulative: null,
+            distanceBaseM: 0,
+            frameUtc: 1012,
+            progress: 0.5,
+        });
+        expect(inGap.hasFix, "interpolated straight line across a 20 s hole is not a fix").toBe(false);
+        const covered = resolveFramePos({
+            records: recs,
+            base,
+            cumulative: null,
+            distanceBaseM: 0,
+            frameUtc: 1001,
+            progress: 0.1,
+        });
+        expect(covered.hasFix).toBe(true);
     });
 });

@@ -42,7 +42,18 @@ export interface FramePos {
     epochSec: number;
     /** Position within the export range, 0..1 (for the speed graph). */
     progress: number;
+    /** False = no usable fix near this frame (receiver warming up, long
+     *  dropout): GPS-fed widgets render their no-fix placeholder instead of a
+     *  reading. The clock and the range-level graph ignore it. */
+    hasFix: boolean;
 }
+
+/** How far (seconds) the nearest usable record may be for a frame to count as
+ *  having a fix. Matches interpolatePosition's edge tolerance; applied inside
+ *  interior gaps too, so a dropout longer than twice this shows the no-fix
+ *  placeholder in its middle instead of a fabricated straight line, while
+ *  short gaps keep the smooth interpolation. */
+export const FIX_TOLERANCE_SEC = 5;
 
 /** Great-circle distance between two lat/lon points, meters. */
 export function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -94,6 +105,29 @@ function lastLeq(records: GpsRecord[], target: number): number {
         }
     }
     return ans;
+}
+
+/**
+ * True when a usable (active, finite-coordinate) record lies within
+ * FIX_TOLERANCE_SEC of `target`. Records flagged active=false are the
+ * receiver's own "no fix" markers, so they do not count as coverage; the scan
+ * walks outward from the binary-search neighbors and is O(1) on healthy data.
+ */
+export function hasFixAt(records: GpsRecord[], target: number): boolean {
+    const n = records.length;
+    if (n === 0) return false;
+    const i = lastLeq(records, target);
+    for (let k = i; k >= 0; k--) {
+        const r = records[k]!;
+        if (target - r.unixSeconds > FIX_TOLERANCE_SEC) break;
+        if (drawable(r)) return true;
+    }
+    for (let k = i + 1; k < n; k++) {
+        const r = records[k]!;
+        if (r.unixSeconds - target > FIX_TOLERANCE_SEC) break;
+        if (drawable(r)) return true;
+    }
+    return false;
 }
 
 /**
@@ -240,6 +274,32 @@ export function resolveFramePos(opts: {
         distanceM,
         epochSec: frameUtc,
         progress: Math.max(0, Math.min(1, progress)),
+        // Base may interpolate finite values across a long interior dropout -
+        // a fabricated straight line. Coverage, not finiteness, decides.
+        hasFix: hasFixAt(records, frameUtc),
+    };
+}
+
+/**
+ * FramePos for a frame with no usable fix (interpolatePosition returned null,
+ * or the frame sits outside record coverage). The clock and graph fields stay
+ * real - both work off the timeline, not the receiver; everything GPS-fed is
+ * NaN so any widget that forgets to check hasFix draws an obvious blank, not a
+ * plausible zero.
+ */
+export function resolveNoFixFramePos(frameUtc: number, progress: number): FramePos {
+    return {
+        lat: Number.NaN,
+        lon: Number.NaN,
+        speedMs: Number.NaN,
+        headingDeg: Number.NaN,
+        gLong: Number.NaN,
+        gLat: Number.NaN,
+        gMag: Number.NaN,
+        distanceM: Number.NaN,
+        epochSec: frameUtc,
+        progress: Math.max(0, Math.min(1, progress)),
+        hasFix: false,
     };
 }
 

@@ -18,7 +18,7 @@ import type { GpsRecord } from "../parsers/types.js";
 import { MAP_BASE_WIDTH_PCT, MAP_SLOT_ASPECT } from "../transcode/map-overlay.js";
 import { drawTelemetryOverlays } from "../transcode/telemetry-overlays.js";
 import { isFinitePosition } from "../transcode/overlay-pipeline-helpers.js";
-import { interpScalar, resolveFramePos } from "../transcode/frame-pos.js";
+import { hasFixAt, interpScalar, resolveFramePos, resolveNoFixFramePos } from "../transcode/frame-pos.js";
 import type { OverlayPipelineArgs, WatermarkAnchor } from "../transcode/types.js";
 import { contentToWallUtc } from "../trips.js";
 import type { Trip } from "../trips.js";
@@ -335,10 +335,6 @@ function renderTelemetryCanvas(): void {
     const ct = dom.player.currentTime || 0;
     const frameUtc = af.frame.startUtc + ct;
     const base = interpolatePosition(af.trip.records, frameUtc);
-    if (!base || !isFinitePosition(base)) {
-        canvas.hidden = true;
-        return;
-    }
     if (canvas.width !== w) canvas.width = w;
     if (canvas.height !== h) canvas.height = h;
     const ctx = canvas.getContext("2d");
@@ -347,14 +343,20 @@ function renderTelemetryCanvas(): void {
     ctx.clearRect(0, 0, w, h);
     const span = previewMeta ? previewMeta.endUtc - previewMeta.startUtc : 0;
     const progress = previewMeta && span > 0 ? (frameUtc - previewMeta.startUtc) / span : 0;
-    const framePos = resolveFramePos({
-        records: af.trip.records,
-        base,
-        cumulative: args.cumulativeDistanceM,
-        distanceBaseM: previewMeta?.distanceBaseM ?? 0,
-        frameUtc,
-        progress,
-    });
+    // No usable fix at the playhead (receiver warm-up, long dropout): the
+    // preview shows the same no-fix placeholders the export burns, instead of
+    // the whole overlay layer vanishing - which read as a broken preview.
+    const framePos =
+        base && isFinitePosition(base)
+            ? resolveFramePos({
+                  records: af.trip.records,
+                  base,
+                  cumulative: args.cumulativeDistanceM,
+                  distanceBaseM: previewMeta?.distanceBaseM ?? 0,
+                  frameUtc,
+                  progress,
+              })
+            : resolveNoFixFramePos(frameUtc, progress);
     // drawTelemetryOverlays paints scrim + every non-map widget; the map is the
     // separate DOM overlay below.
     drawTelemetryOverlays(ctx, w, h, args, framePos);
@@ -390,8 +392,14 @@ function renderPreview(): void {
     if (!af || af.trip.records.length === 0) return;
     if (!exportPanelState.overlayMap.enabled || !dom.playerMapOverlay || dom.playerMapOverlay.hidden) return;
     const ct = dom.player.currentTime || 0;
-    const pos = interpolatePosition(af.trip.records, af.frame.startUtc + ct);
-    if (pos) void refreshMapSnapshot(af.trip.records, af.trip.startUtc, pos);
+    const frameUtc = af.frame.startUtc + ct;
+    const pos = interpolatePosition(af.trip.records, frameUtc);
+    // Same coverage rule as the burned overlay: no fix -> the CSS badge covers
+    // the mini-map (a stale snapshot would lie about the position), and no new
+    // snapshot is requested.
+    const noFix = !pos || !hasFixAt(af.trip.records, frameUtc);
+    dom.playerMapOverlay.classList.toggle("is-no-fix", noFix);
+    if (pos && !noFix) void refreshMapSnapshot(af.trip.records, af.trip.startUtc, pos);
 }
 
 // Free-position drag for the text/map overlays. Writes normalized xPct/yPct
