@@ -51,7 +51,7 @@ import { isAllocationFailure } from "./allocation-failure.js";
 import { isDestinationLostError, tagSinkFailures } from "./destination-error.js";
 import { isMediabunnyReadAssert } from "./mediabunny-read-assert.js";
 import { isQuotaExceededError } from "./quota-error.js";
-import { isSourceReadError } from "./source-read-error.js";
+import { isSourceReadError } from "../source-read-error.js";
 import { dom } from "./dom.js";
 import { exportPanelState, OVERLAY_STATE_ACCESSORS, type Quality } from "./export-state.js";
 import { activeBlurRegions } from "./blur-regions-state.js";

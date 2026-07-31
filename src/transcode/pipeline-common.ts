@@ -22,6 +22,7 @@ import {
 } from "mediabunny";
 
 import { createLogger } from "../log.js";
+import { isSourceReadError } from "../source-read-error.js";
 import type { AudioTrackFormat } from "../export-range.js";
 import { type AdpcmAudioReader, openAdpcmAudioAuto } from "./adpcm-audio.js";
 import { createEncodeAudioSource, resolveEncodeAudioCodec } from "./capabilities.js";
@@ -569,6 +570,11 @@ export type TolerantNext<T> = { done: false; value: T } | { done: true; truncate
  * resolves to { done: true, truncated: true } and the caller finalizes with the
  * frames decoded so far. AbortError still propagates (cancellation is the
  * caller's, not a source defect).
+ *
+ * A SOURCE READ failure also propagates: it means the file itself stopped being
+ * readable (card dropped, a scanner's transient lock), not a damaged tail.
+ * Treating it as truncation would deliver a silently cut-short "successful"
+ * export whenever no other reader is around to surface the real error.
  */
 export async function nextTolerant<T>(iterator: AsyncIterator<T>): Promise<TolerantNext<T>> {
     try {
@@ -576,6 +582,7 @@ export async function nextTolerant<T>(iterator: AsyncIterator<T>): Promise<Toler
         return r.done ? { done: true, truncated: false } : { done: false, value: r.value };
     } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") throw err;
+        if (isSourceReadError(err)) throw err;
         return { done: true, truncated: true };
     }
 }

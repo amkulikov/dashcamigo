@@ -46,6 +46,20 @@ describe("nextTolerant", () => {
         const it = fakeIterator<number>([], new DOMException("aborted", "AbortError"));
         await expect(nextTolerant(it)).rejects.toThrow("aborted");
     });
+
+    it("rethrows Chromium's blob read failure instead of masking it as a damaged tail", async () => {
+        // The literal Blink throws when a source file stops being readable
+        // mid-export (card dropped, scanner lock) - see source-read-error.ts.
+        const readErr = new TypeError("network error");
+        const it = fakeIterator<number>([], readErr);
+        await expect(nextTolerant(it)).rejects.toBe(readErr);
+    });
+
+    it("rethrows the NotReadableError read-failure shape too", async () => {
+        const readErr = new DOMException("read failed", "NotReadableError");
+        const it = fakeIterator<number>([], readErr);
+        await expect(nextTolerant(it)).rejects.toBe(readErr);
+    });
 });
 
 // resolveAudioPlan decides how the re-encode export handles audio. The decode/
