@@ -22,6 +22,7 @@ import {
 } from "mediabunny";
 
 import { createLogger } from "../log.js";
+import { createExportHeartbeat } from "./export-heartbeat.js";
 import { isSourceReadError } from "../source-read-error.js";
 import type { AudioTrackFormat } from "../export-range.js";
 import { type AdpcmAudioReader, openAdpcmAudioAuto } from "./adpcm-audio.js";
@@ -661,7 +662,9 @@ export async function emitSilence(
  * pipelines. The returned function reports at most once per 200 ms (unless
  * force=true) and computes ETA from the average frame time since creation, so
  * it must be created right before the encode loop starts (its internal clock
- * baseline is the moment of the call).
+ * baseline is the moment of the call). Also owns the worker-side export
+ * heartbeat - progress calls are the one place both pipelines already deliver
+ * framesDone and bytesWritten.
  */
 export function createTranscodeProgressReporter(
     framesTotal: number,
@@ -669,7 +672,9 @@ export function createTranscodeProgressReporter(
 ): (framesDone: number, bytesWritten: number, force: boolean) => void {
     let lastProgressMs = 0;
     const startMs = performance.now();
+    const heartbeat = createExportHeartbeat(createLogger("transcode"));
     return (framesDone, bytesWritten, force) => {
+        heartbeat(framesDone, bytesWritten);
         const now = performance.now();
         if (!force && now - lastProgressMs < 200) return;
         lastProgressMs = now;

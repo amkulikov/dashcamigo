@@ -37,6 +37,7 @@ import { exportPanelState } from "./export-state.js";
 import { createWorkerWritableProxy } from "./writable-bridge.js";
 import type { OverlayPipelineArgs } from "../transcode/types.js";
 import { computeOutputSize } from "../transcode/compose.js";
+import { createExportHeartbeat } from "../transcode/export-heartbeat.js";
 import { MAP_BASE_WIDTH_PCT } from "../transcode/map-overlay.js";
 import { recordsInWallWindow } from "../transcode/overlay-pipeline-helpers.js";
 import { type ChasePrewarmOpts, createExportMapSnapshotter, type ExportMapSnapshotter } from "./export-map-snapshot.js";
@@ -182,11 +183,17 @@ function runInWorker(
     // request, which turns it into an error response for the pipeline.
     if (overlays?.map) void ensureSnapshotter().catch(() => {});
 
+    // Main-thread twin of the worker-side heartbeat: same cadence, this
+    // isolate's heap. The FSA writes happen HERE (proxy sink callbacks), so a
+    // main-thread heap climb is invisible to the worker's gauge and vice versa.
+    const mainHeartbeat = createExportHeartbeat(log);
+
     const client = createWorkerClient(worker, {
         name: "transcode",
         onNotification: (msg) => {
             if (msg.type === TRANSCODE_NOTIFY_PROGRESS) {
                 const data = msg.data as TranscodeProgressNotificationData;
+                mainHeartbeat(data.progress.framesDone, data.progress.bytesWritten);
                 try {
                     onProgress(data.progress);
                 } catch (cbErr) {
