@@ -96,12 +96,13 @@ body.export-mode .player-wrap:not(:fullscreen):not(.map-expanded) {
         minmax(0, 1fr)
         4px
         minmax(220px, var(--map-width, clamp(280px, 34%, 480px)));
-    /* The map pane spans all three rows: the bar belongs to the player
-       columns only, so the map keeps an unbroken vertical strip. */
+    /* The map pane matches the video row only: the bar and the timeline
+       keep their full width below both, so the chart does not lose
+       horizontal resolution to the map column. */
     grid-template-areas:
         "video vmr map"
-        "bar bar map"
-        "chart chart map";
+        "bar bar bar"
+        "chart chart chart";
 }
 /* In no-gps trips the chart.js canvas is hidden (see chart.css), panel holds
    only ruler 14 + strip 52 + paddings. 72 = 14 + 52 + ~6 - picked so the
