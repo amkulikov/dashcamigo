@@ -41,14 +41,18 @@
        usage reads the bare var with no per-usage fallback. When map is
        expanded grid-template-areas change (see .map-expanded). */
     --chart-height: 166px;
-    grid-template-rows: minmax(0, 1fr) var(--chart-height) auto;
+    grid-template-rows: minmax(0, 1fr) auto var(--chart-height);
     /* minmax(0, 1fr) instead of 1fr: a bare track falls back to min-content,
        and the chart-canvas with inline width=Npx would prevent the column from shrinking. */
     grid-template-columns: minmax(0, 1fr);
+    /* Bar between video and timeline: transport controls sit next to the
+       chart the user scrubs on, instead of at the far bottom edge. Mobile
+       keeps its own bar-at-bottom template (sticky bar, see the mobile
+       block); fullscreen overlays the bar at the bottom too. */
     grid-template-areas:
         "video"
-        "chart"
-        "bar";
+        "bar"
+        "chart";
     min-height: 0;
     position: relative;
     /* Container scope for player-grid rules (map-expanded -> stack-on-narrow).
@@ -59,7 +63,7 @@
     container-name: pwrap;
 }
 /* Export mode: dock the trim bar (clip-range controls, #export-trim-bar) in
-   its own row between the video and the timeline stack. Only the templates
+   its own row right above the timeline stack. Only the templates
    reachable in export mode grow the "trim" area; the two guards keep this
    rule out of the templates that must survive intact: :not(:fullscreen) for
    the fullscreen video-only template (the fixed-position export panel cannot
@@ -69,12 +73,12 @@
    not the primary mechanism. The mobile grid override lives in the mobile
    block below and carries the same guards. */
 body.export-mode .player-wrap:not(:fullscreen):not(.map-expanded) {
-    grid-template-rows: minmax(0, 1fr) auto var(--chart-height) auto;
+    grid-template-rows: minmax(0, 1fr) auto auto var(--chart-height);
     grid-template-areas:
         "video"
+        "bar"
         "trim"
-        "chart"
-        "bar";
+        "chart";
 }
 /* Belt for the fullscreen + export-mode combination: without a "trim" area in
    the template the bar would auto-place into an implicit row and shrink the
@@ -83,7 +87,7 @@ body.export-mode .player-wrap:not(:fullscreen):not(.map-expanded) {
     display: none;
 }
 .player-wrap.map-expanded {
-    grid-template-rows: minmax(0, 1fr) var(--chart-height) auto;
+    grid-template-rows: minmax(0, 1fr) auto var(--chart-height);
     /* Map-pane default via clamp(280, 34%, 480): on a narrow laptop the map
        doesn't eat 38% (at 1280 that's ~380px - video was left with only
        ~614px), and on a wide desktop it doesn't balloon past 700+. min: 220
@@ -92,10 +96,12 @@ body.export-mode .player-wrap:not(:fullscreen):not(.map-expanded) {
         minmax(0, 1fr)
         4px
         minmax(220px, var(--map-width, clamp(280px, 34%, 480px)));
+    /* The map pane spans all three rows: the bar belongs to the player
+       columns only, so the map keeps an unbroken vertical strip. */
     grid-template-areas:
         "video vmr map"
-        "chart chart map"
-        "bar bar bar";
+        "bar bar map"
+        "chart chart map";
 }
 /* In no-gps trips the chart.js canvas is hidden (see chart.css), panel holds
    only ruler 14 + strip 52 + paddings. 72 = 14 + 52 + ~6 - picked so the

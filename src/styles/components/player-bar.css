@@ -40,6 +40,11 @@
     width: var(--dc-iconbtn);
     height: var(--dc-iconbtn);
     padding: 0;
+    /* Buttons hold their size; a narrow bar sheds items via @container rules
+       and overflow-bar.ts. Shrinkable buttons would defeat both: they squish
+       into slivers long before isOverflowing() (which compares edges, not
+       squeeze) sees anything to move into the overflow menu. */
+    flex-shrink: 0;
     border-radius: var(--dc-radius-sm);
     cursor: pointer;
     display: inline-flex;
@@ -65,6 +70,33 @@
     outline: 2px solid var(--accent);
     outline-offset: 1px;
 }
+/* Desktop sizing: transport (play + frame-step) is noticeably larger - the
+   most-aimed-at targets now that the bar sits right above the timeline; the
+   rest of the bar grows slightly over the --dc-iconbtn base. The mobile block
+   below overrides all of this with touch sizes (44/40) and wins by cascade
+   order. :not(.player-btn-text) keeps the auto-width text buttons (speed,
+   view-menu) out of the square sizing. */
+.player-bar .player-btn:not(.player-btn-text) {
+    width: 32px;
+    height: 32px;
+}
+.player-bar .player-btn svg {
+    width: 18px;
+    height: 18px;
+}
+/* Kept at id / class-pair specificity so the mobile block's #player-play
+   (44px) and .player-btn:not(#player-play) (40px) rules still win there. */
+#player-play,
+.player-bar .player-step {
+    width: 38px;
+    height: 38px;
+}
+#player-play svg,
+.player-bar .player-step svg {
+    width: 20px;
+    height: 20px;
+}
+
 /* Frame-step pair (player-frame-step.ts). touch-action: none - a touch hold
    drives auto-repeat, so the browser must not steal the gesture for scrolling
    (pointercancel would kill the repeat mid-hold). */
