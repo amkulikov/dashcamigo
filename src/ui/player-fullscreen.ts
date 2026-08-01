@@ -10,6 +10,7 @@
 import { t } from "../i18n/index.js";
 import { createLogger } from "../log.js";
 import { dom } from "./dom.js";
+import { applyMapLayout } from "./map.js";
 
 const log = createLogger("player");
 
@@ -63,6 +64,11 @@ export function initPlayerFullscreen(): void {
         if (document.fullscreenElement) {
             scheduleHideFullscreenControls();
         }
+        // Entering/leaving fullscreen swaps the grid template; when the big
+        // map is expanded its pane changes size and MapLibre does not observe
+        // CSS - applyMapLayout re-runs the visibility computation and resizes
+        // the live map canvases on the next frame.
+        applyMapLayout();
     });
 
     dom.playerWrap.addEventListener("mousemove", () => {

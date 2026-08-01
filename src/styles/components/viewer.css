@@ -929,6 +929,41 @@ body.export-mode .tile-drag-handle {
 .player-wrap:fullscreen:not(.controls-visible) {
     cursor: none;
 }
+/* Fullscreen + expanded map: the same video|divider|map split as the desktop
+   template instead of the video-only overlay layout, so the mini-map's
+   click-to-expand works in fullscreen rather than "vanishing" into a map
+   that CSS keeps hidden. The map is content, not a control, so it stays
+   visible (and keeps its cursor) while the controls auto-hide. */
+.player-wrap:fullscreen.map-expanded {
+    grid-template-rows: 1fr;
+    grid-template-columns:
+        minmax(0, 1fr)
+        4px
+        minmax(220px, var(--map-width, clamp(280px, 34%, 480px)));
+    grid-template-areas: "video vmr map";
+}
+/* Confine the chart/bar overlays to the video column: an absolutely
+   positioned grid child with a named area gets that area as its containing
+   block, so left/right/bottom anchor inside "video". Full-width overlays
+   would sit on top of the map column and the divider - their bottom ~210px
+   stopped taking clicks whenever the controls were visible (and mousemoving
+   over the map keeps them visible). The mobile block restores auto: there
+   the split is vertical and the controls belong at the screen bottom. */
+.player-wrap:fullscreen.map-expanded .player-chart,
+.player-wrap:fullscreen.map-expanded .player-bar {
+    grid-area: video;
+}
+.player-wrap:fullscreen.map-expanded .video-frame {
+    width: 100%;
+    height: 100%;
+}
+.player-wrap:fullscreen.map-expanded .player-col-resize,
+.player-wrap:fullscreen.map-expanded .map-wrap {
+    display: block;
+}
+.player-wrap:fullscreen:not(.controls-visible) .map-wrap {
+    cursor: default;
+}
 /* Reduced motion: controls still appear/disappear, just without the slide. */
 @media (prefers-reduced-motion: reduce) {
     .player-wrap:fullscreen .player-chart,
@@ -1082,6 +1117,27 @@ body.export-mode .tile-drag-handle {
            rule. */
         display: block;
         min-height: 50svh;
+    }
+    /* Fullscreen + expanded map on a phone: stack vertically (the desktop
+       side-by-side split leaves an unusable sliver of video on portrait).
+       Video keeps its 16:9 fit rules; the map takes the rest. */
+    .player-wrap:fullscreen.map-expanded {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto minmax(0, 1fr);
+        grid-template-areas:
+            "video"
+            "map";
+    }
+    .player-wrap:fullscreen.map-expanded .player-col-resize {
+        display: none;
+    }
+    /* Vertical split: controls stay at the screen bottom (standard player
+       muscle memory), overlapping the map's lower band only while visible -
+       auto-hide gives the map back. The desktop video-column confinement
+       would park them mid-screen here. */
+    .player-wrap:fullscreen.map-expanded .player-chart,
+    .player-wrap:fullscreen.map-expanded .player-bar {
+        grid-area: auto;
     }
 }
 
