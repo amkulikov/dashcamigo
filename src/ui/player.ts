@@ -80,6 +80,7 @@ import {
     videoAttachedFile,
     videoOwnedBlobUrl,
 } from "./player-video-src.js";
+import { resolveSlaveTarget, type SlaveTarget } from "./player-slave-target.js";
 import {
     applyVideoZoom,
     consumeDragClickSuppress,
@@ -571,7 +572,7 @@ export function playFrame(
 
     pendingPlay = autoPlay;
     pendingFileOffset = startOffsetSec;
-    syncFrameToGrid(frame, picked.channel);
+    syncFrameToGrid(frame, picked.channel, startOffsetSec);
     syncCaptureButton();
 
     // Metrics are NOT reset on file change - they keep updating via timeupdate,
@@ -1050,7 +1051,7 @@ function applyTileLayoutRoles(frame: TripFrame, activeCh: Channel): void {
  * Idempotent: attachCandidateToVideo skips a re-attach when src is already
  * correct, so a channel swap within one frame does not interrupt playback.
  */
-function syncFrameToGrid(frame: TripFrame, activeCh: Channel): void {
+function syncFrameToGrid(frame: TripFrame, activeCh: Channel, masterOffsetSec = 0): void {
     // applyTileLayoutRoles owns visibility (tile.hidden) + slot roles; this pass
     // is media only. Media is attached for every playable frame channel, even
     // ones excluded from the composition, so toggling a camera back on is
@@ -1066,10 +1067,15 @@ function syncFrameToGrid(frame: TripFrame, activeCh: Channel): void {
             routeChannelAudio(v, ch);
             // playbackRate: copy from active so slaves run at the same speed.
             v.playbackRate = state.preferredPlaybackRate;
+            // A drift-corrected slave may need the NEIGHBOUR frame's file at
+            // this master position (resolveSlaveTarget) - on a natural frame
+            // advance that keeps the previous file playing out its matching
+            // tail instead of freezing on the new file's first frame.
+            const attachCand = ch === activeCh ? cand : (activeSlaveTarget(ch, masterOffsetSec)?.cand ?? cand);
             // Backend: per-file MSE (mediabunny remux) for needsHevcRemux /
             // MPEG-TS candidates, native <video>.src otherwise. The helper
             // decides whether a re-attach is needed.
-            attachCandidateToVideo(ch, v, cand, ch === activeCh);
+            attachCandidateToVideo(ch, v, attachCand, ch === activeCh);
         } else {
             // Release decoder and backend - canPlay=false or channel absent.
             disposeChannelBackend(ch);
@@ -1536,22 +1542,80 @@ function routeChannelAudio(v: HTMLVideoElement, ch: Channel): void {
 //
 // videoAttachedFile is used for a fast attached-state check: WeakMap lookup is cheaper than
 // v.getAttribute/v.src (the latter returns an absolutized URL and has a side effect when src was set as relative).
-function forEachSlave(fn: (v: HTMLVideoElement) => void): void {
+function forEachSlave(fn: (v: HTMLVideoElement, ch: Channel) => void): void {
     const master = activePlayer();
-    for (const v of Object.values(channelPlayers)) {
+    for (const ch of ALL_CHANNELS) {
+        const v = channelPlayers[ch];
         if (v === master) continue;
         if (!videoAttachedFile.has(v)) continue;
-        fn(v);
+        fn(v, ch);
     }
+}
+
+/**
+ * Binds resolveSlaveTarget (player-slave-target.ts) to the active trip/frame:
+ * the file + position the slave needs to show the master's wall moment at
+ * `masterPosSec`. May point into a neighbour frame's file - callers re-attach
+ * when the file differs. null when nothing is active or the channel is absent.
+ */
+function activeSlaveTarget(slaveCh: Channel, masterPosSec: number): SlaveTarget | null {
+    const af = activeFrame();
+    if (!af || !state.active) return null;
+    return resolveSlaveTarget(af.trip.frames, state.active.frame, effectiveMasterChannel(), slaveCh, masterPosSec);
+}
+
+/**
+ * Applies a resolved target to a native slave outside the rAF loop (seeks,
+ * metadata catch-up): re-attaches when the matching content lives in a
+ * different file (the drift-aware loadedmetadata handler positions it), else
+ * writes the clamped position directly.
+ */
+function applySlaveTarget(slaveCh: Channel, s: HTMLVideoElement, target: SlaveTarget): void {
+    if (videoAttachedFile.get(s) !== target.cand.file) {
+        attachCandidateToVideo(slaveCh, s, target.cand, false);
+        return;
+    }
+    const duration = Number.isFinite(s.duration) ? s.duration : Number.POSITIVE_INFINITY;
+    s.currentTime = Math.min(Math.max(target.positionSec, 0), duration);
 }
 
 export function driftSyncSlaves(): void {
     const master = activePlayer();
     if (master.paused || master.readyState < 2) return;
-    forEachSlave((s) => {
+    forEachSlave((s, ch) => {
+        // MSE-fed channels keep the plain mirror: their src/feed is owned by
+        // the backend machinery, not this loop, so no cross-file resolution.
+        if (state.channelBackends[ch]) {
+            if (s.readyState >= 2 && Math.abs(s.currentTime - master.currentTime) > SLAVE_DRIFT_MAX_SEC) {
+                s.currentTime = master.currentTime;
+            }
+            return;
+        }
+        const target = activeSlaveTarget(ch, master.currentTime);
+        if (!target) return;
+        // The matching content lives in a neighbour file: swap src and let the
+        // slave loadedmetadata handler position it. At most one swap per file
+        // boundary - the attached file then matches until the next window.
+        if (videoAttachedFile.get(s) !== target.cand.file) {
+            attachCandidateToVideo(ch, s, target.cand, false);
+            return;
+        }
         if (s.readyState < 2) return;
-        if (Math.abs(s.currentTime - master.currentTime) > SLAVE_DRIFT_MAX_SEC) {
-            s.currentTime = master.currentTime;
+        const duration = Number.isFinite(s.duration) ? s.duration : Number.POSITIVE_INFINITY;
+        // No neighbour file can serve this moment (trip edge, missing or
+        // MSE-only neighbour) - hold the boundary frame instead of
+        // stutter-looping between the boundary and the resync threshold.
+        if (target.positionSec < 0 || target.positionSec > duration) {
+            const boundary = target.positionSec < 0 ? 0 : duration;
+            if (!s.paused) s.pause();
+            if (Math.abs(s.currentTime - boundary) > SLAVE_DRIFT_MAX_SEC) s.currentTime = boundary;
+            return;
+        }
+        // Leaving a hold window: the play/pause proxy only mirrors master
+        // EVENTS, so a slave paused by the hold above must be resumed here.
+        if (s.paused) s.play().catch(() => {});
+        if (Math.abs(s.currentTime - target.positionSec) > SLAVE_DRIFT_MAX_SEC) {
+            s.currentTime = target.positionSec;
         }
     });
 }
@@ -1772,7 +1836,14 @@ export function seekTripTime(targetSec: number): void {
             if (state.channelBackends[ch]) continue;
             const v = channelPlayers[ch];
             if (!v.getAttribute("src")) continue;
-            v.currentTime = offsetInFrame;
+            if (v === activePlayer()) {
+                v.currentTime = offsetInFrame;
+                continue;
+            }
+            // Slaves land drift-adjusted, possibly in a neighbour file.
+            const slaveTarget = activeSlaveTarget(ch, offsetInFrame);
+            if (slaveTarget) applySlaveTarget(ch, v, slaveTarget);
+            else v.currentTime = offsetInFrame;
         }
         updatePlayerProgressUi();
         return;
@@ -1870,14 +1941,23 @@ export function initPlayer(): void {
     // active element becomes slot[1], and without installing on both the listener misses the new active.
     // isActiveSlot filter excludes preload slots: a preload should sit at 0 (fresh start),
     // not chase the master - otherwise a promoted preload would play from the middle of the file.
-    forEachVideoSlot((v) => {
+    forEachVideoSlot((v, ch) => {
         v.addEventListener("loadedmetadata", () => {
             if (v === activePlayer()) return; // master is handled by a separate listener
             if (!isActiveSlot(v)) return; // preload slot - don't sync
             const master = activePlayer();
             if (!master.src) return;
-            // Slave catches up to master: same currentTime + playbackRate.
-            v.currentTime = master.currentTime;
+            // Slave catches up to master: same wall moment (drift-adjusted,
+            // clamped into the file - driftSyncSlaves holds boundaries while
+            // playing) + playbackRate. When the attached file is not the one
+            // the resolver wants, position plainly and let the rAF loop swap.
+            // MSE-backed channels take this path too, harmlessly: leads are
+            // only measured for native-playable families, so for them the
+            // resolver position degenerates to the plain mirror.
+            const target = activeSlaveTarget(ch, master.currentTime);
+            const pos =
+                target && videoAttachedFile.get(v) === target.cand.file ? target.positionSec : master.currentTime;
+            v.currentTime = Math.min(Math.max(pos, 0), Number.isFinite(v.duration) ? v.duration : pos);
             v.playbackRate = state.preferredPlaybackRate;
             // If master is playing, slave plays too (but muted).
             if (!master.paused) v.play().catch(() => {});
@@ -1903,8 +1983,17 @@ export function initPlayer(): void {
     onActivePlayerEvent("emptied", syncPreviewThrottle);
     onActivePlayerEvent("seeked", () => {
         const master = activePlayer();
-        forEachSlave((s) => {
-            s.currentTime = master.currentTime;
+        forEachSlave((s, ch) => {
+            if (state.channelBackends[ch]) {
+                s.currentTime = master.currentTime;
+                return;
+            }
+            const target = activeSlaveTarget(ch, master.currentTime);
+            if (!target) {
+                s.currentTime = master.currentTime;
+                return;
+            }
+            applySlaveTarget(ch, s, target);
         });
     });
     onActivePlayerEvent("ratechange", () => {
