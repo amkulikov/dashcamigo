@@ -355,6 +355,7 @@ export const jaDict = {
     "chart.inferredStrip.kind.accel": "加速",
     "chart.inferredStrip.axis.acc": "↑加速",
     "chart.inferredStrip.axis.brk": "↓制動",
+    "chart.inferredStrip.estimated": "GPSトラックからの推定値 — センサーデータではありません",
     "chart.axis.accel": "|G|, g",
     "chart.unit.speed": "km/h",
     "chart.unit.accel": "g",

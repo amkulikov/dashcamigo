@@ -345,6 +345,7 @@ export const plDict = {
     "chart.inferredStrip.kind.accel": "PRZYSP.",
     "chart.inferredStrip.axis.acc": "↑PRZYSP.",
     "chart.inferredStrip.axis.brk": "↓HAMOW.",
+    "chart.inferredStrip.estimated": "Oszacowane na podstawie śladu GPS — to nie dane z czujników",
     "chart.axis.accel": "|G|, g",
     "chart.unit.speed": "km/h",
     "chart.unit.accel": "g",

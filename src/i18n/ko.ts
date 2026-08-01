@@ -354,6 +354,7 @@ export const koDict = {
     "chart.inferredStrip.kind.accel": "가속",
     "chart.inferredStrip.axis.acc": "↑가속",
     "chart.inferredStrip.axis.brk": "↓제동",
+    "chart.inferredStrip.estimated": "GPS 트랙 기반 추정치 — 센서 데이터가 아닙니다",
     "chart.axis.accel": "|G|, g",
     "chart.unit.speed": "km/h",
     "chart.unit.accel": "g",

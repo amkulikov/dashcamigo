@@ -345,6 +345,7 @@ export const ptDict = {
     "chart.inferredStrip.kind.accel": "ACEL.",
     "chart.inferredStrip.axis.acc": "↑ACEL.",
     "chart.inferredStrip.axis.brk": "↓FREIO",
+    "chart.inferredStrip.estimated": "Estimado a partir do trajeto GPS — não são dados de sensores",
     "chart.axis.accel": "|G|, g",
     "chart.unit.speed": "km/h",
     "chart.unit.accel": "g",

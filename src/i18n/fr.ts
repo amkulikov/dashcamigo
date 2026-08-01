@@ -347,6 +347,7 @@ export const frDict = {
     "chart.inferredStrip.kind.accel": "ACCEL.",
     "chart.inferredStrip.axis.acc": "↑ACCEL.",
     "chart.inferredStrip.axis.brk": "↓FREIN",
+    "chart.inferredStrip.estimated": "Estimé à partir de la trace GPS — pas des données de capteurs",
     "chart.axis.accel": "|G|, g",
     "chart.unit.speed": "km/h",
     "chart.unit.accel": "g",

@@ -346,6 +346,7 @@ export const enDict = {
     "chart.inferredStrip.kind.accel": "ACCEL",
     "chart.inferredStrip.axis.acc": "↑ACC",
     "chart.inferredStrip.axis.brk": "↓BRK",
+    "chart.inferredStrip.estimated": "Estimated from the GPS track — not sensor data",
     "chart.axis.accel": "|G|, g",
     "chart.unit.speed": "km/h",
     "chart.unit.accel": "g",

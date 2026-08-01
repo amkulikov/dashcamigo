@@ -424,7 +424,7 @@ function fillRoundRect(
  */
 export function renderInferredEventChipsHtml(active: InferredSegment[]): string {
     if (active.length === 0) return "";
-    return active
+    const rows = active
         .map((seg) => {
             const range = `${formatTime(seg.startRelSec)} - ${formatTime(seg.endRelSec)}`;
             const pct = Math.round(seg.intensity * 100);
@@ -436,4 +436,8 @@ export function renderInferredEventChipsHtml(active: InferredSegment[]): string 
             </div>`;
         })
         .join("");
+    // The segments are computed from the GPS track, not read from any sensor.
+    // Without the note the percentages read as black-box telemetry - and get
+    // quoted as evidence in disputes.
+    return `${rows}<div class="inferred-strip-tooltip__note">${escapeHtml(t("chart.inferredStrip.estimated"))}</div>`;
 }

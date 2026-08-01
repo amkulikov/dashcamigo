@@ -346,6 +346,7 @@ export const esDict = {
     "chart.inferredStrip.kind.accel": "ACEL.",
     "chart.inferredStrip.axis.acc": "↑ACEL.",
     "chart.inferredStrip.axis.brk": "↓FRENO",
+    "chart.inferredStrip.estimated": "Estimado a partir del track GPS — no son datos de sensores",
     "chart.axis.accel": "|G|, g",
     "chart.unit.speed": "km/h",
     "chart.unit.accel": "g",

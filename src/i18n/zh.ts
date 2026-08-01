@@ -344,6 +344,7 @@ export const zhDict = {
     "chart.inferredStrip.kind.accel": "加速",
     "chart.inferredStrip.axis.acc": "↑加速",
     "chart.inferredStrip.axis.brk": "↓刹车",
+    "chart.inferredStrip.estimated": "根据 GPS 轨迹估算 — 并非传感器数据",
     "chart.axis.accel": "|G|，g",
     "chart.unit.speed": "km/h",
     "chart.unit.accel": "g",

@@ -499,6 +499,7 @@ export type I18nKey =
     | "chart.inferredStrip.kind.accel"
     | "chart.inferredStrip.axis.acc"
     | "chart.inferredStrip.axis.brk"
+    | "chart.inferredStrip.estimated"
 
     // Trip event chip in the sidebar (UX-08)
     | "trip.events.chip.title"

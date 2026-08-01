@@ -350,6 +350,7 @@ export const ruDict = {
     "chart.inferredStrip.kind.accel": "РАЗГ",
     "chart.inferredStrip.axis.acc": "↑РАЗГ",
     "chart.inferredStrip.axis.brk": "↓ТОРМ",
+    "chart.inferredStrip.estimated": "Оценка по GPS-треку — не данные датчиков",
     "chart.axis.accel": "|G|, g",
     "chart.unit.speed": "км/ч",
     "chart.unit.accel": "g",

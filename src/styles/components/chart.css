@@ -483,6 +483,13 @@
 .inferred-strip-tooltip__pct.is-hard {
     color: var(--fg);
 }
+/* Provenance note under the chip rows: quiet, but always paired with the
+   percentages so they are not read as recorded telemetry. */
+.inferred-strip-tooltip__note {
+    margin-top: var(--dc-space-1);
+    font-size: var(--dc-text-2xs);
+    color: var(--fg-mute);
+}
 
 /* =========================================================================
    PROGRESS SCRUBBER (always-on)

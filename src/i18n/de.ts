@@ -345,6 +345,7 @@ export const deDict = {
     "chart.inferredStrip.kind.accel": "BESCHL.",
     "chart.inferredStrip.axis.acc": "↑BESCHL.",
     "chart.inferredStrip.axis.brk": "↓BREMS",
+    "chart.inferredStrip.estimated": "Aus der GPS-Spur geschätzt — keine Sensordaten",
     "chart.axis.accel": "|G|, g",
     "chart.unit.speed": "km/h",
     "chart.unit.accel": "g",
