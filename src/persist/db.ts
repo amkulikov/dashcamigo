@@ -8,10 +8,10 @@
 // session-only", never as a crash.
 
 import { type DBSchema, type IDBPDatabase, openDB } from "idb";
-import type { AnnotationRecord, RememberedFolder } from "./types.js";
+import type { AnnotationRecord, CachedFileIndex, RememberedFolder } from "./types.js";
 
 const DB_NAME = "dashcamigo";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 interface PersistDbSchema extends DBSchema {
     folders: { key: string; value: RememberedFolder };
@@ -22,6 +22,12 @@ interface PersistDbSchema extends DBSchema {
     };
     /** Small key-value pairs (e.g. the last-opened folder id). */
     meta: { key: string; value: string };
+    /** Cached indexing results, identity-keyed (see index-cache.ts). */
+    indexCache: {
+        key: string;
+        value: CachedFileIndex;
+        indexes: { bySavedAt: number };
+    };
 }
 
 export type PersistDb = IDBPDatabase<PersistDbSchema>;
@@ -37,14 +43,18 @@ let dbPromise: Promise<PersistDb> | null = null;
 export function openPersistDb(): Promise<PersistDb> {
     if (dbPromise === null) {
         dbPromise = openDB<PersistDbSchema>(DB_NAME, DB_VERSION, {
-            upgrade(db) {
-                // v1: folders + annotations + meta. The index-cache store lands in a
-                // later version bump once its payload shape is settled - migrations
-                // branch on oldVersion from then on.
-                db.createObjectStore("folders", { keyPath: "id" });
-                const annotations = db.createObjectStore("annotations", { keyPath: "id" });
-                annotations.createIndex("byFolder", "folderId");
-                db.createObjectStore("meta");
+            upgrade(db, oldVersion) {
+                if (oldVersion < 1) {
+                    db.createObjectStore("folders", { keyPath: "id" });
+                    const annotations = db.createObjectStore("annotations", { keyPath: "id" });
+                    annotations.createIndex("byFolder", "folderId");
+                    db.createObjectStore("meta");
+                }
+                if (oldVersion < 2) {
+                    // savedAt index drives the size-bound prune (oldest first).
+                    const cache = db.createObjectStore("indexCache", { keyPath: "identityKey" });
+                    cache.createIndex("bySavedAt", "savedAt");
+                }
             },
         });
         dbPromise.catch(() => {

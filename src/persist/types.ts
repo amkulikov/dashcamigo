@@ -1,9 +1,11 @@
 // Contracts for the persistent-folder feature: remembered folder handles, the
 // versioned index cache and user annotations. Everything here is stored in
-// IndexedDB (db.ts) and must stay structured-cloneable: no live File objects,
-// no Date instances (epoch-ms numbers only). FileSystemHandle objects are the
-// one exception - browsers clone them natively, which is the whole mechanism
-// this feature stands on.
+// IndexedDB (db.ts) and must stay structured-cloneable: no live File objects.
+// FileSystemHandle objects are the one exception - browsers clone them
+// natively, which is the whole mechanism this feature stands on.
+
+import type { IndexerRepair } from "../indexer.js";
+import type { VideoCandidate } from "../trips.js";
 
 /**
  * Bumped by hand whenever indexing/parsing semantics change in a way that
@@ -49,6 +51,31 @@ export interface RememberedFolder {
     /** Annotations sidecar file inside (or near) the folder; absent until the
      *  user completes the one-time save-picker flow. */
     sidecarHandle?: FileSystemFileHandle;
+}
+
+/**
+ * Everything a VideoCandidate carries except the live File - the cacheable
+ * remainder. Derived with Omit so a field added to VideoCandidate flows into
+ * the cache automatically; whether its SEMANTICS require an
+ * INDEX_CACHE_VERSION bump stays a review-time decision.
+ */
+export type CachedCandidateFields = Omit<VideoCandidate, "file">;
+
+/** One cached indexing result, keyed by the file identity. */
+export interface CachedFileIndex {
+    /** fileIdentityKey() of the source file. */
+    identityKey: string;
+    /** INDEX_CACHE_VERSION at write time; a mismatch means reindex. */
+    version: number;
+    savedAt: number;
+    candidate: CachedCandidateFields;
+    /**
+     * Container-repair descriptor when the indexer patched this file's moov.
+     * The on-disk bytes stay broken forever, so the repair re-applies on every
+     * restore; without it the cached candidate would point at a file whose
+     * codec config the candidate metadata no longer matches.
+     */
+    repair?: IndexerRepair;
 }
 
 /**

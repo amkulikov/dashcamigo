@@ -10,6 +10,8 @@ import { t } from "../i18n/index.js";
 import { dropDuplicateFiles } from "../ingest-dedup.js";
 import { ignoredRootSegments, isIgnoredPath } from "../ingest-filter.js";
 import { indexAllMp4Files } from "../indexer.js";
+import type { IndexerRepair } from "../indexer.js";
+import { partitionByIndexCache, scheduleIndexCacheWrite } from "./ingest-cache.js";
 import { createLogger } from "../log.js";
 import { captureSentryException, captureSentryMessage } from "../sentry.js";
 import { emitLifecycle, markStage } from "../perf.js";
@@ -420,6 +422,29 @@ async function ingestFilesInternal(vfiles: VendorFile[], signal: AbortSignal): P
         return;
     }
 
+    // Cross-session index cache: files whose (relativePath, size, mtime)
+    // identity matches a stored entry at the current INDEX_CACHE_VERSION skip
+    // every byte-reading stage - the candidate, GPS records included, is
+    // rebuilt from IndexedDB and only genuine misses go through indexing
+    // below. Identity-keyed, so the FSA folder restore, a classic re-pick
+    // (Firefox/Safari) and DnD all reuse the same entries.
+    const { cachedCandidates, misses: videosToIndex } = await mark("cacheLookup", () =>
+        partitionByIndexCache(newVideos),
+    );
+    if (cachedCandidates.length > 0) {
+        const cachedRecords = cachedCandidates.flatMap((c) => c.records);
+        if (cachedRecords.length > 0) {
+            // Same dedup-merge as every other records source: the standalone
+            // log/sidecar files re-parse each session and would double the
+            // track against the cached copies otherwise.
+            state.gpsLog = mergeIntoGpsLog(state.gpsLog, {
+                records: cachedRecords,
+                appliedExtractors: [],
+                skipped: [],
+            });
+        }
+    }
+
     // Assemble the raw files into the candidate list.
     const allCandidates: VideoCandidate[] = [];
 
@@ -429,6 +454,10 @@ async function ingestFilesInternal(vfiles: VendorFile[], signal: AbortSignal): P
             allCandidates.push(f);
         }
     }
+    // Cache hits join the pool up front: the TZ estimation below then sees
+    // their mvhd/records like any carried-over candidate, and the explicit
+    // applyPartial after its definition commits them to trips + addedKeys.
+    allCandidates.push(...cachedCandidates);
 
     // Estimate camera TZ before indexing - needed for files without GPS where the filename is the only time source.
     // Collect (name, first GPS record) pairs from ALL files (old + new) with a log.
@@ -440,7 +469,9 @@ async function ingestFilesInternal(vfiles: VendorFile[], signal: AbortSignal): P
         // sibling) must each contribute a TZ sample - a basename key would drop
         // one. The byFilename lookup below stays basename (parser contract).
         const seen = new Set<File>();
-        for (const cf of newVideos) {
+        // Misses only: cache hits already sit in allCandidates (loop below)
+        // with their mvhd, so sampling them here too would double-count.
+        for (const cf of videosToIndex) {
             const recs = state.gpsLog.byFilename.get(cf.file.file.name);
             // firstSyncedRecord, not recs[0]: a cold-start (timeUnsynced) first
             // record carries a ~1970 placeholder that would poison the TZ delta.
@@ -480,10 +511,11 @@ async function ingestFilesInternal(vfiles: VendorFile[], signal: AbortSignal): P
     // render the trip list from filenames now and hydrate each trip's bytes on
     // open. The probe forces "eager" until LAZY_ENABLED flips after device
     // validation, so this branch is dormant today (zero behavior change).
-    const ingestScheduler = await pickIngestScheduler(newVideos.map((cf) => cf.file));
+    const ingestScheduler = await pickIngestScheduler(videosToIndex.map((cf) => cf.file));
     if (ingestScheduler === "lazy") {
         await runLazyHydration({
-            newVideos,
+            // Misses only - cache hits are already full candidates in the pool.
+            newVideos: videosToIndex,
             allCandidates,
             logExtractorByMp4: logsResult.extractorByMp4,
             sidecarExtractorByMp4: sidecarResult.extractorByMp4,
@@ -552,6 +584,16 @@ async function ingestFilesInternal(vfiles: VendorFile[], signal: AbortSignal): P
         // No auto-select of the first trip - the user picks. Empty-state stays visible until state.active !== null.
     };
 
+    // Commit cache hits immediately (trips + addedKeys in lock-step): the
+    // sidebar fills with restored trips before any byte is read; misses then
+    // stream in through the progressive applyPartial below.
+    if (cachedCandidates.length > 0) applyPartial();
+
+    // Freshly indexed candidates of THIS run + their repair descriptors - the
+    // input for the end-of-ingest cache write (cache hits are not rewritten).
+    const indexedThisRun: VideoCandidate[] = [];
+    const repairByKey = new Map<string, IndexerRepair>();
+
     // indexAllMp4Files runs in a worker. MP4 path: single moov walk yields
     // duration/codec/rotation/hvcC. TS path: mediabunny.computeDuration.
     // We also request moov bytes (withMoovBytes: true) and forward them to
@@ -560,9 +602,9 @@ async function ingestFilesInternal(vfiles: VendorFile[], signal: AbortSignal): P
     // its prebuiltMoovByPath path, eliminating the duplicate moov read
     // on cold SD AND avoiding the heap spike that accumulating moov bytes
     // for all 240 files would cause before transfer.
-    const newRawFiles = newVideos.map((c) => c.file.file);
-    const byFile = new WeakMap<File, (typeof newVideos)[number]>();
-    for (const cf of newVideos) byFile.set(cf.file.file, cf);
+    const newRawFiles = videosToIndex.map((c) => c.file.file);
+    const byFile = new WeakMap<File, (typeof videosToIndex)[number]>();
+    for (const cf of videosToIndex) byFile.set(cf.file.file, cf);
 
     // Streaming embedded-GPS dispatch. Each batch of ~EMBEDDED_BATCH_SIZE
     // freshly indexed files is shipped to gps-extract immediately, in
@@ -649,6 +691,9 @@ async function ingestFilesInternal(vfiles: VendorFile[], signal: AbortSignal): P
                     if (repair) {
                         if (repairApplied.phantomRepaired) phantomRepairedCount++;
                         if (repairApplied.hvccRepaired) repairedCount++;
+                        // The cache entry re-applies this on restore - the
+                        // on-disk bytes stay broken forever.
+                        repairByKey.set(vendorFileKey(cf.file), repair);
                         log.info("applied container repair", {
                             file: file.name,
                             phantom: repair.phantomNeutralized,
@@ -729,7 +774,7 @@ async function ingestFilesInternal(vfiles: VendorFile[], signal: AbortSignal): P
                     if (fromLog) initialApplied.push(fromLog);
                     const fromSidecar = sidecarResult.extractorByMp4.get(file.name);
                     if (fromSidecar) initialApplied.push(fromSidecar);
-                    allCandidates.push({
+                    const builtCandidate: VideoCandidate = {
                         // Patched file when the worker repaired this file's moov,
                         // else the original. Playback/preview/export use this one.
                         file: candidateFile,
@@ -770,7 +815,9 @@ async function ingestFilesInternal(vfiles: VendorFile[], signal: AbortSignal): P
                         // Filled by applyEmbeddedResultToState when the
                         // extractor measured a cold-start clock jump.
                         localClockOffsetHintSec: null,
-                    });
+                    };
+                    allCandidates.push(builtCandidate);
+                    indexedThisRun.push(builtCandidate);
                 }
 
                 batchCount++;
@@ -1090,6 +1137,11 @@ async function ingestFilesInternal(vfiles: VendorFile[], signal: AbortSignal): P
             accelSidecars: accelSidecarResult.errors.length,
         },
     });
+
+    // Persist this run's indexing results for the next session. After every
+    // records/anchor sweep above, so the snapshot is final-state. Heavy-deferred
+    // files are excluded inside (their records are not extracted yet).
+    scheduleIndexCacheWrite(indexedThisRun, repairByKey, new Set(state.pendingHeavyEmbeddedGps.keys()));
 
     // Onboarding tour after the first successful ingest - the peak-value moment,
     // right after the user has just seen their trip. maybeRunIngestTour is
