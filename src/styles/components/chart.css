@@ -72,6 +72,19 @@
 .player-chart-hover-cursor[hidden] {
     display: none;
 }
+/* Drag-select zoom rectangle (mouse): live preview of the span that becomes
+   the visible window on release. Spans the whole timeline stack like the
+   playhead; z5 sits over chart content and the hover cursor but under the
+   export masks (z6) and the playhead (z7). */
+.chart-drag-select {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 5;
+    pointer-events: none;
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    border-inline: 1px solid var(--accent);
+}
 
 .player-chart {
     position: relative;

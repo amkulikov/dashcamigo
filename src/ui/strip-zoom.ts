@@ -8,7 +8,7 @@
 const MIN_VIEW_WIDTH = 0.001;
 
 /** Minimum viewport span accounting for trip duration. On short trips 0.001 of duration is less than 1 s, which is the finest useful zoom. */
-function computeMinViewSpan(durationSec: number): number {
+export function computeMinViewSpan(durationSec: number): number {
     if (durationSec <= 0) return MIN_VIEW_WIDTH;
     const oneSecPct = 1 / durationSec;
     return Math.max(MIN_VIEW_WIDTH, Math.min(0.5, oneSecPct));

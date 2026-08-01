@@ -68,7 +68,14 @@ import { isCoarsePointer } from "./media-queries.js";
 import { suppressEdgeSwipeNav } from "./pointer-drag.js";
 import { renderRangeRuler } from "./range-ruler.js";
 import { activeTrip, mainChannel, state } from "./state.js";
-import { applyPinchZoom, applyWheelPan, applyWheelZoom, computeFollowPan, normalizeWheelDelta } from "./strip-zoom.js";
+import {
+    applyPinchZoom,
+    applyWheelPan,
+    applyWheelZoom,
+    computeFollowPan,
+    computeMinViewSpan,
+    normalizeWheelDelta,
+} from "./strip-zoom.js";
 import { eventColors, subscribeThemeChange, themeColors } from "./theme.js";
 import { subscribeViewPanels } from "./view-menu.js";
 
@@ -880,32 +887,14 @@ export function initChart(cb: ChartCallbacks): void {
     if (dom.playerChartEl) {
         dom.playerChartEl.addEventListener("click", (e: MouseEvent) => {
             if (!state.chart || !state.active) return;
-            // A pinch that just ended may synthesize a click - do not read it as a seek.
-            if (chartPinchSuppressClick) return;
-            let sec: number | null;
-            if (dom.chartCanvas.hidden) {
-                // No-gps trip (or chart hidden via the "View" menu): the canvas is
-                // display:none, so getBoundingClientRect() is all-zero and the
-                // getValueForPixel path below would bail on every click. Fall back
-                // to the shared timelineFracToSec over the .player-chart width -
-                // the same mapping the always-on progress bar and the playhead use
-                // (relSecToPlayerChartCssX). Without this, clicking the visible
-                // ruler/empty timeline area never seeks when there is no GPS.
-                const rect = dom.playerChartEl.getBoundingClientRect();
-                if (rect.width <= 0) return;
-                sec = timelineFracToSec((e.clientX - rect.left) / rect.width);
-            } else {
-                const xScale = state.chart.scales.x;
-                if (!xScale) return;
-                const rect = dom.chartCanvas.getBoundingClientRect();
-                const px = e.clientX - rect.left;
-                // Guard against a click to the right/left of the canvas
-                // (invariant in theory, but .player-chart can be wider than the
-                // canvas due to paddings).
-                if (px < 0 || px > rect.width) return;
-                const x = xScale.getValueForPixel(px);
-                sec = x === undefined ? null : x;
-            }
+            // A pinch that just ended may synthesize a click, and a completed
+            // drag-select always fires one - do not read either as a seek.
+            // The drag window deliberately swallows EVERY click until the
+            // timer expires, not just the first trailing one: a dblclick
+            // right after a drag is the reset gesture, and letting its
+            // component clicks through would seek mid-reset.
+            if (chartPinchSuppressClick || chartDragSuppressClick) return;
+            const sec = chartSecAtClientX(e.clientX);
             if (sec !== null && Number.isFinite(sec)) callbacks.onSeekTripTime(sec);
         });
     }
@@ -1028,6 +1017,34 @@ export function initChart(cb: ChartCallbacks): void {
     // Touch: two-finger pinch is the gesture counterpart of the wheel zoom above
     // (a phone has no wheel). Mirrors the video pinch in player-zoom.ts.
     initChartTouchZoom();
+
+    // Mouse: Audacity-style drag-select zooms to the selected span.
+    initChartDragSelectZoom();
+}
+
+/**
+ * Trip-time (content-sec) under a clientX. Uses the chart x-scale when the
+ * canvas is visible; with the canvas hidden (no-gps trip or the "View" menu)
+ * falls back to the shared timelineFracToSec over the .player-chart width -
+ * the same mapping the always-on progress bar and the playhead use. Null when
+ * the pointer is outside the usable width or no trip is active.
+ */
+function chartSecAtClientX(clientX: number): number | null {
+    if (!state.chart || !state.active || !dom.playerChartEl) return null;
+    if (dom.chartCanvas.hidden) {
+        const rect = dom.playerChartEl.getBoundingClientRect();
+        if (rect.width <= 0) return null;
+        return timelineFracToSec((clientX - rect.left) / rect.width);
+    }
+    const xScale = state.chart.scales.x;
+    if (!xScale) return null;
+    const rect = dom.chartCanvas.getBoundingClientRect();
+    const px = clientX - rect.left;
+    // Guard against a position to the right/left of the canvas (invariant in
+    // theory, but .player-chart can be wider than the canvas due to paddings).
+    if (px < 0 || px > rect.width) return null;
+    const x = xScale.getValueForPixel(px);
+    return x === undefined ? null : x;
 }
 
 // === Touch pinch zoom on the timeline ===
@@ -1176,6 +1193,159 @@ function initChartTouchZoom(): void {
     };
     host.addEventListener("pointerup", onPointerEnd);
     host.addEventListener("pointercancel", onPointerEnd);
+}
+
+// === Mouse drag-select zoom on the timeline ===
+//
+// Audacity-style: press on the timeline background, drag horizontally, release -
+// the selected span becomes the visible window (the same applyChartXRange path
+// as wheel/pinch, so chartZoomed/export-selection semantics are identical).
+// Mouse-only: touch keeps pinch, and the overview / mini-progress / export
+// pull-tabs own their pointers and never start a selection. A press that stays
+// under the threshold remains a plain seek-click.
+
+/** Horizontal travel (px) that turns a press into a selection instead of a click. */
+const DRAG_SELECT_THRESHOLD_PX = 5;
+// A completed drag fires a trailing click on the host (down/up share the
+// ancestor); suppress it so the release is not read as a seek. Self-clears in
+// case the browser skips the click (mirrors chartPinchSuppressClick).
+let chartDragSuppressClick = false;
+let chartDragSuppressTimer = 0;
+
+function initChartDragSelectZoom(): void {
+    const host = dom.playerChartEl;
+    if (!host) return;
+
+    let dragPointerId: number | null = null;
+    let dragStartClientX = 0;
+    let isSelecting = false;
+    let selectRectEl: HTMLDivElement | null = null;
+
+    // The overview and mini-progress rows own their single-finger/mouse drags
+    // (pan and scrub); the export pull-tabs and any real button (overview
+    // reset) keep their native behavior.
+    const eligible = (target: EventTarget | null): boolean => {
+        if (!(target instanceof Element)) return true;
+        return !target.closest("#player-chart-overview, #player-mini-progress, .timeline-range__tab, button");
+    };
+
+    // Selection endpoints must resolve even when the mouse travels past the
+    // plot edge mid-drag, so clamp into the coordinate host chartSecAtClientX
+    // reads from (canvas when visible, the whole row otherwise).
+    const clampToTimelineWidth = (clientX: number): number => {
+        const basis = dom.chartCanvas.hidden ? host : dom.chartCanvas;
+        const rect = basis.getBoundingClientRect();
+        return Math.min(Math.max(clientX, rect.left), rect.right);
+    };
+
+    const removeSelectRect = (): void => {
+        selectRectEl?.remove();
+        selectRectEl = null;
+    };
+
+    const updateSelectRect = (clientX: number): void => {
+        if (!selectRectEl) {
+            selectRectEl = document.createElement("div");
+            selectRectEl.className = "chart-drag-select";
+            host.appendChild(selectRectEl);
+        }
+        const hostRect = host.getBoundingClientRect();
+        const a = clampToTimelineWidth(dragStartClientX) - hostRect.left;
+        const b = clampToTimelineWidth(clientX) - hostRect.left;
+        selectRectEl.style.left = `${Math.min(a, b)}px`;
+        selectRectEl.style.width = `${Math.abs(b - a)}px`;
+    };
+
+    const endDrag = (): void => {
+        dragPointerId = null;
+        isSelecting = false;
+        removeSelectRect();
+    };
+
+    host.addEventListener("pointerdown", (e: PointerEvent) => {
+        if (e.pointerType !== "mouse" || e.button !== 0 || !eligible(e.target)) return;
+        if (!state.chart || !state.active) return;
+        dragPointerId = e.pointerId;
+        dragStartClientX = e.clientX;
+        isSelecting = false;
+    });
+
+    host.addEventListener("pointermove", (e: PointerEvent) => {
+        if (dragPointerId !== e.pointerId) return;
+        // A mouse keeps one persistent pointerId, so a pointerup missed outside
+        // the row (no capture before the threshold) would leave the drag armed;
+        // a hover without the primary button held is that stale state - drop it.
+        if ((e.buttons & 1) === 0) {
+            endDrag();
+            return;
+        }
+        if (!isSelecting) {
+            if (Math.abs(e.clientX - dragStartClientX) < DRAG_SELECT_THRESHOLD_PX) return;
+            isSelecting = true;
+            // Keep receiving moves when the mouse leaves the timeline row.
+            try {
+                host.setPointerCapture(e.pointerId);
+            } catch {
+                /* pointer may already be inactive - selection still works inside the row */
+            }
+            // Capture retargets pointer/mouse events to the host, which starves
+            // the canvas hover handler mid-fade; run its mouseleave cleanup so
+            // the tooltip and hover cursor do not freeze over the selection.
+            dom.chartCanvas.dispatchEvent(new MouseEvent("mouseleave"));
+        }
+        updateSelectRect(e.clientX);
+    });
+
+    host.addEventListener("pointerup", (e: PointerEvent) => {
+        if (dragPointerId !== e.pointerId) return;
+        const wasSelecting = isSelecting;
+        const endClientX = e.clientX;
+        endDrag();
+        if (!wasSelecting) return; // plain click - the click handler seeks
+        chartDragSuppressClick = true;
+        if (chartDragSuppressTimer) clearTimeout(chartDragSuppressTimer);
+        chartDragSuppressTimer = window.setTimeout(() => {
+            chartDragSuppressClick = false;
+            chartDragSuppressTimer = 0;
+        }, 400);
+
+        if (!state.chart || !state.active) return;
+        const trip = state.trips[state.active.trip];
+        if (!trip) return;
+        const dur = trip.timeline.contentDurationSec;
+        if (dur <= 0) return;
+        const secA = chartSecAtClientX(clampToTimelineWidth(dragStartClientX));
+        const secB = chartSecAtClientX(clampToTimelineWidth(endClientX));
+        if (secA === null || secB === null) return;
+        let start = Math.max(0, Math.min(secA, secB));
+        let end = Math.min(dur, Math.max(secA, secB));
+        // Same floor as wheel/pinch zoom: a selection tighter than the minimum
+        // window grows symmetrically around its centre instead of over-zooming.
+        const minSpanSec = computeMinViewSpan(dur) * dur;
+        if (end - start < minSpanSec) {
+            const centre = (start + end) / 2;
+            start = Math.max(0, Math.min(centre - minSpanSec / 2, dur - minSpanSec));
+            end = start + minSpanSec;
+        }
+        // Selection = inspection + take control (pause auto-follow), like wheel.
+        state.isPreviewZoom = false;
+        noteUserTimelineInteraction();
+        const fullView = start <= 1e-6 && end >= dur - 1e-6;
+        applyChartXRange(start, end, fullView);
+    });
+
+    host.addEventListener("pointercancel", (e: PointerEvent) => {
+        if (dragPointerId !== e.pointerId) return;
+        endDrag();
+    });
+
+    // Capture can vanish without pointerup/pointercancel (host detached from
+    // the DOM mid-gesture); after a normal release this is a no-op because
+    // pointerup already cleared dragPointerId.
+    host.addEventListener("lostpointercapture", (e: PointerEvent) => {
+        if (dragPointerId !== e.pointerId) return;
+        endDrag();
+    });
 }
 
 // === UX-15: event pop-action popup ===

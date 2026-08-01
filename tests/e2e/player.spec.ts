@@ -315,6 +315,47 @@ test.describe("player", () => {
         await expect.poll(() => playhead.evaluate((el) => (el as HTMLElement).style.left)).not.toBe(before);
     });
 
+    test("chart drag-select zooms to the selected span", async ({ page }) => {
+        const chart = await boxOf(page, "#player-chart-canvas");
+        const y = chart.y + chart.height * 0.4;
+        // Drag from ~30% to ~70% of the plot. Multiple intermediate moves so the
+        // 5px threshold trips and the selection rectangle path runs.
+        await page.mouse.move(chart.x + chart.width * 0.3, y);
+        await page.mouse.down();
+        await page.mouse.move(chart.x + chart.width * 0.45, y, { steps: 4 });
+        await expect(page.locator(".chart-drag-select"), "selection rect appears mid-drag").toBeVisible();
+        await page.mouse.move(chart.x + chart.width * 0.7, y, { steps: 4 });
+        await page.mouse.up();
+
+        const zoomState = await page.evaluate(() => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const st = (window as any).__dashcamigo.state;
+            return {
+                zoomed: st.chartZoomed,
+                preview: st.isPreviewZoom,
+                windowMin: st.chart.scales.x.min as number,
+                windowMax: st.chart.scales.x.max as number,
+            };
+        });
+        expect(zoomState.zoomed, "drag-select must zoom the timeline").toBe(true);
+        expect(zoomState.preview, "drag-select is inspection, not a preview").toBe(false);
+        // The window matches the dragged span, not the full trip.
+        expect(zoomState.windowMin).toBeGreaterThan(0);
+        expect(zoomState.windowMax).toBeLessThan(4);
+        expect(zoomState.windowMax).toBeGreaterThan(zoomState.windowMin);
+        // The selection rectangle is gone after release.
+        await expect(page.locator(".chart-drag-select")).toHaveCount(0);
+
+        // Double-click resets back to the full view (existing gesture).
+        await page.mouse.dblclick(chart.x + chart.width * 0.5, y);
+        await expect
+            .poll(() =>
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                page.evaluate(() => (window as any).__dashcamigo.state.chartZoomed),
+            )
+            .toBe(false);
+    });
+
     test("inspection zoom does not clamp seeks to the window", async ({ page }) => {
         // A wheel/keyboard zoom is inspection, not a bounded Preview-clip window:
         // seeks must roam the whole trip (isPreviewZoom stays false). Regression
