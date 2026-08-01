@@ -35,6 +35,18 @@ const log = createLogger("persistent-folders");
 // a retry click re-checks reality, and next pageload starts clean.
 const unavailableIds = new Set<string>();
 
+// Root path segment (the folder's on-disk name) -> RememberedFolder.id, for
+// folders touched this session. Annotations resolve their folderId through
+// this: a candidate only knows its relativePath, whose first segment is the
+// root folder name on every picker path.
+const folderIdByRootLabel = new Map<string, string>();
+
+/** RememberedFolder.id owning the given root path segment, or "" when the
+ *  root is not a remembered folder (ad-hoc drop / never remembered). */
+export function folderIdForRootSegment(root: string): string {
+    return folderIdByRootLabel.get(root) ?? "";
+}
+
 let chipsContainer: HTMLElement | null = null;
 let chipsList: HTMLElement | null = null;
 let pickerInFlight = false;
@@ -121,6 +133,7 @@ async function openFolderHandle(handle: FileSystemDirectoryHandle, folder: Remem
     }
     if (folder) {
         unavailableIds.delete(folder.id);
+        folderIdByRootLabel.set(handle.name, folder.id);
         markFolderOpened(folder.id).catch(() => {});
         void refreshChips();
     }
@@ -208,7 +221,8 @@ async function offerToRemember(handle: FileSystemDirectoryHandle): Promise<void>
             labelKey: "recentFolders.rememberAction",
             onAction: () => {
                 rememberFolder(handle)
-                    .then(() => {
+                    .then((record) => {
+                        folderIdByRootLabel.set(handle.name, record.id);
                         void refreshChips();
                         notify({
                             severity: "info",

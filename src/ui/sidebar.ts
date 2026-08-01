@@ -29,11 +29,15 @@ import {
     recordingModeLabel,
 } from "./format.js";
 import type { TripLazyHeavyState } from "./format.js";
+import { setTripMeta, tripMetaFor } from "./annotations.js";
 import { isTripSortKey, state } from "./state.js";
 import { tripPreviewFailed } from "./trip-preview.js";
 
 interface SidebarCallbacks {
     onPlayFrame: (tripIdx: number, frameIdx: number) => void;
+    /** Opens the trip name/note editor (trip-meta-modal, wired in app.ts -
+     *  a direct import here would cycle: saving re-renders this sidebar). */
+    onEditTripMeta?: (tripIdx: number) => void;
     /**
      * UX-08: clicked the event chip in the trip header. Implementation (frame selection, seek to event-5s, pause)
      * lives in the player so the sidebar does not depend on the player API.
@@ -78,7 +82,7 @@ export function renderTrips(): void {
 
     // Build the displayed list with original indices and sort by the selected field/direction.
     // The physical order of state.trips is NOT changed - state.active.trip and state.expandedTrips indices depend on it.
-    const displayed = state.trips.map((trip, idx) => ({ trip, idx }));
+    let displayed = state.trips.map((trip, idx) => ({ trip, idx }));
     const cmp = comparatorFor(state.tripSortKey);
     // Duration/distance are PROVISIONAL on an un-hydrated card (a per-fingerprint
     // estimate / 0 distance), so ranking by them makes cards jump as the
@@ -101,14 +105,27 @@ export function renderTrips(): void {
         if (state.tripSortDir === "desc") displayed.reverse();
     }
 
+    // Favorited trips float above everything, keeping their relative sorted
+    // order. Applied after the sort so the star wins over any sort key.
+    const isFavoriteEntry = (entry: { trip: Trip }) => tripMetaFor(entry.trip)?.isFavorite === true;
+    const favoriteCount = displayed.filter(isFavoriteEntry).length;
+    if (favoriteCount > 0) {
+        displayed = [...displayed.filter(isFavoriteEntry), ...displayed.filter((d) => !isFavoriteEntry(d))];
+    }
+
     // Date bucket separators ("Today · Yesterday · This week · ...") only make sense when sorting by date.
     const showDateBuckets = state.tripSortKey === "date";
     let lastBucket: string | null = null;
     // Click handling is delegated in initSidebar (see dom.list listener). data-action attributes on header/chevron/file-li are sufficient.
 
-    displayed.forEach(({ trip, idx: tripIdx }) => {
+    displayed.forEach(({ trip, idx: tripIdx }, displayIdx) => {
         if (showDateBuckets) {
-            const bucket = dateBucketLabel(trip.startUtc, trip.cameraTzSec);
+            // The floated favorites section gets its own bucket label instead
+            // of date buckets - its trips are not in date order.
+            const bucket =
+                displayIdx < favoriteCount
+                    ? t("sidebar.bucket.favorites")
+                    : dateBucketLabel(trip.startUtc, trip.cameraTzSec);
             if (bucket !== lastBucket) {
                 const sep = document.createElement("li");
                 sep.className = "trip-date-sep";
@@ -188,9 +205,13 @@ function buildTripCard(trip: Trip, tripIdx: number): HTMLLIElement {
     const header = document.createElement("div");
     header.className = "trip-header";
 
+    const tripMeta = tripMetaFor(trip);
     const title = document.createElement("div");
     title.className = "trip-title";
-    title.textContent = formatTripTitle(trip);
+    // Custom name replaces the generated title; the generated one (date/time)
+    // moves to the tooltip so it stays discoverable.
+    title.textContent = tripMeta?.name || formatTripTitle(trip);
+    if (tripMeta?.name) title.title = formatTripTitle(trip);
     // Keyboard / screen-reader affordance: the title IS the trip's open/play
     // control. role=button + tabindex makes it focusable and Enter/Space
     // activatable (the header div carries the same data-action for broad
@@ -285,6 +306,37 @@ function buildTripCard(trip: Trip, tripIdx: number): HTMLLIElement {
     metaText.textContent = formatTripMeta(trip, lazyState);
     if (lazyState !== "loaded") metaText.classList.add(`lazy-${lazyState}`);
     meta.appendChild(metaText);
+
+    // Annotation controls in the meta row (the header's top corners belong to
+    // the badge chips / event chip / chevron): favorite star + name/note pencil.
+    const metaActions = document.createElement("span");
+    metaActions.className = "trip-meta-actions";
+    const isFavorite = tripMeta?.isFavorite === true;
+    const favBtn = document.createElement("button");
+    favBtn.type = "button";
+    favBtn.className = "trip-meta-action trip-fav";
+    if (isFavorite) favBtn.classList.add("is-on");
+    const favLabel = isFavorite ? t("trip.fav.remove") : t("trip.fav.add");
+    favBtn.title = favLabel;
+    favBtn.setAttribute("aria-label", favLabel);
+    favBtn.setAttribute("aria-pressed", isFavorite ? "true" : "false");
+    favBtn.dataset.action = "trip-fav";
+    favBtn.dataset.tripIndex = String(tripIdx);
+    // Lucide star; fill switches on via CSS when .is-on.
+    favBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg>`;
+    metaActions.appendChild(favBtn);
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "trip-meta-action trip-edit";
+    const editLabel = t("trip.editMeta");
+    editBtn.title = editLabel;
+    editBtn.setAttribute("aria-label", editLabel);
+    editBtn.dataset.action = "trip-edit";
+    editBtn.dataset.tripIndex = String(tripIdx);
+    // Lucide pencil.
+    editBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>`;
+    metaActions.appendChild(editBtn);
+    meta.appendChild(metaActions);
     header.appendChild(meta);
 
     // Click on header (but not chevron) is handled by the delegated listener in initSidebar.
@@ -292,6 +344,16 @@ function buildTripCard(trip: Trip, tripIdx: number): HTMLLIElement {
     header.dataset.tripIndex = String(tripIdx);
 
     li.appendChild(header);
+
+    // Free-text note under the header. Display-only here; edited via the
+    // pencil. Clamped by CSS - a long note must not dwarf the card.
+    if (tripMeta?.note) {
+        const noteEl = document.createElement("div");
+        noteEl.className = "trip-note";
+        noteEl.textContent = tripMeta.note;
+        noteEl.title = tripMeta.note;
+        li.appendChild(noteEl);
+    }
 
     // Clip list inside the trip. One <li> = one frame (on multi-channel models this is a synchronized F/B/I pair/triple).
     // Primary name is the front channel (or fallback via pickFrameChannel); extra channels shown as "+R", "+I" chips.
@@ -729,6 +791,17 @@ export function initSidebar(cb: SidebarCallbacks): void {
             const next = ((tripEventCycleIdx.get(tripIdx) ?? -1) + 1) % trip.events.length;
             tripEventCycleIdx.set(tripIdx, next);
             cb.onPlayTripEvent?.(tripIdx, next);
+        } else if (action === "trip-fav") {
+            // Stop propagation - the button sits inside the header, which
+            // carries data-action="play-trip".
+            ev.stopPropagation();
+            const trip = state.trips[tripIdx];
+            if (!trip) return;
+            setTripMeta(trip, { isFavorite: tripMetaFor(trip)?.isFavorite !== true });
+            renderTrips();
+        } else if (action === "trip-edit") {
+            ev.stopPropagation();
+            cb.onEditTripMeta?.(tripIdx);
         } else if (action === "file-details") {
             // Stop propagation - the button sits inside the clip li, which carries
             // data-action="play-file"; without this the closest() walk on bubble

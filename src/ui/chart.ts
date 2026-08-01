@@ -134,7 +134,19 @@ const EVENT_HIT_PX = 8;
  * Works in no-gps mode too - the time scale only depends on trip.timeline.contentDurationSec
  * and the current chart xScale, no GPS data is needed.
  */
+// Extra overlay layer hooked into the ruler re-sync (trip change, zoom, pan,
+// resize) - the timeline-marker pins reposition through this. A registered
+// callback, not an import: markers import this module for the geometry
+// helpers, so the reverse edge would cycle.
+let timelineOverlaySync: (() => void) | null = null;
+
+/** Registers the overlay refresh run after every ruler re-sync. */
+export function registerTimelineOverlaySync(callback: () => void): void {
+    timelineOverlaySync = callback;
+}
+
 function syncChartRulers(): void {
+    timelineOverlaySync?.();
     if (!state.chart || !state.active) return;
     const trip = state.trips[state.active.trip];
     if (!trip) return;

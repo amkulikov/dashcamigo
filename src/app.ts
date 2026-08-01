@@ -52,6 +52,11 @@ import { dom } from "./ui/dom.js";
 import { syncEmptyState } from "./ui/empty-state.js";
 import { initFileSources } from "./ui/file-sources.js";
 import { initPersistentFolders } from "./ui/persistent-folders.js";
+import { initAnnotations } from "./ui/annotations.js";
+import { initTripMetaModal, openTripMetaModal } from "./ui/trip-meta-modal.js";
+import { initTimelineMarkers, refreshTimelineMarkers } from "./ui/timeline-markers.js";
+import { initMarkerModal } from "./ui/marker-modal.js";
+import { registerTimelineOverlaySync } from "./ui/chart.js";
 import { initIngestOverlay } from "./ui/ingest-overlay.js";
 import { initNotifications } from "./ui/notifications.js";
 import { initPwaInstall } from "./ui/pwa-install.js";
@@ -443,7 +448,16 @@ initFileSources();
 // zero-click auto-restore of the last used folder. Needs notifications and
 // the ingest overlay, both initialized above.
 initPersistentFolders();
+// Trip annotations: load the stored records before the first ingest can
+// render cards; wire the name/note editor, the timeline-marker layer (pins
+// reposition through the chart's overlay-sync hook) and the marker editor.
+initAnnotations();
+initTripMetaModal();
+initTimelineMarkers();
+initMarkerModal({ onChanged: refreshTimelineMarkers });
+registerTimelineOverlaySync(refreshTimelineMarkers);
 initSidebar({
+    onEditTripMeta: openTripMetaModal,
     onPlayFrame: async (tripIdx, frameIdx) => {
         // Viewer init (map/chart/player) is lazy and async since T9 - it
         // lazy-loads maplibre-gl. exitLanding fired it already; awaiting the

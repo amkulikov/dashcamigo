@@ -1,0 +1,148 @@
+/* Trip annotation surfaces: the star/pencil cluster in the card's meta row,
+   the note line under the header, and the name/note editor fields. */
+
+.trip-meta-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.trip-meta-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: var(--dc-radius-sm);
+    color: var(--fg-mute);
+    cursor: pointer;
+}
+
+.trip-meta-action:hover {
+    color: var(--fg);
+    background: var(--bg-elev-2);
+}
+
+.trip-meta-action:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+
+/* Filled golden star for a favorited trip - readable at 13px where a stroke
+   color change alone is not. */
+.trip-fav.is-on {
+    color: var(--warn);
+}
+.trip-fav.is-on svg {
+    fill: currentColor;
+}
+
+.trip-note {
+    padding: var(--dc-space-1) var(--dc-space-2);
+    color: var(--fg-dim);
+    font-size: var(--dc-text-sm);
+    line-height: var(--dc-leading-normal);
+    /* A long note must not dwarf the card; full text in the tooltip. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.trip-meta-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-1);
+    margin-bottom: var(--dc-space-3);
+    font-size: var(--dc-text-sm);
+    color: var(--fg-dim);
+}
+
+.trip-meta-field input,
+.trip-meta-field textarea {
+    font: inherit;
+    color: var(--fg);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-sm);
+    padding: var(--dc-space-1) var(--dc-space-2);
+    resize: vertical;
+}
+
+.trip-meta-field input:focus-visible,
+.trip-meta-field textarea:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+}
+
+/* Delete sits apart from cancel/save; red on hover signals the destructive
+   action without shouting in the idle state. */
+.marker-modal-delete {
+    margin-right: auto;
+}
+.marker-modal-delete:hover {
+    color: var(--err);
+    border-color: var(--err);
+}
+
+/* --- Timeline marker pins ------------------------------------------------ */
+
+/* Overlay layer over the whole timeline host (chart + ruler + strip), same
+   coordinate space as the playhead. The layer itself must not eat clicks. */
+.timeline-markers {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 3;
+}
+
+/* One pin: a full-height hairline + a flag head at the top. The button spans
+   the full height for an easy hit target; visuals live in the pseudos. */
+.timeline-marker {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 12px;
+    transform: translateX(-50%);
+    pointer-events: auto;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+}
+
+.timeline-marker::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    background: var(--accent);
+    opacity: 0.45;
+}
+
+.timeline-marker::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 8px;
+    height: 9px;
+    background: var(--accent);
+    /* Bookmark/flag silhouette. */
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 68%, 0 100%);
+}
+
+.timeline-marker:hover::before {
+    opacity: 0.9;
+}
+
+.timeline-marker:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
