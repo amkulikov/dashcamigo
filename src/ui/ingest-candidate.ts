@@ -156,6 +156,8 @@ export function buildProvisionalCandidate(params: ProvisionalCandidateParams): V
         // Provisional: no moov/GPS read yet, so no wall-span evidence; the
         // post-hydration rederive sweep fills the real value.
         wallDurationSec: null,
+        // Computed at regroup time (applyChannelDriftLead), never at construction.
+        driftLeadSec: null,
         startSource: params.startSource,
         cameraTzSec: params.cameraTzSec,
         records: params.records,

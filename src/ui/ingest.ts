@@ -742,6 +742,8 @@ async function ingestFilesInternal(vfiles: VendorFile[], signal: AbortSignal): P
                         startUtc,
                         durationSec: idx.durationSec,
                         wallDurationSec,
+                        // Computed at regroup time (applyChannelDriftLead), never at construction.
+                        driftLeadSec: null,
                         startSource: source,
                         // Pre-index estimate (no mvhd yet); the unconditional
                         // recomputeAllStartUtc sweep refreshes it after indexing.

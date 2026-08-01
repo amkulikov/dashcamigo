@@ -24,6 +24,7 @@ function makeCandidate(file: File): VideoCandidate {
         startUtc: 0,
         durationSec: 60,
         wallDurationSec: null,
+        driftLeadSec: null,
         startSource: "mp4",
         cameraTzSec: null,
         createdUtc: null,

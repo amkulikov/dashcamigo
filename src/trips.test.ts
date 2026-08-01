@@ -73,6 +73,7 @@ function makeCandidate(opts: {
         startUtc: opts.startUtc,
         durationSec: opts.durationSec ?? 60,
         wallDurationSec: opts.wallDurationSec ?? null,
+        driftLeadSec: null,
         startSource: "mp4",
         cameraTzSec: null,
         createdUtc: null,

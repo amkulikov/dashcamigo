@@ -1,6 +1,10 @@
 // Groups video files into trips by time gap.
-// Pure function: input is an array of video metadata, output is an array of trips.
+// Deterministic: input is an array of video metadata, output is an array of
+// trips. The one input mutation is the session-drift pass (writes
+// candidate.driftLeadSec, see channel-drift.ts) - it resets before measuring
+// and derives only from the candidates, so regrouping is idempotent.
 
+import { applyChannelDriftLead } from "./channel-drift.js";
 import { detectEvents, type TripEvent } from "./events.js";
 import { detectInferredSegments, type InferredSegment } from "./inferred-events.js";
 import {
@@ -103,6 +107,14 @@ export interface VideoCandidate {
     // per-file evidence in deriveWallDurationSec; drives the wall-scaled
     // timeline segments, gap math and unsynced-record spreading.
     wallDurationSec: number | null;
+    // How many seconds this file's CONTENT is ahead of its nominal timestamps
+    // (frame-count-cut muxers with schedule-derived names drift about a second
+    // per hour - see channel-drift.ts). Consumers that fetch this channel's
+    // content (export segment placement, slave-channel playback sync) shift the
+    // file this much later on the content axis; the nominal axis itself -
+    // startUtc, frame grouping, timeline, GPS - never moves. null = no
+    // correction (single-channel, healthy camera, or an unmeasurable session).
+    driftLeadSec: number | null;
     startSource: StartSource;
     // Camera-clock zone for DISPLAY: snapshot of the per-fingerprint
     // filenameTzSec estimate (see displayTzSec for the invariant it feeds).
@@ -760,6 +772,10 @@ export function groupTrips(videos: VideoCandidate[], gapSec: number = getTripGap
     const trips: Trip[] = [];
     for (const group of framesByFingerprint.values()) {
         group.sort((a, b) => a.startUtc - b.startUtc);
+        // Session-drift pass BEFORE the trip split: a recording session may span
+        // trip boundaries (driving<->parking class split), and the tail-pair
+        // measurement needs the whole per-camera chain. See channel-drift.ts.
+        applyChannelDriftLead(group);
         let current: TripFrame[] = [group[0]!];
         // Gap is measured from the furthest end reached by ANY frame in the
         // current trip, not just the last-appended frame. Frames are sorted by

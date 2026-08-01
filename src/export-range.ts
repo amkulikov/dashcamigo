@@ -59,8 +59,13 @@ export function sliceCandidatesForRange(
     const out: FileSegment[] = [];
     for (const v of candidates) {
         // A single file never spans a pause, so its footage span is contiguous:
-        // [fileStart, fileStart + durationSec] on the content axis.
-        const fileStart = wallToContentSec(timeline, v.startUtc);
+        // [fileStart, fileStart + durationSec] on the content axis. driftLeadSec
+        // shifts a drift-corrected channel's file later by its measured content
+        // lead (see channel-drift.ts): the request for an early position then
+        // lands in the PREVIOUS file's tail, which is where the matching content
+        // actually is. Consecutive placements stay monotonic (the lead grows a
+        // few ms per file), so the early-break below remains valid.
+        const fileStart = wallToContentSec(timeline, v.startUtc) + (v.driftLeadSec ?? 0);
         const fileEnd = fileStart + v.durationSec;
         if (endContentSec <= fileStart) break;
         if (startContentSec >= fileEnd) continue;
