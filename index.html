@@ -811,6 +811,15 @@
                                 <p class="landing-drop-foot" data-i18n="landing.drop.freeNote">Free · no ads · no sign-up</p>
                             </label>
 
+                            <!-- Recent folders (persistent-folder mode, Chromium-only).
+                                 Kept OUTSIDE the label above: a chip click must not bubble
+                                 into the label's open-picker handler. Hidden until
+                                 src/ui/persistent-folders.ts finds remembered folders. -->
+                            <div class="recent-folders" id="recent-folders" hidden>
+                                <span class="recent-folders-title" data-i18n="recentFolders.title">Recent folders</span>
+                                <span class="recent-folders-list" id="recent-folders-list"></span>
+                            </div>
+
                             <!-- Capability bullets (3x2 grid -> 1 column on <=640px). -->
                             <ul class="landing-caps">
                                 <li>

@@ -31,6 +31,7 @@
 @import "./components/map.css";
 @import "./components/empty-state.css";
 @import "./components/landing.css";
+@import "./components/recent-folders.css";
 @import "./components/event-popup.css";
 @import "./components/drop-overlay.css";
 @import "./components/ingest.css";

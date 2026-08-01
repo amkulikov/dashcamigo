@@ -51,6 +51,7 @@ import { initLandingShot } from "./ui/landing-shot.js";
 import { dom } from "./ui/dom.js";
 import { syncEmptyState } from "./ui/empty-state.js";
 import { initFileSources } from "./ui/file-sources.js";
+import { initPersistentFolders } from "./ui/persistent-folders.js";
 import { initIngestOverlay } from "./ui/ingest-overlay.js";
 import { initNotifications } from "./ui/notifications.js";
 import { initPwaInstall } from "./ui/pwa-install.js";
@@ -438,6 +439,10 @@ initMobileDrawer();
 // fire from their own seams (ingest done, trip open, export open).
 initOnboarding();
 initFileSources();
+// Persistent-folder mode (Chromium): recent-folder chips on the landing and
+// zero-click auto-restore of the last used folder. Needs notifications and
+// the ingest overlay, both initialized above.
+initPersistentFolders();
 initSidebar({
     onPlayFrame: async (tripIdx, frameIdx) => {
         // Viewer init (map/chart/player) is lazy and async since T9 - it

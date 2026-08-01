@@ -10,6 +10,7 @@ import { beginPreIngestReading, endPreIngestReading } from "./ingest-overlay.js"
 import { ingestFiles } from "./ingest.js";
 import { toVendorFiles } from "./ingest-core.js";
 import { notify } from "./notifications.js";
+import { canUseDirectoryPicker, openViaDirectoryPicker } from "./persistent-folders.js";
 import { shouldShowUploadWarning, showUploadWarning } from "./upload-warning-modal.js";
 
 const log = createLogger("file-sources");
@@ -186,6 +187,13 @@ export function initFileSources(): void {
     // page is never blank across that window. Retracted by the change handler
     // (a selection) or the cancel event (a dismissal).
     const openFolderPicker = (): void => {
+        // On Chromium the FSA directory picker yields a persistable handle
+        // (remember + zero-click restore, see persistent-folders.ts); the
+        // classic input stays everywhere else AND as the in-flight fallback.
+        if (canUseDirectoryPicker()) {
+            void openViaDirectoryPicker();
+            return;
+        }
         beginPreIngestReading();
         dom.folderInput.click();
     };
