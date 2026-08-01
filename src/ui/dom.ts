@@ -255,6 +255,7 @@ export const dom = {
     drawerScrim: $id<HTMLElement>("drawer-scrim"),
     topbarBurger: $id<HTMLButtonElement>("topbar-burger"),
     videoMapResize: $id<HTMLDivElement>("video-map-resize"),
+    mapWrap: $sel<HTMLDivElement>(".map-wrap"),
     playerWrapEl: $id<HTMLElement>("player-wrap"),
     /**
      * UX-18: follow mode is now a segmented control (3 buttons instead of one
