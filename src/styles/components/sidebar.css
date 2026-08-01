@@ -309,17 +309,23 @@
     color: rgba(255, 255, 255, 0.85);
     font-variant-numeric: tabular-nums;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
-    /* A single meta-text takes the full width; chips moved to the header's
-       top corners, so the flex-row with justify-between is no longer needed. */
+    /* Flex row: the text is the shrinkable side, the annotation buttons
+       (star/pencil) are fixed - without this the nowrap text pushes the
+       buttons past the right edge and overflow:hidden clips them away on a
+       narrow sidebar. */
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-1);
     overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
 }
 .trip-meta .trip-meta-text {
     /* Single-line text with ellipsis on overflow - on a min-width sidebar
        (200px) a long meta like "1h 32m - 14 files - 187 km" gets truncated
        instead of wrapping/overflowing. min-width:0 is needed so the flex
-       item can shrink below its content-size (the chip on the right is fixed). */
+       item can shrink below its content-size (the buttons on the right are
+       fixed-width). */
+    flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
     min-width: 0;
