@@ -47,6 +47,16 @@ export function folderIdForRootSegment(root: string): string {
     return folderIdByRootLabel.get(root) ?? "";
 }
 
+// The sidecar layer merges its file after a remembered folder opens. A
+// registered hook, not an import - the sidecar module reads annotations,
+// which import this module for folder-id resolution.
+let folderOpenedHook: ((folder: RememberedFolder) => void) | null = null;
+
+/** Registers the after-open hook for remembered folders. */
+export function registerFolderOpenedHook(callback: (folder: RememberedFolder) => void): void {
+    folderOpenedHook = callback;
+}
+
 let chipsContainer: HTMLElement | null = null;
 let chipsList: HTMLElement | null = null;
 let pickerInFlight = false;
@@ -136,6 +146,7 @@ async function openFolderHandle(handle: FileSystemDirectoryHandle, folder: Remem
         folderIdByRootLabel.set(handle.name, folder.id);
         markFolderOpened(folder.id).catch(() => {});
         void refreshChips();
+        folderOpenedHook?.(folder);
     }
     if (files.readErrors > 0) {
         notify({ severity: "warn", messageKey: "status.dropReadFailed" });

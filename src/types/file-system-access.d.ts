@@ -20,4 +20,10 @@ interface Window {
         mode?: FileSystemPermissionMode;
         startIn?: FileSystemHandle | string;
     }): Promise<FileSystemDirectoryHandle>;
+    showSaveFilePicker?(options?: {
+        id?: string;
+        suggestedName?: string;
+        startIn?: FileSystemHandle | string;
+        types?: { description?: string; accept: Record<string, string[]> }[];
+    }): Promise<FileSystemFileHandle>;
 }

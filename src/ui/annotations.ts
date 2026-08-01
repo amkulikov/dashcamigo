@@ -5,7 +5,7 @@
 // unavailability degrades to session-only annotations, never an error.
 
 import { createLogger } from "../log.js";
-import { loadAllAnnotations, saveAnnotation } from "../persist/annotations.js";
+import { loadAllAnnotations, saveAnnotation, saveAnnotations } from "../persist/annotations.js";
 import { fileIdentityKey } from "../persist/identity.js";
 import type { AnnotationRecord, MarkerAnnotation, TripMetaAnnotation } from "../persist/types.js";
 import type { Trip, VideoCandidate } from "../trips.js";
@@ -111,10 +111,7 @@ export function setTripMeta(trip: Trip, patch: TripMetaPatch): void {
     base.deleted = !base.name && !base.note && base.isFavorite !== true;
     // A tombstone must be findable by id for LWW, but not by anchor.
     if (base.deleted) tripMetaByAnchor.delete(base.anchor.fileIdentityKey);
-    indexRecord(base);
-    void saveAnnotation(base).catch((err: unknown) => {
-        log.warn("annotation save failed", { err: err instanceof Error ? err.message : String(err) });
-    });
+    persistRecord(base);
 }
 
 /** Sets a string field, or removes it when empty - the stored record then
@@ -178,4 +175,43 @@ function persistRecord(record: AnnotationRecord): void {
     void saveAnnotation(record).catch((err: unknown) => {
         log.warn("annotation save failed", { err: err instanceof Error ? err.message : String(err) });
     });
+    annotationsChangedHook?.(record.folderId);
+}
+
+// The sidecar layer (annotations-sidecar.ts) hangs off this hook - a direct
+// import here would cycle (it reads records back through this module).
+let annotationsChangedHook: ((folderId: string) => void) | null = null;
+
+/** Registers the after-change hook (called with the record's folderId). */
+export function registerAnnotationsChangedHook(callback: (folderId: string) => void): void {
+    annotationsChangedHook = callback;
+}
+
+/** Every record of a folder, tombstones included - the sidecar file must
+ *  carry deletions or they resurrect from an older copy on merge. */
+export function recordsForFolder(folderId: string): AnnotationRecord[] {
+    return [...recordsById.values()].filter((record) => record.folderId === folderId);
+}
+
+/**
+ * Applies externally merged records (sidecar import): re-indexes them in
+ * memory and batch-saves to IndexedDB. Returns how many records changed
+ * relative to the in-memory state (0 = nothing new, skip re-render).
+ */
+export function applyMergedRecords(records: AnnotationRecord[]): number {
+    let changed = 0;
+    const toSave: AnnotationRecord[] = [];
+    for (const record of records) {
+        const existing = recordsById.get(record.id);
+        if (existing && existing.updatedAt >= record.updatedAt) continue;
+        indexRecord(record);
+        toSave.push(record);
+        changed++;
+    }
+    if (toSave.length > 0) {
+        void saveAnnotations(toSave).catch((err: unknown) => {
+            log.warn("merged annotation save failed", { err: err instanceof Error ? err.message : String(err) });
+        });
+    }
+    return changed;
 }

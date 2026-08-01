@@ -67,6 +67,21 @@ export async function forgetFolder(id: string): Promise<void> {
     if (last === id) await db.delete("meta", LAST_FOLDER_META_KEY);
 }
 
+/** Attaches (or replaces) the annotations-sidecar file handle on a folder. */
+export async function setFolderSidecarHandle(id: string, sidecarHandle: FileSystemFileHandle): Promise<void> {
+    const db = await openPersistDb();
+    const folder = await db.get("folders", id);
+    if (!folder) return;
+    folder.sidecarHandle = sidecarHandle;
+    await db.put("folders", folder);
+}
+
+/** A folder by id, or null. */
+export async function getFolder(id: string): Promise<RememberedFolder | null> {
+    const db = await openPersistDb();
+    return (await db.get("folders", id)) ?? null;
+}
+
 /** Stamps the folder as most recently opened; drives the auto-restore pick. */
 export async function markFolderOpened(id: string): Promise<void> {
     const db = await openPersistDb();

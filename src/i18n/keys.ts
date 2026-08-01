@@ -89,6 +89,11 @@ export type I18nKey =
     | "markerModal.delete"
     | "markerModal.cancel"
     | "markerModal.save"
+    // annotations sidecar file
+    | "sidecar.offer"
+    | "sidecar.offerAction"
+    | "sidecar.enabled"
+    | "sidecar.writeFailed"
     | "landing.caps.a.title"
     | "landing.caps.a.body"
     | "landing.caps.b.title"

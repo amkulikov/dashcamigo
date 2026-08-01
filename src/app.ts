@@ -56,6 +56,7 @@ import { initAnnotations } from "./ui/annotations.js";
 import { initTripMetaModal, openTripMetaModal } from "./ui/trip-meta-modal.js";
 import { initTimelineMarkers, refreshTimelineMarkers } from "./ui/timeline-markers.js";
 import { initMarkerModal } from "./ui/marker-modal.js";
+import { initAnnotationsSidecar } from "./ui/annotations-sidecar.js";
 import { registerTimelineOverlaySync } from "./ui/chart.js";
 import { initIngestOverlay } from "./ui/ingest-overlay.js";
 import { initNotifications } from "./ui/notifications.js";
@@ -456,6 +457,9 @@ initTripMetaModal();
 initTimelineMarkers();
 initMarkerModal({ onChanged: refreshTimelineMarkers });
 registerTimelineOverlaySync(refreshTimelineMarkers);
+// Sidecar replica of the annotations inside the user's folder (Chromium):
+// offered on the first note in a remembered folder, then auto-synced.
+initAnnotationsSidecar();
 initSidebar({
     onEditTripMeta: openTripMetaModal,
     onPlayFrame: async (tripIdx, frameIdx) => {
