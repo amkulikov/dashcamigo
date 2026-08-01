@@ -24,3 +24,20 @@ export function isCoarsePointer(): boolean {
     coarsePointerList ??= window.matchMedia(COARSE_POINTER_QUERY);
     return coarsePointerList.matches;
 }
+
+// The stacked (mobile) layout media. MUST mirror the CSS mobile block
+// (viewer.css / sidebar.css / player-bar.css use the same pair): components
+// pile vertically and .viewer scrolls, so gesture owners (map, video zoom)
+// have to yield the plain wheel/one-finger scroll to the page.
+export const MOBILE_LAYOUT_QUERY = "(max-width: 767px), (max-height: 500px) and (orientation: landscape)";
+
+let mobileLayoutList: MediaQueryList | null = null;
+
+/** True when the stacked (mobile) layout media applies - a narrow window or a
+ *  low landscape one - regardless of pointer type: a squeezed desktop window
+ *  gets the same layout as a phone. */
+export function isMobileLayout(): boolean {
+    if (typeof window === "undefined" || !window.matchMedia) return false;
+    mobileLayoutList ??= window.matchMedia(MOBILE_LAYOUT_QUERY);
+    return mobileLayoutList.matches;
+}

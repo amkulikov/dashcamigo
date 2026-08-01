@@ -451,6 +451,8 @@ export type I18nKey =
     // map. The desktop Ctrl/Cmd-scroll variant is intentionally not enabled, so
     // its message is never shown and not localized.
     | "map.coop.twoFingers"
+    | "map.coop.ctrlScroll"
+    | "map.coop.cmdScroll"
 
     // Player bar
     | "player.play"

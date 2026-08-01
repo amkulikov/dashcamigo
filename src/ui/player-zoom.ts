@@ -25,6 +25,7 @@ import {
     SLAVE_DRIFT_MAX_SEC,
 } from "./dom.js";
 import { t } from "../i18n/index.js";
+import { isMobileLayout } from "./media-queries.js";
 import { clearVideoSrc, requiresMseBackend, setVideoSrcFromFile, videoAttachedFile } from "./player-video-src.js";
 import { activeCandidate, isFocusLayout, state } from "./state.js";
 
@@ -379,6 +380,12 @@ function handleVideoWheel(e: WheelEvent): void {
     const target = e.target;
     if (!(target instanceof HTMLVideoElement)) return;
     if (target !== activePlayer()) return;
+    // Stacked layout: the page scrolls past the player, and the video must
+    // not trap that scroll - plain wheel falls through, zoom moves to
+    // Ctrl/Cmd+wheel (a trackpad pinch arrives as a ctrlKey wheel, so the
+    // pinch gesture keeps zooming). Mirrors the map's cooperative gestures;
+    // the map's overlay hint teaches the modifier for both surfaces.
+    if (isMobileLayout() && !e.ctrlKey && !e.metaKey) return;
     const geom = computeZoomGeometry();
     if (!geom) return;
 

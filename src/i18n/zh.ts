@@ -306,6 +306,8 @@ export const zhDict = {
     "map.ctrl.resetBearing": "重置方向为正北",
     "map.ctrl.attribution": "地图来源信息",
     "map.coop.twoFingers": "用两根手指移动地图",
+    "map.coop.ctrlScroll": "按住 Ctrl 并滚动以缩放地图",
+    "map.coop.cmdScroll": "按住 ⌘ 并滚动以缩放地图",
 
     "player.play": "播放",
     "player.pause": "暂停",

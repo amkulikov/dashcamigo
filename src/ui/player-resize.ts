@@ -11,6 +11,7 @@
 // the value just stops applying; nothing to clean up.
 
 import { dom } from "./dom.js";
+import { isMobileLayout } from "./media-queries.js";
 import { attachPointerDrag } from "./pointer-drag.js";
 import { state } from "./state.js";
 
@@ -24,9 +25,9 @@ const MAP_PCT_MAX = 70;
 const MAP_PCT_STEP = 2;
 const MAP_PCT_STEP_SHIFT = 5;
 
-// The divider lives only in the expanded desktop layout; on mobile the map is a
-// full-screen toggle and --map-width is unused, so keyboard resize is a no-op there.
-const isMobileLayout = (): boolean => typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
+// The divider lives only in the expanded desktop layout; in the stacked
+// layouts the map is a full-screen toggle and --map-width is unused, so
+// keyboard resize is a no-op there (shared predicate: media-queries.ts).
 
 /** Reads the live --map-width as a number. When the variable is unset the CSS
  *  default is clamp(280px, 34%, 480px) (viewer.css), which can render far from

@@ -307,6 +307,8 @@ export const deDict = {
     "map.ctrl.resetBearing": "Ausrichtung auf Norden zurücksetzen",
     "map.ctrl.attribution": "Karten-Quellenangabe",
     "map.coop.twoFingers": "Bewege die Karte mit zwei Fingern",
+    "map.coop.ctrlScroll": "Strg + Scrollen zoomt die Karte",
+    "map.coop.cmdScroll": "⌘ + Scrollen zoomt die Karte",
 
     "player.play": "Abspielen",
     "player.pause": "Pause",

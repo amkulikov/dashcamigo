@@ -317,6 +317,8 @@ export const jaDict = {
     "map.ctrl.resetBearing": "方角を北にリセット",
     "map.ctrl.attribution": "地図の出典",
     "map.coop.twoFingers": "2本指で地図を動かせます",
+    "map.coop.ctrlScroll": "Ctrl + スクロールで地図をズーム",
+    "map.coop.cmdScroll": "⌘ + スクロールで地図をズーム",
 
     "player.play": "再生",
     "player.pause": "一時停止",

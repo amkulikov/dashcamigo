@@ -307,6 +307,8 @@ export const plDict = {
     "map.ctrl.resetBearing": "Wyrównaj na północ",
     "map.ctrl.attribution": "Atrybucja mapy",
     "map.coop.twoFingers": "Przesuwaj mapę dwoma palcami",
+    "map.coop.ctrlScroll": "Ctrl + kółko, aby przybliżyć mapę",
+    "map.coop.cmdScroll": "⌘ + kółko, aby przybliżyć mapę",
 
     "player.play": "Odtwarzaj",
     "player.pause": "Pauza",

@@ -312,6 +312,8 @@ export const ruDict = {
     "map.ctrl.resetBearing": "Сбросить поворот на север",
     "map.ctrl.attribution": "Атрибуция карты",
     "map.coop.twoFingers": "Двигай карту двумя пальцами",
+    "map.coop.ctrlScroll": "Зум карты — Ctrl + прокрутка",
+    "map.coop.cmdScroll": "Зум карты — ⌘ + прокрутка",
 
     "player.play": "Воспроизведение",
     "player.pause": "Пауза",

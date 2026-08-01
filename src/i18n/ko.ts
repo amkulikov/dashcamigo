@@ -316,6 +316,8 @@ export const koDict = {
     "map.ctrl.resetBearing": "방위를 북쪽으로 초기화",
     "map.ctrl.attribution": "지도 출처",
     "map.coop.twoFingers": "두 손가락으로 지도를 움직이세요",
+    "map.coop.ctrlScroll": "Ctrl + 스크롤로 지도를 확대/축소",
+    "map.coop.cmdScroll": "⌘ + 스크롤로 지도를 확대/축소",
 
     "player.play": "재생",
     "player.pause": "일시정지",

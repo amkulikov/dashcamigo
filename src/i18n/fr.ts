@@ -309,6 +309,8 @@ export const frDict = {
     "map.ctrl.resetBearing": "Réinitialiser l'orientation vers le nord",
     "map.ctrl.attribution": "Attribution de la carte",
     "map.coop.twoFingers": "Déplace la carte avec deux doigts",
+    "map.coop.ctrlScroll": "Ctrl + molette pour zoomer la carte",
+    "map.coop.cmdScroll": "⌘ + molette pour zoomer la carte",
 
     "player.play": "Lecture",
     "player.pause": "Pause",

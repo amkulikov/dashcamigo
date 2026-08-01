@@ -131,6 +131,54 @@ test.describe("mobile landscape", () => {
         await loadTrip(page, SAMPLE_70MAI);
     });
 
+    test("stacked layout yields plain wheel to the page scroll", async ({ page }) => {
+        // The reported trap: video (and map) consumed the wheel, so a short
+        // viewport could never scroll down to the timeline. Plain wheel must
+        // fall through to .viewer (the stacked scroll container); zoom moves
+        // to Ctrl/Cmd+wheel, mirroring the map's cooperative gestures.
+        const video = await boxOf(page, "#video-grid");
+        await page.mouse.move(video.x + video.width / 2, video.y + video.height / 2);
+
+        // The cooperative bypass zooms. Checked before any scrolling so the
+        // cursor is still guaranteed to sit on the active video element.
+        await page.keyboard.down("Control");
+        await page.mouse.wheel(0, -200);
+        await page.keyboard.up("Control");
+        await expect
+            .poll(() =>
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                page.evaluate(() => (window as any).__dashcamigo.state.videoZoom.scale),
+            )
+            .toBeGreaterThan(1);
+        // Back to the neutral scale so the plain-wheel check below starts clean.
+        await page.keyboard.down("Control");
+        await page.mouse.wheel(0, 800);
+        await page.keyboard.up("Control");
+        await expect
+            .poll(() =>
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                page.evaluate(() => (window as any).__dashcamigo.state.videoZoom.scale),
+            )
+            .toBe(1);
+
+        await page.mouse.wheel(0, 300);
+        await expect
+            .poll(() => page.evaluate(() => document.querySelector(".viewer")?.scrollTop ?? 0), "plain wheel scrolls")
+            .toBeGreaterThan(0);
+        const zoomAfterPlain = await page.evaluate(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            () => (window as any).__dashcamigo.state.videoZoom.scale,
+        );
+        expect(zoomAfterPlain, "plain wheel does not zoom the video").toBe(1);
+
+        // The map runs MapLibre cooperative gestures in this layout even on a
+        // fine pointer - the overlay hint (with the Ctrl/Cmd message) exists,
+        // which means the wheel is not trapped by the map either.
+        await page.locator("#player-map").click();
+        await expect(page.locator("#player-wrap")).toHaveClass(/map-expanded/);
+        await expect(page.locator(".maplibregl-cooperative-gesture-screen")).toBeAttached();
+    });
+
     test("export panel is in-flow, not a right drawer squeezing the player", async ({ page }) => {
         await openMobileExport(page);
         const panel = await boxOf(page, "#export-panel");

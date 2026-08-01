@@ -308,6 +308,8 @@ export const esDict = {
     "map.ctrl.resetBearing": "Restablecer orientación al norte",
     "map.ctrl.attribution": "Atribución del mapa",
     "map.coop.twoFingers": "Mueve el mapa con dos dedos",
+    "map.coop.ctrlScroll": "Ctrl + rueda para hacer zoom en el mapa",
+    "map.coop.cmdScroll": "⌘ + rueda para hacer zoom en el mapa",
 
     "player.play": "Reproducir",
     "player.pause": "Pausa",

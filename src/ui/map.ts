@@ -25,7 +25,13 @@ import { createLogger } from "../log.js";
 import { emitLifecycle } from "../perf.js";
 import { interpolatePosition } from "../parser.js";
 import { captureSentryMessage } from "../sentry.js";
-import { COARSE_POINTER_QUERY, isCoarsePointer, prefersReducedMotion } from "./media-queries.js";
+import {
+    COARSE_POINTER_QUERY,
+    MOBILE_LAYOUT_QUERY,
+    isCoarsePointer,
+    isMobileLayout,
+    prefersReducedMotion,
+} from "./media-queries.js";
 import type { GpsRecord } from "../parser.js";
 import { displayClockDate, wallToContentSec, type Trip, type TripFrame } from "../trips.js";
 import { getViewPanels, setPanelAvailable, setPanelVisible, subscribeViewPanels } from "./view-menu.js";
@@ -607,13 +613,14 @@ export function ensureMap(): maplibregl.Map | null {
             // setStyle(diff:false) theme-swap path, so the heavy style is not
             // re-validated on theme toggle either.
             validateStyle: false,
-            // Cooperative gestures ON only on touch (coarse pointer): there one
-            // finger must scroll the page and two fingers move the map - otherwise
-            // the map traps a single-finger pan and the user can't scroll past it.
-            // A mouse never triggers this (no Ctrl+scroll is ever imposed), so a
-            // narrow desktop window keeps plain wheel-zoom. syncCooperativeGestures()
-            // resyncs if the pointer type changes (mouse plugged into a tablet).
-            cooperativeGestures: isCoarsePointer(),
+            // Cooperative gestures whenever the page can scroll past the map:
+            // on touch, one finger must scroll and two move the map; in the
+            // stacked layout the same holds for the wheel on any pointer -
+            // otherwise a squeezed desktop window can never scroll down to the
+            // timeline (zoom moves to Ctrl/Cmd+scroll, with MapLibre's own
+            // overlay hint). The wide desktop split keeps plain wheel-zoom.
+            // syncCooperativeGestures() resyncs on pointer/layout flips.
+            cooperativeGestures: isCoarsePointer() || isMobileLayout(),
             // Localized overlay text ("use two fingers"). MapLibre bakes it into the
             // DOM at enable() time from this table; langchange refresh via
             // localizeCooperativeOverlay() below.
@@ -3160,9 +3167,12 @@ export function initMap(cb: MapCallbacks): void {
     initMiniMapHover();
 
     // Toggle cooperative gestures if the pointer type flips (a mouse attached to /
-    // detached from a convertible, which switches coarse<->fine). The map is
-    // created lazily, so the handler no-ops until ensureMap has run.
+    // detached from a convertible, which switches coarse<->fine) or the layout
+    // crosses the stacked-mode boundary (window resized across the mobile
+    // media). The map is created lazily, so the handler no-ops until ensureMap
+    // has run.
     window.matchMedia?.(COARSE_POINTER_QUERY).addEventListener("change", syncCooperativeGestures);
+    window.matchMedia?.(MOBILE_LAYOUT_QUERY).addEventListener("change", syncCooperativeGestures);
 }
 
 /**
@@ -3189,24 +3199,30 @@ function localizeMapNavControls(): void {
 }
 
 /**
- * MapLibre locale patch for the cooperative-gestures overlay. Only the mobile
- * "two fingers" message is set: cooperative gestures are touch-only here, so the
- * desktop Ctrl/Cmd-scroll message never renders (and is not in our dictionaries).
+ * MapLibre locale patch for the cooperative-gestures overlay: the touch "two
+ * fingers" message plus the wheel-bypass one. MapLibre picks Windows vs Mac by
+ * platform sniff - the bypass key is Cmd on a Mac, Ctrl everywhere else - and
+ * its own CSS decides which of the two baked messages is shown.
  */
 function cooperativeLocale(): Record<string, string> {
-    return { "CooperativeGesturesHandler.MobileHelpText": t("map.coop.twoFingers") };
+    return {
+        "CooperativeGesturesHandler.MobileHelpText": t("map.coop.twoFingers"),
+        "CooperativeGesturesHandler.WindowsHelpText": t("map.coop.ctrlScroll"),
+        "CooperativeGesturesHandler.MacHelpText": t("map.coop.cmdScroll"),
+    };
 }
 
 /**
- * Enables cooperative gestures on touch (one finger scrolls the page, two move
- * the map), disables them on a mouse. Idempotent; no-op until the map exists.
- * Called on pointer-type flips; the construction option sets the initial state.
+ * Enables cooperative gestures on touch and in the stacked layout (the page
+ * must be scrollable past the map there), disables them in the wide desktop
+ * split. Idempotent; no-op until the map exists. Called on pointer-type and
+ * layout flips; the construction option sets the initial state.
  */
 function syncCooperativeGestures(): void {
     const map = state.map;
     if (!map) return;
     const handler = map.cooperativeGestures;
-    const want = isCoarsePointer();
+    const want = isCoarsePointer() || isMobileLayout();
     if (want && !handler.isEnabled()) {
         handler.enable();
         // enable() rebuilds the overlay from map._locale, which still holds the
@@ -3225,10 +3241,18 @@ function syncCooperativeGestures(): void {
  */
 function localizeCooperativeOverlay(): void {
     if (!state.map) return;
-    const msg = state.map
-        .getContainer()
-        .querySelector<HTMLElement>(".maplibregl-cooperative-gesture-screen .maplibregl-mobile-message");
-    if (msg) msg.textContent = t("map.coop.twoFingers");
+    const screen = state.map.getContainer().querySelector<HTMLElement>(".maplibregl-cooperative-gesture-screen");
+    if (!screen) return;
+    const mobileMsg = screen.querySelector<HTMLElement>(".maplibregl-mobile-message");
+    if (mobileMsg) mobileMsg.textContent = t("map.coop.twoFingers");
+    // Same platform sniff MapLibre's handler uses for its bypass key: the
+    // desktop message must name the key the handler actually honors.
+    const desktopMsg = screen.querySelector<HTMLElement>(".maplibregl-desktop-message");
+    if (desktopMsg) {
+        desktopMsg.textContent = navigator.userAgent.includes("Mac")
+            ? t("map.coop.cmdScroll")
+            : t("map.coop.ctrlScroll");
+    }
 }
 
 /**

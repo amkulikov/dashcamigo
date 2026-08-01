@@ -308,6 +308,8 @@ export const enDict = {
     "map.ctrl.resetBearing": "Reset bearing to north",
     "map.ctrl.attribution": "Map attribution",
     "map.coop.twoFingers": "Use two fingers to move the map",
+    "map.coop.ctrlScroll": "Use Ctrl + scroll to zoom the map",
+    "map.coop.cmdScroll": "Use ⌘ + scroll to zoom the map",
 
     "player.play": "Play",
     "player.pause": "Pause",

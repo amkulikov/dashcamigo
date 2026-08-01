@@ -307,6 +307,8 @@ export const ptDict = {
     "map.ctrl.resetBearing": "Redefinir orientação para o norte",
     "map.ctrl.attribution": "Atribuição do mapa",
     "map.coop.twoFingers": "Mova o mapa com dois dedos",
+    "map.coop.ctrlScroll": "Ctrl + rolagem para dar zoom no mapa",
+    "map.coop.cmdScroll": "⌘ + rolagem para dar zoom no mapa",
 
     "player.play": "Tocar",
     "player.pause": "Pausar",
