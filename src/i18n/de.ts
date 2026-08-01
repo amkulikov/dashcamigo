@@ -179,6 +179,8 @@ export const deDict = {
     "sidebar.sort.options.size": "Größe",
     "sidebar.sort.dir.desc": "Absteigend",
     "sidebar.sort.dir.asc": "Aufsteigend",
+    "sidebar.collapse": "Fahrtenliste ausblenden",
+    "sidebar.expand": "Fahrtenliste einblenden",
     "sidebar.resize": "Seitenleiste anpassen",
     "sidebar.unindexed.title": "Konnte nicht indiziert werden",
     "sidebar.unindexed.note": "{n, plural, one {# Datei} other {# Dateien}} — siehe Konsole",

@@ -251,6 +251,8 @@ export const dom = {
     sortKey: $id<HTMLSelectElement>("trip-sort-key"),
     sortDir: $id<HTMLButtonElement>("trip-sort-dir"),
     sidebarResize: $id<HTMLDivElement>("sidebar-resize"),
+    sidebarCollapseBtn: $id<HTMLButtonElement>("sidebar-collapse"),
+    sidebarExpandTab: $id<HTMLButtonElement>("sidebar-expand"),
     sidebar: $sel<HTMLElement>(".sidebar"),
     drawerScrim: $id<HTMLElement>("drawer-scrim"),
     topbarBurger: $id<HTMLButtonElement>("topbar-burger"),

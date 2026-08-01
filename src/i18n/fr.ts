@@ -181,6 +181,8 @@ export const frDict = {
     "sidebar.sort.options.size": "Taille",
     "sidebar.sort.dir.desc": "Décroissant",
     "sidebar.sort.dir.asc": "Croissant",
+    "sidebar.collapse": "Masquer la liste des trajets",
+    "sidebar.expand": "Afficher la liste des trajets",
     "sidebar.resize": "Redimensionner la barre latérale",
     "sidebar.unindexed.title": "Indexation impossible",
     "sidebar.unindexed.note": "{n, plural, one {# fichier} other {# fichiers}} — voir la console",

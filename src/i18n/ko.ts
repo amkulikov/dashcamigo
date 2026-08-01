@@ -188,6 +188,8 @@ export const koDict = {
     "sidebar.sort.options.size": "크기",
     "sidebar.sort.dir.desc": "내림차순",
     "sidebar.sort.dir.asc": "오름차순",
+    "sidebar.collapse": "주행 목록 숨기기",
+    "sidebar.expand": "주행 목록 표시",
     "sidebar.resize": "사이드바 너비 조절",
     "sidebar.unindexed.title": "색인 실패",
     "sidebar.unindexed.note": "{n} 개 파일 — 콘솔 참고",

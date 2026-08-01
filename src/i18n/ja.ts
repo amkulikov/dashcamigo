@@ -189,6 +189,8 @@ export const jaDict = {
     "sidebar.sort.options.size": "サイズ",
     "sidebar.sort.dir.desc": "降順",
     "sidebar.sort.dir.asc": "昇順",
+    "sidebar.collapse": "走行リストを隠す",
+    "sidebar.expand": "走行リストを表示",
     "sidebar.resize": "サイドバーの幅を変更",
     "sidebar.unindexed.title": "インデックスできませんでした",
     "sidebar.unindexed.note": "{n} 件のファイル — コンソールを参照",

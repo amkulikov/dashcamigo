@@ -230,6 +230,8 @@ export type I18nKey =
     | "sidebar.sort.options.size"
     | "sidebar.sort.dir.desc"
     | "sidebar.sort.dir.asc"
+    | "sidebar.collapse"
+    | "sidebar.expand"
     | "sidebar.resize"
     | "sidebar.unindexed.title"
     | "sidebar.unindexed.note"

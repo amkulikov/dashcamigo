@@ -806,6 +806,77 @@
 }
 
 /* =========================================================================
+   SIDEBAR COLLAPSE (desktop)
+   body.sidebar-collapsed frees the whole sidebar column - same 0-track
+   mechanics as the export-mode slide-away (export-panel.css). Scoped to the
+   complementary desktop media so it never touches the mobile drawer, which
+   reuses the same .sidebar element with position:fixed.
+   ========================================================================= */
+/* The edge tab that brings the list back. Hidden until collapsed; sits at
+   the layout's left edge (main.layout is position:relative), above the
+   viewer content. */
+.sidebar-expand-tab {
+    display: none;
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 30;
+    width: 20px;
+    height: 64px;
+    padding: 0;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-elev-2);
+    color: var(--fg-dim);
+    border: 1px solid var(--border);
+    border-left: 0;
+    border-radius: 0 var(--dc-radius-md) var(--dc-radius-md) 0;
+    cursor: pointer;
+    transition:
+        background var(--dc-dur-fast) var(--dc-ease),
+        color var(--dc-dur-fast) var(--dc-ease);
+}
+.sidebar-expand-tab:hover {
+    background: var(--bg-hover);
+    color: var(--fg);
+}
+.sidebar-expand-tab:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+@media (min-width: 768px) and (min-height: 501px) {
+    body.sidebar-collapsed main.layout {
+        grid-template-columns: 0 0 minmax(0, 1fr);
+    }
+    /* visibility, NOT display:none: the viewer has no explicit grid-column
+       and auto-places after these two boxes - removing them from the flow
+       would slide it into the 0-width first track (a black screen).
+       visibility keeps the boxes (and the placement) while hiding paint,
+       focus and the a11y subtree; export-mode solves the same problem with
+       transform+opacity. This media excludes the drawer layouts, so the
+       fixed-position drawer styles never coexist with the collapse. */
+    body.sidebar-collapsed .sidebar,
+    body.sidebar-collapsed .sidebar-resize {
+        visibility: hidden;
+    }
+    /* :not(.export-mode): export slides the sidebar away on its own
+       (export-panel.css) and ignores this class - the tab would show but
+       clicking it could not bring the list back, so it hides for the
+       duration and returns when export mode ends. */
+    body.sidebar-collapsed:not(.export-mode) .sidebar-expand-tab {
+        display: inline-flex;
+    }
+}
+/* The collapse chevron lives among the sort controls; it is desktop-only -
+   the mobile drawer closes via the burger/scrim instead. */
+@media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {
+    .sidebar-collapse-btn {
+        display: none;
+    }
+}
+
+/* =========================================================================
    MOBILE DRAWER (< 768px)
    On mobile the sidebar becomes an off-canvas drawer that slides in from
    the left via translateX. Opening/closing is via the data-drawer-open

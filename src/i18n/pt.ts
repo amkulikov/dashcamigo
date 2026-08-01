@@ -179,6 +179,8 @@ export const ptDict = {
     "sidebar.sort.options.size": "Tamanho",
     "sidebar.sort.dir.desc": "Decrescente",
     "sidebar.sort.dir.asc": "Crescente",
+    "sidebar.collapse": "Ocultar a lista de viagens",
+    "sidebar.expand": "Mostrar a lista de viagens",
     "sidebar.resize": "Mudar largura da barra lateral",
     "sidebar.unindexed.title": "Não consegui indexar",
     "sidebar.unindexed.note": "{n, plural, one {# arquivo} other {# arquivos}} — veja o console",

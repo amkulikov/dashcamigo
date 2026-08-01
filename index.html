@@ -705,6 +705,16 @@
                     <button id="trip-sort-dir" class="sort-btn" type="button"
                             data-i18n-attr="aria-label:sidebar.sort.dir.desc,title:sidebar.sort.dir.desc"
                             aria-label="Descending" title="Descending">↓</button>
+                    <!-- Collapse the whole trip list (desktop only; the mobile
+                         drawer has the burger). Counterpart: #sidebar-expand,
+                         the edge tab that brings the list back. -->
+                    <button id="sidebar-collapse" class="sort-btn sidebar-collapse-btn" type="button"
+                            data-i18n-attr="aria-label:sidebar.collapse,title:sidebar.collapse"
+                            aria-label="Hide the trip list" title="Hide the trip list"
+                            aria-expanded="true" aria-controls="sidebar">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/></svg>
+                    </button>
                 </div>
             </div>
             <!-- Compact CTA button for adding files. label[for="folder-input"]
@@ -727,6 +737,17 @@
         <div id="sidebar-resize" class="sidebar-resize" role="separator" aria-orientation="vertical"
              data-i18n-attr="aria-label:sidebar.resize"
              aria-label="Resize sidebar" tabindex="0"></div>
+
+        <!-- Edge tab shown only while the trip list is collapsed
+             (body.sidebar-collapsed) - the way back without the mouse-resize
+             dance. Absolutely positioned at the layout's left edge. -->
+        <button id="sidebar-expand" class="sidebar-expand-tab" type="button"
+                data-i18n-attr="aria-label:sidebar.expand,title:sidebar.expand"
+                aria-label="Show the trip list" title="Show the trip list"
+                aria-expanded="false" aria-controls="sidebar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 17 5-5-5-5"/><path d="m13 17 5-5-5-5"/></svg>
+        </button>
 
         <section class="viewer">
             <!-- Landing sections for body.no-trips (initial state, nothing

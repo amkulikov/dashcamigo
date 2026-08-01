@@ -1,5 +1,7 @@
 // Drag handle between sidebar and main area. Width stored in --sidebar-width on :root and persisted to localStorage.
 // mousemove is on document because the cursor can escape the handle during fast drags.
+// Also owns the collapse toggle (body.sidebar-collapsed + the edge tab) -
+// collapse is the other way the user manages the same column's width.
 
 import { dom } from "./dom.js";
 
@@ -36,8 +38,28 @@ function restoreSidebarWidth(): void {
     }
 }
 
+/** Applies the collapsed state to the DOM: the body class drives the CSS
+ *  (0-track column + edge tab visibility), aria-expanded mirrors it on both
+ *  toggles for screen readers. */
+function applySidebarCollapsed(collapsed: boolean): void {
+    document.body.classList.toggle("sidebar-collapsed", collapsed);
+    dom.sidebarCollapseBtn.setAttribute("aria-expanded", String(!collapsed));
+    dom.sidebarExpandTab.setAttribute("aria-expanded", String(!collapsed));
+}
+
+function setSidebarCollapsed(collapsed: boolean): void {
+    applySidebarCollapsed(collapsed);
+    // The vanished control would strand keyboard focus on a hidden element;
+    // hand it to the counterpart so Tab keeps working from the same spot.
+    (collapsed ? dom.sidebarExpandTab : dom.sidebarCollapseBtn).focus();
+}
+
 export function initSidebarResize(): void {
     restoreSidebarWidth();
+    // Session-only on purpose (no persistence): a fresh page always shows the
+    // list - it is the only way to pick a trip to watch.
+    dom.sidebarCollapseBtn.addEventListener("click", () => setSidebarCollapsed(true));
+    dom.sidebarExpandTab.addEventListener("click", () => setSidebarCollapsed(false));
 
     let sidebarDragging = false;
 

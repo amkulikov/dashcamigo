@@ -180,6 +180,8 @@ export const enDict = {
     "sidebar.sort.options.size": "Size",
     "sidebar.sort.dir.desc": "Descending",
     "sidebar.sort.dir.asc": "Ascending",
+    "sidebar.collapse": "Hide the trip list",
+    "sidebar.expand": "Show the trip list",
     "sidebar.resize": "Resize sidebar",
     "sidebar.unindexed.title": "Couldn't index",
     "sidebar.unindexed.note": "{n, plural, one {# file} other {# files}} — see console",

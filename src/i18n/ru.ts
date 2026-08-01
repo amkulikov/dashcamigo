@@ -184,6 +184,8 @@ export const ruDict = {
     "sidebar.sort.options.size": "Размер",
     "sidebar.sort.dir.desc": "По убыванию",
     "sidebar.sort.dir.asc": "По возрастанию",
+    "sidebar.collapse": "Скрыть список поездок",
+    "sidebar.expand": "Показать список поездок",
     "sidebar.resize": "Изменить ширину сайдбара",
     "sidebar.unindexed.title": "Не удалось проиндексировать",
     "sidebar.unindexed.note": "{n, plural, one {# файл} few {# файла} other {# файлов}} — см. консоль",

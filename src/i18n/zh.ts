@@ -178,6 +178,8 @@ export const zhDict = {
     "sidebar.sort.options.size": "大小",
     "sidebar.sort.dir.desc": "降序",
     "sidebar.sort.dir.asc": "升序",
+    "sidebar.collapse": "隐藏行程列表",
+    "sidebar.expand": "显示行程列表",
     "sidebar.resize": "调整侧栏宽度",
     "sidebar.unindexed.title": "无法索引",
     "sidebar.unindexed.note": "{n, plural, other {# 个文件}}，见控制台",

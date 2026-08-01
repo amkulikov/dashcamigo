@@ -179,6 +179,8 @@ export const plDict = {
     "sidebar.sort.options.size": "Rozmiar",
     "sidebar.sort.dir.desc": "Malejąco",
     "sidebar.sort.dir.asc": "Rosnąco",
+    "sidebar.collapse": "Ukryj listę przejazdów",
+    "sidebar.expand": "Pokaż listę przejazdów",
     "sidebar.resize": "Zmień szerokość paska bocznego",
     "sidebar.unindexed.title": "Nie udało się zindeksować",
     "sidebar.unindexed.note": "{n, plural, one {# plik} few {# pliki} many {# plików} other {# pliku}} — patrz konsola",

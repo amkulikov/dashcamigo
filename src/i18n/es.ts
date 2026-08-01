@@ -180,6 +180,8 @@ export const esDict = {
     "sidebar.sort.options.size": "Tamaño",
     "sidebar.sort.dir.desc": "Descendente",
     "sidebar.sort.dir.asc": "Ascendente",
+    "sidebar.collapse": "Ocultar la lista de trayectos",
+    "sidebar.expand": "Mostrar la lista de trayectos",
     "sidebar.resize": "Cambiar ancho de la barra lateral",
     "sidebar.unindexed.title": "No se pudo indexar",
     "sidebar.unindexed.note": "{n, plural, one {# archivo} other {# archivos}} — mira la consola",
