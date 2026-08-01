@@ -35,7 +35,7 @@ export async function loadChart(): Promise<void> {
     ChartClass = chartMod.Chart;
 }
 
-import { gMagnitude } from "../events.js";
+import { gMagnitude, hasAccelData } from "../events.js";
 import type { TripEvent } from "../events.js";
 import {
     inferredSegmentsAtRelSec,
@@ -652,7 +652,7 @@ export function initChart(cb: ChartCallbacks): void {
                     grid: { color: `${tc.chartGrid}33` },
                     // UX-16: vertical title hidden - unit label lives as .chart-axis-label--speed overlay in HTML.
                     title: { display: false },
-                    afterFit: enforceTouchGutterAxisWidth,
+                    afterFit: enforceEdgeGutterAxisWidth,
                 },
                 yAccel: {
                     type: "linear",
@@ -662,7 +662,7 @@ export function initChart(cb: ChartCallbacks): void {
                     grid: { display: false },
                     // UX-16: see ySpeed.title above.
                     title: { display: false },
-                    afterFit: enforceTouchGutterAxisWidth,
+                    afterFit: enforceEdgeGutterAxisWidth,
                 },
             },
             plugins: {
@@ -1492,25 +1492,32 @@ export function setPlayerCursorRelSec(relSec: number | null): void {
  * ~24dp by default (user-tunable up to ~40), iOS arms swipe-back at ~20-27pt.
  * No in-page CSS/JS can suppress those system gestures, so a layout inset is
  * the only reliable mitigation. Enforced as a minimum Y-axis width while the
- * chart canvas is visible (see enforceTouchGutterAxisWidth) and synthesized in
+ * chart canvas is visible (see enforceEdgeGutterAxisWidth) and synthesized in
  * getTimelineView when it is hidden.
  */
 const TIMELINE_EDGE_GUTTER_TOUCH_PX = 28;
-/** Hidden-canvas gutter on fine pointers: just enough that the playhead and
- *  the 12px progress thumb do not clip against the container edges. */
+/** Fine-pointer gutter floor: just enough that the playhead, the 12px
+ *  progress thumb and the 16px export pull-tabs (centered on the plot edge)
+ *  do not clip against the container edges. Matters as an axis-width floor
+ *  when a Y axis is hidden (accel-less trip hides yAccel - a display:false
+ *  scale fits to width 0, putting the plot edge at the very container edge)
+ *  and as the synthetic gutter when the whole canvas is hidden. */
 const TIMELINE_EDGE_GUTTER_MOUSE_PX = 12;
 /** Cap so the synthetic gutter never eats a meaningful share of a tiny host. */
 const MAX_SYNTHETIC_GUTTER_FRAC = 0.1;
 
 /**
- * afterFit for both Y axes: on touch, widen the axis to the gesture-safe
- * gutter. Going through the axis width (not CSS padding or a frac override)
- * keeps xScale.left/right the single geometry truth, so the ruler, strip,
- * playhead and range tabs all follow via getTimelineView with no extra sync.
+ * afterFit for both Y axes: widen the axis to the pointer-appropriate edge
+ * gutter (gesture-safe on touch, clip-safe on mouse). Going through the axis
+ * width (not CSS padding or a frac override) keeps xScale.left/right the
+ * single geometry truth, so the ruler, strip, playhead and range tabs all
+ * follow via getTimelineView with no extra sync. Runs (and reserves width)
+ * even for a display:false scale - that is what keeps the right gutter alive
+ * when the accel axis is hidden.
  */
-function enforceTouchGutterAxisWidth(axis: { width: number }): void {
-    if (!isCoarsePointer()) return;
-    axis.width = Math.max(axis.width, TIMELINE_EDGE_GUTTER_TOUCH_PX);
+function enforceEdgeGutterAxisWidth(axis: { width: number }): void {
+    const gutterPx = isCoarsePointer() ? TIMELINE_EDGE_GUTTER_TOUCH_PX : TIMELINE_EDGE_GUTTER_MOUSE_PX;
+    axis.width = Math.max(axis.width, gutterPx);
 }
 
 /**
@@ -1675,12 +1682,19 @@ export function rebuildChartFromTrip(trip: Trip): void {
     // CSS) they would overflow the canvas height and break layout. The x-axis and
     // file-boundary lines (cursorPlugin) stay - the timeline is useless without them.
     const noGps = speedData.length === 0;
+    // A format without an accelerometer (e.g. GPS-only embedded tracks) yields
+    // all-zero |G| - a flat line at 0 reads as "no G-force ever", so hide the
+    // curve, its axis and the "g" unit overlay instead of charting zeros.
+    const hasAccel = hasAccelData(trip.records);
+    state.chart.data.datasets[1]!.hidden = !hasAccel;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ySpeedOpts = state.chart.options.scales!.ySpeed as any;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const yAccelOpts = state.chart.options.scales!.yAccel as any;
     ySpeedOpts.display = !noGps;
-    yAccelOpts.display = !noGps;
+    yAccelOpts.display = !noGps && hasAccel;
+    const accelAxisLabel = document.querySelector<HTMLElement>(".chart-axis-label--accel");
+    if (accelAxisLabel) accelAxisLabel.hidden = !hasAccel;
     state.chart.update("none");
 
     syncChartRulers();

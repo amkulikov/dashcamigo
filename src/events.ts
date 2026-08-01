@@ -109,6 +109,31 @@ export function gMagnitude(rec: GpsRecord): number {
 }
 
 /**
+ * Noise floor separating "camera ships an accelerometer" from "parser filled
+ * zeros because the format carries no G data". A real sensor's gravity-removed
+ * readings jitter well above this on any drive; a format without accel produces
+ * exact zeros on every record.
+ */
+const ACCEL_PRESENT_EPSILON_G = 0.001;
+
+// Presence is per-trip-constant but O(records) to compute; the chart rebuild
+// and every hover tooltip ask repeatedly, so memoize on the records array.
+const accelPresenceCache = new WeakMap<GpsRecord[], boolean>();
+
+/**
+ * Whether the record array carries real accelerometer data. False when the
+ * format has no G channel (all magnitudes at zero) - callers hide the |G|
+ * curve/axis and tooltip rows instead of showing a flat zero line.
+ */
+export function hasAccelData(records: GpsRecord[]): boolean {
+    const cached = accelPresenceCache.get(records);
+    if (cached !== undefined) return cached;
+    const present = records.some((rec) => gMagnitude(rec) > ACCEL_PRESENT_EPSILON_G);
+    accelPresenceCache.set(records, present);
+    return present;
+}
+
+/**
  * Detects all events in a trip GPS record array.
  *
  * Records must be sorted by unixSeconds (as in Trip.records after finalizeTrip).

@@ -4,7 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { detectEvents, getBrakeThresholdG, gMagnitude, setBrakeThresholdG } from "./events.js";
+import { detectEvents, getBrakeThresholdG, gMagnitude, hasAccelData, setBrakeThresholdG } from "./events.js";
 import type { GpsRecord } from "./parsers/types.js";
 
 function rec(unixSeconds: number, accel: [number, number, number]): GpsRecord {
@@ -43,6 +43,37 @@ describe("gMagnitude", () => {
     it("symmetric in sign (|x| of negative components)", () => {
         expect(gMagnitude(rec(0, [-0.3, -0.4, 0]))).toBeCloseTo(0.5, 9);
         expect(gMagnitude(rec(0, [-1, 1, -1]))).toBeCloseTo(Math.sqrt(3), 9);
+    });
+});
+
+describe("hasAccelData", () => {
+    it("reports absent accel on an all-zero record array", () => {
+        const records = [rec(0, [0, 0, 0]), rec(1, [0, 0, 0]), rec(2, [0, 0, 0])];
+        expect(hasAccelData(records)).toBe(false);
+    });
+
+    it("reports absent accel on an empty array", () => {
+        expect(hasAccelData([])).toBe(false);
+    });
+
+    it("reports present accel when any record exceeds the noise floor", () => {
+        const records = [rec(0, [0, 0, 0]), rec(1, [0, 0.02, 0]), rec(2, [0, 0, 0])];
+        expect(hasAccelData(records)).toBe(true);
+    });
+
+    it("treats sub-noise-floor jitter as absent", () => {
+        // Below ACCEL_PRESENT_EPSILON_G (0.001) on every record.
+        const records = [rec(0, [0.0002, 0, 0]), rec(1, [0, 0.0003, 0])];
+        expect(hasAccelData(records)).toBe(false);
+    });
+
+    it("memoizes per record-array identity", () => {
+        const records = [rec(0, [0.5, 0, 0])];
+        expect(hasAccelData(records), "first call computes").toBe(true);
+        // Mutating the array does not change the cached verdict - presence is
+        // keyed on the array identity, which is stable for a finalized trip.
+        records[0] = rec(0, [0, 0, 0]);
+        expect(hasAccelData(records), "cached verdict survives mutation").toBe(true);
     });
 });
 

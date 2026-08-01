@@ -18,7 +18,7 @@ import type * as maplibregl from "maplibre-gl";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 
 import { probeWebGL } from "../capabilities.js";
-import { gMagnitude } from "../events.js";
+import { gMagnitude, hasAccelData } from "../events.js";
 import { escapeHtml } from "../escape.js";
 import { getDateLocale, t } from "../i18n/index.js";
 import { createLogger } from "../log.js";
@@ -1694,7 +1694,12 @@ export function buildRecordPopupHtml(rec: GpsRecord, trip: Trip): string {
     const speedFmt = formatSpeedFromMs(rec.speedMs);
     const speedStr = speedFmt.value.toFixed(0);
     const speedUnitKey = speedFmt.unitKey;
-    const gMag = gMagnitude(rec).toFixed(2);
+    // No accelerometer in this format - drop the G rows entirely rather than
+    // show a constant 0.00 (same rule as the hidden |G| curve on the chart).
+    const gRows = hasAccelData(trip.records)
+        ? `<div class="track-popup-row"><span class="track-popup-label">${t("popup.label.gMag")}</span><span>${gMagnitude(rec).toFixed(2)} g</span></div>
+            <div class="track-popup-row mono"><span class="track-popup-label">${t("popup.label.aXYZ")}</span><span>${rec.accelXg.toFixed(2)} · ${rec.accelYg.toFixed(2)} · ${rec.accelZg.toFixed(2)}</span></div>`
+        : "";
     // mp4Filename is user-controlled (70mai: CSV field[9]; GPX: matched MP4
     // basename; embedded: File.name). The user may have renamed the file to
     // anything, including HTML/JS injection - escape before innerHTML/setHTML.
@@ -1704,8 +1709,7 @@ export function buildRecordPopupHtml(rec: GpsRecord, trip: Trip): string {
         <div class="track-popup">
             <div class="track-popup-title">${titleStr}</div>
             <div class="track-popup-row"><span class="track-popup-label">${t("popup.label.speed")}</span><span>${speedStr} ${t(speedUnitKey)}</span></div>
-            <div class="track-popup-row"><span class="track-popup-label">${t("popup.label.gMag")}</span><span>${gMag} g</span></div>
-            <div class="track-popup-row mono"><span class="track-popup-label">${t("popup.label.aXYZ")}</span><span>${rec.accelXg.toFixed(2)} · ${rec.accelYg.toFixed(2)} · ${rec.accelZg.toFixed(2)}</span></div>
+            ${gRows}
             <div class="track-popup-row mono"><span class="track-popup-label">${t("popup.label.coords")}</span><span>${rec.lat.toFixed(5)}, ${rec.lon.toFixed(5)}</span></div>
             <div class="track-popup-row mono"><span class="track-popup-label">${t("popup.label.file")}</span><span>${fileStr}</span></div>
         </div>
