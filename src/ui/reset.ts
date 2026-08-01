@@ -82,11 +82,12 @@ export async function resetAllAppState(): Promise<void> {
         log.warn("cookies clear failed", err);
     }
 
-    // 4) IndexedDB. We don't open any DBs ourselves, but third-party
-    // libraries (MapLibre tile cache, Mediabunny, browser-internal SW
-    // bookkeeping in some engines) might. indexedDB.databases() is the
-    // standard enumeration API (Chrome, Firefox 119+, Safari 17+); on
-    // older browsers we skip it.
+    // 4) IndexedDB. Includes our own persist database (remembered folders,
+    // annotations, cached indexing - wiping those is the point of the Danger
+    // zone) plus anything third-party libraries opened (MapLibre tile cache,
+    // Mediabunny, browser-internal SW bookkeeping in some engines).
+    // indexedDB.databases() is the standard enumeration API (Chrome,
+    // Firefox 119+, Safari 17+); on older browsers we skip it.
     if (typeof indexedDB !== "undefined" && typeof indexedDB.databases === "function") {
         try {
             const dbs = await indexedDB.databases();

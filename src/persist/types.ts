@@ -1,0 +1,95 @@
+// Contracts for the persistent-folder feature: remembered folder handles, the
+// versioned index cache and user annotations. Everything here is stored in
+// IndexedDB (db.ts) and must stay structured-cloneable: no live File objects,
+// no Date instances (epoch-ms numbers only). FileSystemHandle objects are the
+// one exception - browsers clone them natively, which is the whole mechanism
+// this feature stands on.
+
+/**
+ * Bumped by hand whenever indexing/parsing semantics change in a way that
+ * makes cached results stale (new extractor, changed classification, fixed
+ * timestamp derivation, ...). A mismatch invalidates the whole cache and the
+ * folder is re-indexed in full on next open. Deliberately one global version:
+ * per-extractor granularity would need a dependency matrix (classify + source
+ * hints + extractors + sidecars) that is easy to get wrong, and a silently
+ * stale cache is worse than one extra re-index.
+ */
+export const INDEX_CACHE_VERSION = 1;
+
+/**
+ * Cheap cross-session identity of a file inside a picked folder, matchable
+ * from directory enumeration alone (no byte reads). No content hash on
+ * purpose: dashcams loop-record onto reused filenames, and (size,
+ * lastModified) catches an overwrite at the same path. Mirrors the in-session
+ * vendorFileKey and the ingest dedup (name, size) grouping.
+ */
+export interface FileIdentity {
+    /** Path relative to the remembered folder root, filename included. */
+    relativePath: string;
+    size: number;
+    lastModified: number;
+}
+
+/**
+ * A folder the user explicitly asked to remember. The handle is the live
+ * FileSystemDirectoryHandle persisted via structured clone; permission on it
+ * must be re-verified on every restore (queryPermission does NOT check that
+ * the folder still exists - only an actual read does). An unavailable folder
+ * (unplugged drive, revoked permission) stays in the list greyed out; it is
+ * never auto-deleted.
+ */
+export interface RememberedFolder {
+    id: string;
+    handle: FileSystemDirectoryHandle;
+    /** Display name, captured from handle.name at remember time. */
+    label: string;
+    addedAt: number;
+    /** Drives "auto-restore the most recently used folder" on startup. */
+    lastOpenedAt: number;
+    /** Annotations sidecar file inside (or near) the folder; absent until the
+     *  user completes the one-time save-picker flow. */
+    sidecarHandle?: FileSystemFileHandle;
+}
+
+/**
+ * Anchor for trip-level annotations. Trips are derived entities - regrouping
+ * (parser version bump, trip-gap setting) rebuilds them - so annotations
+ * anchor to the identity of the trip's first video file plus its start time,
+ * and re-attach to whichever trip contains that file after a restore.
+ */
+export interface TripAnchor {
+    /** fileIdentityKey() of the trip's first video file. */
+    fileIdentityKey: string;
+    /** Trip start, epoch ms UTC. */
+    startUtc: number;
+}
+
+interface AnnotationBase {
+    id: string;
+    /** RememberedFolder.id the annotation belongs to. */
+    folderId: string;
+    /** Last-write-wins merge key across IndexedDB and the sidecar copy. */
+    updatedAt: number;
+    /** Tombstone: deletions must survive merging with an older copy, so a
+     *  deleted annotation keeps its record with this flag instead of being
+     *  removed from the store. */
+    deleted: boolean;
+}
+
+/** User-editable trip metadata: custom name, free-text note, favorite flag. */
+export interface TripMetaAnnotation extends AnnotationBase {
+    kind: "tripMeta";
+    anchor: TripAnchor;
+    name?: string;
+    note?: string;
+    isFavorite?: boolean;
+}
+
+/** A point on the timeline: pure UTC anchor + short text, click-to-seek. */
+export interface MarkerAnnotation extends AnnotationBase {
+    kind: "marker";
+    utc: number;
+    text: string;
+}
+
+export type AnnotationRecord = TripMetaAnnotation | MarkerAnnotation;

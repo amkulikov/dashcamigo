@@ -49,6 +49,7 @@ export type CapabilityId =
     | "folderPicker"
     | "dndEntries"
     | "fileSystemAccess"
+    | "persistentFolder"
     | "serviceWorker"
     | "structuredClone";
 
@@ -123,6 +124,13 @@ const SEVERITY: Record<CapabilityId, CapabilitySeverity> = {
     // native-file-system-adapter ponyfill transparently covers FF/Safari, so
     // its absence is invisible to the user. Diagnostic only.
     fileSystemAccess: "info",
+    // showDirectoryPicker - the persistent-folder mode (remember a folder,
+    // reopen it across sessions without re-picking). Chromium-only by vendor
+    // choice: Mozilla and WebKit formally rejected the local-disk picker part
+    // of File System Access. Everywhere else the feature invisibly degrades
+    // to the classic picker plus cached indexing, so absence is not a
+    // user-facing gap. Diagnostic only.
+    persistentFolder: "info",
     // Service Worker powers the ponyfill's streaming export on FF/Safari. When
     // absent (private mode) the ponyfill falls back to an in-memory Blob, which
     // the export panel already warns about. Diagnostic only.
@@ -444,6 +452,10 @@ function probeFileSystemAccess(): boolean {
     return hasGlobal("showSaveFilePicker");
 }
 
+function probePersistentFolder(): boolean {
+    return hasGlobal("showDirectoryPicker");
+}
+
 function probeServiceWorker(): boolean {
     return typeof navigator !== "undefined" && "serviceWorker" in navigator;
 }
@@ -467,6 +479,7 @@ const PROBES: Record<CapabilityId, () => boolean> = {
     folderPicker: probeFolderPicker,
     dndEntries: probeDndEntries,
     fileSystemAccess: probeFileSystemAccess,
+    persistentFolder: probePersistentFolder,
     serviceWorker: probeServiceWorker,
     structuredClone: probeStructuredClone,
 };
