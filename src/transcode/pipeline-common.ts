@@ -14,6 +14,7 @@ import {
     type Input,
     Mp4OutputFormat,
     Output,
+    Quality,
     StreamTarget,
     VideoSampleSource,
     type AudioCodec,
@@ -470,11 +471,19 @@ function h264EncodingConfig(bitrate: number): VideoEncodingConfig {
         // mediabunny's universal H.264 type - it selects the avcC
         // profile/level automatically from the encoded stream.
         codec: "avc" satisfies VideoCodec,
-        bitrate,
-        // Batch export, not a live stream: VBR (the WebCodecs default) gives the
-        // better quality-per-byte for dashcam content. Pin it EXPLICITLY so a
-        // future "make export smaller" edit cannot silently switch to constant.
-        bitrateMode: "variable",
+        // Explicit bitrate only - never a quantizer or a subjective level.
+        // Either of those flips mediabunny into quantizer rate control, which
+        // is wrong for this pipeline on three counts: WebCodecs only offers a
+        // fixed per-frame QP (CQP - "like CRF" in the mediabunny docs oversells
+        // it), so output size is unbounded on noisy footage; only Chromium
+        // supports the quantizer bitrateMode, and mediabunny silently falls
+        // back to its own bitrate heuristic elsewhere, making the output
+        // browser-dependent; and the panel's size estimate plus the
+        // resolveEncodableH264 ceiling probe both assume a known bitrate.
+        // VBR (the WebCodecs default) gives the better quality-per-byte for
+        // dashcam batch export; pin it EXPLICITLY so a future "make export
+        // smaller" edit cannot silently switch to constant.
+        quality: new Quality({ bitrate, bitrateMode: "variable" }),
         keyFrameInterval: 2,
         sizeChangeBehavior: "deny",
         // Batch export, not a live stream: keep the encoder in "quality" mode

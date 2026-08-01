@@ -11,7 +11,7 @@
 // export UI detect that up front and keep the user on stream-copy instead of
 // failing with a raw codec error.
 
-import { AudioSampleSource, canEncodeVideo, getFirstEncodableAudioCodec } from "mediabunny";
+import { AudioSampleSource, canEncodeVideo, getFirstEncodableAudioCodec, Quality } from "mediabunny";
 
 import { createLogger } from "../log.js";
 import { AUDIO_TARGET_BITRATE, AUDIO_TARGET_CHANNELS, AUDIO_TARGET_SAMPLE_RATE } from "./types.js";
@@ -45,7 +45,7 @@ export async function resolveEncodeAudioCodec(): Promise<"aac" | "opus" | null> 
         return (await getFirstEncodableAudioCodec(["aac", "opus"], {
             numberOfChannels: AUDIO_TARGET_CHANNELS,
             sampleRate: AUDIO_TARGET_SAMPLE_RATE,
-            bitrate: AUDIO_TARGET_BITRATE,
+            quality: new Quality({ bitrate: AUDIO_TARGET_BITRATE }),
         })) as "aac" | "opus" | null;
     } catch (err) {
         log.debug("audio encode codec probe threw", { err: String(err) });
@@ -74,7 +74,7 @@ export async function resolveEncodeAudioCodec(): Promise<"aac" | "opus" | null> 
 export function createEncodeAudioSource(codec: "aac" | "opus"): AudioSampleSource {
     return new AudioSampleSource({
         codec,
-        bitrate: AUDIO_TARGET_BITRATE,
+        quality: new Quality({ bitrate: AUDIO_TARGET_BITRATE }),
         transform: { numberOfChannels: AUDIO_TARGET_CHANNELS, sampleRate: AUDIO_TARGET_SAMPLE_RATE },
     });
 }
@@ -104,7 +104,10 @@ export async function canReencodeH264(width: number, height: number, bitrate: nu
         return await canEncodeVideo("avc", {
             width,
             height,
-            bitrate,
+            // Explicit bitrate only - never a quantizer or a subjective level, so
+            // the probe resolves to the exact bitrate-driven isConfigSupported
+            // check the binary search in resolveEncodableH264 depends on.
+            quality: new Quality({ bitrate }),
             hardwareAcceleration: "no-preference",
         });
     } catch (err) {
