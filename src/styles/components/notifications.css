@@ -83,6 +83,29 @@
     flex: 1;
     min-width: 0;
 }
+/* Action button on decision toasts (see NotifyInput.action). Sits between the
+   message and the ×; the toast holds until the user picks one of the two. */
+.dc-toast__action {
+    flex-shrink: 0;
+    align-self: center;
+    background: transparent;
+    border: 1px solid var(--accent);
+    border-radius: var(--dc-radius-sm);
+    color: var(--accent);
+    font-size: var(--dc-text-sm);
+    line-height: 1;
+    padding: var(--dc-space-1) var(--dc-space-2);
+    cursor: pointer;
+    white-space: nowrap;
+}
+.dc-toast__action:hover {
+    background: var(--accent);
+    color: var(--bg);
+}
+.dc-toast__action:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
 .dc-toast__close {
     flex-shrink: 0;
     background: transparent;

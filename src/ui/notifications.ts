@@ -30,6 +30,13 @@ export interface NotifyInput {
     messageKey: I18nKey;
     /** ICU MessageFormat parameters; merged into the template at render time. */
     messageParams?: Record<string, string | number | boolean>;
+    /**
+     * Optional action button on the toast. A toast with an action never
+     * auto-dismisses (the user must choose or close), and the action renders
+     * on the TOAST only - drawer entries outlive the session moment the
+     * callback was built for, so the drawer shows just the message.
+     */
+    action?: { labelKey: I18nKey; onAction: () => void };
 }
 
 interface Notification extends NotifyInput {
@@ -221,6 +228,21 @@ function showToast(n: Notification): void {
     body.textContent = t(n.messageKey, n.messageParams);
     el.appendChild(body);
 
+    if (n.action) {
+        const { labelKey, onAction } = n.action;
+        const actionBtn = document.createElement("button");
+        actionBtn.type = "button";
+        actionBtn.className = "dc-toast__action";
+        actionBtn.textContent = t(labelKey);
+        actionBtn.addEventListener("click", () => {
+            // Remove the toast BEFORE the callback: an action that itself
+            // notifies must not race the stack cap against its own toast.
+            removeToast(n.id);
+            onAction();
+        });
+        el.appendChild(actionBtn);
+    }
+
     const close = document.createElement("button");
     close.type = "button";
     close.className = "dc-toast__close";
@@ -231,7 +253,9 @@ function showToast(n: Notification): void {
 
     toastContainer.appendChild(el);
 
-    const timeoutMs = TOAST_TIMEOUT_MS[n.severity];
+    // An action toast waits for a decision - no auto-dismiss regardless of
+    // severity; the close button remains the "no" path.
+    const timeoutMs = n.action ? null : TOAST_TIMEOUT_MS[n.severity];
     const timer = timeoutMs === null ? null : window.setTimeout(() => removeToast(n.id), timeoutMs);
     activeToasts.set(n.id, { el, timer });
 }
@@ -251,7 +275,7 @@ function resetToastTimer(id: string): void {
     if (!entry) return;
     if (entry.timer !== null) clearTimeout(entry.timer);
     const n = notifications.find((x) => x.id === id);
-    const timeoutMs = n ? TOAST_TIMEOUT_MS[n.severity] : null;
+    const timeoutMs = n && !n.action ? TOAST_TIMEOUT_MS[n.severity] : null;
     entry.timer = timeoutMs === null ? null : window.setTimeout(() => removeToast(id), timeoutMs);
 }
 
