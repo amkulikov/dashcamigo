@@ -24,7 +24,9 @@ import {
     rememberFolder,
     requestFolderPermission,
 } from "../persist/folders.js";
+import { fileIdentityKey, fileIdentityOf } from "../persist/identity.js";
 import type { RememberedFolder } from "../persist/types.js";
+import type { VendorFile } from "../parsers/types.js";
 import { t } from "../i18n/index.js";
 
 import { dom } from "./dom.js";
@@ -38,16 +40,24 @@ const log = createLogger("persistent-folders");
 // actual open attempts. Session-only - reality is re-probed on every render.
 const availabilityById = new Map<string, FolderAvailability>();
 
-// Root path segment (the folder's on-disk name) -> RememberedFolder.id, for
-// folders touched this session. Annotations resolve their folderId through
-// this: a candidate only knows its relativePath, whose first segment is the
-// root folder name on every picker path.
-const folderIdByRootLabel = new Map<string, string>();
+// File identity key -> RememberedFolder.id, for every file enumerated out of
+// a remembered folder this session. Annotations resolve their folderId
+// through this. Exact by construction - keying on the root folder NAME would
+// collide the moment two remembered folders (say, two SD cards) share one
+// on-disk name, and the handle exposes no path to disambiguate with.
+const folderIdByFileKey = new Map<string, string>();
 
-/** RememberedFolder.id owning the given root path segment, or "" when the
- *  root is not a remembered folder (ad-hoc drop / never remembered). */
-export function folderIdForRootSegment(root: string): string {
-    return folderIdByRootLabel.get(root) ?? "";
+/** RememberedFolder.id that produced the file with this identity key, or ""
+ *  when the file did not come out of a remembered folder (ad-hoc drop /
+ *  never remembered). */
+export function folderIdForFileKey(identityKey: string): string {
+    return folderIdByFileKey.get(identityKey) ?? "";
+}
+
+function registerFolderFiles(folderId: string, files: VendorFile[]): void {
+    for (const vendorFile of files) {
+        folderIdByFileKey.set(fileIdentityKey(fileIdentityOf(vendorFile.file, vendorFile.relativePath)), folderId);
+    }
 }
 
 // The sidecar layer merges its file after a remembered folder opens. A
@@ -110,8 +120,8 @@ export async function openViaDirectoryPicker(): Promise<void> {
             dom.folderInput.click();
             return;
         }
-        await openFolderHandle(handle, null);
-        void offerToRemember(handle);
+        const enumerated = await openFolderHandle(handle, null);
+        if (enumerated) void offerToRemember(handle, enumerated);
     } finally {
         pickerInFlight = false;
     }
@@ -121,8 +131,13 @@ export async function openViaDirectoryPicker(): Promise<void> {
  * Enumerates a handle and feeds the result to ingest. `folder` is non-null
  * when opening a REMEMBERED folder - failures then grey its chip. Assumes
  * read permission is already granted and the pre-ingest overlay is up.
+ * Returns the enumerated files (the caller may bind them to a folder record
+ * later), or null when the folder could not be read.
  */
-async function openFolderHandle(handle: FileSystemDirectoryHandle, folder: RememberedFolder | null): Promise<void> {
+async function openFolderHandle(
+    handle: FileSystemDirectoryHandle,
+    folder: RememberedFolder | null,
+): Promise<VendorFile[] | null> {
     let files: Awaited<ReturnType<typeof enumerateFolder>>;
     try {
         files = await enumerateFolder(handle);
@@ -141,11 +156,11 @@ async function openFolderHandle(handle: FileSystemDirectoryHandle, folder: Remem
             messageKey: "recentFolders.openFailed",
             messageParams: { name: handle.name },
         });
-        return;
+        return null;
     }
     if (folder) {
         availabilityById.set(folder.id, "available");
-        folderIdByRootLabel.set(handle.name, folder.id);
+        registerFolderFiles(folder.id, files.files);
         markFolderOpened(folder.id).catch(() => {});
         void refreshChips();
         folderOpenedHook?.(folder);
@@ -159,6 +174,7 @@ async function openFolderHandle(handle: FileSystemDirectoryHandle, folder: Remem
         endPreIngestReading();
     }
     await ingestFiles(files.files);
+    return files.files;
 }
 
 /** Click path for a chip: re-verify permission (prompting inside the user
@@ -180,15 +196,22 @@ async function openRememberedFolder(folder: RememberedFolder): Promise<void> {
     await openFolderHandle(folder.handle, folder);
 }
 
-/** Offers to remember a picker-chosen folder unless it already is. */
-async function offerToRemember(handle: FileSystemDirectoryHandle): Promise<void> {
+/** Offers to remember a picker-chosen folder unless it already is. `files` is
+ *  the enumeration the open just produced - bound to the folder record so the
+ *  session's annotations resolve their folderId. */
+async function offerToRemember(handle: FileSystemDirectoryHandle, files: VendorFile[]): Promise<void> {
     try {
         const folders = await listFolders();
         for (const folder of folders) {
             try {
                 if (await handle.isSameEntry(folder.handle)) {
+                    // Already remembered, picked fresh via the picker - behaves
+                    // like a chip open: bind files, stamp, merge the sidecar.
+                    registerFolderFiles(folder.id, files);
+                    availabilityById.set(folder.id, "available");
                     await markFolderOpened(folder.id);
                     void refreshChips();
+                    folderOpenedHook?.(folder);
                     return;
                 }
             } catch {
@@ -211,7 +234,7 @@ async function offerToRemember(handle: FileSystemDirectoryHandle): Promise<void>
             onAction: () => {
                 rememberFolder(handle)
                     .then((record) => {
-                        folderIdByRootLabel.set(handle.name, record.id);
+                        registerFolderFiles(record.id, files);
                         void refreshChips();
                         notify({
                             severity: "info",
@@ -241,13 +264,14 @@ async function refreshChips(): Promise<void> {
     }
     chipsContainer.hidden = folders.length === 0;
     chipsList.replaceChildren();
+    const labels = disambiguatedLabels(folders);
     const chipById = new Map<string, HTMLElement>();
     for (const folder of folders) {
-        const chip = buildChip(folder);
+        const chip = buildChip(folder, labels.get(folder.id) ?? folder.label);
         chipById.set(folder.id, chip);
         chipsList.appendChild(chip);
     }
-    if (folders.length > 1) chipsList.appendChild(buildForgetAllButton());
+    syncForgetAllButton(folders.length > 1);
     for (const folder of folders) {
         void probeFolderAvailability(folder.handle).then((availability) => {
             availabilityById.set(folder.id, availability);
@@ -259,7 +283,31 @@ async function refreshChips(): Promise<void> {
     }
 }
 
-function buildChip(folder: RememberedFolder): HTMLElement {
+/**
+ * Display labels, with duplicates suffixed " (2)", " (3)"... in addedAt order
+ * (stable across re-renders, unlike the lastOpenedAt chip order). The handle
+ * exposes only the folder's leaf name - two SD cards named "DCIM" are
+ * otherwise indistinguishable in the list.
+ */
+function disambiguatedLabels(folders: RememberedFolder[]): Map<string, string> {
+    const byLabel = new Map<string, RememberedFolder[]>();
+    for (const folder of folders) {
+        const bucket = byLabel.get(folder.label);
+        if (bucket) bucket.push(folder);
+        else byLabel.set(folder.label, [folder]);
+    }
+    const out = new Map<string, string>();
+    for (const bucket of byLabel.values()) {
+        if (bucket.length === 1) continue;
+        bucket.sort((a, b) => a.addedAt - b.addedAt);
+        bucket.forEach((folder, index) => {
+            if (index > 0) out.set(folder.id, `${folder.label} (${index + 1})`);
+        });
+    }
+    return out;
+}
+
+function buildChip(folder: RememberedFolder, displayLabel: string): HTMLElement {
     const wrap = document.createElement("span");
     wrap.className = "recent-folder-chip";
 
@@ -271,7 +319,7 @@ function buildChip(folder: RememberedFolder): HTMLElement {
     status.className = "recent-folder-chip__status";
     status.setAttribute("aria-hidden", "true");
     open.appendChild(status);
-    open.appendChild(document.createTextNode(folder.label));
+    open.appendChild(document.createTextNode(displayLabel));
     open.addEventListener("click", () => void openRememberedFolder(folder));
     wrap.appendChild(open);
 
@@ -305,15 +353,25 @@ function applyAvailability(chip: HTMLElement, availability: FolderAvailability):
     else chip.removeAttribute("title");
 }
 
-function buildForgetAllButton(): HTMLElement {
-    const forgetAll = document.createElement("button");
-    forgetAll.type = "button";
-    forgetAll.className = "recent-folders-forget-all";
-    forgetAll.textContent = t("recentFolders.forgetAll");
-    forgetAll.addEventListener("click", () => {
-        forgetAllFolders()
-            .then(() => refreshChips())
-            .catch(() => {});
-    });
-    return forgetAll;
+// Single instance living in the card header, attached/detached per render.
+let forgetAllButton: HTMLElement | null = null;
+
+function syncForgetAllButton(shouldShow: boolean): void {
+    if (!shouldShow) {
+        forgetAllButton?.remove();
+        return;
+    }
+    if (!forgetAllButton) {
+        const forgetAll = document.createElement("button");
+        forgetAll.type = "button";
+        forgetAll.className = "recent-folders-forget-all";
+        forgetAll.textContent = t("recentFolders.forgetAll");
+        forgetAll.addEventListener("click", () => {
+            forgetAllFolders()
+                .then(() => refreshChips())
+                .catch(() => {});
+        });
+        forgetAllButton = forgetAll;
+    }
+    chipsContainer?.querySelector(".recent-folders-head")?.appendChild(forgetAllButton);
 }

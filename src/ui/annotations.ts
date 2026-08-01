@@ -10,7 +10,7 @@ import { fileIdentityKey } from "../persist/identity.js";
 import type { AnnotationRecord, MarkerAnnotation, TripMetaAnnotation } from "../persist/types.js";
 import type { Trip, VideoCandidate } from "../trips.js";
 import { tripAllCandidates } from "../trips.js";
-import { folderIdForRootSegment } from "./persistent-folders.js";
+import { folderIdForFileKey } from "./persistent-folders.js";
 
 const log = createLogger("annotations");
 
@@ -90,9 +90,10 @@ export function setTripMeta(trip: Trip, patch: TripMetaPatch): void {
         ? { ...existing }
         : {
               id: crypto.randomUUID(),
-              // "" when the trip's root folder is not a remembered one (ad-hoc
-              // drop) - the annotation still works, it just has no sidecar home.
-              folderId: folderIdForRootSegment(rootSegment(firstCandidate.relativePath)),
+              // "" when the trip's files did not come out of a remembered
+              // folder (ad-hoc drop) - the annotation still works, it just
+              // has no sidecar home.
+              folderId: folderIdForFileKey(candidateIdentityKey(firstCandidate)),
               updatedAt: 0,
               deleted: false,
               kind: "tripMeta",
@@ -121,11 +122,6 @@ function setOrDrop(record: TripMetaAnnotation, field: "name" | "note", value: st
     else delete record[field];
 }
 
-function rootSegment(relativePath: string): string {
-    const slash = relativePath.indexOf("/");
-    return slash >= 0 ? relativePath.slice(0, slash) : "";
-}
-
 /** Live markers whose UTC lands inside the trip's wall span, oldest first.
  *  Markers anchor to pure UTC, so regrouping cannot orphan them - they follow
  *  whatever trip covers that moment now. */
@@ -145,7 +141,7 @@ export function addMarker(trip: Trip, utcMs: number, text: string): MarkerAnnota
     const firstCandidate = tripAllCandidates(trip)[0];
     const record: MarkerAnnotation = {
         id: crypto.randomUUID(),
-        folderId: firstCandidate ? folderIdForRootSegment(rootSegment(firstCandidate.relativePath)) : "",
+        folderId: firstCandidate ? folderIdForFileKey(candidateIdentityKey(firstCandidate)) : "",
         updatedAt: Date.now(),
         deleted: false,
         kind: "marker",
