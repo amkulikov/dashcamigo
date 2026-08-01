@@ -9,8 +9,6 @@ import type { RememberedFolder } from "./types.js";
 
 const log = createLogger("persist-folders");
 
-const LAST_FOLDER_META_KEY = "lastFolderId";
-
 /** All remembered folders, most recently opened first. */
 export async function listFolders(): Promise<RememberedFolder[]> {
     const db = await openPersistDb();
@@ -42,7 +40,6 @@ export async function rememberFolder(handle: FileSystemDirectoryHandle): Promise
                 lastOpenedAt: Date.now(),
             };
             await db.put("folders", updated);
-            await setLastFolderId(db, updated.id);
             return updated;
         }
     }
@@ -54,7 +51,6 @@ export async function rememberFolder(handle: FileSystemDirectoryHandle): Promise
         lastOpenedAt: Date.now(),
     };
     await db.put("folders", record);
-    await setLastFolderId(db, record.id);
     return record;
 }
 
@@ -63,8 +59,12 @@ export async function rememberFolder(handle: FileSystemDirectoryHandle): Promise
 export async function forgetFolder(id: string): Promise<void> {
     const db = await openPersistDb();
     await db.delete("folders", id);
-    const last = await db.get("meta", LAST_FOLDER_META_KEY);
-    if (last === id) await db.delete("meta", LAST_FOLDER_META_KEY);
+}
+
+/** Clears the whole remembered list. Annotations stay, same as forgetFolder. */
+export async function forgetAllFolders(): Promise<void> {
+    const db = await openPersistDb();
+    await db.clear("folders");
 }
 
 /** Attaches (or replaces) the annotations-sidecar file handle on a folder. */
@@ -82,26 +82,13 @@ export async function getFolder(id: string): Promise<RememberedFolder | null> {
     return (await db.get("folders", id)) ?? null;
 }
 
-/** Stamps the folder as most recently opened; drives the auto-restore pick. */
+/** Stamps the folder as most recently opened; drives the chip ordering. */
 export async function markFolderOpened(id: string): Promise<void> {
     const db = await openPersistDb();
     const folder = await db.get("folders", id);
     if (!folder) return;
     folder.lastOpenedAt = Date.now();
     await db.put("folders", folder);
-    await setLastFolderId(db, id);
-}
-
-/** The folder auto-restore should target, or null when none is remembered. */
-export async function getLastFolder(): Promise<RememberedFolder | null> {
-    const db = await openPersistDb();
-    const id = await db.get("meta", LAST_FOLDER_META_KEY);
-    if (!id) return null;
-    return (await db.get("folders", id)) ?? null;
-}
-
-async function setLastFolderId(db: Awaited<ReturnType<typeof openPersistDb>>, id: string): Promise<void> {
-    await db.put("meta", id, LAST_FOLDER_META_KEY);
 }
 
 /**
@@ -117,6 +104,25 @@ export async function queryFolderPermission(handle: FileSystemDirectoryHandle): 
     } catch (err) {
         log.warn("queryPermission failed", { err: err instanceof Error ? err.message : String(err) });
         return "denied";
+    }
+}
+
+export type FolderAvailability = "available" | "unavailable" | "unknown";
+
+/**
+ * Whether a stored handle still points at a readable folder. queryPermission
+ * never checks liveness, so a granted handle gets one actual directory read -
+ * a moved/unplugged folder throws (NotFoundError) right there. Without granted
+ * permission the read would prompt, so the answer is "unknown" (the folder may
+ * well exist; a click-driven requestPermission resolves it).
+ */
+export async function probeFolderAvailability(handle: FileSystemDirectoryHandle): Promise<FolderAvailability> {
+    if ((await queryFolderPermission(handle)) !== "granted") return "unknown";
+    try {
+        await handle.keys().next();
+        return "available";
+    } catch {
+        return "unavailable";
     }
 }
 

@@ -1,9 +1,11 @@
 // Persistent-folder UX (Chromium-only, capability "persistentFolder"):
 //  - the FSA directory picker the landing CTA routes through,
 //  - the "remember this folder" offer after a picked ingest,
-//  - the recent-folder chips on the landing (unavailable ones grey out but
-//    stay - a renamed-back or re-plugged folder revives its stored handle),
-//  - zero-click auto-restore of the last-used folder when permission held.
+//  - the recent-folder chips on the landing: one-click reopen, a status dot
+//    per chip (a background liveness probe colors it), forget one / forget
+//    all. Nothing opens without a click - a remembered folder is an offer,
+//    not an autostart. Unavailable chips grey out but stay: a renamed-back or
+//    re-plugged folder revives its stored handle.
 //
 // IndexedDB unavailability (private mode, storage off) quietly degrades the
 // whole module to "picker without memory" - never a user-facing error.
@@ -12,10 +14,12 @@ import { detectCapabilities } from "../capabilities.js";
 import { createLogger } from "../log.js";
 import {
     enumerateFolder,
+    type FolderAvailability,
+    forgetAllFolders,
     forgetFolder,
-    getLastFolder,
     listFolders,
     markFolderOpened,
+    probeFolderAvailability,
     queryFolderPermission,
     rememberFolder,
     requestFolderPermission,
@@ -27,13 +31,12 @@ import { dom } from "./dom.js";
 import { beginPreIngestReading, endPreIngestReading } from "./ingest-overlay.js";
 import { ingestFiles } from "./ingest.js";
 import { notify } from "./notifications.js";
-import { state } from "./state.js";
 
 const log = createLogger("persistent-folders");
 
-// Folders whose last open failed on read (moved/unplugged). Session-only:
-// a retry click re-checks reality, and next pageload starts clean.
-const unavailableIds = new Set<string>();
+// Latest known liveness per folder, fed by the render-time probe and by
+// actual open attempts. Session-only - reality is re-probed on every render.
+const availabilityById = new Map<string, FolderAvailability>();
 
 // Root path segment (the folder's on-disk name) -> RememberedFolder.id, for
 // folders touched this session. Annotations resolve their folderId through
@@ -68,15 +71,14 @@ export function canUseDirectoryPicker(): boolean {
 }
 
 /**
- * Wires the landing chips and kicks off auto-restore. Call once from app.ts
- * after notifications/overlay init. No-op on browsers without the API.
+ * Wires the landing chips. Call once from app.ts after notifications/overlay
+ * init. No-op on browsers without the API.
  */
 export function initPersistentFolders(): void {
     if (!canUseDirectoryPicker()) return;
     chipsContainer = document.getElementById("recent-folders");
     chipsList = document.getElementById("recent-folders-list");
     void refreshChips();
-    void maybeAutoRestore();
 }
 
 /**
@@ -127,7 +129,7 @@ async function openFolderHandle(handle: FileSystemDirectoryHandle, folder: Remem
     } catch (err) {
         endPreIngestReading();
         if (folder) {
-            unavailableIds.add(folder.id);
+            availabilityById.set(folder.id, "unavailable");
             void refreshChips();
         }
         log.warn("folder enumeration failed", {
@@ -142,7 +144,7 @@ async function openFolderHandle(handle: FileSystemDirectoryHandle, folder: Remem
         return;
     }
     if (folder) {
-        unavailableIds.delete(folder.id);
+        availabilityById.set(folder.id, "available");
         folderIdByRootLabel.set(handle.name, folder.id);
         markFolderOpened(folder.id).catch(() => {});
         void refreshChips();
@@ -176,30 +178,6 @@ async function openRememberedFolder(folder: RememberedFolder): Promise<void> {
     }
     beginPreIngestReading();
     await openFolderHandle(folder.handle, folder);
-}
-
-/**
- * Zero-click restore: most recently used folder, only when permission
- * survived the restart ("Allow on every visit" / installed PWA). A lapsed
- * permission needs a gesture for requestPermission, so those folders wait as
- * chips instead. Never fires over an existing session.
- */
-async function maybeAutoRestore(): Promise<void> {
-    if (state.trips.length > 0 || state.ingestInProgress) return;
-    let last: RememberedFolder | null = null;
-    try {
-        last = await getLastFolder();
-    } catch (err) {
-        log.warn("persist db unavailable, skipping restore", { err: err instanceof Error ? err.message : String(err) });
-        return;
-    }
-    if (!last) return;
-    if ((await queryFolderPermission(last.handle)) !== "granted") return;
-    // Re-check: the user may have started a drop while we awaited the DB.
-    if (state.trips.length > 0 || state.ingestInProgress) return;
-    log.info("auto-restoring last folder", { label: last.label });
-    beginPreIngestReading();
-    await openFolderHandle(last.handle, last);
 }
 
 /** Offers to remember a picker-chosen folder unless it already is. */
@@ -249,7 +227,9 @@ async function offerToRemember(handle: FileSystemDirectoryHandle): Promise<void>
     });
 }
 
-/** Re-renders the landing chips from the DB. Hides the block when empty. */
+/** Re-renders the landing chips from the DB and kicks off a background
+ *  liveness probe per folder - the status dots recolor as answers arrive.
+ *  Hides the block when nothing is remembered. */
 async function refreshChips(): Promise<void> {
     if (!chipsContainer || !chipsList) return;
     let folders: RememberedFolder[];
@@ -261,23 +241,37 @@ async function refreshChips(): Promise<void> {
     }
     chipsContainer.hidden = folders.length === 0;
     chipsList.replaceChildren();
+    const chipById = new Map<string, HTMLElement>();
     for (const folder of folders) {
-        chipsList.appendChild(buildChip(folder));
+        const chip = buildChip(folder);
+        chipById.set(folder.id, chip);
+        chipsList.appendChild(chip);
+    }
+    if (folders.length > 1) chipsList.appendChild(buildForgetAllButton());
+    for (const folder of folders) {
+        void probeFolderAvailability(folder.handle).then((availability) => {
+            availabilityById.set(folder.id, availability);
+            const chip = chipById.get(folder.id);
+            // A refresh may have re-rendered meanwhile - never touch a
+            // detached chip, the new render probes again anyway.
+            if (chip?.isConnected) applyAvailability(chip, availability);
+        });
     }
 }
 
 function buildChip(folder: RememberedFolder): HTMLElement {
     const wrap = document.createElement("span");
     wrap.className = "recent-folder-chip";
-    if (unavailableIds.has(folder.id)) {
-        wrap.classList.add("is-unavailable");
-        wrap.title = t("recentFolders.unavailableHint");
-    }
 
     const open = document.createElement("button");
     open.type = "button";
     open.className = "recent-folder-chip__open";
-    open.textContent = folder.label;
+
+    const status = document.createElement("span");
+    status.className = "recent-folder-chip__status";
+    status.setAttribute("aria-hidden", "true");
+    open.appendChild(status);
+    open.appendChild(document.createTextNode(folder.label));
     open.addEventListener("click", () => void openRememberedFolder(folder));
     wrap.appendChild(open);
 
@@ -294,5 +288,32 @@ function buildChip(folder: RememberedFolder): HTMLElement {
     });
     wrap.appendChild(forget);
 
+    const known = availabilityById.get(folder.id);
+    if (known) applyAvailability(wrap, known);
     return wrap;
+}
+
+/** Colors a chip by liveness: green = readable right now, red+greyed = gone
+ *  (moved/unplugged; still clickable - a re-plug revives the handle), amber =
+ *  permission lapsed, a click re-prompts. */
+function applyAvailability(chip: HTMLElement, availability: FolderAvailability): void {
+    chip.classList.toggle("is-available", availability === "available");
+    chip.classList.toggle("is-unavailable", availability === "unavailable");
+    chip.classList.toggle("is-unknown", availability === "unknown");
+    if (availability === "unavailable") chip.title = t("recentFolders.unavailableHint");
+    else if (availability === "unknown") chip.title = t("recentFolders.permissionHint");
+    else chip.removeAttribute("title");
+}
+
+function buildForgetAllButton(): HTMLElement {
+    const forgetAll = document.createElement("button");
+    forgetAll.type = "button";
+    forgetAll.className = "recent-folders-forget-all";
+    forgetAll.textContent = t("recentFolders.forgetAll");
+    forgetAll.addEventListener("click", () => {
+        forgetAllFolders()
+            .then(() => refreshChips())
+            .catch(() => {});
+    });
+    return forgetAll;
 }

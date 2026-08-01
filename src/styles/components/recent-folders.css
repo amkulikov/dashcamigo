@@ -30,13 +30,17 @@
     overflow: hidden;
 }
 
-/* Last open hit NotFoundError (moved/unplugged). Greyed but still clickable -
-   a re-plugged drive or a renamed-back folder revives the stored handle. */
+/* NotFoundError on probe or open (moved/unplugged). Greyed but still
+   clickable - a re-plugged drive or a renamed-back folder revives the stored
+   handle. */
 .recent-folder-chip.is-unavailable {
     opacity: 0.55;
 }
 
 .recent-folder-chip__open {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--dc-space-1);
     background: transparent;
     border: none;
     color: var(--fg);
@@ -47,6 +51,28 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* Liveness dot: neutral until the background probe answers, then green =
+   readable, red = gone, amber = permission lapsed (a click re-prompts). */
+.recent-folder-chip__status {
+    flex-shrink: 0;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--fg-mute);
+}
+
+.recent-folder-chip.is-available .recent-folder-chip__status {
+    background: var(--ok);
+}
+
+.recent-folder-chip.is-unavailable .recent-folder-chip__status {
+    background: var(--err);
+}
+
+.recent-folder-chip.is-unknown .recent-folder-chip__status {
+    background: var(--warn);
 }
 
 .recent-folder-chip__open:hover {
@@ -69,6 +95,28 @@
 
 .recent-folder-chip__open:focus-visible,
 .recent-folder-chip__forget:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+
+/* "Forget all" rides at the end of the chip row; quiet by default, warning
+   red on hover - it drops the whole list in one click. */
+.recent-folders-forget-all {
+    background: transparent;
+    border: none;
+    color: var(--fg-mute);
+    font-size: inherit;
+    padding: 2px var(--dc-space-1);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.recent-folders-forget-all:hover {
+    color: var(--err);
+}
+
+.recent-folders-forget-all:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: -2px;
 }

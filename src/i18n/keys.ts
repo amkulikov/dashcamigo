@@ -66,6 +66,8 @@ export type I18nKey =
     | "recentFolders.title"
     | "recentFolders.unavailableHint"
     | "recentFolders.forgetLabel"
+    | "recentFolders.forgetAll"
+    | "recentFolders.permissionHint"
     | "recentFolders.openFailed"
     | "recentFolders.permissionDenied"
     | "recentFolders.rememberPrompt"
