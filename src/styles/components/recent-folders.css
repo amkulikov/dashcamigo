@@ -1,18 +1,34 @@
 /* Recent-folder chips under the landing drop CTA (persistent-folder mode).
    Populated by src/ui/persistent-folders.ts; the whole block is hidden when
-   nothing is remembered or the browser has no FSA directory picker. */
+   nothing is remembered or the browser has no FSA directory picker.
+
+   Visual language mirrors the drop card above it: same elevated card shell
+   (solid border where the drop target is dashed - this one is not a drop
+   zone), and chips in the .landing-codec pill idiom - mono font, bg over
+   bg-elev, accent border on hover. */
 
 .recent-folders {
     display: flex;
-    align-items: center;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: var(--dc-space-2);
     margin-top: var(--dc-space-3);
-    font-size: var(--dc-text-sm);
+    padding: var(--dc-space-3) var(--dc-space-4);
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-lg);
+}
+
+.recent-folders-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--dc-space-3);
 }
 
 .recent-folders-title {
-    color: var(--fg-dim);
+    font-family: var(--dc-font-mono);
+    font-size: var(--dc-text-xs);
+    color: var(--fg-mute);
 }
 
 .recent-folders-list {
@@ -28,6 +44,12 @@
     border-radius: var(--dc-radius-sm);
     background: var(--bg);
     overflow: hidden;
+    transition: border-color var(--dc-dur-slow) var(--dc-ease);
+}
+
+.recent-folder-chip:hover,
+.recent-folder-chip:focus-within {
+    border-color: var(--accent);
 }
 
 /* NotFoundError on probe or open (moved/unplugged). Greyed but still
@@ -40,17 +62,22 @@
 .recent-folder-chip__open {
     display: inline-flex;
     align-items: center;
-    gap: var(--dc-space-1);
+    gap: var(--dc-space-2);
     background: transparent;
     border: none;
     color: var(--fg);
-    font-size: inherit;
-    padding: 2px var(--dc-space-2);
+    font-family: var(--dc-font-mono);
+    font-size: var(--dc-text-sm);
+    padding: 4px var(--dc-space-3);
     cursor: pointer;
     max-width: 16rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.recent-folder-chip__open:hover {
+    background: var(--bg-elev-2);
 }
 
 /* Liveness dot: neutral until the background probe answers, then green =
@@ -75,17 +102,13 @@
     background: var(--warn);
 }
 
-.recent-folder-chip__open:hover {
-    background: var(--bg-elev-2);
-}
-
 .recent-folder-chip__forget {
     background: transparent;
     border: none;
     border-left: 1px solid var(--border);
     color: var(--fg-mute);
     line-height: 1;
-    padding: 0 var(--dc-space-1);
+    padding: 0 var(--dc-space-2);
     cursor: pointer;
 }
 
@@ -93,29 +116,26 @@
     color: var(--err);
 }
 
-.recent-folder-chip__open:focus-visible,
-.recent-folder-chip__forget:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: -2px;
-}
-
-/* "Forget all" rides at the end of the chip row; quiet by default, warning
-   red on hover - it drops the whole list in one click. */
+/* "Forget all" sits in the card header's right corner; quiet by default,
+   warning red on hover - it drops the whole list in one click. */
 .recent-folders-forget-all {
     background: transparent;
     border: none;
     color: var(--fg-mute);
-    font-size: inherit;
-    padding: 2px var(--dc-space-1);
+    font-family: var(--dc-font-mono);
+    font-size: var(--dc-text-xs);
+    padding: 0;
     cursor: pointer;
-    text-decoration: underline;
-    text-underline-offset: 2px;
 }
 
 .recent-folders-forget-all:hover {
     color: var(--err);
+    text-decoration: underline;
+    text-underline-offset: 2px;
 }
 
+.recent-folder-chip__open:focus-visible,
+.recent-folder-chip__forget:focus-visible,
 .recent-folders-forget-all:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: -2px;
