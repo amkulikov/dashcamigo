@@ -315,6 +315,94 @@ test.describe("player", () => {
         await expect.poll(() => playhead.evaluate((el) => (el as HTMLElement).style.left)).not.toBe(before);
     });
 
+    test("sidebar collapse button hides the trip list and the edge tab restores it", async ({ page }) => {
+        const sidebar = page.locator(".sidebar").first();
+        await expect(sidebar).toBeVisible();
+        await page.locator("#sidebar-collapse").click();
+        await expect(sidebar, "list leaves the layout").toBeHidden();
+        const tab = page.locator("#sidebar-expand");
+        await expect(tab, "edge tab is the way back").toBeVisible();
+        // The viewer must take over the freed column, not slide into the
+        // 0-width sidebar track (which rendered the whole area black when
+        // the hidden boxes left the grid flow).
+        const viewport = page.viewportSize();
+        const video = await page.locator("#video-grid").boundingBox();
+        expect(video?.width ?? 0, "player keeps a real width").toBeGreaterThan((viewport?.width ?? 0) * 0.5);
+        // Session-only by design: nothing is persisted - a fresh page must
+        // show the list again (it is the only way to pick a trip).
+        expect(await page.evaluate(() => localStorage.getItem("dashcamigo:sidebar-collapsed"))).toBeNull();
+        await tab.click();
+        await expect(sidebar).toBeVisible();
+        await expect(tab).toBeHidden();
+    });
+
+    test("map divider drag resizes the expanded map pane", async ({ page }) => {
+        await page.locator("#mini-map").click();
+        await expect(page.locator("#player-wrap")).toHaveClass(/map-expanded/);
+        const before = await page.locator("#map").boundingBox();
+        expect(before, "map pane must be laid out").not.toBeNull();
+
+        const divider = await boxOf(page, "#video-map-resize");
+        const y = divider.y + divider.height / 2;
+        await page.mouse.move(divider.x + divider.width / 2, y);
+        await page.mouse.down();
+        await page.mouse.move(divider.x - 120, y, { steps: 5 });
+        await page.mouse.up();
+
+        const after = await page.locator("#map").boundingBox();
+        expect((after?.width ?? 0) - (before?.width ?? 0), "map grows by roughly the drag distance").toBeGreaterThan(
+            80,
+        );
+        // The bar loses the map column's width in this layout; buttons must
+        // shed into the overflow menu instead of squishing (flex-shrink: 0).
+        const play = await boxOf(page, "#player-play");
+        expect(play.width, "transport keeps its size in the narrowed bar").toBeGreaterThanOrEqual(38);
+        await page.locator("#map-collapse").click();
+        await expect(page.locator("#player-wrap")).not.toHaveClass(/map-expanded/);
+    });
+
+    test("fullscreen: mini-map click expands the map into a visible split", async ({ page }) => {
+        await page.locator("#player-fullscreen").click();
+        await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
+
+        // Desktop expand entry is the mini-map circle. In fullscreen it must
+        // reveal the big map pane (video | map split), not leave both maps
+        // invisible until fullscreen exit.
+        await page.locator("#mini-map").click();
+        await expect(page.locator("#player-wrap")).toHaveClass(/map-expanded/);
+        const mapBox = await page.locator("#map").boundingBox();
+        expect(mapBox, "big map pane must be laid out").not.toBeNull();
+        expect(mapBox?.width ?? 0, "map pane occupies a real column").toBeGreaterThan(200);
+        // The video keeps the remaining width instead of the 100vw overlay size.
+        const videoBox = await page.locator("#video-grid").boundingBox();
+        const viewport = page.viewportSize();
+        expect((videoBox?.width ?? 0) + (mapBox?.width ?? 0), "split shares the screen").toBeLessThanOrEqual(
+            (viewport?.width ?? 0) + 8,
+        );
+
+        // The chart/bar overlays are confined to the video column, so the
+        // map's lower band keeps taking pointer input while the controls are
+        // visible (mousemove keeps them visible whenever the cursor lives on
+        // the map, so a full-width overlay would permanently shadow it).
+        const probeX = (mapBox?.x ?? 0) + (mapBox?.width ?? 0) / 2;
+        const probeY = (mapBox?.y ?? 0) + (mapBox?.height ?? 0) - 20;
+        await page.mouse.move(probeX, probeY);
+        await expect(page.locator("#player-wrap")).toHaveClass(/controls-visible/);
+        const hitsMap = await page.evaluate(
+            ([x, y]) => !!document.elementFromPoint(x ?? 0, y ?? 0)?.closest(".map-wrap"),
+            [probeX, probeY],
+        );
+        expect(hitsMap, "map bottom stays clickable under visible controls").toBe(true);
+
+        // The map's collapse X returns to the video-only fullscreen layout.
+        await page.locator("#map-collapse").click();
+        await expect(page.locator("#player-wrap")).not.toHaveClass(/map-expanded/);
+        await expect.poll(() => page.evaluate(() => !!document.fullscreenElement), "still fullscreen").toBe(true);
+
+        await page.evaluate(() => document.exitFullscreen());
+        await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(false);
+    });
+
     test("chart drag-select zooms to the selected span", async ({ page }) => {
         const chart = await boxOf(page, "#player-chart-canvas");
         const y = chart.y + chart.height * 0.4;
