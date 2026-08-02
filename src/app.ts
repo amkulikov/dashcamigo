@@ -51,6 +51,7 @@ import { initLandingShot } from "./ui/landing-shot.js";
 import { dom } from "./ui/dom.js";
 import { syncEmptyState } from "./ui/empty-state.js";
 import { initFileSources } from "./ui/file-sources.js";
+import { initFolderSources } from "./ui/folder-sources.js";
 import { initPersistentFolders } from "./ui/persistent-folders.js";
 import { initAnnotations } from "./ui/annotations.js";
 import { initTripMetaModal, openTripMetaModal } from "./ui/trip-meta-modal.js";
@@ -446,9 +447,12 @@ initMobileDrawer();
 // fire from their own seams (ingest done, trip open, export open).
 initOnboarding();
 initFileSources();
-// Persistent-folder mode (Chromium): recent-folder chips on the landing and
-// zero-click auto-restore of the last used folder. Needs notifications and
-// the ingest overlay, both initialized above.
+// The folder rows above the trip list: where the loaded trips came from and
+// whether that folder is remembered. Wired before the first ingest can
+// register a source into it.
+initFolderSources();
+// Persistent-folder mode (Chromium): recent-folder chips on the landing.
+// Needs notifications and the ingest overlay, both initialized above.
 initPersistentFolders();
 // Trip annotations: load the stored records before the first ingest can
 // render cards; wire the name/note editor, the timeline-marker layer (pins
@@ -465,8 +469,8 @@ initTimelineMarkers();
 initMarkerModal({ onChanged: refreshTimelineMarkers });
 initMarkerListModal({ onChanged: refreshTimelineMarkers });
 registerTimelineOverlaySync(refreshTimelineMarkers);
-// Sidecar replica of the annotations inside the user's folder (Chromium):
-// offered on the first note in a remembered folder, then auto-synced.
+// Notes-file replica of the annotations inside the user's folder (Chromium):
+// connected from the folder row, then auto-synced.
 initAnnotationsSidecar();
 initSidebar({
     onEditTripMeta: openTripMetaModal,

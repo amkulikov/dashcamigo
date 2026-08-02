@@ -10,7 +10,7 @@ import { fileIdentityKey } from "../persist/identity.js";
 import type { AnnotationRecord, MarkerAnnotation, TripMetaAnnotation } from "../persist/types.js";
 import type { Trip, VideoCandidate } from "../trips.js";
 import { tripAllCandidates } from "../trips.js";
-import { folderIdForFileKey } from "./persistent-folders.js";
+import { folderIdForFileKey } from "./folder-sources.js";
 import { state } from "./state.js";
 
 const log = createLogger("annotations");

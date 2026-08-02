@@ -4,13 +4,14 @@
 // copy; the sidecar is an auto-synced replica merged per record (LWW +
 // tombstones) whenever the folder opens.
 //
-// Flow: the first annotation in a remembered folder without a sidecar raises
-// a one-time offer toast; accepting opens a save picker defaulting INTO the
-// folder (startIn), the picked file handle persists on the folder record,
-// and the file is MERGED before anything is written - the user may have
-// picked a pre-existing notes file from another machine. After that every
-// annotation change schedules a debounced atomic write (createWritable =
-// write-to-swap, rename-on-close - a crash never tears the file).
+// Flow: the folder row in the sidebar (ui/folder-sources.ts) offers to
+// connect a file for a remembered folder; that click opens a save picker
+// defaulting INTO the folder (startIn), the picked file handle persists on
+// the folder record, and the file is MERGED before anything is written - the
+// user may have picked a pre-existing notes file from another machine. After
+// that every annotation change schedules a debounced atomic write
+// (createWritable = write-to-swap, rename-on-close - a crash never tears the
+// file).
 //
 // folderId in the file is never trusted: it is a per-profile UUID, so every
 // record read from a folder's sidecar is restamped with the LOCAL folder id
@@ -29,7 +30,7 @@ import {
     registerAnnotationsChangedHook,
 } from "./annotations.js";
 import { notify } from "./notifications.js";
-import { registerFolderOpenedHook } from "./persistent-folders.js";
+import { registerFolderOpenedHook, registerNotesConnector } from "./folder-sources.js";
 import { renderTrips } from "./sidebar.js";
 import { refreshTimelineMarkers } from "./timeline-markers.js";
 
@@ -38,14 +39,18 @@ const log = createLogger("annotations-sidecar");
 const SIDECAR_SUGGESTED_NAME = "dashcamigo-notes.json";
 const WRITE_DEBOUNCE_MS = 1500;
 
-// One offer per folder per session - a declined toast must not re-pop on
-// every keystroke in the note field.
-const offeredFolderIds = new Set<string>();
 const writeTimers = new Map<string, number>();
 
 export function initAnnotationsSidecar(): void {
     registerAnnotationsChangedHook(onAnnotationsChanged);
     registerFolderOpenedHook(onFolderOpened);
+    // Connecting the file is an offer the user takes when they want it, from
+    // the folder row in the sidebar - never a toast interrupting the note they
+    // are in the middle of writing. Registered only where a save picker
+    // exists, so the row hides the entry everywhere else.
+    if (typeof window.showSaveFilePicker === "function") {
+        registerNotesConnector((folder) => void pickSidecarFile(folder));
+    }
     // A write still sitting in its debounce window at tab close would be
     // lost. visibilitychange->hidden fires on tab switches too, shrinking
     // the loss window; pagehide is the last reliable moment on real close
@@ -74,32 +79,18 @@ function onFolderOpened(folder: RememberedFolder): void {
 
 function onAnnotationsChanged(folderId: string): void {
     // "" = the annotated trip's root folder is not remembered - nowhere to
-    // put a sidecar. The record still lives in IndexedDB.
+    // put a notes file. The record still lives in IndexedDB.
     if (!folderId) return;
     void getFolder(folderId)
         .then(async (folder) => {
-            if (!folder) return;
-            if (folder.sidecarHandle) {
-                // Annotation edits happen inside clicks/keys - re-arm the
-                // session-scoped readwrite grant while activation is live,
-                // or the gesture-less debounced write below can only skip.
-                await ensureFileReadwritePermission(folder.sidecarHandle);
-                scheduleWrite(folderId);
-                return;
-            }
-            if (typeof window.showSaveFilePicker !== "function") return;
-            if (offeredFolderIds.has(folderId)) return;
-            offeredFolderIds.add(folderId);
-            notify({
-                severity: "info",
-                messageKey: "sidecar.offer",
-                messageParams: { name: folder.label },
-                action: {
-                    labelKey: "sidecar.offerAction",
-                    // The toast click is the user gesture the save picker needs.
-                    onAction: () => void pickSidecarFile(folder),
-                },
-            });
+            // No file connected yet: nothing to write, and asking for one is
+            // the folder row's job, not this hook's.
+            if (!folder?.sidecarHandle) return;
+            // Annotation edits happen inside clicks/keys - re-arm the
+            // session-scoped readwrite grant while activation is live, or the
+            // gesture-less debounced write below can only skip.
+            await ensureFileReadwritePermission(folder.sidecarHandle);
+            scheduleWrite(folderId);
         })
         .catch(() => {});
 }

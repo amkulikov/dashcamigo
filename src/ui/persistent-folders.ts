@@ -1,11 +1,15 @@
 // Persistent-folder UX (Chromium-only, capability "persistentFolder"):
 //  - the FSA directory picker the landing CTA routes through,
-//  - the "remember this folder" offer after a picked ingest,
 //  - the recent-folder chips on the landing: one-click reopen, a status dot
 //    per chip (a background liveness probe colors it), forget one / forget
 //    all. Nothing opens without a click - a remembered folder is an offer,
 //    not an autostart. Unavailable chips grey out but stay: a renamed-back or
 //    re-plugged folder revives its stored handle.
+//
+// This is the LANDING half of the folder feature - "what can I open". Once
+// trips are loaded the landing is gone for good, and the session half
+// (ui/folder-sources.ts) takes over: which folder the open trips came from,
+// remembering it, its notes file.
 //
 // IndexedDB unavailability (private mode, storage off) quietly degrades the
 // whole module to "picker without memory" - never a user-facing error.
@@ -22,15 +26,20 @@ import {
     markFolderOpened,
     probeFolderAvailability,
     queryFolderPermission,
-    rememberFolder,
     requestFolderPermission,
 } from "../persist/folders.js";
-import { fileIdentityKey, fileIdentityOf } from "../persist/identity.js";
 import type { RememberedFolder } from "../persist/types.js";
 import type { VendorFile } from "../parsers/types.js";
 import { t } from "../i18n/index.js";
 
 import { dom } from "./dom.js";
+import {
+    bindSourceToFolder,
+    notifyFolderOpened,
+    purgeAllFolderSessionState,
+    purgeFolderSessionState,
+    registerIngestSource,
+} from "./folder-sources.js";
 import { beginPreIngestReading, endPreIngestReading } from "./ingest-overlay.js";
 import { ingestFiles } from "./ingest.js";
 import { notify } from "./notifications.js";
@@ -40,47 +49,6 @@ const log = createLogger("persistent-folders");
 // Latest known liveness per folder, fed by the render-time probe and by
 // actual open attempts. Session-only - reality is re-probed on every render.
 const availabilityById = new Map<string, FolderAvailability>();
-
-// File identity key -> RememberedFolder.id, for every file enumerated out of
-// a remembered folder this session. Annotations resolve their folderId
-// through this. Far tighter than keying on the root folder NAME (which
-// collides the moment two SD cards share one on-disk name), though not
-// absolute: a byte-for-byte backup of a folder under the same leaf name
-// yields identical keys (size and mtime survive copying), and the handle
-// exposes no path to tell the two apart - last opened wins there.
-const folderIdByFileKey = new Map<string, string>();
-
-/** RememberedFolder.id that produced the file with this identity key, or ""
- *  when the file did not come out of a remembered folder (ad-hoc drop /
- *  never remembered). */
-export function folderIdForFileKey(identityKey: string): string {
-    return folderIdByFileKey.get(identityKey) ?? "";
-}
-
-function registerFolderFiles(folderId: string, files: VendorFile[]): void {
-    for (const vendorFile of files) {
-        folderIdByFileKey.set(fileIdentityKey(fileIdentityOf(vendorFile.file, vendorFile.relativePath)), folderId);
-    }
-}
-
-/** Drops a forgotten folder's session state - a later annotation must not
- *  resolve to the dead id (it would be invisible to every sidecar path). */
-function purgeFolderSessionState(folderId: string): void {
-    for (const [key, id] of folderIdByFileKey) {
-        if (id === folderId) folderIdByFileKey.delete(key);
-    }
-    availabilityById.delete(folderId);
-}
-
-// The sidecar layer merges its file after a remembered folder opens. A
-// registered hook, not an import - the sidecar module reads annotations,
-// which import this module for folder-id resolution.
-let folderOpenedHook: ((folder: RememberedFolder) => void) | null = null;
-
-/** Registers the after-open hook for remembered folders. */
-export function registerFolderOpenedHook(callback: (folder: RememberedFolder) => void): void {
-    folderOpenedHook = callback;
-}
 
 let chipsContainer: HTMLElement | null = null;
 let chipsList: HTMLElement | null = null;
@@ -104,10 +72,11 @@ export function initPersistentFolders(): void {
 }
 
 /**
- * Opens the FSA directory picker, ingests the choice and - for a folder not
- * yet remembered - offers to remember it. The pre-ingest overlay goes up
- * before the picker for the same reason as the classic path: enumeration of a
- * big card takes seconds and the page must not look dead meanwhile.
+ * Opens the FSA directory picker and ingests the choice. The pre-ingest
+ * overlay goes up before the picker for the same reason as the classic path:
+ * enumeration of a big card takes seconds and the page must not look dead
+ * meanwhile. Remembering the folder is not asked here - the session row under
+ * the sidebar CTA owns that offer and does not expire.
  */
 export async function openViaDirectoryPicker(): Promise<void> {
     if (pickerInFlight) return;
@@ -135,7 +104,7 @@ export async function openViaDirectoryPicker(): Promise<void> {
             return;
         }
         const enumerated = await openFolderHandle(handle, null);
-        if (enumerated) void offerToRemember(handle, enumerated);
+        if (enumerated) void adoptIfAlreadyRemembered(handle);
     } finally {
         pickerInFlight = false;
     }
@@ -147,6 +116,10 @@ export async function openViaDirectoryPicker(): Promise<void> {
  * read permission is already granted and the pre-ingest overlay is up.
  * Returns the enumerated files (the caller may bind them to a folder record
  * later), or null when the folder could not be read.
+ *
+ * The handle travels into ingest as the batch's origin, so the session row
+ * can offer to remember the folder (or show that it already is) without this
+ * module having to know anything about the sidebar.
  */
 async function openFolderHandle(
     handle: FileSystemDirectoryHandle,
@@ -174,10 +147,14 @@ async function openFolderHandle(
     }
     if (folder) {
         availabilityById.set(folder.id, "available");
-        registerFolderFiles(folder.id, files.files);
         markFolderOpened(folder.id).catch(() => {});
         void refreshChips();
-        folderOpenedHook?.(folder);
+        // Register the source BEFORE the open hook: adopting stranded
+        // annotations resolves each record through the file -> folder binding
+        // this call establishes. Ingest registers the same source again once
+        // the batch is filtered and deduped - the call is idempotent.
+        registerIngestSource(files.files, { handle, folderId: folder.id });
+        notifyFolderOpened(folder);
     }
     if (files.readErrors > 0) {
         notify({ severity: "warn", messageKey: "status.dropReadFailed" });
@@ -187,7 +164,7 @@ async function openFolderHandle(
         // the pre-ingest overlay - same contract as the classic paths.
         endPreIngestReading();
     }
-    await ingestFiles(files.files);
+    await ingestFiles(files.files, { handle, folderId: folder?.id ?? "" });
     return files.files;
 }
 
@@ -223,63 +200,39 @@ async function openRememberedFolder(folder: RememberedFolder): Promise<void> {
     }
 }
 
-/** Offers to remember a picker-chosen folder unless it already is. `files` is
- *  the enumeration the open just produced - bound to the folder record so the
- *  session's annotations resolve their folderId. */
-async function offerToRemember(handle: FileSystemDirectoryHandle, files: VendorFile[]): Promise<void> {
+/**
+ * A folder picked afresh may already be remembered - the picker hands back a
+ * new handle with no id on it, and only isSameEntry can tell. Binding it here
+ * is what makes the session row say "remembered" (and the notes file resume)
+ * instead of offering to remember a folder that already is.
+ */
+async function adoptIfAlreadyRemembered(handle: FileSystemDirectoryHandle): Promise<void> {
+    let folders: RememberedFolder[];
     try {
-        const folders = await listFolders();
-        for (const folder of folders) {
-            try {
-                if (await handle.isSameEntry(folder.handle)) {
-                    // Already remembered, picked fresh via the picker - behaves
-                    // like a chip open: bind files, stamp, merge the sidecar.
-                    registerFolderFiles(folder.id, files);
-                    availabilityById.set(folder.id, "available");
-                    await markFolderOpened(folder.id);
-                    void refreshChips();
-                    folderOpenedHook?.(folder);
-                    return;
-                }
-            } catch {
-                // Dead stored handle - not the same folder.
-            }
-        }
+        folders = await listFolders();
     } catch (err) {
-        // No DB - nothing to remember into; stay silent (feature degrades).
-        log.warn("persist db unavailable, remember offer skipped", {
+        // No DB - nothing is remembered; the row just offers to remember.
+        log.warn("persist db unavailable, remembered-folder match skipped", {
             err: err instanceof Error ? err.message : String(err),
         });
         return;
     }
-    notify({
-        severity: "info",
-        messageKey: "recentFolders.rememberPrompt",
-        messageParams: { name: handle.name },
-        action: {
-            labelKey: "recentFolders.rememberAction",
-            onAction: () => {
-                rememberFolder(handle)
-                    .then((record) => {
-                        registerFolderFiles(record.id, files);
-                        availabilityById.set(record.id, "available");
-                        void refreshChips();
-                        // The hook adopts annotations made before this click
-                        // (they carry folderId "") into the fresh record; the
-                        // sidecar merge inside is a no-op (no handle yet).
-                        folderOpenedHook?.(record);
-                        notify({
-                            severity: "info",
-                            messageKey: "recentFolders.remembered",
-                            messageParams: { name: handle.name },
-                        });
-                    })
-                    .catch((err: unknown) => {
-                        log.warn("rememberFolder failed", { err: err instanceof Error ? err.message : String(err) });
-                    });
-            },
-        },
-    });
+    for (const folder of folders) {
+        let same = false;
+        try {
+            same = await handle.isSameEntry(folder.handle);
+        } catch {
+            // Dead stored handle - not the same folder.
+        }
+        if (!same) continue;
+        // Behaves like a chip open: bind the session files, stamp, merge notes.
+        bindSourceToFolder(handle, folder);
+        availabilityById.set(folder.id, "available");
+        await markFolderOpened(folder.id).catch(() => {});
+        void refreshChips();
+        notifyFolderOpened(folder);
+        return;
+    }
 }
 
 /** Re-renders the landing chips from the DB and kicks off a background
@@ -418,7 +371,7 @@ function syncForgetAllButton(shouldShow: boolean): void {
                 .then(() => {
                     // Only remembered-folder ids ever enter these maps, and
                     // none of them exists anymore.
-                    folderIdByFileKey.clear();
+                    purgeAllFolderSessionState();
                     availabilityById.clear();
                     return refreshChips();
                 })

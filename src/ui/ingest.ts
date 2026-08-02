@@ -45,6 +45,7 @@ import {
 import type { TzSample, VideoCandidate } from "../trips.js";
 import { isMatroskaName, isTransportStreamName } from "../video-format-names.js";
 
+import { registerIngestSource } from "./folder-sources.js";
 import { maybeRunIngestTour } from "./onboarding.js";
 import { maybeShowPostIngestToast } from "./pwa-install.js";
 import {
@@ -57,7 +58,7 @@ import {
     syncIngestQueueIndicator,
 } from "./ingest-overlay.js";
 import { renderTrips, updateTripPreview } from "./sidebar.js";
-import { state } from "./state.js";
+import { type IngestOrigin, state } from "./state.js";
 import { notify } from "./notifications.js";
 import { schedulePopulateTripPreviews } from "./trip-preview.js";
 import { looksLikeRecordings } from "../report-structure.js";
@@ -108,8 +109,12 @@ function nextPaint(): Promise<void> {
  *
  * If an ingest is already running, the files go into state.ingestQueue and are started sequentially
  * after the current ingest finishes (success / cancel / error). No drop is ever lost.
+ *
+ * `origin` names the folder the batch was picked from - only the FSA path can
+ * (see folder-sources.ts); it travels with the queued batch so a drop that
+ * waited behind another ingest still knows where it came from.
  */
-export async function ingestFiles(vfiles: VendorFile[]): Promise<void> {
+export async function ingestFiles(vfiles: VendorFile[], origin: IngestOrigin | null = null): Promise<void> {
     // Empty drop (a DnD that yielded nothing) - not a real ingest; warn and bail
     // without opening the overlay. The hidden/junk-path filter, which may also
     // empty the list, runs later (ingestFilesInternal, after the overlay paints)
@@ -123,7 +128,7 @@ export async function ingestFiles(vfiles: VendorFile[]): Promise<void> {
     if (state.ingestInProgress) {
         // Queue the raw (unfiltered) list - it is filtered when this wrapper
         // re-runs on it at dequeue, so no junk slips through.
-        state.ingestQueue.push(vfiles);
+        state.ingestQueue.push({ files: vfiles, origin });
         syncIngestQueueIndicator();
         return;
     }
@@ -138,7 +143,7 @@ export async function ingestFiles(vfiles: VendorFile[]): Promise<void> {
     let cancelled = false;
     let failed = false;
     try {
-        await ingestFilesInternal(vfiles, state.ingestController.signal);
+        await ingestFilesInternal(vfiles, state.ingestController.signal, origin);
     } catch (err) {
         // AbortError means the user clicked Cancel; partial state stays in the sidebar.
         if (err instanceof DOMException && err.name === "AbortError") {
@@ -179,13 +184,17 @@ export async function ingestFiles(vfiles: VendorFile[]): Promise<void> {
         // No await - to not keep the first ingest session's promise chain alive.
         // void + .catch prevents the unhandled rejection from the next ingest from polluting the global uncaught handler.
         // ingestFiles already logs errors internally, so this catch is just a suppressor.
-        void ingestFiles(next).catch(() => {
+        void ingestFiles(next.files, next.origin).catch(() => {
             /* already logged inside ingestFiles */
         });
     }
 }
 
-async function ingestFilesInternal(vfiles: VendorFile[], signal: AbortSignal): Promise<void> {
+async function ingestFilesInternal(
+    vfiles: VendorFile[],
+    signal: AbortSignal,
+    origin: IngestOrigin | null,
+): Promise<void> {
     // Stop any background hydration still running from a previous drop before this
     // one rebuilds state.trips - a stale fill would write onto the wrong trips.
     cancelLazyHydration();
@@ -292,6 +301,13 @@ async function ingestFilesInternal(vfiles: VendorFile[], signal: AbortSignal): P
         });
         vfiles = dedup.kept;
     }
+
+    // Name the folders this batch came from, before any heavy stage: the rows
+    // above the trip list explain the trips that are about to appear, and a
+    // cancelled or partially failed ingest still leaves those trips behind.
+    // After the dedup on purpose - a re-drop of an already loaded card adds no
+    // trips, so it must not add a row claiming otherwise.
+    registerIngestSource(vfiles, origin);
 
     // Sidecar classification looks at already-known videos (state.trips + newly classified) so the user can drop a GPX later for a previously loaded MP4.
     const existingVideoNames = new Set<string>(alreadyLoaded.map((vf) => vf.file.name));

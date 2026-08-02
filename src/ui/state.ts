@@ -17,6 +17,25 @@ import type { CropRect, SplitLayout } from "../transcode/compose.js";
 import { pickFrameChannel } from "../trips.js";
 import type { Trip, TripFrame, VideoCandidate } from "../trips.js";
 
+/**
+ * Folder a batch of files was picked from. Only the FSA picker can name one -
+ * the classic input and drag-and-drop hand over plain File objects with no
+ * reopenable handle. Declared here (the UI dependency root) so the ingest
+ * queue can carry it without state.ts importing a ui/* module; the semantics
+ * live in ui/folder-sources.ts.
+ */
+export interface IngestOrigin {
+    handle: FileSystemDirectoryHandle;
+    /** Remembered-folder id, "" when this folder is not remembered (yet). */
+    folderId: string;
+}
+
+/** One drop waiting behind the running ingest, with the folder it came from. */
+export interface QueuedIngest {
+    files: VendorFile[];
+    origin: IngestOrigin | null;
+}
+
 export type TripSortKey = "date" | "distance" | "duration" | "size";
 type TripSortDir = "desc" | "asc";
 // What happens when the last clip of a trip ends. "advance" plays the next trip
@@ -168,7 +187,9 @@ export interface AppState {
     // current ingest is active; they run sequentially.
     ingestInProgress: boolean;
     ingestController: AbortController | null;
-    ingestQueue: VendorFile[][];
+    // Each entry keeps the batch's origin folder next to its files - a drop
+    // that waited here must still be attributable to the folder it came from.
+    ingestQueue: QueuedIngest[];
     // Snapshot of the raw file list of the LAST ingest (path/size/mtime only -
     // File refs, no content read). Kept so the "help add my camera" flow can
     // build its folder-structure report after an unrecognised-camera ingest,

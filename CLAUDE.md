@@ -302,6 +302,9 @@ go through a `themeColors()` cache invalidated on `prefers-color-scheme` change.
 - Container repair -> `src/repair/`
 - Ingest pipeline -> `src/ui/ingest.ts`, `src/parsers/registry.ts`; start-time
   derivation -> `deriveStartUtc` in `src/trips.ts`
+- Remembered folders - session half (rows above the trip list, file ->
+  folder binding) -> `src/ui/folder-sources.ts`; landing half (picker, chips)
+  -> `src/ui/persistent-folders.ts`; store -> `src/persist/folders.ts`
 - AppState shape -> `src/ui/state.ts`
 - Capability detection + gate -> `src/capabilities.ts`, `src/ui/capability-gate.ts`
   (matrix + rationale in `docs/browser-support.md`)

@@ -1,0 +1,163 @@
+/* Folder-source rows between the sidebar CTA and the trip list: where the
+   loaded trips came from, whether the folder is remembered, and the per-folder
+   menu. Populated by src/ui/folder-sources.ts; the whole list is hidden until
+   an ingest names a source.
+
+   Quiet by design - this is provenance, not navigation. It reads one notch
+   below the trip cards below it (muted text, no card shell), so the eye still
+   lands on the trips first. */
+
+.folder-sources {
+    list-style: none;
+    margin: 0 0 var(--dc-space-2);
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    /* No scroll container of its own: it would clip the row menus, which hang
+       out of their row. The sidebar already scrolls, and a session realistically
+       holds one or two cards. */
+}
+
+.folder-sources[hidden] {
+    display: none;
+}
+
+.folder-source {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-1);
+    padding: 2px var(--dc-space-1);
+    font-size: var(--dc-text-xs);
+    color: var(--fg-dim);
+    min-height: 24px;
+}
+
+/* Liveness dot: neutral until the probe answers, then green = readable,
+   red = gone (unplugged/moved), amber = permission lapsed. Same meaning as on
+   the landing chips. */
+.folder-source__status {
+    flex-shrink: 0;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--fg-mute);
+}
+
+.folder-source.is-available .folder-source__status {
+    background: var(--ok);
+}
+
+.folder-source.is-unavailable .folder-source__status {
+    background: var(--err);
+}
+
+.folder-source.is-unknown .folder-source__status {
+    background: var(--warn);
+}
+
+/* The name is the only shrinkable part of the row - the controls to its right
+   keep their size, an SD-card folder name does not. */
+.folder-source__label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--dc-font-mono);
+}
+
+/* The call to action while the folder is only a session source. Reads as a
+   link, not a button: the row must not compete with the trip cards. */
+.folder-source__remember {
+    flex-shrink: 0;
+    background: transparent;
+    border: none;
+    padding: var(--dc-space-1);
+    font-family: var(--dc-font-body);
+    font-size: var(--dc-text-xs);
+    color: var(--accent-ink);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    white-space: nowrap;
+}
+
+.folder-source__remember:hover {
+    color: var(--accent);
+}
+
+.folder-source__remember:disabled {
+    color: var(--fg-mute);
+    cursor: default;
+    text-decoration: none;
+}
+
+/* Settled state - a label, not a control: forgetting lives in the menu, so a
+   stray click on the row's right edge can never undo the memory. */
+.folder-source__state {
+    flex-shrink: 0;
+    color: var(--fg-mute);
+    white-space: nowrap;
+}
+
+.folder-source__menu-wrap {
+    position: relative;
+    flex-shrink: 0;
+    display: inline-flex;
+}
+
+.folder-source__menu {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: var(--dc-radius-sm);
+    color: var(--fg-mute);
+    cursor: pointer;
+}
+
+.folder-source__menu:hover {
+    color: var(--fg);
+    background: var(--bg-hover);
+}
+
+/* Touch: grow the tap target through a pseudo-element so the 22px control
+   keeps its size and the row keeps its height (see trip-annotations.css). */
+@media (pointer: coarse) {
+    .folder-source__menu::before {
+        content: "";
+        position: absolute;
+        inset: -11px -6px;
+    }
+}
+
+/* Reuses the shared popover shell (overflow.css); only the anchoring differs -
+   it hangs off the row, which is the positioned ancestor. */
+.folder-source__popup {
+    top: calc(100% + 2px);
+    right: 0;
+    min-width: 12rem;
+}
+
+/* A state line, not an action: same metrics as a menu button so the list does
+   not jump, but inert and muted. */
+.folder-source__menu-state {
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+    padding: var(--dc-space-1) var(--dc-space-3);
+    color: var(--fg-mute);
+    font-size: var(--dc-text-xs);
+}
+
+.folder-source__remember:focus-visible,
+.folder-source__menu:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}

@@ -731,6 +731,12 @@
                 </svg>
                 <span data-i18n="sidebar.cta.label">Add files</span>
             </label>
+            <!-- Folders the loaded trips came out of: status, "remember this
+                 one", notes file. Filled by src/ui/folder-sources.ts; stays
+                 hidden until the first ingest names a source. -->
+            <ul id="folder-sources" class="folder-sources"
+                data-i18n-attr="aria-label:folderSources.aria"
+                aria-label="Folders of this session" hidden></ul>
             <ul id="trip-list" class="trip-list"></ul>
         </aside>
 
