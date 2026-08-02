@@ -787,10 +787,10 @@ export const enDict = {
     "settings.about.clearCache.description": "Forces a fresh download of the app on the next visit. Settings and language are kept.",
 
     "settings.danger.section": "Danger zone",
-    "settings.danger.description": "Erases all dashcamigo data saved on this device: settings, language, theme, your privacy choice, install hints and offline data. Your loaded videos aren't affected — they only live in this tab.",
+    "settings.danger.description": "Erases all dashcamigo data saved on this device: settings, language, theme, your privacy choice, install hints, offline data, plus your trip names, notes, markers and remembered folders. Your loaded videos aren't affected — they only live in this tab.",
     "settings.danger.cta": "Reset everything",
     "settings.danger.confirm.title": "Reset all local data?",
-    "settings.danger.confirm.body": "All saved settings, cookies and offline data will be cleared, then the page will reload. This can't be undone.",
+    "settings.danger.confirm.body": "All saved settings, cookies, offline data and everything you saved about your trips will be cleared, then the page will reload. This can't be undone.",
     "settings.danger.confirm.note": "An installed app shortcut and browser permissions aren't touched — remove those from your system or browser settings.",
     "settings.danger.confirm.cta": "Reset everything",
     "settings.danger.confirm.cancel": "Cancel",

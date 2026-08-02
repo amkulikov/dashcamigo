@@ -497,10 +497,11 @@ export type I18nKey =
     | "map.ctrl.zoomOut"
     | "map.ctrl.resetBearing"
     | "map.ctrl.attribution"
-    // Cooperative-gestures overlay, touch + mobile layout only (where the viewer
-    // is a scroll container): one finger scrolls the page, two fingers move the
-    // map. The desktop Ctrl/Cmd-scroll variant is intentionally not enabled, so
-    // its message is never shown and not localized.
+    // Cooperative-gestures overlay, on wherever the page can scroll past the map
+    // (touch, and the stacked layout on any pointer): one finger scrolls the
+    // page, two fingers move the map; with a mouse there, plain wheel scrolls
+    // and Ctrl/Cmd+wheel zooms. MapLibre picks the Windows or Mac wording by
+    // platform, so both variants are localized.
     | "map.coop.twoFingers"
     | "map.coop.ctrlScroll"
     | "map.coop.cmdScroll"

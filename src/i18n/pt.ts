@@ -787,10 +787,11 @@ export const ptDict = {
     "settings.about.clearCache.description": "Força um download novo do app na próxima visita. Configurações e idioma são mantidos.",
 
     "settings.danger.section": "Zona de perigo",
-    "settings.danger.description": "Apaga todos os dados do dashcamigo salvos neste dispositivo: configurações, idioma, tema, sua escolha de privacidade, avisos de instalação e dados offline. Os vídeos carregados não são afetados — eles só existem nesta aba.",
+    "settings.danger.description":
+        "Apaga todos os dados do dashcamigo salvos neste dispositivo: configurações, idioma, tema, sua escolha de privacidade, avisos de instalação, dados offline e os nomes, as notas e os marcadores das suas viagens e as pastas lembradas. Os vídeos carregados não são afetados — eles só existem nesta aba.",
     "settings.danger.cta": "Redefinir tudo",
     "settings.danger.confirm.title": "Redefinir todos os dados locais?",
-    "settings.danger.confirm.body": "Todas as configurações salvas, cookies e dados offline serão apagados e a página vai recarregar. Não dá para desfazer.",
+    "settings.danger.confirm.body": "Todas as configurações salvas, cookies, dados offline e tudo o que você salvou sobre suas viagens serão apagados e a página vai recarregar. Não dá para desfazer.",
     "settings.danger.confirm.note": "Um atalho de aplicativo instalado e as permissões do navegador não são afetados — remova-os pelas configurações do seu sistema ou do navegador.",
     "settings.danger.confirm.cta": "Redefinir tudo",
     "settings.danger.confirm.cancel": "Cancelar",

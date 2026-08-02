@@ -787,10 +787,11 @@ export const deDict = {
     "settings.about.clearCache.description": "Beim nächsten Besuch wird die App neu heruntergeladen. Einstellungen und Sprache bleiben erhalten.",
 
     "settings.danger.section": "Gefahrenzone",
-    "settings.danger.description": "Löscht alle dashcamigo-Daten, die auf diesem Gerät gespeichert sind: Einstellungen, Sprache, Theme, deine Datenschutz-Entscheidung, Installations-Hinweise und Offline-Daten. Deine geladenen Videos sind nicht betroffen — sie existieren nur in diesem Tab.",
+    "settings.danger.description":
+        "Löscht alle dashcamigo-Daten, die auf diesem Gerät gespeichert sind: Einstellungen, Sprache, Theme, deine Datenschutz-Entscheidung, Installations-Hinweise, Offline-Daten sowie deine Fahrtnamen, Notizen, Marker und gemerkten Ordner. Deine geladenen Videos sind nicht betroffen — sie existieren nur in diesem Tab.",
     "settings.danger.cta": "Alles zurücksetzen",
     "settings.danger.confirm.title": "Alle lokalen Daten zurücksetzen?",
-    "settings.danger.confirm.body": "Alle gespeicherten Einstellungen, Cookies und Offline-Daten werden gelöscht, danach lädt die Seite neu. Das lässt sich nicht rückgängig machen.",
+    "settings.danger.confirm.body": "Alle gespeicherten Einstellungen, Cookies, Offline-Daten und alles, was du zu deinen Fahrten notiert hast, werden gelöscht, danach lädt die Seite neu. Das lässt sich nicht rückgängig machen.",
     "settings.danger.confirm.note": "Eine installierte App-Verknüpfung und Browser-Berechtigungen bleiben unberührt — entferne sie über deine System- oder Browser-Einstellungen.",
     "settings.danger.confirm.cta": "Alles zurücksetzen",
     "settings.danger.confirm.cancel": "Abbrechen",

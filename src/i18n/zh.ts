@@ -787,10 +787,10 @@ export const zhDict = {
     "settings.about.clearCache.description": "下次访问时强制重新下载应用。设置和语言会保留。",
 
     "settings.danger.section": "危险操作",
-    "settings.danger.description": "删除本设备上保存的所有 dashcamigo 数据：设置、语言、主题、你的隐私选择、安装提示和离线数据。已加载的视频不受影响 — 它们只存在于当前标签页。",
+    "settings.danger.description": "删除本设备上保存的所有 dashcamigo 数据：设置、语言、主题、你的隐私选择、安装提示、离线数据，以及你的行程名称、备注、标记和记住的文件夹。已加载的视频不受影响 — 它们只存在于当前标签页。",
     "settings.danger.cta": "重置全部",
     "settings.danger.confirm.title": "重置所有本地数据？",
-    "settings.danger.confirm.body": "将清除所有已保存的设置、cookies 和离线数据，然后页面会重新加载。此操作无法撤销。",
+    "settings.danger.confirm.body": "将清除所有已保存的设置、cookies、离线数据以及你为行程保存的一切，然后页面会重新加载。此操作无法撤销。",
     "settings.danger.confirm.note": "已安装的应用快捷方式和浏览器权限不会被清除 — 请通过操作系统或浏览器设置移除。",
     "settings.danger.confirm.cta": "重置全部",
     "settings.danger.confirm.cancel": "取消",

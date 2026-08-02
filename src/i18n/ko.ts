@@ -797,10 +797,10 @@ export const koDict = {
     "settings.about.clearCache.description": "다음 방문 때 앱을 새로 다운로드해요. 설정과 언어는 그대로 유지돼요.",
 
     "settings.danger.section": "위험 영역",
-    "settings.danger.description": "이 기기에 저장된 dashcamigo 데이터를 모두 지워요: 설정, 언어, 테마, 개인정보 선택, 설치 안내, 오프라인 데이터. 불러온 영상은 영향을 받지 않아요 — 이 탭에만 있어요.",
+    "settings.danger.description": "이 기기에 저장된 dashcamigo 데이터를 모두 지워요: 설정, 언어, 테마, 개인정보 선택, 설치 안내, 오프라인 데이터, 그리고 주행 이름·메모·마커·기억한 폴더. 불러온 영상은 영향을 받지 않아요 — 이 탭에만 있어요.",
     "settings.danger.cta": "모두 초기화",
     "settings.danger.confirm.title": "모든 로컬 데이터를 초기화할까요?",
-    "settings.danger.confirm.body": "저장된 설정, 쿠키, 오프라인 데이터가 모두 지워지고 페이지가 다시 로드돼요. 되돌릴 수 없어요.",
+    "settings.danger.confirm.body": "저장된 설정, 쿠키, 오프라인 데이터, 주행에 대해 저장한 내용이 모두 지워지고 페이지가 다시 로드돼요. 되돌릴 수 없어요.",
     "settings.danger.confirm.note": "설치된 앱 바로가기와 브라우저 권한은 그대로예요 — 그건 시스템이나 브라우저 설정에서 직접 지워 주세요.",
     "settings.danger.confirm.cta": "모두 초기화",
     "settings.danger.confirm.cancel": "취소",
