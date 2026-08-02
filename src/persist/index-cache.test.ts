@@ -6,7 +6,7 @@ import { INDEX_CACHE_VERSION } from "./types.js";
 function makeCandidate(): VideoCandidate {
     return {
         file: new File([new Uint8Array(16)], "NO20260730-143756-000001F.MP4", { lastModified: 1_753_900_000_000 }),
-        relativePath: "Martin/Normal/NO20260730-143756-000001F.MP4",
+        relativePath: "DASHCAM_SD/Normal/NO20260730-143756-000001F.MP4",
         fingerprint: "novatek-ts:cam1",
         appliedExtractors: ["novatek-gps"],
         classifierMatches: { time: "novatek", channel: "novatek", mode: "novatek", sequence: "novatek" },

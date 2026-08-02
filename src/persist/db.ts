@@ -63,6 +63,13 @@ export function openPersistDb(): Promise<PersistDb> {
                 // listens for versionchange when this callback is provided.
                 void closePersistDb();
             },
+            terminated() {
+                // The browser killed the connection on its own (storage
+                // pressure, a backend crash). Dropping the memo lets the next
+                // call reopen; keeping it would leave every later annotation
+                // and cache write failing silently for the tab's lifetime.
+                dbPromise = null;
+            },
         });
         dbPromise.catch(() => {
             dbPromise = null;
@@ -86,9 +93,4 @@ export async function closePersistDb(): Promise<void> {
     } catch {
         // The open itself failed - nothing to close.
     }
-}
-
-/** Test-only reset of the memoized connection. */
-export function _resetForTests(): void {
-    dbPromise = null;
 }

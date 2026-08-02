@@ -24,6 +24,16 @@ const MAX_ENTRIES = 50_000;
 // A cache hit refreshes savedAt only past this age - re-writing thousands of
 // untouched entries on every open of a daily folder would be pure churn.
 const TOUCH_MIN_AGE_MS = 24 * 60 * 60 * 1000;
+// Ceiling on entries refreshed per open. Bounds the write burst when a whole
+// big folder crosses the age gate at once; the remainder refreshes next time.
+const MAX_TOUCH_PER_CALL = 512;
+// Emergency eviction when a write is rejected for lack of room (origin quota,
+// not our own bound): drop this share of the oldest entries so the next attempt
+// has somewhere to go instead of failing identically forever.
+const QUOTA_EVICT_FRACTION = 0.25;
+// Entries whose previous size is read in one turn. Bounds the peak memory of a
+// big ingest's write-back without giving up the batched round trip.
+const PUT_CHUNK = 200;
 // Running total of `bytes` across entries, kept in the meta store and updated
 // in the same transaction as every put/delete - the prune trigger without a
 // full-store walk.
@@ -60,19 +70,36 @@ export async function touchIndexCacheEntries(keys: string[]): Promise<void> {
     const db = await openPersistDb();
     const now = Date.now();
     const tx = db.transaction("indexCache", "readwrite");
-    let touched = 0;
+    // Which of these keys are actually stale, decided from the savedAt INDEX -
+    // key-only, so nothing is deserialized to answer a question about a
+    // timestamp. Reading every hit's full payload (records included) to find
+    // the handful past the age gate was the expensive half of this pass.
+    const staleByAge = await tx.store.index("bySavedAt").getAllKeys(IDBKeyRange.upperBound(now - TOUCH_MIN_AGE_MS));
+    const wanted = new Set<IDBValidKey>(keys);
+    const due = staleByAge.filter((key) => wanted.has(key));
+    // A rewrite is a full re-serialization of the entry, so a folder untouched
+    // for a day would rewrite its whole payload at once (hundreds of MB on a
+    // big card). Bound the burst instead - and take the OLDEST first, in the
+    // index's own order: those are the ones the prune would evict next, and
+    // refreshing them moves the rest up the queue, so repeated opens converge
+    // instead of re-picking the same prefix forever.
+    const batch = due.slice(0, MAX_TOUCH_PER_CALL);
     await Promise.all(
-        keys.map(async (key) => {
+        batch.map(async (key) => {
             const entry = await tx.store.get(key);
             if (!entry || entry.version !== INDEX_CACHE_VERSION) return;
-            if (now - entry.savedAt < TOUCH_MIN_AGE_MS) return;
             entry.savedAt = now;
-            void tx.store.put(entry);
-            touched++;
+            // Voided on purpose (the batch is fire-and-forget), but with its own
+            // catch: an aborted transaction rejects every pending request, and a
+            // bare `void` would surface each as an unhandled rejection in the
+            // diagnostic ring buffer. tx.done below still reports the failure.
+            void tx.store.put(entry).catch(() => {});
         }),
     );
     await tx.done;
-    if (touched > 0) log.info("refreshed cache recency", { touched });
+    if (batch.length > 0) {
+        log.info("refreshed cache recency", { touched: batch.length, deferred: due.length - batch.length });
+    }
 }
 
 /** Strips the live File off a candidate for storage. Pure; the stored copy is
@@ -82,15 +109,26 @@ export function toCachedCandidate(candidate: VideoCandidate): CachedCandidateFie
     return fields;
 }
 
+// Rough stored weight of one GpsRecord: nine numeric fields plus the source
+// filename. Measured against JSON.stringify of a real record (~196 bytes) so
+// the volume bound keeps meaning roughly what it says; the prune itself only
+// ever compares entries against each other.
+const BYTES_PER_RECORD = 200;
+// Everything on a candidate that is not its records: paths, codec strings,
+// classifier verdicts, the fixed scalars.
+const BYTES_PER_CANDIDATE = 512;
+
 /**
- * Approximate stored size of an entry in bytes: the JSON length of the
- * candidate fields (records dominate) plus the repair's patched-moov buffer.
- * An estimate is enough - the prune needs relative weight, not accounting.
+ * Approximate stored size of an entry in bytes: the records (which dominate by
+ * orders of magnitude) plus a flat allowance for the rest and the repair's
+ * patched-moov buffer. Arithmetic, not JSON.stringify: this runs once per file
+ * at the end of every ingest, on the main thread, and serializing a
+ * thousand-record candidate to measure it costs more than storing it.
  */
 export function approxEntryBytes(candidate: CachedCandidateFields, repair: IndexerRepair | undefined): number {
-    // Uint8Array does not JSON-stringify usefully - add its raw length instead.
     const repairBytes = repair ? repair.patchedMoov.byteLength + 256 : 0;
-    return JSON.stringify(candidate).length + repairBytes + 256;
+    const pathBytes = candidate.relativePath.length * 2;
+    return candidate.records.length * BYTES_PER_RECORD + BYTES_PER_CANDIDATE + pathBytes + repairBytes;
 }
 
 /** Assembles a store entry for a freshly indexed candidate. */
@@ -120,17 +158,70 @@ export async function putIndexCacheEntries(entries: CachedFileIndex[]): Promise<
     const tx = db.transaction(["indexCache", "meta"], "readwrite");
     const store = tx.objectStore("indexCache");
     const meta = tx.objectStore("meta");
-    let delta = 0;
-    for (const entry of entries) {
-        // Upsert accounting: replacing an entry swaps its bytes, it does not add.
-        const previous = await store.get(entry.identityKey);
-        delta += (entry.bytes ?? 0) - (previous?.bytes ?? 0);
-        void store.put(entry);
+    let total = 0;
+    try {
+        let delta = 0;
+        // Read the previous sizes in bounded groups: one await per entry
+        // serialized a whole card's worth of round trips, while a single
+        // Promise.all over ten thousand entries would hold every previous
+        // payload (records included) in memory at once.
+        for (let start = 0; start < entries.length; start += PUT_CHUNK) {
+            const chunk = entries.slice(start, start + PUT_CHUNK);
+            const previous = await Promise.all(chunk.map((entry) => store.get(entry.identityKey)));
+            for (const [index, entry] of chunk.entries()) {
+                // Upsert accounting: replacing an entry swaps its bytes, it does not add.
+                delta += (entry.bytes ?? 0) - (previous[index]?.bytes ?? 0);
+                // Voided, but with its own catch: an aborted transaction rejects
+                // every pending request, and each bare `void` would land in the
+                // diagnostic ring buffer as an unhandled rejection. The abort
+                // itself still surfaces through tx.done.
+                void store.put(entry).catch(() => {});
+            }
+        }
+        total = (await readTotalBytes(meta)) + delta;
+        await meta.put(String(total), TOTAL_BYTES_META_KEY);
+        await tx.done;
+    } catch (err) {
+        // Out of room, specifically: the ORIGIN quota, which our own byte
+        // accounting cannot see, so the ordinary prune below would find nothing
+        // to do and every future write would fail the same way. Make room by
+        // age and let the next ingest try again. Any other abort (the browser
+        // closing the connection, a version change) leaves the store alone -
+        // throwing entries away would not help it.
+        const name = err instanceof Error ? err.name : "";
+        if (name === "QuotaExceededError") await evictOldestFraction(db, QUOTA_EVICT_FRACTION).catch(() => {});
+        throw err;
     }
-    const total = (await readTotalBytes(meta)) + delta;
-    await meta.put(String(total), TOTAL_BYTES_META_KEY);
-    await tx.done;
     await pruneIndexCache(db, total);
+}
+
+/**
+ * Deletes the oldest `fraction` of entries (by savedAt) and rebases the running
+ * byte total on what is left. The recovery path for a rejected write, where the
+ * accounting-driven prune has no reason to fire.
+ */
+async function evictOldestFraction(db: PersistDb, fraction: number): Promise<void> {
+    const tx = db.transaction(["indexCache", "meta"], "readwrite");
+    const store = tx.objectStore("indexCache");
+    const target = Math.ceil((await store.count()) * fraction);
+    if (target <= 0) {
+        await tx.done;
+        return;
+    }
+    let freed = 0;
+    let deleted = 0;
+    let cursor = await store.index("bySavedAt").openCursor();
+    while (cursor && deleted < target) {
+        freed += cursor.value.bytes ?? 0;
+        deleted++;
+        await cursor.delete();
+        cursor = await cursor.continue();
+    }
+    const meta = tx.objectStore("meta");
+    const remaining = Math.max(0, (await readTotalBytes(meta)) - freed);
+    await meta.put(String(remaining), TOTAL_BYTES_META_KEY);
+    await tx.done;
+    log.warn("index cache write rejected, evicted oldest entries", { deleted, totalBytes: remaining });
 }
 
 async function readTotalBytes(meta: { get(key: string): Promise<string | undefined> }): Promise<number> {
