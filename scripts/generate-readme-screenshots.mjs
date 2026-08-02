@@ -790,11 +790,17 @@ async function main() {
     checkPreconditions();
     mkdirSync(OUT_DIR, { recursive: true });
 
+    let tempRoot;
     let fixtureRoot;
     let server;
     let browser;
     try {
-        fixtureRoot = mkdtempSync(join(tmpdir(), "dashcamigo-readme-"));
+        // The randomized mkdtemp name is visible in the shot: the sidebar names
+        // the folder the trips came from. Nest a plausible card folder inside it
+        // so the screenshot reads like a real SD card, not a scratch directory.
+        tempRoot = mkdtempSync(join(tmpdir(), "dashcamigo-readme-"));
+        fixtureRoot = join(tempRoot, "DASHCAM_SD");
+        mkdirSync(fixtureRoot, { recursive: true });
         buildFixture(fixtureRoot, utcTodayYYYYMMDD());
         server = await startPreview();
         browser = await launchBrowser();
@@ -810,7 +816,7 @@ async function main() {
     } finally {
         if (browser) await browser.close().catch(() => {});
         if (server) server.kill("SIGTERM");
-        if (fixtureRoot) rmSync(fixtureRoot, { recursive: true, force: true });
+        if (tempRoot) rmSync(tempRoot, { recursive: true, force: true });
     }
 }
 
