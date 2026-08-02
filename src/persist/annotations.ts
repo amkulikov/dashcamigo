@@ -22,7 +22,10 @@ export async function saveAnnotations(records: AnnotationRecord[]): Promise<void
     const db = await openPersistDb();
     const tx = db.transaction("annotations", "readwrite");
     for (const record of records) {
-        void tx.store.put(record);
+        // Voided, but with its own catch: an aborted transaction rejects every
+        // pending request, and a bare `void` would surface each one as an
+        // unhandled rejection. tx.done below carries the real failure.
+        void tx.store.put(record).catch(() => {});
     }
     await tx.done;
 }
@@ -68,6 +71,19 @@ export function annotationContentEqual(a: AnnotationRecord, b: AnnotationRecord)
     return false;
 }
 
+/** Wire format marker of the notes file. Read by parseSidecarPayload, written
+ *  by buildSidecarPayload - the two must agree, which is why they live here. */
+const SIDECAR_FORMAT = "annotations";
+
+/**
+ * The exact object written into a folder's notes file. `savedAt` is a human
+ * courtesy (nothing reads it back); the records travel as-is, folderId
+ * included, and the reader restamps it with its own local id.
+ */
+export function buildSidecarPayload(records: AnnotationRecord[], savedAt: number): object {
+    return { app: "dashcamigo", format: SIDECAR_FORMAT, version: 1, savedAt, annotations: records };
+}
+
 function isFiniteNumber(value: unknown): value is number {
     return typeof value === "number" && Number.isFinite(value);
 }
@@ -96,7 +112,7 @@ export function parseSidecarPayload(text: string): AnnotationRecord[] | null {
     }
     if (typeof parsed !== "object" || parsed === null) return null;
     const obj = parsed as Record<string, unknown>;
-    if (obj.format !== "annotations" || !Array.isArray(obj.annotations)) return null;
+    if (obj.format !== SIDECAR_FORMAT || !Array.isArray(obj.annotations)) return null;
     const out: AnnotationRecord[] = [];
     for (const entry of obj.annotations) {
         if (typeof entry !== "object" || entry === null) continue;

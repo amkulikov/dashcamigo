@@ -20,7 +20,12 @@
 // endlessly erase each other's notes from the file.
 
 import { createLogger } from "../log.js";
-import { annotationContentEqual, mergeAnnotationLists, parseSidecarPayload } from "../persist/annotations.js";
+import {
+    annotationContentEqual,
+    buildSidecarPayload,
+    mergeAnnotationLists,
+    parseSidecarPayload,
+} from "../persist/annotations.js";
 import { ensureFileReadwritePermission, getFolder, listFolders, setFolderSidecarHandle } from "../persist/folders.js";
 import type { AnnotationRecord, RememberedFolder } from "../persist/types.js";
 import {
@@ -40,6 +45,19 @@ const SIDECAR_SUGGESTED_NAME = "dashcamigo-notes.json";
 const WRITE_DEBOUNCE_MS = 1500;
 
 const writeTimers = new Map<string, number>();
+
+// Folder ids whose sidecar file this session has actually READ. A write is a
+// full replace, so it must never run before this side has seen what the file
+// holds - after a browser restart the stored handle is back to "prompt" and
+// the open-time read fails, while the next annotation edit re-arms the grant
+// and would happily overwrite another machine's notes with this profile's copy.
+// Read, not parsed: a file that does not parse is ours to replace (the save
+// picker already asked about overwriting), one that could not be read may hold
+// everything.
+const sidecarReadFolders = new Set<string>();
+// One "could not write" toast per folder per session - the retry below runs on
+// every edit, and the user can only act on the message once.
+const unreadableWarned = new Set<string>();
 
 export function initAnnotationsSidecar(): void {
     registerAnnotationsChangedHook(onAnnotationsChanged);
@@ -63,6 +81,13 @@ export function initAnnotationsSidecar(): void {
 
 function onFolderOpened(folder: RememberedFolder): void {
     void (async () => {
+        // The grant on a stored file handle is session-scoped, so after a
+        // browser restart even READING the notes file fails. Every open path
+        // lands here, and some of them still hold user activation (the folder
+        // row's Remember click) - a no-op when activation is spent or the
+        // grant is live, and the difference between merging and not merging
+        // when it is not.
+        if (folder.sidecarHandle) await ensureFileReadwritePermission(folder.sidecarHandle);
         // Adopt records stranded on "" or on a dead folder id BEFORE the
         // merge, so they participate in the write-back below.
         try {
@@ -120,6 +145,10 @@ async function pickSidecarFile(folder: RememberedFolder): Promise<void> {
         log.warn("sidecar handle save failed", { err: err instanceof Error ? err.message : String(err) });
         return;
     }
+    // A different file from here on - whatever was read for the previous one
+    // says nothing about this one's contents.
+    sidecarReadFolders.delete(folder.id);
+    unreadableWarned.delete(folder.id);
     notify({ severity: "info", messageKey: "sidecar.enabled" });
     // NEVER blind-write here: showSaveFilePicker happily returns an existing
     // file (a notes file from another machine travelling with the SD card),
@@ -158,6 +187,21 @@ async function writeSidecar(folderId: string): Promise<void> {
     const folder = await getFolder(folderId).catch(() => null);
     if (!folder?.sidecarHandle) return;
     const handle = folder.sidecarHandle;
+    // The file has not been read this session (lapsed permission at folder-open
+    // time, a transient IO error). Writing now would replace its contents with
+    // this profile's records - the exact way notes made on another machine get
+    // erased. Retry the read instead: this call chain starts at an annotation
+    // edit, which re-armed the grant inside its gesture, so the retry usually
+    // succeeds and the merge schedules the converging write itself.
+    if (!sidecarReadFolders.has(folderId)) {
+        await mergeFromSidecar(folder);
+        if (!sidecarReadFolders.has(folderId) && !unreadableWarned.has(folderId)) {
+            unreadableWarned.add(folderId);
+            log.warn("sidecar write skipped, file unreadable this session", { folder: folder.label });
+            notify({ severity: "warn", messageKey: "sidecar.writeFailed" });
+        }
+        return;
+    }
     // Writes fire from a debounce timer - no user gesture, so only a still-
     // granted permission works; a lapsed one skips quietly. Recovery paths:
     // ensureFileReadwritePermission re-arms the grant inside the next
@@ -169,18 +213,15 @@ async function writeSidecar(folderId: string): Promise<void> {
             return;
         }
     }
-    const payload = {
-        app: "dashcamigo",
-        format: "annotations",
-        version: 1,
-        savedAt: Date.now(),
-        annotations: recordsForFolder(folderId),
-    };
+    const records = recordsForFolder(folderId);
+    // Built next to the parser (persist/annotations.ts) so the two halves of the
+    // file format cannot drift apart.
+    const payload = buildSidecarPayload(records, Date.now());
     try {
         const writable = await handle.createWritable();
         await writable.write(JSON.stringify(payload));
         await writable.close();
-        log.info("sidecar written", { folder: folder.label, records: payload.annotations.length });
+        log.info("sidecar written", { folder: folder.label, records: records.length });
     } catch (err) {
         log.warn("sidecar write failed", { err: err instanceof Error ? err.message : String(err) });
         notify({ severity: "warn", messageKey: "sidecar.writeFailed" });
@@ -202,11 +243,18 @@ async function mergeFromSidecar(folder: RememberedFolder): Promise<void> {
         const file = await handle.getFile();
         text = await file.text();
     } catch (err) {
+        // Not readable -> not writable either (see writeSidecar): the local
+        // copy stands and nothing touches the file until a read succeeds.
         log.warn("sidecar read failed", { err: err instanceof Error ? err.message : String(err) });
         return;
     }
+    // The file's contents are known from here on, whatever they turn out to be.
+    sidecarReadFolders.add(folder.id);
+    unreadableWarned.delete(folder.id);
     const parsed = parseSidecarPayload(text);
     if (parsed === null) {
+        // Foreign or corrupt: the save picker already asked about overwriting
+        // it, so the local copy wins - but nothing is merged out of it.
         log.warn("sidecar file is not a dashcamigo annotations file, ignoring");
         return;
     }

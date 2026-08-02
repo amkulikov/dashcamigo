@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { annotationContentEqual, mergeAnnotationLists, parseSidecarPayload } from "./annotations.js";
+import {
+    annotationContentEqual,
+    buildSidecarPayload,
+    mergeAnnotationLists,
+    parseSidecarPayload,
+} from "./annotations.js";
 import type { AnnotationRecord, TripMetaAnnotation } from "./types.js";
 
 function tripMeta(overrides: Partial<TripMetaAnnotation>): TripMetaAnnotation {
@@ -128,5 +133,29 @@ describe("parseSidecarPayload", () => {
     it("drops unknown extra fields instead of storing them", () => {
         const parsed = parseSidecarPayload(wrap([{ ...tripMeta({}), evil: "payload" }]));
         expect(parsed![0]).not.toHaveProperty("evil");
+    });
+});
+
+describe("buildSidecarPayload", () => {
+    // The notes file is the only copy that survives a browser data wipe, so the
+    // writer and the reader agreeing is not a detail: a payload the parser
+    // rejects reads as "not a dashcamigo file" and gets silently replaced.
+    it("round-trips every record kind through the parser unchanged", () => {
+        const records: AnnotationRecord[] = [
+            tripMeta({ id: "a1", name: "Morning drive", note: "roadworks on the bridge", isFavorite: true }),
+            tripMeta({ id: "a2", deleted: true, name: undefined }),
+            {
+                id: "m1",
+                folderId: "f1",
+                updatedAt: 7,
+                deleted: false,
+                kind: "marker",
+                utc: 1_753_900_500_000,
+                text: "deer",
+            },
+            { id: "m2", folderId: "f1", updatedAt: 8, deleted: true, kind: "marker", utc: 1_753_900_900_000, text: "" },
+        ];
+        const parsed = parseSidecarPayload(JSON.stringify(buildSidecarPayload(records, 1_753_901_000_000)));
+        expect(parsed).toEqual(records);
     });
 });
