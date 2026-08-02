@@ -51,6 +51,7 @@ export const ptDict = {
     "recentFolders.rememberAction": "Lembrar",
     "recentFolders.remembered": "{name} salva — a partir de agora, a um clique abaixo da área de arrastar.",
     "sidebar.bucket.favorites": "Favoritos",
+    "sidebar.bucket.others": "Restantes",
     "trip.fav.add": "Adicionar aos favoritos",
     "trip.fav.remove": "Remover dos favoritos",
     "trip.editMeta": "Editar nome e nota",

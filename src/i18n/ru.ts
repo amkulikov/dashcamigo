@@ -56,6 +56,7 @@ export const ruDict = {
     "recentFolders.rememberAction": "Запомнить",
     "recentFolders.remembered": "{name} сохранена — теперь открывается в один клик под зоной загрузки.",
     "sidebar.bucket.favorites": "Избранное",
+    "sidebar.bucket.others": "Остальные",
     "trip.fav.add": "В избранное",
     "trip.fav.remove": "Убрать из избранного",
     "trip.editMeta": "Изменить название и заметку",

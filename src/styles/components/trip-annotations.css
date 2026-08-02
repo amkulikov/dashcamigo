@@ -18,13 +18,25 @@
     background: transparent;
     border: none;
     border-radius: var(--dc-radius-sm);
-    color: var(--fg-mute);
+    /* Inherit from .trip-meta: over a hero preview the meta row switches to
+       light-on-dark, and an own fg-mute here would go dark-on-dark. */
+    color: inherit;
+    opacity: 0.75;
     cursor: pointer;
 }
 
 .trip-meta-action:hover {
-    color: var(--fg);
-    background: var(--bg-elev-2);
+    opacity: 1;
+    background: rgba(128, 128, 128, 0.25);
+}
+
+/* Touch: 22px is a guaranteed miss next to the play-trip header - grow the
+   hit target (the icon keeps its size). */
+@media (pointer: coarse) {
+    .trip-meta-action {
+        width: 34px;
+        height: 34px;
+    }
 }
 
 .trip-meta-action:focus-visible {
@@ -36,6 +48,7 @@
    color change alone is not. */
 .trip-fav.is-on {
     color: var(--warn);
+    opacity: 1;
 }
 .trip-fav.is-on svg {
     fill: currentColor;
@@ -100,19 +113,16 @@
     z-index: 3;
 }
 
-/* One pin: a full-height hairline + a flag head at the top. The button spans
-   the full height for an easy hit target; visuals live in the pseudos. */
+/* One pin: an inert full-height wrapper draws the hairline; only the flag
+   head at the top is a button. A full-height interactive column would sit
+   over the seek strip and the pan overview below and steal their drags. */
 .timeline-marker {
     position: absolute;
     top: 0;
     bottom: 0;
     width: 12px;
     transform: translateX(-50%);
-    pointer-events: auto;
-    background: transparent;
-    border: none;
-    padding: 0;
-    cursor: pointer;
+    pointer-events: none;
 }
 
 .timeline-marker::before {
@@ -126,11 +136,26 @@
     opacity: 0.45;
 }
 
-.timeline-marker::after {
+.timeline-marker-hit {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 14px;
+    height: 14px;
+    pointer-events: auto;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+}
+
+.timeline-marker-hit::after {
     content: "";
     position: absolute;
     top: 0;
     left: 50%;
+    transform: translateX(-50%);
     width: 8px;
     height: 9px;
     background: var(--accent);
@@ -138,11 +163,18 @@
     clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 68%, 0 100%);
 }
 
-.timeline-marker:hover::before {
+.timeline-marker:has(.timeline-marker-hit:hover)::before {
     opacity: 0.9;
 }
 
-.timeline-marker:focus-visible {
+.timeline-marker-hit:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: -2px;
+}
+
+@media (pointer: coarse) {
+    .timeline-marker-hit {
+        width: 22px;
+        height: 20px;
+    }
 }

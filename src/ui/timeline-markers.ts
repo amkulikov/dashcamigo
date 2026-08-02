@@ -32,33 +32,51 @@ export function initTimelineMarkers(): void {
     });
 }
 
+// Snapshot of what the layer currently renders. The overlay-sync hook fires
+// per pointermove during an overview drag - identical content must not churn
+// the DOM (and must not kill :hover on a pin mid-interaction).
+let renderedSignature = "";
+
 /** Rebuilds the pins for the active trip and the current zoom window. Cheap
  *  (a handful of DOM nodes); out-of-window markers are skipped, not clamped -
  *  a pile-up at the window edge reads as pins that are not there. */
 export function refreshTimelineMarkers(): void {
     if (!layer) return;
-    layer.replaceChildren();
     const trip = activeTrip();
-    if (!trip) return;
-    const view = getTimelineView();
-    if (!view) return;
-    for (const marker of markersForTrip(trip)) {
-        const contentSec = wallToContentSec(trip.timeline, marker.utc / 1000);
-        if (contentSec < view.startSec || contentSec > view.endSec) continue;
-        const frac = timelineSecToFrac(contentSec);
-        if (frac == null) continue;
-        const pin = document.createElement("button");
-        pin.type = "button";
+    const view = trip ? getTimelineView() : null;
+    const visible: Array<{ id: string; text: string; contentSec: number; frac: number }> = [];
+    if (trip && view) {
+        for (const marker of markersForTrip(trip)) {
+            const contentSec = wallToContentSec(trip.timeline, marker.utc / 1000);
+            if (contentSec < view.startSec || contentSec > view.endSec) continue;
+            const frac = timelineSecToFrac(contentSec);
+            if (frac == null) continue;
+            visible.push({ id: marker.id, text: marker.text, contentSec, frac });
+        }
+    }
+    const signature = visible.map((v) => `${v.id}${v.text}${v.frac.toFixed(4)}`).join("");
+    if (signature === renderedSignature) return;
+    renderedSignature = signature;
+    layer.replaceChildren();
+    for (const v of visible) {
+        // Wrapper (full height, inert): the hairline. Hit button (flag head
+        // only): a full-height interactive column would sit over the seek
+        // strip and the pan overview and steal their pointerdowns.
+        const pin = document.createElement("span");
         pin.className = "timeline-marker";
-        pin.style.left = `${(frac * 100).toFixed(3)}%`;
-        const label = marker.text || t("marker.untitled");
-        pin.title = label;
-        pin.setAttribute("aria-label", label);
-        pin.addEventListener("click", () => seekTripTime(contentSec));
-        pin.addEventListener("contextmenu", (ev) => {
+        pin.style.left = `${(v.frac * 100).toFixed(3)}%`;
+        const hit = document.createElement("button");
+        hit.type = "button";
+        hit.className = "timeline-marker-hit";
+        const label = v.text || t("marker.untitled");
+        hit.title = label;
+        hit.setAttribute("aria-label", label);
+        hit.addEventListener("click", () => seekTripTime(v.contentSec));
+        hit.addEventListener("contextmenu", (ev) => {
             ev.preventDefault();
-            openMarkerModal(marker.id);
+            openMarkerModal(v.id);
         });
+        pin.appendChild(hit);
         layer.appendChild(pin);
     }
 }

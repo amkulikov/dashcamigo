@@ -51,6 +51,7 @@ export const esDict = {
     "recentFolders.rememberAction": "Recordar",
     "recentFolders.remembered": "{name} guardada — a partir de ahora, a un clic debajo de la zona de arrastre.",
     "sidebar.bucket.favorites": "Favoritos",
+    "sidebar.bucket.others": "El resto",
     "trip.fav.add": "Añadir a favoritos",
     "trip.fav.remove": "Quitar de favoritos",
     "trip.editMeta": "Editar nombre y nota",

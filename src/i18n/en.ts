@@ -52,6 +52,7 @@ export const enDict = {
     "recentFolders.rememberAction": "Remember",
     "recentFolders.remembered": "{name} saved — one click away under the drop zone from now on.",
     "sidebar.bucket.favorites": "Favorites",
+    "sidebar.bucket.others": "Everything else",
     "trip.fav.add": "Add to favorites",
     "trip.fav.remove": "Remove from favorites",
     "trip.editMeta": "Edit name and note",

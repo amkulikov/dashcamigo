@@ -51,6 +51,7 @@ export const plDict = {
     "recentFolders.rememberAction": "Zapamiętaj",
     "recentFolders.remembered": "{name} zapisany — od teraz jedno kliknięcie pod polem upuszczania.",
     "sidebar.bucket.favorites": "Ulubione",
+    "sidebar.bucket.others": "Pozostałe",
     "trip.fav.add": "Dodaj do ulubionych",
     "trip.fav.remove": "Usuń z ulubionych",
     "trip.editMeta": "Edytuj nazwę i notatkę",

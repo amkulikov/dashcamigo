@@ -205,10 +205,13 @@ function showToast(n: Notification): void {
     if (!toastContainer) return;
 
     // Enforce stack cap by removing the oldest toast first. Older entries
-    // remain in the drawer; only the on-screen view is bounded.
+    // remain in the drawer; only the on-screen view is bounded. Action toasts
+    // are exempt victims: they never auto-dismiss because the user must
+    // choose, so a burst of ordinary toasts must not silently destroy the
+    // pending choice (the stack may briefly exceed the cap instead).
     while (activeToasts.size >= TOAST_STACK_LIMIT) {
-        const [oldestId] = activeToasts.keys();
-        if (oldestId !== undefined) removeToast(oldestId);
+        const victim = [...activeToasts.entries()].find(([, v]) => !v.el.querySelector(".dc-toast__action"))?.[0];
+        if (victim !== undefined) removeToast(victim);
         else break;
     }
 

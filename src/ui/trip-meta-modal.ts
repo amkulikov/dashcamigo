@@ -1,15 +1,20 @@
-// Trip name & note editor. Opened from the pencil on a trip card (wired via
+// Trip name/note editor. Opened from the pencil on a trip card via
 // initSidebar's onEditTripMeta callback in app.ts - sidebar cannot import this
-// module without a cycle, since saving re-renders the sidebar).
+// module (it imports sidebar's renderTrips back).
 
+import type { Trip } from "../trips.js";
 import { setTripMeta, tripMetaFor } from "./annotations.js";
+import { activateModal, deactivateModal, wireBackdropDismiss } from "./modal-helper.js";
 import { renderTrips } from "./sidebar.js";
-import { state } from "./state.js";
 
 let modal: HTMLElement | null = null;
 let nameInput: HTMLInputElement | null = null;
 let noteInput: HTMLTextAreaElement | null = null;
-let currentTripIdx = -1;
+// The Trip object, not an index: state.trips is rebuilt/reordered by
+// regrouping (a second folder dropped while the modal is open), and a stale
+// index would save the edit onto whichever trip now sits at that position.
+// The captured object still anchors to the files the user was editing.
+let currentTrip: Trip | null = null;
 
 export function initTripMetaModal(): void {
     modal = document.getElementById("trip-meta-modal");
@@ -19,17 +24,11 @@ export function initTripMetaModal(): void {
 
     document.getElementById("trip-meta-cancel")?.addEventListener("click", close);
     document.getElementById("trip-meta-save")?.addEventListener("click", save);
-    // Backdrop click closes without saving; clicks inside the card stay put.
-    modal.addEventListener("click", (ev) => {
-        if (ev.target === modal) close();
-    });
+    wireBackdropDismiss(modal, close);
+    // Escape/Tab live in modal-helper (activateModal); only Enter-to-save in
+    // the single-line name field is ours. The textarea keeps Enter for
+    // newlines.
     modal.addEventListener("keydown", (ev) => {
-        if (ev.key === "Escape") {
-            ev.preventDefault();
-            close();
-        }
-        // Enter in the single-line name field saves; the textarea keeps Enter
-        // for newlines.
         if (ev.key === "Enter" && ev.target === nameInput) {
             ev.preventDefault();
             save();
@@ -37,28 +36,28 @@ export function initTripMetaModal(): void {
     });
 }
 
-export function openTripMetaModal(tripIdx: number): void {
+export function openTripMetaModal(trip: Trip): void {
     if (!modal || !nameInput || !noteInput) return;
-    const trip = state.trips[tripIdx];
-    if (!trip) return;
-    currentTripIdx = tripIdx;
+    currentTrip = trip;
     const meta = tripMetaFor(trip);
     nameInput.value = meta?.name ?? "";
     noteInput.value = meta?.note ?? "";
     modal.hidden = false;
-    nameInput.focus();
+    activateModal(modal, { onClose: close, initialFocus: nameInput });
 }
 
 function save(): void {
-    const trip = state.trips[currentTripIdx];
-    if (trip && nameInput && noteInput) {
-        setTripMeta(trip, { name: nameInput.value, note: noteInput.value });
+    if (currentTrip && nameInput && noteInput) {
+        setTripMeta(currentTrip, { name: nameInput.value, note: noteInput.value });
         renderTrips();
     }
     close();
 }
 
 function close(): void {
-    if (modal) modal.hidden = true;
-    currentTripIdx = -1;
+    if (modal) {
+        modal.hidden = true;
+        deactivateModal(modal);
+    }
+    currentTrip = null;
 }

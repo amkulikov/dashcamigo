@@ -80,6 +80,15 @@
     background: var(--bg-elev-2);
 }
 
+/* Own span, not a bare text node: inline-flex wraps the text into an
+   anonymous flex item where text-overflow is inert. */
+.recent-folder-chip__label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* Liveness dot: neutral until the background probe answers, then green =
    readable, red = gone, amber = permission lapsed (a click re-prompts). */
 .recent-folder-chip__status {

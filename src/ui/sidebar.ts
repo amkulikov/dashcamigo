@@ -37,7 +37,9 @@ interface SidebarCallbacks {
     onPlayFrame: (tripIdx: number, frameIdx: number) => void;
     /** Opens the trip name/note editor (trip-meta-modal, wired in app.ts -
      *  a direct import here would cycle: saving re-renders this sidebar). */
-    onEditTripMeta?: (tripIdx: number) => void;
+    // The Trip object, not its index - the modal outlives regroups that
+    // reorder state.trips, and a stale index would edit the wrong trip.
+    onEditTripMeta?: (trip: Trip) => void;
     /**
      * UX-08: clicked the event chip in the trip header. Implementation (frame selection, seek to event-5s, pause)
      * lives in the player so the sidebar does not depend on the player API.
@@ -107,7 +109,11 @@ export function renderTrips(): void {
 
     // Favorited trips float above everything, keeping their relative sorted
     // order. Applied after the sort so the star wins over any sort key.
-    const isFavoriteEntry = (entry: { trip: Trip }) => tripMetaFor(entry.trip)?.isFavorite === true;
+    // tripMetaFor walks the trip's candidates - resolve it once per trip,
+    // not once per filter pass (this repaints every 700 ms during ingest).
+    const favoriteByTrip = new Map<Trip, boolean>();
+    for (const entry of displayed) favoriteByTrip.set(entry.trip, tripMetaFor(entry.trip)?.isFavorite === true);
+    const isFavoriteEntry = (entry: { trip: Trip }) => favoriteByTrip.get(entry.trip) === true;
     const favoriteCount = displayed.filter(isFavoriteEntry).length;
     if (favoriteCount > 0) {
         displayed = [...displayed.filter(isFavoriteEntry), ...displayed.filter((d) => !isFavoriteEntry(d))];
@@ -119,20 +125,24 @@ export function renderTrips(): void {
     // Click handling is delegated in initSidebar (see dom.list listener). data-action attributes on header/chevron/file-li are sufficient.
 
     displayed.forEach(({ trip, idx: tripIdx }, displayIdx) => {
-        if (showDateBuckets) {
-            // The floated favorites section gets its own bucket label instead
-            // of date buckets - its trips are not in date order.
-            const bucket =
-                displayIdx < favoriteCount
-                    ? t("sidebar.bucket.favorites")
-                    : dateBucketLabel(trip.startUtc, trip.cameraTzSec);
-            if (bucket !== lastBucket) {
-                const sep = document.createElement("li");
-                sep.className = "trip-date-sep";
-                sep.textContent = bucket;
-                dom.list.appendChild(sep);
-                lastBucket = bucket;
-            }
+        // The floated favorites always get their own labelled section - in
+        // every sort mode, or they read as trips mysteriously out of order.
+        // Under date sort the rest gets date buckets; under other sorts a
+        // single "everything else" label closes the favorites group.
+        let bucket: string | null = null;
+        if (displayIdx < favoriteCount) {
+            bucket = t("sidebar.bucket.favorites");
+        } else if (showDateBuckets) {
+            bucket = dateBucketLabel(trip.startUtc, trip.cameraTzSec);
+        } else if (favoriteCount > 0) {
+            bucket = t("sidebar.bucket.others");
+        }
+        if (bucket !== null && bucket !== lastBucket) {
+            const sep = document.createElement("li");
+            sep.className = "trip-date-sep";
+            sep.textContent = bucket;
+            dom.list.appendChild(sep);
+            lastBucket = bucket;
         }
         dom.list.appendChild(buildTripCard(trip, tripIdx));
     });
@@ -801,7 +811,8 @@ export function initSidebar(cb: SidebarCallbacks): void {
             renderTrips();
         } else if (action === "trip-edit") {
             ev.stopPropagation();
-            cb.onEditTripMeta?.(tripIdx);
+            const trip = state.trips[tripIdx];
+            if (trip) cb.onEditTripMeta?.(trip);
         } else if (action === "file-details") {
             // Stop propagation - the button sits inside the clip li, which carries
             // data-action="play-file"; without this the closest() walk on bubble

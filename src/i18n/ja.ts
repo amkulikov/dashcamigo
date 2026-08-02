@@ -61,6 +61,7 @@ export const jaDict = {
     "recentFolders.rememberAction": "記憶する",
     "recentFolders.remembered": "{name} を保存しました。次回からドロップ欄の下からワンクリックで開けます。",
     "sidebar.bucket.favorites": "お気に入り",
+    "sidebar.bucket.others": "その他",
     "trip.fav.add": "お気に入りに追加",
     "trip.fav.remove": "お気に入りから削除",
     "trip.editMeta": "名前とメモを編集",

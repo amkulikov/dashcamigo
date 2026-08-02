@@ -60,6 +60,7 @@ export const koDict = {
     "recentFolders.rememberAction": "기억하기",
     "recentFolders.remembered": "{name} 저장됨 — 이제 드롭 영역 아래에서 한 번의 클릭으로 열 수 있습니다.",
     "sidebar.bucket.favorites": "즐겨찾기",
+    "sidebar.bucket.others": "나머지",
     "trip.fav.add": "즐겨찾기에 추가",
     "trip.fav.remove": "즐겨찾기에서 제거",
     "trip.editMeta": "이름과 메모 편집",

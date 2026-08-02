@@ -75,6 +75,7 @@ export type I18nKey =
     | "recentFolders.remembered"
     // trip annotations: favorite star, name/note editor
     | "sidebar.bucket.favorites"
+    | "sidebar.bucket.others"
     | "trip.fav.add"
     | "trip.fav.remove"
     | "trip.editMeta"

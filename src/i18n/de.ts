@@ -49,6 +49,7 @@ export const deDict = {
     "recentFolders.rememberAction": "Merken",
     "recentFolders.remembered": "{name} gespeichert — ab jetzt nur einen Klick unter der Ablagezone entfernt.",
     "sidebar.bucket.favorites": "Favoriten",
+    "sidebar.bucket.others": "Alle übrigen",
     "trip.fav.add": "Zu Favoriten hinzufügen",
     "trip.fav.remove": "Aus Favoriten entfernen",
     "trip.editMeta": "Name und Notiz bearbeiten",

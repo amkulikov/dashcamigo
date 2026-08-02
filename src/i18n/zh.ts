@@ -50,6 +50,7 @@ export const zhDict = {
     "recentFolders.rememberAction": "记住",
     "recentFolders.remembered": "已保存 {name}——今后在拖放区下方一键打开。",
     "sidebar.bucket.favorites": "收藏",
+    "sidebar.bucket.others": "其他",
     "trip.fav.add": "添加到收藏",
     "trip.fav.remove": "从收藏中移除",
     "trip.editMeta": "编辑名称和备注",

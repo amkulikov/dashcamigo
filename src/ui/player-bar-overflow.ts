@@ -35,6 +35,7 @@ export function initPlayerBarOverflow() {
     const loop = document.getElementById("player-loop") as HTMLButtonElement | null;
     const viewMode = document.getElementById("player-view-mode") as HTMLButtonElement | null;
     const help = document.getElementById("player-help") as HTMLButtonElement | null;
+    const addMarker = document.getElementById("player-add-marker") as HTMLButtonElement | null;
     const map = document.getElementById("player-map") as HTMLButtonElement | null;
     const fullscreen = document.getElementById("player-fullscreen") as HTMLButtonElement | null;
     const exportBtn = document.getElementById("player-export") as HTMLButtonElement | null;
@@ -60,6 +61,17 @@ export function initPlayerBarOverflow() {
             priority: 9,
             label: () => t("player.capture"),
             isAvailable: () => !capture.hidden,
+        });
+    }
+    // Marker drop: secondary on narrow bars - every un-collapsible control
+    // widens the mandatory floor and pushes Export toward the kebab (the
+    // regression the floor comment in player-bar.css guards against).
+    if (addMarker) {
+        items.push({
+            el: addMarker,
+            priority: 9,
+            label: () => t("player.addMarker"),
+            isAvailable: () => !addMarker.hidden,
         });
     }
     if (loop) {

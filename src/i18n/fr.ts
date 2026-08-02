@@ -51,6 +51,7 @@ export const frDict = {
     "recentFolders.rememberAction": "Mémoriser",
     "recentFolders.remembered": "{name} enregistré — désormais à un clic sous la zone de dépôt.",
     "sidebar.bucket.favorites": "Favoris",
+    "sidebar.bucket.others": "Le reste",
     "trip.fav.add": "Ajouter aux favoris",
     "trip.fav.remove": "Retirer des favoris",
     "trip.editMeta": "Modifier le nom et la note",

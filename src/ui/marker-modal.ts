@@ -3,6 +3,7 @@
 // init (app.ts) - importing timeline-markers here would cycle.
 
 import { deleteMarker, markerById, updateMarkerText } from "./annotations.js";
+import { activateModal, deactivateModal, wireBackdropDismiss } from "./modal-helper.js";
 
 let modal: HTMLElement | null = null;
 let textInput: HTMLInputElement | null = null;
@@ -24,14 +25,10 @@ export function initMarkerModal(callbacks: { onChanged: () => void }): void {
         }
         close();
     });
-    modal.addEventListener("click", (ev) => {
-        if (ev.target === modal) close();
-    });
+    wireBackdropDismiss(modal, close);
+    // Escape/Tab live in modal-helper (activateModal); only Enter-to-save is
+    // ours.
     modal.addEventListener("keydown", (ev) => {
-        if (ev.key === "Escape") {
-            ev.preventDefault();
-            close();
-        }
         if (ev.key === "Enter" && ev.target === textInput) {
             ev.preventDefault();
             save();
@@ -46,7 +43,7 @@ export function openMarkerModal(markerId: string): void {
     currentMarkerId = markerId;
     textInput.value = marker.text;
     modal.hidden = false;
-    textInput.focus();
+    activateModal(modal, { onClose: close, initialFocus: textInput });
 }
 
 function save(): void {
@@ -58,6 +55,9 @@ function save(): void {
 }
 
 function close(): void {
-    if (modal) modal.hidden = true;
+    if (modal) {
+        modal.hidden = true;
+        deactivateModal(modal);
+    }
     currentMarkerId = null;
 }
