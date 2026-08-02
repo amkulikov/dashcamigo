@@ -16,7 +16,7 @@
     gap: var(--dc-space-2);
     padding: var(--dc-space-1) var(--dc-space-2);
     background: var(--bg-elev);
-    border-top: 1px solid var(--border);
+    border-top: var(--player-bar-border) solid var(--border);
     color: var(--fg);
     /* flex-wrap: nowrap - on a narrow bar, progressive hide via @container
        (see below) + overflow-bar.ts remove low-priority elements.
@@ -71,12 +71,16 @@
     outline-offset: 1px;
 }
 /* Height the desktop bar occupies: its tallest control (the transport pair
-   below) plus the vertical padding and the top border. Derived, not typed in
-   twice - the fullscreen chart overlay is absolutely positioned and has to
-   clear the bar (viewer.css), and a hardcoded number there silently loses its
-   clearance the next time a control grows. Mobile has its own --mobile-bar-h. */
+   below) plus the vertical padding and the top border. Every term is the token
+   the bar itself lays out with, so growing a control moves this with it - the
+   fullscreen chart overlay is absolutely positioned and has to clear the bar
+   (viewer.css), and a number that only LOOKS derived silently loses that
+   clearance the next time the transport grows. Mobile has its own
+   --mobile-bar-h. */
 .player-wrap {
-    --player-bar-h: calc(38px + 2 * var(--dc-space-1) + 1px);
+    --player-transport-size: 38px;
+    --player-bar-border: 1px;
+    --player-bar-h: calc(var(--player-transport-size) + 2 * var(--dc-space-1) + var(--player-bar-border));
 }
 
 /* Desktop sizing: transport (play + frame-step) is noticeably larger - the
@@ -97,8 +101,8 @@
    (44px) and .player-btn:not(#player-play) (40px) rules still win there. */
 #player-play,
 .player-bar .player-step {
-    width: 38px;
-    height: 38px;
+    width: var(--player-transport-size);
+    height: var(--player-transport-size);
 }
 #player-play svg,
 .player-bar .player-step svg {
