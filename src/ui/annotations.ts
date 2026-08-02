@@ -19,6 +19,11 @@ const log = createLogger("annotations");
 const recordsById = new Map<string, AnnotationRecord>();
 // anchor file identity -> LIVE trip-meta record (tombstones excluded).
 const tripMetaByAnchor = new Map<string, TripMetaAnnotation>();
+// anchor file identity -> highest updatedAt seen for it, tombstones included.
+// A tombstone leaves no trace in tripMetaByAnchor, so without this an OLDER
+// live record processed afterwards walks into the empty slot and resurrects
+// itself - and the load order is db.getAll's (by UUID), not by time.
+const anchorWatermark = new Map<string, number>();
 // id -> LIVE timeline marker (tombstones excluded).
 const markersById = new Map<string, MarkerAnnotation>();
 
@@ -55,17 +60,25 @@ function indexRecord(record: AnnotationRecord): void {
     recordsById.set(record.id, record);
     if (record.kind === "tripMeta") {
         // The anchor entry is shared across record ids (two profiles can
-        // annotate the same trip independently), so both directions compare
-        // updatedAt: a stale tombstone must not unindex a different, newer
-        // live record, and of two live records the newer one wins
-        // deterministically instead of by iteration order.
-        const current = tripMetaByAnchor.get(record.anchor.fileIdentityKey);
+        // annotate the same trip independently), so resolution is pure LWW
+        // against the anchor's watermark - never against iteration order: a
+        // stale tombstone cannot unindex a newer live record, and a stale live
+        // record cannot re-occupy an anchor a newer tombstone cleared.
+        const key = record.anchor.fileIdentityKey;
+        const current = tripMetaByAnchor.get(key);
+        const watermark = anchorWatermark.get(key) ?? Number.NEGATIVE_INFINITY;
+        if (record.updatedAt > watermark) anchorWatermark.set(key, record.updatedAt);
         if (record.deleted) {
             if (current && (current.id === record.id || current.updatedAt <= record.updatedAt)) {
-                tripMetaByAnchor.delete(record.anchor.fileIdentityKey);
+                tripMetaByAnchor.delete(key);
             }
-        } else if (!current || current.id === record.id || current.updatedAt <= record.updatedAt) {
-            tripMetaByAnchor.set(record.anchor.fileIdentityKey, record);
+        } else if (record.updatedAt >= watermark || current?.id === record.id) {
+            // The same-id case bypasses the watermark on purpose and cannot
+            // resurrect anything (a tombstone leaves the slot empty, so
+            // `current` would be absent): it is an edit to the very record on
+            // screen, and a watermark set by another machine's fast clock must
+            // not make the user's own rename look like it did nothing.
+            tripMetaByAnchor.set(key, record);
         }
     } else if (record.kind === "marker") {
         if (record.deleted) markersById.delete(record.id);
@@ -90,11 +103,27 @@ export function tripMetaFor(trip: Trip): TripMetaAnnotation | null {
     // No annotations at all (the common case) - skip the candidate walk;
     // this runs per card on the render path, including mid-ingest repaints.
     if (tripMetaByAnchor.size === 0) return null;
+    // The NEWEST of them, not the first: a regroup can pull two separately
+    // annotated trips into one, and picking by frame order would show whichever
+    // clip happens to sort first - and hide an edit made after it.
+    let best: TripMetaAnnotation | null = null;
     for (const candidate of tripAllCandidates(trip)) {
         const meta = tripMetaByAnchor.get(candidateIdentityKey(candidate));
-        if (meta) return meta;
+        if (meta && (best === null || meta.updatedAt > best.updatedAt)) best = meta;
     }
-    return null;
+    return best;
+}
+
+/** Every live trip-meta record anchored inside this trip. More than one only
+ *  after a regroup merged separately annotated trips. */
+function liveTripMetas(trip: Trip): TripMetaAnnotation[] {
+    if (tripMetaByAnchor.size === 0) return [];
+    const out: TripMetaAnnotation[] = [];
+    for (const candidate of tripAllCandidates(trip)) {
+        const meta = tripMetaByAnchor.get(candidateIdentityKey(candidate));
+        if (meta && !out.includes(meta)) out.push(meta);
+    }
+    return out;
 }
 
 /** User-editable subset of a trip-meta annotation. */
@@ -113,6 +142,14 @@ export interface TripMetaPatch {
  */
 export function setTripMeta(trip: Trip, patch: TripMetaPatch): void {
     const existing = tripMetaFor(trip);
+    // Captured before the edit: any OTHER record anchored in this trip is a
+    // leftover of a regroup that merged two annotated trips. Only the newest is
+    // ever shown, so leaving one live means clearing the visible name uncovers
+    // a name the user thought was gone. They are folded in ONLY when this edit
+    // clears the trip (below) - trip membership is derived and reversible, so
+    // tombstoning on an ordinary edit would destroy the other trip's name the
+    // moment the gap setting puts the two back apart.
+    const superseded = liveTripMetas(trip).filter((meta) => meta.id !== existing?.id);
     const firstCandidate = tripAllCandidates(trip)[0];
     if (!firstCandidate) return;
     const base: TripMetaAnnotation = existing
@@ -139,9 +176,16 @@ export function setTripMeta(trip: Trip, patch: TripMetaPatch): void {
     }
     base.updatedAt = Date.now();
     base.deleted = !base.name && !base.note && base.isFavorite !== true;
-    // A tombstone must be findable by id for LWW, but not by anchor.
-    if (base.deleted) tripMetaByAnchor.delete(base.anchor.fileIdentityKey);
     persistRecord(base);
+    // Clearing the card means "this trip has no annotation" - so the leftovers
+    // it was hiding go with it, or the next render uncovers one of them.
+    // Anything short of a clear leaves them alone: they still belong to the
+    // trip they were written on, which a different gap setting brings back.
+    if (base.deleted) {
+        for (const meta of superseded) {
+            persistRecord({ ...meta, deleted: true, updatedAt: base.updatedAt });
+        }
+    }
 }
 
 /** Sets a string field, or removes it when empty - the stored record then
@@ -234,13 +278,20 @@ function captureProvisionalAnchor(trip: Trip, record: MarkerAnnotation, utcMs: n
 /**
  * Recomputes the UTC of provisionally-placed markers from their clip anchors
  * against the CURRENT trip timelines, re-saving the ones that moved. Call
- * after a lazy re-derive has rebuilt the affected trips. An anchor whose clip
- * is terminal (hydrated or read-failed) is done and dropped; one whose clip is
- * still pending stays for the next pass; one whose clip left the session is
- * dropped as unfixable. Returns how many markers moved.
+ * after a lazy re-derive has rebuilt the affected trips, and once more with
+ * `final` after the closing regroup sweep - that sweep reconciles trip
+ * boundaries with the real durations and can shift startUtc again, so an
+ * anchor consumed at per-trip hydration would leave the marker on the
+ * intermediate timeline. An anchor whose clip left the session is dropped as
+ * unfixable; one whose clip is still pending waits for the next pass; `final`
+ * clears whatever is left. Returns how many markers moved.
  */
-export function restampProvisionalMarkers(): number {
+export function restampProvisionalMarkers(opts?: { final?: boolean }): number {
     if (provisionalMarkerAnchors.size === 0) return 0;
+    // One index for the whole pass: anchors are held until the closing sweep,
+    // so a per-anchor walk of every trip's every frame would repeat that scan
+    // on each of the per-trip hydration passes.
+    const byIdentity = indexCandidatesByIdentity();
     let moved = 0;
     for (const [markerId, anchor] of [...provisionalMarkerAnchors]) {
         const marker = markersById.get(markerId);
@@ -249,14 +300,13 @@ export function restampProvisionalMarkers(): number {
             provisionalMarkerAnchors.delete(markerId);
             continue;
         }
-        const located = locateCandidate(anchor.fileKey);
+        const located = byIdentity.get(anchor.fileKey) ?? null;
         if (!located) {
             provisionalMarkerAnchors.delete(markerId);
             continue;
         }
         if (isHydrationPending(located.candidate)) continue;
         const segment = located.trip.timeline.segments.find((seg) => seg.frameIndex === located.frameIndex);
-        provisionalMarkerAnchors.delete(markerId);
         if (!segment) continue;
         const contentSec = Math.min(segment.contentStart + anchor.offsetSec, segment.contentEnd);
         const utcMs = Math.round(contentToWallUtc(located.trip.timeline, contentSec) * 1000);
@@ -268,6 +318,9 @@ export function restampProvisionalMarkers(): number {
         persistRecord({ ...marker, utc: utcMs, updatedAt: Date.now() });
         moved++;
     }
+    // Nothing can move a marker after the closing sweep, so holding anchors
+    // past it would only keep them (and their clip lookups) alive forever.
+    if (opts?.final) provisionalMarkerAnchors.clear();
     if (moved > 0) markersRestampedHook?.();
     return moved;
 }
@@ -276,23 +329,32 @@ export function restampProvisionalMarkers(): number {
 export function _resetForTests(): void {
     recordsById.clear();
     tripMetaByAnchor.clear();
+    anchorWatermark.clear();
     markersById.clear();
     provisionalMarkerAnchors.clear();
 }
 
-/** The trip and frame currently holding the clip with this identity key. */
-function locateCandidate(fileKey: string): { trip: Trip; frameIndex: number; candidate: VideoCandidate } | null {
+interface LocatedCandidate {
+    trip: Trip;
+    frameIndex: number;
+    candidate: VideoCandidate;
+}
+
+/** Identity key -> the trip and frame currently holding that clip, for every
+ *  loaded clip. First writer wins, matching the old first-match walk. */
+function indexCandidatesByIdentity(): Map<string, LocatedCandidate> {
+    const out = new Map<string, LocatedCandidate>();
     for (const trip of state.trips) {
         for (let frameIndex = 0; frameIndex < trip.frames.length; frameIndex++) {
             const frame = trip.frames[frameIndex]!;
             for (const candidate of Object.values(frame.channels)) {
-                if (candidate && candidateIdentityKey(candidate) === fileKey) {
-                    return { trip, frameIndex, candidate };
-                }
+                if (!candidate) continue;
+                const key = candidateIdentityKey(candidate);
+                if (!out.has(key)) out.set(key, { trip, frameIndex, candidate });
             }
         }
     }
-    return null;
+    return out;
 }
 
 /** Replaces a marker's text. No-op for a deleted/unknown id. */

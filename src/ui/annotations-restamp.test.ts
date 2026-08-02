@@ -105,6 +105,34 @@ describe("restampProvisionalMarkers", () => {
         expect(markerById(marker.id)?.utc).toBe((PROVISIONAL_START + HYDRATION_SHIFT_SEC + 5) * 1000);
     });
 
+    it("keeps the anchor after a per-trip pass so the closing sweep can move the marker again", () => {
+        const file = new File(["x"], "REC0007.MP4", { lastModified: 42 });
+        state.trips = [buildTrip(file, PROVISIONAL_START, false)];
+        const marker = addMarker(state.trips[0]!, (PROVISIONAL_START + 15) * 1000, "");
+
+        // Per-trip hydration: the clip is terminal, the marker follows it.
+        state.trips = [buildTrip(file, PROVISIONAL_START + HYDRATION_SHIFT_SEC, true)];
+        expect(restampProvisionalMarkers(), "per-trip pass moves it").toBe(1);
+
+        // The closing regroup reconciles boundaries and shifts the trip again.
+        state.trips = [buildTrip(file, PROVISIONAL_START + HYDRATION_SHIFT_SEC + 120, true)];
+        expect(restampProvisionalMarkers({ final: true }), "final sweep moves it again").toBe(1);
+        expect(markerById(marker.id)?.utc).toBe((PROVISIONAL_START + HYDRATION_SHIFT_SEC + 120 + 15) * 1000);
+    });
+
+    it("releases the anchors on the final sweep", () => {
+        const file = new File(["x"], "REC0008.MP4", { lastModified: 42 });
+        state.trips = [buildTrip(file, PROVISIONAL_START, false)];
+        addMarker(state.trips[0]!, (PROVISIONAL_START + 15) * 1000, "");
+
+        state.trips = [buildTrip(file, PROVISIONAL_START + HYDRATION_SHIFT_SEC, true)];
+        expect(restampProvisionalMarkers({ final: true })).toBe(1);
+
+        // A regroup after the sweep must not drag the marker along anymore.
+        state.trips = [buildTrip(file, PROVISIONAL_START + HYDRATION_SHIFT_SEC + 600, true)];
+        expect(restampProvisionalMarkers({ final: true })).toBe(0);
+    });
+
     it("skips the write when the re-derived position is within half a second", () => {
         const file = new File(["x"], "REC0004.MP4", { lastModified: 42 });
         state.trips = [buildTrip(file, PROVISIONAL_START, false)];
