@@ -557,10 +557,12 @@ export function clearOpeningTrip(): void {
 type ListFocus =
     | { kind: "title"; key: File }
     | { kind: "frame"; key: File; frameIndex: string }
-    // The annotation controls in the meta row: toggling the star re-renders
-    // the list AND can move the card into the favorites group, so without this
-    // every keyboard favorite/edit drops focus to <body>.
-    | { kind: "action"; key: File; action: "trip-fav" | "trip-edit" };
+    // Any trip-level control: toggling the star re-renders the list AND can
+    // move the card into the favorites group, the chevron and the event chip
+    // rebuild it outright - without this every keyboard press on one of them
+    // drops focus to <body>. Not a fixed union: naming the controls one by one
+    // is what left the chevron broken while the star next to it was fixed.
+    | { kind: "action"; key: File; action: string };
 
 /** Stable identity of a trip across a regroup: its first candidate's File object
  *  (groupTrips reuses the same File, so identity survives the renumber). */
@@ -581,9 +583,12 @@ function captureListFocus(scope: Element): ListFocus | null {
     if (el.dataset.action === "play-file" && el.dataset.frameIndex != null) {
         return { kind: "frame", key, frameIndex: el.dataset.frameIndex };
     }
-    if (el.dataset.action === "trip-fav" || el.dataset.action === "trip-edit") {
-        return { kind: "action", key, action: el.dataset.action };
-    }
+    // Every remaining trip-level control, by construction rather than by list.
+    // Frame-scoped ones are excluded: they repeat per clip, so `action` alone
+    // would restore focus onto the first row instead of the one it left - the
+    // branch above carries the frame index that gets it right.
+    const action = el.dataset.action;
+    if (action && el.dataset.frameIndex == null) return { kind: "action", key, action };
     return null;
 }
 

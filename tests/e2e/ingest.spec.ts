@@ -72,4 +72,28 @@ test.describe("ingest", () => {
 
         await shot(page, "ingest-02-gopro-single");
     });
+
+    // Both rebuild the whole list from their own handler - the star also floats
+    // the card into the favorites group - so each is a chance to drop the
+    // keyboard user on <body> with the card they were on now somewhere else.
+    // (trip-edit is deliberately absent: it opens a dialog, which owns focus
+    // until it closes.)
+    for (const action of ["chevron", "trip-fav"]) {
+        test(`keyboard focus survives activating the ${action} control`, async ({ page }) => {
+            await loadTrip(page, SAMPLE_70MAI);
+            const control = page.locator(`li.trip [data-action="${action}"]`).first();
+            await expect(control).toBeVisible();
+
+            await control.focus();
+            await expect(control).toBeFocused();
+            await page.keyboard.press("Enter");
+
+            // The node itself is gone - the list was rebuilt - so assert on
+            // where focus LANDED, not on the original handle.
+            const focused = await page.evaluate(
+                () => document.activeElement?.closest("[data-action]")?.getAttribute("data-action") ?? null,
+            );
+            expect(focused, "focus stays on the control, not <body>").toBe(action);
+        });
+    }
 });
