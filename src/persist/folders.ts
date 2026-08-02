@@ -70,10 +70,15 @@ export async function forgetAllFolders(): Promise<void> {
 /** Attaches (or replaces) the annotations-sidecar file handle on a folder. */
 export async function setFolderSidecarHandle(id: string, sidecarHandle: FileSystemFileHandle): Promise<void> {
     const db = await openPersistDb();
-    const folder = await db.get("folders", id);
-    if (!folder) return;
-    folder.sidecarHandle = sidecarHandle;
-    await db.put("folders", folder);
+    // Single transaction: a separate get+put would re-insert the record if a
+    // "forget" deleted it between the two (async gap spans a picker dialog).
+    const tx = db.transaction("folders", "readwrite");
+    const folder = await tx.store.get(id);
+    if (folder) {
+        folder.sidecarHandle = sidecarHandle;
+        await tx.store.put(folder);
+    }
+    await tx.done;
 }
 
 /** A folder by id, or null. */
@@ -85,10 +90,14 @@ export async function getFolder(id: string): Promise<RememberedFolder | null> {
 /** Stamps the folder as most recently opened; drives the chip ordering. */
 export async function markFolderOpened(id: string): Promise<void> {
     const db = await openPersistDb();
-    const folder = await db.get("folders", id);
-    if (!folder) return;
-    folder.lastOpenedAt = Date.now();
-    await db.put("folders", folder);
+    // Same single-transaction reasoning as setFolderSidecarHandle.
+    const tx = db.transaction("folders", "readwrite");
+    const folder = await tx.store.get(id);
+    if (folder) {
+        folder.lastOpenedAt = Date.now();
+        await tx.store.put(folder);
+    }
+    await tx.done;
 }
 
 /**
@@ -118,11 +127,16 @@ export type FolderAvailability = "available" | "unavailable" | "unknown";
  */
 export async function probeFolderAvailability(handle: FileSystemDirectoryHandle): Promise<FolderAvailability> {
     if ((await queryFolderPermission(handle)) !== "granted") return "unknown";
+    const iterator = handle.keys();
     try {
-        await handle.keys().next();
+        await iterator.next();
         return "available";
     } catch {
         return "unavailable";
+    } finally {
+        // One entry is all the probe needs - release the OS enumeration
+        // instead of leaving the iterator dangling until GC.
+        void iterator.return?.().catch?.(() => {});
     }
 }
 
@@ -137,6 +151,27 @@ export async function requestFolderPermission(handle: FileSystemDirectoryHandle)
     } catch (err) {
         log.warn("requestPermission failed", { err: err instanceof Error ? err.message : String(err) });
         return false;
+    }
+}
+
+/**
+ * Re-arms the readwrite grant on a stored file handle (the annotations
+ * sidecar). The grant a save picker gives is session-scoped - after a
+ * browser restart it reads "prompt", and the debounced gesture-less writes
+ * can only skip. This must run while user activation is live (a click); it
+ * may show the permission prompt, where Chromium offers "Allow on every
+ * visit" to end the asking. Silent no-op when already granted/denied or when
+ * activation is spent.
+ */
+export async function ensureFileReadwritePermission(handle: FileSystemFileHandle): Promise<void> {
+    if (typeof handle.queryPermission !== "function" || typeof handle.requestPermission !== "function") return;
+    try {
+        const current = await handle.queryPermission({ mode: "readwrite" });
+        if (current !== "prompt") return;
+        if (navigator.userActivation && !navigator.userActivation.isActive) return;
+        await handle.requestPermission({ mode: "readwrite" });
+    } catch (err) {
+        log.warn("sidecar permission re-arm failed", { err: err instanceof Error ? err.message : String(err) });
     }
 }
 

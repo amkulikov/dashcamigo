@@ -13,6 +13,7 @@
 //    if a third-party CDN ever does, they'd survive.
 
 import { createLogger } from "../log.js";
+import { closePersistDb } from "../persist/db.js";
 
 const log = createLogger("reset");
 
@@ -88,6 +89,14 @@ export async function resetAllAppState(): Promise<void> {
     // Mediabunny, browser-internal SW bookkeeping in some engines).
     // indexedDB.databases() is the standard enumeration API (Chrome,
     // Firefox 119+, Safari 17+); on older browsers we skip it.
+    // Our own connection must close first: deleteDatabase against a live
+    // connection reports "blocked", which the loop below counts as done -
+    // the wipe would silently skip the very data this reset is for.
+    try {
+        await closePersistDb();
+    } catch (err) {
+        log.warn("persist db close failed", err);
+    }
     if (typeof indexedDB !== "undefined" && typeof indexedDB.databases === "function") {
         try {
             const dbs = await indexedDB.databases();

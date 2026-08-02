@@ -56,12 +56,36 @@ export function openPersistDb(): Promise<PersistDb> {
                     cache.createIndex("bySavedAt", "savedAt");
                 }
             },
+            blocking(_currentVersion, _blockedVersion, _event) {
+                // Another context wants a version change (schema bump in a
+                // newer tab, or deleteDatabase from the Danger-zone reset).
+                // Without closing here, that context blocks FOREVER - idb only
+                // listens for versionchange when this callback is provided.
+                void closePersistDb();
+            },
         });
         dbPromise.catch(() => {
             dbPromise = null;
         });
     }
     return dbPromise;
+}
+
+/**
+ * Closes the shared connection (no-op when never opened or already failed).
+ * The next openPersistDb() reopens. Used before deleteDatabase in the reset
+ * flow - a live connection turns the delete into a silent "blocked" that the
+ * reset would misreport as success.
+ */
+export async function closePersistDb(): Promise<void> {
+    const pending = dbPromise;
+    if (pending === null) return;
+    dbPromise = null;
+    try {
+        (await pending).close();
+    } catch {
+        // The open itself failed - nothing to close.
+    }
 }
 
 /** Test-only reset of the memoized connection. */

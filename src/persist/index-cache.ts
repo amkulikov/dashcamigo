@@ -74,16 +74,21 @@ export async function putIndexCacheEntries(entries: CachedFileIndex[]): Promise<
 }
 
 async function pruneIndexCache(db: PersistDb): Promise<void> {
-    const count = await db.count("indexCache");
-    if (count <= MAX_ENTRIES) return;
-    let toDelete = count - MAX_ENTRIES;
+    // Count and delete share one transaction - a count taken outside it can
+    // race a concurrent batch write and over-delete.
     const tx = db.transaction("indexCache", "readwrite");
-    let cursor = await tx.store.index("bySavedAt").openCursor();
-    while (cursor && toDelete > 0) {
-        await cursor.delete();
-        toDelete--;
-        cursor = await cursor.continue();
+    const count = await tx.store.count();
+    let deleted = 0;
+    if (count > MAX_ENTRIES) {
+        let toDelete = count - MAX_ENTRIES;
+        let cursor = await tx.store.index("bySavedAt").openCursor();
+        while (cursor && toDelete > 0) {
+            await cursor.delete();
+            deleted++;
+            toDelete--;
+            cursor = await cursor.continue();
+        }
     }
     await tx.done;
-    log.info("pruned index cache", { deleted: count - MAX_ENTRIES, kept: MAX_ENTRIES });
+    if (deleted > 0) log.info("pruned index cache", { deleted, kept: count - deleted });
 }
