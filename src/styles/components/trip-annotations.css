@@ -275,4 +275,14 @@
         width: 22px;
         height: 20px;
     }
+    /* Grow the TAP zone past the visible flag to the 24px floor without growing
+       the flag itself (the trick the trip-card actions use): a wider button
+       would push its neighbour's pin off its own moment. Down only to the
+       flag's own height - reaching further would cover the seek strip the pin
+       deliberately keeps clear. */
+    .timeline-marker-hit::before {
+        content: "";
+        position: absolute;
+        inset: -2px -3px;
+    }
 }

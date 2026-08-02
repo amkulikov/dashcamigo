@@ -159,6 +159,19 @@ function refreshRememberedFolders(): void {
         });
 }
 
+/**
+ * Records the liveness an actual open attempt just proved, for the row the user
+ * clicked. The background probe is a guess about a folder nobody touched; a
+ * real enumerate that succeeded or threw is the authoritative answer, and
+ * without this the row keeps whatever the last probe said - green next to a
+ * "could not open" toast.
+ */
+export function setRememberedAvailability(folderId: string, availability: FolderAvailability): void {
+    if (rememberedAvailability.get(folderId) === availability) return;
+    rememberedAvailability.set(folderId, availability);
+    renderSources();
+}
+
 /** Remembered folders no session source is bound to - the rows offering to
  *  load. Bound ones are already represented by their session row. */
 function unloadedRemembered(): RememberedFolder[] {
@@ -333,12 +346,13 @@ function buildRow(source: FolderSource): HTMLElement {
         applyAvailability(row, source.availability);
     }
 
-    const label = document.createElement("span");
-    label.className = "folder-source__label";
     // A bare drop has no folder to name; say what it is instead of showing an
     // empty row - the trips still came from somewhere the user recognizes.
-    label.textContent = source.key || t("folderSources.looseFiles");
-    label.title = label.textContent;
+    const displayLabel = source.key || t("folderSources.looseFiles");
+    const label = document.createElement("span");
+    label.className = "folder-source__label";
+    label.textContent = displayLabel;
+    label.title = displayLabel;
     row.appendChild(label);
 
     // Nothing to offer without a handle: the classic input and drag-and-drop
@@ -352,7 +366,7 @@ function buildRow(source: FolderSource): HTMLElement {
         badge.textContent = t("folderSources.remembered");
         badge.title = t("folderSources.rememberedHint");
         row.appendChild(badge);
-        row.appendChild(buildMenu(source));
+        row.appendChild(buildMenu(source, displayLabel));
         return row;
     }
 
@@ -361,6 +375,9 @@ function buildRow(source: FolderSource): HTMLElement {
     remember.className = "folder-source__remember";
     remember.textContent = t("folderSources.remember");
     remember.title = t("folderSources.rememberHint");
+    // Several rows carry the same verb; the folder is what tells them apart, so
+    // it belongs in the accessible name and not only in the row above it.
+    remember.setAttribute("aria-label", `${t("folderSources.remember")}: ${displayLabel}`);
     remember.addEventListener("click", () => void onRemember(source, remember));
     row.appendChild(remember);
     return row;
@@ -389,6 +406,8 @@ function buildUnloadedRow(folder: RememberedFolder, displayLabel: string): HTMLE
     load.className = "folder-source__load";
     load.textContent = t("folderSources.load");
     load.title = t("folderSources.loadHint");
+    // Same verb on every unloaded row - name the folder it belongs to.
+    load.setAttribute("aria-label", `${t("folderSources.load")}: ${displayLabel}`);
     // Clickable in every liveness state on purpose: a re-plugged card revives
     // its stored handle, and the permission re-prompt needs this very gesture.
     load.addEventListener("click", () => rememberedFolderOpener?.(folder));
@@ -408,23 +427,41 @@ function buildUnloadedRow(folder: RememberedFolder, displayLabel: string): HTMLE
                         });
                 }),
             );
-        }),
+        }, displayLabel),
     );
     return row;
 }
 
 /** Colors a row by liveness: green = readable right now, red = gone
  *  (moved/unplugged), amber = permission lapsed. Mirrors the landing chips so
- *  one dot means one thing across the app. */
+ *  one dot means one thing across the app. The two problem states also get a
+ *  text equivalent on the dot - a colour alone says nothing to a screen reader
+ *  (or to anyone who cannot tell the red from the green). */
 function applyAvailability(row: HTMLElement, availability: FolderAvailability | null): void {
     row.classList.toggle("is-available", availability === "available");
     row.classList.toggle("is-unavailable", availability === "unavailable");
     row.classList.toggle("is-unknown", availability === "unknown");
     // Own hints, not the landing chips': those promise a retry on click, and
     // this row has nothing to click - it states the situation instead.
-    if (availability === "unavailable") row.title = t("folderSources.unavailableHint");
-    else if (availability === "unknown") row.title = t("folderSources.permissionHint");
+    const hint =
+        availability === "unavailable"
+            ? t("folderSources.unavailableHint")
+            : availability === "unknown"
+              ? t("folderSources.permissionHint")
+              : null;
+    if (hint) row.title = hint;
     else row.removeAttribute("title");
+    const status = row.querySelector<HTMLElement>(".folder-source__status");
+    if (!status) return;
+    if (hint) {
+        status.setAttribute("role", "img");
+        status.setAttribute("aria-label", hint);
+        status.removeAttribute("aria-hidden");
+    } else {
+        status.setAttribute("aria-hidden", "true");
+        status.removeAttribute("role");
+        status.removeAttribute("aria-label");
+    }
 }
 
 async function onRemember(source: FolderSource, button: HTMLButtonElement): Promise<void> {
@@ -450,8 +487,8 @@ async function onRemember(source: FolderSource, button: HTMLButtonElement): Prom
 
 /** The per-row overflow menu: the notes file and forgetting. Only remembered
  *  folders have one - an unremembered source has nothing to configure. */
-function buildMenu(source: FolderSource): HTMLElement {
-    return buildMenuShell((menu, setOpen) => fillMenu(menu, source, setOpen));
+function buildMenu(source: FolderSource, folderLabel: string): HTMLElement {
+    return buildMenuShell((menu, setOpen) => fillMenu(menu, source, setOpen), folderLabel);
 }
 
 /** The shared ⋯ popup shell: open/close state, outside-click and Escape
@@ -459,6 +496,7 @@ function buildMenu(source: FolderSource): HTMLElement {
  *  opens - the contents come from the store and can change between opens. */
 function buildMenuShell(
     fill: (menu: HTMLElement, setOpen: (open: boolean) => void) => void | Promise<void>,
+    folderLabel: string,
 ): HTMLElement {
     const wrap = document.createElement("span");
     wrap.className = "folder-source__menu-wrap";
@@ -466,7 +504,9 @@ function buildMenuShell(
     const toggle = document.createElement("button");
     toggle.type = "button";
     toggle.className = "folder-source__menu";
-    toggle.setAttribute("aria-label", t("folderSources.menu"));
+    // Every row has one of these; without the folder in the name a screen
+    // reader reads the same "Folder actions" over and over.
+    toggle.setAttribute("aria-label", `${t("folderSources.menu")}: ${folderLabel}`);
     toggle.setAttribute("aria-expanded", "false");
     toggle.title = t("folderSources.menu");
     toggle.appendChild(buildLucideIcon(["M5 12h.01", "M12 12h.01", "M19 12h.01"], 14));

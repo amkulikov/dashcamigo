@@ -41,6 +41,7 @@ import {
     purgeFolderSessionState,
     registerIngestSource,
     registerRememberedFolderOpener,
+    setRememberedAvailability,
 } from "./folder-sources.js";
 import { beginPreIngestReading, endPreIngestReading } from "./ingest-overlay.js";
 import { ingestFiles } from "./ingest.js";
@@ -139,6 +140,10 @@ async function openFolderHandle(
         endPreIngestReading();
         if (folder) {
             availabilityById.set(folder.id, "unavailable");
+            // The SOURCES row keeps its own map and its own probe cadence; an
+            // open that just failed is the strongest liveness evidence there
+            // is, and the landing chips are display:none once trips are loaded.
+            setRememberedAvailability(folder.id, "unavailable");
             void refreshChips();
         }
         log.warn("folder enumeration failed", {
@@ -154,6 +159,7 @@ async function openFolderHandle(
     }
     if (folder) {
         availabilityById.set(folder.id, "available");
+        setRememberedAvailability(folder.id, "available");
         markFolderOpened(folder.id).catch(() => {});
         void refreshChips();
         // Register the source BEFORE the open hook: adopting stranded
