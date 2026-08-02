@@ -249,11 +249,17 @@ export function dispatchParseVideoEmbeddedGpsViaWorker(
                 if (s.reason instanceof DOMException && s.reason.name === "AbortError") {
                     throw s.reason;
                 }
-                shardErrors.push({
-                    file: `shard-${i}`,
-                    extractor: "gps-extract-worker",
-                    message: s.reason instanceof Error ? s.reason.message : String(s.reason),
-                });
+                // One error PER FILE of the dead shard, named by basename -
+                // never one "shard-N" entry. Consumers key this channel by
+                // file.name to decide what may be written to the index cache;
+                // a synthetic shard name matches nothing, so every file the
+                // crash swallowed would be cached as a confirmed "no GPS" and
+                // never re-extracted. The whole shard did fail, so naming each
+                // of its files is also the honest report.
+                const message = s.reason instanceof Error ? s.reason.message : String(s.reason);
+                for (const cf of chunks[i] ?? []) {
+                    shardErrors.push({ file: cf.file.file.name, extractor: "gps-extract-worker", message });
+                }
             }
             const merged = mergeResults(fulfilled);
             extendArray(merged.errors, shardErrors);
