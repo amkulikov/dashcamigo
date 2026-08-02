@@ -6,16 +6,28 @@
 //
 // Flow: the first annotation in a remembered folder without a sidecar raises
 // a one-time offer toast; accepting opens a save picker defaulting INTO the
-// folder (startIn), and the picked file handle persists on the folder record.
-// After that every annotation change schedules a debounced atomic write
-// (createWritable = write-to-swap, rename-on-close - a crash never tears the
-// file). On folder open the sidecar is read back and merged both ways.
+// folder (startIn), the picked file handle persists on the folder record,
+// and the file is MERGED before anything is written - the user may have
+// picked a pre-existing notes file from another machine. After that every
+// annotation change schedules a debounced atomic write (createWritable =
+// write-to-swap, rename-on-close - a crash never tears the file).
+//
+// folderId in the file is never trusted: it is a per-profile UUID, so every
+// record read from a folder's sidecar is restamped with the LOCAL folder id
+// (see mergeFromSidecar). Without that, records written by another machine
+// would be excluded from this machine's writes and the two profiles would
+// endlessly erase each other's notes from the file.
 
 import { createLogger } from "../log.js";
-import { mergeAnnotationLists } from "../persist/annotations.js";
-import { getFolder, setFolderSidecarHandle } from "../persist/folders.js";
+import { annotationContentEqual, mergeAnnotationLists, parseSidecarPayload } from "../persist/annotations.js";
+import { ensureFileReadwritePermission, getFolder, listFolders, setFolderSidecarHandle } from "../persist/folders.js";
 import type { AnnotationRecord, RememberedFolder } from "../persist/types.js";
-import { applyMergedRecords, recordsForFolder, registerAnnotationsChangedHook } from "./annotations.js";
+import {
+    applyMergedRecords,
+    rebindFolderAnnotations,
+    recordsForFolder,
+    registerAnnotationsChangedHook,
+} from "./annotations.js";
 import { notify } from "./notifications.js";
 import { registerFolderOpenedHook } from "./persistent-folders.js";
 import { renderTrips } from "./sidebar.js";
@@ -33,7 +45,31 @@ const writeTimers = new Map<string, number>();
 
 export function initAnnotationsSidecar(): void {
     registerAnnotationsChangedHook(onAnnotationsChanged);
-    registerFolderOpenedHook((folder) => void mergeFromSidecar(folder));
+    registerFolderOpenedHook(onFolderOpened);
+    // A write still sitting in its debounce window at tab close would be
+    // lost. visibilitychange->hidden fires on tab switches too, shrinking
+    // the loss window; pagehide is the last reliable moment on real close
+    // (beforeunload is not delivered on mobile).
+    window.addEventListener("pagehide", flushPendingWrites);
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") flushPendingWrites();
+    });
+}
+
+function onFolderOpened(folder: RememberedFolder): void {
+    void (async () => {
+        // Adopt records stranded on "" or on a dead folder id BEFORE the
+        // merge, so they participate in the write-back below.
+        try {
+            const existingIds = new Set((await listFolders()).map((f) => f.id));
+            rebindFolderAnnotations(folder.id, existingIds);
+        } catch {
+            // No DB - session-only mode, nothing to rebind against.
+        }
+        await mergeFromSidecar(folder);
+    })().catch((err: unknown) => {
+        log.warn("sidecar open-merge failed", { err: err instanceof Error ? err.message : String(err) });
+    });
 }
 
 function onAnnotationsChanged(folderId: string): void {
@@ -41,9 +77,13 @@ function onAnnotationsChanged(folderId: string): void {
     // put a sidecar. The record still lives in IndexedDB.
     if (!folderId) return;
     void getFolder(folderId)
-        .then((folder) => {
+        .then(async (folder) => {
             if (!folder) return;
             if (folder.sidecarHandle) {
+                // Annotation edits happen inside clicks/keys - re-arm the
+                // session-scoped readwrite grant while activation is live,
+                // or the gesture-less debounced write below can only skip.
+                await ensureFileReadwritePermission(folder.sidecarHandle);
                 scheduleWrite(folderId);
                 return;
             }
@@ -90,8 +130,17 @@ async function pickSidecarFile(folder: RememberedFolder): Promise<void> {
         return;
     }
     notify({ severity: "info", messageKey: "sidecar.enabled" });
-    // First write immediately - the file the picker just created is empty.
-    scheduleWrite(folder.id, 0);
+    // NEVER blind-write here: showSaveFilePicker happily returns an existing
+    // file (a notes file from another machine travelling with the SD card),
+    // and the first write is a full overwrite. Merging handles both cases -
+    // an existing file contributes its records, an empty one triggers the
+    // converging write that seeds it.
+    const updated = await getFolder(folder.id).catch(() => null);
+    if (updated?.sidecarHandle) {
+        await mergeFromSidecar(updated).catch((err: unknown) => {
+            log.warn("sidecar first merge failed", { err: err instanceof Error ? err.message : String(err) });
+        });
+    }
 }
 
 function scheduleWrite(folderId: string, delayMs: number = WRITE_DEBOUNCE_MS): void {
@@ -106,13 +155,22 @@ function scheduleWrite(folderId: string, delayMs: number = WRITE_DEBOUNCE_MS): v
     );
 }
 
+function flushPendingWrites(): void {
+    for (const [folderId, timer] of [...writeTimers]) {
+        clearTimeout(timer);
+        writeTimers.delete(folderId);
+        void writeSidecar(folderId);
+    }
+}
+
 async function writeSidecar(folderId: string): Promise<void> {
     const folder = await getFolder(folderId).catch(() => null);
     if (!folder?.sidecarHandle) return;
     const handle = folder.sidecarHandle;
     // Writes fire from a debounce timer - no user gesture, so only a still-
-    // granted permission works; a lapsed one skips quietly and the next
-    // folder-open merge (inside a gesture-adjacent flow) catches up.
+    // granted permission works; a lapsed one skips quietly. Recovery paths:
+    // ensureFileReadwritePermission re-arms the grant inside the next
+    // annotation edit's gesture, and the chip-open flow re-arms it too.
     if (typeof handle.queryPermission === "function") {
         const permission = await handle.queryPermission({ mode: "readwrite" }).catch(() => "denied" as const);
         if (permission !== "granted") {
@@ -141,9 +199,9 @@ async function writeSidecar(folderId: string): Promise<void> {
 /**
  * Reads the folder's sidecar (if attached) and merges it with the local
  * records both ways: newer sidecar entries land in IndexedDB and refresh the
- * UI; newer local entries trigger a sidecar rewrite. An unreadable or
- * malformed file is an expected local failure - logged, never surfaced as an
- * error (the IndexedDB copy still stands).
+ * UI; a local side holding anything the file lacks triggers a converging
+ * rewrite. An unreadable or malformed file is an expected local failure -
+ * logged, never surfaced as an error (the IndexedDB copy still stands).
  */
 async function mergeFromSidecar(folder: RememberedFolder): Promise<void> {
     const handle = folder.sidecarHandle;
@@ -156,11 +214,16 @@ async function mergeFromSidecar(folder: RememberedFolder): Promise<void> {
         log.warn("sidecar read failed", { err: err instanceof Error ? err.message : String(err) });
         return;
     }
-    const sidecarRecords = parseSidecar(text);
-    if (sidecarRecords === null) {
+    const parsed = parseSidecarPayload(text);
+    if (parsed === null) {
         log.warn("sidecar file is not a dashcamigo annotations file, ignoring");
         return;
     }
+    // Restamp: records arriving through THIS folder's sidecar belong to this
+    // folder locally, whatever per-profile UUID the writing side used.
+    const sidecarRecords: AnnotationRecord[] = parsed.map((record) =>
+        record.folderId === folder.id ? record : { ...record, folderId: folder.id },
+    );
     const local = recordsForFolder(folder.id);
     const merged = mergeAnnotationLists(local, sidecarRecords);
     const changedLocally = applyMergedRecords(merged);
@@ -169,37 +232,17 @@ async function mergeFromSidecar(folder: RememberedFolder): Promise<void> {
         renderTrips();
         refreshTimelineMarkers();
     }
-    // The local side had records the file lacks (or newer versions) - push
-    // the merged state back so the file converges too.
-    if (merged.length !== sidecarRecords.length || changedLocally === 0) {
-        scheduleWrite(folder.id);
-    }
-}
-
-/** Parses sidecar JSON into records, or null when the file is not ours.
- *  Individual malformed entries are skipped, not fatal. */
-function parseSidecar(text: string): AnnotationRecord[] | null {
-    if (text.trim() === "") return [];
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(text);
-    } catch {
-        return null;
-    }
-    if (typeof parsed !== "object" || parsed === null) return null;
-    const obj = parsed as Record<string, unknown>;
-    if (obj.format !== "annotations" || !Array.isArray(obj.annotations)) return null;
-    const out: AnnotationRecord[] = [];
-    for (const entry of obj.annotations) {
-        if (typeof entry !== "object" || entry === null) continue;
-        const record = entry as Record<string, unknown>;
-        const hasBase =
-            typeof record.id === "string" &&
-            typeof record.updatedAt === "number" &&
-            typeof record.deleted === "boolean" &&
-            (record.kind === "tripMeta" || record.kind === "marker");
-        if (!hasBase) continue;
-        out.push(entry as AnnotationRecord);
-    }
-    return out;
+    // Push back only when the local side holds something the file lacks: an
+    // id missing from the file, a strictly newer version, or a different
+    // winner at an equal timestamp (tombstone tie). An in-sync pair skips
+    // the write entirely - rewriting an untouched file on every open churns
+    // its mtime for nothing.
+    const sidecarById = new Map(sidecarRecords.map((record) => [record.id, record]));
+    const needsPush = recordsForFolder(folder.id).some((record) => {
+        const inFile = sidecarById.get(record.id);
+        if (!inFile) return true;
+        if (inFile.updatedAt < record.updatedAt) return true;
+        return inFile.updatedAt === record.updatedAt && !annotationContentEqual(inFile, record);
+    });
+    if (needsPush) scheduleWrite(folder.id);
 }

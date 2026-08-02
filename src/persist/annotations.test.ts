@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mergeAnnotationLists } from "./annotations.js";
+import { annotationContentEqual, mergeAnnotationLists, parseSidecarPayload } from "./annotations.js";
 import type { AnnotationRecord, TripMetaAnnotation } from "./types.js";
 
 function tripMeta(overrides: Partial<TripMetaAnnotation>): TripMetaAnnotation {
@@ -43,5 +43,90 @@ describe("mergeAnnotationLists", () => {
         const merged = mergeAnnotationLists([tombstone], [revived]);
         expect(merged[0]!.deleted).toBe(false);
         expect((merged[0] as TripMetaAnnotation).name).toBe("revived");
+    });
+});
+
+describe("annotationContentEqual", () => {
+    it("treats records differing only in folderId as equal", () => {
+        const a = tripMeta({ folderId: "f1" });
+        const b = tripMeta({ folderId: "f2" });
+        expect(annotationContentEqual(a, b)).toBe(true);
+    });
+
+    it("detects a content difference at an equal timestamp", () => {
+        const a = tripMeta({ name: "one" });
+        const b = tripMeta({ name: "two" });
+        expect(annotationContentEqual(a, b)).toBe(false);
+    });
+
+    it("detects the live/tombstone difference", () => {
+        const live = tripMeta({ deleted: false });
+        const tombstone = tripMeta({ deleted: true });
+        expect(annotationContentEqual(live, tombstone)).toBe(false);
+    });
+});
+
+describe("parseSidecarPayload", () => {
+    const wrap = (annotations: unknown[]): string => JSON.stringify({ format: "annotations", annotations });
+
+    it("returns an empty list for an empty file", () => {
+        expect(parseSidecarPayload("")).toEqual([]);
+        expect(parseSidecarPayload("   \n")).toEqual([]);
+    });
+
+    it("returns null for a foreign or broken file", () => {
+        expect(parseSidecarPayload("not json"), "not JSON").toBeNull();
+        expect(parseSidecarPayload("[1,2]"), "not an object").toBeNull();
+        expect(parseSidecarPayload('{"format":"other","annotations":[]}'), "foreign format").toBeNull();
+    });
+
+    it("round-trips valid tripMeta and marker records", () => {
+        const records = [
+            tripMeta({ id: "t1", note: "n", isFavorite: true }),
+            {
+                id: "m1",
+                folderId: "f1",
+                updatedAt: 5,
+                deleted: false,
+                kind: "marker",
+                utc: 1_753_900_000_000,
+                text: "hit",
+            },
+        ];
+        const parsed = parseSidecarPayload(wrap(records));
+        expect(parsed).not.toBeNull();
+        expect(parsed!.map((r) => r.id).sort()).toEqual(["m1", "t1"]);
+        const meta = parsed!.find((r) => r.id === "t1") as TripMetaAnnotation;
+        expect(meta.name, "name survives").toBe("trip");
+        expect(meta.isFavorite, "favorite survives").toBe(true);
+    });
+
+    it("skips a tripMeta without an anchor instead of throwing later", () => {
+        const parsed = parseSidecarPayload(wrap([{ id: "x", updatedAt: 1, deleted: false, kind: "tripMeta" }]));
+        expect(parsed).toEqual([]);
+    });
+
+    it("skips non-finite timestamps that would pin LWW forever", () => {
+        const infinite = { ...tripMeta({}), updatedAt: Number.POSITIVE_INFINITY };
+        const nan = { ...tripMeta({ id: "a2" }), updatedAt: Number.NaN };
+        // JSON has no Infinity/NaN literal - emulate a hand-edited file.
+        const text = wrap([infinite, nan]).replace(/null/g, "1e999");
+        const parsed = parseSidecarPayload(text);
+        expect(parsed).toEqual([]);
+    });
+
+    it("skips a marker with a non-string text and non-number utc", () => {
+        const parsed = parseSidecarPayload(
+            wrap([
+                { id: "m1", updatedAt: 1, deleted: false, kind: "marker", utc: "later", text: "x" },
+                { id: "m2", updatedAt: 1, deleted: false, kind: "marker", utc: 5, text: { nested: true } },
+            ]),
+        );
+        expect(parsed).toEqual([]);
+    });
+
+    it("drops unknown extra fields instead of storing them", () => {
+        const parsed = parseSidecarPayload(wrap([{ ...tripMeta({}), evil: "payload" }]));
+        expect(parsed![0]).not.toHaveProperty("evil");
     });
 });

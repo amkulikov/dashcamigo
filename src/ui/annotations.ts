@@ -5,12 +5,13 @@
 // unavailability degrades to session-only annotations, never an error.
 
 import { createLogger } from "../log.js";
-import { loadAllAnnotations, saveAnnotation, saveAnnotations } from "../persist/annotations.js";
+import { annotationContentEqual, loadAllAnnotations, saveAnnotation, saveAnnotations } from "../persist/annotations.js";
 import { fileIdentityKey } from "../persist/identity.js";
 import type { AnnotationRecord, MarkerAnnotation, TripMetaAnnotation } from "../persist/types.js";
 import type { Trip, VideoCandidate } from "../trips.js";
 import { tripAllCandidates } from "../trips.js";
 import { folderIdForFileKey } from "./persistent-folders.js";
+import { state } from "./state.js";
 
 const log = createLogger("annotations");
 
@@ -22,12 +23,26 @@ const tripMetaByAnchor = new Map<string, TripMetaAnnotation>();
 const markersById = new Map<string, MarkerAnnotation>();
 
 /** Loads the stored annotations into the in-memory index. Call once at app
- *  start; until it resolves, lookups just return nothing. */
-export function initAnnotations(): void {
+ *  start; until it resolves, lookups just return nothing. `onLoaded` fires
+ *  when the load actually added records - the caller re-renders surfaces
+ *  that may have painted before the store answered. */
+export function initAnnotations(onLoaded?: () => void): void {
     void loadAllAnnotations()
         .then((records) => {
-            for (const record of records) indexRecord(record);
-            if (records.length > 0) log.info("annotations loaded", { count: records.length });
+            let applied = 0;
+            for (const record of records) {
+                // A sidecar merge can land before this load resolves (chip
+                // click on a cold start) - the older DB snapshot must not
+                // override what the merge just wrote.
+                const existing = recordsById.get(record.id);
+                if (existing && existing.updatedAt >= record.updatedAt) continue;
+                indexRecord(record);
+                applied++;
+            }
+            if (applied > 0) {
+                log.info("annotations loaded", { count: applied });
+                onLoaded?.();
+            }
         })
         .catch((err: unknown) => {
             log.warn("annotation store unavailable, session-only annotations", {
@@ -39,8 +54,19 @@ export function initAnnotations(): void {
 function indexRecord(record: AnnotationRecord): void {
     recordsById.set(record.id, record);
     if (record.kind === "tripMeta") {
-        if (record.deleted) tripMetaByAnchor.delete(record.anchor.fileIdentityKey);
-        else tripMetaByAnchor.set(record.anchor.fileIdentityKey, record);
+        // The anchor entry is shared across record ids (two profiles can
+        // annotate the same trip independently), so both directions compare
+        // updatedAt: a stale tombstone must not unindex a different, newer
+        // live record, and of two live records the newer one wins
+        // deterministically instead of by iteration order.
+        const current = tripMetaByAnchor.get(record.anchor.fileIdentityKey);
+        if (record.deleted) {
+            if (current && (current.id === record.id || current.updatedAt <= record.updatedAt)) {
+                tripMetaByAnchor.delete(record.anchor.fileIdentityKey);
+            }
+        } else if (!current || current.id === record.id || current.updatedAt <= record.updatedAt) {
+            tripMetaByAnchor.set(record.anchor.fileIdentityKey, record);
+        }
     } else if (record.kind === "marker") {
         if (record.deleted) markersById.delete(record.id);
         else markersById.set(record.id, record);
@@ -61,6 +87,9 @@ function candidateIdentityKey(candidate: VideoCandidate): string {
  * grouping owns the annotation.
  */
 export function tripMetaFor(trip: Trip): TripMetaAnnotation | null {
+    // No annotations at all (the common case) - skip the candidate walk;
+    // this runs per card on the render path, including mid-ingest repaints.
+    if (tripMetaByAnchor.size === 0) return null;
     for (const candidate of tripAllCandidates(trip)) {
         const meta = tripMetaByAnchor.get(candidateIdentityKey(candidate));
         if (meta) return meta;
@@ -192,14 +221,31 @@ export function recordsForFolder(folderId: string): AnnotationRecord[] {
 /**
  * Applies externally merged records (sidecar import): re-indexes them in
  * memory and batch-saves to IndexedDB. Returns how many records changed
- * relative to the in-memory state (0 = nothing new, skip re-render).
+ * user-visibly relative to the in-memory state (0 = nothing new, skip
+ * re-render). A record whose only difference is folderId adopts the incoming
+ * id silently: folderId is per-profile bookkeeping (restamped by the sidecar
+ * reader), and without adoption a record imported on another machine - or
+ * kept through a forget/re-remember cycle - would stay keyed to a dead id
+ * and vanish from every future sidecar write.
  */
 export function applyMergedRecords(records: AnnotationRecord[]): number {
     let changed = 0;
     const toSave: AnnotationRecord[] = [];
     for (const record of records) {
         const existing = recordsById.get(record.id);
-        if (existing && existing.updatedAt >= record.updatedAt) continue;
+        if (existing) {
+            const localWins =
+                existing.updatedAt > record.updatedAt ||
+                (existing.updatedAt === record.updatedAt && annotationContentEqual(existing, record));
+            if (localWins) {
+                if (existing.folderId !== record.folderId) {
+                    const restamped = { ...existing, folderId: record.folderId };
+                    indexRecord(restamped);
+                    toSave.push(restamped);
+                }
+                continue;
+            }
+        }
         indexRecord(record);
         toSave.push(record);
         changed++;
@@ -210,4 +256,40 @@ export function applyMergedRecords(records: AnnotationRecord[]): number {
         });
     }
     return changed;
+}
+
+/**
+ * Re-keys records onto `folderId` when they clearly belong to that folder
+ * but are stranded on "" (created before the folder was remembered) or on a
+ * dead id (the folder was forgotten and re-remembered under a fresh UUID).
+ * Records owned by another still-existing folder are left alone. Trip
+ * metadata re-associates by its anchor file; a marker has only a UTC, so an
+ * orphaned one is adopted when it falls inside a trip made of this folder's
+ * files. Returns how many records moved.
+ */
+export function rebindFolderAnnotations(folderId: string, existingFolderIds: ReadonlySet<string>): number {
+    const ownedUtcRanges: Array<[number, number]> = [];
+    for (const trip of state.trips) {
+        const first = tripAllCandidates(trip)[0];
+        if (first && folderIdForFileKey(candidateIdentityKey(first)) === folderId) {
+            ownedUtcRanges.push([trip.startUtc * 1000, trip.endUtc * 1000]);
+        }
+    }
+    let rebound = 0;
+    for (const record of [...recordsById.values()]) {
+        if (record.folderId === folderId) continue;
+        if (record.folderId !== "" && existingFolderIds.has(record.folderId)) continue;
+        let belongs = false;
+        if (record.kind === "tripMeta") {
+            belongs = folderIdForFileKey(record.anchor.fileIdentityKey) === folderId;
+        } else if (record.kind === "marker") {
+            belongs = ownedUtcRanges.some(([startMs, endMs]) => record.utc >= startMs && record.utc <= endMs);
+        }
+        if (!belongs) continue;
+        // updatedAt stays: re-keying is not a content edit and must not win
+        // LWW against a real edit made elsewhere.
+        persistRecord({ ...record, folderId });
+        rebound++;
+    }
+    return rebound;
 }

@@ -45,3 +45,94 @@ export function mergeAnnotationLists(a: AnnotationRecord[], b: AnnotationRecord[
     }
     return [...byId.values()];
 }
+
+/**
+ * Whether two records carry the same user-visible content and version.
+ * folderId is deliberately ignored - it is per-profile bookkeeping, not
+ * content, and differs across machines sharing one sidecar file.
+ */
+export function annotationContentEqual(a: AnnotationRecord, b: AnnotationRecord): boolean {
+    if (a.kind !== b.kind || a.deleted !== b.deleted || a.updatedAt !== b.updatedAt) return false;
+    if (a.kind === "tripMeta" && b.kind === "tripMeta") {
+        return (
+            a.anchor.fileIdentityKey === b.anchor.fileIdentityKey &&
+            a.anchor.startUtc === b.anchor.startUtc &&
+            a.name === b.name &&
+            a.note === b.note &&
+            a.isFavorite === b.isFavorite
+        );
+    }
+    if (a.kind === "marker" && b.kind === "marker") {
+        return a.utc === b.utc && a.text === b.text;
+    }
+    return false;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+    return typeof value === "number" && Number.isFinite(value);
+}
+
+function isOptionalString(value: unknown): value is string | undefined {
+    return value === undefined || typeof value === "string";
+}
+
+/**
+ * Parses sidecar-file JSON into annotation records, or null when the file is
+ * not a dashcamigo annotations file at all. Individual malformed entries are
+ * skipped, never fatal - and validation is per-kind and strict, because a
+ * record that passes lands in IndexedDB and in the render path: a tripMeta
+ * without an anchor would throw at index time, an Infinity updatedAt would
+ * pin itself against every future LWW edit, a non-string name would render
+ * as "[object Object]". folderId is NOT validated or trusted - callers
+ * restamp it with the local folder id.
+ */
+export function parseSidecarPayload(text: string): AnnotationRecord[] | null {
+    if (text.trim() === "") return [];
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(text);
+    } catch {
+        return null;
+    }
+    if (typeof parsed !== "object" || parsed === null) return null;
+    const obj = parsed as Record<string, unknown>;
+    if (obj.format !== "annotations" || !Array.isArray(obj.annotations)) return null;
+    const out: AnnotationRecord[] = [];
+    for (const entry of obj.annotations) {
+        if (typeof entry !== "object" || entry === null) continue;
+        const record = entry as Record<string, unknown>;
+        if (typeof record.id !== "string" || record.id === "") continue;
+        if (!isFiniteNumber(record.updatedAt)) continue;
+        if (typeof record.deleted !== "boolean") continue;
+        if (record.kind === "tripMeta") {
+            const anchor = record.anchor as Record<string, unknown> | null | undefined;
+            if (typeof anchor !== "object" || anchor === null) continue;
+            if (typeof anchor.fileIdentityKey !== "string" || !isFiniteNumber(anchor.startUtc)) continue;
+            if (!isOptionalString(record.name) || !isOptionalString(record.note)) continue;
+            if (record.isFavorite !== undefined && typeof record.isFavorite !== "boolean") continue;
+            out.push({
+                id: record.id,
+                folderId: typeof record.folderId === "string" ? record.folderId : "",
+                updatedAt: record.updatedAt,
+                deleted: record.deleted,
+                kind: "tripMeta",
+                anchor: { fileIdentityKey: anchor.fileIdentityKey, startUtc: anchor.startUtc },
+                ...(record.name !== undefined ? { name: record.name } : {}),
+                ...(record.note !== undefined ? { note: record.note } : {}),
+                ...(record.isFavorite !== undefined ? { isFavorite: record.isFavorite } : {}),
+            });
+        } else if (record.kind === "marker") {
+            if (!isFiniteNumber(record.utc) || typeof record.text !== "string") continue;
+            out.push({
+                id: record.id,
+                folderId: typeof record.folderId === "string" ? record.folderId : "",
+                updatedAt: record.updatedAt,
+                deleted: record.deleted,
+                kind: "marker",
+                utc: record.utc,
+                text: record.text,
+            });
+        }
+    }
+    return out;
+}

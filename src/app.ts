@@ -105,7 +105,7 @@ import {
 import { initTripUi } from "./ui/trip-ui-init.js";
 import { initOnboarding, pickTripOpenTour, runTripOpenTour } from "./ui/onboarding.js";
 import { resetVideoZoom } from "./ui/player-zoom.js";
-import { initSidebar, syncSortControls } from "./ui/sidebar.js";
+import { initSidebar, renderTrips, syncSortControls } from "./ui/sidebar.js";
 import { initSidebarResize } from "./ui/sidebar-resize.js";
 import { state } from "./ui/state.js";
 import type { AppState } from "./ui/state.js";
@@ -452,7 +452,12 @@ initPersistentFolders();
 // Trip annotations: load the stored records before the first ingest can
 // render cards; wire the name/note editor, the timeline-marker layer (pins
 // reposition through the chart's overlay-sync hook) and the marker editor.
-initAnnotations();
+// The store answers async - if the index-cache restore painted trip cards
+// first, this repaints them with their names/stars/notes.
+initAnnotations(() => {
+    renderTrips();
+    refreshTimelineMarkers();
+});
 initTripMetaModal();
 initTimelineMarkers();
 initMarkerModal({ onChanged: refreshTimelineMarkers });
