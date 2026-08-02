@@ -1561,6 +1561,12 @@
                             data-i18n-attr="aria-label:player.addMarker,title:player.addMarker" aria-label="Add marker">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v6"/><path d="M9 10h6"/><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
                     </button>
+                    <!-- All markers of the trip: jump, rename, delete. Shown
+                         only once the trip has one (src/ui/marker-list-modal.ts). -->
+                    <button id="player-marker-list" class="player-btn" type="button" hidden
+                            data-i18n-attr="aria-label:markerList.title,title:markerList.title" aria-label="Trip markers">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
+                    </button>
                     <span class="player-time mono" id="player-current">0:00</span>
                     <span class="player-time-sep">/</span>
                     <span class="player-time mono" id="player-total">0:00</span>
@@ -1943,6 +1949,21 @@
                     <button id="marker-modal-delete" class="dc-btn dc-btn--ghost marker-modal-delete" type="button" data-i18n="markerModal.delete">Delete</button>
                     <button id="marker-modal-cancel" class="dc-btn dc-btn--ghost" type="button" data-i18n="markerModal.cancel">Cancel</button>
                     <button id="marker-modal-save" class="dc-btn dc-btn--primary" type="button" data-i18n="markerModal.save">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Timeline-marker list of the active trip: seek, rename in place, delete.
+         Opened from the player-bar button next to "add marker". -->
+    <div id="marker-list-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="marker-list-title">
+        <div class="export-modal-card modal-card">
+            <div class="export-modal-title" id="marker-list-title" data-i18n="markerList.title">Trip markers</div>
+            <div class="export-modal-section">
+                <p id="marker-list-empty" class="marker-list-empty" data-i18n="markerList.empty" hidden>No markers in this trip yet.</p>
+                <ul id="marker-list-items" class="marker-list"></ul>
+                <div class="export-modal-actions">
+                    <button id="marker-list-close" class="dc-btn dc-btn--primary" type="button" data-i18n="markerList.close">Close</button>
                 </div>
             </div>
         </div>

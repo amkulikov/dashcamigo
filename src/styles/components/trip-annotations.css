@@ -102,6 +102,90 @@
     border-color: var(--err);
 }
 
+/* --- Marker list ---------------------------------------------------------- */
+
+.marker-list {
+    list-style: none;
+    margin: 0 0 var(--dc-space-3);
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-1);
+    /* A long trip can carry dozens of markers - scroll the list, not the page
+       behind the modal. */
+    max-height: 50vh;
+    overflow-y: auto;
+}
+
+.marker-list-row {
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+}
+
+.marker-list-seek {
+    flex-shrink: 0;
+    font: inherit;
+    font-size: var(--dc-text-sm);
+    color: var(--fg-dim);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--dc-radius-sm);
+    padding: var(--dc-space-1) var(--dc-space-2);
+    cursor: pointer;
+}
+
+.marker-list-seek:hover {
+    color: var(--fg);
+    border-color: var(--border);
+}
+
+.marker-list-text {
+    flex: 1;
+    min-width: 0;
+    font: inherit;
+    font-size: var(--dc-text-sm);
+    color: var(--fg);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-sm);
+    padding: var(--dc-space-1) var(--dc-space-2);
+}
+
+.marker-list-delete {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    font-size: var(--dc-text-lg);
+    line-height: 1;
+    color: var(--fg-mute);
+    background: transparent;
+    border: none;
+    border-radius: var(--dc-radius-sm);
+    cursor: pointer;
+}
+
+.marker-list-delete:hover {
+    color: var(--err);
+    background: rgba(128, 128, 128, 0.25);
+}
+
+.marker-list-seek:focus-visible,
+.marker-list-text:focus-visible,
+.marker-list-delete:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+}
+
+.marker-list-empty {
+    margin: 0 0 var(--dc-space-3);
+    color: var(--fg-dim);
+    font-size: var(--dc-text-sm);
+}
+
 /* --- Timeline marker pins ------------------------------------------------ */
 
 /* Overlay layer over the whole timeline host (chart + ruler + strip), same

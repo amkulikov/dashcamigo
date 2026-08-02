@@ -92,6 +92,12 @@ export type I18nKey =
     | "markerModal.delete"
     | "markerModal.cancel"
     | "markerModal.save"
+    | "markerList.title"
+    | "markerList.empty"
+    | "markerList.seek"
+    | "markerList.delete"
+    | "markerList.textPlaceholder"
+    | "markerList.close"
     // annotations sidecar file
     | "sidecar.offer"
     | "sidecar.offerAction"

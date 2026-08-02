@@ -5,12 +5,14 @@
 //
 // Interactions: the player-bar button drops a marker at the playhead and
 // opens the editor; a pin click seeks; contextmenu (long-press on Android)
-// opens the editor. TODO: an edit affordance for iOS touch (no contextmenu).
+// opens the editor. iOS touch has no contextmenu - there the marker list
+// (marker-list-modal.ts) is the way to rename and delete.
 
 import { t } from "../i18n/index.js";
 import { contentToWallUtc, wallToContentSec } from "../trips.js";
 import { addMarker, markersForTrip } from "./annotations.js";
 import { getTimelineView, timelineSecToFrac } from "./chart.js";
+import { syncMarkerListButton } from "./marker-list-modal.js";
 import { openMarkerModal } from "./marker-modal.js";
 import { getTripCurrentTime, seekTripTime } from "./player.js";
 import { activeTrip } from "./state.js";
@@ -41,12 +43,16 @@ let renderedSignature = "";
  *  (a handful of DOM nodes); out-of-window markers are skipped, not clamped -
  *  a pile-up at the window edge reads as pins that are not there. */
 export function refreshTimelineMarkers(): void {
-    if (!layer) return;
     const trip = activeTrip();
+    const markers = trip ? markersForTrip(trip) : [];
+    // Ahead of the layer guard and the signature short-circuit below: the bar
+    // button tracks the trip's whole marker set, not the zoom window's slice.
+    syncMarkerListButton(markers.length);
+    if (!layer) return;
     const view = trip ? getTimelineView() : null;
     const visible: Array<{ id: string; text: string; contentSec: number; frac: number }> = [];
     if (trip && view) {
-        for (const marker of markersForTrip(trip)) {
+        for (const marker of markers) {
             const contentSec = wallToContentSec(trip.timeline, marker.utc / 1000);
             if (contentSec < view.startSec || contentSec > view.endSec) continue;
             const frac = timelineSecToFrac(contentSec);

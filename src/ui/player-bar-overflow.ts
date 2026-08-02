@@ -36,6 +36,7 @@ export function initPlayerBarOverflow() {
     const viewMode = document.getElementById("player-view-mode") as HTMLButtonElement | null;
     const help = document.getElementById("player-help") as HTMLButtonElement | null;
     const addMarker = document.getElementById("player-add-marker") as HTMLButtonElement | null;
+    const markerList = document.getElementById("player-marker-list") as HTMLButtonElement | null;
     const map = document.getElementById("player-map") as HTMLButtonElement | null;
     const fullscreen = document.getElementById("player-fullscreen") as HTMLButtonElement | null;
     const exportBtn = document.getElementById("player-export") as HTMLButtonElement | null;
@@ -72,6 +73,18 @@ export function initPlayerBarOverflow() {
             priority: 9,
             label: () => t("player.addMarker"),
             isAvailable: () => !addMarker.hidden,
+        });
+    }
+    // Same reasoning as the marker drop, one step less important: the list is
+    // reachable from the pins too, the drop button is the only way to create.
+    if (markerList) {
+        items.push({
+            el: markerList,
+            priority: 10,
+            label: () => t("markerList.title"),
+            // Hidden until the trip has a marker - it must then enter neither
+            // the bar nor the kebab.
+            isAvailable: () => !markerList.hidden,
         });
     }
     if (loop) {

@@ -55,6 +55,7 @@ import { initPersistentFolders } from "./ui/persistent-folders.js";
 import { initAnnotations } from "./ui/annotations.js";
 import { initTripMetaModal, openTripMetaModal } from "./ui/trip-meta-modal.js";
 import { initTimelineMarkers, refreshTimelineMarkers } from "./ui/timeline-markers.js";
+import { initMarkerListModal } from "./ui/marker-list-modal.js";
 import { initMarkerModal } from "./ui/marker-modal.js";
 import { initAnnotationsSidecar } from "./ui/annotations-sidecar.js";
 import { registerTimelineOverlaySync } from "./ui/chart.js";
@@ -451,7 +452,8 @@ initFileSources();
 initPersistentFolders();
 // Trip annotations: load the stored records before the first ingest can
 // render cards; wire the name/note editor, the timeline-marker layer (pins
-// reposition through the chart's overlay-sync hook) and the marker editor.
+// reposition through the chart's overlay-sync hook), the marker editor and the
+// per-trip marker list.
 // The store answers async - if the index-cache restore painted trip cards
 // first, this repaints them with their names/stars/notes.
 initAnnotations(() => {
@@ -461,6 +463,7 @@ initAnnotations(() => {
 initTripMetaModal();
 initTimelineMarkers();
 initMarkerModal({ onChanged: refreshTimelineMarkers });
+initMarkerListModal({ onChanged: refreshTimelineMarkers });
 registerTimelineOverlaySync(refreshTimelineMarkers);
 // Sidecar replica of the annotations inside the user's folder (Chromium):
 // offered on the first note in a remembered folder, then auto-synced.
