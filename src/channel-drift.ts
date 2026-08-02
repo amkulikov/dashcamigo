@@ -105,7 +105,7 @@ function correctChain(chain: TripFrame[]): void {
     if (sessionSec < MIN_SESSION_SEC) return;
 
     const front = tail.channels.front;
-    if (!front || front.durationSec <= 1) return;
+    if (!front || front.durationSec <= 1 || !hasMeasuredDuration(front)) return;
     // A time-lapse tail has no wall-true durations to compare.
     if (front.wallDurationSec !== null) return;
 
@@ -113,6 +113,7 @@ function correctChain(chain: TripFrame[]): void {
         if (channel === "front") continue;
         const tailCandidate = tail.channels[channel];
         if (!tailCandidate || tailCandidate.durationSec <= 1 || tailCandidate.wallDurationSec !== null) continue;
+        if (!hasMeasuredDuration(tailCandidate)) continue;
 
         // Both channels stopped at the same wall instant, so the duration delta
         // is the lead this channel's content accumulated over the session.
@@ -137,6 +138,17 @@ function correctChain(chain: TripFrame[]): void {
             candidate.driftLeadSec = leadSec * (elapsed / sessionSec);
         }
     }
+}
+
+/**
+ * Whether this candidate's durationSec came from its own container rather than
+ * from the per-fingerprint estimate a filename-only candidate carries. The
+ * whole measurement is a duration DIFFERENCE of a few seconds, so one estimated
+ * side turns a healthy pair into a fabricated lead - and the estimate is what a
+ * not-yet-hydrated file and a file whose moov read failed both hold.
+ */
+function hasMeasuredDuration(candidate: VideoCandidate): boolean {
+    return candidate.hydrated !== false && candidate.indexFailed !== true;
 }
 
 function nonFrontCandidates(frame: TripFrame): VideoCandidate[] {
