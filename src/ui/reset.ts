@@ -11,6 +11,10 @@
 //  - browser permissions / autoplay policy: not exposed to scripts.
 //  - HttpOnly cookies: invisible to document.cookie. We don't set any, but
 //    if a third-party CDN ever does, they'd survive.
+//  - the annotations notes file (ui/annotations-sidecar.ts): it lives in the
+//    user's own recordings folder, holds every trip name, note and marker in
+//    plain text, and reconnecting the folder pulls all of it back. A reset
+//    done FOR privacy must not claim otherwise.
 
 import { createLogger } from "../log.js";
 import { closePersistDb } from "../persist/db.js";
