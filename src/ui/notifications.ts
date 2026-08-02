@@ -30,13 +30,6 @@ export interface NotifyInput {
     messageKey: I18nKey;
     /** ICU MessageFormat parameters; merged into the template at render time. */
     messageParams?: Record<string, string | number | boolean>;
-    /**
-     * Optional action button on the toast. A toast with an action never
-     * auto-dismisses (the user must choose or close), and the action renders
-     * on the TOAST only - drawer entries outlive the session moment the
-     * callback was built for, so the drawer shows just the message.
-     */
-    action?: { labelKey: I18nKey; onAction: () => void };
 }
 
 interface Notification extends NotifyInput {
@@ -205,13 +198,10 @@ function showToast(n: Notification): void {
     if (!toastContainer) return;
 
     // Enforce stack cap by removing the oldest toast first. Older entries
-    // remain in the drawer; only the on-screen view is bounded. Action toasts
-    // are exempt victims: they never auto-dismiss because the user must
-    // choose, so a burst of ordinary toasts must not silently destroy the
-    // pending choice (the stack may briefly exceed the cap instead).
+    // remain in the drawer; only the on-screen view is bounded.
     while (activeToasts.size >= TOAST_STACK_LIMIT) {
-        const victim = [...activeToasts.entries()].find(([, v]) => !v.el.querySelector(".dc-toast__action"))?.[0];
-        if (victim !== undefined) removeToast(victim);
+        const [oldestId] = activeToasts.keys();
+        if (oldestId !== undefined) removeToast(oldestId);
         else break;
     }
 
@@ -231,21 +221,6 @@ function showToast(n: Notification): void {
     body.textContent = t(n.messageKey, n.messageParams);
     el.appendChild(body);
 
-    if (n.action) {
-        const { labelKey, onAction } = n.action;
-        const actionBtn = document.createElement("button");
-        actionBtn.type = "button";
-        actionBtn.className = "dc-toast__action";
-        actionBtn.textContent = t(labelKey);
-        actionBtn.addEventListener("click", () => {
-            // Remove the toast BEFORE the callback: an action that itself
-            // notifies must not race the stack cap against its own toast.
-            removeToast(n.id);
-            onAction();
-        });
-        el.appendChild(actionBtn);
-    }
-
     const close = document.createElement("button");
     close.type = "button";
     close.className = "dc-toast__close";
@@ -256,9 +231,7 @@ function showToast(n: Notification): void {
 
     toastContainer.appendChild(el);
 
-    // An action toast waits for a decision - no auto-dismiss regardless of
-    // severity; the close button remains the "no" path.
-    const timeoutMs = n.action ? null : TOAST_TIMEOUT_MS[n.severity];
+    const timeoutMs = TOAST_TIMEOUT_MS[n.severity];
     const timer = timeoutMs === null ? null : window.setTimeout(() => removeToast(n.id), timeoutMs);
     activeToasts.set(n.id, { el, timer });
 }
@@ -278,7 +251,7 @@ function resetToastTimer(id: string): void {
     if (!entry) return;
     if (entry.timer !== null) clearTimeout(entry.timer);
     const n = notifications.find((x) => x.id === id);
-    const timeoutMs = n && !n.action ? TOAST_TIMEOUT_MS[n.severity] : null;
+    const timeoutMs = n ? TOAST_TIMEOUT_MS[n.severity] : null;
     entry.timer = timeoutMs === null ? null : window.setTimeout(() => removeToast(id), timeoutMs);
 }
 
