@@ -331,8 +331,17 @@ export function drawGraph(
 
     // current speed readout (top-right). units drives the m/s conversion; the
     // localized suffix comes from unitLabel (see OverlayPipelineArgs.unitSpeed).
-    const v = units === "imperial" ? pos.speedMs * 3.6 * 0.621371 : pos.speedMs * 3.6;
+    // The sparkline itself stays: it is range-level (sampled across the whole
+    // export), so it is honest even where this frame has no fix - but the
+    // instantaneous readout is not, and Math.round(NaN) would burn "NaN km/h"
+    // into the frame. Same placeholder icon as the other GPS-fed widgets.
     const txtPx = Math.round(boxH * 0.34);
+    if (!pos.hasFix) {
+        drawNoFixIcon(ctx, x + boxW - pad - txtPx / 2, y + pad + txtPx / 2, txtPx, "rgba(255,255,255,0.75)");
+        ctx.restore();
+        return;
+    }
+    const v = units === "imperial" ? pos.speedMs * 3.6 * 0.621371 : pos.speedMs * 3.6;
     ctx.font = composeFont("700", txtPx, MONO);
     ctx.fillStyle = "#FFFFFF";
     ctx.textAlign = "right";

@@ -218,10 +218,15 @@ export function drawNoFixBox(
     style: OverlayStyleId,
     accent: string,
     valueScale: number,
+    hero = false,
 ): void {
     const chrome = STYLE_CHROME[style];
     const scale = clamp(opts.scalePct, 50, 200) / 100;
-    const primaryPx = Math.max(10, Math.round(frameHeight * TEXT_OVERLAY_BASE_FONT_PCT * scale * valueScale));
+    // Same hero multiplier drawWidgetBox applies to the speed readout in the
+    // bold style: without it the placeholder renders at ~65% of the reading it
+    // replaces, so the widget visibly shrinks and grows at every fix boundary.
+    const heroMul = hero && chrome.heroSpeed ? HERO_SCALE : 1;
+    const primaryPx = Math.max(10, Math.round(frameHeight * TEXT_OVERLAY_BASE_FONT_PCT * scale * valueScale * heroMul));
     const pad = chrome.plate ? Math.round(primaryPx * 0.36) : 0;
     const side = Math.round(primaryPx * 1.2);
     const boxW = side + pad * 2;

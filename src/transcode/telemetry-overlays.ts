@@ -79,7 +79,9 @@ export function drawTelemetryOverlays(
                 hero: true,
             });
         } else {
-            drawNoFixBox(ctx, widthPx, heightPx, overlays.speed, style, accent, 1);
+            // hero: true, matching the reading above - the placeholder stands
+            // in for the hero-sized speed readout, not for a plain one.
+            drawNoFixBox(ctx, widthPx, heightPx, overlays.speed, style, accent, 1, true);
         }
     }
     if (overlays.coords) {
