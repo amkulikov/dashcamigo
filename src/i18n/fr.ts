@@ -48,8 +48,10 @@ export const frDict = {
     "recentFolders.openFailed": "Impossible d'ouvrir {name} — le dossier a été déplacé, renommé, ou le disque est débranché.",
     "recentFolders.permissionDenied": "Pas d'accès à {name} — le navigateur n'a pas accordé l'autorisation.",
     // folder sources: the row per folder the loaded trips came from
-    "folderSources.aria": "Dossiers de cette session",
+    "folderSources.title": "Sources",
     "folderSources.looseFiles": "Fichiers déposés",
+    "folderSources.load": "Charger",
+    "folderSources.loadHint": "Charger les enregistrements de ce dossier dans la liste",
     "folderSources.unavailableHint": "Ce dossier est inaccessible pour l'instant — le disque est débranché ou le dossier a été déplacé.",
     "folderSources.permissionHint": "L'accès à ce dossier doit être confirmé à nouveau.",
     "folderSources.remember": "Mémoriser",

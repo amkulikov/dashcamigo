@@ -49,8 +49,10 @@ export const enDict = {
     "recentFolders.openFailed": "Can't open {name} — the folder was moved, renamed, or the drive is unplugged.",
     "recentFolders.permissionDenied": "No access to {name} — the browser permission wasn't granted.",
     // folder sources: the row per folder the loaded trips came from
-    "folderSources.aria": "Folders of this session",
+    "folderSources.title": "Sources",
     "folderSources.looseFiles": "Dropped files",
+    "folderSources.load": "Load",
+    "folderSources.loadHint": "Load this folder's recordings into the list",
     "folderSources.unavailableHint": "This folder isn't reachable right now — the drive is unplugged, or the folder moved.",
     "folderSources.permissionHint": "Access to this folder needs confirming again.",
     "folderSources.remember": "Remember",

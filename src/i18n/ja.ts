@@ -58,8 +58,10 @@ export const jaDict = {
     "recentFolders.openFailed": "{name} を開けません。フォルダが移動・名前変更されたか、ドライブが接続されていません。",
     "recentFolders.permissionDenied": "{name} にアクセスできません。ブラウザの許可が得られませんでした。",
     // folder sources: the row per folder the loaded trips came from
-    "folderSources.aria": "このセッションのフォルダ",
+    "folderSources.title": "ソース",
     "folderSources.looseFiles": "ドロップしたファイル",
+    "folderSources.load": "読み込む",
+    "folderSources.loadHint": "このフォルダの録画をリストに読み込む",
     "folderSources.unavailableHint": "このフォルダに今はアクセスできません。ドライブが外れているか、フォルダが移動されています。",
     "folderSources.permissionHint": "このフォルダへのアクセスを再度許可する必要があります。",
     "folderSources.remember": "記憶する",

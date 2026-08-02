@@ -57,8 +57,10 @@ export const koDict = {
     "recentFolders.openFailed": "{name} 폴더를 열 수 없습니다 — 폴더가 이동·이름 변경되었거나 드라이브가 분리되어 있습니다.",
     "recentFolders.permissionDenied": "{name} 폴더에 접근할 수 없습니다 — 브라우저 권한이 허용되지 않았습니다.",
     // folder sources: the row per folder the loaded trips came from
-    "folderSources.aria": "이 세션의 폴더",
+    "folderSources.title": "소스",
     "folderSources.looseFiles": "드롭한 파일",
+    "folderSources.load": "불러오기",
+    "folderSources.loadHint": "이 폴더의 녹화를 목록에 불러오기",
     "folderSources.unavailableHint": "지금은 이 폴더에 접근할 수 없습니다 — 드라이브가 분리됐거나 폴더가 이동됐습니다.",
     "folderSources.permissionHint": "이 폴더에 대한 접근을 다시 확인해야 합니다.",
     "folderSources.remember": "기억하기",

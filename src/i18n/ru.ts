@@ -53,8 +53,10 @@ export const ruDict = {
     "recentFolders.openFailed": "Не получилось открыть {name} — папка перемещена, переименована или диск отключён.",
     "recentFolders.permissionDenied": "Нет доступа к {name} — браузер не выдал разрешение.",
     // folder sources: the row per folder the loaded trips came from
-    "folderSources.aria": "Папки этой сессии",
+    "folderSources.title": "Источники",
     "folderSources.looseFiles": "Перетащенные файлы",
+    "folderSources.load": "Загрузить",
+    "folderSources.loadHint": "Загрузить записи из этой папки в список",
     "folderSources.unavailableHint": "Папка сейчас недоступна — диск отключён или папку перенесли.",
     "folderSources.permissionHint": "Доступ к этой папке нужно подтвердить заново.",
     "folderSources.remember": "Запомнить",

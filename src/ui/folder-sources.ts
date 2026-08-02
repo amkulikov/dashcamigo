@@ -1,10 +1,9 @@
-// Folder sources of the current session: which folders the loaded trips came
-// out of, whether each one is remembered, and the controls for that. The
-// landing chips (persistent-folders.ts) answer "what can I open next time";
-// this list answers "where does what I am looking at come from, and does it
-// survive the tab". Both are needed because the landing is one-way - once
-// trips are loaded it never comes back, so without this list there is no
-// folder surface left at all.
+// The SOURCES list: which folders the loaded trips came out of (with the
+// remember/notes controls), plus remembered folders that are NOT loaded yet -
+// one click loads them into the session. The landing chips
+// (persistent-folders.ts) answer the same "what can I open" question before
+// the first ingest; this list takes over afterwards, because the landing is
+// one-way - once trips are loaded it never comes back.
 //
 // Deliberately the LOW-level module of the folder feature: it owns the
 // file-identity -> remembered-folder binding that every annotation resolves
@@ -23,6 +22,7 @@ import {
     type FolderAvailability,
     forgetFolder,
     getFolder,
+    listFolders,
     probeFolderAvailability,
     rememberFolder,
 } from "../persist/folders.js";
@@ -83,7 +83,8 @@ export function purgeFolderSessionState(folderId: string): void {
     for (const source of sourcesByKey.values()) {
         if (source.folderId === folderId) source.folderId = "";
     }
-    renderSources();
+    // The forgotten folder must also leave the "not loaded yet" rows.
+    refreshRememberedFolders();
 }
 
 /** Same as purgeFolderSessionState, for the landing's "forget all" - none of
@@ -91,7 +92,7 @@ export function purgeFolderSessionState(folderId: string): void {
 export function purgeAllFolderSessionState(): void {
     folderIdByFileKey.clear();
     for (const source of sourcesByKey.values()) source.folderId = "";
-    renderSources();
+    refreshRememberedFolders();
 }
 
 // The sidecar layer merges its file after a folder opens or is remembered. A
@@ -117,6 +118,79 @@ let notesConnector: ((folder: RememberedFolder) => void) | null = null;
 /** Registers the "keep notes in a file" action for the source menu. */
 export function registerNotesConnector(callback: (folder: RememberedFolder) => void): void {
     notesConnector = callback;
+}
+
+// Loads a remembered folder into the session (permission re-prompt included).
+// Registered by persistent-folders.ts, which owns the open flow - a direct
+// import would cycle, it already imports this module.
+let rememberedFolderOpener: ((folder: RememberedFolder) => void) | null = null;
+
+/** Registers the click action for a remembered-but-not-loaded row. */
+export function registerRememberedFolderOpener(callback: (folder: RememberedFolder) => void): void {
+    rememberedFolderOpener = callback;
+}
+
+// Remembered folders as last read from the store, for the "not loaded yet"
+// rows. A cache because rendering is synchronous; refreshed on init, on every
+// store mutation this module makes, and on tab return.
+let rememberedCache: RememberedFolder[] = [];
+// Liveness per remembered folder id (session-local, re-probed on refresh).
+const rememberedAvailability = new Map<string, FolderAvailability>();
+
+/** Re-reads the remembered folders and re-renders; kicks a liveness probe per
+ *  not-yet-loaded folder. Safe to call any time - store errors just leave the
+ *  unloaded rows out. */
+function refreshRememberedFolders(): void {
+    listFolders()
+        .then((folders) => {
+            rememberedCache = folders;
+            renderSources();
+            for (const folder of unloadedRemembered()) {
+                void probeFolderAvailability(folder.handle).then((availability) => {
+                    if (rememberedAvailability.get(folder.id) === availability) return;
+                    rememberedAvailability.set(folder.id, availability);
+                    renderSources();
+                });
+            }
+        })
+        .catch(() => {
+            rememberedCache = [];
+            renderSources();
+        });
+}
+
+/** Remembered folders no session source is bound to - the rows offering to
+ *  load. Bound ones are already represented by their session row. */
+function unloadedRemembered(): RememberedFolder[] {
+    const boundIds = new Set<string>();
+    for (const source of sourcesByKey.values()) {
+        if (source.folderId) boundIds.add(source.folderId);
+    }
+    return rememberedCache.filter((folder) => !boundIds.has(folder.id));
+}
+
+/**
+ * Display labels for remembered folders, duplicates suffixed " (2)", " (3)"...
+ * in addedAt order (stable across re-renders, unlike the lastOpenedAt list
+ * order). The handle exposes only the folder's leaf name - two SD cards named
+ * "DCIM" are otherwise indistinguishable. Shared with the landing chips.
+ */
+export function disambiguatedLabels(folders: RememberedFolder[]): Map<string, string> {
+    const byLabel = new Map<string, RememberedFolder[]>();
+    for (const folder of folders) {
+        const bucket = byLabel.get(folder.label);
+        if (bucket) bucket.push(folder);
+        else byLabel.set(folder.label, [folder]);
+    }
+    const out = new Map<string, string>();
+    for (const bucket of byLabel.values()) {
+        if (bucket.length === 1) continue;
+        bucket.sort((a, b) => a.addedAt - b.addedAt);
+        bucket.forEach((folder, index) => {
+            if (index > 0) out.set(folder.id, `${folder.label} (${index + 1})`);
+        });
+    }
+    return out;
 }
 
 /** Root folder name of a relative path, or "" when the file was dropped
@@ -196,16 +270,19 @@ function bindKeys(source: FolderSource, folderId: string): void {
 
 let listElement: HTMLElement | null = null;
 
-/** Wires the source list under the sidebar CTA. Call once from app.ts. */
+/** Wires the SOURCES list under the sidebar CTA. Call once from app.ts. */
 export function initFolderSources(): void {
     listElement = document.getElementById("folder-sources");
     // A card pulled out mid-session is the case the status dot exists for, and
     // returning to the tab is when the user is about to act on it - re-probe
     // then rather than on a timer that would keep an unplugged card spinning.
     document.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === "visible") probeAll();
+        if (document.visibilityState === "visible") {
+            probeAll();
+            refreshRememberedFolders();
+        }
     });
-    renderSources();
+    refreshRememberedFolders();
 }
 
 function probeAll(): void {
@@ -233,8 +310,15 @@ function renderSources(): void {
     if (!listElement) return;
     closeOpenMenu?.();
     listElement.replaceChildren();
-    listElement.hidden = sourcesByKey.size === 0;
+    const unloaded = unloadedRemembered();
+    listElement.hidden = sourcesByKey.size === 0 && unloaded.length === 0;
     for (const source of sourcesByKey.values()) listElement.appendChild(buildRow(source));
+    // Remembered-but-not-loaded folders come after the session sources: what
+    // is on screen explains itself first, what can be added follows.
+    const labels = disambiguatedLabels(rememberedCache);
+    for (const folder of unloaded) {
+        listElement.appendChild(buildUnloadedRow(folder, labels.get(folder.id) ?? folder.label));
+    }
 }
 
 function buildRow(source: FolderSource): HTMLElement {
@@ -282,6 +366,53 @@ function buildRow(source: FolderSource): HTMLElement {
     return row;
 }
 
+/** A remembered folder not loaded this session: muted name + a "load" action.
+ *  The dot still shows liveness - the user decides whether to click by it. */
+function buildUnloadedRow(folder: RememberedFolder, displayLabel: string): HTMLElement {
+    const row = document.createElement("li");
+    row.className = "folder-source folder-source--unloaded";
+
+    const status = document.createElement("span");
+    status.className = "folder-source__status";
+    status.setAttribute("aria-hidden", "true");
+    row.appendChild(status);
+    applyAvailability(row, rememberedAvailability.get(folder.id) ?? null);
+
+    const label = document.createElement("span");
+    label.className = "folder-source__label";
+    label.textContent = displayLabel;
+    label.title = displayLabel;
+    row.appendChild(label);
+
+    const load = document.createElement("button");
+    load.type = "button";
+    load.className = "folder-source__load";
+    load.textContent = t("folderSources.load");
+    load.title = t("folderSources.loadHint");
+    // Clickable in every liveness state on purpose: a re-plugged card revives
+    // its stored handle, and the permission re-prompt needs this very gesture.
+    load.addEventListener("click", () => rememberedFolderOpener?.(folder));
+    row.appendChild(load);
+
+    row.appendChild(
+        buildMenuShell((menu, setOpen) => {
+            menu.appendChild(
+                menuAction(t("recentFolders.forgetLabel"), () => {
+                    setOpen(false);
+                    forgetFolder(folder.id)
+                        .then(() => purgeFolderSessionState(folder.id))
+                        .catch((err) => {
+                            log.warn("forgetFolder failed", {
+                                err: err instanceof Error ? err.message : String(err),
+                            });
+                        });
+                }),
+            );
+        }),
+    );
+    return row;
+}
+
 /** Colors a row by liveness: green = readable right now, red = gone
  *  (moved/unplugged), amber = permission lapsed. Mirrors the landing chips so
  *  one dot means one thing across the app. */
@@ -305,6 +436,7 @@ async function onRemember(source: FolderSource, button: HTMLButtonElement): Prom
         // Adopts annotations made before this click (they carry folderId "")
         // and merges the notes file if this folder already had one.
         notifyFolderOpened(record);
+        refreshRememberedFolders();
     } catch (err) {
         log.warn("rememberFolder failed", { err: err instanceof Error ? err.message : String(err) });
         button.disabled = false;
@@ -319,6 +451,15 @@ async function onRemember(source: FolderSource, button: HTMLButtonElement): Prom
 /** The per-row overflow menu: the notes file and forgetting. Only remembered
  *  folders have one - an unremembered source has nothing to configure. */
 function buildMenu(source: FolderSource): HTMLElement {
+    return buildMenuShell((menu, setOpen) => fillMenu(menu, source, setOpen));
+}
+
+/** The shared ⋯ popup shell: open/close state, outside-click and Escape
+ *  teardown. `fill` populates the (already emptied) menu right before it
+ *  opens - the contents come from the store and can change between opens. */
+function buildMenuShell(
+    fill: (menu: HTMLElement, setOpen: (open: boolean) => void) => void | Promise<void>,
+): HTMLElement {
     const wrap = document.createElement("span");
     wrap.className = "folder-source__menu-wrap";
 
@@ -370,7 +511,8 @@ function buildMenu(source: FolderSource): HTMLElement {
         }
         // Fill first, open after: the notes state comes from the store, and an
         // empty menu flashing before it lands reads as a broken control.
-        void fillMenu(menu, source, setOpen).then(() => setOpen(true));
+        menu.replaceChildren();
+        void Promise.resolve(fill(menu, setOpen)).then(() => setOpen(true));
     });
     // On the wrap, not the menu: after the toggle click the focus is on the
     // toggle, so a listener bound to the menu would never see the key.
@@ -388,7 +530,6 @@ function buildMenu(source: FolderSource): HTMLElement {
 /** Rebuilds the menu contents right before it opens - the notes state lives in
  *  the store and can change from another surface (or another tab). */
 async function fillMenu(menu: HTMLElement, source: FolderSource, setOpen: (open: boolean) => void): Promise<void> {
-    menu.replaceChildren();
     const folder = await getFolder(source.folderId).catch(() => null);
     if (folder && notesConnector) {
         menu.appendChild(
@@ -462,5 +603,5 @@ async function onForget(source: FolderSource): Promise<void> {
         return;
     }
     source.folderId = "";
-    renderSources();
+    refreshRememberedFolders();
 }

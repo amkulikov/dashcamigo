@@ -48,8 +48,10 @@ export const esDict = {
     "recentFolders.openFailed": "No se puede abrir {name} — la carpeta se movió, se renombró o la unidad está desconectada.",
     "recentFolders.permissionDenied": "Sin acceso a {name} — el navegador no concedió el permiso.",
     // folder sources: the row per folder the loaded trips came from
-    "folderSources.aria": "Carpetas de esta sesión",
+    "folderSources.title": "Fuentes",
     "folderSources.looseFiles": "Archivos sueltos",
+    "folderSources.load": "Cargar",
+    "folderSources.loadHint": "Cargar las grabaciones de esta carpeta en la lista",
     "folderSources.unavailableHint": "Ahora mismo no se puede acceder a esta carpeta: la unidad está desconectada o la carpeta se movió.",
     "folderSources.permissionHint": "Hay que volver a confirmar el acceso a esta carpeta.",
     "folderSources.remember": "Recordar",

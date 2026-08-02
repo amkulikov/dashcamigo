@@ -691,6 +691,35 @@
 
     <main class="layout">
         <aside id="sidebar" class="sidebar">
+            <!-- SOURCES: everything about where recordings come from - the
+                 add-files CTA, the folders of this session, and remembered
+                 folders not loaded yet. Sits above TRIPS so folder management
+                 has one permanent home (the landing chips disappear after the
+                 first ingest). -->
+            <div class="sidebar-sources">
+                <h2 data-i18n="folderSources.title">Sources</h2>
+                <!-- Compact CTA button for adding files. label[for="folder-input"]
+                     opens the system file picker, and also works as a drop target
+                     (window-level DnD listeners pick it up anyway). Appears after
+                     the first ingest - hidden before that via body.no-trips. The
+                     FLIP animation moves the large central landing CTA onto this one. -->
+                <label for="folder-input" id="sidebar-cta" class="sidebar-cta" tabindex="0"
+                       data-i18n-attr="title:sidebar.cta.title"
+                       title="Add more files">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M5 12h14"/><path d="M12 5v14"/>
+                    </svg>
+                    <span data-i18n="sidebar.cta.label">Add files</span>
+                </label>
+                <!-- Folder rows: sources of this session (status, "remember this
+                     one", notes file) plus remembered folders that are not loaded
+                     yet (click to load). Filled by src/ui/folder-sources.ts;
+                     stays hidden until there is a row to show. -->
+                <!-- No aria-label: the visible SOURCES heading names the list,
+                     and its rows are no longer only "this session's" folders. -->
+                <ul id="folder-sources" class="folder-sources" hidden></ul>
+            </div>
             <div class="sidebar-header">
                 <h2 data-i18n="sidebar.title">Trips</h2>
                 <div class="sort-controls">
@@ -717,26 +746,6 @@
                     </button>
                 </div>
             </div>
-            <!-- Compact CTA button for adding files. label[for="folder-input"]
-                 opens the system file picker, and also works as a drop target
-                 (window-level DnD listeners pick it up anyway). Appears after
-                 the first ingest - hidden before that via body.no-trips. The
-                 FLIP animation moves the large central landing CTA onto this one. -->
-            <label for="folder-input" id="sidebar-cta" class="sidebar-cta" tabindex="0"
-                   data-i18n-attr="title:sidebar.cta.title"
-                   title="Add more files">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M5 12h14"/><path d="M12 5v14"/>
-                </svg>
-                <span data-i18n="sidebar.cta.label">Add files</span>
-            </label>
-            <!-- Folders the loaded trips came out of: status, "remember this
-                 one", notes file. Filled by src/ui/folder-sources.ts; stays
-                 hidden until the first ingest names a source. -->
-            <ul id="folder-sources" class="folder-sources"
-                data-i18n-attr="aria-label:folderSources.aria"
-                aria-label="Folders of this session" hidden></ul>
             <ul id="trip-list" class="trip-list"></ul>
         </aside>
 

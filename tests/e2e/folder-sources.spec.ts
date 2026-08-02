@@ -116,6 +116,32 @@ test.describe("folder sources, file-system picker", () => {
         await expect(page.locator(sourceRow)).toHaveCount(2);
         await expect(page.locator(sourceRow).nth(1)).toContainText("SECONDCARD");
     });
+    test("a remembered folder from an earlier session shows as a loadable row", async ({ page }) => {
+        await page.locator("#landing-cta").click();
+        await expect(page.locator("li.trip:not(.unindexed-note)").first()).toBeVisible({ timeout: 30_000 });
+        await page.locator(`${sourceRow} .folder-source__remember`).click();
+        await expect(page.locator(".folder-source__state")).toBeVisible();
+
+        // Next session: the trips come from somewhere else entirely, but the
+        // remembered folder must still be one click away in the SOURCES list.
+        await page.reload();
+        await page.locator("#folder-input").setInputFiles(SAMPLE_GOPRO);
+        await expect(page.locator("li.trip:not(.unindexed-note)").first()).toBeVisible({ timeout: 30_000 });
+
+        const unloaded = page.locator(".folder-source--unloaded");
+        await expect(unloaded).toHaveCount(1);
+        await expect(unloaded).toContainText("MOCKCARD");
+        await expect(unloaded.locator(".folder-source__load")).toBeVisible();
+        // Not loaded - nothing here can claim the trips on screen.
+        await expect(unloaded.locator(".folder-source__remember")).toHaveCount(0);
+
+        // Forgetting from the row removes it without touching the loaded trips.
+        await unloaded.locator(".folder-source__menu").click();
+        await unloaded.locator(".folder-source__popup").getByRole("button", { name: "Forget this folder" }).click();
+        await expect(page.locator(".folder-source--unloaded")).toHaveCount(0);
+        await expect(page.locator("li.trip:not(.unindexed-note)").first()).toBeVisible();
+    });
+
     test("a note taken before remembering re-attaches to the folder", async ({ page }) => {
         await page.locator("#landing-cta").click();
         const card = page.locator("li.trip:not(.unindexed-note)").first();

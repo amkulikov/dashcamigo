@@ -48,8 +48,10 @@ export const plDict = {
     "recentFolders.openFailed": "Nie można otworzyć {name} — folder został przeniesiony, zmieniono jego nazwę albo dysk jest odłączony.",
     "recentFolders.permissionDenied": "Brak dostępu do {name} — przeglądarka nie udzieliła uprawnienia.",
     // folder sources: the row per folder the loaded trips came from
-    "folderSources.aria": "Foldery tej sesji",
+    "folderSources.title": "Źródła",
     "folderSources.looseFiles": "Upuszczone pliki",
+    "folderSources.load": "Wczytaj",
+    "folderSources.loadHint": "Wczytaj nagrania z tego folderu do listy",
     "folderSources.unavailableHint": "Ten folder jest teraz nieosiągalny — dysk jest odłączony albo folder przeniesiono.",
     "folderSources.permissionHint": "Dostęp do tego folderu trzeba potwierdzić ponownie.",
     "folderSources.remember": "Zapamiętaj",

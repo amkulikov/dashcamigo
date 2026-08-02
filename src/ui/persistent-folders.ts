@@ -35,10 +35,12 @@ import { t } from "../i18n/index.js";
 import { dom } from "./dom.js";
 import {
     bindSourceToFolder,
+    disambiguatedLabels,
     notifyFolderOpened,
     purgeAllFolderSessionState,
     purgeFolderSessionState,
     registerIngestSource,
+    registerRememberedFolderOpener,
 } from "./folder-sources.js";
 import { beginPreIngestReading, endPreIngestReading } from "./ingest-overlay.js";
 import { ingestFiles } from "./ingest.js";
@@ -66,6 +68,11 @@ export function canUseDirectoryPicker(): boolean {
  */
 export function initPersistentFolders(): void {
     if (!canUseDirectoryPicker()) return;
+    // The SOURCES list's "load" action for a remembered-but-not-loaded folder:
+    // same flow as a chip click (permission re-prompt inside the gesture, then
+    // enumerate + ingest). Registered, not imported - folder-sources is the
+    // lower module.
+    registerRememberedFolderOpener((folder) => void openRememberedFolder(folder));
     chipsContainer = document.getElementById("recent-folders");
     chipsList = document.getElementById("recent-folders-list");
     void refreshChips();
@@ -273,30 +280,6 @@ async function refreshChips(): Promise<void> {
 
 // Monotonic render stamp for the probe staleness check above.
 let chipsRenderToken = 0;
-
-/**
- * Display labels, with duplicates suffixed " (2)", " (3)"... in addedAt order
- * (stable across re-renders, unlike the lastOpenedAt chip order). The handle
- * exposes only the folder's leaf name - two SD cards named "DCIM" are
- * otherwise indistinguishable in the list.
- */
-function disambiguatedLabels(folders: RememberedFolder[]): Map<string, string> {
-    const byLabel = new Map<string, RememberedFolder[]>();
-    for (const folder of folders) {
-        const bucket = byLabel.get(folder.label);
-        if (bucket) bucket.push(folder);
-        else byLabel.set(folder.label, [folder]);
-    }
-    const out = new Map<string, string>();
-    for (const bucket of byLabel.values()) {
-        if (bucket.length === 1) continue;
-        bucket.sort((a, b) => a.addedAt - b.addedAt);
-        bucket.forEach((folder, index) => {
-            if (index > 0) out.set(folder.id, `${folder.label} (${index + 1})`);
-        });
-    }
-    return out;
-}
 
 function buildChip(folder: RememberedFolder, displayLabel: string): HTMLElement {
     const wrap = document.createElement("span");

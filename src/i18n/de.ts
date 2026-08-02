@@ -46,8 +46,10 @@ export const deDict = {
     "recentFolders.openFailed": "{name} lässt sich nicht öffnen — der Ordner wurde verschoben, umbenannt oder das Laufwerk ist getrennt.",
     "recentFolders.permissionDenied": "Kein Zugriff auf {name} — der Browser hat die Berechtigung nicht erteilt.",
     // folder sources: the row per folder the loaded trips came from
-    "folderSources.aria": "Ordner dieser Sitzung",
+    "folderSources.title": "Quellen",
     "folderSources.looseFiles": "Abgelegte Dateien",
+    "folderSources.load": "Laden",
+    "folderSources.loadHint": "Aufnahmen aus diesem Ordner in die Liste laden",
     "folderSources.unavailableHint": "Dieser Ordner ist gerade nicht erreichbar — das Laufwerk ist abgezogen oder der Ordner wurde verschoben.",
     "folderSources.permissionHint": "Der Zugriff auf diesen Ordner muss erneut bestätigt werden.",
     "folderSources.remember": "Merken",

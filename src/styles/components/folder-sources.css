@@ -1,15 +1,23 @@
-/* Folder-source rows between the sidebar CTA and the trip list: where the
-   loaded trips came from, whether the folder is remembered, and the per-folder
-   menu. Populated by src/ui/folder-sources.ts; the whole list is hidden until
-   an ingest names a source.
+/* The SOURCES block above the trip list: its heading, the add-files CTA and
+   the folder rows - where the loaded trips came from, whether each folder is
+   remembered, and remembered folders not loaded yet. Populated by
+   src/ui/folder-sources.ts; the row list is hidden until there is a row.
 
    Quiet by design - this is provenance, not navigation. It reads one notch
    below the trip cards below it (muted text, no card shell), so the eye still
    lands on the trips first. */
 
+.sidebar-sources {
+    margin-bottom: var(--dc-space-3);
+}
+
+.sidebar-sources h2 {
+    margin-bottom: var(--dc-space-2);
+}
+
 .folder-sources {
     list-style: none;
-    margin: 0 0 var(--dc-space-2);
+    margin: var(--dc-space-2) 0 0;
     padding: 0;
     display: flex;
     flex-direction: column;
@@ -68,8 +76,16 @@
     font-family: var(--dc-font-mono);
 }
 
-/* The call to action while the folder is only a session source. Reads as a
-   link, not a button: the row must not compete with the trip cards. */
+/* A remembered folder that is not loaded yet: the name steps back one more
+   notch so the rows explaining what IS on screen read first. */
+.folder-source--unloaded .folder-source__label {
+    color: var(--fg-mute);
+}
+
+/* The call to action while the folder is only a session source ("remember")
+   or not loaded yet ("load"). Reads as a link, not a button: the row must not
+   compete with the trip cards. */
+.folder-source__load,
 .folder-source__remember {
     flex-shrink: 0;
     background: transparent;
@@ -84,6 +100,7 @@
     white-space: nowrap;
 }
 
+.folder-source__load:hover,
 .folder-source__remember:hover {
     color: var(--accent);
 }
@@ -156,6 +173,7 @@
     font-size: var(--dc-text-xs);
 }
 
+.folder-source__load:focus-visible,
 .folder-source__remember:focus-visible,
 .folder-source__menu:focus-visible {
     outline: 2px solid var(--accent);

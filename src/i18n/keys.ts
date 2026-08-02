@@ -71,8 +71,10 @@ export type I18nKey =
     | "recentFolders.openFailed"
     | "recentFolders.permissionDenied"
     // folder sources: the row per folder the loaded trips came from
-    | "folderSources.aria"
+    | "folderSources.title"
     | "folderSources.looseFiles"
+    | "folderSources.load"
+    | "folderSources.loadHint"
     | "folderSources.unavailableHint"
     | "folderSources.permissionHint"
     | "folderSources.remember"

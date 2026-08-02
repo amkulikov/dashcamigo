@@ -47,8 +47,10 @@ export const zhDict = {
     "recentFolders.openFailed": "无法打开 {name}——文件夹已被移动、重命名,或硬盘已断开。",
     "recentFolders.permissionDenied": "无法访问 {name}——浏览器未授予权限。",
     // folder sources: the row per folder the loaded trips came from
-    "folderSources.aria": "本次会话的文件夹",
+    "folderSources.title": "来源",
     "folderSources.looseFiles": "拖入的文件",
+    "folderSources.load": "加载",
+    "folderSources.loadHint": "把这个文件夹的录像加载到列表",
     "folderSources.unavailableHint": "现在无法访问这个文件夹——驱动器已拔出，或文件夹被移动了。",
     "folderSources.permissionHint": "需要重新确认对这个文件夹的访问权限。",
     "folderSources.remember": "记住",

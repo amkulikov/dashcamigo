@@ -48,8 +48,10 @@ export const ptDict = {
     "recentFolders.openFailed": "Não foi possível abrir {name} — a pasta foi movida, renomeada ou a unidade está desconectada.",
     "recentFolders.permissionDenied": "Sem acesso a {name} — o navegador não concedeu a permissão.",
     // folder sources: the row per folder the loaded trips came from
-    "folderSources.aria": "Pastas desta sessão",
+    "folderSources.title": "Fontes",
     "folderSources.looseFiles": "Arquivos soltos",
+    "folderSources.load": "Carregar",
+    "folderSources.loadHint": "Carregar as gravações desta pasta na lista",
     "folderSources.unavailableHint": "Esta pasta está inacessível agora — o drive está desconectado ou a pasta foi movida.",
     "folderSources.permissionHint": "O acesso a esta pasta precisa ser confirmado de novo.",
     "folderSources.remember": "Lembrar",
