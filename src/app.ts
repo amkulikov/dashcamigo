@@ -53,7 +53,7 @@ import { syncEmptyState } from "./ui/empty-state.js";
 import { initFileSources } from "./ui/file-sources.js";
 import { initFolderSources } from "./ui/folder-sources.js";
 import { initPersistentFolders } from "./ui/persistent-folders.js";
-import { initAnnotations } from "./ui/annotations.js";
+import { initAnnotations, registerMarkersRestampedHook } from "./ui/annotations.js";
 import { initTripMetaModal, openTripMetaModal } from "./ui/trip-meta-modal.js";
 import { initTimelineMarkers, refreshTimelineMarkers } from "./ui/timeline-markers.js";
 import { initMarkerListModal } from "./ui/marker-list-modal.js";
@@ -469,6 +469,9 @@ initTimelineMarkers();
 initMarkerModal({ onChanged: refreshTimelineMarkers });
 initMarkerListModal({ onChanged: refreshTimelineMarkers });
 registerTimelineOverlaySync(refreshTimelineMarkers);
+// Lazy hydration can move a marker's UTC after the fact (see
+// restampProvisionalMarkers) - repaint the pins when it does.
+registerMarkersRestampedHook(refreshTimelineMarkers);
 // Notes-file replica of the annotations inside the user's folder (Chromium):
 // connected from the folder row, then auto-synced.
 initAnnotationsSidecar();

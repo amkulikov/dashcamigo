@@ -9,7 +9,7 @@ import { annotationContentEqual, loadAllAnnotations, saveAnnotation, saveAnnotat
 import { fileIdentityKey } from "../persist/identity.js";
 import type { AnnotationRecord, MarkerAnnotation, TripMetaAnnotation } from "../persist/types.js";
 import type { Trip, VideoCandidate } from "../trips.js";
-import { tripAllCandidates } from "../trips.js";
+import { contentToWallUtc, isHydrationPending, tripAllCandidates, wallToContentSec } from "../trips.js";
 import { folderIdForFileKey } from "./folder-sources.js";
 import { state } from "./state.js";
 
@@ -177,8 +177,122 @@ export function addMarker(trip: Trip, utcMs: number, text: string): MarkerAnnota
         utc: Math.round(utcMs),
         text: text.trim(),
     };
+    captureProvisionalAnchor(trip, record, utcMs);
     persistRecord(record);
     return record;
+}
+
+// === Re-stamping markers placed on a provisional timeline (lazy ingest) ===
+//
+// A marker is pure UTC, computed from the trip's startUtc - which, on the lazy
+// path, is a filename-derived guess until hydration reads the real
+// mvhd/GPS (a Skip in the hydration modal starts playback exactly there). The
+// re-derive then moves the trip out from under the marker: the stored UTC
+// lands at the wrong moment, on the wrong trip, or outside every trip, and
+// the broken value flows into the notes file. So a marker placed while its
+// trip still has pending candidates also records a SESSION anchor - the clip
+// file at the playhead plus the content offset into it - and once the real
+// timeline lands, the UTC is recomputed from that anchor and re-saved.
+
+interface ProvisionalMarkerAnchor {
+    /** Identity key of the clip file the marker was placed in. */
+    fileKey: string;
+    /** Content seconds from that clip's segment start to the marker. */
+    offsetSec: number;
+}
+
+// marker id -> anchor, only for markers created on a not-yet-hydrated trip.
+const provisionalMarkerAnchors = new Map<string, ProvisionalMarkerAnchor>();
+
+// Repaints the timeline pins after a re-stamp. Registered from app.ts -
+// importing timeline-markers here would cycle (it imports this module).
+let markersRestampedHook: (() => void) | null = null;
+
+/** Registers the after-re-stamp repaint. */
+export function registerMarkersRestampedHook(callback: () => void): void {
+    markersRestampedHook = callback;
+}
+
+/** Records the clip-relative position of a marker placed on a trip that still
+ *  has un-hydrated candidates - the input for the later re-stamp. */
+function captureProvisionalAnchor(trip: Trip, record: MarkerAnnotation, utcMs: number): void {
+    if (!tripAllCandidates(trip).some(isHydrationPending)) return;
+    const contentSec = wallToContentSec(trip.timeline, utcMs / 1000);
+    const segment = trip.timeline.segments.find(
+        (seg) => contentSec >= seg.contentStart && contentSec <= seg.contentEnd,
+    );
+    if (!segment) return;
+    const frame = trip.frames[segment.frameIndex];
+    const candidate = frame ? Object.values(frame.channels).find((ch) => ch != null) : undefined;
+    if (!candidate) return;
+    provisionalMarkerAnchors.set(record.id, {
+        fileKey: candidateIdentityKey(candidate),
+        offsetSec: contentSec - segment.contentStart,
+    });
+}
+
+/**
+ * Recomputes the UTC of provisionally-placed markers from their clip anchors
+ * against the CURRENT trip timelines, re-saving the ones that moved. Call
+ * after a lazy re-derive has rebuilt the affected trips. An anchor whose clip
+ * is terminal (hydrated or read-failed) is done and dropped; one whose clip is
+ * still pending stays for the next pass; one whose clip left the session is
+ * dropped as unfixable. Returns how many markers moved.
+ */
+export function restampProvisionalMarkers(): number {
+    if (provisionalMarkerAnchors.size === 0) return 0;
+    let moved = 0;
+    for (const [markerId, anchor] of [...provisionalMarkerAnchors]) {
+        const marker = markersById.get(markerId);
+        if (!marker) {
+            // Deleted meanwhile - the tombstone's UTC does not matter.
+            provisionalMarkerAnchors.delete(markerId);
+            continue;
+        }
+        const located = locateCandidate(anchor.fileKey);
+        if (!located) {
+            provisionalMarkerAnchors.delete(markerId);
+            continue;
+        }
+        if (isHydrationPending(located.candidate)) continue;
+        const segment = located.trip.timeline.segments.find((seg) => seg.frameIndex === located.frameIndex);
+        provisionalMarkerAnchors.delete(markerId);
+        if (!segment) continue;
+        const contentSec = Math.min(segment.contentStart + anchor.offsetSec, segment.contentEnd);
+        const utcMs = Math.round(contentToWallUtc(located.trip.timeline, contentSec) * 1000);
+        // Sub-half-second drift is invisible on the timeline - not worth a
+        // store write and a notes-file flush.
+        if (Math.abs(utcMs - marker.utc) < 500) continue;
+        // A fresh updatedAt: the corrected UTC must LWW-win over the wrong
+        // value that may already sit in the notes file or on another machine.
+        persistRecord({ ...marker, utc: utcMs, updatedAt: Date.now() });
+        moved++;
+    }
+    if (moved > 0) markersRestampedHook?.();
+    return moved;
+}
+
+/** Clears the in-memory indexes and provisional anchors between unit tests. */
+export function _resetForTests(): void {
+    recordsById.clear();
+    tripMetaByAnchor.clear();
+    markersById.clear();
+    provisionalMarkerAnchors.clear();
+}
+
+/** The trip and frame currently holding the clip with this identity key. */
+function locateCandidate(fileKey: string): { trip: Trip; frameIndex: number; candidate: VideoCandidate } | null {
+    for (const trip of state.trips) {
+        for (let frameIndex = 0; frameIndex < trip.frames.length; frameIndex++) {
+            const frame = trip.frames[frameIndex]!;
+            for (const candidate of Object.values(frame.channels)) {
+                if (candidate && candidateIdentityKey(candidate) === fileKey) {
+                    return { trip, frameIndex, candidate };
+                }
+            }
+        }
+    }
+    return null;
 }
 
 /** Replaces a marker's text. No-op for a deleted/unknown id. */

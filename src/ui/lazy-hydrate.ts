@@ -44,6 +44,7 @@ import {
 } from "../trips.js";
 import type { VideoCandidate } from "../trips.js";
 
+import { restampProvisionalMarkers } from "./annotations.js";
 import { applyRegroup } from "./apply-regroup.js";
 import { planEmbeddedGpsQueue } from "./embedded-gps-queue.js";
 import { dispatchParseVideoEmbeddedGpsViaWorker as dispatchParseVideoEmbeddedGps } from "./gps-extract-shim.js";
@@ -642,6 +643,11 @@ async function runHydrateData(tripIdx: number, pending: VideoCandidate[], sessio
     // this trip is active. Does NOT regroup or re-render the list.
     refreshTrip(tripIdx);
 
+    // Markers placed on this trip's provisional timeline (a Skip lands there)
+    // carry a wrong absolute UTC - move them onto the now-real one before it
+    // flows any further (the notes file flushes on every marker save).
+    restampProvisionalMarkers();
+
     log.info("trip hydrated", { tripIdx, files: pending.length, durationMs: Math.round(performance.now() - t0) });
 }
 
@@ -744,6 +750,10 @@ function startBackgroundFill(): void {
             // active trip so its chart/map pick up the re-placed G-load.
             mergeLazyAccel(lazyAllCandidates);
             if (state.active) refreshTrip(state.active.trip);
+            // The sweep can shift startUtc once more (boundaries reconcile
+            // with real durations) - give any still-anchored marker its final
+            // position.
+            restampProvisionalMarkers();
             log.info("lazy background fill complete, regrouped", { trips: state.trips.length });
         } else {
             log.warn("recompute sweep not registered, skipping final regroup");
