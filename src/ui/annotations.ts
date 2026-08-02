@@ -174,7 +174,14 @@ export function setTripMeta(trip: Trip, patch: TripMetaPatch): void {
         if (patch.isFavorite) base.isFavorite = true;
         else delete base.isFavorite;
     }
-    base.updatedAt = Date.now();
+    // Past the anchor's watermark, not just "now": another machine's fast clock
+    // can leave a future-stamped record (a tombstone in particular) on this
+    // anchor, and a wall-clock stamp behind it loses LWW - indexRecord would
+    // drop this edit on the floor, and so would the other machine when the
+    // notes file reaches it. The same-id escape hatch in indexRecord does not
+    // help here: clearing an anchor leaves no `current` for a new record to
+    // match. Bounded by the skew that already exists; it never invents more.
+    base.updatedAt = Math.max(Date.now(), (anchorWatermark.get(base.anchor.fileIdentityKey) ?? 0) + 1);
     base.deleted = !base.name && !base.note && base.isFavorite !== true;
     persistRecord(base);
     // Clearing the card means "this trip has no annotation" - so the leftovers

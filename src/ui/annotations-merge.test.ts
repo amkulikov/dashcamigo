@@ -295,4 +295,25 @@ describe("setTripMeta on a trip a regroup merged", () => {
         setTripMeta(trip, { name: "renamed here" });
         expect(tripMetaFor(trip)?.name).toBe("renamed here");
     });
+
+    it("names a trip the remote clock already cleared into the future", () => {
+        // The same fast clock, but the remote record is a TOMBSTONE: the anchor
+        // is empty, so there is no visible record for the same-id escape hatch
+        // to match, and a wall-clock stamp would sit behind the watermark the
+        // tombstone left. The name the user just typed must still show up.
+        const future = Date.now() + 60 * 60 * 1000;
+        // The record setTripMeta mints resolves its own folder from the anchor.
+        folderByKey.set(ANCHOR_KEY, "folder-A");
+        applyMergedRecords([meta({ id: "remote", updatedAt: future, deleted: true })]);
+        const trip = buildTrip();
+        state.trips = [trip];
+        expect(tripMetaFor(trip), "the tombstone cleared the anchor").toBeNull();
+
+        setTripMeta(trip, { name: "Airport run" });
+        expect(tripMetaFor(trip)?.name).toBe("Airport run");
+        // Stamped past the watermark, or the other machine rejects it in turn
+        // and the two profiles disagree about the trip forever.
+        const written = recordsForFolder("folder-A").find((r) => r.kind === "tripMeta" && r.name === "Airport run");
+        expect(written?.updatedAt, "beats the future-dated tombstone").toBeGreaterThan(future);
+    });
 });
