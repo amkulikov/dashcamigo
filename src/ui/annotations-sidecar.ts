@@ -192,15 +192,19 @@ async function writeSidecar(folderId: string): Promise<void> {
     // this profile's records - the exact way notes made on another machine get
     // erased. Retry the read instead: this call chain starts at an annotation
     // edit, which re-armed the grant inside its gesture, so the retry usually
-    // succeeds and the merge schedules the converging write itself.
+    // succeeds. Only a retry that FAILED gives up here - a read that succeeded
+    // but found a foreign file merges nothing and schedules nothing, and
+    // returning on it would drop this edit for a whole debounce cycle.
     if (!sidecarReadFolders.has(folderId)) {
         await mergeFromSidecar(folder);
-        if (!sidecarReadFolders.has(folderId) && !unreadableWarned.has(folderId)) {
-            unreadableWarned.add(folderId);
-            log.warn("sidecar write skipped, file unreadable this session", { folder: folder.label });
-            notify({ severity: "warn", messageKey: "sidecar.writeFailed" });
+        if (!sidecarReadFolders.has(folderId)) {
+            if (!unreadableWarned.has(folderId)) {
+                unreadableWarned.add(folderId);
+                log.warn("sidecar write skipped, file unreadable this session", { folder: folder.label });
+                notify({ severity: "warn", messageKey: "sidecar.writeFailed" });
+            }
+            return;
         }
-        return;
     }
     // Writes fire from a debounce timer - no user gesture, so only a still-
     // granted permission works; a lapsed one skips quietly. Recovery paths:
