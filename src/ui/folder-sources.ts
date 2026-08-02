@@ -376,8 +376,10 @@ function buildRow(source: FolderSource): HTMLElement {
     remember.textContent = t("folderSources.remember");
     remember.title = t("folderSources.rememberHint");
     // Several rows carry the same verb; the folder is what tells them apart, so
-    // it belongs in the accessible name and not only in the row above it.
-    remember.setAttribute("aria-label", `${t("folderSources.remember")}: ${displayLabel}`);
+    // it belongs in the accessible name and not only in the row above it. Its
+    // own key, not a colon glued on here - word order and separator are the
+    // dictionary's to choose.
+    remember.setAttribute("aria-label", t("folderSources.rememberAria", { folder: displayLabel }));
     remember.addEventListener("click", () => void onRemember(source, remember));
     row.appendChild(remember);
     return row;
@@ -407,7 +409,7 @@ function buildUnloadedRow(folder: RememberedFolder, displayLabel: string): HTMLE
     load.textContent = t("folderSources.load");
     load.title = t("folderSources.loadHint");
     // Same verb on every unloaded row - name the folder it belongs to.
-    load.setAttribute("aria-label", `${t("folderSources.load")}: ${displayLabel}`);
+    load.setAttribute("aria-label", t("folderSources.loadAria", { folder: displayLabel }));
     // Clickable in every liveness state on purpose: a re-plugged card revives
     // its stored handle, and the permission re-prompt needs this very gesture.
     load.addEventListener("click", () => rememberedFolderOpener?.(folder));
@@ -506,7 +508,7 @@ function buildMenuShell(
     toggle.className = "folder-source__menu";
     // Every row has one of these; without the folder in the name a screen
     // reader reads the same "Folder actions" over and over.
-    toggle.setAttribute("aria-label", `${t("folderSources.menu")}: ${folderLabel}`);
+    toggle.setAttribute("aria-label", t("folderSources.menuAria", { folder: folderLabel }));
     toggle.setAttribute("aria-expanded", "false");
     toggle.title = t("folderSources.menu");
     toggle.appendChild(buildLucideIcon(["M5 12h.01", "M12 12h.01", "M19 12h.01"], 14));
