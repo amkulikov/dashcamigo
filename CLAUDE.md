@@ -302,9 +302,19 @@ go through a `themeColors()` cache invalidated on `prefers-color-scheme` change.
 - Container repair -> `src/repair/`
 - Ingest pipeline -> `src/ui/ingest.ts`, `src/parsers/registry.ts`; start-time
   derivation -> `deriveStartUtc` in `src/trips.ts`
+- Browser-side persistence (one IndexedDB, schema + versioning) -> `src/persist/`
 - Remembered folders - session half (rows above the trip list, file ->
   folder binding) -> `src/ui/folder-sources.ts`; landing half (picker, chips)
   -> `src/ui/persistent-folders.ts`; store -> `src/persist/folders.ts`
+- Trip annotations (name/note/favorite/markers) - merge rules ->
+  `src/persist/annotations.ts`; session layer -> `src/ui/annotations.ts`;
+  notes-file replica -> `src/ui/annotations-sidecar.ts`
+- Cross-session index cache - store + prune -> `src/persist/index-cache.ts`;
+  ingest glue -> `src/ui/ingest-cache.ts`; invalidation ->
+  `INDEX_CACHE_VERSION` in `src/persist/types.ts` (bump it whenever a parser or
+  classifier change makes a stored parse wrong)
+- Channel drift (frame-count-cut muxers) -> `src/channel-drift.ts`;
+  playback consumer -> `src/ui/player-slave-target.ts`
 - AppState shape -> `src/ui/state.ts`
 - Capability detection + gate -> `src/capabilities.ts`, `src/ui/capability-gate.ts`
   (matrix + rationale in `docs/browser-support.md`)
