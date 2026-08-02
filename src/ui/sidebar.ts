@@ -554,7 +554,13 @@ export function clearOpeningTrip(): void {
 // same key carryOverTripPreviews / remapActiveAndExpanded use to follow a trip
 // across a regroup - a basename key collapses duplicate names (TeslaCam's
 // front.mp4 in every event folder), landing focus on the wrong trip.
-type ListFocus = { kind: "title"; key: File } | { kind: "frame"; key: File; frameIndex: string };
+type ListFocus =
+    | { kind: "title"; key: File }
+    | { kind: "frame"; key: File; frameIndex: string }
+    // The annotation controls in the meta row: toggling the star re-renders
+    // the list AND can move the card into the favorites group, so without this
+    // every keyboard favorite/edit drops focus to <body>.
+    | { kind: "action"; key: File; action: "trip-fav" | "trip-edit" };
 
 /** Stable identity of a trip across a regroup: its first candidate's File object
  *  (groupTrips reuses the same File, so identity survives the renumber). */
@@ -575,6 +581,9 @@ function captureListFocus(scope: Element): ListFocus | null {
     if (el.dataset.action === "play-file" && el.dataset.frameIndex != null) {
         return { kind: "frame", key, frameIndex: el.dataset.frameIndex };
     }
+    if (el.dataset.action === "trip-fav" || el.dataset.action === "trip-edit") {
+        return { kind: "action", key, action: el.dataset.action };
+    }
     return null;
 }
 
@@ -585,9 +594,11 @@ function restoreListFocus(focus: ListFocus | null, root: Element): void {
     const sel =
         focus.kind === "title"
             ? `li.trip[data-trip-index="${idx}"] .trip-title`
-            : // The focusable clip control is the inner .file-name (role=button),
-              // not the li itself (which is now a plain mouse-click container).
-              `li.trip[data-trip-index="${idx}"] li[data-frame-index="${focus.frameIndex}"] .file-name`;
+            : focus.kind === "action"
+              ? `li.trip[data-trip-index="${idx}"] [data-action="${focus.action}"]`
+              : // The focusable clip control is the inner .file-name (role=button),
+                // not the li itself (which is now a plain mouse-click container).
+                `li.trip[data-trip-index="${idx}"] li[data-frame-index="${focus.frameIndex}"] .file-name`;
     root.querySelector<HTMLElement>(sel)?.focus();
 }
 

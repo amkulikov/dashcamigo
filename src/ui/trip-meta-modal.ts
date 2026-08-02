@@ -47,11 +47,18 @@ export function openTripMetaModal(trip: Trip): void {
 }
 
 function save(): void {
-    if (currentTrip && nameInput && noteInput) {
-        setTripMeta(currentTrip, { name: nameInput.value, note: noteInput.value });
-        renderTrips();
+    if (!currentTrip || !nameInput || !noteInput) {
+        close();
+        return;
     }
+    setTripMeta(currentTrip, { name: nameInput.value, note: noteInput.value });
+    // Close BEFORE the re-render: closing hands focus back to the pencil that
+    // opened the modal, and renderTrips then carries that focus onto the
+    // rebuilt card (its own capture/restore pass). The other order restores
+    // focus onto a card the re-render has already thrown away, stranding the
+    // keyboard on <body>.
     close();
+    renderTrips();
 }
 
 function close(): void {
