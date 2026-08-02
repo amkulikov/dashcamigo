@@ -1099,11 +1099,15 @@ function initChartTouchZoom(): void {
     const host = dom.playerChartEl;
     if (!host) return;
 
-    // Overview + mini-progress own their single-finger drag; a contact there is
-    // not eligible to start a pinch (avoids stealing their pointer capture).
+    // Overview, mini-progress and the export range pull-tabs own their
+    // single-finger drag; a contact there is not eligible to start a pinch.
+    // The pinch captures BOTH pointers on the host, which silently steals a
+    // tab's capture mid-drag: the tab gets lostpointercapture (not
+    // pointercancel), its own move/up listeners never fire again, and its
+    // value bubble hangs around. Same list as the mouse drag-select below.
     const eligible = (target: EventTarget | null): boolean => {
         if (!(target instanceof Element)) return true;
-        return !target.closest("#player-chart-overview, #player-mini-progress");
+        return !target.closest("#player-chart-overview, #player-mini-progress, .timeline-range__tab");
     };
 
     const startPinch = (): void => {
