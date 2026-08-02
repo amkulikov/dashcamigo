@@ -28,6 +28,9 @@ export function initMarkerModal(callbacks: { onChanged: () => void }): void {
             deleteMarker(currentMarkerId);
             onChanged?.();
         }
+        // Explicit delete already did it - leaving the flag set would make the
+        // dismissal below tombstone and re-render the same marker a second time.
+        createdNow = false;
         close();
     });
     wireBackdropDismiss(modal, close);
