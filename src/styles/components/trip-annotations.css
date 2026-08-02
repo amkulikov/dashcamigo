@@ -9,6 +9,7 @@
 }
 
 .trip-meta-action {
+    position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -30,12 +31,25 @@
     background: rgba(128, 128, 128, 0.25);
 }
 
-/* Touch: 22px is a guaranteed miss next to the play-trip header - grow the
-   hit target (the icon keeps its size). */
+/* Touch: 22px is a guaranteed miss next to the play-trip header. Grow only the
+   tap area via a pseudo-element (same trick as the corner badges in
+   sidebar.css) - growing the button box itself stretches the meta row, and the
+   row's centered text then rides up under the absolutely-placed title.
+   Downward reach stops at the row's 8px bottom inset: the header clips
+   overflow, so anything past the card edge is dead area. Each zone is biased
+   away from its neighbour (star grows left, pencil right) so the two do not
+   overlap across the 2px gap. */
 @media (pointer: coarse) {
-    .trip-meta-action {
-        width: 34px;
-        height: 34px;
+    .trip-meta-action::before {
+        content: "";
+        position: absolute;
+        inset: -11px -1px -8px -1px;
+    }
+    .trip-fav::before {
+        left: -12px;
+    }
+    .trip-edit::before {
+        right: -12px;
     }
 }
 

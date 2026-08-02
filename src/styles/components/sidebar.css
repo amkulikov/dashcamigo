@@ -316,7 +316,9 @@
     display: flex;
     align-items: center;
     gap: var(--dc-space-1);
-    overflow: hidden;
+    /* No overflow:hidden here - the text child clips itself, and the row must let
+       the touch hit-zones of the annotation buttons grow past its 22px height
+       (trip-annotations.css). The header still clips at the card edge. */
     white-space: nowrap;
 }
 .trip-meta .trip-meta-text {
