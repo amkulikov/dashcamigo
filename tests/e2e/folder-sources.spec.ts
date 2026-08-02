@@ -40,6 +40,23 @@ test.describe("folder sources, classic picker", () => {
         await expect(row.locator(".folder-source__status")).toHaveCount(0);
         await expect(row.locator(".folder-source__menu")).toHaveCount(0);
     });
+
+    test("re-opening the same folder through the picker upgrades its row", async ({ page }) => {
+        // The fake picker hands back the SAME root the plain input just loaded.
+        await mockDirectoryPicker(page, [{ label: "70mai-multichannel", dir: SAMPLE_70MAI }]);
+        await page.reload();
+        await page.locator("#folder-input").setInputFiles(SAMPLE_70MAI);
+        const row = page.locator(sourceRow);
+        await expect(row).toHaveCount(1);
+        await expect(row.locator(".folder-source__remember")).toHaveCount(0);
+
+        await page.locator("#sidebar-cta").click();
+        // The clips dedup away against what is already loaded, so the second
+        // batch is a remnant at best - the row must still stay single AND learn
+        // that it now has a reopenable folder behind it.
+        await expect(row).toHaveCount(1);
+        await expect(row.locator(".folder-source__remember")).toBeVisible();
+    });
 });
 
 test.describe("folder sources, file-system picker", () => {
