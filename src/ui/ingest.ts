@@ -11,6 +11,7 @@ import { dropDuplicateFiles } from "../ingest-dedup.js";
 import { ignoredRootSegments, isIgnoredPath } from "../ingest-filter.js";
 import { indexAllMp4Files } from "../indexer.js";
 import { partitionByIndexCache, registerCandidateRepair, scheduleIndexCacheWrite } from "./ingest-cache.js";
+import { fileIdentityOf } from "../persist/identity.js";
 import { createLogger } from "../log.js";
 import { captureSentryException, captureSentryMessage } from "../sentry.js";
 import { emitLifecycle, markStage } from "../perf.js";
@@ -716,7 +717,7 @@ async function ingestFilesInternal(
                         if (repairApplied.hvccRepaired) repairedCount++;
                         // The cache entry re-applies this on restore - the
                         // on-disk bytes stay broken forever.
-                        registerCandidateRepair(vendorFileKey(cf.file), repair);
+                        registerCandidateRepair(fileIdentityOf(cf.file.file, cf.file.relativePath), repair);
                         log.info("applied container repair", {
                             file: file.name,
                             phantom: repair.phantomNeutralized,
@@ -1164,11 +1165,22 @@ async function ingestFilesInternal(
 
     // Persist this run's indexing results for the next session. After every
     // records/anchor sweep above, so the snapshot is final-state. Excluded:
-    // heavy-deferred files (records not extracted yet) and files whose
-    // gps-extract batch crashed (empty records from a transient failure).
+    // heavy-deferred files (records not extracted yet), files whose
+    // gps-extract batch crashed, and files an extractor failed on inside an
+    // otherwise fulfilled batch - all three end up with empty records for a
+    // reason a plain retry may not repeat, and caching that would freeze
+    // "no GPS" for them across every future session.
+    // Errors carry a basename, so an empty result is required as well: another
+    // extractor may have claimed the same file afterwards (the dispatcher keeps
+    // walking past a failure), and a same-named file on a second card would
+    // otherwise be excluded for a failure that was never its own.
+    const gpsErrorNames = new Set(embeddedResult.errors.map((e) => e.file));
+    const gpsErrorKeys = indexedThisRun
+        .filter((c) => c.records.length === 0 && gpsErrorNames.has(c.file.name))
+        .map((c) => vendorFileKey({ file: c.file, relativePath: c.relativePath }));
     scheduleIndexCacheWrite(
         indexedThisRun,
-        new Set([...state.pendingHeavyEmbeddedGps.keys(), ...crashedBatchFileKeys]),
+        new Set([...state.pendingHeavyEmbeddedGps.keys(), ...crashedBatchFileKeys, ...gpsErrorKeys]),
     );
 
     // Onboarding tour after the first successful ingest - the peak-value moment,

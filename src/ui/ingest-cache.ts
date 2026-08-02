@@ -18,24 +18,32 @@ import {
     putIndexCacheEntries,
     touchIndexCacheEntries,
 } from "../persist/index-cache.js";
-import type { CachedFileIndex } from "../persist/types.js";
+import type { CachedFileIndex, FileIdentity } from "../persist/types.js";
 import type { VideoCandidate } from "../trips.js";
 import { applyMoovRepair, vendorFileKey } from "./ingest-candidate.js";
 
 const log = createLogger("ingest-cache");
 
-// Container-repair descriptors of THIS session's indexed files, vendorFileKey
-// -> repair. A session registry (not a per-ingest map) because cache writes no
-// longer happen only in the eager ingest tail: the lazy hydration path and the
-// on-click heavy-GPS load write entries long after their ingest returned, and
-// a cached entry without its repair would describe bytes the file on disk
-// does not have. Rare entries (repairs are the exception), session lifetime.
-const repairByFileKey = new Map<string, IndexerRepair>();
+// Container-repair descriptors of THIS session's indexed files, keyed by the
+// same file IDENTITY the cache entries are (path + size + mtime), not by path
+// alone: two cards with the same folder layout produce identical paths, and a
+// repair descriptor applied to the wrong file's moov would hand playback a
+// patched header that does not match its bytes. A session registry (not a
+// per-ingest map) because cache writes no longer happen only in the eager
+// ingest tail: the lazy hydration path and the on-click heavy-GPS load write
+// entries long after their ingest returned, and a cached entry without its
+// repair would describe bytes the file on disk does not have. Rare entries
+// (repairs are the exception), session lifetime.
+const repairByIdentity = new Map<string, IndexerRepair>();
 
-/** Records a file's container repair for later cache writes. Call wherever
- *  the indexer reports one. */
-export function registerCandidateRepair(fileKey: string, repair: IndexerRepair): void {
-    repairByFileKey.set(fileKey, repair);
+/**
+ * Records a file's container repair for later cache writes. Call wherever the
+ * indexer reports one, with the identity of the ORIGINAL file - applyMoovRepair
+ * is constant-size and preserves name/lastModified, so the patched file's
+ * identity is the same either way.
+ */
+export function registerCandidateRepair(identity: FileIdentity, repair: IndexerRepair): void {
+    repairByIdentity.set(fileIdentityKey(identity), repair);
 }
 
 export interface IndexCachePartition {
@@ -117,7 +125,7 @@ export function scheduleIndexCacheWrite(candidates: VideoCandidate[], skipKeys: 
             size: candidate.file.size,
             lastModified: candidate.file.lastModified,
         });
-        entries.push(buildCacheEntry(identityKey, candidate, repairByFileKey.get(key)));
+        entries.push(buildCacheEntry(identityKey, candidate, repairByIdentity.get(identityKey)));
     }
     if (entries.length === 0) return;
     void putIndexCacheEntries(entries)

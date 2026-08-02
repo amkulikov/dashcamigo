@@ -47,6 +47,7 @@ import type { VideoCandidate } from "../trips.js";
 import { restampProvisionalMarkers } from "./annotations.js";
 import { applyRegroup } from "./apply-regroup.js";
 import { registerCandidateRepair, scheduleIndexCacheWrite } from "./ingest-cache.js";
+import { fileIdentityOf } from "../persist/identity.js";
 import { planEmbeddedGpsQueue } from "./embedded-gps-queue.js";
 import { dispatchParseVideoEmbeddedGpsViaWorker as dispatchParseVideoEmbeddedGps } from "./gps-extract-shim.js";
 import {
@@ -550,7 +551,7 @@ async function runHydrateData(tripIdx: number, pending: VideoCandidate[], sessio
                 if (plan.cacheMoov && moovBytes) moovByKey.set(key, moovBytes);
                 // The cache entry re-applies the repair on restore (the on-disk
                 // bytes stay broken forever) - record it for the write below.
-                if (repair) registerCandidateRepair(key, repair);
+                if (repair) registerCandidateRepair(fileIdentityOf(cand.file, cand.relativePath), repair);
                 hydrateCandidateFromIndex(cand, idx, repair);
             },
             /* concurrency */ 4,
@@ -589,10 +590,13 @@ async function runHydrateData(tripIdx: number, pending: VideoCandidate[], sessio
         if (!shouldTryEmbeddedGps(vf, cand.records.length > 0)) continue;
         gpsTargets.push({ file: vf, role: "video", sidecarId: null, sidecarMp4: null, logExtractorId: null });
     }
-    // A crashed GPS extraction must keep its files out of the cache write
-    // below - the empty records would freeze "no GPS" across sessions for a
-    // transient failure (mirrors crashedBatchFileKeys on the eager path).
+    // A failed GPS extraction must keep its files out of the cache write below
+    // - the empty records would freeze "no GPS" across sessions for a failure
+    // a plain retry may not repeat. Both grains, same as the eager path: the
+    // whole dispatch throwing, and a per-file extractor error inside a
+    // fulfilled one.
     let gpsStageFailed = false;
+    const gpsErrorNames = new Set<string>();
     if (gpsTargets.length > 0) {
         try {
             const result = await dispatchParseVideoEmbeddedGps(
@@ -618,6 +622,7 @@ async function runHydrateData(tripIdx: number, pending: VideoCandidate[], sessio
             for (const [mp4Name, samples] of result.accelByFilename) {
                 lazyEmbeddedAccelByMp4.set(mp4Name, samples);
             }
+            for (const err of result.errors) gpsErrorNames.add(err.file);
         } catch (err) {
             if (err instanceof DOMException && err.name === "AbortError") return;
             gpsStageFailed = true;
@@ -665,7 +670,16 @@ async function runHydrateData(tripIdx: number, pending: VideoCandidate[], sessio
     // startUtc may still shift at the final sweep - harmless, a restore
     // re-derives it from the cached createdUtc/records anyway.
     const hydratedNow = pending.filter((cand) => cand.hydrated === true);
-    const skipKeys = gpsStageFailed ? new Set(gpsTargets.map((cf) => vendorFileKey(cf.file))) : new Set<string>();
+    const gpsTargetKeys = new Set(gpsTargets.map((cf) => vendorFileKey(cf.file)));
+    const skipKeys = new Set<string>();
+    for (const cand of hydratedNow) {
+        const key = vendorFileKey({ file: cand.file, relativePath: cand.relativePath });
+        if (!gpsTargetKeys.has(key)) continue;
+        // A whole-dispatch failure took every target down with it. A per-file
+        // error also needs the empty result: the errors carry a basename, and
+        // another extractor may have claimed the file after the one that threw.
+        if (gpsStageFailed || (cand.records.length === 0 && gpsErrorNames.has(cand.file.name))) skipKeys.add(key);
+    }
     scheduleIndexCacheWrite(hydratedNow, skipKeys);
 
     log.info("trip hydrated", { tripIdx, files: pending.length, durationMs: Math.round(performance.now() - t0) });
@@ -771,9 +785,9 @@ function startBackgroundFill(): void {
             mergeLazyAccel(lazyAllCandidates);
             if (state.active) refreshTrip(state.active.trip);
             // The sweep can shift startUtc once more (boundaries reconcile
-            // with real durations) - give any still-anchored marker its final
-            // position.
-            restampProvisionalMarkers();
+            // with real durations) - give every anchored marker its final
+            // position, then release the anchors: nothing moves them after this.
+            restampProvisionalMarkers({ final: true });
             log.info("lazy background fill complete, regrouped", { trips: state.trips.length });
         } else {
             log.warn("recompute sweep not registered, skipping final regroup");

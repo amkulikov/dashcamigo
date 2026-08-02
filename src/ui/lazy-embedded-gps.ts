@@ -213,7 +213,17 @@ async function runLazyLoad(session: LazySession, targets: ClassifiedFile[], trip
         const targetKeys = new Set(targets.map((cf) => vendorFileKey(cf.file)));
         const trip = state.trips[tripIdx];
         const scanned = trip ? tripAllCandidates(trip).filter((cand) => targetKeys.has(vendorFileKey(cand))) : [];
-        scheduleIndexCacheWrite(scanned, new Set(state.pendingHeavyEmbeddedGps.keys()));
+        // A file the extractor errored on AND that came back empty is not a
+        // verified "no GPS" - it is a failure, and caching it would deny the
+        // retry that may well succeed. Both halves are needed: the errors carry
+        // a basename, and the dispatcher keeps walking past a failed extractor,
+        // so a file another primitive then claimed is not a failure at all.
+        const errorNames = new Set(result.errors.map((err) => err.file));
+        const skipKeys = new Set(state.pendingHeavyEmbeddedGps.keys());
+        for (const cand of scanned) {
+            if (cand.records.length === 0 && errorNames.has(cand.file.name)) skipKeys.add(vendorFileKey(cand));
+        }
+        scheduleIndexCacheWrite(scanned, skipKeys);
     }
 
     if (result && result.errors.length > 0) {
