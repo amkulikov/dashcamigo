@@ -30,18 +30,22 @@ interface Pending {
 const SNAPSHOT_TIMEOUT_MS = 30_000;
 
 /**
- * Wider ceiling for the FIRST request only: on the main thread it additionally
- * awaits MapLibre init + style load + the range prewarm walk (itself capped by
- * PREWARM_BUDGET_MS in export-map-snapshot.ts, which this must comfortably
- * exceed). One timeout here latches the map off for the whole export, so the
- * first request must not race legitimate warm-up work - only a truly dead
- * main thread.
+ * Wider ceiling until the main thread has answered ONCE: up to that point every
+ * in-flight request is queued behind MapLibre init + style load + the range
+ * prewarm walk (itself capped by PREWARM_BUDGET_MS in export-map-snapshot.ts,
+ * which this must comfortably exceed). Gated on the first RESPONSE, not on
+ * reqId: the pipeline decodes one frame ahead, so request 2 is issued while
+ * request 1 is still warming up and would start a 30 s timer it cannot beat.
+ * One timeout latches the map off for the whole export, so nothing may race
+ * legitimate warm-up work - only a truly dead main thread.
  */
 const FIRST_SNAPSHOT_TIMEOUT_MS = 120_000;
 
 export class MapSnapshotWorkerClient implements MapSnapshotter {
     private nextId = 1;
     private pending = new Map<number, Pending>();
+    // Flips on the first reply of any kind: warm-up is over from then on.
+    private warmedUp = false;
 
     constructor(private server: WorkerServer) {}
 
@@ -60,6 +64,7 @@ export class MapSnapshotWorkerClient implements MapSnapshotter {
             return;
         }
         this.pending.delete(data.reqId);
+        this.warmedUp = true;
         clearTimeout(entry.timeoutId);
         if (data.error) {
             entry.reject(new Error(`map snapshot failed: ${data.error}`));
@@ -74,7 +79,7 @@ export class MapSnapshotWorkerClient implements MapSnapshotter {
 
     snapshot(req: MapSnapshotRequest): Promise<ImageBitmap> {
         const reqId = this.nextId++;
-        const timeoutMs = reqId === 1 ? FIRST_SNAPSHOT_TIMEOUT_MS : SNAPSHOT_TIMEOUT_MS;
+        const timeoutMs = this.warmedUp ? SNAPSHOT_TIMEOUT_MS : FIRST_SNAPSHOT_TIMEOUT_MS;
         return new Promise((resolve, reject) => {
             const timeoutId = setTimeout(() => {
                 if (this.pending.delete(reqId)) {

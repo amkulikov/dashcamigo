@@ -13,12 +13,14 @@
 export function isSourceReadError(err: unknown): boolean {
     // Chromium blob.stream() shape. Exact match - "network error" is the fixed
     // Blink literal, and anything looser would swallow real fetch failures.
-    if (err instanceof TypeError && err.message === "network error") return true;
+    // The name, not just instanceof: an error rebuilt from worker-port data is
+    // a plain Error carrying the original name, and the re-encode export
+    // reports exactly that copy.
+    const name = typeof err === "object" && err !== null ? (err as { name?: unknown }).name : undefined;
+    if (name === "TypeError" && err instanceof Error && err.message === "network error") return true;
     // FileReader / arrayBuffer shape, incl. wrapped/re-thrown variants where the
     // DOMException subclass is lost but the name survives (worker forwarding).
-    if (typeof err === "object" && err !== null && "name" in err) {
-        if ((err as { name?: unknown }).name === "NotReadableError") return true;
-    }
+    if (name === "NotReadableError") return true;
     // Last resort: the Chromium/WebKit NotReadableError message text, kept narrow
     // to avoid false positives on unrelated "read" wording.
     const message = (err instanceof Error ? err.message : String(err)).toLowerCase();

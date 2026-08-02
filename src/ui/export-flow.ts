@@ -48,7 +48,7 @@ import { getUnits } from "../units-pref.js";
 import { anyRegionIntersectsRange, type BlurRegion } from "../blur-regions.js";
 
 import { isAllocationFailure } from "./allocation-failure.js";
-import { isDestinationLostError, tagSinkFailures } from "./destination-error.js";
+import { isDestinationLostError, isSinkFailure, tagSinkFailures } from "./destination-error.js";
 import { isMediabunnyReadAssert } from "./mediabunny-read-assert.js";
 import { isQuotaExceededError } from "./quota-error.js";
 import { isSourceReadError } from "../source-read-error.js";
@@ -1227,14 +1227,17 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
         //    sink-tagged throw, since a source-side failure shares the name;
         //  - a SOURCE file stopped being readable mid-export (card/drive dropped,
         //    file changed since it was picked) - the one failure the user can
-        //    actually fix themselves, so it gets its own message.
+        //    actually fix themselves, so it gets its own message. Gated on the
+        //    sink tag: the source-read shapes are name/text matches, and a
+        //    write failure carrying one of them would otherwise send the user
+        //    to check the card when the destination is the problem.
         const errorKey: I18nKey = isQuotaExceededError(err)
             ? "export.error.diskFull"
             : isAllocationFailure(err)
               ? "export.error.tooLargeForMemory"
               : isDestinationLostError(err)
                 ? "export.error.destinationLost"
-                : isSourceReadError(err)
+                : !isSinkFailure(err) && isSourceReadError(err)
                   ? "export.error.sourceReadFailed"
                   : "export.error.generic";
         hooks.onError(errorKey);

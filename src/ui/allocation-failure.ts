@@ -9,14 +9,24 @@
  *  RAM path has no pre-cap, so this predicate is the only thing standing between
  *  an oversized export and an opaque error toast. */
 export function isAllocationFailure(err: unknown): boolean {
-    if (err instanceof RangeError) return true;
-    // Wrapped/re-thrown: the subclass is gone but the name survives (an error
-    // rebuilt from worker-port data). Our own over-4-GiB throw is a RangeError
-    // whose message names no engine wording, so the name is all that is left.
-    if (typeof err === "object" && err !== null && (err as { name?: unknown }).name === "RangeError") return true;
     const message = err instanceof Error ? err.message : String(err);
-    // Engine-specific OOM wording thrown as a plain Error (not RangeError):
-    // V8 "Array buffer allocation failed", JSC "Out of memory", SpiderMonkey
-    // "out of memory" / "allocation size overflow".
-    return /out of memory|allocation (?:failed|size overflow)|array buffer|memory exhausted/i.test(message);
+    // Engine wording for an allocation that could not be satisfied. V8: "Array
+    // buffer allocation failed", "Invalid typed array length", "Invalid string
+    // length"; JSC: "Out of memory"; SpiderMonkey: "out of memory" /
+    // "allocation size overflow".
+    if (
+        /out of memory|allocation (?:failed|size overflow)|array buffer|memory exhausted|invalid (?:typed array|string) length/i.test(
+            message,
+        )
+    ) {
+        return true;
+    }
+    // A RangeError with our own over-4-GiB wording, whichever way it arrives -
+    // as the real subclass on this thread, or rebuilt from worker-port data
+    // where only name and message survive. The RangeError SHAPE alone is not
+    // enough either way: a demuxer range check on a corrupt container throws
+    // one too, and calling that "too large for your browser's memory" sends the
+    // user hunting for RAM to open a broken file.
+    const name = err instanceof Error ? err.name : (err as { name?: unknown } | null)?.name;
+    return name === "RangeError" && /too large|exceeds|4 ?gib|maximum size/i.test(message);
 }

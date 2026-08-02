@@ -3,11 +3,18 @@ import { describe, expect, it } from "vitest";
 import { isAllocationFailure } from "./allocation-failure.js";
 
 describe("isAllocationFailure", () => {
-    it("treats any RangeError as an allocation failure (V8 throws RangeError for an oversized ArrayBuffer)", () => {
+    it("matches the RangeErrors an oversized allocation actually throws", () => {
         expect(isAllocationFailure(new RangeError("Array buffer allocation failed"))).toBe(true);
-        // Even a RangeError with unrelated wording: the in-house throw and V8's
-        // oversize-buffer error both surface as RangeError, so the type is enough.
-        expect(isAllocationFailure(new RangeError("Invalid array length"))).toBe(true);
+        expect(isAllocationFailure(new RangeError("Invalid typed array length: 5000000000"))).toBe(true);
+        expect(isAllocationFailure(new RangeError("in-memory export exceeds 4294967296 bytes"))).toBe(true);
+    });
+
+    it("does not read every RangeError as an allocation failure", () => {
+        // mediabunny's demuxer range-checks a corrupt container with RangeError.
+        // "Too large for this browser's memory" would send the user hunting for
+        // RAM to open a file that is simply broken.
+        expect(isAllocationFailure(new RangeError("Offset 12345 is outside the bounds of the DataView"))).toBe(false);
+        expect(isAllocationFailure(new RangeError("Invalid array length"))).toBe(false);
     });
 
     it("matches engine-specific OOM wording thrown as a plain Error", () => {
@@ -27,6 +34,16 @@ describe("isAllocationFailure", () => {
         rebuilt.name = "RangeError";
         expect(rebuilt).not.toBeInstanceOf(RangeError);
         expect(isAllocationFailure(rebuilt)).toBe(true);
+    });
+
+    it("does not read a rebuilt RangeError with unrelated wording as an allocation failure", () => {
+        // The demuxer throws RangeError on a corrupt container's out-of-range
+        // box offsets, and the worker port hands it back name-first. Reporting
+        // that as "too large for this browser's memory" sends the user chasing
+        // RAM for a broken file.
+        const parseDefect = new Error("Offset 12345 is outside the bounds of the DataView");
+        parseDefect.name = "RangeError";
+        expect(isAllocationFailure(parseDefect)).toBe(false);
     });
 
     it("matches the OOM wording case-insensitively", () => {

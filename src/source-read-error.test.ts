@@ -7,6 +7,15 @@ describe("isSourceReadError", () => {
         expect(isSourceReadError(new TypeError("network error"))).toBe(true);
     });
 
+    it("matches the same failure rebuilt from worker-port data, where instanceof no longer holds", () => {
+        // A worker hands back name + message as data; the receiving side
+        // rebuilds a plain Error and re-attaches the name. That copy is what
+        // the re-encode export's error mapping sees.
+        const overThePort = Object.assign(new Error("network error"), { name: "TypeError" });
+        expect(overThePort instanceof TypeError, "the rebuilt copy is not a TypeError").toBe(false);
+        expect(isSourceReadError(overThePort)).toBe(true);
+    });
+
     it("matches the FileReader/arrayBuffer NotReadableError shape (incl. wrapped variants)", () => {
         expect(isSourceReadError(new DOMException("read failed", "NotReadableError"))).toBe(true);
         const wrapped = Object.assign(new Error("read failed"), { name: "NotReadableError" });
