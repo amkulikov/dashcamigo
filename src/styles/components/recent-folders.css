@@ -18,6 +18,11 @@
     border-radius: var(--dc-radius-lg);
 }
 
+/* Explicit display above beats the UA [hidden] rule - restore it. */
+.recent-folders[hidden] {
+    display: none;
+}
+
 .recent-folders-head {
     display: flex;
     align-items: center;
