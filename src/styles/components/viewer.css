@@ -905,11 +905,11 @@ body.export-mode .tile-drag-handle {
     opacity: 0;
 }
 .player-wrap:fullscreen .player-chart {
-    /* Clear the player-bar. On mobile the bar is calc(60px + safe-area-bottom)
-       (--mobile-bar-h, set on .player-wrap in the mobile media query and
-       inherited here), so the magic 48px would let the chart overlap the bar's
-       top controls; fall back to 48px on desktop where the bar is ~39px. */
-    bottom: var(--mobile-bar-h, 48px);
+    /* Clear the player-bar. On mobile that is --mobile-bar-h (60px + the iOS
+       safe area, set on .player-wrap in the mobile media query and inherited
+       here); on desktop --player-bar-h, derived from the bar's own control and
+       padding sizes in player-bar.css so the two cannot drift apart. */
+    bottom: var(--mobile-bar-h, var(--player-bar-h, 48px));
     /* Same height as the in-grid chart row - the overlay must not clip or
        letterbox the panel content. */
     height: var(--chart-height);
@@ -929,6 +929,12 @@ body.export-mode .tile-drag-handle {
    again via the :hover class. */
 .player-wrap:fullscreen:not(.controls-visible) {
     cursor: none;
+}
+/* ...except over a dialog: modals are re-homed under the fullscreen element
+   while it is active (modal-helper.ts), and a dialog you cannot see the
+   pointer on is not usable. */
+.player-wrap:fullscreen:not(.controls-visible) .modal-overlay {
+    cursor: auto;
 }
 /* Fullscreen + expanded map: the same video|divider|map split as the desktop
    template instead of the video-only overlay layout, so the mini-map's

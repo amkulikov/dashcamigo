@@ -16,6 +16,9 @@ interface ModalEntry {
     el: HTMLElement;
     onClose: () => void;
     savedFocus: HTMLElement | null;
+    /** Where the modal lived before it was re-homed under the fullscreen
+     *  element, so it can go back on close. Null when it was not moved. */
+    home: { parent: Node; next: Node | null } | null;
 }
 
 // Topmost = last. A stack (not a single ref) so nested dialogs - e.g. the reset
@@ -104,7 +107,7 @@ export function activateModal(el: HTMLElement, opts: { onClose: () => void; init
 
     const savedFocus = (document.activeElement as HTMLElement) ?? null;
     if (stack.length === 0) document.body.style.overflow = "hidden";
-    stack.push({ el, onClose: opts.onClose, savedFocus });
+    stack.push({ el, onClose: opts.onClose, savedFocus, home: adoptIntoFullscreen(el) });
 
     // preventScroll: several modals put initialFocus on a "Close" button in
     // the card's footer (settings, CSP, unsupported-formats). A plain focus()
@@ -113,6 +116,25 @@ export function activateModal(el: HTMLElement, opts: { onClose: () => void; init
     // button for Escape/Enter; it just doesn't drag the scroll with it.
     const target = opts.initialFocus ?? focusableWithin(el)[0] ?? el;
     target.focus?.({ preventScroll: true });
+}
+
+/**
+ * Moves a modal under the fullscreen element for as long as it is open, and
+ * reports where it came from. While fullscreen is on, only that element's
+ * subtree is painted - and every modal sits outside .player-wrap, so opening
+ * one from the fullscreen player bar showed nothing while the focus trap held
+ * the keyboard in a dialog the user could not see. The modals are
+ * position:fixed, so the move does not change their on-screen geometry.
+ * Returns null when there is nothing to do (no fullscreen, already inside, or
+ * a media element is fullscreen - that one takes no children).
+ */
+function adoptIntoFullscreen(el: HTMLElement): ModalEntry["home"] {
+    const fullscreen = document.fullscreenElement;
+    if (!(fullscreen instanceof HTMLElement) || fullscreen instanceof HTMLMediaElement) return null;
+    if (fullscreen.contains(el) || !el.parentNode) return null;
+    const home = { parent: el.parentNode, next: el.nextSibling };
+    fullscreen.appendChild(el);
+    return home;
 }
 
 /**
@@ -149,5 +171,16 @@ export function deactivateModal(el: HTMLElement): void {
     if (idx === -1) return;
     const [entry] = stack.splice(idx, 1);
     if (stack.length === 0) document.body.style.overflow = "";
+    // Back to its own place in the document before anything else looks for it
+    // there (a later open outside fullscreen, a querySelector on the layout).
+    if (entry?.home) {
+        const { parent, next } = entry.home;
+        // The recorded sibling can be gone by now (a re-render of whatever sits
+        // around the modal). Landing at the end of the same parent is still the
+        // right document, and these are position:fixed overlays - order in the
+        // parent carries no layout meaning.
+        if (next && next.parentNode === parent) parent.insertBefore(entry.el, next);
+        else parent.appendChild(entry.el);
+    }
     entry?.savedFocus?.focus?.();
 }

@@ -70,6 +70,15 @@
     outline: 2px solid var(--accent);
     outline-offset: 1px;
 }
+/* Height the desktop bar occupies: its tallest control (the transport pair
+   below) plus the vertical padding and the top border. Derived, not typed in
+   twice - the fullscreen chart overlay is absolutely positioned and has to
+   clear the bar (viewer.css), and a hardcoded number there silently loses its
+   clearance the next time a control grows. Mobile has its own --mobile-bar-h. */
+.player-wrap {
+    --player-bar-h: calc(38px + 2 * var(--dc-space-1) + 1px);
+}
+
 /* Desktop sizing: transport (play + frame-step) is noticeably larger - the
    most-aimed-at targets now that the bar sits right above the timeline; the
    rest of the bar grows slightly over the --dc-iconbtn base. The mobile block
@@ -377,7 +386,14 @@
     margin-left: var(--dc-space-2);
     font-family: var(--dc-font-mono);
     font-variant-numeric: tabular-nums;
-    flex-wrap: wrap;
+    /* nowrap, deliberately: overflow-bar.ts decides what to shed by comparing
+       the row's right edges, so a pill that absorbs the pressure by wrapping to
+       a second line is invisible to it - the kebab is never asked to take
+       anything and the bar's `auto` grid row grows instead, eating the video.
+       Keeping the pill on one line pushes that pressure sideways where the
+       measurement can see it; the @container rules below then drop coords and
+       absolute time as the bar narrows. */
+    flex-wrap: nowrap;
 }
 .player-metrics .pm-item {
     display: inline-flex;
@@ -535,9 +551,8 @@
     text-transform: uppercase;
     letter-spacing: var(--dc-tracking-wide);
     /* Localized speed units like "mph" / "km/h" contain a slash, a soft
-       line-break opportunity, so on a narrow mobile bar the unit's tail
-       wraps to a second line. Pin the unit on a single line - the pill
-       flex-wraps as a whole instead. */
+       line-break opportunity, so the unit's tail can wrap to a second line
+       and grow the bar. Pin it on a single line. */
     white-space: nowrap;
 }
 .player-metrics .pm-coords,
@@ -560,8 +575,7 @@
 
 /* Progressive hide of metrics as the bar shrinks. Container query - we
    react to the bar's width, not the window's: at 1440px with an open map
-   the bar can also be down to 700px, and then coordinates spill onto a
-   second line via flex-wrap. */
+   the bar can also be down to 700px, and the pill is the widest thing in it. */
 @container pbar (max-width: 900px) {
     .player-metrics .pm-coords,
     .player-metrics .pm-coords + .pm-sep {

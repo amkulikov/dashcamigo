@@ -11,6 +11,7 @@ import { t } from "../i18n/index.js";
 import { createLogger } from "../log.js";
 import { dom } from "./dom.js";
 import { applyMapLayout } from "./map.js";
+import { isAnyModalOpen } from "./modal-helper.js";
 
 const log = createLogger("player");
 
@@ -98,6 +99,11 @@ export function initPlayerFullscreen(): void {
         (e) => {
             if (!document.fullscreenElement) return;
             if (!lastPointerWasTouch) return;
+            // A dialog is open: its buttons are the target, never the
+            // reveal-tap. Modals are re-homed under the fullscreen element
+            // while it is active (modal-helper), so their taps reach this
+            // capture listener and would otherwise be swallowed whole.
+            if (isAnyModalOpen()) return;
             // Controls already visible: let the tap fall through to play/pause.
             if (dom.playerWrap.classList.contains("controls-visible")) return;
             // Controls hidden: this tap ONLY reveals them; stop it reaching the
