@@ -149,6 +149,19 @@ export function buildCacheEntry(
     return entry;
 }
 
+/**
+ * Whether a failed cache write ran out of ORIGIN quota, given every error the
+ * failure produced. Takes a list because the quota name survives in only one of
+ * them and it is usually not the one that was thrown: an unhandled request error
+ * aborts its transaction, so every other request still queued there - including
+ * the total-bytes read this code awaits first - is re-reported as AbortError.
+ * Matching by name alone: IndexedDB hands back a real DOMException, so there is
+ * nothing here to match on message text.
+ */
+export function isQuotaFailure(errors: readonly unknown[]): boolean {
+    return errors.some((err) => err instanceof DOMException && (err.name === "QuotaExceededError" || err.code === 22));
+}
+
 /** Writes entries (upsert by identityKey), then prunes the store to its size
  *  bound. Puts and the running-total update share one transaction - a torn
  *  write can neither leave a partial batch visible nor desync the total. */
@@ -159,6 +172,13 @@ export async function putIndexCacheEntries(entries: CachedFileIndex[]): Promise<
     const store = tx.objectStore("indexCache");
     const meta = tx.objectStore("meta");
     let total = 0;
+    // The put that actually hit the quota. Its rejection is the ONLY place the
+    // QuotaExceededError name survives: an unhandled request error aborts the
+    // transaction, and every other request still queued in it - including the
+    // meta.get below, which is awaited first - is re-reported as AbortError.
+    // Reading the name off the thrown error alone therefore never sees a quota
+    // failure, and the eviction this whole path exists for would not fire.
+    let putRejection: unknown;
     try {
         let delta = 0;
         // Read the previous sizes in bounded groups: one await per entry
@@ -174,8 +194,12 @@ export async function putIndexCacheEntries(entries: CachedFileIndex[]): Promise<
                 // Voided, but with its own catch: an aborted transaction rejects
                 // every pending request, and each bare `void` would land in the
                 // diagnostic ring buffer as an unhandled rejection. The abort
-                // itself still surfaces through tx.done.
-                void store.put(entry).catch(() => {});
+                // itself still surfaces through tx.done. Keep the FIRST
+                // rejection - the later ones are the abort cascade, this one
+                // carries the real reason.
+                void store.put(entry).catch((err: unknown) => {
+                    putRejection ??= err;
+                });
             }
         }
         total = (await readTotalBytes(meta)) + delta;
@@ -188,8 +212,19 @@ export async function putIndexCacheEntries(entries: CachedFileIndex[]): Promise<
         // age and let the next ingest try again. Any other abort (the browser
         // closing the connection, a version change) leaves the store alone -
         // throwing entries away would not help it.
-        const name = err instanceof Error ? err.name : "";
-        if (name === "QuotaExceededError") await evictOldestFraction(db, QUOTA_EVICT_FRACTION).catch(() => {});
+        //
+        // Three sources, because only one of them is ever the quota: what was
+        // thrown here is usually the abort cascade's AbortError, the failing
+        // put's own rejection carries the real name, and tx.error is what the
+        // transaction was aborted WITH when the put's catch has not settled yet.
+        if (isQuotaFailure([err, putRejection, tx.error])) {
+            await evictOldestFraction(db, QUOTA_EVICT_FRACTION).catch((evictErr: unknown) => {
+                // Nothing left to try - say so, or the store looks merely full.
+                log.warn("index cache quota eviction failed", {
+                    err: evictErr instanceof Error ? evictErr.message : String(evictErr),
+                });
+            });
+        }
         throw err;
     }
     await pruneIndexCache(db, total);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { VideoCandidate } from "../trips.js";
-import { approxEntryBytes, buildCacheEntry, toCachedCandidate } from "./index-cache.js";
+import { approxEntryBytes, buildCacheEntry, isQuotaFailure, toCachedCandidate } from "./index-cache.js";
 import { INDEX_CACHE_VERSION } from "./types.js";
 
 function makeCandidate(): VideoCandidate {
@@ -128,5 +128,38 @@ describe("approxEntryBytes", () => {
         // JSON.stringify of a 10KB Uint8Array would be ~40KB of digits and
         // commas - the estimate must stay near the raw buffer size instead.
         expect(withRepair - without).toBeLessThan(15_000);
+    });
+});
+
+describe("isQuotaFailure", () => {
+    const quota = new DOMException("out of room", "QuotaExceededError");
+    const abort = new DOMException("aborted", "AbortError");
+
+    it("finds the quota rejection behind the abort that was actually thrown", () => {
+        // The shape the write really fails in: the put hits the quota, its
+        // unhandled error aborts the transaction, and the total-bytes read
+        // awaited first surfaces as AbortError. Reading only what was thrown
+        // is what left the store unable to ever evict.
+        expect(isQuotaFailure([abort, quota, quota])).toBe(true);
+    });
+
+    it("finds it in the transaction error when the put rejection has not settled", () => {
+        expect(isQuotaFailure([abort, undefined, quota])).toBe(true);
+    });
+
+    it("accepts the legacy numeric code, which the standard exception also carries", () => {
+        // Kept for an engine that reports the old QUOTA_EXCEEDED_ERR name; a
+        // spec-compliant DOMException answers to both, so the clause can only
+        // ever widen the match.
+        expect(quota.code).toBe(22);
+        expect(isQuotaFailure([quota])).toBe(true);
+    });
+
+    it("leaves an abort that is not about room alone - eviction would not help it", () => {
+        // A version change or a browser-closed connection: throwing entries
+        // away costs the user their cache and fixes nothing.
+        expect(isQuotaFailure([abort, undefined, abort])).toBe(false);
+        expect(isQuotaFailure([new Error("QuotaExceededError")]), "a plain Error is not the DOM one").toBe(false);
+        expect(isQuotaFailure([null, undefined])).toBe(false);
     });
 });
