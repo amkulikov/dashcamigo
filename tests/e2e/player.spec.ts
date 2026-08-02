@@ -328,9 +328,12 @@ test.describe("player", () => {
         const viewport = page.viewportSize();
         const video = await page.locator("#video-grid").boundingBox();
         expect(video?.width ?? 0, "player keeps a real width").toBeGreaterThan((viewport?.width ?? 0) * 0.5);
-        // Session-only by design: nothing is persisted - a fresh page must
-        // show the list again (it is the only way to pick a trip).
-        expect(await page.evaluate(() => localStorage.getItem("dashcamigo:sidebar-collapsed"))).toBeNull();
+        // Session-only by design: a fresh page must show the list again (it is
+        // the only way to pick a trip). Asserted as "nothing about collapsing
+        // was written", not as one guessed key name - a persistence attempt
+        // under any other name has to fail this too.
+        const persisted = await page.evaluate(() => Object.keys(localStorage).filter((k) => /collaps/i.test(k)));
+        expect(persisted, "no localStorage key about collapsing may be written").toEqual([]);
         await tab.click();
         await expect(sidebar).toBeVisible();
         await expect(tab).toBeHidden();
