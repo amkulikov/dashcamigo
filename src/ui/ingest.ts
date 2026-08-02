@@ -618,6 +618,9 @@ async function ingestFilesInternal(vfiles: VendorFile[], signal: AbortSignal): P
     let pendingBatch: (typeof newVideos)[number][] = [];
     let pendingBatchMoov: Map<string, Uint8Array> = new Map();
     const embeddedBatchPromises: Promise<DispatchedEmbeddedGpsResult>[] = [];
+    const embeddedBatchFileKeys: string[][] = [];
+    // vendorFileKeys of files whose gps-extract batch rejected this run.
+    const crashedBatchFileKeys = new Set<string>();
     let embeddedTotal = 0;
     let embeddedDone = 0;
     // While the indexer is still running, the overlay shows "Indexing X/Y".
@@ -662,6 +665,11 @@ async function ingestFilesInternal(vfiles: VendorFile[], signal: AbortSignal): P
         // real result/rejection.
         batchPromise.catch(() => {});
         embeddedBatchPromises.push(batchPromise);
+        // Index-aligned with embeddedBatchPromises: when a batch rejects, its
+        // files must be excluded from the index-cache write below - caching
+        // their empty records would freeze "no GPS" across sessions for a
+        // failure (worker OOM, bad read) that a plain retry may not repeat.
+        embeddedBatchFileKeys.push(batch.map((cf) => vendorFileKey(cf.file)));
     };
 
     if (signal.aborted) throw new DOMException("ingest aborted", "AbortError");
@@ -959,13 +967,14 @@ async function ingestFilesInternal(vfiles: VendorFile[], signal: AbortSignal): P
             const settled = await mark("embeddedGps", () => Promise.allSettled(embeddedBatchPromises));
             const fulfilled: DispatchedEmbeddedGpsResult[] = [];
             const crashed: string[] = [];
-            for (const s of settled) {
+            for (const [batchIdx, s] of settled.entries()) {
                 if (s.status === "fulfilled") {
                     fulfilled.push(s.value);
                 } else if (s.reason instanceof DOMException && s.reason.name === "AbortError") {
                     throw s.reason;
                 } else {
                     crashed.push(String(s.reason));
+                    for (const key of embeddedBatchFileKeys[batchIdx] ?? []) crashedBatchFileKeys.add(key);
                 }
             }
             embeddedResult = mergeEmbeddedResults(fulfilled);
@@ -1139,9 +1148,14 @@ async function ingestFilesInternal(vfiles: VendorFile[], signal: AbortSignal): P
     });
 
     // Persist this run's indexing results for the next session. After every
-    // records/anchor sweep above, so the snapshot is final-state. Heavy-deferred
-    // files are excluded inside (their records are not extracted yet).
-    scheduleIndexCacheWrite(indexedThisRun, repairByKey, new Set(state.pendingHeavyEmbeddedGps.keys()));
+    // records/anchor sweep above, so the snapshot is final-state. Excluded:
+    // heavy-deferred files (records not extracted yet) and files whose
+    // gps-extract batch crashed (empty records from a transient failure).
+    scheduleIndexCacheWrite(
+        indexedThisRun,
+        repairByKey,
+        new Set([...state.pendingHeavyEmbeddedGps.keys(), ...crashedBatchFileKeys]),
+    );
 
     // Onboarding tour after the first successful ingest - the peak-value moment,
     // right after the user has just seen their trip. maybeRunIngestTour is
