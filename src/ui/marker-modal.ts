@@ -8,6 +8,11 @@ import { activateModal, deactivateModal, wireBackdropDismiss } from "./modal-hel
 let modal: HTMLElement | null = null;
 let textInput: HTMLInputElement | null = null;
 let currentMarkerId: string | null = null;
+// True while the editor is showing a marker the SAME click just created. The
+// pin exists before the dialog does (so it previews live while the user types),
+// which would otherwise make Cancel, Escape and a backdrop click all mean
+// "keep it" - three of the four ways out of a dialog whose fourth is Save.
+let createdNow = false;
 let onChanged: (() => void) | null = null;
 
 export function initMarkerModal(callbacks: { onChanged: () => void }): void {
@@ -36,11 +41,12 @@ export function initMarkerModal(callbacks: { onChanged: () => void }): void {
     });
 }
 
-export function openMarkerModal(markerId: string): void {
+export function openMarkerModal(markerId: string, opts: { createdNow?: boolean } = {}): void {
     if (!modal || !textInput) return;
     const marker = markerById(markerId);
     if (!marker) return;
     currentMarkerId = markerId;
+    createdNow = opts.createdNow === true;
     textInput.value = marker.text;
     modal.hidden = false;
     activateModal(modal, { onClose: close, initialFocus: textInput });
@@ -51,10 +57,20 @@ function save(): void {
         updateMarkerText(currentMarkerId, textInput.value);
         onChanged?.();
     }
+    // Saving is what keeps a freshly dropped marker.
+    createdNow = false;
     close();
 }
 
 function close(): void {
+    // Dismissing the editor of a marker this very click dropped means "never
+    // mind" - it takes the pin with it. An existing marker is never removed by
+    // a dismissal; only its own Delete button does that.
+    if (createdNow && currentMarkerId) {
+        deleteMarker(currentMarkerId);
+        onChanged?.();
+    }
+    createdNow = false;
     if (modal) {
         modal.hidden = true;
         deactivateModal(modal);

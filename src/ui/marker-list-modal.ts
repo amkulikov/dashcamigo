@@ -47,7 +47,11 @@ export function syncMarkerListButton(count?: number): void {
     if (!openButton) return;
     const trip = activeTrip();
     const markerCount = count ?? (trip ? markersForTrip(trip).length : 0);
-    openButton.hidden = !trip || markerCount === 0;
+    const shouldHide = !trip || markerCount === 0;
+    // Only on a real change: setAttribute fires a mutation record even when the
+    // value is identical, and the player-bar overflow watches [hidden] with a
+    // synchronous re-measure. This runs per pointermove during an overview drag.
+    if (openButton.hidden !== shouldHide) openButton.hidden = shouldHide;
 }
 
 function open(): void {

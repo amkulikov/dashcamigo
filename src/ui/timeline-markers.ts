@@ -28,9 +28,10 @@ export function initTimelineMarkers(): void {
         const utcMs = contentToWallUtc(trip.timeline, contentSec) * 1000;
         const marker = addMarker(trip, utcMs, "");
         refreshTimelineMarkers();
-        // Straight into the text editor - an unlabeled pin is rarely the goal,
-        // and cancel-with-empty-text simply leaves a bare pin.
-        openMarkerModal(marker.id);
+        // Straight into the text editor - an unlabeled pin is rarely the goal.
+        // createdNow: dismissing the editor drops the pin again, so a stray
+        // click on this button is undone by Escape like any other dialog.
+        openMarkerModal(marker.id, { createdNow: true });
     });
 }
 

@@ -4,6 +4,16 @@
 
 import { DESKTOP, boxOf, expect, gotoApp, loadTrip, presetLocalStorage, test } from "./_fixtures.js";
 
+const MASTER_VIDEO = ".video-tile.active video:not(.preload-slot):not(.tile-blur-bg)";
+
+/** Pauses the player if it is running, so a time readout stays put between
+ *  assertions. Idempotent - the play button is a toggle. */
+async function pausePlayback(page: import("@playwright/test").Page): Promise<void> {
+    const isPaused = (): Promise<boolean> => page.locator(MASTER_VIDEO).evaluate((v: HTMLVideoElement) => v.paused);
+    if (!(await isPaused())) await page.locator("#player-play").click();
+    await expect.poll(isPaused, { message: "playback must be paused" }).toBe(true);
+}
+
 /** Drops a marker at the playhead and dismisses the editor that opens with it. */
 async function addMarker(page: import("@playwright/test").Page, text: string): Promise<void> {
     await page.locator("#player-add-marker").click();
@@ -52,20 +62,68 @@ test.describe("timeline markers", () => {
     });
 
     test("a list row seeks back to its moment and closes the modal", async ({ page }) => {
+        // Paused first, so the geometry below measures seeks and not playback.
+        await pausePlayback(page);
+        // Asserted in pixels on the timeline, not on the bar's clock: the clock
+        // is second-granular and the sample trip is a couple of seconds long,
+        // so a text compare is satisfied by a seek that ignored the marker.
+        // The pin and the playhead share the timeline host, so "the playhead
+        // came back to the pin" is both precise and exactly what the user sees.
+        const ruler = await boxOf(page, "#player-chart-ruler-top");
+        await page.mouse.click(ruler.x + ruler.width * 0.25, ruler.y + ruler.height / 2);
         await addMarker(page, "start");
-        const markerTime = (await page.locator("#player-current").textContent())?.trim();
+        // Centres, not left edges: the pin's hairline sits mid-box and the two
+        // elements are different widths.
+        const centreOf = async (selector: string): Promise<number> => {
+            const box = await boxOf(page, selector);
+            return box.x + box.width / 2;
+        };
+        const pinX = await centreOf(".timeline-marker");
+        const playheadX = (): Promise<number> => centreOf("#player-chart-playhead");
+        expect(Math.abs((await playheadX()) - pinX), "the pin is dropped at the playhead").toBeLessThan(3);
 
         // Away from the marker, then back through the list.
-        const ruler = await boxOf(page, "#player-chart-ruler-top");
-        await page.mouse.click(ruler.x + ruler.width * 0.8, ruler.y + ruler.height / 2);
-        await expect(page.locator("#player-current")).not.toHaveText(markerTime ?? "");
+        await page.mouse.click(ruler.x + ruler.width * 0.85, ruler.y + ruler.height / 2);
+        await expect
+            .poll(async () => Math.abs((await playheadX()) - pinX), { message: "the away-seek must move the playhead" })
+            .toBeGreaterThan(ruler.width * 0.2);
 
         await page.locator("#player-marker-list").click();
         await page.locator("#marker-list-items .marker-list-seek").first().click();
         // The backdrop hides the video, so a seek that left the modal open
         // would show the user nothing.
         await expect(page.locator("#marker-list-modal")).toBeHidden();
-        await expect(page.locator("#player-current")).toHaveText(markerTime ?? "");
+        await expect
+            .poll(async () => Math.abs((await playheadX()) - pinX), { message: "the row must seek back to the pin" })
+            .toBeLessThan(4);
+    });
+
+    test("dismissing the editor of a just-dropped marker takes the pin with it", async ({ page }) => {
+        // The pin is created before the dialog so it previews live while the
+        // user types - which would otherwise make Cancel and Escape mean "keep".
+        await page.locator("#player-add-marker").click();
+        await expect(page.locator("#marker-modal")).toBeVisible();
+        await expect(page.locator(".timeline-marker")).toHaveCount(1);
+        await page.locator("#marker-modal-cancel").click();
+        await expect(page.locator("#marker-modal")).toBeHidden();
+        await expect(page.locator(".timeline-marker"), "cancel undoes the drop").toHaveCount(0);
+        await expect(page.locator("#player-marker-list")).toBeHidden();
+
+        // Escape is the other dismissal route and means the same thing.
+        await page.locator("#player-add-marker").click();
+        await expect(page.locator("#marker-modal")).toBeVisible();
+        await page.keyboard.press("Escape");
+        await expect(page.locator(".timeline-marker"), "escape undoes the drop").toHaveCount(0);
+    });
+
+    test("editing an existing marker keeps it when the editor is dismissed", async ({ page }) => {
+        // Only a marker created by THIS open is undone by a dismissal; an
+        // existing one is removed by its Delete button and nothing else.
+        await addMarker(page, "keep me");
+        await page.locator(".timeline-marker-hit").first().click({ button: "right" });
+        await expect(page.locator("#marker-modal")).toBeVisible();
+        await page.locator("#marker-modal-cancel").click();
+        await expect(page.locator(".timeline-marker")).toHaveCount(1);
     });
 
     test("deleting the last marker empties the list and retracts the bar button", async ({ page }) => {
