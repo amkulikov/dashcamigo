@@ -231,12 +231,14 @@ function travelledBy(s) {
 
 // --- fixture builders ------------------------------------------------------
 
-// UTC calendar day (YYYYMMDD) of "now" - drives the filename date so the sidebar
-// bucket reads "Today". The Playwright contexts pin timezoneId "UTC", so the
-// displayed trip time equals the filename wall-clock and the day never rolls.
-function utcTodayYYYYMMDD() {
-    const iso = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-    return iso.replaceAll("-", "");
+// UTC calendar day (YYYYMMDD) the fixture clips are stamped with. Must stay in
+// the PAST at any hour the generator runs: the trips run to 18:05, and a trip
+// ahead of "now" lands in the sidebar's "In the future" bucket. The Playwright
+// contexts pin timezoneId "UTC", so the displayed trip time equals the filename
+// wall-clock and the day never rolls.
+function fixtureDayYYYYMMDD() {
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    return yesterday.toISOString().slice(0, 10).replaceAll("-", "");
 }
 
 // Wall-clock (YYYYMMDD + HHMMSS) treated as if it were UTC, in unix seconds - the
@@ -801,7 +803,7 @@ async function main() {
         tempRoot = mkdtempSync(join(tmpdir(), "dashcamigo-readme-"));
         fixtureRoot = join(tempRoot, "DASHCAM_SD");
         mkdirSync(fixtureRoot, { recursive: true });
-        buildFixture(fixtureRoot, utcTodayYYYYMMDD());
+        buildFixture(fixtureRoot, fixtureDayYYYYMMDD());
         server = await startPreview();
         browser = await launchBrowser();
 
