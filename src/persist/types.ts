@@ -67,7 +67,13 @@ export interface CachedFileIndex {
     identityKey: string;
     /** INDEX_CACHE_VERSION at write time; a mismatch means reindex. */
     version: number;
+    /** Last write OR last cache hit (refreshed on use, so the prune evicts
+     *  what is not being opened, not what was merely written first). */
     savedAt: number;
+    /** Approximate stored size (see approxEntryBytes) - the unit of the
+     *  volume-based prune. Absent on entries written before it existed;
+     *  those are evicted first when the prune runs. */
+    bytes?: number;
     candidate: CachedCandidateFields;
     /**
      * Container-repair descriptor when the indexer patched this file's moov.

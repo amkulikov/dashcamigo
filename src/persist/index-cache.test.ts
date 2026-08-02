@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { VideoCandidate } from "../trips.js";
-import { buildCacheEntry, toCachedCandidate } from "./index-cache.js";
+import { approxEntryBytes, buildCacheEntry, toCachedCandidate } from "./index-cache.js";
 import { INDEX_CACHE_VERSION } from "./types.js";
 
 function makeCandidate(): VideoCandidate {
@@ -94,5 +94,39 @@ describe("buildCacheEntry", () => {
         };
         const entry = buildCacheEntry("some-key", makeCandidate(), repair);
         expect(entry.repair).toEqual(repair);
+    });
+
+    it("stamps an approximate size so the volume prune can weigh the entry", () => {
+        const entry = buildCacheEntry("some-key", makeCandidate(), undefined);
+        expect(entry.bytes).toBe(approxEntryBytes(entry.candidate, undefined));
+        expect(entry.bytes ?? 0, "an entry with records weighs something real").toBeGreaterThan(300);
+    });
+});
+
+describe("approxEntryBytes", () => {
+    it("grows with the record count - GPS-dense clips must weigh more", () => {
+        const sparse = toCachedCandidate(makeCandidate());
+        const dense = {
+            ...sparse,
+            records: Array.from({ length: 200 }, (_, i) => ({ ...sparse.records[0]!, unixSeconds: i })),
+        };
+        expect(approxEntryBytes(dense, undefined)).toBeGreaterThan(approxEntryBytes(sparse, undefined) * 10);
+    });
+
+    it("counts the patched moov by its raw length, not its JSON blowup", () => {
+        const candidate = toCachedCandidate(makeCandidate());
+        const repair = {
+            patchedMoov: new Uint8Array(10_000),
+            moovFileStart: 8,
+            moovFileEnd: 10_008,
+            phantomNeutralized: [],
+            hvcc: null,
+        };
+        const withRepair = approxEntryBytes(candidate, repair);
+        const without = approxEntryBytes(candidate, undefined);
+        expect(withRepair - without).toBeGreaterThanOrEqual(10_000);
+        // JSON.stringify of a 10KB Uint8Array would be ~40KB of digits and
+        // commas - the estimate must stay near the raw buffer size instead.
+        expect(withRepair - without).toBeLessThan(15_000);
     });
 });

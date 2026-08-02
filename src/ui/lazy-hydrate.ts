@@ -46,6 +46,7 @@ import type { VideoCandidate } from "../trips.js";
 
 import { restampProvisionalMarkers } from "./annotations.js";
 import { applyRegroup } from "./apply-regroup.js";
+import { registerCandidateRepair, scheduleIndexCacheWrite } from "./ingest-cache.js";
 import { planEmbeddedGpsQueue } from "./embedded-gps-queue.js";
 import { dispatchParseVideoEmbeddedGpsViaWorker as dispatchParseVideoEmbeddedGps } from "./gps-extract-shim.js";
 import {
@@ -547,6 +548,9 @@ async function runHydrateData(tripIdx: number, pending: VideoCandidate[], sessio
                     moovBytes != null,
                 );
                 if (plan.cacheMoov && moovBytes) moovByKey.set(key, moovBytes);
+                // The cache entry re-applies the repair on restore (the on-disk
+                // bytes stay broken forever) - record it for the write below.
+                if (repair) registerCandidateRepair(key, repair);
                 hydrateCandidateFromIndex(cand, idx, repair);
             },
             /* concurrency */ 4,
@@ -585,6 +589,10 @@ async function runHydrateData(tripIdx: number, pending: VideoCandidate[], sessio
         if (!shouldTryEmbeddedGps(vf, cand.records.length > 0)) continue;
         gpsTargets.push({ file: vf, role: "video", sidecarId: null, sidecarMp4: null, logExtractorId: null });
     }
+    // A crashed GPS extraction must keep its files out of the cache write
+    // below - the empty records would freeze "no GPS" across sessions for a
+    // transient failure (mirrors crashedBatchFileKeys on the eager path).
+    let gpsStageFailed = false;
     if (gpsTargets.length > 0) {
         try {
             const result = await dispatchParseVideoEmbeddedGps(
@@ -612,6 +620,7 @@ async function runHydrateData(tripIdx: number, pending: VideoCandidate[], sessio
             }
         } catch (err) {
             if (err instanceof DOMException && err.name === "AbortError") return;
+            gpsStageFailed = true;
             log.warn("hydrate gps stage failed", { tripIdx, err: err instanceof Error ? err.message : String(err) });
         }
     }
@@ -647,6 +656,17 @@ async function runHydrateData(tripIdx: number, pending: VideoCandidate[], sessio
     // carry a wrong absolute UTC - move them onto the now-real one before it
     // flows any further (the notes file flushes on every marker save).
     restampProvisionalMarkers();
+
+    // Persist this trip's hydration for the next session - the lazy path used
+    // to never write the cache, so slow backends (the ones the path exists
+    // for) re-read every moov and re-extracted every track each session.
+    // Only candidates that actually hydrated (a failed moov read keeps
+    // hydrated=false); a crashed GPS stage keeps its targets out entirely.
+    // startUtc may still shift at the final sweep - harmless, a restore
+    // re-derives it from the cached createdUtc/records anyway.
+    const hydratedNow = pending.filter((cand) => cand.hydrated === true);
+    const skipKeys = gpsStageFailed ? new Set(gpsTargets.map((cf) => vendorFileKey(cf.file))) : new Set<string>();
+    scheduleIndexCacheWrite(hydratedNow, skipKeys);
 
     log.info("trip hydrated", { tripIdx, files: pending.length, durationMs: Math.round(performance.now() - t0) });
 }

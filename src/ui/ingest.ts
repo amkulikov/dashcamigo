@@ -10,8 +10,7 @@ import { t } from "../i18n/index.js";
 import { dropDuplicateFiles } from "../ingest-dedup.js";
 import { ignoredRootSegments, isIgnoredPath } from "../ingest-filter.js";
 import { indexAllMp4Files } from "../indexer.js";
-import type { IndexerRepair } from "../indexer.js";
-import { partitionByIndexCache, scheduleIndexCacheWrite } from "./ingest-cache.js";
+import { partitionByIndexCache, registerCandidateRepair, scheduleIndexCacheWrite } from "./ingest-cache.js";
 import { createLogger } from "../log.js";
 import { captureSentryException, captureSentryMessage } from "../sentry.js";
 import { emitLifecycle, markStage } from "../perf.js";
@@ -605,10 +604,10 @@ async function ingestFilesInternal(
     // stream in through the progressive applyPartial below.
     if (cachedCandidates.length > 0) applyPartial();
 
-    // Freshly indexed candidates of THIS run + their repair descriptors - the
-    // input for the end-of-ingest cache write (cache hits are not rewritten).
+    // Freshly indexed candidates of THIS run - the input for the
+    // end-of-ingest cache write (cache hits are not rewritten). Repairs go to
+    // the session registry in ingest-cache, shared with the lazy write sites.
     const indexedThisRun: VideoCandidate[] = [];
-    const repairByKey = new Map<string, IndexerRepair>();
 
     // indexAllMp4Files runs in a worker. MP4 path: single moov walk yields
     // duration/codec/rotation/hvcC. TS path: mediabunny.computeDuration.
@@ -717,7 +716,7 @@ async function ingestFilesInternal(
                         if (repairApplied.hvccRepaired) repairedCount++;
                         // The cache entry re-applies this on restore - the
                         // on-disk bytes stay broken forever.
-                        repairByKey.set(vendorFileKey(cf.file), repair);
+                        registerCandidateRepair(vendorFileKey(cf.file), repair);
                         log.info("applied container repair", {
                             file: file.name,
                             phantom: repair.phantomNeutralized,
@@ -1169,7 +1168,6 @@ async function ingestFilesInternal(
     // gps-extract batch crashed (empty records from a transient failure).
     scheduleIndexCacheWrite(
         indexedThisRun,
-        repairByKey,
         new Set([...state.pendingHeavyEmbeddedGps.keys(), ...crashedBatchFileKeys]),
     );
 

@@ -12,12 +12,31 @@ import type { IndexerRepair } from "../indexer.js";
 import { createLogger } from "../log.js";
 import type { ClassifiedFile } from "../parsers/registry.js";
 import { fileIdentityKey, fileIdentityOf } from "../persist/identity.js";
-import { buildCacheEntry, getIndexCacheEntries, putIndexCacheEntries } from "../persist/index-cache.js";
+import {
+    buildCacheEntry,
+    getIndexCacheEntries,
+    putIndexCacheEntries,
+    touchIndexCacheEntries,
+} from "../persist/index-cache.js";
 import type { CachedFileIndex } from "../persist/types.js";
 import type { VideoCandidate } from "../trips.js";
 import { applyMoovRepair, vendorFileKey } from "./ingest-candidate.js";
 
 const log = createLogger("ingest-cache");
+
+// Container-repair descriptors of THIS session's indexed files, vendorFileKey
+// -> repair. A session registry (not a per-ingest map) because cache writes no
+// longer happen only in the eager ingest tail: the lazy hydration path and the
+// on-click heavy-GPS load write entries long after their ingest returned, and
+// a cached entry without its repair would describe bytes the file on disk
+// does not have. Rare entries (repairs are the exception), session lifetime.
+const repairByFileKey = new Map<string, IndexerRepair>();
+
+/** Records a file's container repair for later cache writes. Call wherever
+ *  the indexer reports one. */
+export function registerCandidateRepair(fileKey: string, repair: IndexerRepair): void {
+    repairByFileKey.set(fileKey, repair);
+}
 
 export interface IndexCachePartition {
     /** Rebuilt candidates for identity-matched entries; repair re-applied. */
@@ -48,12 +67,15 @@ export async function partitionByIndexCache(videos: ClassifiedFile[]): Promise<I
     }
     const cachedCandidates: VideoCandidate[] = [];
     const misses: ClassifiedFile[] = [];
+    const hitKeys: string[] = [];
     for (const cf of videos) {
-        const entry = entries.get(cacheKeyOf(cf));
+        const key = cacheKeyOf(cf);
+        const entry = entries.get(key);
         if (!entry) {
             misses.push(cf);
             continue;
         }
+        hitKeys.push(key);
         const freshFile = cf.file.file;
         cachedCandidates.push({
             ...entry.candidate,
@@ -68,22 +90,22 @@ export async function partitionByIndexCache(videos: ClassifiedFile[]): Promise<I
     }
     if (cachedCandidates.length > 0) {
         log.info("index cache hits", { hits: cachedCandidates.length, total: videos.length });
+        // Mark the hits as USED so the volume prune keeps what the user
+        // actually opens. Fire-and-forget, off the ingest critical path.
+        void touchIndexCacheEntries(hitKeys).catch(() => {});
     }
     return { cachedCandidates, misses };
 }
 
 /**
- * Fire-and-forget write of this run's freshly indexed candidates. A failed
- * write only costs a future reindex - never surfaces past a warn log.
- * `skipKeys` (vendorFileKey set) excludes heavy-deferred files: their records
- * are not extracted yet, and caching the empty state would freeze "no GPS"
- * across sessions.
+ * Fire-and-forget write of freshly indexed candidates. A failed write only
+ * costs a future reindex - never surfaces past a warn log. `skipKeys`
+ * (vendorFileKey set) excludes files whose snapshot must not stick: records
+ * not extracted yet (heavy-deferred) or extraction crashed - caching the
+ * empty state would freeze "no GPS" across sessions. Repairs come from the
+ * session registry (registerCandidateRepair).
  */
-export function scheduleIndexCacheWrite(
-    candidates: VideoCandidate[],
-    repairByKey: ReadonlyMap<string, IndexerRepair>,
-    skipKeys: ReadonlySet<string>,
-): void {
+export function scheduleIndexCacheWrite(candidates: VideoCandidate[], skipKeys: ReadonlySet<string>): void {
     const entries: CachedFileIndex[] = [];
     for (const candidate of candidates) {
         const key = vendorFileKey({ file: candidate.file, relativePath: candidate.relativePath });
@@ -95,7 +117,7 @@ export function scheduleIndexCacheWrite(
             size: candidate.file.size,
             lastModified: candidate.file.lastModified,
         });
-        entries.push(buildCacheEntry(identityKey, candidate, repairByKey.get(key)));
+        entries.push(buildCacheEntry(identityKey, candidate, repairByFileKey.get(key)));
     }
     if (entries.length === 0) return;
     void putIndexCacheEntries(entries)

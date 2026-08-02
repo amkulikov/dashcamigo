@@ -23,6 +23,7 @@ import { createLogger } from "../log.js";
 import { finalizeTripFromFrames, tripAllCandidates } from "../trips.js";
 
 import { dispatchParseVideoEmbeddedGpsViaWorker as dispatchParseVideoEmbeddedGps } from "./gps-extract-shim.js";
+import { scheduleIndexCacheWrite } from "./ingest-cache.js";
 import { vendorFileKey } from "./ingest-candidate.js";
 import { closeLazyGpsLoadModal, showLazyGpsLoadModal, updateLazyGpsLoadModalProgress } from "./lazy-gps-load-modal.js";
 import { rebuildChartFromTrip } from "./chart.js";
@@ -199,6 +200,21 @@ async function runLazyLoad(session: LazySession, targets: ClassifiedFile[], trip
     }
 
     refreshTrip(tripIdx);
+
+    // Persist the scan for the next session: these files were excluded from
+    // the ingest-tail cache write exactly because their records were not
+    // extracted yet - without this write the full-file scan (and its modal)
+    // repeats every session forever. After refreshTrip, which is what puts
+    // the fresh records onto the candidates the entry snapshots. A scan that
+    // honestly found nothing is cached too - "no GPS" re-verified by a full
+    // read is knowledge, not a transient. Files returned to pending (partial
+    // cancel / failure) are still excluded via the skip set.
+    if (result) {
+        const targetKeys = new Set(targets.map((cf) => vendorFileKey(cf.file)));
+        const trip = state.trips[tripIdx];
+        const scanned = trip ? tripAllCandidates(trip).filter((cand) => targetKeys.has(vendorFileKey(cand))) : [];
+        scheduleIndexCacheWrite(scanned, new Set(state.pendingHeavyEmbeddedGps.keys()));
+    }
 
     if (result && result.errors.length > 0) {
         log.warn("lazy embedded gps errors", { tripIdx, errors: result.errors });
