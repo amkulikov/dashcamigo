@@ -625,10 +625,6 @@ export type I18nKey =
     | "theme.dark"
     | "theme.label"
 
-    // Trust line (UX-25)
-    | "trust.short"
-    | "trust.tooltip"
-
     // UX-26 - feedback modal ("report a problem")
     | "feedback.entry.title"
     | "feedback.modal.title"

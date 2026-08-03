@@ -469,9 +469,6 @@ export const koDict = {
     "theme.dark": "어두움",
     "theme.label": "테마",
 
-    "trust.short": "로컬",
-    "trust.tooltip": "파일은 브라우저 안에 머물러요 · 계정 없음",
-
     "feedback.entry.title": "문제 신고",
     "feedback.modal.title": "문제 신고",
     "feedback.step1.preset.load": "주행이 안 불러와져요",

@@ -460,9 +460,6 @@ export const ptDict = {
     "theme.dark": "Escuro",
     "theme.label": "Tema",
 
-    "trust.short": "local",
-    "trust.tooltip": "Os arquivos ficam no navegador · sem contas",
-
     "feedback.entry.title": "Reportar um problema",
     "feedback.modal.title": "Reportar um problema",
     "feedback.step1.preset.load": "A viagem não carregou",

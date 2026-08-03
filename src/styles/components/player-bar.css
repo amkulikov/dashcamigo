@@ -201,42 +201,6 @@
     flex: 1;
 }
 
-/* UX-25: trust-line - a quiet mini-note to the right of the fullscreen
-   button. Always visible, opacity 0.6 so it doesn't distract. Opacity
-   1.0 on hover. Mono 11px text, doesn't compete for attention with the
-   metrics and buttons. */
-.trust-mini {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--dc-space-1);
-    margin-left: var(--dc-space-2);
-    font-family: var(--dc-font-mono);
-    font-size: var(--dc-text-xs);
-    color: var(--fg-mute);
-    cursor: help;
-    opacity: 0.6;
-    transition:
-        opacity var(--dc-dur-base) var(--dc-ease),
-        color var(--dc-dur-base) var(--dc-ease);
-    user-select: none;
-    flex-shrink: 0;
-}
-.trust-mini:hover {
-    opacity: 1;
-    color: var(--fg-dim);
-}
-.trust-mini svg {
-    flex-shrink: 0;
-}
-/* On a very narrow player-bar trust-mini doesn't fit - hide it, freeing
-   room for the required controls. Container query - the bar can be narrow
-   on desktop too (open map), not just on mobile. */
-@container pbar (max-width: 720px) {
-    .trust-mini {
-        display: none;
-    }
-}
-
 /* A thin vertical divider in the player bar. Separates the group of
    player settings from the Export button - a visual cue that this
    is an action of a different class. */
@@ -680,14 +644,12 @@
     .player-time {
         font-size: var(--dc-text-md);
     }
-    /* Hide elements that on mobile live elsewhere or in the kebab:
-       - divider -> not needed (export now sits among the other bar buttons)
-       - trust-mini -> non-critical decoration (present in landing/topbar)
-       Export itself STAYS in the bar and participates in the overflow priority
-       (player-bar-overflow.ts) as the LAST control to move into the kebab, so it
-       is reachable in both portrait and landscape without a separate strip. */
-    .player-bar .player-bar-divider,
-    .player-bar .trust-mini {
+    /* The divider is not needed on mobile - export sits among the other bar
+       buttons rather than apart from them. Export itself STAYS in the bar and
+       participates in the overflow priority (player-bar-overflow.ts) as the
+       LAST control to move into the kebab, so it is reachable in both portrait
+       and landscape without a separate strip. */
+    .player-bar .player-bar-divider {
         display: none;
     }
     /* Touch floor for the export button when it lives in the mobile bar. */

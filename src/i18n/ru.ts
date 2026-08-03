@@ -465,9 +465,6 @@ export const ruDict = {
     "theme.dark": "Тёмная",
     "theme.label": "Тема",
 
-    "trust.short": "локально",
-    "trust.tooltip": "Файлы не покидают браузер · без аккаунтов",
-
     "feedback.entry.title": "Сообщить о проблеме",
     "feedback.modal.title": "Сообщить о проблеме",
     "feedback.step1.preset.load": "Не загрузилась поездка",

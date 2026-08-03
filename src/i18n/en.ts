@@ -461,9 +461,6 @@ export const enDict = {
     "theme.dark": "Dark",
     "theme.label": "Theme",
 
-    "trust.short": "local",
-    "trust.tooltip": "Files stay in your browser · no accounts",
-
     "feedback.entry.title": "Report a problem",
     "feedback.modal.title": "Report a problem",
     "feedback.step1.preset.load": "Trip didn't load",

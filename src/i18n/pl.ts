@@ -460,9 +460,6 @@ export const plDict = {
     "theme.dark": "Ciemny",
     "theme.label": "Motyw",
 
-    "trust.short": "lokalnie",
-    "trust.tooltip": "Pliki zostają w przeglądarce · bez konta",
-
     "feedback.entry.title": "Zgłoś problem",
     "feedback.modal.title": "Zgłoś problem",
     "feedback.step1.preset.load": "Przejazd nie wczytał się",

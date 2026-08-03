@@ -462,9 +462,6 @@ export const frDict = {
     "theme.dark": "Sombre",
     "theme.label": "Thème",
 
-    "trust.short": "local",
-    "trust.tooltip": "Les fichiers restent dans le navigateur · sans compte",
-
     "feedback.entry.title": "Signaler un problème",
     "feedback.modal.title": "Signaler un problème",
     "feedback.step1.preset.load": "Le trajet n'a pas chargé",

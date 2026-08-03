@@ -470,9 +470,6 @@ export const jaDict = {
     "theme.dark": "ダーク",
     "theme.label": "テーマ",
 
-    "trust.short": "ローカル",
-    "trust.tooltip": "ファイルはブラウザ内に留まります · アカウント不要",
-
     "feedback.entry.title": "問題を報告する",
     "feedback.modal.title": "問題を報告する",
     "feedback.step1.preset.load": "走行が読み込まれない",

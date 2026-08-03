@@ -460,9 +460,6 @@ export const deDict = {
     "theme.dark": "Dunkel",
     "theme.label": "Theme",
 
-    "trust.short": "lokal",
-    "trust.tooltip": "Dateien bleiben im Browser · keine Konten",
-
     "feedback.entry.title": "Problem melden",
     "feedback.modal.title": "Problem melden",
     "feedback.step1.preset.load": "Fahrt wurde nicht geladen",

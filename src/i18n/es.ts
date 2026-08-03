@@ -461,9 +461,6 @@ export const esDict = {
     "theme.dark": "Oscuro",
     "theme.label": "Tema",
 
-    "trust.short": "local",
-    "trust.tooltip": "Los archivos no salen del navegador · sin cuentas",
-
     "feedback.entry.title": "Reportar un problema",
     "feedback.modal.title": "Reportar un problema",
     "feedback.step1.preset.load": "El trayecto no cargó",

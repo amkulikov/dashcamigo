@@ -459,9 +459,6 @@ export const zhDict = {
     "theme.dark": "深色",
     "theme.label": "主题",
 
-    "trust.short": "本地",
-    "trust.tooltip": "文件留在浏览器内 · 无需账号",
-
     "feedback.entry.title": "反馈问题",
     "feedback.modal.title": "反馈问题",
     "feedback.step1.preset.load": "行程没加载",
