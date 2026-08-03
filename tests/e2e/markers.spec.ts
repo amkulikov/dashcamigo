@@ -98,6 +98,35 @@ test.describe("timeline markers", () => {
             .toBeLessThan(4);
     });
 
+    test("dropping a marker holds the frame it names and hands playback back", async ({ page }) => {
+        const isPaused = (): Promise<boolean> => page.locator(MASTER_VIDEO).evaluate((v: HTMLVideoElement) => v.paused);
+        // Rewound before playing: the fixture trip is four seconds long, and a
+        // run that starts near its end would report "paused" for having ended.
+        await pausePlayback(page);
+        const ruler = await boxOf(page, "#player-chart-ruler-top");
+        await page.mouse.click(ruler.x + ruler.width * 0.1, ruler.y + ruler.height / 2);
+        await page.locator("#player-play").click();
+        await expect.poll(isPaused, { message: "the trip must be running first" }).toBe(false);
+
+        await page.locator("#player-add-marker").click();
+        await expect(page.locator("#marker-modal")).toBeVisible();
+        await expect.poll(isPaused, { message: "the editor opens on a held frame" }).toBe(true);
+
+        await page.locator("#marker-modal-save").click();
+        await expect(page.locator("#marker-modal")).toBeHidden();
+        await expect.poll(isPaused, { message: "closing the editor resumes playback" }).toBe(false);
+    });
+
+    test("dropping a marker while paused leaves the player paused", async ({ page }) => {
+        await pausePlayback(page);
+        await addMarker(page, "still");
+        await expect
+            .poll(() => page.locator(MASTER_VIDEO).evaluate((v: HTMLVideoElement) => v.paused), {
+                message: "a paused player must not start playing on its own",
+            })
+            .toBe(true);
+    });
+
     test("dismissing the editor of a just-dropped marker takes the pin with it", async ({ page }) => {
         // The pin is created before the dialog so it previews live while the
         // user types - which would otherwise make Cancel and Escape mean "keep".

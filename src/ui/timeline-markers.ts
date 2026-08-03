@@ -12,6 +12,7 @@ import { t } from "../i18n/index.js";
 import { contentToWallUtc, wallToContentSec } from "../trips.js";
 import { addMarker, markersForTrip } from "./annotations.js";
 import { getTimelineView, timelineSecToFrac } from "./chart.js";
+import { dom } from "./dom.js";
 import { syncMarkerListButton } from "./marker-list-modal.js";
 import { openMarkerModal } from "./marker-modal.js";
 import { getTripCurrentTime, seekTripTime } from "./player.js";
@@ -24,6 +25,12 @@ export function initTimelineMarkers(): void {
     document.getElementById("player-add-marker")?.addEventListener("click", () => {
         const trip = activeTrip();
         if (!trip) return;
+        // Pause BEFORE reading the playhead: the marker must name the frame the
+        // user is looking at, and a running video moves on while the editor is
+        // built. Playback resumes on close, so the pause is not a state the
+        // user has to undo - and a paused player is left paused.
+        const wasPlaying = !dom.player.paused;
+        if (wasPlaying) dom.player.pause();
         const contentSec = getTripCurrentTime();
         const utcMs = contentToWallUtc(trip.timeline, contentSec) * 1000;
         const marker = addMarker(trip, utcMs, "");
@@ -31,7 +38,12 @@ export function initTimelineMarkers(): void {
         // Straight into the text editor - an unlabeled pin is rarely the goal.
         // createdNow: dismissing the editor drops the pin again, so a stray
         // click on this button is undone by Escape like any other dialog.
-        openMarkerModal(marker.id, { createdNow: true });
+        openMarkerModal(marker.id, {
+            createdNow: true,
+            onClose: () => {
+                if (wasPlaying) dom.player.play().catch(() => {});
+            },
+        });
     });
 }
 

@@ -14,6 +14,10 @@ let currentMarkerId: string | null = null;
 // "keep it" - three of the four ways out of a dialog whose fourth is Save.
 let createdNow = false;
 let onChanged: (() => void) | null = null;
+// Per-open callback of the code that opened the editor, fired on every way out.
+// The add gesture uses it to hand playback back; a nested open would clobber it,
+// but the editor is modal, so there is no second opener while one is showing.
+let onDismissed: (() => void) | null = null;
 
 export function initMarkerModal(callbacks: { onChanged: () => void }): void {
     onChanged = callbacks.onChanged;
@@ -44,12 +48,19 @@ export function initMarkerModal(callbacks: { onChanged: () => void }): void {
     });
 }
 
-export function openMarkerModal(markerId: string, opts: { createdNow?: boolean } = {}): void {
-    if (!modal || !textInput) return;
-    const marker = markerById(markerId);
-    if (!marker) return;
+/** Shows the editor for one marker. createdNow marks a marker this same gesture
+ *  dropped, so any dismissal removes it again. onClose runs once the editor is
+ *  gone, whichever way it went - including the paths that never showed it, so an
+ *  opener that prepared something (paused the player) always gets to undo it. */
+export function openMarkerModal(markerId: string, opts: { createdNow?: boolean; onClose?: () => void } = {}): void {
+    const marker = modal && textInput ? markerById(markerId) : null;
+    if (!marker || !modal || !textInput) {
+        opts.onClose?.();
+        return;
+    }
     currentMarkerId = markerId;
     createdNow = opts.createdNow === true;
+    onDismissed = opts.onClose ?? null;
     textInput.value = marker.text;
     modal.hidden = false;
     activateModal(modal, { onClose: close, initialFocus: textInput });
@@ -79,4 +90,8 @@ function close(): void {
         deactivateModal(modal);
     }
     currentMarkerId = null;
+    // Last, and cleared first: the opener may reopen the editor from here.
+    const dismissed = onDismissed;
+    onDismissed = null;
+    dismissed?.();
 }
