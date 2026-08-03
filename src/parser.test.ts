@@ -29,6 +29,7 @@ import {
     rebindOrphanLogRecords,
     rebuildLog,
     recordsHaveGps,
+    thinDenseRecords,
     totalDistanceKm,
     unionStringArrays,
 } from "./parser.js";
@@ -396,6 +397,129 @@ describe("dedupRecords", () => {
         expect(out[0]!.accelXg).toBe(1.5);
         // No transplant needed, so the survivor is the original object (not a clone).
         expect(out[0]!).toBe(records[0]!);
+    });
+});
+
+describe("thinDenseRecords", () => {
+    it("passes records at or below GPS_THIN_HZ through unchanged", () => {
+        // Exactly 5 Hz: every record lands in its own 200 ms bucket.
+        const records = [rec(100.0, 1, 1), rec(100.2, 1.0001, 1), rec(100.4, 1.0002, 1), rec(101.0, 1.001, 1)];
+        expect(thinDenseRecords(records)).toEqual(records);
+    });
+
+    it("collapses denser records to the first of each 200 ms bucket", () => {
+        // Nextbase fmt1 shape: 10 Hz, fractional unixSeconds, distinct coords.
+        const records = [
+            rec(100.0, 1, 1),
+            rec(100.1, 1.0001, 1),
+            rec(100.2, 1.0002, 1),
+            rec(100.3, 1.0003, 1),
+            rec(101.0, 1.001, 1),
+        ];
+        const out = thinDenseRecords(records);
+        expect(out).toHaveLength(3);
+        expect(out[0]!.unixSeconds).toBe(100.0);
+        expect(out[1]!.unixSeconds).toBe(100.2);
+        expect(out[2]!.unixSeconds).toBe(101.0);
+    });
+
+    it("transplants the bucket's max-|G| accel onto the survivor (braking peak survives)", () => {
+        const records = [
+            rec(100.0, 1, 1, { accelXg: 0.1 }),
+            rec(100.05, 1.0001, 1, { accelXg: 1.4 }), // the peak rides a dropped record
+            rec(100.1, 1.0002, 1, { accelXg: 0.2 }),
+        ];
+        const out = thinDenseRecords(records);
+        expect(out).toHaveLength(1);
+        expect(out[0]!.unixSeconds).toBe(100.0);
+        expect(out[0]!.accelXg).toBe(1.4);
+        expect(records[0]!.accelXg, "survivor cloned, input untouched").toBe(0.1);
+    });
+
+    it("keeps the survivor object identity when it already carries the max |G|", () => {
+        const records = [rec(100.0, 1, 1, { accelXg: 1.4 }), rec(100.1, 1.0001, 1, { accelXg: 0.1 })];
+        const out = thinDenseRecords(records);
+        expect(out).toHaveLength(1);
+        expect(out[0]!).toBe(records[0]!);
+    });
+
+    it("keeps the survivor object identity on an accel tie (no pointless clone)", () => {
+        // Both all-zero accel: >= must treat the tie as "kept is strongest" so
+        // the common quiet-driving case never allocates.
+        const records = [rec(100.0, 1, 1), rec(100.1, 1.0001, 1)];
+        const out = thinDenseRecords(records);
+        expect(out).toHaveLength(1);
+        expect(out[0]!).toBe(records[0]!);
+    });
+
+    it("prefers the first record with a fix over an earlier no-fix one, keeping the max accel", () => {
+        const records = [rec(100.0, 0, 0, { active: false, accelYg: 0.8 }), rec(100.1, 1, 1, { active: true })];
+        const out = thinDenseRecords(records);
+        expect(out).toHaveLength(1);
+        expect(out[0]!.lat, "fix acquired mid-bucket wins the coordinates").toBe(1);
+        expect(out[0]!.accelYg, "accel of the dropped no-fix record still rides along").toBe(0.8);
+        expect(out[0]!, "the transplant must clone, not mutate the fix record").not.toBe(records[1]!);
+        expect(records[1]!.accelYg, "input record untouched by the transplant").toBe(0);
+    });
+
+    it("keeps the fix record as-is when it also carries the max |G|", () => {
+        const records = [
+            rec(100.0, 0, 0, { active: false, accelYg: 0.2 }),
+            rec(100.1, 1, 1, { active: true, accelYg: 1.0 }),
+        ];
+        const out = thinDenseRecords(records);
+        expect(out).toHaveLength(1);
+        expect(out[0]!, "nothing to transplant - no clone").toBe(records[1]!);
+        expect(out[0]!.accelYg).toBe(1.0);
+    });
+
+    it("buckets unsynced records by relStartSeconds, not the placeholder clock", () => {
+        // Vueroid shape: fake camera-local clock, 20 Hz relStartSeconds.
+        const records = [
+            rec(500.0, 1, 1, { timeUnsynced: true, relStartSeconds: 0.0 }),
+            rec(500.05, 1.0001, 1, { timeUnsynced: true, relStartSeconds: 0.05 }),
+            rec(500.2, 1.001, 1, { timeUnsynced: true, relStartSeconds: 0.2 }),
+        ];
+        const out = thinDenseRecords(records);
+        expect(out).toHaveLength(2);
+        expect(out[0]!.relStartSeconds).toBe(0.0);
+        expect(out[1]!.relStartSeconds).toBe(0.2);
+    });
+
+    it("keeps a synced record and an unsynced one apart even when their bucket numbers collide", () => {
+        // floor(unixSeconds * 5) of the synced record equals
+        // floor(relStartSeconds * 5) of the unsynced one - the "r|" axis prefix
+        // is what keeps them from collapsing into each other. Reachable: the
+        // Vueroid dead-RTC path sets unixSeconds = relStartSeconds.
+        const records = [rec(5.0, 1, 1), rec(999, 2, 2, { timeUnsynced: true, relStartSeconds: 5.0 })];
+        expect(thinDenseRecords(records)).toHaveLength(2);
+    });
+
+    it("passes unsynced records without relStartSeconds through untouched", () => {
+        // No per-record clock to bucket by - the placeholder time is meaningless.
+        const records = [rec(-1, 1, 1, { timeUnsynced: true }), rec(-1, 1.0001, 1, { timeUnsynced: true })];
+        expect(thinDenseRecords(records)).toEqual(records);
+    });
+
+    it("never collapses across files", () => {
+        const records = [rec(100.0, 1, 1, { mp4Filename: "a.mp4" }), rec(100.1, 2, 2, { mp4Filename: "b.mp4" })];
+        expect(thinDenseRecords(records)).toHaveLength(2);
+    });
+
+    it("is idempotent across every branch, preserving identities on the second pass", () => {
+        const records = [
+            rec(100.0, 0, 0, { active: false, accelYg: 0.8 }), // fix-acquired branch
+            rec(100.1, 1, 1, { active: true }),
+            rec(101.0, 1.001, 1), // accel-transplant branch
+            rec(101.1, 1.0011, 1, { accelXg: 1.2 }),
+            rec(102.0, 1.002, 1), // untouched passthrough
+        ];
+        const once = thinDenseRecords(records);
+        const twice = thinDenseRecords(once);
+        expect(twice).toEqual(once);
+        for (let i = 0; i < once.length; i++) {
+            expect(twice[i]!, `record ${i} identity survives the second pass`).toBe(once[i]!);
+        }
     });
 });
 
@@ -790,13 +914,14 @@ describe("dropTeleportOutliers", () => {
 describe("mergeIntoGpsLog: incremental merge equals full rebuild", () => {
     type Batch = { records: GpsRecord[]; appliedExtractors: string[]; skipped: SkippedLine[] };
 
-    // The old O(total) path, inlined as the reference: dedup the WHOLE
+    // The old O(total) path, inlined as the reference: dedup + thin the WHOLE
     // concatenated log and regroup every bucket on each merge.
     function naiveMerge(existing: ParsedLog | null, batch: Batch): ParsedLog {
-        if (!existing) return rebuildLog(batch.appliedExtractors, dedupRecords(batch.records), batch.skipped);
+        if (!existing)
+            return rebuildLog(batch.appliedExtractors, thinDenseRecords(dedupRecords(batch.records)), batch.skipped);
         return rebuildLog(
             unionStringArrays(existing.appliedExtractors, batch.appliedExtractors),
-            dedupRecords(existing.records.concat(batch.records)),
+            thinDenseRecords(dedupRecords(existing.records.concat(batch.records))),
             existing.skipped.concat(batch.skipped),
         );
     }
@@ -828,6 +953,8 @@ describe("mergeIntoGpsLog: incremental merge equals full rebuild", () => {
                     rec(101, 1.001, 1, { mp4Filename: "a.mp4", speedMs: 11, bearingDeg: 12 }),
                     rec(102, 1.002, 1, { mp4Filename: "a.mp4", speedMs: 11, bearingDeg: 14 }),
                     rec(200, 2, 2, { mp4Filename: "b.mp4", speedMs: 0.2, bearingDeg: 90 }),
+                    // same-bucket sibling of b@200: thinned onto it, spike transplanted.
+                    rec(200.1, 2.0005, 2, { mp4Filename: "b.mp4", speedMs: 0.4, bearingDeg: 91, accelZg: 1.1 }),
                     rec(201, 2.001, 2, { mp4Filename: "b.mp4", speedMs: 11, bearingDeg: 92 }),
                 ],
                 appliedExtractors: ["freegps"],
@@ -847,6 +974,9 @@ describe("mergeIntoGpsLog: incremental merge equals full rebuild", () => {
                 records: [
                     // dup of a@100 with a WEAKER spike -> survivor keeps its own accel.
                     rec(100, 1, 1, { mp4Filename: "a.mp4", speedMs: 11, bearingDeg: 10, accelXg: 0.05 }),
+                    // record inside a@102's thin bucket, arriving a batch
+                    // later: thins onto the cross-batch survivor.
+                    rec(102.1, 1.0025, 1, { mp4Filename: "a.mp4", speedMs: 11, bearingDeg: 15, accelZg: 0.3 }),
                     rec(202, 2.002, 2, { mp4Filename: "b.mp4", speedMs: 11, bearingDeg: 94 }),
                 ],
                 appliedExtractors: ["nmea"],

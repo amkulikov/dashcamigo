@@ -166,8 +166,10 @@ export function decodeVueroidTxetRow(dv: DataView): DecodedRow | "zero" | null {
 /**
  * Extracts GPS records from a Vueroid TXET track at the full ~20 Hz sample
  * rate (coords step at 1 Hz inside, but speed/accel carry real 20 Hz
- * dynamics - thinning to 1 Hz would lose braking peaks, and ~1200 records
- * per minute is cheap; rvmi keeps its full gReV rate for the same reason).
+ * dynamics). The extractor does not thin: the merge funnel
+ * (parser.thinDenseRecords) caps density at GPS_THIN_HZ while folding each
+ * bucket's max-|G| accel onto the survivor, so braking peaks reach
+ * detectEvents intact and per-row diagnostics here stay at source resolution.
  *
  * Timestamps: the wall-clock field is camera-LOCAL stored as fake UTC (see
  * the header), so every record is flagged `timeUnsynced` with

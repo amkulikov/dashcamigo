@@ -14,9 +14,10 @@ import type { GpsRecord, InterpolatedPosition, ParsedLog, SkippedLine } from "./
 /**
  * Dynamic-acceleration magnitude from a gravity-removed accel triple. Single
  * definition for the max-|G|-wins transplant the merge/dedup layer performs in
- * three places (dedupRecords here, finalizeTrip cross-channel dedup, and
- * registry.mergeAccelSamples), so a collision/downsample never silently drops
- * the strongest impact sample before detectEvents runs. Component form (not a
+ * four places (dedupRecords and thinDenseRecords here, finalizeTrip
+ * cross-channel dedup, and registry.mergeAccelSamples), so a
+ * collision/downsample never silently drops the strongest impact sample before
+ * detectEvents runs. Component form (not a
  * GpsRecord) because mergeAccelSamples compares raw AccelSamples after
  * subtracting the per-file gravity offset. Mirrors events.gMagnitude, but lives
  * here because events.ts imports from this module (importing back would cycle).
@@ -65,6 +66,78 @@ export function dedupRecords(records: GpsRecord[]): GpsRecord[] {
         if (
             accelMagnitude(r.accelXg, r.accelYg, r.accelZg) > accelMagnitude(kept.accelXg, kept.accelYg, kept.accelZg)
         ) {
+            out[existingIdx] = { ...kept, accelXg: r.accelXg, accelYg: r.accelYg, accelZg: r.accelZg };
+        }
+    }
+    return out;
+}
+
+/**
+ * Cap on stored GPS record density. 5 Hz keeps enough sub-second shape for the
+ * exported gpmd/GPX tracks and near-exact event timing while still cutting the
+ * densest sources (Vueroid ~20 Hz, GoPro ~18 Hz) to a quarter of the memory
+ * and index-cache footprint. Thinning only collapses - a source at or below
+ * this rate passes through unchanged, nothing is ever interpolated up.
+ */
+export const GPS_THIN_HZ = 5;
+
+/**
+ * Thins records to at most GPS_THIN_HZ per second per file. Denser GPS
+ * (Nextbase fmt1 10 Hz, Vueroid ~20 Hz, GoPro ~18 Hz) buys nothing on a
+ * map/chart sampled at 1 Hz everywhere else, but multiplies session memory and
+ * the IndexedDB index cache by the rate factor - so the merge funnel drops the
+ * extras and keeps the one signal that genuinely lives between samples: the
+ * strongest gravity-removed accel triple of the bucket is transplanted onto
+ * the survivor (max-|G| wins, same policy as dedupRecords), so detectEvents
+ * still sees every braking peak.
+ *
+ * The survivor is the bucket's first record with a valid fix (first record at
+ * all when none has one) - a fix acquired mid-bucket must not lose its
+ * coordinates to a no-fix placeholder. Records are bucketed by
+ * floor(unixSeconds * GPS_THIN_HZ); unsynced records bucket by
+ * floor(relStartSeconds * GPS_THIN_HZ) instead (their unixSeconds is a
+ * placeholder the time layer rewrites later), and an unsynced record without
+ * relStartSeconds passes through untouched - there is no per-record clock to
+ * bucket it by, and every such source is 1 Hz anyway.
+ *
+ * Kept records are referenced, never mutated (they are aliased by state.gpsLog
+ * buckets and candidate.records); a transplant clones. Idempotent, so re-merging
+ * an already-thinned bucket is a no-op.
+ */
+export function thinDenseRecords(records: GpsRecord[]): GpsRecord[] {
+    const indexByKey = new Map<string, number>();
+    const out: GpsRecord[] = [];
+    for (const r of records) {
+        let bucketKey: string;
+        if (r.timeUnsynced) {
+            if (r.relStartSeconds === undefined) {
+                out.push(r);
+                continue;
+            }
+            // "r|" keeps the relative-offset axis from colliding with a synced
+            // record's wall-clock axis in the same bucket.
+            bucketKey = `r|${Math.floor(r.relStartSeconds * GPS_THIN_HZ)}`;
+        } else {
+            bucketKey = String(Math.floor(r.unixSeconds * GPS_THIN_HZ));
+        }
+        const key = `${bucketKey}|${r.mp4Filename}`;
+        const existingIdx = indexByKey.get(key);
+        if (existingIdx === undefined) {
+            indexByKey.set(key, out.length);
+            out.push(r);
+            continue;
+        }
+        const kept = out[existingIdx]!;
+        const keptIsStrongest =
+            accelMagnitude(kept.accelXg, kept.accelYg, kept.accelZg) >= accelMagnitude(r.accelXg, r.accelYg, r.accelZg);
+        if (!kept.active && r.active) {
+            // Fix acquired mid-bucket: this record's coordinates win, but the
+            // strongest accel seen so far must ride along (kept already holds
+            // the max of every earlier record in this bucket).
+            out[existingIdx] = keptIsStrongest
+                ? { ...r, accelXg: kept.accelXg, accelYg: kept.accelYg, accelZg: kept.accelZg }
+                : r;
+        } else if (!keptIsStrongest) {
             out[existingIdx] = { ...kept, accelXg: r.accelXg, accelYg: r.accelYg, accelZg: r.accelZg };
         }
     }
@@ -749,7 +822,7 @@ export function mergeIntoGpsLog(
     batch: { records: GpsRecord[]; appliedExtractors: string[]; skipped: SkippedLine[] },
 ): ParsedLog {
     if (!existing) {
-        return rebuildLog(batch.appliedExtractors, dedupRecords(batch.records), batch.skipped);
+        return rebuildLog(batch.appliedExtractors, thinDenseRecords(dedupRecords(batch.records)), batch.skipped);
     }
 
     // Incremental merge. The dedup key always carries mp4Filename, so records of
@@ -776,7 +849,14 @@ export function mergeIntoGpsLog(
         // global dedup would, since no cross-file key can collide. Sort + freeze
         // only this one bucket. freezeStationaryBearings is per-bucket idempotent,
         // so an untouched bucket keeps a state identical to a fresh freeze.
-        const mergedBucket = existingBucket ? dedupRecords(existingBucket.concat(batchRecs)) : dedupRecords(batchRecs);
+        // Thin AFTER dedup: dedup keys on exact (time, position), thinning on
+        // coarser time buckets - the wider net must see the deduped survivors so
+        // its max-|G| transplant compounds instead of racing. Existing bucket
+        // goes first, so an already-thinned survivor keeps its identity across
+        // re-merges of the same source.
+        const mergedBucket = thinDenseRecords(
+            existingBucket ? dedupRecords(existingBucket.concat(batchRecs)) : dedupRecords(batchRecs),
+        );
         mergedBucket.sort((a, b) => a.unixSeconds - b.unixSeconds);
         freezeStationaryBearings(mergedBucket);
         byFilename.set(filename, mergedBucket);
