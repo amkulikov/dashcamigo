@@ -125,8 +125,8 @@ test.describe("mobile portrait", () => {
 
 // A real phone reports a coarse pointer, which the other describes above do not
 // emulate (setViewportSize alone leaves the pointer fine). The trip card packs
-// an absolutely-placed title over a meta row whose touch-sized controls used to
-// stretch that row upward - a layout only this emulation reproduces.
+// an absolutely-placed title over a meta row, and its corner controls carry
+// touch-only tap zones - neither shows up without this emulation.
 test.describe("mobile portrait, touch pointer", () => {
     test.use({ hasTouch: true, isMobile: true });
 
@@ -144,6 +144,22 @@ test.describe("mobile portrait, touch pointer", () => {
         // The ingest overlay covers the list while previews are still being
         // generated - hit-testing the card underneath would only find the scrim.
         await expect(page.locator("#ingest-overlay")).toBeHidden({ timeout: 30_000 });
+        // Entering the browse state slides the list in from off-canvas. A card
+        // measured mid-transition still hangs off the left edge, and every
+        // hit-test below then probes a point outside the viewport. Two matching
+        // reads, a poll interval apart, mean the slide is over.
+        let previousX = Number.NaN;
+        await expect
+            .poll(
+                async () => {
+                    const x = (await card.boundingBox())?.x ?? Number.NaN;
+                    const settled = x === previousX;
+                    previousX = x;
+                    return settled;
+                },
+                { message: "the trip list must finish sliding in before it is measured" },
+            )
+            .toBe(true);
 
         const geometry = await page.evaluate(() => {
             const trip = document.querySelector("li.trip:not(.unindexed-note)") as HTMLElement;
@@ -151,7 +167,9 @@ test.describe("mobile portrait, touch pointer", () => {
             const favourite = trip.querySelector(".trip-fav") as HTMLElement;
             const favouriteBox = favourite.getBoundingClientRect();
             // The tap zone is a pseudo-element, invisible to getBoundingClientRect -
-            // probe it through hit-testing instead, above and below the icon.
+            // probe it through hit-testing instead. Down and left: the star sits in
+            // the card's top-left corner, so those are the directions it can grow
+            // (the header clips whatever reaches past its edges).
             const actionAt = (x: number, y: number) =>
                 (document.elementFromPoint(x, y) as HTMLElement | null)
                     ?.closest("[data-action]")
@@ -160,8 +178,8 @@ test.describe("mobile portrait, touch pointer", () => {
                 title: rect(".trip-title"),
                 metaText: rect(".trip-meta-text"),
                 header: rect(".trip-header"),
-                favouriteAbove: actionAt(favouriteBox.left + 11, favouriteBox.top - 7),
-                favouriteBelow: actionAt(favouriteBox.left + 11, favouriteBox.bottom + 5),
+                favouriteLeft: actionAt(favouriteBox.left - 3, favouriteBox.top + 13),
+                favouriteBelow: actionAt(favouriteBox.left + 13, favouriteBox.bottom + 5),
             };
         });
         const { title, metaText, header } = geometry;
@@ -172,8 +190,8 @@ test.describe("mobile portrait, touch pointer", () => {
             (metaText?.top ?? 0) + 1,
         );
         expect(metaText?.bottom ?? 0, "the meta line stays inside the card").toBeLessThanOrEqual(header?.bottom ?? 0);
-        // Touch reach: the star keeps a tap zone well past its 22px icon box.
-        expect(geometry.favouriteAbove, "the star is tappable above its icon").toBe("trip-fav");
+        // Touch reach: the star keeps a tap zone well past its 26px icon box.
+        expect(geometry.favouriteLeft, "the star is tappable left of its icon").toBe("trip-fav");
         expect(geometry.favouriteBelow, "the star is tappable below its icon").toBe("trip-fav");
     });
 });

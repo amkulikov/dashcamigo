@@ -309,24 +309,18 @@
     color: rgba(255, 255, 255, 0.85);
     font-variant-numeric: tabular-nums;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
-    /* Flex row: the text is the shrinkable side, the annotation buttons
-       (star/pencil) are fixed - without this the nowrap text pushes the
-       buttons past the right edge and overflow:hidden clips them away on a
-       narrow sidebar. */
     display: flex;
     align-items: center;
     gap: var(--dc-space-1);
-    /* No overflow:hidden here - the text child clips itself, and the row must let
-       the touch hit-zones of the annotation buttons grow past its 22px height
-       (trip-annotations.css). The header still clips at the card edge. */
+    /* No overflow:hidden here - the text child clips itself, and the header
+       already clips at the card edge. */
     white-space: nowrap;
 }
 .trip-meta .trip-meta-text {
     /* Single-line text with ellipsis on overflow - on a min-width sidebar
        (200px) a long meta like "1h 32m - 14 files - 187 km" gets truncated
-       instead of wrapping/overflowing. min-width:0 is needed so the flex
-       item can shrink below its content-size (the buttons on the right are
-       fixed-width). */
+       instead of wrapping/overflowing. min-width:0 lets the flex item shrink
+       below its content-size. */
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -343,15 +337,17 @@
     color: var(--fg);
 }
 
-/* Top-left badge slot on the hero card: one flex row so the parking badge
-   and a warning chip coexist without overlapping. The slot owns the corner
-   positioning; the chips inside stay in flow. */
-.trip-badge-slot {
+/* Top-left corner slot on the hero card: one flex row holding the annotation
+   buttons and then the badge chips, so they never overlap. The slot owns the
+   corner positioning; its children stay in flow. Inert by default - only the
+   buttons opt back into pointer events, so a chip never eats a card click. */
+.trip-corner-slot {
     position: absolute;
     top: 6px;
     left: 6px;
     z-index: 2;
     display: flex;
+    align-items: center;
     gap: var(--dc-space-1);
     max-width: calc(100% - 80px); /* yields room for chevron+event-chip on the right */
     pointer-events: none;

@@ -167,6 +167,39 @@ export function renderTrips(): void {
     dom.list.setAttribute("aria-busy", state.trips.some(tripHasPending) ? "true" : "false");
 }
 
+/** The card's annotation controls - favorite star, name/note pencil - as one
+ *  row for the header's top-left corner. Both carry data-action, so the
+ *  delegated list listener drives them. */
+function buildTripActions(tripIdx: number, isFavorite: boolean): HTMLElement {
+    const actions = document.createElement("span");
+    actions.className = "trip-card-actions";
+    const favBtn = document.createElement("button");
+    favBtn.type = "button";
+    favBtn.className = "trip-card-action trip-fav";
+    if (isFavorite) favBtn.classList.add("is-on");
+    const favLabel = isFavorite ? t("trip.fav.remove") : t("trip.fav.add");
+    favBtn.title = favLabel;
+    favBtn.setAttribute("aria-label", favLabel);
+    favBtn.setAttribute("aria-pressed", isFavorite ? "true" : "false");
+    favBtn.dataset.action = "trip-fav";
+    favBtn.dataset.tripIndex = String(tripIdx);
+    // Lucide star; fill switches on via CSS when .is-on.
+    favBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg>`;
+    actions.appendChild(favBtn);
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "trip-card-action trip-edit";
+    const editLabel = t("trip.editMeta");
+    editBtn.title = editLabel;
+    editBtn.setAttribute("aria-label", editLabel);
+    editBtn.dataset.action = "trip-edit";
+    editBtn.dataset.tripIndex = String(tripIdx);
+    // Lucide pencil.
+    editBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>`;
+    actions.appendChild(editBtn);
+    return actions;
+}
+
 /**
  * Builds one trip card <li> (header, hero/loading state, chips, meta, clip list).
  * Extracted from renderTrips so a single card can be rebuilt in place
@@ -261,10 +294,12 @@ function buildTripCard(trip: Trip, tripIdx: number): HTMLLIElement {
     chevron.dataset.tripIndex = String(tripIdx);
     header.appendChild(chevron);
 
-    // Trip-level chips in the top-left badge slot - one flex row, so the
-    // parking badge and a warning coexist without overlapping. Read-failed
-    // still takes priority over "no GPS": an unreadable clip is the more
-    // important signal, and it has no records anyway.
+    // Top-left corner cluster: the annotation controls first (in the corner
+    // proper, where they are always in the same place), then the trip-level
+    // chips. One flex row, so a parking badge and a warning coexist without
+    // overlapping and neither hides a button. Read-failed takes priority over
+    // "no GPS": an unreadable clip is the more important signal, and it has no
+    // records anyway.
     const badgeChips: HTMLElement[] = [];
     if (trip.isParking) {
         const parkingChip = document.createElement("span");
@@ -286,12 +321,11 @@ function buildTripCard(trip: Trip, tripIdx: number): HTMLLIElement {
         noGpsChip.textContent = t("trip.chip.noGps");
         badgeChips.push(noGpsChip);
     }
-    if (badgeChips.length > 0) {
-        const badgeSlot = document.createElement("div");
-        badgeSlot.className = "trip-badge-slot";
-        for (const chip of badgeChips) badgeSlot.appendChild(chip);
-        header.appendChild(badgeSlot);
-    }
+    const cornerSlot = document.createElement("div");
+    cornerSlot.className = "trip-corner-slot";
+    cornerSlot.appendChild(buildTripActions(tripIdx, tripMeta?.isFavorite === true));
+    for (const chip of badgeChips) cornerSlot.appendChild(chip);
+    header.appendChild(cornerSlot);
     // UX-08: red outline chip showing event count. Clickable, cycles to the next trip event (seek -5s).
     // Top-right corner left of the chevron - both group into the actions zone.
     if (trip.events.length > 0) {
@@ -316,37 +350,6 @@ function buildTripCard(trip: Trip, tripIdx: number): HTMLLIElement {
     metaText.textContent = formatTripMeta(trip, lazyState);
     if (lazyState !== "loaded") metaText.classList.add(`lazy-${lazyState}`);
     meta.appendChild(metaText);
-
-    // Annotation controls in the meta row (the header's top corners belong to
-    // the badge chips / event chip / chevron): favorite star + name/note pencil.
-    const metaActions = document.createElement("span");
-    metaActions.className = "trip-meta-actions";
-    const isFavorite = tripMeta?.isFavorite === true;
-    const favBtn = document.createElement("button");
-    favBtn.type = "button";
-    favBtn.className = "trip-meta-action trip-fav";
-    if (isFavorite) favBtn.classList.add("is-on");
-    const favLabel = isFavorite ? t("trip.fav.remove") : t("trip.fav.add");
-    favBtn.title = favLabel;
-    favBtn.setAttribute("aria-label", favLabel);
-    favBtn.setAttribute("aria-pressed", isFavorite ? "true" : "false");
-    favBtn.dataset.action = "trip-fav";
-    favBtn.dataset.tripIndex = String(tripIdx);
-    // Lucide star; fill switches on via CSS when .is-on.
-    favBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg>`;
-    metaActions.appendChild(favBtn);
-    const editBtn = document.createElement("button");
-    editBtn.type = "button";
-    editBtn.className = "trip-meta-action trip-edit";
-    const editLabel = t("trip.editMeta");
-    editBtn.title = editLabel;
-    editBtn.setAttribute("aria-label", editLabel);
-    editBtn.dataset.action = "trip-edit";
-    editBtn.dataset.tripIndex = String(tripIdx);
-    // Lucide pencil.
-    editBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>`;
-    metaActions.appendChild(editBtn);
-    meta.appendChild(metaActions);
     header.appendChild(meta);
 
     // Click on header (but not chevron) is handled by the delegated listener in initSidebar.

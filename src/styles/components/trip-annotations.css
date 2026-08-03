@@ -1,68 +1,77 @@
-/* Trip annotation surfaces: the star/pencil cluster in the card's meta row,
-   the note line under the header, and the name/note editor fields. */
+/* Trip annotation surfaces: the star/pencil pair in the card's top-left
+   corner, the note line under the header, and the name/note editor fields. */
 
-.trip-meta-actions {
+.trip-card-actions {
     display: inline-flex;
     align-items: center;
-    gap: 2px;
+    gap: 4px;
     flex-shrink: 0;
+    /* The corner slot around it is inert so its chips do not eat card clicks. */
+    pointer-events: auto;
 }
 
-.trip-meta-action {
+/* Same disc as the chevron in the opposite corner: the top of a hero preview
+   carries no gradient, so a bare icon would sit on whatever the frame shows. */
+.trip-card-action {
     position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    width: 26px;
+    height: 26px;
     padding: 0;
-    background: transparent;
-    border: none;
-    border-radius: var(--dc-radius-sm);
-    /* Inherit from .trip-meta: over a hero preview the meta row switches to
-       light-on-dark, and an own fg-mute here would go dark-on-dark. */
-    color: inherit;
-    opacity: 0.75;
+    background: rgba(0, 0, 0, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    color: var(--dc-white);
     cursor: pointer;
+    transition: background var(--dc-dur-fast) var(--dc-ease);
+}
+.trip-header:not(.has-preview) .trip-card-action {
+    background: var(--bg-elev);
+    border-color: var(--border);
+    color: var(--fg);
 }
 
-.trip-meta-action:hover {
-    opacity: 1;
-    background: rgba(128, 128, 128, 0.25);
+.trip-card-action:hover {
+    background: rgba(0, 0, 0, 0.7);
+}
+/* Hover moves the disc, not the icon color: recoloring would fight the gold of
+   a favorited star for the one button where it matters most. */
+.trip-header:not(.has-preview) .trip-card-action:hover {
+    background: var(--bg-hover);
 }
 
-/* Touch: 22px is a guaranteed miss next to the play-trip header. Grow only the
+/* Touch: 26px is a guaranteed miss next to the play-trip header. Grow only the
    tap area via a pseudo-element (same trick as the corner badges in
-   sidebar.css) - growing the button box itself stretches the meta row, and the
-   row's centered text then rides up under the absolutely-placed title.
-   Downward reach stops at the row's 8px bottom inset: the header clips
-   overflow, so anything past the card edge is dead area. Each zone is biased
-   away from its neighbour (star grows left, pencil right) so the two do not
-   overlap across the 2px gap. */
+   sidebar.css) - a bigger button box would crowd the chips beside it. Upward
+   reach stops at the 6px corner inset: the header clips overflow, so anything
+   past the card edge is dead area. Each zone is biased away from its neighbour
+   (star grows left, pencil right) so the two do not overlap across the gap. */
 @media (pointer: coarse) {
-    .trip-meta-action::before {
+    .trip-card-action::before {
         content: "";
         position: absolute;
-        inset: -11px -1px -8px -1px;
+        inset: -6px -2px -14px -2px;
     }
     .trip-fav::before {
-        left: -12px;
+        left: -6px;
     }
     .trip-edit::before {
-        right: -12px;
+        right: -6px;
     }
 }
 
-.trip-meta-action:focus-visible {
+.trip-card-action:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: -2px;
 }
 
-/* Filled golden star for a favorited trip - readable at 13px where a stroke
-   color change alone is not. */
-.trip-fav.is-on {
+/* Filled golden star for a favorited trip - readable at 14px where a stroke
+   color change alone is not. Specific enough to outrank the no-preview icon
+   color above, which would otherwise repaint the star on a placeholder card. */
+.trip-header .trip-card-action.trip-fav.is-on {
     color: var(--warn);
-    opacity: 1;
 }
 .trip-fav.is-on svg {
     fill: currentColor;
