@@ -415,6 +415,9 @@ initViewMenu({
         // subscribeViewPanels, which accounts for map-expanded / no-gps /
         // preference in one place.
         map: null,
+        // The whole readout row: its grid track is `auto`, so hiding the
+        // element collapses the row to nothing.
+        readout: dom.metrics.readout,
     },
 });
 initExportMode();

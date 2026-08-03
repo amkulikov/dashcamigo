@@ -585,6 +585,41 @@ test.describe("player", () => {
         await expect(current).not.toHaveText("0:00");
     });
 
+    test("the readout row carries the GPS values and copies the coordinates", async ({ page }) => {
+        const row = page.locator("#player-readout");
+        await expect(row).toBeVisible();
+        // Speed left the bar for the row - the bar's copy is the mobile one.
+        await expect(page.locator("#player-metrics")).toBeHidden();
+        await expect(page.locator("#pm-coords")).toHaveText(/-?\d+\.\d{4}, -?\d+\.\d{4}/);
+        await expect(page.locator("#pm-time")).toHaveText(/\d{2}:\d{2}:\d{2}/);
+        await expect(page.locator("#readout-fix-label")).toHaveText("GPS signal");
+        // The clip name is what you need before going looking for the file.
+        await expect(page.locator("#readout-file")).toHaveText(/\.(mp4|mov|ts)$/i);
+
+        await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+        const shown = (await page.locator("#pm-coords").textContent())?.trim();
+        await page.locator("#pm-coords").click();
+        const copied = await page.evaluate(() => navigator.clipboard.readText());
+        expect(copied, "the clipboard must carry exactly what the row showed").toBe(shown);
+    });
+
+    test("the View menu collapses the readout row and G toggles it back", async ({ page }) => {
+        const row = page.locator("#player-readout");
+        const frameHeight = async (): Promise<number> => (await boxOf(page, ".video-frame")).height;
+        const withRow = await frameHeight();
+
+        await page.locator("#player-view-menu").click();
+        await page.locator('.view-menu-row[data-panel="readout"]').click();
+        await page.locator("body").click(); // close popover
+        await expect(row).toBeHidden();
+        // The row's grid track is `auto`, so hiding it hands the height back to
+        // the video rather than leaving a gap.
+        expect(await frameHeight(), "hiding the row must give the video its pixels back").toBeGreaterThan(withRow);
+
+        await page.keyboard.press("g");
+        await expect(row).toBeVisible();
+    });
+
     test("hotkeys modal opens with '?'", async ({ page }) => {
         await page.keyboard.press("?");
         await expect(page.locator("#hotkeys-modal")).toBeVisible();

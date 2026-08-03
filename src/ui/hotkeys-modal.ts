@@ -44,6 +44,7 @@ function buildGroups(): HotkeyGroup[] {
                 { keys: ["C"], label: t("hotkeys.action.toggleChart") },
                 { keys: ["T"], label: t("hotkeys.action.toggleStrip") },
                 { keys: ["M"], label: t("hotkeys.action.toggleMap") },
+                { keys: ["G"], label: t("hotkeys.action.toggleReadout") },
             ],
         },
         {

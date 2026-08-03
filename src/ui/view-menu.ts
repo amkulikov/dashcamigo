@@ -1,7 +1,7 @@
-// "View" dropdown - toggle visibility of three panels (chart / strip / map).
-// Per design handoff (spec/04-view-menu.md): button in player toolbar + popover
-// with 3 checkboxes, state persisted via localStorage["dc.viewer.panels"],
-// global hotkeys C / T / M.
+// "View" dropdown - toggle visibility of the optional viewer panels. Per design
+// handoff (spec/04-view-menu.md): button in player toolbar + popover with one
+// checkbox per panel, state persisted via localStorage["dc.viewer.panels"],
+// one global hotkey each (see HOTKEY_BY_PANEL).
 //
 // Toggling a panel sets the `hidden` attribute on its host element; layout
 // reflows via existing CSS grid/flex rules (no JS layout math here).
@@ -14,20 +14,16 @@ import { createLogger } from "../log.js";
 import { isAnyModalOpen } from "./modal-helper.js";
 
 const STORAGE_KEY = "dc.viewer.panels";
-const HOTKEY_BY_PANEL = { chart: "KeyC", strip: "KeyT", map: "KeyM" } as const;
-const PANELS = ["chart", "strip", "map"] as const;
+const HOTKEY_BY_PANEL = { chart: "KeyC", strip: "KeyT", map: "KeyM", readout: "KeyG" } as const;
+const PANELS = ["chart", "strip", "map", "readout"] as const;
 export type Panel = (typeof PANELS)[number];
 
 const log = createLogger("view-menu");
 
-/** Visibility state of the three view-menu panels. Default: all visible. */
-export interface ViewPanels {
-    chart: boolean;
-    strip: boolean;
-    map: boolean;
-}
+/** Visibility state of the view-menu panels. Default: all visible. */
+export type ViewPanels = Record<Panel, boolean>;
 
-const DEFAULT_PANELS: ViewPanels = { chart: true, strip: true, map: true };
+const DEFAULT_PANELS: ViewPanels = { chart: true, strip: true, map: true, readout: true };
 
 /** In-memory mirror of the persisted state. */
 let currentPanels: ViewPanels = { ...DEFAULT_PANELS };
@@ -51,11 +47,11 @@ function loadFromStorage(): ViewPanels {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return { ...DEFAULT_PANELS };
         const parsed = JSON.parse(raw) as Partial<ViewPanels>;
-        return {
-            chart: parsed.chart !== false,
-            strip: parsed.strip !== false,
-            map: parsed.map !== false,
-        };
+        // !== false, not ?? true: a panel added after the preference was
+        // written is absent from the stored object and must default to on.
+        const restored = {} as ViewPanels;
+        for (const panel of PANELS) restored[panel] = parsed[panel] !== false;
+        return restored;
     } catch {
         // private mode / malformed JSON - fall back to defaults
         return { ...DEFAULT_PANELS };
@@ -73,11 +69,7 @@ function saveToStorage(panels: ViewPanels): void {
 export interface ViewMenuOptions {
     button: HTMLElement;
     popover: HTMLElement;
-    panels: {
-        chart: HTMLElement | null;
-        strip: HTMLElement | null;
-        map: HTMLElement | null;
-    };
+    panels: Record<Panel, HTMLElement | null>;
 }
 
 /** Per-panel availability. A disabled panel cannot be toggled by the user
@@ -85,7 +77,7 @@ export interface ViewMenuOptions {
  *  mini-map" when there's no GPS track. The stored visibility preference
  *  is preserved so toggling availability back on restores the user's last
  *  choice. */
-const availability: Record<Panel, boolean> = { chart: true, strip: true, map: true };
+const availability: Record<Panel, boolean> = { chart: true, strip: true, map: true, readout: true };
 
 /** Module-level options ref set by initViewMenu. setPanelAvailable needs it
  *  to re-apply visibility on availability change (no need to wait for the
@@ -225,9 +217,10 @@ function applyPanels(opts: ViewMenuOptions): void {
     // Final visibility = user preference AND availability. Unavailable panels
     // are forced hidden regardless of the user's stored preference (no-GPS
     // trip -> mini-map node hidden even if user previously toggled it on).
-    if (opts.panels.chart) opts.panels.chart.hidden = !(currentPanels.chart && availability.chart);
-    if (opts.panels.strip) opts.panels.strip.hidden = !(currentPanels.strip && availability.strip);
-    if (opts.panels.map) opts.panels.map.hidden = !(currentPanels.map && availability.map);
+    for (const panel of PANELS) {
+        const el = opts.panels[panel];
+        if (el) el.hidden = !(currentPanels[panel] && availability[panel]);
+    }
     // Sync checkboxes in the popover (aria-checked + visual tick via CSS).
     opts.popover.querySelectorAll<HTMLButtonElement>(".view-menu-row").forEach((row) => {
         const panel = row.dataset.panel as Panel | undefined;
