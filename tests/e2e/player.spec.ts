@@ -588,6 +588,11 @@ test.describe("player", () => {
     test("the readout row carries the GPS values and copies the coordinates", async ({ page }) => {
         const row = page.locator("#player-readout");
         await expect(row).toBeVisible();
+        // Nothing has been played in this test, so no timeupdate has fired yet.
+        // The row must already be telling the truth about the activated trip -
+        // a paused player that never starts would otherwise leave it claiming
+        // "no GPS data" over a full track.
+        await expect(page.locator("#player-readout")).not.toHaveClass(/is-nofix/);
         // Speed left the bar for the row - the bar's copy is the mobile one.
         await expect(page.locator("#player-metrics")).toBeHidden();
         await expect(page.locator("#pm-coords")).toHaveText(/-?\d+\.\d{4}, -?\d+\.\d{4}/);

@@ -216,11 +216,22 @@ function markTimelapseClock(isTimelapse: boolean): void {
     else dom.metrics.time.removeAttribute("title");
 }
 
-/** Resets the readouts to placeholders. Used on trip change. */
-export function resetMetrics(): void {
-    refreshMetrics(null, null, null);
-    markTimelapseClock(false);
-    refreshFileName();
+// Set by initPlayerMetrics. Reading the playhead through a getter keeps the
+// playback module out of this one's import graph.
+let readTripCurrentSec: (() => number) | null = null;
+
+/**
+ * Re-resolves every readout for a newly activated trip. Called on trip change
+ * only - on a file change the values keep flowing from timeupdate.
+ *
+ * It re-resolves rather than blanking. The first timeupdate after activation
+ * can be arbitrarily far off (a player that never starts never fires one), and
+ * a blank row is not neutral: the fix state would sit on "no GPS data" over a
+ * trip that carries a full track.
+ */
+export function resyncMetricsForTrip(): void {
+    if (readTripCurrentSec === null) return;
+    refreshMetricsFromActiveFrame(readTripCurrentSec());
 }
 
 /**
@@ -263,6 +274,7 @@ const COPIED_FLASH_MS = 1200;
  * lang-change subscription.
  */
 export function initPlayerMetrics(getTripCurrentSec: () => number): void {
+    readTripCurrentSec = getTripCurrentSec;
     for (const toggle of [dom.metrics.speedToggle, dom.metrics.barSpeedToggle]) {
         toggle.addEventListener("click", () => {
             toggleUnits();

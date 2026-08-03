@@ -88,7 +88,7 @@ import {
     reclampAndApplyZoom,
     resetVideoZoom,
 } from "./player-zoom.js";
-import { initPlayerMetrics, refreshMetricsFromActiveFrame, resetMetrics } from "./player-metrics.js";
+import { initPlayerMetrics, refreshMetricsFromActiveFrame, resyncMetricsForTrip } from "./player-metrics.js";
 import { setExportInProgress, syncExportButton } from "./player-export-button.js";
 import { initPlayerFullscreen, syncFullscreenButton, toggleFullscreen } from "./player-fullscreen.js";
 import { persistCurrentLayout, restoreLayoutForTrip } from "./player-layout-pref.js";
@@ -549,7 +549,7 @@ export function playFrame(
         pendingFileOffset = 0;
         // Zoom is pointless on an unplayable video - the decoder returns nothing.
         resetVideoZoom();
-        if (tripChanged) resetMetrics();
+        if (tripChanged) resyncMetricsForTrip();
         updatePlayerProgressUi();
         syncCaptureButton();
         // Clear all video.src and backends so the decoder doesn't stall on a problematic
@@ -575,9 +575,11 @@ export function playFrame(
     syncFrameToGrid(frame, picked.channel, startOffsetSec);
     syncCaptureButton();
 
-    // Metrics are NOT reset on file change - they keep updating via timeupdate,
-    // showing the last known values. Reset only on trip change where metrics are entirely different.
-    if (tripChanged) resetMetrics();
+    // Readouts are NOT resynced on a file change - they keep flowing from
+    // timeupdate. Only a trip change needs it: the values belong to a
+    // different track, and the first timeupdate may never come on a player
+    // the user does not start.
+    if (tripChanged) resyncMetricsForTrip();
 
     updatePlayerProgressUi();
 
