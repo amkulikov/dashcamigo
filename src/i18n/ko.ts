@@ -796,6 +796,17 @@ export const koDict = {
     "settings.ingest.gap.unit": "분",
     "settings.ingest.gap.never": "분할 안 함 — 모든 파일을 하나의 주행으로",
 
+    "settings.cache.section": "녹화 캐시",
+    "settings.cache.description": "녹화에서 읽어낸 내용을 기억해 두어, 한 번 연 폴더는 즉시 열립니다. 영상 자체는 저장되지 않습니다.",
+    "settings.cache.usage.label": "사용 중인 공간",
+    "settings.cache.usage.value": "{limit} 중 {used} · {n, plural, other {클립 #개}}",
+    "settings.cache.limit.label": "크기 제한",
+    "settings.cache.limit.unit": "MB",
+    "settings.cache.limit.description": "캐시가 제한을 넘으면 가장 오래된 폴더부터 지워집니다.",
+    "settings.cache.clear.label": "녹화 캐시 지우기",
+    "settings.cache.clear.description": "다음에 폴더를 열면 처음부터 다시 읽습니다. 주행 이름, 메모, 마커는 유지됩니다.",
+    "settings.cache.clear.done": "녹화 캐시를 지웠습니다",
+
     "settings.about.section": "앱 정보 및 진단",
     "settings.about.version.label": "버전",
     "settings.about.storage.label": "사용한 저장 공간",

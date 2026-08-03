@@ -787,6 +787,17 @@ export const esDict = {
     "settings.ingest.gap.unit": "minutos",
     "settings.ingest.gap.never": "No dividir — todo como un trayecto",
 
+    "settings.cache.section": "Caché de grabaciones",
+    "settings.cache.description": "Recuerda lo que dashcamigo leyó de tus grabaciones: las carpetas que ya abriste cargan al instante. Los vídeos en sí nunca se guardan.",
+    "settings.cache.usage.label": "Espacio usado",
+    "settings.cache.usage.value": "{used} de {limit} · {n, plural, one {# clip} other {# clips}}",
+    "settings.cache.limit.label": "Límite de tamaño",
+    "settings.cache.limit.unit": "MB",
+    "settings.cache.limit.description": "Cuando la caché supera el límite, las carpetas más antiguas se olvidan primero.",
+    "settings.cache.clear.label": "Vaciar caché de grabaciones",
+    "settings.cache.clear.description": "La próxima vez las carpetas cargarán desde cero. Los nombres de viajes, notas y marcadores se conservan.",
+    "settings.cache.clear.done": "Caché de grabaciones vaciada",
+
     "settings.about.section": "Información y diagnóstico",
     "settings.about.version.label": "Versión",
     "settings.about.storage.label": "Almacenamiento usado",

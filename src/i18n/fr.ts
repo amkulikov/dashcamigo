@@ -788,6 +788,17 @@ export const frDict = {
     "settings.ingest.gap.unit": "minutes",
     "settings.ingest.gap.never": "Ne pas diviser — tout en un seul trajet",
 
+    "settings.cache.section": "Cache des enregistrements",
+    "settings.cache.description": "Mémorise ce que dashcamigo a lu dans tes enregistrements — les dossiers déjà ouverts chargent instantanément. Les vidéos elles-mêmes ne sont jamais stockées.",
+    "settings.cache.usage.label": "Espace utilisé",
+    "settings.cache.usage.value": "{used} sur {limit} · {n, plural, one {# clip} other {# clips}}",
+    "settings.cache.limit.label": "Limite de taille",
+    "settings.cache.limit.unit": "Mo",
+    "settings.cache.limit.description": "Quand le cache dépasse la limite, les dossiers les plus anciens sont oubliés en premier.",
+    "settings.cache.clear.label": "Vider le cache des enregistrements",
+    "settings.cache.clear.description": "Les dossiers se chargeront à nouveau depuis zéro. Les noms de trajets, notes et marqueurs sont conservés.",
+    "settings.cache.clear.done": "Cache des enregistrements vidé",
+
     "settings.about.section": "À propos et diagnostic",
     "settings.about.version.label": "Version",
     "settings.about.storage.label": "Stockage utilisé",

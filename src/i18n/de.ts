@@ -786,6 +786,17 @@ export const deDict = {
     "settings.ingest.gap.unit": "Minuten",
     "settings.ingest.gap.never": "Nicht aufteilen — alles als eine Fahrt",
 
+    "settings.cache.section": "Aufnahmen-Cache",
+    "settings.cache.description": "Merkt sich, was dashcamigo aus deinen Aufnahmen gelesen hat — bereits geöffnete Ordner laden sofort. Die Videos selbst werden nie gespeichert.",
+    "settings.cache.usage.label": "Vom Cache belegt",
+    "settings.cache.usage.value": "{used} von {limit} · {n, plural, one {# Clip} other {# Clips}}",
+    "settings.cache.limit.label": "Größenlimit",
+    "settings.cache.limit.unit": "MB",
+    "settings.cache.limit.description": "Wächst der Cache über das Limit, werden die ältesten Ordner zuerst vergessen.",
+    "settings.cache.clear.label": "Aufnahmen-Cache leeren",
+    "settings.cache.clear.description": "Ordner laden beim nächsten Öffnen komplett neu. Fahrtnamen, Notizen und Marker bleiben erhalten.",
+    "settings.cache.clear.done": "Aufnahmen-Cache geleert",
+
     "settings.about.section": "Über & Diagnose",
     "settings.about.version.label": "Version",
     "settings.about.storage.label": "Belegter Speicher",

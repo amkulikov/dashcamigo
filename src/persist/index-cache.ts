@@ -5,19 +5,20 @@
 import { createLogger } from "../log.js";
 import type { IndexerRepair } from "../indexer.js";
 import type { VideoCandidate } from "../trips.js";
+import { getIndexCacheLimitBytes } from "./cache-limit.js";
 import { openPersistDb, type PersistDb } from "./db.js";
 import { type CachedCandidateFields, type CachedFileIndex, INDEX_CACHE_VERSION } from "./types.js";
 
 const log = createLogger("index-cache");
 
-// Size bound, not a correctness knob: without one the store would creep
-// toward gigabytes over months of different cards. Bounded by DATA VOLUME,
-// not entry count - a GPS-dense clip weighs orders of magnitude more than an
-// empty one, and a terabyte archive is tens of thousands of clips, so a count
-// cap either starves it or lets the dense case blow up the browser profile.
-// Oldest savedAt first (savedAt refreshes on use - LRU-ish); an evicted entry
-// only costs a reindex of that file.
-const MAX_TOTAL_BYTES = 512 * 1024 * 1024;
+// The size bound (user-configurable, cache-limit.ts) is not a correctness
+// knob: without one the store would creep toward gigabytes over months of
+// different cards. Bounded by DATA VOLUME, not entry count - a GPS-dense clip
+// weighs orders of magnitude more than an empty one, and a terabyte archive is
+// tens of thousands of clips, so a count cap either starves it or lets the
+// dense case blow up the browser profile. Oldest savedAt first (savedAt
+// refreshes on use - LRU-ish); an evicted entry only costs a reindex of that
+// file.
 // Backstop against pathological tiny-entry counts (volume alone would admit
 // millions of empty-record entries, and every prune walks a cursor).
 const MAX_ENTRIES = 50_000;
@@ -265,11 +266,58 @@ async function readTotalBytes(meta: { get(key: string): Promise<string | undefin
     return Number.isFinite(parsed) ? parsed : 0;
 }
 
+/**
+ * Approximate cache footprint for the settings UI: the running byte total and
+ * the entry count. Reads the maintained accounting, no store walk - entries
+ * written before the `bytes` field existed are invisible to the total (they
+ * are also first in line for eviction). Rejects when IndexedDB is unavailable;
+ * the caller degrades to "unknown".
+ */
+export async function getIndexCacheStats(): Promise<{ totalBytes: number; entryCount: number }> {
+    const db = await openPersistDb();
+    const tx = db.transaction(["indexCache", "meta"]);
+    const [entryCount, totalBytes] = await Promise.all([
+        tx.objectStore("indexCache").count(),
+        readTotalBytes(tx.objectStore("meta")),
+    ]);
+    await tx.done;
+    return { totalBytes: Math.max(0, totalBytes), entryCount };
+}
+
+/**
+ * Wipes the whole index cache and zeroes its byte accounting in one
+ * transaction. Folders and annotations are untouched - the only cost is a full
+ * re-index on the next open of each folder. Rejects when IndexedDB is
+ * unavailable (nothing to clear then anyway).
+ */
+export async function clearIndexCache(): Promise<void> {
+    const db = await openPersistDb();
+    const tx = db.transaction(["indexCache", "meta"], "readwrite");
+    await tx.objectStore("indexCache").clear();
+    await tx.objectStore("meta").put("0", TOTAL_BYTES_META_KEY);
+    await tx.done;
+    log.info("index cache cleared");
+}
+
+/**
+ * Runs the ordinary size-bound prune against the CURRENT limit, outside any
+ * write. For the settings modal: shrinking the limit must reclaim the space
+ * right away, not on the next ingest's write-back.
+ */
+export async function pruneIndexCacheToLimit(): Promise<void> {
+    const db = await openPersistDb();
+    const tx = db.transaction("meta");
+    const total = await readTotalBytes(tx.store);
+    await tx.done;
+    await pruneIndexCache(db, total);
+}
+
 async function pruneIndexCache(db: PersistDb, totalHint: number): Promise<void> {
+    const limitBytes = getIndexCacheLimitBytes();
     const countTx = db.transaction("indexCache");
     const count = await countTx.store.count();
     await countTx.done;
-    if (totalHint <= MAX_TOTAL_BYTES && count <= MAX_ENTRIES) return;
+    if (totalHint <= limitBytes && count <= MAX_ENTRIES) return;
 
     // Count/total and the deletions share one transaction - a check taken
     // outside it can race a concurrent batch write and over-delete.
@@ -280,7 +328,7 @@ async function pruneIndexCache(db: PersistDb, totalHint: number): Promise<void> 
     let entriesLeft = await store.count();
     let deleted = 0;
     let cursor = await store.index("bySavedAt").openCursor();
-    while (cursor && (total > MAX_TOTAL_BYTES || entriesLeft > MAX_ENTRIES)) {
+    while (cursor && (total > limitBytes || entriesLeft > MAX_ENTRIES)) {
         const entry = cursor.value;
         // A pre-`bytes` entry never contributed to the total (subtracts 0);
         // a version-mismatched one is unreadable anyway - the walk clears

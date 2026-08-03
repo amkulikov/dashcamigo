@@ -798,6 +798,17 @@ export const jaDict = {
     "settings.ingest.gap.unit": "分",
     "settings.ingest.gap.never": "分割しない — すべてを 1 本の走行にまとめる",
 
+    "settings.cache.section": "録画キャッシュ",
+    "settings.cache.description": "録画から読み取った内容を記憶し、一度開いたフォルダを瞬時に読み込みます。動画そのものは保存されません。",
+    "settings.cache.usage.label": "使用中の容量",
+    "settings.cache.usage.value": "{used} / {limit} · {n, plural, other {#件のクリップ}}",
+    "settings.cache.limit.label": "サイズ上限",
+    "settings.cache.limit.unit": "MB",
+    "settings.cache.limit.description": "キャッシュが上限を超えると、古いフォルダから順に削除されます。",
+    "settings.cache.clear.label": "録画キャッシュを消去",
+    "settings.cache.clear.description": "次回はフォルダを最初から読み込み直します。ドライブ名・メモ・マーカーは保持されます。",
+    "settings.cache.clear.done": "録画キャッシュを消去しました",
+
     "settings.about.section": "アプリ情報と診断",
     "settings.about.version.label": "バージョン",
     "settings.about.storage.label": "使用中のストレージ",

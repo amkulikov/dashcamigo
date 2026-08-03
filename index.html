@@ -2285,6 +2285,36 @@
                        data-i18n="settings.privacy.policyLink">Privacy policy</a>
                 </div>
             </div>
+            <!-- Recordings cache: usage + limit + clear for the cross-session
+                 index cache (src/persist/index-cache.ts). Usage is filled from
+                 JS at open time; the limit input persists via
+                 src/persist/cache-limit.ts and shrinking it prunes at once.
+                 Clearing touches ONLY the indexCache store - folders and
+                 annotations stay. -->
+            <div class="export-modal-section">
+                <h3 class="settings-section-title" data-i18n="settings.cache.section">Recordings cache</h3>
+                <div class="settings-row">
+                    <p class="settings-toggle-desc" data-i18n="settings.cache.description">Remembers what dashcamigo read from your recordings, so folders you open again load instantly. The videos themselves are never stored.</p>
+                    <div class="settings-info-row">
+                        <span class="settings-info-label" data-i18n="settings.cache.usage.label">Space used</span>
+                        <span id="settings-cache-usage-value" class="settings-info-value">—</span>
+                    </div>
+                    <label class="settings-select-row">
+                        <span class="settings-select-label" data-i18n="settings.cache.limit.label">Size limit</span>
+                        <span class="settings-numeric-row">
+                            <input id="settings-cache-limit-input" type="number" inputmode="numeric" class="settings-number-input"
+                                   min="64" max="4096" step="64">
+                            <span class="settings-numeric-unit" data-i18n="settings.cache.limit.unit">MB</span>
+                        </span>
+                    </label>
+                    <p class="settings-toggle-desc" data-i18n="settings.cache.limit.description">When the cache outgrows the limit, the oldest folders are forgotten first.</p>
+                </div>
+                <div class="settings-row">
+                    <button id="settings-cache-clear-btn" class="dc-btn dc-btn--secondary" type="button"
+                            data-i18n="settings.cache.clear.label">Clear recordings cache</button>
+                    <p class="settings-toggle-desc" data-i18n="settings.cache.clear.description">Folders will load from scratch the next time you open them. Trip names, notes and markers are kept.</p>
+                </div>
+            </div>
             <!-- About & diagnostics: read-only info (version, storage) and
                  support actions (download log, clear offline cache). Filled
                  from JS at open time - DOM is static placeholders. -->

@@ -26,6 +26,14 @@ import { t } from "../i18n/index.js";
 import { createLogger, downloadLogBuffer } from "../log.js";
 import { crashReportingEnabled, isCrashReportingBuilt, setCrashReportingEnabled } from "../sentry.js";
 import { groupTrips, setTripGapSec, tripAllCandidates, getTripGapSec, projectEventsOntoTimeline } from "../trips.js";
+import {
+    DEFAULT_INDEX_CACHE_LIMIT_BYTES,
+    getIndexCacheLimitBytes,
+    INDEX_CACHE_LIMIT_MAX_BYTES,
+    INDEX_CACHE_LIMIT_MIN_BYTES,
+    setIndexCacheLimitBytes,
+} from "../persist/cache-limit.js";
+import { clearIndexCache, getIndexCacheStats, pruneIndexCacheToLimit } from "../persist/index-cache.js";
 import { getUnits, setUnits, type Units } from "../units-pref.js";
 import { APP_VERSION } from "../version.js";
 import { rebuildChartFromTrip } from "./chart.js";
@@ -89,6 +97,7 @@ function openSettings(): void {
     syncSeekStepInputs();
     syncEventsThresholdInputs();
     syncTripGapInput();
+    syncCacheSection();
     syncAboutInfo();
     m.hidden = false;
     // [hidden] preserves the card's scrollTop from the previous open -
@@ -160,6 +169,40 @@ function syncTripGapInput(): void {
     // "0.5" not "0.500" but "5 min" stays "5".
     const minutes = sec / 60;
     input.value = String(Number(minutes.toFixed(2)));
+}
+
+const BYTES_PER_MB = 1024 * 1024;
+
+/**
+ * Pre-fills the Recordings-cache section: the limit input (stored in bytes,
+ * displayed in whole MB) synchronously, the usage readout async. An
+ * unavailable IndexedDB (private mode, storage disabled) leaves the static
+ * "—" placeholder - the cache degrades to session-only there anyway.
+ */
+function syncCacheSection(): void {
+    const limitInput = document.getElementById("settings-cache-limit-input") as HTMLInputElement | null;
+    if (limitInput) limitInput.value = String(Math.round(getIndexCacheLimitBytes() / BYTES_PER_MB));
+    refreshCacheUsageValue();
+}
+
+/** Re-reads the cache footprint into the usage row. Fire-and-forget async;
+ *  called on open and after every action that changes the footprint. */
+function refreshCacheUsageValue(): void {
+    const value = document.getElementById("settings-cache-usage-value");
+    if (!value) return;
+    value.textContent = "…";
+    getIndexCacheStats()
+        .then((stats) => {
+            value.textContent = t("settings.cache.usage.value", {
+                used: formatBytes(stats.totalBytes),
+                limit: formatBytes(getIndexCacheLimitBytes()),
+                n: stats.entryCount,
+            });
+        })
+        .catch((err: unknown) => {
+            log.warn("index cache stats failed", { err: err instanceof Error ? err.message : String(err) });
+            value.textContent = "—";
+        });
 }
 
 /** Writes version + storage estimate into the About section. Called on open. */
@@ -494,6 +537,53 @@ export function initSettingsModal(): void {
             applyTripGapFromInput();
         }
         regroupLoadedTrips();
+    });
+
+    // --- Recordings cache ---
+    //
+    // Limit input follows the seek-step pattern: empty / invalid restores the
+    // default, out-of-range clamps and echoes back. Shrinking must reclaim the
+    // space immediately (pruneIndexCacheToLimit) - the ordinary prune only
+    // runs on an ingest write-back, which may be days away.
+
+    const cacheLimitInput = document.getElementById("settings-cache-limit-input") as HTMLInputElement | null;
+    cacheLimitInput?.addEventListener("change", () => {
+        const raw = Number.parseFloat(cacheLimitInput.value);
+        const requestedBytes = Number.isFinite(raw) && raw > 0 ? raw * BYTES_PER_MB : DEFAULT_INDEX_CACHE_LIMIT_BYTES;
+        const clampedBytes = Math.min(
+            INDEX_CACHE_LIMIT_MAX_BYTES,
+            Math.max(INDEX_CACHE_LIMIT_MIN_BYTES, requestedBytes),
+        );
+        cacheLimitInput.value = String(Math.round(clampedBytes / BYTES_PER_MB));
+        setIndexCacheLimitBytes(clampedBytes);
+        pruneIndexCacheToLimit()
+            .then(refreshCacheUsageValue)
+            .catch((err: unknown) => {
+                log.warn("prune after limit change failed", {
+                    err: err instanceof Error ? err.message : String(err),
+                });
+                // The stored limit is applied either way - the next write-back prunes.
+                refreshCacheUsageValue();
+            });
+    });
+
+    document.getElementById("settings-cache-clear-btn")?.addEventListener("click", () => {
+        const btn = document.getElementById("settings-cache-clear-btn") as HTMLButtonElement | null;
+        if (btn) btn.disabled = true;
+        clearIndexCache()
+            .then(() => {
+                notify({ severity: "info", messageKey: "settings.cache.clear.done" });
+            })
+            .catch((err: unknown) => {
+                // Unavailable IndexedDB means there was nothing to clear; any
+                // other failure leaves the cache as it was. Either way the
+                // refreshed readout below shows the actual state.
+                log.warn("clear index cache failed", { err: err instanceof Error ? err.message : String(err) });
+            })
+            .finally(() => {
+                if (btn) btn.disabled = false;
+                refreshCacheUsageValue();
+            });
     });
 
     // --- About & diagnostics ---

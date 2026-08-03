@@ -5,7 +5,9 @@
 
 import { readFileSync } from "node:fs";
 
-import { expect, gotoApp, presetLocalStorage, shot, test } from "./_fixtures.js";
+import type { Page } from "@playwright/test";
+
+import { expect, gotoApp, loadTrip, presetLocalStorage, shot, test } from "./_fixtures.js";
 import { DESKTOP } from "./_fixtures.js";
 
 test.describe("navigation & shell", () => {
@@ -63,6 +65,30 @@ test.describe("navigation & shell", () => {
         await expect(page.locator("#settings-units-select")).toBeVisible();
         await expect(page.locator("#settings-version-value")).toBeVisible();
         await shot(page, "nav-05-settings-modal");
+    });
+
+    test("settings modal reports cache usage and clears it", async ({ page }) => {
+        await gotoApp(page, "en");
+        // A populated cache is the whole point: an empty profile would show the
+        // same "0 clips" readout before and after the clear, proving nothing.
+        await loadTrip(page);
+        // The write-back is fire-and-forget off the ingest path - wait for it
+        // to land before the modal snapshots the stats.
+        await expect
+            .poll(() => storedIndexCacheEntryCount(page), { message: "ingest must persist index-cache entries" })
+            .toBeGreaterThan(0);
+
+        await page.locator("#settings-btn").click();
+        await expect(page.locator("#settings-modal")).toBeVisible();
+        const usage = page.locator("#settings-cache-usage-value");
+        await expect(usage, "the readout reflects the populated cache").toContainText(/· [1-9]\d* clips?/);
+        await expect(page.locator("#settings-cache-limit-input")).toHaveValue("128");
+
+        const clearBtn = page.locator("#settings-cache-clear-btn");
+        await clearBtn.click();
+        await expect(usage, "the readout drops to empty after the wipe").toContainText(/· 0 clips/);
+        await expect(clearBtn, "re-enabled once the wipe settles").toBeEnabled();
+        expect(await storedIndexCacheEntryCount(page), "the store itself is empty").toBe(0);
     });
 
     test("feedback modal opens and cancels", async ({ page }) => {
@@ -156,3 +182,23 @@ test.describe("navigation & shell", () => {
         await shot(page, "nav-08-add-camera-page");
     });
 });
+
+/** Entry count of the index-cache store, read straight out of IndexedDB. */
+async function storedIndexCacheEntryCount(page: Page): Promise<number> {
+    return page.evaluate(
+        () =>
+            new Promise<number>((resolve, reject) => {
+                const request = indexedDB.open("dashcamigo");
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => {
+                    const db = request.result;
+                    const count = db.transaction("indexCache").objectStore("indexCache").count();
+                    count.onerror = () => reject(count.error);
+                    count.onsuccess = () => {
+                        resolve(count.result);
+                        db.close();
+                    };
+                };
+            }),
+    );
+}

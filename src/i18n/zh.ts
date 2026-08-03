@@ -786,6 +786,17 @@ export const zhDict = {
     "settings.ingest.gap.unit": "分钟",
     "settings.ingest.gap.never": "不拆分，所有文件作为同一行程",
 
+    "settings.cache.section": "录像缓存",
+    "settings.cache.description": "记住 dashcamigo 从录像中读取的内容，打开过的文件夹即刻加载。视频本身不会被保存。",
+    "settings.cache.usage.label": "已用空间",
+    "settings.cache.usage.value": "{used} / {limit} · {n, plural, other {# 个片段}}",
+    "settings.cache.limit.label": "大小上限",
+    "settings.cache.limit.unit": "MB",
+    "settings.cache.limit.description": "缓存超过上限时，最先清除最早的文件夹。",
+    "settings.cache.clear.label": "清除录像缓存",
+    "settings.cache.clear.description": "下次打开文件夹时将重新读取。行程名称、备注和标记会保留。",
+    "settings.cache.clear.done": "录像缓存已清除",
+
     "settings.about.section": "关于与诊断",
     "settings.about.version.label": "版本",
     "settings.about.storage.label": "已用存储",

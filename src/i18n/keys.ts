@@ -1014,6 +1014,21 @@ export type I18nKey =
     | "settings.ingest.gap.unit"
     | "settings.ingest.gap.never"
 
+    // Settings -> Recordings cache: the cross-session index cache
+    // (src/persist/index-cache.ts). Usage readout, configurable size limit
+    // (src/persist/cache-limit.ts) and a clear action that wipes only cached
+    // indexing results - folders and annotations survive.
+    | "settings.cache.section"
+    | "settings.cache.description"
+    | "settings.cache.usage.label"
+    | "settings.cache.usage.value"
+    | "settings.cache.limit.label"
+    | "settings.cache.limit.unit"
+    | "settings.cache.limit.description"
+    | "settings.cache.clear.label"
+    | "settings.cache.clear.description"
+    | "settings.cache.clear.done"
+
     // Settings -> About & diagnostics. Read-only info (version, storage
     // estimate) plus support actions: download the in-memory log ring buffer
     // (for bug reports) and "Clear offline cache" - lighter than Danger zone

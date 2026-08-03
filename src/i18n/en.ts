@@ -786,6 +786,17 @@ export const enDict = {
     "settings.ingest.gap.unit": "minutes",
     "settings.ingest.gap.never": "Never split — one trip from all files",
 
+    "settings.cache.section": "Recordings cache",
+    "settings.cache.description": "Remembers what dashcamigo read from your recordings, so folders you open again load instantly. The videos themselves are never stored.",
+    "settings.cache.usage.label": "Space used",
+    "settings.cache.usage.value": "{used} of {limit} · {n, plural, one {# clip} other {# clips}}",
+    "settings.cache.limit.label": "Size limit",
+    "settings.cache.limit.unit": "MB",
+    "settings.cache.limit.description": "When the cache outgrows the limit, the oldest folders are forgotten first.",
+    "settings.cache.clear.label": "Clear recordings cache",
+    "settings.cache.clear.description": "Folders will load from scratch the next time you open them. Trip names, notes and markers are kept.",
+    "settings.cache.clear.done": "Recordings cache cleared",
+
     "settings.about.section": "About & diagnostics",
     "settings.about.version.label": "Version",
     "settings.about.storage.label": "Storage used",

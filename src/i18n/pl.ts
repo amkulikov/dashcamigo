@@ -786,6 +786,17 @@ export const plDict = {
     "settings.ingest.gap.unit": "minut",
     "settings.ingest.gap.never": "Nie dziel — wszystko jako jeden przejazd",
 
+    "settings.cache.section": "Pamięć podręczna nagrań",
+    "settings.cache.description": "Zapamiętuje, co dashcamigo odczytało z twoich nagrań — raz otwarte foldery ładują się natychmiast. Same filmy nigdy nie są zapisywane.",
+    "settings.cache.usage.label": "Zajęte przez pamięć podręczną",
+    "settings.cache.usage.value": "{used} z {limit} · {n, plural, one {# klip} few {# klipy} other {# klipów}}",
+    "settings.cache.limit.label": "Limit rozmiaru",
+    "settings.cache.limit.unit": "MB",
+    "settings.cache.limit.description": "Gdy pamięć podręczna przekroczy limit, najstarsze foldery są zapominane pierwsze.",
+    "settings.cache.clear.label": "Wyczyść pamięć podręczną nagrań",
+    "settings.cache.clear.description": "Następnym razem foldery załadują się od zera. Nazwy tras, notatki i znaczniki zostaną zachowane.",
+    "settings.cache.clear.done": "Pamięć podręczna nagrań wyczyszczona",
+
     "settings.about.section": "O aplikacji i diagnostyka",
     "settings.about.version.label": "Wersja",
     "settings.about.storage.label": "Zajęte miejsce",

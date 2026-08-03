@@ -786,6 +786,17 @@ export const ptDict = {
     "settings.ingest.gap.unit": "minutos",
     "settings.ingest.gap.never": "Não dividir — tudo em uma só viagem",
 
+    "settings.cache.section": "Cache de gravações",
+    "settings.cache.description": "Lembra o que o dashcamigo leu das suas gravações — pastas já abertas carregam na hora. Os vídeos em si nunca são guardados.",
+    "settings.cache.usage.label": "Espaço usado",
+    "settings.cache.usage.value": "{used} de {limit} · {n, plural, one {# clipe} other {# clipes}}",
+    "settings.cache.limit.label": "Limite de tamanho",
+    "settings.cache.limit.unit": "MB",
+    "settings.cache.limit.description": "Quando o cache passa do limite, as pastas mais antigas são esquecidas primeiro.",
+    "settings.cache.clear.label": "Limpar cache de gravações",
+    "settings.cache.clear.description": "Na próxima vez as pastas carregarão do zero. Nomes de viagens, notas e marcadores são mantidos.",
+    "settings.cache.clear.done": "Cache de gravações limpo",
+
     "settings.about.section": "Sobre e diagnóstico",
     "settings.about.version.label": "Versão",
     "settings.about.storage.label": "Armazenamento usado",

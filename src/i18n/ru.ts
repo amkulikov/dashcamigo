@@ -791,6 +791,17 @@ export const ruDict = {
     "settings.ingest.gap.unit": "минут",
     "settings.ingest.gap.never": "Никогда не делить — всё одной поездкой",
 
+    "settings.cache.section": "Кэш записей",
+    "settings.cache.description": "Запоминает, что dashcamigo прочитал из твоих записей, — уже открытые папки загружаются мгновенно. Сами видео не сохраняются.",
+    "settings.cache.usage.label": "Занято кэшем",
+    "settings.cache.usage.value": "{used} из {limit} · {n, plural, one {# клип} few {# клипа} other {# клипов}}",
+    "settings.cache.limit.label": "Лимит места",
+    "settings.cache.limit.unit": "МБ",
+    "settings.cache.limit.description": "Когда кэш вырастает больше лимита, первыми забываются самые старые папки.",
+    "settings.cache.clear.label": "Очистить кэш записей",
+    "settings.cache.clear.description": "В следующий раз папки загрузятся заново, с нуля. Названия поездок, заметки и маркеры сохранятся.",
+    "settings.cache.clear.done": "Кэш записей очищен",
+
     "settings.about.section": "О приложении и диагностика",
     "settings.about.version.label": "Версия",
     "settings.about.storage.label": "Занято места",
