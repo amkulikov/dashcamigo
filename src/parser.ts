@@ -122,6 +122,34 @@ export function totalDistanceKm(records: GpsRecord[] | null | undefined): number
 }
 
 /**
+ * Running distance in km from the first record to each one, aligned
+ * index-for-index with `records`. Same rule as totalDistanceKm - only
+ * `active === true` records advance the total, so a lost-fix jump does not
+ * inflate it, and the last element equals totalDistanceKm(records).
+ *
+ * Precomputed per trip on purpose: the readout row wants "distance so far" at
+ * every playhead position, and re-summing haversine over the whole track at
+ * timeupdate rate is not something a playback path can afford.
+ *
+ * Empty input returns an empty array.
+ */
+export function cumulativeDistanceKm(records: GpsRecord[] | null | undefined): Float64Array {
+    if (!records || records.length === 0) return new Float64Array(0);
+    const out = new Float64Array(records.length);
+    let prev: GpsRecord | null = null;
+    let sum = 0;
+    for (let i = 0; i < records.length; i++) {
+        const r = records[i]!;
+        if (r.active) {
+            if (prev !== null) sum += haversineKm(prev.lat, prev.lon, r.lat, r.lon);
+            prev = r;
+        }
+        out[i] = sum;
+    }
+    return out;
+}
+
+/**
  * True iff the records carry at least one valid GPS fix. "active" = a valid
  * lat/lon fix (see GpsRecord); lost-fix points do not count. This is the single
  * gate for every GPS-dependent export option - the GPS-track-only mode, the

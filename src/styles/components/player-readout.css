@@ -122,6 +122,137 @@
     cursor: help;
 }
 
+/* ----- Fix state -----
+   A dot that is orange while the position is trustworthy and hollow when it is
+   not. The label beside it only becomes visible in the bad states; in the good
+   one it is clipped rather than display:none'd, so it stays in the
+   accessibility tree and the live region announces the fix RETURNING as well
+   as being lost. */
+.readout-fix {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--dc-space-1);
+    flex: 0 0 auto;
+}
+.readout-fix__dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+}
+.player-readout.is-nofix .readout-fix__dot {
+    background: transparent;
+    border: 1px solid var(--fg-mute);
+}
+.readout-fix__label {
+    font-size: var(--dc-text-xs);
+    color: var(--fg-mute);
+    white-space: nowrap;
+}
+.player-readout:not(.is-nofix) .readout-fix__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+/* Without a position there is nothing to report, so the values step aside and
+   leave the row to the one thing worth saying. */
+.player-readout.is-nofix .player-readout__live > :not(.readout-fix) {
+    display: none;
+}
+
+/* ----- Context group -----
+   Truncation happens here and nowhere else: min-width:0 lets the group shrink
+   below its content, and the file name is the one item allowed to lose its
+   tail. */
+.player-readout__context {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+    min-width: 0;
+    flex: 0 1 auto;
+}
+.readout-file {
+    appearance: none;
+    background: none;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    color: var(--fg-mute);
+    font: inherit;
+    font-size: var(--dc-text-xs);
+    cursor: pointer;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.readout-file[hidden] {
+    display: none;
+}
+
+/* Accuracy note. Muted by default so it does not compete with the values;
+   the whole point is that it is there when looked for, not that it is seen. */
+.readout-note {
+    appearance: none;
+    background: none;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    color: var(--fg-mute);
+    cursor: help;
+    flex: 0 0 auto;
+    opacity: 0.7;
+}
+.readout-note:hover,
+.readout-note:focus-visible {
+    opacity: 1;
+    color: var(--fg-dim);
+}
+
+/* ----- Copy affordances -----
+   Coordinates and the clip name are read to be pasted somewhere else, so both
+   are buttons. The confirmation replaces the value in place for a moment - a
+   toast is a lot of furniture for copying a number. */
+.readout-copy {
+    appearance: none;
+    background: none;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+.readout-copy:hover {
+    color: var(--fg);
+}
+.readout-copy:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--dc-radius-xs);
+}
+.readout-copy.is-copied {
+    /* Hide the value's own text without changing the element's box, so the row
+       does not twitch for the duration of the flash. */
+    color: transparent;
+    position: relative;
+}
+.readout-copy.is-copied::after {
+    content: attr(data-copied-label);
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+}
+
 /* The readout row is a desktop surface. On a phone the video row is already
    clamped to 16:9 against the viewport height, so every row below it comes
    straight out of the frame; the bar keeps a speed-only copy there instead

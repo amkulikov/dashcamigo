@@ -387,11 +387,15 @@ export const dom = {
     // from neither DOM, only from one viewport.
     metrics: {
         readout: $id<HTMLElement>("player-readout"),
+        fixLabel: $id<HTMLElement>("readout-fix-label"),
         speed: $id<HTMLElement>("pm-speed"),
         unit: $id<HTMLElement>("pm-unit"),
         speedToggle: $id<HTMLButtonElement>("pm-speed-toggle"),
-        coords: $id<HTMLElement>("pm-coords"),
+        coords: $id<HTMLButtonElement>("pm-coords"),
         time: $id<HTMLElement>("pm-time"),
+        distance: $id<HTMLElement>("pm-distance-value"),
+        distanceUnit: $id<HTMLElement>("pm-distance-unit"),
+        file: $id<HTMLButtonElement>("readout-file"),
         barSpeed: $id<HTMLElement>("pm-bar-speed"),
         barUnit: $id<HTMLElement>("pm-bar-unit"),
         barSpeedToggle: $id<HTMLButtonElement>("pm-bar-speed-toggle"),

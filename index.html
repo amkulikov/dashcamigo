@@ -1355,15 +1355,53 @@
                      from the View menu. -->
                 <div class="player-readout" id="player-readout">
                     <div class="player-readout__live">
+                        <!-- Fix state is the row's only live region: it changes
+                             rarely and matters, unlike the values beside it,
+                             which move up to 15 times a second. The label stays
+                             in the accessibility tree in both states (clipped,
+                             not display:none) so a screen reader is told when
+                             the fix returns as well as when it is lost. -->
+                        <span class="readout-fix" id="readout-fix" role="status">
+                            <span class="readout-fix__dot" aria-hidden="true"></span>
+                            <span class="readout-fix__label" id="readout-fix-label"
+                                  data-i18n="readout.gps.ok">GPS signal</span>
+                        </span>
                         <button type="button" class="pm-item pm-speed pm-speed-toggle" id="pm-speed-toggle"
                                 data-i18n-attr="aria-label:units.toggle.aria,title:units.toggle.title"
                                 aria-label="Toggle speed units" title="Click to switch km/h ↔ mph">
                             <span class="pm-value mono" id="pm-speed">-</span>
                             <span class="pm-unit" id="pm-unit">km/h</span>
                         </button>
-                        <span class="pm-item pm-coords mono" id="pm-coords">-</span>
+                        <button type="button" class="pm-item pm-coords readout-copy mono" id="pm-coords"
+                                data-i18n-attr="title:readout.coords.copy"
+                                title="Click to copy the coordinates">-</button>
                         <span class="pm-sep">·</span>
                         <span class="pm-item pm-time mono" id="pm-time">-</span>
+                        <span class="pm-sep">·</span>
+                        <span class="pm-item pm-distance mono" id="pm-distance">
+                            <span class="pm-value" id="pm-distance-value">-</span>
+                            <span class="pm-unit" id="pm-distance-unit">km</span>
+                        </span>
+                    </div>
+                    <div class="player-readout__context">
+                        <!-- The button's text IS the file name, so it doubles as
+                             the accessible name; the title carries the full name
+                             for when CSS ellipsis eats the tail. Both are set in
+                             JS - the copy affordance rides on the cursor, like
+                             the speed toggle's unit switch. -->
+                        <button type="button" class="readout-file readout-copy mono" id="readout-file" hidden></button>
+                        <!-- Accuracy note. The values come from what the camera
+                             wrote; the tooltip says so, and /terms carries the
+                             same statement where it has weight. -->
+                        <button type="button" class="readout-note" id="readout-note"
+                                data-i18n-attr="aria-label:readout.note.aria,title:readout.note.tooltip"
+                                aria-label="About these values"
+                                title="Read from what the camera recorded - not verified.">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+                            </svg>
+                        </button>
                     </div>
                 </div>
                 <div class="player-chart" id="player-chart">

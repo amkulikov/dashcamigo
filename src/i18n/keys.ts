@@ -312,6 +312,15 @@ export type I18nKey =
     | "units.km"
     | "units.mph"
     | "units.mi"
+
+    // GPS readout row under the player bar
+    | "readout.gps.ok"
+    | "readout.gps.lost"
+    | "readout.gps.none"
+    | "readout.coords.copy"
+    | "readout.copied"
+    | "readout.note.aria"
+    | "readout.note.tooltip"
     | "units.kb"
     | "units.mb"
     | "units.gb"

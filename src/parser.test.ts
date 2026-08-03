@@ -21,6 +21,7 @@ import {
     firstSyncedRecord,
     forwardFillBearingsIfAllZero,
     freezeStationaryBearings,
+    cumulativeDistanceKm,
     haversineKm,
     interpolatePosition,
     lastSyncedRecord,
@@ -111,6 +112,47 @@ describe("totalDistanceKm", () => {
         // as if the lost point never existed: prev tracks last active record.
         const expected = haversineKm(0, 0, 1, 0);
         expect(totalDistanceKm(records)).toBeCloseTo(expected, 6);
+    });
+});
+
+describe("cumulativeDistanceKm", () => {
+    it("returns an empty array for empty/null/undefined", () => {
+        expect(cumulativeDistanceKm(null)).toHaveLength(0);
+        expect(cumulativeDistanceKm(undefined)).toHaveLength(0);
+        expect(cumulativeDistanceKm([])).toHaveLength(0);
+    });
+
+    it("starts at zero and grows with each leg", () => {
+        const records = [rec(0, 0, 0), rec(1, 1, 0), rec(2, 2, 0)];
+        const leg = haversineKm(0, 0, 1, 0);
+        const prefix = cumulativeDistanceKm(records);
+        expect(prefix[0]).toBe(0);
+        expect(prefix[1]).toBeCloseTo(leg, 6);
+        expect(prefix[2]).toBeCloseTo(2 * leg, 6);
+    });
+
+    it("carries the running total across a lost fix without advancing it", () => {
+        const records = [rec(0, 0, 0), rec(1, 10, 10, { active: false }), rec(2, 1, 0)];
+        const prefix = cumulativeDistanceKm(records);
+        // The lost-fix record keeps the total it inherited - stepping onto it
+        // must not credit the coordinate jump that its stale lat/lon implies.
+        expect(prefix[1]).toBe(0);
+        expect(prefix[2]).toBeCloseTo(haversineKm(0, 0, 1, 0), 6);
+    });
+
+    it("ends on the same total as totalDistanceKm", () => {
+        const records = [
+            rec(0, 55.75, 37.6),
+            rec(1, 55.76, 37.61),
+            rec(2, 10, 10, { active: false }),
+            rec(3, 55.77, 37.62),
+            rec(4, 55.78, 37.63),
+        ];
+        const prefix = cumulativeDistanceKm(records);
+        expect(prefix[prefix.length - 1], "prefix tail must agree with the whole-track sum").toBeCloseTo(
+            totalDistanceKm(records),
+            9,
+        );
     });
 });
 
