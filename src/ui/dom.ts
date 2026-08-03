@@ -380,12 +380,21 @@ export const dom = {
     lazyGpsLoadModalTitle: $id<HTMLElement>("lazy-gps-load-modal-title"),
     lazyGpsLoadModalProgress: $id<HTMLElement>("lazy-gps-load-modal-progress"),
     lazyGpsLoadModalCancel: $id<HTMLButtonElement>("lazy-gps-load-modal-cancel"),
+    // GPS readouts for the playhead. `speed`/`unit`/`speedToggle` live in the
+    // readout row; `barSpeed`/`barUnit`/`barSpeedToggle` are the speed-only
+    // copy the player bar keeps for phones, where the row is not shown. Both
+    // copies are written and wired by player-metrics.ts - the row is absent
+    // from neither DOM, only from one viewport.
     metrics: {
+        readout: $id<HTMLElement>("player-readout"),
         speed: $id<HTMLElement>("pm-speed"),
         unit: $id<HTMLElement>("pm-unit"),
         speedToggle: $id<HTMLButtonElement>("pm-speed-toggle"),
         coords: $id<HTMLElement>("pm-coords"),
         time: $id<HTMLElement>("pm-time"),
+        barSpeed: $id<HTMLElement>("pm-bar-speed"),
+        barUnit: $id<HTMLElement>("pm-bar-unit"),
+        barSpeedToggle: $id<HTMLButtonElement>("pm-bar-speed-toggle"),
     },
     chartInferredStrip: $id<HTMLCanvasElement>("player-chart-inferred-strip"),
     chartInferredStripWrap: $id<HTMLDivElement>("player-chart-inferred-strip-wrap"),

@@ -202,9 +202,8 @@
        EVERYWHERE when they change, or the token drifts out of sync with
        the rules.
 
-       Intermediate breakpoints (player-bar pm-time, mini-export-padding,
-       etc.) moved to @container queries - they depend on the component's
-       width, not the window's. */
+       Intermediate breakpoints live in @container queries instead - they
+       depend on the component's width, not the window's. */
     --dc-bp-mobile: 768px; /* < 768  : mobile (drawer, stack) */
     --dc-bp-tablet: 1024px; /* < 1024 : tablet (single-column modals) */
     --dc-bp-laptop: 1280px; /* < 1280 : narrow laptop (compact defaults) */

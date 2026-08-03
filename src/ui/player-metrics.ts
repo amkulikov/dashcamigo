@@ -1,7 +1,9 @@
-// GPS metrics shown next to the player: speed, coordinates, local time.
-// Driven by timeupdate + lang/unit change subscriptions. Hides when the player
-// is outside the GPS window (no nearby record within METRICS_TOLERANCE_SEC) so
-// the panel matches the map marker visibility.
+// GPS readouts for the playhead: speed, coordinates, camera clock. Rendered in
+// the readout row between the player bar and the timeline, plus a speed-only
+// copy the bar keeps for phones. Driven by timeupdate + unit-change
+// subscriptions. Falls back to placeholders when the player is outside the GPS
+// window (no nearby record within METRICS_TOLERANCE_SEC) so the numbers and the
+// map marker disappear together.
 
 import { getDateLocale, t } from "../i18n/index.js";
 import { findNearestIndex } from "../parser.js";
@@ -40,20 +42,29 @@ function localTimeFormatter(): Intl.DateTimeFormat {
     return cachedTimeFmt;
 }
 
+/** Writes speed into both places it is shown: the readout row on desktop and
+ *  the bar's speed-only copy on phones. Only one of them is on screen at a
+ *  time, but which one is a CSS breakpoint decision - so both are always
+ *  current and neither needs a media query in JS. */
+function setSpeedText(value: string, unit: string): void {
+    dom.metrics.speed.textContent = value;
+    dom.metrics.unit.textContent = unit;
+    dom.metrics.barSpeed.textContent = value;
+    dom.metrics.barUnit.textContent = unit;
+}
+
 function refreshMetrics(rec: GpsRecord | null, cameraTzSec: number | null): void {
     if (!rec) {
         const ph = t("player.metrics.placeholder");
-        dom.metrics.speed.textContent = ph;
         dom.metrics.coords.textContent = ph;
         dom.metrics.time.textContent = ph;
         // Unit label stays correct even when no GPS record - user can still
         // click to switch the preference; the next record uses the new unit.
-        dom.metrics.unit.textContent = t(formatSpeedFromMs(0).unitKey);
+        setSpeedText(ph, t(formatSpeedFromMs(0).unitKey));
         return;
     }
     const speed = formatSpeedFromMs(rec.speedMs);
-    dom.metrics.speed.textContent = speed.value.toFixed(1);
-    dom.metrics.unit.textContent = t(speed.unitKey);
+    setSpeedText(speed.value.toFixed(1), t(speed.unitKey));
     // 4 decimal places = ~11m accuracy at mid-latitudes, enough for viewing.
     // Full 5-place accuracy is in tooltip popups.
     dom.metrics.coords.textContent = `${rec.lat.toFixed(4)}, ${rec.lon.toFixed(4)}`;
@@ -148,9 +159,11 @@ export function resetMetrics(): void {
  * lifetime, so there is no lang-change subscription.
  */
 export function initPlayerMetrics(getTripCurrentSec: () => number): void {
-    dom.metrics.speedToggle.addEventListener("click", () => {
-        toggleUnits();
-    });
+    for (const toggle of [dom.metrics.speedToggle, dom.metrics.barSpeedToggle]) {
+        toggle.addEventListener("click", () => {
+            toggleUnits();
+        });
+    }
     subscribeUnitsChange(() => {
         refreshMetricsFromActiveFrame(getTripCurrentSec());
     });

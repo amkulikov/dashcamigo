@@ -27,6 +27,7 @@
 @import "./components/top-panel.css";
 @import "./components/export-panel.css";
 @import "./components/player-bar.css";
+@import "./components/player-readout.css";
 @import "./components/chart.css";
 @import "./components/map.css";
 @import "./components/empty-state.css";

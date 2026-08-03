@@ -41,17 +41,21 @@
        usage reads the bare var with no per-usage fallback. When map is
        expanded grid-template-areas change (see .map-expanded). */
     --chart-height: 166px;
-    grid-template-rows: minmax(0, 1fr) auto var(--chart-height);
+    grid-template-rows: minmax(0, 1fr) auto auto var(--chart-height);
     /* minmax(0, 1fr) instead of 1fr: a bare track falls back to min-content,
        and the chart-canvas with inline width=Npx would prevent the column from shrinking. */
     grid-template-columns: minmax(0, 1fr);
     /* Bar between video and timeline: transport controls sit next to the
-       chart the user scrubs on, instead of at the far bottom edge. Mobile
-       keeps its own bar-at-bottom template (sticky bar, see the mobile
-       block); fullscreen overlays the bar at the bottom too. */
+       chart the user scrubs on, instead of at the far bottom edge. The GPS
+       readout row goes below the bar so the actions stay in one block and the
+       readings in another. Its row is `auto`, so hiding the row from the View
+       menu collapses the track to zero. Mobile keeps its own bar-at-bottom
+       template (sticky bar, see the mobile block) and drops the readout
+       entirely; fullscreen overlays all three at the bottom. */
     grid-template-areas:
         "video"
         "bar"
+        "readout"
         "chart";
     min-height: 0;
     position: relative;
@@ -73,10 +77,11 @@
    not the primary mechanism. The mobile grid override lives in the mobile
    block below and carries the same guards. */
 body.export-mode .player-wrap:not(:fullscreen):not(.map-expanded) {
-    grid-template-rows: minmax(0, 1fr) auto auto var(--chart-height);
+    grid-template-rows: minmax(0, 1fr) auto auto auto var(--chart-height);
     grid-template-areas:
         "video"
         "bar"
+        "readout"
         "trim"
         "chart";
 }
@@ -87,7 +92,7 @@ body.export-mode .player-wrap:not(:fullscreen):not(.map-expanded) {
     display: none;
 }
 .player-wrap.map-expanded {
-    grid-template-rows: minmax(0, 1fr) auto var(--chart-height);
+    grid-template-rows: minmax(0, 1fr) auto auto var(--chart-height);
     /* Map-pane default via clamp(280, 34%, 480): on a narrow laptop the map
        doesn't eat 38% (at 1280 that's ~380px - video was left with only
        ~614px), and on a wide desktop it doesn't balloon past 700+. min: 220
@@ -96,12 +101,13 @@ body.export-mode .player-wrap:not(:fullscreen):not(.map-expanded) {
         minmax(0, 1fr)
         4px
         minmax(220px, var(--map-width, clamp(280px, 34%, 480px)));
-    /* The map pane matches the video row only: the bar and the timeline
-       keep their full width below both, so the chart does not lose
+    /* The map pane matches the video row only: the bar, the readout and the
+       timeline keep their full width below both, so the chart does not lose
        horizontal resolution to the map column. */
     grid-template-areas:
         "video vmr map"
         "bar bar bar"
+        "readout readout readout"
         "chart chart chart";
 }
 /* In no-gps trips the chart.js canvas is hidden (see chart.css), panel holds
@@ -147,6 +153,9 @@ body.export-mode .player-wrap:not(:fullscreen):not(.map-expanded) {
 .player-wrap .player-bar {
     grid-area: bar;
 }
+.player-wrap .player-readout {
+    grid-area: readout;
+}
 .player-wrap .map-wrap {
     grid-area: map;
     min-width: 0;
@@ -189,6 +198,7 @@ body.export-mode .player-wrap:not(:fullscreen):not(.map-expanded) {
     }
     .player-wrap.map-expanded .video-frame,
     .player-wrap.map-expanded .player-chart,
+    .player-wrap.map-expanded .player-readout,
     .player-wrap.map-expanded .player-col-resize {
         /* Map-expanded on a narrow player = map fills the whole grid. */
         display: none;
@@ -891,6 +901,7 @@ body.export-mode .tile-drag-handle {
     display: none;
 }
 .player-wrap:fullscreen .player-chart,
+.player-wrap:fullscreen .player-readout,
 .player-wrap:fullscreen .player-bar {
     position: absolute;
     left: 0;
@@ -904,12 +915,24 @@ body.export-mode .tile-drag-handle {
     pointer-events: none;
     opacity: 0;
 }
-.player-wrap:fullscreen .player-chart {
-    /* Clear the player-bar. On mobile that is --mobile-bar-h (60px + the iOS
-       safe area, set on .player-wrap in the mobile media query and inherited
-       here); on desktop --player-bar-h, derived from the bar's own control and
-       padding sizes in player-bar.css so the two cannot drift apart. */
+/* Bottom-up overlay stack: bar, then readout, then chart. Each offset is the
+   sum of the heights below it, and every term is the var the corresponding
+   element lays out with - a literal here would silently lose its clearance
+   the next time one of them grows. --readout-stack-h is 0 when the row is
+   hidden (from the View menu or on mobile), which collapses the chart back
+   onto the bar without a separate rule. */
+.player-wrap:fullscreen .player-readout {
+    /* On mobile the bar is --mobile-bar-h (60px + the iOS safe area, set on
+       .player-wrap in the mobile media query and inherited here); on desktop
+       --player-bar-h, derived from the bar's own control and padding sizes in
+       player-bar.css. */
     bottom: var(--mobile-bar-h, var(--player-bar-h, 48px));
+    /* Its own height plus the bar below it - a bare 100% on a ~25px row is a
+       twitch, not a slide-out. */
+    transform: translateY(calc(100% + var(--mobile-bar-h, var(--player-bar-h, 48px))));
+}
+.player-wrap:fullscreen .player-chart {
+    bottom: calc(var(--mobile-bar-h, var(--player-bar-h, 48px)) + var(--readout-stack-h, 0px));
     /* Same height as the in-grid chart row - the overlay must not clip or
        letterbox the panel content. */
     height: var(--chart-height);
@@ -920,6 +943,7 @@ body.export-mode .tile-drag-handle {
     transform: translateY(100%);
 }
 .player-wrap:fullscreen.controls-visible .player-chart,
+.player-wrap:fullscreen.controls-visible .player-readout,
 .player-wrap:fullscreen.controls-visible .player-bar {
     transform: translateY(0);
     opacity: 1;
@@ -957,6 +981,7 @@ body.export-mode .tile-drag-handle {
    over the map keeps them visible). The mobile block restores auto: there
    the split is vertical and the controls belong at the screen bottom. */
 .player-wrap:fullscreen.map-expanded .player-chart,
+.player-wrap:fullscreen.map-expanded .player-readout,
 .player-wrap:fullscreen.map-expanded .player-bar {
     grid-area: video;
 }
@@ -974,6 +999,7 @@ body.export-mode .tile-drag-handle {
 /* Reduced motion: controls still appear/disappear, just without the slide. */
 @media (prefers-reduced-motion: reduce) {
     .player-wrap:fullscreen .player-chart,
+    .player-wrap:fullscreen .player-readout,
     .player-wrap:fullscreen .player-bar {
         transition: none;
     }

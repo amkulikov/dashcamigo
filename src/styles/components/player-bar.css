@@ -346,21 +346,17 @@
     cursor: pointer;
 }
 
-/* Metrics to the right of Play - speed, coordinates, time. */
-.player-metrics {
-    display: inline-flex;
+/* Speed-only readout kept in the bar for phones, where the readout row is
+   absent (player-readout.css). Display:none here, restored by the mobile block
+   at the end of this file - the desktop bar must not carry it, since its width
+   is exactly what the readout row was extracted to give back. */
+.player-bar .player-metrics {
+    display: none;
     align-items: baseline;
     gap: var(--dc-space-1);
     margin-left: var(--dc-space-2);
     font-family: var(--dc-font-mono);
     font-variant-numeric: tabular-nums;
-    /* nowrap, deliberately: overflow-bar.ts decides what to shed by comparing
-       the row's right edges, so a pill that absorbs the pressure by wrapping to
-       a second line is invisible to it - the kebab is never asked to take
-       anything and the bar's `auto` grid row grows instead, eating the video.
-       Keeping the pill on one line pushes that pressure sideways where the
-       measurement can see it; the @container rules below then drop coords and
-       absolute time as the bar narrows. */
     flex-wrap: nowrap;
 }
 .player-metrics .pm-item {
@@ -523,48 +519,14 @@
        and grow the bar. Pin it on a single line. */
     white-space: nowrap;
 }
-.player-metrics .pm-coords,
-.player-metrics .pm-time {
-    color: var(--fg-dim);
-    font-size: var(--dc-text-xs);
-}
-/* Time-lapse clip: the clock runs at playback speed, not real elapsed time.
-   A dotted underline + help cursor flag it as not real-time; the full
-   explanation is in the title tooltip. */
-.player-metrics .pm-time.is-timelapse {
-    text-decoration: underline dotted;
-    text-underline-offset: 2px;
-    cursor: help;
-}
-.player-metrics .pm-sep {
-    color: var(--fg-mute);
-    padding: 0 var(--dc-space-1);
-}
 
-/* Progressive hide of metrics as the bar shrinks. Container query - we
-   react to the bar's width, not the window's: at 1440px with an open map
-   the bar can also be down to 700px, and the pill is the widest thing in it. */
-@container pbar (max-width: 900px) {
-    .player-metrics .pm-coords,
-    .player-metrics .pm-coords + .pm-sep {
-        display: none;
-    }
-}
-@container pbar (max-width: 700px) {
-    .player-metrics .pm-time,
-    .player-metrics .pm-speed + .pm-sep {
-        display: none;
-    }
-}
-
-/* Very narrow bar (<=520) - mobile-player threshold. At this width, even
-   after all the hide rules, the bar still contains: play + time
-   (current/sep/total) + pm-speed + spacer + speed + mute + show-map +
-   capture + loop + view-mode + help + fullscreen + kebab + divider +
-   export. With gap=10 that is ~500+px - export and kebab slide past
-   overflow:hidden and become effectively unreachable. We hide the time
-   section and the metrics entirely - the current time is visible in the
-   chart strip, and pm-speed alone loses meaning without time context. */
+/* Very narrow bar (<=520) - mobile-player threshold. At this width the bar
+   still contains: play + time (current/sep/total) + pm-speed + spacer + speed
+   + mute + show-map + capture + loop + view-mode + help + fullscreen + kebab
+   + divider + export. With gap=10 that is ~500+px - export and kebab slide
+   past overflow:hidden and become effectively unreachable. We hide the time
+   section and the speed pill entirely - the current time is visible in the
+   chart strip, and speed alone loses meaning without time context. */
 @container pbar (max-width: 520px) {
     .player-time,
     .player-time-sep,
@@ -729,9 +691,9 @@
     #player-bar #player-total {
         display: none;
     }
-    /* pm-speed (current speed + unit) is the only metric that stays
-       relevant on mobile. Coordinates and absolute time remain hidden
-       (@container pbar max-width 700 below). */
+    /* The speed pill is the mobile stand-in for the readout row, which is not
+       shown on phones. Specificity bump via #player-bar to beat both the
+       desktop display:none and the @container pbar (max-width: 520) rule. */
     #player-bar .player-time:first-of-type,
     #player-bar .player-metrics,
     #player-bar .player-metrics .pm-speed {
@@ -745,13 +707,6 @@
     }
     #player-bar .player-metrics .pm-speed .pm-value {
         font-size: var(--dc-text-md);
-    }
-    /* On mobile we still hide pm-coords/pm-time - even with metrics
-       visible they do not fit. */
-    #player-bar .player-metrics .pm-coords,
-    #player-bar .player-metrics .pm-coords + .pm-sep,
-    #player-bar .player-metrics .pm-time {
-        display: none;
     }
 }
 

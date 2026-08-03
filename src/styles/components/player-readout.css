@@ -1,0 +1,137 @@
+/* =========================================================================
+   GPS READOUT ROW
+   A thin row between the control bar and the timeline holding what the camera
+   recorded at the playhead. It exists as its own row rather than as a pill
+   inside the player bar: the pill's ~270px were a quarter of the bar's
+   intrinsic width, and since the bar has no horizontal slack at a 1440 desktop
+   with the sidebar open, those pixels were paid for by real controls dropping
+   into the kebab.
+
+   Two groups. The left one changes every frame, the right one changes at most
+   once per file - keeping them apart stops the eye chasing moving digits
+   through static text, and lets the right group be the only thing that
+   truncates when the row runs out of width.
+   ========================================================================= */
+/* Height the row occupies, declared once and read by everything that has to
+   clear it. The content is a single line whose tallest item is the accented
+   speed at --dc-text-base; 24px carries that with the baseline-aligned smaller
+   values hanging off it. The fullscreen overlay stack in viewer.css offsets
+   the chart by this same var, so a taller row cannot silently push the chart
+   over the bar. */
+.player-wrap {
+    --player-readout-content-h: 24px;
+    --player-readout-border: 1px;
+    --player-readout-h: calc(var(--player-readout-content-h) + var(--player-readout-border));
+    /* What the row contributes to the fullscreen stack: its height when it is
+       on screen, zero otherwise. The two overrides below are the only ways it
+       leaves the screen. */
+    --readout-stack-h: var(--player-readout-h);
+}
+.player-wrap:has(.player-readout[hidden]) {
+    --readout-stack-h: 0px;
+}
+
+.player-readout {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--dc-space-4);
+    height: var(--player-readout-h);
+    padding: 0 var(--dc-space-2);
+    background: var(--bg-elev);
+    border-top: var(--player-readout-border) solid var(--border);
+    font-family: var(--dc-font-mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--fg-dim);
+    /* nowrap: the row must never grow a second line - the video row is the
+       flexible one in the grid and would pay for it. Overflow is absorbed by
+       the context group's ellipsis instead. */
+    flex-wrap: nowrap;
+    min-width: 0;
+}
+.player-readout[hidden] {
+    display: none;
+}
+
+.player-readout__live {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--dc-space-2);
+    flex: 0 0 auto;
+}
+
+/* One value plus whatever hangs off it (unit, icon). Baseline-aligned so the
+   accented speed and the smaller values share a text baseline. */
+.player-readout .pm-item {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--dc-space-1);
+}
+.player-readout .pm-sep {
+    color: var(--fg-mute);
+}
+
+/* Speed leads: it is the value glanced at, the rest is looked up. */
+.player-readout .pm-speed .pm-value {
+    font-size: var(--dc-text-base);
+    font-weight: 600;
+    color: var(--fg);
+}
+.player-readout .pm-unit {
+    font-size: var(--dc-text-3xs);
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: var(--dc-tracking-wide);
+    /* "km/h" carries a slash, which is a soft break opportunity - the tail
+       would drop to a second line and grow the row. */
+    white-space: nowrap;
+}
+.player-readout .pm-coords,
+.player-readout .pm-time {
+    font-size: var(--dc-text-xs);
+    /* Coordinates break at the space after the comma and the clock at the
+       colons; either one wrapping inside its own cell grows the row's height
+       without the flex container ever reporting overflow. */
+    white-space: nowrap;
+}
+
+/* Speed doubles as the km/h <-> mph switch. Strip the button chrome so it
+   reads as a value, not a control; the cursor carries the affordance. */
+.player-readout .pm-speed-toggle {
+    appearance: none;
+    background: none;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+.player-readout .pm-speed-toggle:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--dc-radius-xs);
+}
+
+/* Time-lapse clip: the clock runs at playback speed, not real elapsed time.
+   A dotted underline flags it as not real-time; the full explanation is in
+   the title tooltip. */
+.player-readout .pm-time.is-timelapse {
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+    cursor: help;
+}
+
+/* The readout row is a desktop surface. On a phone the video row is already
+   clamped to 16:9 against the viewport height, so every row below it comes
+   straight out of the frame; the bar keeps a speed-only copy there instead
+   (#player-metrics in player-bar.css). Breakpoint matches --dc-bp-mobile plus
+   the short-landscape arm used by the rest of the viewer. */
+@media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {
+    .player-wrap {
+        --readout-stack-h: 0px;
+    }
+    .player-readout {
+        display: none;
+    }
+}
