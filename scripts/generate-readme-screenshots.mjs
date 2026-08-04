@@ -19,7 +19,7 @@
 //                                map expanded with the speed-colored route. Dark.
 //        app-mobile-player.png - a trip open and playing. Light theme, so the
 //                                hero shows both themes at once.
-//        readme-hero.png       - the two shots above composed on a brand-gradient
+//        readme-hero.webp      - the two shots above composed on a brand-gradient
 //                                backdrop; the only image README.md embeds.
 //   4. Writes to public/landing/ (shipped with the site, embedded by the
 //      .landing-hero-shot composite in index.html - desktop thumb + phone,
@@ -654,11 +654,12 @@ async function shotMobilePlayer(browser, fixtureRoot) {
 
 // --- landing WebP variants ---------------------------------------------------
 
-// Downscales a PNG shot and encodes it as WebP inside the same headless
-// Chromium (canvas.toDataURL). Chromium's native encoder replaces both an
-// image library (a dependency for four files) and ffmpeg's libwebp (absent
-// from the slim homebrew build this script otherwise relies on).
-async function pngToWebp(browser, srcPng, outPath, targetWidth, quality = 0.82) {
+// Encodes a PNG buffer as WebP inside the same headless Chromium
+// (canvas.toDataURL), downscaling to targetWidth first (null keeps the source
+// width). Chromium's native encoder replaces both an image library (a
+// dependency for four files) and ffmpeg's libwebp (absent from the slim
+// homebrew build this script otherwise relies on).
+async function pngToWebp(browser, srcPngBuffer, outPath, targetWidth, quality = 0.82) {
     const context = await browser.newContext();
     const page = await context.newPage();
     try {
@@ -668,15 +669,15 @@ async function pngToWebp(browser, srcPng, outPath, targetWidth, quality = 0.82) 
                 img.src = src;
                 await img.decode();
                 const canvas = document.createElement("canvas");
-                canvas.width = width;
-                canvas.height = Math.round((img.naturalHeight * width) / img.naturalWidth);
+                canvas.width = width ?? img.naturalWidth;
+                canvas.height = Math.round((img.naturalHeight * canvas.width) / img.naturalWidth);
                 const ctx = canvas.getContext("2d");
                 ctx.imageSmoothingQuality = "high";
                 ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                 return canvas.toDataURL("image/webp", q);
             },
             {
-                src: `data:image/png;base64,${readFileSync(srcPng).toString("base64")}`,
+                src: `data:image/png;base64,${srcPngBuffer.toString("base64")}`,
                 width: targetWidth,
                 q: quality,
             },
@@ -696,7 +697,7 @@ async function writeLandingVariants(browser, shots) {
     for (const { shot, base, widths } of LANDING_VARIANTS) {
         for (const { width, quality } of widths) {
             const out = join(LANDING_OUT_DIR, `${base}-${width}.webp`);
-            await pngToWebp(browser, shots[shot], out, width, quality);
+            await pngToWebp(browser, readFileSync(shots[shot]), out, width, quality);
             console.log(`wrote ${out}`);
         }
     }
@@ -720,7 +721,7 @@ const BRAND = {
 async function composeHero(browser, desktopPng, mobilePng) {
     const b64 = (path) => readFileSync(path).toString("base64");
     // 1600x780 logical, DSF 1.25 -> 2000x975 output: ~2.4x of the ~830px
-    // GitHub README column, crisp on retina without a multi-MB PNG.
+    // GitHub README column, crisp on retina without a multi-MB file.
     const html = `<!doctype html>
 <html><head><meta charset="utf-8"><style>
   * { box-sizing: border-box; margin: 0; }
@@ -765,9 +766,12 @@ async function composeHero(browser, desktopPng, mobilePng) {
     await page.waitForFunction(() =>
         Array.from(document.images).every((img) => img.complete && img.naturalWidth > 0),
     );
-    const out = join(OUT_DIR, "readme-hero.png");
-    await page.screenshot({ path: out, fullPage: false });
+    const heroPng = await page.screenshot({ fullPage: false });
     await context.close();
+    // No downscale (null width): the 2000px output is the retina budget picked
+    // above; WebP alone brings the file under ~150 KB where PNG was ~1 MB.
+    const out = join(OUT_DIR, "readme-hero.webp");
+    await pngToWebp(browser, heroPng, out, null, 0.9);
     return out;
 }
 

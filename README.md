@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://dashcamigo.app">
-    <img src="docs/screenshots/readme-hero.png" alt="dashcamigo on desktop (dark theme) and on a phone (light theme): a two-camera trip with front and rear video side by side, a speed and G-force chart, and the speed-colored route on a map">
+    <img src="docs/screenshots/readme-hero.webp" alt="dashcamigo on desktop (dark theme) and on a phone (light theme): a two-camera trip with front and rear video side by side, a speed and G-force chart, and the speed-colored route on a map">
   </a>
 </p>
 
