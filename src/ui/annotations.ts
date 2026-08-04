@@ -184,6 +184,9 @@ export function setTripMeta(trip: Trip, patch: TripMetaPatch): void {
     base.updatedAt = Math.max(Date.now(), (anchorWatermark.get(base.anchor.fileIdentityKey) ?? 0) + 1);
     base.deleted = !base.name && !base.note && base.isFavorite !== true;
     persistRecord(base);
+    // A clear is not a moment to talk about keeping annotations - only a
+    // record the user wants to keep goes to the user-edit hook.
+    if (!base.deleted) userAnnotationHook?.(base);
     // Clearing the card means "this trip has no annotation" - so the leftovers
     // it was hiding go with it, or the next render uncovers one of them.
     // Anything short of a clear leaves them alone: they still belong to the
@@ -230,6 +233,7 @@ export function addMarker(trip: Trip, utcMs: number, text: string): MarkerAnnota
     };
     captureProvisionalAnchor(trip, record, utcMs);
     persistRecord(record);
+    userAnnotationHook?.(record);
     return record;
 }
 
@@ -368,7 +372,9 @@ function indexCandidatesByIdentity(): Map<string, LocatedCandidate> {
 export function updateMarkerText(id: string, text: string): void {
     const marker = markersById.get(id);
     if (!marker) return;
-    persistRecord({ ...marker, text: text.trim(), updatedAt: Date.now() });
+    const updated = { ...marker, text: text.trim(), updatedAt: Date.now() };
+    persistRecord(updated);
+    userAnnotationHook?.(updated);
 }
 
 /** Tombstones a marker - the record survives for merge, the pin disappears. */
@@ -393,6 +399,29 @@ let annotationsChangedHook: ((folderId: string) => void) | null = null;
 /** Registers the after-change hook (called with the record's folderId). */
 export function registerAnnotationsChangedHook(callback: (folderId: string) => void): void {
     annotationsChangedHook = callback;
+}
+
+// Fired ONLY by the user-invoked edit paths (setTripMeta, addMarker,
+// updateMarkerText) - never by re-keying, re-stamping or merge bookkeeping,
+// which replay records the user wrote some other time. The notes-file nudge
+// hangs off this: it must mean "the user just wrote something they care
+// about", or it fires on a folder open. Registered hook, not an import - the
+// nudge lives in the UI layer above this module.
+let userAnnotationHook: ((record: AnnotationRecord) => void) | null = null;
+
+/** Registers the after-user-edit hook. */
+export function registerUserAnnotationHook(callback: (record: AnnotationRecord) => void): void {
+    userAnnotationHook = callback;
+}
+
+/** RememberedFolder id this trip's next annotation would resolve to: the id
+ *  already carried by its live annotation, else the id of the remembered
+ *  folder its first file came out of, else "". */
+export function tripFolderId(trip: Trip): string {
+    const existing = tripMetaFor(trip);
+    if (existing?.folderId) return existing.folderId;
+    const first = tripAllCandidates(trip)[0];
+    return first ? folderIdForFileKey(candidateIdentityKey(first)) : "";
 }
 
 /** Every record of a folder, tombstones included - the sidecar file must

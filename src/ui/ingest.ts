@@ -46,12 +46,14 @@ import type { TzSample, VideoCandidate } from "../trips.js";
 import { isMatroskaName, isTransportStreamName } from "../video-format-names.js";
 
 import { registerIngestSource } from "./folder-sources.js";
-import { maybeRunIngestTour } from "./onboarding.js";
+import { mergeNotesFilesFromBatch } from "./annotations-sidecar.js";
+import { maybeRunIngestTour, maybeRunSourcesTour } from "./onboarding.js";
 import { maybeShowPostIngestToast } from "./pwa-install.js";
 import {
     hideIngestOverlay,
     hideIngestProgress,
     setIngestCancelLabel,
+    setIngestFirstLoadHint,
     setIngestProgress,
     setIngestStage,
     showIngestOverlay,
@@ -252,6 +254,12 @@ async function ingestFilesInternal(
         resumeLazyHydrationIfPending();
         return;
     }
+
+    // The folder may carry its own notes file - merge it read-only right away,
+    // whatever path the files came in by. Fire-and-forget: annotations index
+    // synchronously ahead of the first card render in the common case, and a
+    // late merge repaints via renderTrips on its own.
+    void mergeNotesFilesFromBatch(kept, origin?.folderId ?? "");
     vfiles = kept;
 
     // Reset the bad-MP4 counter - it is per-ingest. Without resetting, repeated drops would keep growing
@@ -447,9 +455,11 @@ async function ingestFilesInternal(
     // rebuilt from IndexedDB and only genuine misses go through indexing
     // below. Identity-keyed, so the FSA folder restore, a classic re-pick
     // (Firefox/Safari) and DnD all reuse the same entries.
-    const { cachedCandidates, misses: videosToIndex } = await mark("cacheLookup", () =>
-        partitionByIndexCache(newVideos),
-    );
+    const {
+        cachedCandidates,
+        misses: videosToIndex,
+        cacheAvailable,
+    } = await mark("cacheLookup", () => partitionByIndexCache(newVideos));
     if (cachedCandidates.length > 0) {
         const cachedRecords = cachedCandidates.flatMap((c) => c.records);
         if (cachedRecords.length > 0) {
@@ -556,6 +566,16 @@ async function ingestFilesInternal(
         // case the signal is not aborted and runLazyHydration owns its own fill.
         if (signal.aborted) resumeLazyHydrationIfPending();
         return;
+    }
+
+    // First-open reassurance: a big batch the cache had NOTHING for is the one
+    // wait that feels broken - say it is normal and that the cache makes the
+    // next open fast. Any hit at all means the user has seen a fast open (or
+    // is about to); an unavailable cache would make the promise a lie; a small
+    // batch is over before the line is worth reading.
+    const FIRST_LOAD_HINT_MIN_FILES = 30;
+    if (cacheAvailable && cachedCandidates.length === 0 && videosToIndex.length >= FIRST_LOAD_HINT_MIN_FILES) {
+        setIngestFirstLoadHint(true);
     }
 
     // Progressive indexing: add VideoCandidate to the pool on the fly and rebuild trips every PARTIAL_BATCH_SIZE files.
@@ -1188,8 +1208,13 @@ async function ingestFilesInternal(
 
     // Onboarding tour after the first successful ingest - the peak-value moment,
     // right after the user has just seen their trip. maybeRunIngestTour is
-    // self-guarded (localStorage flag + single-run).
-    if (state.trips.length > 0) maybeRunIngestTour();
+    // self-guarded (localStorage flag + single-run). The sources tour queues
+    // behind it: it fires only once the ingest tour is done AND an
+    // unremembered folder row is on screen (both checked inside).
+    if (state.trips.length > 0) {
+        maybeRunIngestTour();
+        maybeRunSourcesTour();
+    }
 
     // Install toast - one-shot after the first successful ingest (peak-value
     // moment: the user has just seen their trip and is most receptive to

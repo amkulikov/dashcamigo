@@ -35,6 +35,7 @@ import type { OnboardTourId } from "../../src/ui/onboarding.js";
 // escape the suppression that keeps its overlay from blocking unrelated specs.
 export const ONBOARD_TOUR_IDS = Object.keys({
     ingest: true,
+    sources: true,
     player: true,
     export: true,
     multichannel: true,

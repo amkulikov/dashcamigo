@@ -142,6 +142,16 @@
     line-height: var(--dc-leading-snug);
 }
 
+.ingest-overlay-hint {
+    font-size: var(--dc-text-xs);
+    color: var(--fg-mute);
+    max-width: 34ch;
+    margin: 0 auto var(--dc-space-3);
+}
+.ingest-overlay-hint[hidden] {
+    display: none;
+}
+
 .ingest-overlay-queue {
     font-size: var(--dc-text-xs);
     color: var(--accent);

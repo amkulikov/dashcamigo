@@ -39,6 +39,9 @@ export function showIngestOverlay(): void {
     preIngestOwners = 0;
     dom.ingestOverlay.hidden = false;
     dom.ingestOverlayCancel.disabled = false;
+    // The hint belongs to one ingest's cache verdict - a queued follow-up drop
+    // decides for itself.
+    setIngestFirstLoadHint(false);
     cancelLabelKey = "ingestOverlay.cancel";
     dom.ingestOverlayCancel.textContent = t(cancelLabelKey);
 }
@@ -106,7 +109,19 @@ export function setIngestCancelLabel(continueWithoutGps: boolean): void {
 export function hideIngestOverlay(): void {
     dom.ingestOverlay.hidden = true;
     dom.ingestOverlayStatus.textContent = "";
+    dom.ingestOverlayHint.hidden = true;
     dom.ingestOverlayQueue.hidden = true;
+}
+
+/**
+ * Shows/hides the "first open is the slowest" reassurance under the stage
+ * line. Shown by ingest.ts only for a large batch the index cache had nothing
+ * for - the one case where the wait is real and the promise of a faster next
+ * time is true.
+ */
+export function setIngestFirstLoadHint(visible: boolean): void {
+    dom.ingestOverlayHint.hidden = !visible;
+    dom.ingestOverlayHint.textContent = visible ? t("ingestOverlay.firstLoadHint") : "";
 }
 
 // === UX-02: progress bar above the header =============================

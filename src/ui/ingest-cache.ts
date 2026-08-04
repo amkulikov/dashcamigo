@@ -51,6 +51,9 @@ export interface IndexCachePartition {
     cachedCandidates: VideoCandidate[];
     /** Files that need the full byte pipeline. */
     misses: ClassifiedFile[];
+    /** False when the cache store itself failed (private mode, storage off) -
+     *  the "next time is faster" promise would be a lie then. */
+    cacheAvailable: boolean;
 }
 
 function cacheKeyOf(cf: ClassifiedFile): string {
@@ -63,7 +66,7 @@ function cacheKeyOf(cf: ClassifiedFile): string {
  * pipeline must never fail because the cache did.
  */
 export async function partitionByIndexCache(videos: ClassifiedFile[]): Promise<IndexCachePartition> {
-    if (videos.length === 0) return { cachedCandidates: [], misses: videos };
+    if (videos.length === 0) return { cachedCandidates: [], misses: videos, cacheAvailable: true };
     let entries: Map<string, CachedFileIndex>;
     try {
         entries = await getIndexCacheEntries(videos.map(cacheKeyOf));
@@ -71,7 +74,7 @@ export async function partitionByIndexCache(videos: ClassifiedFile[]): Promise<I
         log.warn("index cache unavailable, running full pipeline", {
             err: err instanceof Error ? err.message : String(err),
         });
-        return { cachedCandidates: [], misses: videos };
+        return { cachedCandidates: [], misses: videos, cacheAvailable: false };
     }
     const cachedCandidates: VideoCandidate[] = [];
     const misses: ClassifiedFile[] = [];
@@ -102,7 +105,7 @@ export async function partitionByIndexCache(videos: ClassifiedFile[]): Promise<I
         // actually opens. Fire-and-forget, off the ingest critical path.
         void touchIndexCacheEntries(hitKeys).catch(() => {});
     }
-    return { cachedCandidates, misses };
+    return { cachedCandidates, misses, cacheAvailable: true };
 }
 
 /**

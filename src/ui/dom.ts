@@ -283,6 +283,7 @@ export const dom = {
     dropOverlay: $id<HTMLElement>("drop-overlay"),
     ingestOverlay: $id<HTMLElement>("ingest-overlay"),
     ingestOverlayStatus: $id<HTMLElement>("ingest-overlay-status"),
+    ingestOverlayHint: $id<HTMLElement>("ingest-overlay-hint"),
     ingestOverlayQueue: $id<HTMLElement>("ingest-overlay-queue"),
     ingestOverlayCancel: $id<HTMLButtonElement>("ingest-overlay-cancel"),
     // dom.player - always the currently active <video> (effectiveMasterChannel:

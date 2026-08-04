@@ -98,6 +98,13 @@
     color: var(--fg-dim);
 }
 
+/* Where-the-data-lives line under the editor fields - informative, quiet. */
+.annotation-storage-hint {
+    margin: 0 0 var(--dc-space-3);
+    font-size: var(--dc-text-xs);
+    color: var(--fg-mute);
+}
+
 .trip-meta-field input,
 .trip-meta-field textarea {
     font: inherit;

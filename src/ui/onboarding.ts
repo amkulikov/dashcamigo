@@ -1,7 +1,9 @@
 // In-house onboarding tours. A guided "spotlight + coachmark" overlay that
-// introduces the key controls at four moments in the flow:
+// introduces the key controls at key moments in the flow:
 //
 //   - "ingest"       : after the very first ingest, when the trip list appears.
+//   - "sources"      : after a later ingest (once the ingest tour is done),
+//                      when the sidebar offers to remember the folder.
 //   - "player"       : the first time a trip is opened (before playback starts).
 //   - "export"       : the first time export mode is opened.
 //   - "multichannel" : the first time a multi-camera trip is opened (after the
@@ -43,7 +45,7 @@ import { activateModal, deactivateModal, isAnyModalOpen } from "./modal-helper.j
 
 const log = createLogger("onboarding");
 
-export type OnboardTourId = "ingest" | "player" | "export" | "multichannel";
+export type OnboardTourId = "ingest" | "sources" | "player" | "export" | "multichannel";
 
 interface OnboardStep {
     /**
@@ -128,6 +130,20 @@ const TOURS: Record<OnboardTourId, OnboardTour> = {
                 anchors: ["#feedback-btn", "#topbar-overflow"],
                 titleKey: "onboard.ingest.feedback.title",
                 bodyKey: "onboard.ingest.feedback.body",
+            },
+        ],
+    },
+    sources: {
+        id: "sources",
+        delayMs: 650,
+        steps: [
+            {
+                // The Remember button of a source row; the row list as the
+                // fallback if a re-render swapped the button away between
+                // scheduling and firing.
+                anchors: [".folder-source__remember", "#folder-sources"],
+                titleKey: "onboard.sources.remember.title",
+                bodyKey: "onboard.sources.remember.body",
             },
         ],
     },
@@ -691,6 +707,20 @@ function scheduleTour(id: OnboardTourId, onFinish?: () => void): void {
 export function maybeRunIngestTour(): void {
     if (active || isTourDone("ingest")) return;
     scheduleTour("ingest");
+}
+
+/**
+ * Fired after every successful ingest, together with maybeRunIngestTour. It
+ * waits its turn: nothing shows until the ingest tour is done/skipped, so the
+ * two never compete for the same moment - this one takes the NEXT ingest.
+ * The visible Remember button is the whole precondition: no button (ad-hoc
+ * drop, a browser without the folder picker, everything already remembered)
+ * means nothing to teach.
+ */
+export function maybeRunSourcesTour(): void {
+    if (active || isTourDone("sources") || !isTourDone("ingest")) return;
+    if (!visibleRect(".folder-source__remember")) return;
+    scheduleTour("sources");
 }
 
 /** Fired when export mode is opened for the first time. */

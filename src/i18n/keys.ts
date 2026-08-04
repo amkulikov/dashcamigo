@@ -118,6 +118,11 @@ export type I18nKey =
     | "sidecar.enabled"
     | "sidecar.notOurFile"
     | "sidecar.writeFailed"
+    // where-annotations-live hint (editor modals) + the one-shot notes-file nudge
+    | "annotations.storageHint"
+    | "annotations.storageHintFile"
+    | "notesNudge.message"
+    | "notesNudge.action"
     | "landing.caps.a.title"
     | "landing.caps.a.body"
     | "landing.caps.b.title"
@@ -737,6 +742,7 @@ export type I18nKey =
     // Pre-ingest umbrella: shown the instant the user commits to a folder
     // (picker click / folder drop) and held while the browser enumerates the
     // directory - before the real ingest stages below begin.
+    | "ingestOverlay.firstLoadHint"
     | "ingestOverlay.stage.preparing"
     | "ingestOverlay.stage.classifying"
     | "ingestOverlay.stage.parsingLogs"
@@ -1154,6 +1160,8 @@ export type I18nKey =
     | "onboard.ingest.privacy.body"
     | "onboard.ingest.feedback.title"
     | "onboard.ingest.feedback.body"
+    | "onboard.sources.remember.title"
+    | "onboard.sources.remember.body"
     | "onboard.player.timeline.title"
     | "onboard.player.timeline.body"
     | "onboard.player.playback.title"

@@ -25,7 +25,9 @@
 // would be excluded from this machine's writes and the two profiles would
 // endlessly erase each other's notes from the file.
 
+import type { I18nKey } from "../i18n/keys.js";
 import { createLogger } from "../log.js";
+import type { VendorFile } from "../parsers/types.js";
 import {
     annotationContentEqual,
     buildSidecarPayload,
@@ -54,6 +56,7 @@ const log = createLogger("annotations-sidecar");
 // by hand still reaches it - extension appending is implementation-defined -
 // but that is a deliberate act on a Save-As dialog, not a slip.
 const SIDECAR_SUGGESTED_NAME = "notes.dashcamigo";
+const SIDECAR_EXTENSION = ".dashcamigo";
 const SIDECAR_FILE_TYPE: FilePickerAcceptType = {
     description: "dashcamigo notes",
     accept: { "application/json": [".dashcamigo"] },
@@ -97,6 +100,52 @@ export function initAnnotationsSidecar(): void {
     });
 }
 
+/**
+ * Read-only merge of the notes files that arrived INSIDE an ingest batch. The
+ * file travels with the recordings, so every open path sees it as a plain
+ * File - the classic picker, drag-and-drop, a browser without the folder
+ * pickers, a fresh profile. Nothing here writes back or binds a handle: the
+ * write side stays behind an explicit or auto attach, so this cannot touch
+ * the file on disk. folderId from the file is restamped to the batch's local
+ * id ("" for an unremembered folder - a later Remember re-keys via rebind).
+ */
+export async function mergeNotesFilesFromBatch(files: VendorFile[], folderId: string): Promise<void> {
+    for (const vendorFile of files) {
+        if (!vendorFile.file.name.toLowerCase().endsWith(SIDECAR_EXTENSION)) continue;
+        let parsed: AnnotationRecord[] | null;
+        try {
+            parsed = parseSidecarPayload(await vendorFile.file.text());
+        } catch (err) {
+            log.warn("notes file in batch unreadable", { err: err instanceof Error ? err.message : String(err) });
+            continue;
+        }
+        if (parsed === null) {
+            // Wrong contents under our extension - not worth a toast on every
+            // folder open; the file is simply not merged.
+            log.warn("notes-like file in batch is not ours, skipped", { name: vendorFile.file.name });
+            continue;
+        }
+        const restamped = parsed.map((record) => (record.folderId === folderId ? record : { ...record, folderId }));
+        const changed = applyMergedRecords(restamped);
+        if (changed > 0) {
+            log.info("notes file merged from batch", { name: vendorFile.file.name, records: changed });
+            renderTrips();
+            refreshTimelineMarkers();
+        }
+    }
+}
+
+/**
+ * Where this folder's annotations actually land right now, as the editor
+ * modals' hint key: browser-only, or browser + the connected notes file. ""
+ * (no remembered folder) is always browser-only.
+ */
+export async function annotationStorageHintKey(folderId: string): Promise<I18nKey> {
+    if (!folderId) return "annotations.storageHint";
+    const folder = await getFolder(folderId).catch(() => null);
+    return folder?.sidecarHandle ? "annotations.storageHintFile" : "annotations.storageHint";
+}
+
 function onFolderOpened(folder: RememberedFolder): void {
     void (async () => {
         // The grant on a stored file handle is session-scoped, so after a
@@ -114,10 +163,55 @@ function onFolderOpened(folder: RememberedFolder): void {
         } catch {
             // No DB - session-only mode, nothing to rebind against.
         }
+        if (!folder.sidecarHandle) {
+            // No file bound in THIS profile, but the folder itself may carry
+            // one (written by another machine/profile - that is the whole
+            // point of the file living next to the recordings). Adopt it
+            // without a picker; attachSidecar merges on success.
+            await autoAdoptSidecar(folder);
+            return;
+        }
         await mergeFromSidecar(folder);
     })().catch((err: unknown) => {
         log.warn("sidecar open-merge failed", { err: err instanceof Error ? err.message : String(err) });
     });
+}
+
+/**
+ * Scans the folder ROOT (where the create path puts the file) for exactly one
+ * notes file and attaches it as if the user had picked it. Zero found: the
+ * common case, silence. Two or more: no honest guess, leave it to the manual
+ * menu. A file that does not parse as ours is skipped with a log only - the
+ * every-open cadence of this path would turn attachSidecar's warning toast
+ * into a nag.
+ */
+async function autoAdoptSidecar(folder: RememberedFolder): Promise<void> {
+    let found: FileSystemFileHandle | null = null;
+    try {
+        for await (const child of folder.handle.values()) {
+            if (child.kind !== "file" || !child.name.toLowerCase().endsWith(SIDECAR_EXTENSION)) continue;
+            if (found) {
+                log.warn("multiple notes files in folder root, not auto-attaching", { folder: folder.label });
+                return;
+            }
+            found = child;
+        }
+    } catch (err) {
+        // Folder unreadable right now (unplugged mid-open, permission lapsed).
+        log.warn("notes auto-adopt scan failed", { err: err instanceof Error ? err.message : String(err) });
+        return;
+    }
+    if (!found) return;
+    try {
+        if (parseSidecarPayload(await (await found.getFile()).text()) === null) {
+            log.warn("notes-like file in folder root is not ours, not auto-attaching", { name: found.name });
+            return;
+        }
+    } catch (err) {
+        log.warn("notes auto-adopt read failed", { err: err instanceof Error ? err.message : String(err) });
+        return;
+    }
+    await attachSidecar(folder, found);
 }
 
 function onAnnotationsChanged(folderId: string): void {

@@ -2013,6 +2013,9 @@
                     <span data-i18n="tripMeta.noteLabel">Note</span>
                     <textarea id="trip-meta-note" rows="4" maxlength="2000"></textarea>
                 </label>
+                <!-- Where the annotation lands; swapped per open to the
+                     notes-file variant when the folder has one connected. -->
+                <p class="annotation-storage-hint" id="trip-meta-storage-hint" data-i18n="annotations.storageHint">Saved in this browser on this device.</p>
                 <div class="export-modal-actions">
                     <button id="trip-meta-cancel" class="dc-btn dc-btn--ghost" type="button" data-i18n="tripMeta.cancel">Cancel</button>
                     <button id="trip-meta-save" class="dc-btn dc-btn--primary" type="button" data-i18n="tripMeta.save">Save</button>
@@ -2031,6 +2034,7 @@
                     <span data-i18n="markerModal.textLabel">Text</span>
                     <input id="marker-modal-text" type="text" maxlength="200" autocomplete="off">
                 </label>
+                <p class="annotation-storage-hint" id="marker-modal-storage-hint" data-i18n="annotations.storageHint">Saved in this browser on this device.</p>
                 <div class="export-modal-actions">
                     <button id="marker-modal-delete" class="dc-btn dc-btn--ghost marker-modal-delete" type="button" data-i18n="markerModal.delete">Delete</button>
                     <button id="marker-modal-cancel" class="dc-btn dc-btn--ghost" type="button" data-i18n="markerModal.cancel">Cancel</button>
@@ -2192,6 +2196,9 @@
             <div class="ingest-overlay-title" id="ingest-overlay-title"
                  data-i18n="ingestOverlay.title">Sorting through files</div>
             <div class="ingest-overlay-status" id="ingest-overlay-status" aria-live="polite"></div>
+            <!-- First-open reassurance: shown only on a large uncached batch,
+                 set from ingest.ts once the cache lookup comes back empty. -->
+            <div class="ingest-overlay-hint" id="ingest-overlay-hint" hidden></div>
             <div class="ingest-overlay-queue" id="ingest-overlay-queue" hidden></div>
             <div class="ingest-overlay-actions">
                 <button id="ingest-overlay-cancel" class="dc-btn dc-btn--secondary" type="button"

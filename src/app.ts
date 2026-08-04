@@ -59,6 +59,7 @@ import { initTimelineMarkers, refreshTimelineMarkers } from "./ui/timeline-marke
 import { initMarkerListModal } from "./ui/marker-list-modal.js";
 import { initMarkerModal } from "./ui/marker-modal.js";
 import { initAnnotationsSidecar } from "./ui/annotations-sidecar.js";
+import { initNotesNudge } from "./ui/notes-nudge.js";
 import { registerTimelineOverlaySync } from "./ui/chart.js";
 import { initIngestOverlay } from "./ui/ingest-overlay.js";
 import { initNotifications } from "./ui/notifications.js";
@@ -478,6 +479,8 @@ registerMarkersRestampedHook(refreshTimelineMarkers);
 // Notes-file replica of the annotations inside the user's folder (Chromium):
 // connected from the folder row, then auto-synced.
 initAnnotationsSidecar();
+// One-shot offer of that notes file at the user's first annotation.
+initNotesNudge();
 initSidebar({
     onEditTripMeta: openTripMetaModal,
     onPlayFrame: async (tripIdx, frameIdx) => {

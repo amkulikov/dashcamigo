@@ -127,6 +127,52 @@ export function registerNotesConnector(connector: NotesConnector): void {
     notesConnector = connector;
 }
 
+/** The registered notes-file actions, or null on browsers without the
+ *  pickers (the connector never registers there). */
+export function getNotesConnector(): NotesConnector | null {
+    return notesConnector;
+}
+
+/** The session source holding this file, live handles only - or, with null,
+ *  the SOLE live-handle source of the session (for records that carry no file
+ *  anchor; with several sources there is no honest guess, so none). */
+function liveSourceFor(identityKey: string | null): FolderSource | null {
+    const live = [...sourcesByKey.values()].filter((source) => source.handle !== null);
+    if (identityKey === null) return live.length === 1 ? live[0]! : null;
+    return live.find((source) => source.identityKeys.has(identityKey)) ?? null;
+}
+
+/** True when a folder with a live handle backs this file (or, with null, when
+ *  exactly one such folder is open) - the precondition for offering to keep a
+ *  notes file next to the recordings. */
+export function hasLiveSource(identityKey: string | null): boolean {
+    return liveSourceFor(identityKey) !== null;
+}
+
+/**
+ * Resolves the live source for the key (see liveSourceFor) to its
+ * RememberedFolder, creating the record the same way the row's Remember
+ * button does when the folder is not remembered yet. Returns null when there
+ * is no live source or the store refused.
+ */
+export async function rememberLiveSource(identityKey: string | null): Promise<RememberedFolder | null> {
+    const source = liveSourceFor(identityKey);
+    if (!source?.handle) return null;
+    if (source.folderId) return (await getFolder(source.folderId).catch(() => null)) ?? null;
+    try {
+        const record = await rememberFolder(source.handle);
+        bindSourceToFolder(source.handle, record);
+        // Adopts annotations made before this point (they carry folderId "")
+        // and merges a notes file the folder may already hold.
+        notifyFolderOpened(record);
+        refreshRememberedFolders();
+        return record;
+    } catch (err) {
+        log.warn("rememberFolder failed", { err: err instanceof Error ? err.message : String(err) });
+        return null;
+    }
+}
+
 // Loads a remembered folder into the session (permission re-prompt included).
 // Registered by persistent-folders.ts, which owns the open flow - a direct
 // import would cycle, it already imports this module.
