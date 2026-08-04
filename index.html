@@ -33,7 +33,10 @@
              load schedules a reload on a backoff ladder. The budget lives in
              sessionStorage ("dc-asset-retry"), is spent across reloads and
              cleared by dc:ready; a boot that succeeds anyway cancels the
-             pending reload. The app-level twin for lazy chunks is the
+             pending reload. While a reload is pending, #dc-retry-note says the
+             app is updating - ru/en literals, not i18n keys: the i18n bundle
+             is exactly what failed to load (same pattern as the SW offline
+             fallback). The app-level twin for lazy chunks is the
              "vite:preloadError" listener in app.ts - key and cap are
              hand-mirrored there.
          The inline script's CSP hash is computed at build time by the
@@ -69,6 +72,20 @@
       @media (prefers-reduced-motion: reduce) {
         #dc-loader::before { animation: none; }
       }
+      /* Line shown while an asset-retry reload is pending (the backoff ladder
+         in dc-bootstrap below): a silent auto-reload reads as a glitch, a line
+         of text reads as an update in progress. Sits above the splash
+         (z-index 9999) and stays legible over the landing if the splash
+         watchdog has already revealed it. */
+      #dc-retry-note {
+        position: fixed; left: 0; right: 0; bottom: 12%; z-index: 10000;
+        text-align: center; font: 14px/1.4 system-ui, -apple-system, sans-serif;
+        color: #bdbdbd;
+      }
+      html.dc-light #dc-retry-note { color: #57534e; }
+      @media (prefers-color-scheme: light) {
+        html:not(.dc-light):not(.dc-dark) #dc-retry-note { color: #57534e; }
+      }
       /* Landing CTA loading state. The landing is prerendered static HTML and
          paints before the entry bundle hydrates; on a slow connection the 15s
          splash watchdog can reveal it while app.ts is still downloading, so the
@@ -91,7 +108,7 @@
     </style>
     <script id="dc-bootstrap">
 (function(){try{var t=localStorage.getItem("dc-theme");if(t==="light")document.documentElement.classList.add("dc-light");else if(t==="dark")document.documentElement.classList.add("dc-dark")}catch(e){}var K=__DC_LANGS__,p=(location.pathname.split("/").filter(function(s){return s.length>0})[0]||"");if(p&&K.indexOf(p)!==-1){document.documentElement.lang=p}else{var s=null;try{s=localStorage.getItem("dashcamigo:lang")}catch(e){}var n=(navigator.language||"").toLowerCase().split("-")[0],l=(s&&K.indexOf(s)!==-1)?s:(K.indexOf(n)!==-1?n:"en");if(!p){location.replace("/"+l+"/"+location.search+location.hash);return}document.documentElement.lang=l}document.documentElement.classList.add("is-loading");function h(){document.documentElement.classList.remove("is-loading");setTimeout(function(){var el=document.getElementById("dc-loader");if(el)el.remove()},500)}addEventListener("dc:ready",h,{once:true});setTimeout(h,15000)})();
-(function(){var K="dc-asset-retry",D=[4000,15000,45000,90000],armed=false,booted=false,timer=0;function go(){location.reload()}addEventListener("dc:ready",function(){booted=true;try{sessionStorage.removeItem(K)}catch(e){}if(timer)clearTimeout(timer);removeEventListener("online",go)},{once:true});addEventListener("error",function(ev){var el=ev.target;if(armed||booted||!el||!el.tagName)return;var tag=el.tagName;if(tag!=="SCRIPT"&&tag!=="LINK")return;var u=el.src||el.href||"";if(typeof u!=="string"||u.indexOf(location.origin+"/assets/")!==0)return;var n;try{n=parseInt(sessionStorage.getItem(K)||"0",10)||0;if(n>=D.length)return;sessionStorage.setItem(K,String(n+1))}catch(e){return}armed=true;if(navigator.onLine===false){addEventListener("online",go,{once:true})}else{timer=setTimeout(go,D[n])}},true)})();
+(function(){var K="dc-asset-retry",D=[4000,15000,45000,90000],armed=false,booted=false,timer=0;function go(){location.reload()}function note(){if(document.getElementById("dc-retry-note"))return;var d=document.createElement("div");d.id="dc-retry-note";d.textContent=(document.documentElement.lang||"").indexOf("ru")===0?"Обновляем приложение…":"Updating the app…";(document.body||document.documentElement).appendChild(d)}addEventListener("dc:ready",function(){booted=true;try{sessionStorage.removeItem(K)}catch(e){}if(timer)clearTimeout(timer);removeEventListener("online",go);var d=document.getElementById("dc-retry-note");if(d)d.remove()},{once:true});addEventListener("error",function(ev){var el=ev.target;if(armed||booted||!el||!el.tagName)return;var tag=el.tagName;if(tag!=="SCRIPT"&&tag!=="LINK")return;var u=el.src||el.href||"";if(typeof u!=="string"||u.indexOf(location.origin+"/assets/")!==0)return;var n;try{n=parseInt(sessionStorage.getItem(K)||"0",10)||0;if(n>=D.length)return;sessionStorage.setItem(K,String(n+1))}catch(e){return}armed=true;note();if(navigator.onLine===false){addEventListener("online",go,{once:true})}else{timer=setTimeout(go,D[n])}},true)})();
     </script>
 
     <!-- Description for SERPs. The literal in HTML is English (baseline for

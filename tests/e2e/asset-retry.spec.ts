@@ -29,6 +29,10 @@ test("dead shell reloads itself and boots once the assets come back", async ({ p
     expect(Number(spentAttempts), "the retry budget was spent").toBeGreaterThanOrEqual(1);
     expect(blockedRequests, "the fault was actually injected").toBeGreaterThan(0);
 
+    // A pending reload announces itself instead of firing silently; the text
+    // asserts the lang wiring too (en page -> the English literal).
+    await expect(page.locator("#dc-retry-note")).toHaveText("Updating the app…");
+
     await page.unroute(HASHED_JS);
 
     // The first retry fires ~4s in; after the reload the entry executes and
@@ -37,6 +41,8 @@ test("dead shell reloads itself and boots once the assets come back", async ({ p
     // second-attempt run (15s backoff) on a slow runner.
     await expect(page.locator(".landing-cta").first()).not.toHaveClass(/is-pending/, { timeout: 30_000 });
 
-    // A successful boot returns the budget (dc:ready clears the counter).
+    // A successful boot returns the budget (dc:ready clears the counter) and
+    // takes the updating note down with it.
     await expect.poll(() => page.evaluate(() => sessionStorage.getItem("dc-asset-retry"))).toBe(null);
+    await expect(page.locator("#dc-retry-note")).toHaveCount(0);
 });
