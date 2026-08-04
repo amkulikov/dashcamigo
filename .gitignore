@@ -38,6 +38,14 @@ Thumbs.db
 /tests/playwright-report/
 /playwright/.cache/
 
+# Backstop for the cwd-relative default: a `playwright test` invoked WITHOUT
+# --config loads no config at all (there is no root playwright.config.ts), so
+# it treats the repo root as rootDir and dumps artifacts here. Such a run is a
+# mistake - it has no baseURL and no webServer, so every spec fails - but the
+# droppings should not show up as untracked noise.
+/test-results/
+/playwright-report/
+
 # e2e shot() review artifacts: PNGs of live video/map, non-deterministic by
 # frame timing - a committed diff is noise, not signal. Local/CI review aids
 # only (CI uploads them in the playwright-report on failure). Deterministic
