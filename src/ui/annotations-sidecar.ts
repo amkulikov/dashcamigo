@@ -62,17 +62,16 @@ const WRITE_DEBOUNCE_MS = 1500;
 
 const writeTimers = new Map<string, number>();
 
-// Folder ids whose sidecar file this session has actually READ. A write is a
-// full replace, so it must never run before this side has seen what the file
-// holds - after a browser restart the stored handle is back to "prompt" and
-// the open-time read fails, while the next annotation edit re-arms the grant
-// and would happily overwrite another machine's notes with this profile's copy.
-// Read, not parsed: a file that does not parse is ours to replace (the save
-// picker already asked about overwriting), one that could not be read may hold
-// everything.
+// Folder ids whose sidecar file this session has READ and recognized as ours.
+// A write is a full replace, so it must never run before this side has seen
+// what the file holds - after a browser restart the stored handle is back to
+// "prompt" and the open-time read fails, while the next annotation edit
+// re-arms the grant and would happily overwrite another machine's notes with
+// this profile's copy. A file that does not parse as ours stays out too (see
+// mergeFromSidecar): whatever replaced it is not this writer's to erase.
 const sidecarReadFolders = new Set<string>();
-// One "could not write" toast per folder per session - the retry below runs on
-// every edit, and the user can only act on the message once.
+// One warning toast (unwritable or foreign file) per folder per session - the
+// retry below runs on every edit, and the user can only act on the message once.
 const unreadableWarned = new Set<string>();
 
 export function initAnnotationsSidecar(): void {
