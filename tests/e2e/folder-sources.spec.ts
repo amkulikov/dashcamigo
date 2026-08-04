@@ -96,8 +96,11 @@ test.describe("folder sources, file-system picker", () => {
         await row.locator(".folder-source__menu").click();
         const menu = row.locator(".folder-source__popup");
         await expect(menu).toBeVisible();
-        // Connecting a notes file is an entry here, never an interrupting toast.
-        await expect(menu).toContainText("Keep notes in a file");
+        // Attaching a notes file is an entry here, never an interrupting toast -
+        // and both ways to do it are offered, because only one of the two
+        // pickers can adopt a file that already holds notes.
+        await expect(menu).toContainText("Keep notes in a new file");
+        await expect(menu).toContainText("Use an existing notes file");
 
         await menu.getByRole("button", { name: "Forget this folder" }).click();
         // Back to an offer, and the trips it produced are untouched.

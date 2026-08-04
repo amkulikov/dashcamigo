@@ -86,7 +86,8 @@ export type I18nKey =
     | "folderSources.rememberFailed"
     | "folderSources.menu"
     | "folderSources.menuAria"
-    | "folderSources.connectNotes"
+    | "folderSources.createNotes"
+    | "folderSources.useExistingNotes"
     | "folderSources.notesConnected"
     // trip annotations: favorite star, name/note editor
     | "sidebar.bucket.favorites"
@@ -115,6 +116,7 @@ export type I18nKey =
     | "markerList.close"
     // annotations sidecar file
     | "sidecar.enabled"
+    | "sidecar.notOurFile"
     | "sidecar.writeFailed"
     | "landing.caps.a.title"
     | "landing.caps.a.body"

@@ -110,14 +110,21 @@ export function notifyFolderOpened(folder: RememberedFolder): void {
     folderOpenedHook?.(folder);
 }
 
-// Opens the save picker for a folder's notes file. Registered by
-// annotations-sidecar.ts, absent until it initializes (and on browsers
-// without showSaveFilePicker, where the whole menu entry stays hidden).
-let notesConnector: ((folder: RememberedFolder) => void) | null = null;
+/** The two ways to attach a notes file. They are separate because the pickers
+ *  behave differently on an existing file - see annotations-sidecar. */
+export interface NotesConnector {
+    create(folder: RememberedFolder): void;
+    useExisting(folder: RememberedFolder): void;
+}
 
-/** Registers the "keep notes in a file" action for the source menu. */
-export function registerNotesConnector(callback: (folder: RememberedFolder) => void): void {
-    notesConnector = callback;
+// Notes-file actions for a folder. Registered by annotations-sidecar.ts, absent
+// until it initializes (and on browsers without the pickers, where the menu
+// entries stay hidden).
+let notesConnector: NotesConnector | null = null;
+
+/** Registers the notes-file actions for the source menu. */
+export function registerNotesConnector(connector: NotesConnector): void {
+    notesConnector = connector;
 }
 
 // Loads a remembered folder into the session (permission re-prompt included).
@@ -573,15 +580,27 @@ function buildMenuShell(
  *  the store and can change from another surface (or another tab). */
 async function fillMenu(menu: HTMLElement, source: FolderSource, setOpen: (open: boolean) => void): Promise<void> {
     const folder = await getFolder(source.folderId).catch(() => null);
-    if (folder && notesConnector) {
-        menu.appendChild(
-            folder.sidecarHandle
-                ? menuState(t("folderSources.notesConnected"))
-                : menuAction(t("folderSources.connectNotes"), () => {
-                      setOpen(false);
-                      notesConnector?.(folder);
-                  }),
-        );
+    const connector = notesConnector;
+    if (folder && connector) {
+        if (folder.sidecarHandle) {
+            menu.appendChild(menuState(t("folderSources.notesConnected")));
+        } else {
+            // Create first: the common case is a folder that has no notes file
+            // yet. Adopting one is for a card that already carries notes from
+            // another machine.
+            menu.appendChild(
+                menuAction(t("folderSources.createNotes"), () => {
+                    setOpen(false);
+                    connector.create(folder);
+                }),
+            );
+            menu.appendChild(
+                menuAction(t("folderSources.useExistingNotes"), () => {
+                    setOpen(false);
+                    connector.useExisting(folder);
+                }),
+            );
+        }
     }
     menu.appendChild(
         menuAction(t("recentFolders.forgetLabel"), () => {

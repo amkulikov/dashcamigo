@@ -1,17 +1,23 @@
-// Annotations sidecar: a dashcamigo-notes.json living in the user's own
+// Annotations sidecar: a notes file living in the user's own
 // folder (Chromium-only - needs showSaveFilePicker), so notes survive browser
 // data cleanup and travel with the recordings. IndexedDB stays the working
 // copy; the sidecar is an auto-synced replica merged per record (LWW +
 // tombstones) whenever the folder opens.
 //
-// Flow: the folder row in the sidebar (ui/folder-sources.ts) offers to
-// connect a file for a remembered folder; that click opens a save picker
-// defaulting INTO the folder (startIn), the picked file handle persists on
-// the folder record, and the file is MERGED before anything is written - the
-// user may have picked a pre-existing notes file from another machine. After
-// that every annotation change schedules a debounced atomic write
-// (createWritable = write-to-swap, rename-on-close - a crash never tears the
-// file).
+// Flow: the folder row in the sidebar (ui/folder-sources.ts) offers TWO ways to
+// attach a file, and the split is forced by the pickers themselves.
+// showSaveFilePicker empties whatever file the user selects BEFORE it returns
+// (spec: "set entry's binary data to an empty byte sequence"; verified - the
+// file is 0 bytes with no writable ever opened), so it can only ever create a
+// new file. Adopting a notes file that already holds records - one that
+// travelled here on the card from another machine - goes through
+// showOpenFilePicker, which has no such step and hands back a read-granted
+// handle; write access is bought separately via requestPermission inside a
+// gesture. Both paths converge on attachSidecar, which reads and validates
+// BEFORE persisting the handle: a file that is not ours is never adopted, so it
+// is never overwritten. After that every annotation change schedules a
+// debounced atomic write (createWritable = write-to-swap, rename-on-close - a
+// crash never tears the file).
 //
 // folderId in the file is never trusted: it is a per-profile UUID, so every
 // record read from a folder's sidecar is restamped with the LOCAL folder id
@@ -41,7 +47,17 @@ import { refreshTimelineMarkers } from "./timeline-markers.js";
 
 const log = createLogger("annotations-sidecar");
 
-const SIDECAR_SUGGESTED_NAME = "dashcamigo-notes.json";
+// Our own extension, not .json, and paired with excludeAcceptAllOption below:
+// the dialogs then list only files we wrote. That keeps an ordinary .json of
+// the user's out of reach on the create path, where a mis-click is destructive
+// and irreversible (the picker empties the file, not us). Typing a foreign name
+// by hand still reaches it - extension appending is implementation-defined -
+// but that is a deliberate act on a Save-As dialog, not a slip.
+const SIDECAR_SUGGESTED_NAME = "notes.dashcamigo";
+const SIDECAR_FILE_TYPE: FilePickerAcceptType = {
+    description: "dashcamigo notes",
+    accept: { "application/json": [".dashcamigo"] },
+};
 const WRITE_DEBOUNCE_MS = 1500;
 
 const writeTimers = new Map<string, number>();
@@ -66,8 +82,11 @@ export function initAnnotationsSidecar(): void {
     // the folder row in the sidebar - never a toast interrupting the note they
     // are in the middle of writing. Registered only where a save picker
     // exists, so the row hides the entry everywhere else.
-    if (typeof window.showSaveFilePicker === "function") {
-        registerNotesConnector((folder) => void pickSidecarFile(folder));
+    if (typeof window.showSaveFilePicker === "function" && typeof window.showOpenFilePicker === "function") {
+        registerNotesConnector({
+            create: (folder) => void createSidecarFile(folder),
+            useExisting: (folder) => void adoptSidecarFile(folder),
+        });
     }
     // A write still sitting in its debounce window at tab close would be
     // lost. visibilitychange->hidden fires on tab switches too, shrinking
@@ -120,7 +139,13 @@ function onAnnotationsChanged(folderId: string): void {
         .catch(() => {});
 }
 
-async function pickSidecarFile(folder: RememberedFolder): Promise<void> {
+/**
+ * Creates a fresh notes file for the folder. The save picker empties whatever
+ * it returns, so this path can only ever end on an empty file - which is
+ * exactly what "create" means, and why the extension filter matters here more
+ * than anywhere else.
+ */
+async function createSidecarFile(folder: RememberedFolder): Promise<void> {
     if (typeof window.showSaveFilePicker !== "function") return;
     let handle: FileSystemFileHandle;
     try {
@@ -130,13 +155,72 @@ async function pickSidecarFile(folder: RememberedFolder): Promise<void> {
             // Defaults the dialog INTO the recordings folder - the user just
             // confirms; picking elsewhere is allowed and works the same.
             startIn: folder.handle,
-            types: [{ description: "dashcamigo notes", accept: { "application/json": [".json"] } }],
+            excludeAcceptAllOption: true,
+            types: [SIDECAR_FILE_TYPE],
         });
     } catch (err) {
-        // AbortError = dismissed the dialog; the offer returns next session.
-        if (!(err instanceof DOMException && err.name === "AbortError")) {
-            log.warn("sidecar picker failed", { err: err instanceof Error ? err.message : String(err) });
+        if (!isPickerDismissal(err)) {
+            log.warn("sidecar create picker failed", { err: err instanceof Error ? err.message : String(err) });
         }
+        return;
+    }
+    await attachSidecar(folder, handle);
+}
+
+/**
+ * Adopts a notes file that already exists - the one that came along on the card
+ * from another machine. The open picker leaves it intact, so its records are
+ * still there to be read and merged.
+ */
+async function adoptSidecarFile(folder: RememberedFolder): Promise<void> {
+    if (typeof window.showOpenFilePicker !== "function") return;
+    let handle: FileSystemFileHandle | undefined;
+    try {
+        [handle] = await window.showOpenFilePicker({
+            id: "annotations-sidecar",
+            startIn: folder.handle,
+            multiple: false,
+            excludeAcceptAllOption: true,
+            types: [SIDECAR_FILE_TYPE],
+        });
+    } catch (err) {
+        if (!isPickerDismissal(err)) {
+            log.warn("sidecar open picker failed", { err: err instanceof Error ? err.message : String(err) });
+        }
+        return;
+    }
+    if (!handle) return;
+    await attachSidecar(folder, handle);
+}
+
+function isPickerDismissal(err: unknown): boolean {
+    // AbortError = dismissed the dialog; the offer stays in the menu.
+    return err instanceof DOMException && err.name === "AbortError";
+}
+
+/**
+ * Validates a picked file and, only if it checks out, binds it to the folder
+ * and merges. Reading BEFORE persisting the handle is the whole point: a file
+ * we never adopt is a file the debounced writer can never overwrite. Both
+ * pickers land here - for a freshly created file the read simply returns
+ * nothing, which parses as an empty record set and seeds the file on merge.
+ */
+async function attachSidecar(folder: RememberedFolder, handle: FileSystemFileHandle): Promise<void> {
+    let text: string;
+    try {
+        text = await (await handle.getFile()).text();
+    } catch (err) {
+        // Unreadable now means unwritable later - binding it would only produce
+        // a folder wired to a file nothing can use.
+        log.warn("sidecar read failed at attach", { err: err instanceof Error ? err.message : String(err) });
+        notify({ severity: "warn", messageKey: "sidecar.writeFailed" });
+        return;
+    }
+    if (parseSidecarPayload(text) === null) {
+        // Someone else's file: hands off. It keeps its contents and the folder
+        // keeps no handle, so nothing here can touch it later either.
+        log.warn("picked file is not a dashcamigo notes file, not attaching");
+        notify({ severity: "warn", messageKey: "sidecar.notOurFile" });
         return;
     }
     try {
@@ -149,12 +233,11 @@ async function pickSidecarFile(folder: RememberedFolder): Promise<void> {
     // says nothing about this one's contents.
     sidecarReadFolders.delete(folder.id);
     unreadableWarned.delete(folder.id);
+    // The open picker grants read only. Buy the write while the picker's
+    // gesture may still count; if activation is already spent this is a no-op
+    // and the next annotation edit re-arms it through the same helper.
+    await ensureFileReadwritePermission(handle);
     notify({ severity: "info", messageKey: "sidecar.enabled" });
-    // NEVER blind-write here: showSaveFilePicker happily returns an existing
-    // file (a notes file from another machine travelling with the SD card),
-    // and the first write is a full overwrite. Merging handles both cases -
-    // an existing file contributes its records, an empty one triggers the
-    // converging write that seeds it.
     const updated = await getFolder(folder.id).catch(() => null);
     if (updated?.sidecarHandle) {
         await mergeFromSidecar(updated).catch((err: unknown) => {
@@ -187,14 +270,13 @@ async function writeSidecar(folderId: string): Promise<void> {
     const folder = await getFolder(folderId).catch(() => null);
     if (!folder?.sidecarHandle) return;
     const handle = folder.sidecarHandle;
-    // The file has not been read this session (lapsed permission at folder-open
-    // time, a transient IO error). Writing now would replace its contents with
-    // this profile's records - the exact way notes made on another machine get
-    // erased. Retry the read instead: this call chain starts at an annotation
-    // edit, which re-armed the grant inside its gesture, so the retry usually
-    // succeeds. Only a retry that FAILED gives up here - a read that succeeded
-    // but found a foreign file merges nothing and schedules nothing, and
-    // returning on it would drop this edit for a whole debounce cycle.
+    // Not read this session: a lapsed permission at folder-open time, a
+    // transient IO error, or contents that turned out not to be ours. A write
+    // without a preceding read is precisely how notes made on another machine
+    // get erased, so retry the read first - this call chain starts at an
+    // annotation edit, which re-armed the grant inside its gesture, so the
+    // retry usually succeeds. Still unread afterwards means hands off, and the
+    // merge has already said why if it knew (a foreign file warns there).
     if (!sidecarReadFolders.has(folderId)) {
         await mergeFromSidecar(folder);
         if (!sidecarReadFolders.has(folderId)) {
@@ -252,16 +334,24 @@ async function mergeFromSidecar(folder: RememberedFolder): Promise<void> {
         log.warn("sidecar read failed", { err: err instanceof Error ? err.message : String(err) });
         return;
     }
-    // The file's contents are known from here on, whatever they turn out to be.
-    sidecarReadFolders.add(folder.id);
-    unreadableWarned.delete(folder.id);
     const parsed = parseSidecarPayload(text);
     if (parsed === null) {
-        // Foreign or corrupt: the save picker already asked about overwriting
-        // it, so the local copy wins - but nothing is merged out of it.
-        log.warn("sidecar file is not a dashcamigo annotations file, ignoring");
+        // Foreign or corrupt. Attach-time validation keeps this out of the
+        // normal path, so the file changed underneath us - swapped by hand, or
+        // torn by something else writing it. Deliberately NOT marked as read:
+        // that is the flag writeSidecar needs before it replaces the contents,
+        // so leaving it unset means nothing here can overwrite whatever is in
+        // there now. The IndexedDB copy stays authoritative meanwhile.
+        log.warn("sidecar file is not a dashcamigo annotations file, leaving it alone");
+        if (!unreadableWarned.has(folder.id)) {
+            unreadableWarned.add(folder.id);
+            notify({ severity: "warn", messageKey: "sidecar.notOurFile" });
+        }
         return;
     }
+    // The file's contents are known from here on.
+    sidecarReadFolders.add(folder.id);
+    unreadableWarned.delete(folder.id);
     // Restamp: records arriving through THIS folder's sidecar belong to this
     // folder locally, whatever per-profile UUID the writing side used.
     const sidecarRecords: AnnotationRecord[] = parsed.map((record) =>
