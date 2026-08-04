@@ -30,6 +30,11 @@ export interface NotifyInput {
     messageKey: I18nKey;
     /** ICU MessageFormat parameters; merged into the template at render time. */
     messageParams?: Record<string, string | number | boolean>;
+    /** Optional action button on the toast. The bell-drawer copy stays
+     *  text-only: the drawer outlives the moment the action was offered for,
+     *  and a stale button there would fire on state that no longer exists. */
+    actionKey?: I18nKey;
+    onAction?: () => void;
 }
 
 interface Notification extends NotifyInput {
@@ -42,7 +47,7 @@ interface Notification extends NotifyInput {
 
 /** Stable signature for de-duplicating identical notifications. */
 function notifSignature(input: NotifyInput): string {
-    return `${input.severity}|${input.messageKey}|${JSON.stringify(input.messageParams ?? {})}`;
+    return `${input.severity}|${input.messageKey}|${JSON.stringify(input.messageParams ?? {})}|${input.actionKey ?? ""}`;
 }
 
 // Newest first. Capped to keep the drawer from growing unboundedly in long
@@ -58,6 +63,15 @@ const TOAST_TIMEOUT_MS: Record<Severity, number | null> = {
     warn: 8000,
     error: null,
 };
+
+// A toast carrying an action needs reading time PLUS deciding time - the
+// default info window is gone before the user reaches the button.
+const ACTION_TOAST_TIMEOUT_MS = 15000;
+
+function toastTimeoutFor(n: Notification): number | null {
+    if (n.actionKey && n.onAction) return ACTION_TOAST_TIMEOUT_MS;
+    return TOAST_TIMEOUT_MS[n.severity];
+}
 
 // Toast stack cap on screen. Extra toasts are not queued - they live only
 // in the bell drawer history. Avoids a wall of toasts on slow recovery
@@ -221,6 +235,22 @@ function showToast(n: Notification): void {
     body.textContent = t(n.messageKey, n.messageParams);
     el.appendChild(body);
 
+    if (n.actionKey && n.onAction) {
+        const { actionKey, onAction } = n;
+        const action = document.createElement("button");
+        action.type = "button";
+        action.className = "dc-toast__action";
+        action.textContent = t(actionKey);
+        action.addEventListener("click", () => {
+            // Toast down first: the action may open a picker, and a toast
+            // hanging over (or auto-dismissing under) a system dialog reads
+            // as a glitch.
+            removeToast(n.id);
+            onAction();
+        });
+        body.appendChild(action);
+    }
+
     const close = document.createElement("button");
     close.type = "button";
     close.className = "dc-toast__close";
@@ -231,7 +261,7 @@ function showToast(n: Notification): void {
 
     toastContainer.appendChild(el);
 
-    const timeoutMs = TOAST_TIMEOUT_MS[n.severity];
+    const timeoutMs = toastTimeoutFor(n);
     const timer = timeoutMs === null ? null : window.setTimeout(() => removeToast(n.id), timeoutMs);
     activeToasts.set(n.id, { el, timer });
 }
@@ -251,7 +281,7 @@ function resetToastTimer(id: string): void {
     if (!entry) return;
     if (entry.timer !== null) clearTimeout(entry.timer);
     const n = notifications.find((x) => x.id === id);
-    const timeoutMs = n ? TOAST_TIMEOUT_MS[n.severity] : null;
+    const timeoutMs = n ? toastTimeoutFor(n) : null;
     entry.timer = timeoutMs === null ? null : window.setTimeout(() => removeToast(id), timeoutMs);
 }
 

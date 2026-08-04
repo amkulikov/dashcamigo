@@ -83,6 +83,26 @@
     flex: 1;
     min-width: 0;
 }
+/* Action button inside the body: a new line under the message, styled as an
+   accent text button - the toast stays one compact card. */
+.dc-toast__action {
+    display: block;
+    margin-top: var(--dc-space-1);
+    padding: 0;
+    background: transparent;
+    border: none;
+    color: var(--accent);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+.dc-toast__action:hover {
+    text-decoration: underline;
+}
+.dc-toast__action:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
 .dc-toast__close {
     flex-shrink: 0;
     background: transparent;
