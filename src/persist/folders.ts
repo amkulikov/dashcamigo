@@ -2,6 +2,7 @@
 // permission checks, dedupe via isSameEntry, recursive enumeration into
 // VendorFile[]. UI-free - ui/persistent-folders.ts owns the UX on top.
 
+import { isIgnoredSegment } from "../ingest-filter.js";
 import { createLogger } from "../log.js";
 import type { VendorFile } from "../parsers/types.js";
 import { openPersistDb } from "./db.js";
@@ -208,6 +209,12 @@ async function walkDirectory(
     errors: { count: number },
 ): Promise<void> {
     for await (const child of dir.values()) {
+        // Hidden/junk names are pruned here, not only at the ingest chokepoint:
+        // OS metadata directories (.Spotlight-V100, System Volume Information)
+        // deny reads, so descending would count them as read errors and warn
+        // the user about a perfectly healthy card. The picked root itself is
+        // never filtered - that stays the chokepoint's junk-root diagnostic.
+        if (isIgnoredSegment(child.name)) continue;
         if (child.kind === "file") {
             try {
                 const file = await child.getFile();

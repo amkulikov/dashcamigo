@@ -1,6 +1,10 @@
 // Pre-ingest path filter: drops files that live in hidden or OS/filesystem
 // junk directories before they reach classify/index/dedup. Runs at the single
-// ingest chokepoint (ui/ingest.ts), so junk never costs an SD seek.
+// ingest chokepoint (ui/ingest.ts), so junk never costs an SD seek. The FSA
+// and drag-and-drop walkers additionally prune the same names during
+// enumeration (via isIgnoredSegment) - OS metadata directories like
+// .Spotlight-V100 are unreadable and would otherwise surface as read-error
+// warnings for a perfectly healthy card.
 //
 // Vendor-neutral by design - there is no per-camera branch here. The two rules
 // below cover every known case we have seen, including 70mai `.s_Front` /
@@ -25,7 +29,7 @@ const FOUND_DIR_RE = /^found\.\d{3}$/;
  * Hidden = starts with ".", which on every dashcam SD we have seen means
  * proxy/thumbnail/system content, never a primary recording.
  */
-function isIgnoredSegment(segment: string): boolean {
+export function isIgnoredSegment(segment: string): boolean {
     if (segment.startsWith(".")) return true;
     const lower = segment.toLowerCase();
     if (JUNK_DIR_NAMES.has(lower)) return true;

@@ -2,6 +2,7 @@
 // (with recursive folder traversal via FileSystemEntry API). Both paths
 // converge into ingestFiles(VendorFile[]).
 
+import { isIgnoredSegment } from "../ingest-filter.js";
 import { createLogger } from "../log.js";
 import type { VendorFile } from "../parsers/types.js";
 
@@ -136,7 +137,15 @@ async function walkEntry(entry: FileSystemEntry, out: VendorFile[], errors: { co
                 break;
             }
             if (batch.length === 0) break;
-            for (const child of batch) await walkEntry(child, out, errors);
+            for (const child of batch) {
+                // Same pruning as the FSA walker (persist/folders.ts): OS
+                // metadata directories deny reads and would count as read
+                // errors. Only children are pruned - an explicitly dropped
+                // junk folder still walks, so the chokepoint's junk-root
+                // diagnostic can name it.
+                if (isIgnoredSegment(child.name)) continue;
+                await walkEntry(child, out, errors);
+            }
         }
     }
 }

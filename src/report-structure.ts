@@ -130,8 +130,11 @@ function renderFieldLine(s: FieldSummary): string {
  * matching technique - the "is this just a filename gap?" triage), likely
  * basename sidecars, and the file listing (path, size, modified time).
  *
- * `files` is the raw ingest snapshot (state.lastIngestFiles) including hidden
- * proxy dirs - those (e.g. 70mai `.s_Front`) are useful onboarding signal.
+ * `files` is the pre-filter ingest snapshot (state.lastIngestFiles). Hidden
+ * proxy dirs (e.g. 70mai `.s_Front`) are useful onboarding signal and appear
+ * when the source path carries them - the classic <input webkitdirectory>
+ * listing does; the FSA and DnD walkers prune hidden/junk names during
+ * enumeration.
  */
 export function buildStructureReport(files: readonly VendorFile[]): string {
     const now = new Date();

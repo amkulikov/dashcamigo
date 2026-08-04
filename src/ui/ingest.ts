@@ -217,7 +217,10 @@ async function ingestFilesInternal(
     // the "help add my camera" report. Kept even when this ingest yields zero
     // trips - the case that otherwise discards the tree. Taken before the
     // hidden/junk filter on purpose: proxy dirs (.s_Front, DCIM quirks) are
-    // useful onboarding signal. Overwritten each drop, not accumulated.
+    // useful onboarding signal where the source still carries them - the classic
+    // <input webkitdirectory> listing does; the FSA and DnD walkers prune
+    // hidden/junk names during enumeration. Overwritten each drop, not
+    // accumulated.
     state.lastIngestFiles = [...vfiles];
 
     // Drop hidden/junk-dir files (70mai .s_* proxies, macOS/Windows system dirs)
