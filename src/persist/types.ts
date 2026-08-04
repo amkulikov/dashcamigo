@@ -46,7 +46,7 @@ export interface RememberedFolder {
     /** Display name, captured from handle.name at remember time. */
     label: string;
     addedAt: number;
-    /** Drives "auto-restore the most recently used folder" on startup. */
+    /** Orders the folder list and the landing chips, most recent first. */
     lastOpenedAt: number;
     /** Annotations sidecar file inside (or near) the folder; absent until the
      *  user completes the one-time save-picker flow. */
