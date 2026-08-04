@@ -221,8 +221,8 @@
 }
 
 /* One pin: an inert full-height wrapper draws the hairline; only the flag
-   head at the top is a button. A full-height interactive column would sit
-   over the seek strip and the pan overview below and steal their drags. */
+   head is a button. A full-height interactive column would sit over the
+   seek scrubber above and the pan overview below and steal their drags. */
 .timeline-marker {
     position: absolute;
     top: 0;
@@ -245,7 +245,11 @@
 
 .timeline-marker-hit {
     position: absolute;
-    top: 0;
+    /* Start below the scrubber row (top of the stack): the flag head is a
+       click target and must not sit on the seek surface, where it would
+       steal the grab at exactly the marker's moment. --scrubber-h is
+       inherited from .player-chart (chart.css). */
+    top: var(--scrubber-h, 0px);
     left: 50%;
     transform: translateX(-50%);
     width: 14px;
@@ -286,12 +290,12 @@
     }
     /* Grow the TAP zone past the visible flag to the 24px floor without growing
        the flag itself (the trick the trip-card actions use): a wider button
-       would push its neighbour's pin off its own moment. Down only to the
-       flag's own height - reaching further would cover the seek strip the pin
-       deliberately keeps clear. */
+       would push its neighbour's pin off its own moment. Downward only - the
+       seek scrubber sits directly ABOVE the flag row, and reaching up would
+       steal its grab at the marker's moment. */
     .timeline-marker-hit::before {
         content: "";
         position: absolute;
-        inset: -2px -3px;
+        inset: 0 -3px -4px;
     }
 }

@@ -440,10 +440,12 @@ body.letterbox-blur .video-tile > video:not(.tile-blur-bg) {
 }
 
 .timeline-range__tab::after {
-    /* Pull-handle "grip" hint at the top so the tab reads as draggable. */
+    /* Pull-handle "grip" hint at the top of the ANALYTICS block, i.e. just
+       below the scrubber row - the grip is a drag target and must not overlap
+       the seek surface above (--scrubber-h inherited from .player-chart). */
     content: "";
     position: absolute;
-    top: 4px;
+    top: calc(var(--scrubber-h, 0px) + 4px);
     left: 50%;
     transform: translateX(-50%);
     width: 10px;

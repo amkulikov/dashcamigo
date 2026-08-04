@@ -29,21 +29,10 @@
        the chart, strip and seek track. */
     box-shadow: 0 0 4px color-mix(in srgb, var(--accent) 55%, transparent);
     /* Above the export range overlay (z6) so the current-position line stays
-       visible over the dimming masks. */
+       visible over the dimming masks. No separate head marker: the scrubber
+       thumb in the top row sits on the same x (shared timelineSecToFrac
+       mapping) and IS the handle. */
     z-index: 7;
-}
-.player-chart-playhead::before {
-    /* Tab-shaped head on top - a clear handle marking the exact position.
-       Centered on the line via transform, independent of line width. */
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 8px;
-    height: 6px;
-    border-radius: 0 0 var(--dc-radius-xs) var(--dc-radius-xs);
-    background: var(--accent);
 }
 .player-chart-playhead[hidden] {
     display: none;
@@ -90,10 +79,10 @@
     position: relative;
     background: var(--bg-elev);
     border-top: 1px solid var(--border);
-    /* Flex-column layout: ruler-top on top, canvas in the middle (flex:1),
-       ruler-bottom + overview at the bottom. Canvas stays flex:1, the rulers
-       and overview are auto. min-width:0 + overflow:hidden is the same
-       chicken-egg fix as
+    /* Flex-column layout: scrubber on top (next to the transport bar), then
+       ruler, canvas in the middle (flex:1), strip + overview at the bottom.
+       Canvas stays flex:1, the fixed rows are auto. min-width:0 +
+       overflow:hidden is the same chicken-egg fix as
        before: the Chart.js canvas gets an inline width=Npx, and without
        overflow it would keep the parent bloated and ResizeObserver would
        never get a shrink callback. */
@@ -493,17 +482,26 @@
 
 /* =========================================================================
    PROGRESS SCRUBBER (always-on)
-   The always-visible bottom row of the timeline stack inside .player-chart:
-   a neutral seek track with a round thumb at the current position. The
-   chart canvas and event strip above it are optional (View menu); this bar is
-   not - it is the baseline timeline that also carries the playhead + export
-   range overlays. Click/drag to seek - handler in player-scrubber.ts.
+   The always-visible TOP row of the timeline stack inside .player-chart:
+   a neutral seek track with a round thumb at the current position, adjacent
+   to the transport bar above the stack. The chart canvas and event strip
+   below it are optional (View menu); this bar is not - it is the baseline
+   timeline that also carries the playhead + export range overlays.
+   Click/drag to seek - handler in player-scrubber.ts.
+   --scrubber-h is the single height knob: the marker flag heads and the
+   export-tab grips read it to start BELOW this row, so the top-of-stack
+   drag surfaces never overlap the scrubber's own hit area.
    ========================================================================= */
+.player-chart {
+    --scrubber-h: 14px;
+}
 .player-mini-progress {
     flex: 0 0 auto;
     position: relative;
-    height: 14px;
-    border-top: 1px solid var(--border);
+    height: var(--scrubber-h);
+    /* border-BOTTOM: the row sits at the top of the stack, .player-chart's own
+       border-top already separates it from the readout above. */
+    border-bottom: 1px solid var(--border);
     cursor: pointer;
     user-select: none;
     touch-action: none;
@@ -531,22 +529,20 @@
    the full 44px touch floor - that would eat scarce chart vertical space. The
    thumb is center-anchored (top:50%), so it stays put as the bar grows. */
 @media (pointer: coarse) {
-    .player-mini-progress {
-        height: 24px;
-    }
-    /* The zoomed-timeline drag-pan bar is 12px - a thin touch handle. Grow the
-       grabbable height to match the mini-progress bump (the viewport rect inside
-       scales via top:0/bottom:0). Only present while zoomed, so no permanent cost. */
-    .range-overview {
-        height: 20px;
-    }
     /* Route the two-finger pinch into our zoom handler instead of the browser's
        page zoom: pan-y still lets a single finger scroll the viewer vertically,
        but a pinch is no longer a recognised gesture here so both pointers reach
        the JS pinch (chart.ts). Children that own a drag (overview, mini-progress)
        keep their own touch-action:none. */
     .player-chart {
+        --scrubber-h: 24px;
         touch-action: pan-y;
+    }
+    /* The zoomed-timeline drag-pan bar is 12px - a thin touch handle. Grow the
+       grabbable height to match the mini-progress bump (the viewport rect inside
+       scales via top:0/bottom:0). Only present while zoomed, so no permanent cost. */
+    .range-overview {
+        height: 20px;
     }
 }
 .player-mini-progress__thumb {

@@ -1,6 +1,7 @@
-// Bottom mini-progress scrubber: fill, thumb, hover-tooltip with a frame
-// preview, drag-to-seek, keyboard arrows. Also owns updatePlayerProgressUi
-// (the per-timeupdate UI sync) because it writes to the same DOM nodes.
+// Mini-progress scrubber (top row of the timeline stack): fill, thumb,
+// hover-tooltip with a frame preview, drag-to-seek, keyboard arrows. Also owns
+// updatePlayerProgressUi (the per-timeupdate UI sync) because it writes to the
+// same DOM nodes.
 //
 // Depends on the playback core only through two callables passed at init:
 // getTripCurrentTime() and seekTripTime(sec). Keeps the cycle one-directional
