@@ -60,31 +60,16 @@ analytics at all unless you configure it.
 ## Supported cameras
 
 Every GPS parser is built from a real recording or a verified open-source
-reference, never from guesswork. Coverage includes 70mai, VIOFO, GoPro,
+reference. Coverage includes 70mai, VIOFO, GoPro,
 Garmin, Thinkware, BlackVue, Vantrue, Nextbase and more; the full list lives
 in [docs/gps-format-coverage.md](docs/gps-format-coverage.md).
 
-A camera that is not covered still plays and groups into trips - only the
-route and the chart are missing. As a stopgap, drop a GPS track next to a
-clip as `<basename>.gpx` and it is picked up automatically.
-
 Want your camera supported properly? Two ways:
 
-- In the app: package the card's file list (file names only, never the video)
+- In the app: package the card's file list
   into a report you can send - see
   [dashcamigo.app/add-my-camera](https://dashcamigo.app/add-my-camera).
 - On GitHub: open a camera-support issue.
-
-## Development
-
-```sh
-npm install
-npm run dev
-```
-
-Node 22. A fresh clone builds and runs with no keys and no configuration.
-Feedback and camera requests go through GitHub issues, and pull requests are
-welcome - [CONTRIBUTING.md](CONTRIBUTING.md) has the rules.
 
 ## Self-hosting
 
@@ -111,10 +96,6 @@ docker run -d -p 8080:80 ghcr.io/amkulikov/dashcamigo
 ```
 
 Then open http://localhost:8080.
-
-Everything else - building from a clone, dropping the files into a web
-server you already run, serving rules, the HTTPS caveat for the editor
-features - lives in [docs/self-hosting.md](docs/self-hosting.md).
 
 ## Built with
 

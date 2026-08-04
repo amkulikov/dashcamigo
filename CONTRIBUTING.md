@@ -13,6 +13,16 @@ The most valuable things you can send:
   are welcome as issues with the exact current string and the suggested
   replacement.
 
+## Development
+
+```sh
+npm install
+npm run dev
+```
+
+Node version: `.nvmrc`. A fresh clone builds and runs with no keys and no
+configuration.
+
 ## Pull requests
 
 Pull requests are welcome. Two rules keep review workable on a
