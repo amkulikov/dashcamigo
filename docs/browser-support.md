@@ -130,10 +130,27 @@ version. The API existing does not mean a codec decodes - always probe.
   new inline script that the CSP-hash build plugin (which hashes only
   `#dc-bootstrap`) does not cover, so it would need a build/CSP change for a
   near-zero, far-below-target-bar audience.
-- **iOS `webkitdirectory` no-op (iOS 11.3-18.3)** - the attribute is *present*
-  (so `'webkitdirectory' in input` returns true) but does nothing until iOS
-  18.4. Feature-detection cannot see this; the gap is documented, not gated. The
-  user can still select individual files.
+- **iOS `webkitdirectory`** - the attribute is *present* (so
+  `'webkitdirectory' in input` returns true) on every iOS version, but the
+  picker does nothing on iOS 11.3-18.3 and is a trap on 18.4+
+  ([WebKit bug 271705](https://bugs.webkit.org/show_bug.cgi?id=271705)): WebKit
+  copies the ENTIRE chosen folder into the browser's own temporary storage
+  (`NSFileManager copyItemAtURL:`) before the page sees a single file - minutes
+  to hours on a full SD card, no way for the page to filter or stream the
+  selection (the `accept` filter is ignored in folder mode). Cleanup of those
+  copies is registered only after ALL copies finish and runs at tab teardown
+  (`_removeTemporaryDirectoriesWhenDeallocated` in WebKit's
+  `WKFileUploadPanel.mm`, the copy-then-cleanup design from
+  [WebKit bug 228683](https://bugs.webkit.org/show_bug.cgi?id=228683)) - so a
+  process killed mid-copy strands the copies in the browser app's own
+  container, where site-data clearing does not reach them; only reinstalling
+  the browser does. Reading a folder in place
+  is not coming: WebKit formally declined the directory part of File System
+  Access ([standards-positions#28](https://github.com/WebKit/standards-positions/issues/28)).
+  Feature-detection cannot see any of this. Mitigation: the iOS folder warning
+  (`src/ui/ios-folder-warning-modal.ts`) shows before every folder pick and
+  steers to selecting individual files - those are also copied, but only the
+  selection, and a completed copy is scheduled for cleanup.
 - **Firefox H.264 encode is broken in practice** -
   `VideoEncoder.isConfigSupported()` returns true for H.264 but
   `configure()`/`encode()` throw ([Bugzilla 1918769](https://bugzilla.mozilla.org/show_bug.cgi?id=1918769),

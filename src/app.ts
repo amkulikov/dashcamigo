@@ -69,6 +69,7 @@ import { initNoRecordingsModal } from "./ui/no-recordings-modal.js";
 import { isIntentionalNavigation } from "./ui/nav-intent.js";
 import { initSwitchLangModal } from "./ui/switch-lang-modal.js";
 import { initUnsupportedFormatsModal } from "./ui/unsupported-formats-modal.js";
+import { initIosFolderWarningModal } from "./ui/ios-folder-warning-modal.js";
 import { initUploadWarningModal } from "./ui/upload-warning-modal.js";
 import { initWebglEnableModal } from "./ui/webgl-enable-modal.js";
 import { awaitLazyEmbeddedGpsForTrip, isCurrentTripOpen, takeTripOpenToken } from "./ui/lazy-embedded-gps.js";
@@ -388,10 +389,12 @@ initSettingsModal();
 initIngestOverlay();
 initUnsupportedFormatsModal();
 initNoRecordingsModal();
-// Upload-warning must be initialized BEFORE initFileSources - file-sources
-// binds click handlers to CTA buttons that call showUploadWarning; this
-// init only attaches close listeners to the modal's own buttons.
+// Upload-warning and the iOS folder warning must be initialized BEFORE
+// initFileSources - file-sources binds click handlers to CTA buttons that call
+// showUploadWarning / showIosFolderWarning; these inits only attach close
+// listeners to the modals' own buttons.
 initUploadWarningModal();
+initIosFolderWarningModal();
 initSwitchLangModal();
 initLazyGpsLoadModal();
 initHotkeysModal();

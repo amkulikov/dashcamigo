@@ -225,6 +225,9 @@ export function onActivePlayerEvent<E extends keyof HTMLVideoElementEventMap>(
 
 export const dom = {
     folderInput: $id<HTMLInputElement>("folder-input"),
+    /** Plain multi-file input - the iOS escape hatch from the folder-copy trap
+     *  (see ios-folder-warning-modal.ts). */
+    fileInput: $id<HTMLInputElement>("file-input"),
     videoGrid: $id<HTMLElement>("video-grid"),
     viewModeBtn: $id<HTMLButtonElement>("player-view-mode"),
     videoTileFront: $sel<HTMLElement>('.video-tile[data-channel="front"]'),
@@ -374,6 +377,10 @@ export const dom = {
     uploadWarningModal: $id<HTMLElement>("upload-warning-modal"),
     uploadWarningModalContinue: $id<HTMLButtonElement>("upload-warning-modal-continue"),
     uploadWarningModalCancel: $id<HTMLButtonElement>("upload-warning-modal-cancel"),
+    iosFolderWarningModal: $id<HTMLElement>("ios-folder-warning-modal"),
+    iosFolderWarningModalFiles: $id<HTMLButtonElement>("ios-folder-warning-modal-files"),
+    iosFolderWarningModalFolder: $id<HTMLButtonElement>("ios-folder-warning-modal-folder"),
+    iosFolderWarningModalCancel: $id<HTMLButtonElement>("ios-folder-warning-modal-cancel"),
     switchLangModal: $id<HTMLElement>("switch-lang-modal"),
     switchLangModalConfirm: $id<HTMLButtonElement>("switch-lang-modal-confirm"),
     switchLangModalCancel: $id<HTMLButtonElement>("switch-lang-modal-cancel"),

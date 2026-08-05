@@ -530,6 +530,12 @@ export const esDict = {
     "uploadWarning.body": 'El navegador puede preguntarte algo como "¿Subir archivos a este sitio?" — es su diálogo estándar de acceso a carpetas, no una subida de verdad. No hay servidor. Todo se reproduce aquí mismo, en el navegador.',
     "uploadWarning.continue": "Abrir carpeta",
     "uploadWarning.cancel": "Cancelar",
+    "iosFolderWarning.title": "Elegir una carpeta entera es lento en iPhone y iPad",
+    "iosFolderWarning.body":
+        "En iPhone y iPad el navegador primero copia todo el contenido de la carpeta elegida — con una tarjeta de memoria grande tarda muchísimo y consume espacio en tu dispositivo. Si la copia se interrumpe, las copias pueden quedarse atascadas en el dispositivo. Es mucho más rápido elegir solo los vídeos que necesitas. En cualquier caso, no se sube nada a ningún sitio — todo se queda en tu dispositivo.",
+    "iosFolderWarning.files": "Elegir archivos",
+    "iosFolderWarning.folder": "Carpeta entera igualmente",
+    "iosFolderWarning.cancel": "Cancelar",
 
     "switchLang.title": "¿Recargar para cambiar el idioma?",
     "switchLang.body": "Al cambiar el idioma se recarga la página y se borran las grabaciones que abriste. Tendrás que abrirlas de nuevo.",

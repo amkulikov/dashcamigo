@@ -539,6 +539,12 @@ export const jaDict = {
     "uploadWarning.body": "ブラウザが「このサイトにファイルをアップロードしますか？」のような確認を出すかもしれませんが、これはフォルダーアクセスの標準ダイアログで、実際にはアップロードしていません。サーバーはありません。すべてブラウザ内で再生されます。",
     "uploadWarning.continue": "フォルダーを開く",
     "uploadWarning.cancel": "キャンセル",
+    "iosFolderWarning.title": "iPhone・iPad ではフォルダーごと選ぶと時間がかかります",
+    "iosFolderWarning.body":
+        "iPhone・iPad では、選んだフォルダーの中身をブラウザがまず全部コピーします。大容量のメモリーカードだと非常に時間がかかり、端末の容量も消費します。コピーが中断されると、コピーが端末に残ったままになることがあります。必要な動画ファイルだけを選ぶ方がずっと速いです。どちらの場合もアップロードは一切なく、すべて端末内に残ります。",
+    "iosFolderWarning.files": "ファイルを選ぶ",
+    "iosFolderWarning.folder": "それでもフォルダーごと",
+    "iosFolderWarning.cancel": "キャンセル",
 
     "switchLang.title": "言語を切り替えるには再読み込みしますか？",
     "switchLang.body": "言語を切り替えるとページが再読み込みされ、読み込んだ録画は消去されます。もう一度開き直す必要があります。",

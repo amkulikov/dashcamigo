@@ -714,6 +714,11 @@ export type I18nKey =
     | "uploadWarning.body"
     | "uploadWarning.continue"
     | "uploadWarning.cancel"
+    | "iosFolderWarning.title"
+    | "iosFolderWarning.body"
+    | "iosFolderWarning.files"
+    | "iosFolderWarning.folder"
+    | "iosFolderWarning.cancel"
 
     // Confirm modal shown when the user changes language while a trip is loaded.
     // Switching language is a full page reload (only the active locale is

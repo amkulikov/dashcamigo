@@ -529,6 +529,12 @@ export const ptDict = {
     "uploadWarning.body": 'O navegador pode perguntar algo como "Enviar arquivos para este site?" — é o diálogo padrão dele para acesso à pasta, não um envio de verdade. Não tem servidor. Tudo roda aqui mesmo, no navegador.',
     "uploadWarning.continue": "Abrir pasta",
     "uploadWarning.cancel": "Cancelar",
+    "iosFolderWarning.title": "Escolher uma pasta inteira é lento no iPhone e iPad",
+    "iosFolderWarning.body":
+        "No iPhone e no iPad, o navegador primeiro copia todo o conteúdo da pasta escolhida — com um cartão de memória grande isso demora muito e consome o armazenamento do dispositivo. Se a cópia for interrompida, as cópias podem ficar presas no dispositivo. É bem mais rápido escolher só os vídeos de que você precisa. De qualquer forma, nada é enviado para lugar nenhum — tudo fica no seu dispositivo.",
+    "iosFolderWarning.files": "Escolher arquivos",
+    "iosFolderWarning.folder": "Pasta inteira mesmo assim",
+    "iosFolderWarning.cancel": "Cancelar",
 
     "switchLang.title": "Recarregar para trocar o idioma?",
     "switchLang.body": "Trocar o idioma recarrega a página e limpa as gravações que você abriu. Você vai precisar abri-las de novo.",

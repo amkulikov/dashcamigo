@@ -473,6 +473,12 @@
          sidebar header (#sidebar-cta). Just sits inside body, not rendered. -->
     <input id="folder-input" type="file" webkitdirectory directory multiple hidden>
 
+    <!-- Plain multi-file input for the iOS escape hatch: on iOS the folder
+         picker copies the whole tree before the page sees anything (see
+         ios-folder-warning-modal below), so the warning modal offers picking
+         individual files through this input instead. -->
+    <input id="file-input" type="file" multiple hidden>
+
     <!-- Offline banner. Thin fixed strip above the topbar, shown when the device
          loses connectivity: hard-offline via online/offline events, OR "connected
          but no internet" limbo detected from map tile failures (navigator.onLine
@@ -1976,6 +1982,23 @@
                 <div class="export-modal-actions">
                     <button id="upload-warning-modal-cancel" class="dc-btn dc-btn--ghost" type="button" data-i18n="uploadWarning.cancel">Cancel</button>
                     <button id="upload-warning-modal-continue" class="dc-btn dc-btn--primary" type="button" data-i18n="uploadWarning.continue">Open folder</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- iOS/iPadOS folder-picker warning: on iOS the folder picker copies the
+         whole chosen tree before the page sees anything (see
+         ui/ios-folder-warning-modal.ts). Structure mirrors upload-warning-modal. -->
+    <div id="ios-folder-warning-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="ios-folder-warning-modal-title">
+        <div class="export-modal-card modal-card">
+            <div class="export-modal-title" id="ios-folder-warning-modal-title" data-i18n="iosFolderWarning.title">Picking a whole folder is slow on iPhone and iPad</div>
+            <div class="export-modal-section">
+                <p class="export-modal-body" data-i18n="iosFolderWarning.body">On iPhone and iPad the browser first copies everything in the folder you pick — on a big memory card that takes very long and eats your device's storage. If the copying is interrupted, the copies can get stuck on the device. Picking just the video files you need is much faster. Either way, nothing is uploaded anywhere — everything stays on your device.</p>
+                <div class="export-modal-actions">
+                    <button id="ios-folder-warning-modal-cancel" class="dc-btn dc-btn--ghost" type="button" data-i18n="iosFolderWarning.cancel">Cancel</button>
+                    <button id="ios-folder-warning-modal-folder" class="dc-btn dc-btn--ghost" type="button" data-i18n="iosFolderWarning.folder">Whole folder anyway</button>
+                    <button id="ios-folder-warning-modal-files" class="dc-btn dc-btn--primary" type="button" data-i18n="iosFolderWarning.files">Choose files</button>
                 </div>
             </div>
         </div>

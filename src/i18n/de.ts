@@ -529,6 +529,12 @@ export const deDict = {
     "uploadWarning.body": 'Der Browser fragt vielleicht so etwas wie "Dateien auf diese Seite hochladen?" — das ist sein Standarddialog für Ordnerzugriff, kein echter Upload. Es gibt keinen Server. Alles läuft direkt in deinem Browser.',
     "uploadWarning.continue": "Ordner öffnen",
     "uploadWarning.cancel": "Abbrechen",
+    "iosFolderWarning.title": "Einen ganzen Ordner zu wählen ist auf iPhone und iPad langsam",
+    "iosFolderWarning.body":
+        "Auf iPhone und iPad kopiert der Browser erst alles aus dem gewählten Ordner — bei einer großen Speicherkarte dauert das sehr lange und frisst Speicher auf deinem Gerät. Wird das Kopieren unterbrochen, können die Kopien auf dem Gerät hängen bleiben. Viel schneller: nur die Videodateien auswählen, die du brauchst. Hochgeladen wird so oder so nichts — alles bleibt auf deinem Gerät.",
+    "iosFolderWarning.files": "Dateien auswählen",
+    "iosFolderWarning.folder": "Trotzdem ganzer Ordner",
+    "iosFolderWarning.cancel": "Abbrechen",
 
     "switchLang.title": "Zum Sprachwechsel neu laden?",
     "switchLang.body": "Beim Sprachwechsel wird die Seite neu geladen und deine geladenen Aufnahmen werden entfernt. Du musst sie erneut öffnen.",

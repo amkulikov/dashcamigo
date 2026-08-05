@@ -527,6 +527,11 @@ export const zhDict = {
     "uploadWarning.body": '浏览器可能会询问类似"上传文件到此网站？"的话 — 这是它访问文件夹的标准对话框，并不是真的上传。没有服务器。一切都在浏览器里直接播放。',
     "uploadWarning.continue": "打开文件夹",
     "uploadWarning.cancel": "取消",
+    "iosFolderWarning.title": "在 iPhone 和 iPad 上选择整个文件夹会很慢",
+    "iosFolderWarning.body": "在 iPhone 和 iPad 上，浏览器会先把所选文件夹里的全部内容复制一遍 — 内存卡很大时会非常耗时，还会占用设备存储空间。复制被打断时，这些副本可能会滞留在设备上。只选需要的视频文件要快得多。无论哪种方式都不会上传任何东西 — 一切都留在你的设备上。",
+    "iosFolderWarning.files": "选择文件",
+    "iosFolderWarning.folder": "仍选整个文件夹",
+    "iosFolderWarning.cancel": "取消",
 
     "switchLang.title": "重新加载以切换语言？",
     "switchLang.body": "切换语言会重新加载页面，已打开的录像将被清空。你需要重新打开它们。",

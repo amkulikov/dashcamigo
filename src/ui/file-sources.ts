@@ -2,6 +2,7 @@
 // (with recursive folder traversal via FileSystemEntry API). Both paths
 // converge into ingestFiles(VendorFile[]).
 
+import { identifyBrowser } from "../capabilities.js";
 import { isIgnoredSegment } from "../ingest-filter.js";
 import { createLogger } from "../log.js";
 import type { VendorFile } from "../parsers/types.js";
@@ -10,6 +11,7 @@ import { dom } from "./dom.js";
 import { beginPreIngestReading, endPreIngestReading } from "./ingest-overlay.js";
 import { ingestFiles } from "./ingest.js";
 import { toVendorFiles } from "./ingest-core.js";
+import { showIosFolderWarning } from "./ios-folder-warning-modal.js";
 import { notify } from "./notifications.js";
 import { canUseDirectoryPicker, openViaDirectoryPicker } from "./persistent-folders.js";
 import { shouldShowUploadWarning, showUploadWarning } from "./upload-warning-modal.js";
@@ -175,6 +177,18 @@ export function initFileSources(): void {
     // the manual escape, so a missed cancel is never a reload-only dead end.
     dom.folderInput.addEventListener("cancel", () => endPreIngestReading());
 
+    // The plain multi-file input (the iOS escape hatch) mirrors the folder
+    // input's change/cancel wiring. webkitRelativePath is empty for a flat
+    // pick, so toVendorFiles falls back to bare filenames - same shape a flat
+    // file drop produces.
+    dom.fileInput.addEventListener("change", () => {
+        const files = Array.from(dom.fileInput.files || []);
+        if (files.length === 0) endPreIngestReading();
+        ingestFiles(toVendorFiles(files));
+        dom.fileInput.value = "";
+    });
+    dom.fileInput.addEventListener("cancel", () => endPreIngestReading());
+
     // Drag-and-drop works across the whole window. CTA wrappers (landing-drop
     // and sidebar-cta) are label[for="folder-input"] elements. The landing
     // drop card contains an inner <button id="landing-cta"> as the primary
@@ -207,7 +221,15 @@ export function initFileSources(): void {
         dom.folderInput.click();
     };
 
-    let uploadWarningInFlight = false;
+    // On iOS/iPadOS the folder picker copies the entire chosen tree into the
+    // browser's temporary storage before firing change (see
+    // ios-folder-warning-modal.ts) - so the CTA routes through a warning that
+    // shows EVERY time and steers to picking individual files. It replaces the
+    // TTL-gated upload warning there: its body carries the same "nothing is
+    // uploaded" reassurance. Computed once - the UA does not change mid-session.
+    const isIos = identifyBrowser().os === "ios";
+
+    let pickerGateInFlight = false;
     for (const cta of [dom.landingDrop, dom.landingDock, dom.sidebarCta]) {
         if (!cta) continue;
         cta.addEventListener("click", async (e) => {
@@ -215,17 +237,33 @@ export function initFileSources(): void {
             // descendant) and any default button activation. We open the picker
             // explicitly below.
             e.preventDefault();
+            if (isIos) {
+                if (pickerGateInFlight) return;
+                pickerGateInFlight = true;
+                try {
+                    const choice = await showIosFolderWarning();
+                    if (choice === "files") {
+                        beginPreIngestReading();
+                        dom.fileInput.click();
+                    } else if (choice === "folder") {
+                        openFolderPicker();
+                    }
+                } finally {
+                    pickerGateInFlight = false;
+                }
+                return;
+            }
             if (!shouldShowUploadWarning()) {
                 openFolderPicker();
                 return;
             }
-            if (uploadWarningInFlight) return;
-            uploadWarningInFlight = true;
+            if (pickerGateInFlight) return;
+            pickerGateInFlight = true;
             try {
                 const continued = await showUploadWarning();
                 if (continued) openFolderPicker();
             } finally {
-                uploadWarningInFlight = false;
+                pickerGateInFlight = false;
             }
         });
     }

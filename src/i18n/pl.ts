@@ -529,6 +529,12 @@ export const plDict = {
     "uploadWarning.body": 'Przeglądarka może zapytać coś w stylu "Wysłać pliki na tę stronę?" — to jej standardowe pytanie o dostęp do folderu, a nie prawdziwa wysyłka. Nie ma serwera. Wszystko odtwarza się tu, w przeglądarce.',
     "uploadWarning.continue": "Otwórz folder",
     "uploadWarning.cancel": "Anuluj",
+    "iosFolderWarning.title": "Wybór całego folderu na iPhonie i iPadzie trwa długo",
+    "iosFolderWarning.body":
+        "Na iPhonie i iPadzie przeglądarka najpierw kopiuje całą zawartość wybranego folderu — przy dużej karcie pamięci trwa to bardzo długo i zjada miejsce na urządzeniu. Jeśli kopiowanie zostanie przerwane, kopie mogą utknąć na urządzeniu. Dużo szybciej jest wybrać tylko potrzebne pliki wideo. Tak czy inaczej nic nigdzie nie jest wysyłane — wszystko zostaje na twoim urządzeniu.",
+    "iosFolderWarning.files": "Wybierz pliki",
+    "iosFolderWarning.folder": "Mimo to cały folder",
+    "iosFolderWarning.cancel": "Anuluj",
 
     "switchLang.title": "Przeładować, aby zmienić język?",
     "switchLang.body": "Zmiana języka przeładuje stronę, więc wczytane nagrania zostaną wyczyszczone. Trzeba będzie otworzyć je ponownie.",

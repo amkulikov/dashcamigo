@@ -529,6 +529,12 @@ export const enDict = {
     "uploadWarning.body": "Your browser may ask something like \"Upload files to this site?\" — that's its standard folder-access dialog, not what's actually happening. No server. Everything plays right here in the browser.",
     "uploadWarning.continue": "Open folder",
     "uploadWarning.cancel": "Cancel",
+    "iosFolderWarning.title": "Picking a whole folder is slow on iPhone and iPad",
+    "iosFolderWarning.body":
+        "On iPhone and iPad the browser first copies everything in the folder you pick — on a big memory card that takes very long and eats your device's storage. If the copying is interrupted, the copies can get stuck on the device. Picking just the video files you need is much faster. Either way, nothing is uploaded anywhere — everything stays on your device.",
+    "iosFolderWarning.files": "Choose files",
+    "iosFolderWarning.folder": "Whole folder anyway",
+    "iosFolderWarning.cancel": "Cancel",
 
     "switchLang.title": "Reload to switch language?",
     "switchLang.body": "Switching language reloads the page, so your loaded recordings will be cleared. You'll need to open them again.",

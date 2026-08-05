@@ -531,6 +531,12 @@ export const frDict = {
     "uploadWarning.body": "Le navigateur peut demander un truc du genre \"Envoyer les fichiers à ce site ?\" — c'est sa boîte de dialogue standard pour l'accès au dossier, pas un vrai envoi. Pas de serveur. Tout se lit directement dans ton navigateur.",
     "uploadWarning.continue": "Ouvrir le dossier",
     "uploadWarning.cancel": "Annuler",
+    "iosFolderWarning.title": "Choisir un dossier entier est lent sur iPhone et iPad",
+    "iosFolderWarning.body":
+        "Sur iPhone et iPad, le navigateur copie d'abord tout le contenu du dossier choisi — avec une grande carte mémoire c'est très long et ça mange le stockage de ton appareil. Si la copie est interrompue, les copies peuvent rester coincées sur l'appareil. C'est bien plus rapide de choisir seulement les vidéos dont tu as besoin. Dans tous les cas, rien n'est envoyé nulle part — tout reste sur ton appareil.",
+    "iosFolderWarning.files": "Choisir des fichiers",
+    "iosFolderWarning.folder": "Le dossier entier quand même",
+    "iosFolderWarning.cancel": "Annuler",
 
     "switchLang.title": "Recharger pour changer de langue ?",
     "switchLang.body": "Changer de langue recharge la page et efface les enregistrements que tu as ouverts. Tu devras les rouvrir.",

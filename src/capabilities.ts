@@ -114,8 +114,11 @@ const SEVERITY: Record<CapabilityId, CapabilitySeverity> = {
     // At least one way to hand us files. Folder picker OR DnD entries OR a plain
     // multi-file <input>. If NONE work the app cannot start. Fatal (universal).
     fileLoad: "blocking",
-    // <input webkitdirectory> folder picker. Absent on iOS Safari - there the
-    // user picks individual files instead, so it is load friction, not fatal.
+    // <input webkitdirectory> folder picker. On iOS the attribute probes true
+    // but the picker either does nothing (pre-18.4) or copies the whole tree
+    // before the page sees anything (18.4+, see docs/browser-support.md) - the
+    // iOS folder warning steers to individual files there. Load friction, not
+    // fatal.
     folderPicker: "degraded",
     // DataTransferItem.webkitGetAsEntry for recursive folder drag-and-drop. The
     // picker is the primary path; this is a convenience. Diagnostic only.

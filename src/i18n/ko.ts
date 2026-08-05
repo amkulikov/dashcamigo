@@ -537,6 +537,11 @@ export const koDict = {
     "uploadWarning.body": '브라우저가 "이 사이트에 파일을 업로드하시겠습니까?" 같은 질문을 띄울 수 있는데, 폴더 접근 표준 대화상자일 뿐 실제 업로드는 아니에요. 서버는 없어요. 모든 게 바로 브라우저 안에서 재생돼요.',
     "uploadWarning.continue": "폴더 열기",
     "uploadWarning.cancel": "취소",
+    "iosFolderWarning.title": "iPhone·iPad에서 폴더 전체 선택은 느려요",
+    "iosFolderWarning.body": "iPhone과 iPad에서는 선택한 폴더의 내용을 브라우저가 먼저 전부 복사해요. 큰 메모리 카드라면 아주 오래 걸리고 기기 저장 공간도 잡아먹어요. 복사가 중단되면 복사본이 기기에 남아버릴 수 있어요. 필요한 동영상 파일만 고르는 게 훨씬 빨라요. 어느 쪽이든 업로드는 없어요 — 모든 건 기기 안에 남아요.",
+    "iosFolderWarning.files": "파일 선택",
+    "iosFolderWarning.folder": "그래도 폴더 전체",
+    "iosFolderWarning.cancel": "취소",
 
     "switchLang.title": "언어를 바꾸려면 새로고침할까요?",
     "switchLang.body": "언어를 바꾸면 페이지가 새로고침되어 불러온 녹화 영상이 지워집니다. 다시 열어야 합니다.",
