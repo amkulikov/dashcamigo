@@ -20,6 +20,7 @@ import { juscarTsPrimitive } from "./juscar-ts.js";
 import { kenwoodPrimitive } from "./kenwood.js";
 import { ligoJsonPrimitive } from "./ligo-json.js";
 import { ligoGpsPrimitive } from "./ligogps.js";
+import { ligoGpsTrailerPrimitive } from "./ligogps-trailer.js";
 import { navitelTailPrimitive } from "./navitel-tail.js";
 import { nextbaseGdatPrimitive } from "./nextbase-gdat.js";
 import { nextbaseSubtitlePrimitive } from "./nextbase-subtitle.js";
@@ -59,6 +60,9 @@ import { csv70maiPrimitive } from "./csv-70mai.js";
 //      ~40 B trailer probe (CCCC + GPSDATA--) for files whose box walk does
 //      not reach EOF. Before freegps so udta/trailer-carried files never pay
 //      the heavy streaming probe.
+//   4e2. ligogps-trailer - conditional 64 KB probe of the trailing region for
+//      the LIGOGPSINFO literal (Beferich J18). After kenwood (its probe is
+//      40 B); only junk-tailed files pay this read at all.
 //   4f. gpslog-atom     - sync head check of the top-level `udat` text-log atom
 //      for an NMEA sentence or a Denver record shape, like the udta carriers.
 //      After rvmi on purpose: a Datakam Player re-export can carry both, and
@@ -125,6 +129,7 @@ export const VIDEO_EMBEDDED_PRIMITIVES: readonly Primitive[] = [
     garminUuidPrimitive,
     ligoJsonPrimitive,
     kenwoodPrimitive,
+    ligoGpsTrailerPrimitive,
     gpsLogAtomPrimitive,
     nextbaseGdatPrimitive,
     gpmfPrimitive,

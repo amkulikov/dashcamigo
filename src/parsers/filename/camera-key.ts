@@ -24,6 +24,7 @@ import {
     MAI70_MODE_FOLDERS,
     RX_70MAI,
     RX_70MAI_CHANNEL_STRIP,
+    RX_BEFERICH,
     RX_BLACKVUE,
     RX_CARCAM,
     RX_DDPAI_EVENT,
@@ -145,6 +146,20 @@ const mai70CameraKey: FilenameCameraKeyTechnique = {
         // the same dir component.
         const dir = strippedParentDir(file.relativePath, MAI70_STRIP_FOLDERS);
         return `70mai|${dir}|${masked}`;
+    },
+};
+
+const beferichCameraKey: FilenameCameraKeyTechnique = {
+    id: "beferich-camera-key",
+    extract(file: VendorFile): string | null {
+        const m = file.file.name.match(RX_BEFERICH);
+        if (!m) return null;
+        // Channel letter at group [7], one char before `.mp4`. Strip it so
+        // front + rear converge to one fingerprint and pair into one frame.
+        const masked = maskNameWithTrailingLetterStripped(file.file.name, m[7]!);
+        // Single-folder corpus; defensive strip for hand-split channels.
+        const dir = strippedParentDir(file.relativePath, ["front", "rear", "interior"]);
+        return `beferich|${dir}|${masked}`;
     },
 };
 
@@ -515,6 +530,7 @@ const wolfboxCameraKey: FilenameCameraKeyTechnique = {
  */
 export const FILENAME_CAMERA_KEY: readonly FilenameCameraKeyTechnique[] = [
     mai70CameraKey,
+    beferichCameraKey,
     blackvueCameraKey,
     carcamCameraKey,
     sstarChnCameraKey,

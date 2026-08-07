@@ -57,6 +57,12 @@ export const RX_70MAI_CHANNEL_STRIP = /[FBIR]((?:-\d{14})?\.mp4)$/i;
 
 // BlackVue DR-series: YYYYMMDD_HHMMSS_<Mode><Channel>.mp4.
 // Mode in N/E/P/M, Channel in F/R/I.
+// Beferich (J18, ...): `2026-08-03_11_34_53_f.mp4`. Same datetime core as
+// RX_FORD but `.mp4` and no FordFootage/ gate - the trailing channel letter
+// keeps the two disjoint via the extension. Front-only corpus: `f` is
+// confirmed, other letters map by mnemonic (see beferich-channel).
+export const RX_BEFERICH = /^(\d{4})-(\d{2})-(\d{2})_(\d{2})_(\d{2})_(\d{2})_([a-z])\.mp4$/i;
+
 export const RX_BLACKVUE = /^(\d{8})_(\d{6})_([NEPM])([FRI])\.mp4$/i;
 
 /**

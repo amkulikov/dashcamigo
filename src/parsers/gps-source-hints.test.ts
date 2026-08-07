@@ -39,6 +39,8 @@ describe("classifyGpsSource", () => {
     });
 
     it("embedded formats", () => {
+        expect(classifyGpsSource(vf("2026-08-03_11_34_53_f.mp4"))).toBe("embedded"); // Beferich J18 (ligogps trailer)
+        expect(classifyGpsSource(vf("2026-08-03_11_34_53_r.mp4"))).toBe("embedded"); // Beferich rear suffix
         expect(classifyGpsSource(vf("20211011_141314_NF.mp4"))).toBe("embedded"); // BlackVue X
         expect(classifyGpsSource(vf("REC20250607-180617-527-A.mp4"))).toBe("embedded"); // Carcam
         expect(classifyGpsSource(vf("FILE201104-163014-000429F.mov"))).toBe("embedded"); // Navitel

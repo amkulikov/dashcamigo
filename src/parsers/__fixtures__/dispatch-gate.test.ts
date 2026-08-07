@@ -72,6 +72,15 @@ const CASES = [
         extractor: "wolfbox-gpmd",
     },
     {
+        // The trailer sits past the last top-level box, invisible to every
+        // sync marker - the file must classify "light" through the junk-tail
+        // branch (the kenwood fallback) and the 64 KB trailer probe must win.
+        label: "Beferich LigoGPS trailer -> ligogps-trailer",
+        rel: "ligogps-trailer/real-anonymized.mp4",
+        name: "2026-08-03_11_34_53_f.mp4",
+        extractor: "ligogps-trailer",
+    },
+    {
         // MPEG-TS has no moov, so the kind-gate must key off hasLigoGpsMarker
         // (headerBytes), not a moov atom. Also covers the container class the
         // ingest queue regressed on (TS got no embedded GPS at all).

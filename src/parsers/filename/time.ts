@@ -10,6 +10,7 @@
 import type { VendorFile } from "../types.js";
 import {
     RX_70MAI,
+    RX_BEFERICH,
     RX_BLACKVUE,
     RX_CARCAM,
     RX_DDPAI_EVENT,
@@ -111,6 +112,17 @@ const mai70Time: FilenameTimeTechnique = {
         // return null, not silently roll over to a wrong date.
         const [, y, mo, d, h, mi, s] = m;
         return ymdhms(+y!, +mo!, +d!, +h!, +mi!, +s!);
+    },
+};
+
+const beferichTime: FilenameTimeTechnique = {
+    id: "beferich-time",
+    extract(file: VendorFile): Date | null {
+        const m = file.file.name.match(RX_BEFERICH);
+        if (!m) return null;
+        // Named technique (not just the generic-datetime fallback) so the file
+        // reads as "beferich-time" in diagnostics - the ford-time rationale.
+        return ymdhms(+m[1]!, +m[2]!, +m[3]!, +m[4]!, +m[5]!, +m[6]!);
     },
 };
 
@@ -357,6 +369,7 @@ const genericDatetimeTime: FilenameTimeTechnique = {
  */
 export const FILENAME_TIME: readonly FilenameTimeTechnique[] = [
     mai70Time,
+    beferichTime,
     blackvueTime,
     carcamTime,
     recSingleTime,

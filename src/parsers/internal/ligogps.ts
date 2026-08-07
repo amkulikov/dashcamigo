@@ -1,9 +1,10 @@
-// LigoGPS - encrypted GPS payload written by several SoC families under the
-// LIGOGPSINFO\0 marker. Claimed here only in the `ssmd` meta-track carrier
-// (CARCAM 4CH 360-WiFi and relatives); the freeGPS-wrapped and `gpmd`
-// carriers (Rexing, Kingslim, iiway, XGODY, Redtiger F9 4K) are a
-// recognize-and-bail case, deliberately left unclaimed - see
-// FUZZ_SETTLED_SAMPLE_FORMAT.
+// LigoGPS - GPS payload written by several SoC families under the
+// LIGOGPSINFO\0 marker. Claimed here in two carriers: the encrypted `ssmd`
+// meta-track (CARCAM 4CH 360-WiFi and relatives) and the plaintext half of
+// the file trailer (Beferich J18 - see parseLigoGpsTrailer below). The
+// freeGPS-wrapped and `gpmd` carriers (Rexing, Kingslim, iiway, XGODY,
+// Redtiger F9 4K) plus the encrypted trailer twin are a recognize-and-bail
+// case, deliberately left unclaimed - see FUZZ_SETTLED_SAMPLE_FORMAT.
 //
 // Source of truth: ExifTool LigoGPS.pm (DecryptLigoGPS + ParseLigoGPS),
 // ported 1-to-1 to avoid divergence. ExifTool MIT/Artistic-2.
@@ -146,11 +147,28 @@ function decryptLigoGps(chunk: Uint8Array): Uint8Array | null {
  *   5: lon hemisphere (E/W/?)
  *   6: optional minus
  *   7: lon decimal degrees
- *   8: speed (knots)
+ *   8: speed (unit is per-carrier, see LigoSpeedUnit)
+ *
+ * The `s` flag mirrors ExifTool's /s: the leading 4 bytes are a binary
+ * counter, and a counter byte of 0x0a (record 10, 266, ...) must not make
+ * `.` fail on a "line terminator".
  */
-const REC_RX = /^.{4}(\S+ \S+)\s+([NS?]):(-?)([.\d]+)\s+([EW?]):(-?)([.\d]+)\s+([.\d]+)/;
+const REC_RX = /^.{4}(\S+ \S+)\s+([NS?]):(-?)([.\d]+)\s+([EW?]):(-?)([.\d]+)\s+([.\d]+)/s;
 
-function parseLigoGpsRecord(text: string, mp4Filename: string): GpsRecord | null {
+/** Optional trailing fields (ExifTool ParseLigoGPS): A: course over ground
+ *  in degrees, x/y/z accelerometer components. H: (altitude) has no
+ *  GpsRecord field and M: (magnetic variation) no consumer - both dropped. */
+const COURSE_RX = /\bA:(-?[.\d]+)/;
+const ACCEL_RX = /x:(-?[.\d]+)\sy:(-?[.\d]+)\sz:(-?[.\d]+)/;
+
+/**
+ * Speed unit of the record's 8th field. ExifTool keys this off carrier flags
+ * (LigoGPS.pm ParseLigoGPS `$flags`): encrypted ssmd records carry knots,
+ * the plaintext trailer records (flags 0x02) are already km/h.
+ */
+type LigoSpeedUnit = "knots" | "kmh";
+
+function parseLigoGpsRecord(text: string, mp4Filename: string, speedUnit: LigoSpeedUnit = "knots"): GpsRecord | null {
     const m = text.match(REC_RX);
     if (!m) return null;
 
@@ -162,6 +180,8 @@ function parseLigoGpsRecord(text: string, mp4Filename: string): GpsRecord | null
     const lonNeg = m[6] === "-";
     const lonStr = m[7]!;
     const speedStr = m[8]!;
+    const courseMatch = text.match(COURSE_RX);
+    const accelMatch = text.match(ACCEL_RX);
 
     // datetime: "YYYY/MM/DD HH:MM:SS" (UTC).
     const dtMatch = datetimeStr.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2}) (\d{1,2}):(\d{1,2}):(\d{1,2})/);
@@ -179,13 +199,30 @@ function parseLigoGpsRecord(text: string, mp4Filename: string): GpsRecord | null
 
     let lat = Number(latStr);
     let lon = Number(lonStr);
-    const speedKnots = Number(speedStr);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(speedKnots)) return null;
+    const speedRaw = Number(speedStr);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(speedRaw)) return null;
 
     if (latNeg || nsRef === "S") lat = -lat;
     if (lonNeg || ewRef === "W") lon = -lon;
     if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
     if (nsRef === "?" || ewRef === "?") return null; // no fix
+
+    // Course: only a plausible [0..360) value lands in bearingDeg; anything
+    // else keeps 0 so the dispatcher forward-fills from trajectory.
+    let bearingDeg = 0;
+    if (courseMatch) {
+        const course = Number(courseMatch[1]);
+        if (Number.isFinite(course) && course >= 0 && course < 360) bearingDeg = course;
+    }
+    let accelXg = 0;
+    let accelYg = 0;
+    let accelZg = 0;
+    if (accelMatch) {
+        const [ax, ay, az] = [Number(accelMatch[1]), Number(accelMatch[2]), Number(accelMatch[3])];
+        if (Number.isFinite(ax) && Number.isFinite(ay) && Number.isFinite(az)) {
+            [accelXg, accelYg, accelZg] = [ax, ay, az];
+        }
+    }
 
     const unixSeconds = Date.UTC(year, month - 1, day, hour, minute, second) / 1000;
     return {
@@ -193,11 +230,11 @@ function parseLigoGpsRecord(text: string, mp4Filename: string): GpsRecord | null
         active: true,
         lat,
         lon,
-        bearingDeg: 0, // LigoGPS ParseLigoGPS does not extract course; dispatcher forward-fills from trajectory
-        speedMs: speedKnots * KNOTS_TO_MS,
-        accelXg: 0,
-        accelYg: 0,
-        accelZg: 0,
+        bearingDeg,
+        speedMs: speedUnit === "kmh" ? speedRaw / 3.6 : speedRaw * KNOTS_TO_MS,
+        accelXg,
+        accelYg,
+        accelZg,
         mp4Filename,
     };
 }
@@ -336,4 +373,152 @@ function bytesToAscii(buf: Uint8Array): string {
     return out;
 }
 
-export const _internal = { decryptLigoGps, parseLigoGpsRecord, findLigoGpsChunkOffset };
+// ---------------------------------------------------------------------------
+// File-trailer carrier (Beferich J18 and relatives).
+//
+// After the last top-level box the firmware appends a zero-padded trailer
+// holding TWO LIGOGPSINFO directories: an encrypted twin ('####' chunks;
+// fuzz state unsettled for this carrier, deliberately not claimed - see
+// FUZZ_SETTLED_SAMPLE_FORMAT) followed by a plaintext table of the same
+// records:
+//
+//   "SKIP" "LIGOGPSINFO" <5 spaces> <u32 BE record count>
+//   then per record a 0x84-byte slot: u32 BE 1-based index + ASCII text,
+//   NUL-padded; a '####' + u32 BE block-size pair terminates the table.
+//
+// The plaintext records match ExifTool's "non-encrypted format written by
+// Redtiger F9 4K" branch (LigoGPS.pm ProcessLigoGPS -> ParseLigoGPS flags
+// 0x03): not fuzzed, speed already km/h. The zero pad before the first
+// directory varies per file (24..3408 bytes observed) - scan for the magic,
+// never assume a fixed offset.
+
+/** Probe window from the trailer start for the marker check. The magic sits
+ *  past a variable zero pad (<=3.4 KB observed); 64 KB is cheap margin. */
+export const LIGO_TRAILER_PROBE_BYTES = 64 * 1024;
+
+/** Full-trailer read cap. A 1 Hz table costs ~16 KB/min including the
+ *  encrypted twin - 8 MB covers many hours of records. */
+const LIGO_TRAILER_READ_CAP = 8 * 1024 * 1024;
+
+const LIGO_SLOT_SIZE = 0x84;
+/** Records start at magic + 0x14: 11 magic bytes + 9 header bytes (pad or
+ *  spaces + count, depending on the directory flavor). */
+const LIGO_DIR_HEADER = 0x14;
+/** Sanity cap on the declared record count (24 h at 1 Hz). */
+const LIGO_MAX_RECORDS = 86400;
+
+const LIGO_MAGIC_BYTES = new TextEncoder().encode(LIGO_MAGIC);
+
+function findLigoMagicOffsets(payload: Uint8Array): number[] {
+    const hits: number[] = [];
+    outer: for (let i = 0; i + LIGO_MAGIC_BYTES.length <= payload.length; i++) {
+        for (let j = 0; j < LIGO_MAGIC_BYTES.length; j++) {
+            if (payload[i + j] !== LIGO_MAGIC_BYTES[j]) continue outer;
+        }
+        hits.push(i);
+    }
+    return hits;
+}
+
+/** Whether the buffer holds a LIGOGPSINFO literal - the trailer marker check
+ *  over the probe window read from `lastTopLevelBoxEnd`. */
+export function hasLigoTrailerMarker(head: Uint8Array): boolean {
+    return findLigoMagicOffsets(head).length > 0;
+}
+
+function isHashMarker(buf: Uint8Array, offset: number): boolean {
+    return (
+        offset + 4 <= buf.length &&
+        buf[offset] === 0x23 &&
+        buf[offset + 1] === 0x23 &&
+        buf[offset + 2] === 0x23 &&
+        buf[offset + 3] === 0x23
+    );
+}
+
+function readU32BE(buf: Uint8Array, offset: number): number {
+    if (offset + 4 > buf.length) return 0;
+    return ((buf[offset]! << 24) | (buf[offset + 1]! << 16) | (buf[offset + 2]! << 8) | buf[offset + 3]!) >>> 0;
+}
+
+/**
+ * Extracts GpsRecords from the plaintext LIGOGPSINFO table in the file
+ * trailer. Reads the region past the last top-level box (capped), walks every
+ * LIGOGPSINFO directory in it, skips the encrypted twin, and regex-parses the
+ * plaintext slots. Throws WrongFormatError when the region carries no
+ * LIGOGPSINFO directory at all; an encrypted-only trailer returns zero
+ * records with a skipped entry (recognized but unclaimed, the ssmd-carrier
+ * precedent).
+ */
+export async function parseLigoGpsTrailer(file: VendorFile, index: Mp4Index): Promise<ParsedRecords> {
+    const start = index.lastTopLevelBoxEnd;
+    if (start === null || start >= index.fileSize) {
+        throw new WrongFormatError("no trailing region after last top-level box");
+    }
+    const end = Math.min(index.fileSize, start + LIGO_TRAILER_READ_CAP);
+    const buf = new Uint8Array(await file.file.slice(start, end).arrayBuffer());
+
+    const records: GpsRecord[] = [];
+    const skipped: SkippedLine[] = [];
+    let foundDirectory = false;
+
+    for (const magicOff of findLigoMagicOffsets(buf)) {
+        const recordsStart = magicOff + LIGO_DIR_HEADER;
+        // The '####' check needs 4 bytes; a full slot is required only for
+        // the plaintext walk below (a truncated encrypted directory must
+        // still be recognized, or the file misreads as "no ligogps trailer").
+        if (recordsStart + 4 > buf.length) continue;
+
+        if (isHashMarker(buf, recordsStart)) {
+            // Encrypted twin. The plaintext table carries the same records,
+            // and the unfuzz question (see FUZZ_SETTLED_SAMPLE_FORMAT) stays
+            // open for this carrier - recognize, do not claim.
+            foundDirectory = true;
+            skipped.push({
+                line: 1,
+                raw: "<ligogps trailer: encrypted directory>",
+                reason: "encrypted trailer directory not claimed - the plaintext twin carries the data",
+            });
+            continue;
+        }
+
+        // Plaintext table: the u32 BE right before the records is the count.
+        // Trust it only as an upper bound - the '####' terminator and the
+        // buffer end also stop the walk (one real file stores 179 slots with
+        // indices jumping to 180: a second with no GPS write).
+        foundDirectory = true;
+        if (recordsStart + LIGO_SLOT_SIZE > buf.length) continue;
+        const declaredCount = readU32BE(buf, magicOff + 0x10);
+        const regionSlots = Math.floor((buf.length - recordsStart) / LIGO_SLOT_SIZE);
+        const maxSlots =
+            declaredCount >= 1 && declaredCount <= LIGO_MAX_RECORDS
+                ? Math.min(declaredCount, regionSlots)
+                : regionSlots;
+
+        for (let i = 0; i < maxSlots; i++) {
+            const slotStart = recordsStart + i * LIGO_SLOT_SIZE;
+            if (isHashMarker(buf, slotStart)) break; // table terminator
+            const slot = buf.subarray(slotStart, slotStart + LIGO_SLOT_SIZE);
+            // Blank (all-zero) slots are a normal firmware gap, not an error.
+            if (slot.every((b) => b === 0)) continue;
+            const text = bytesToAscii(slot).replace(/\0+$/, "");
+            const record = parseLigoGpsRecord(text, file.file.name, "kmh");
+            if (record) {
+                records.push(record);
+            } else {
+                skipped.push({
+                    line: i + 1,
+                    raw: `<ligogps trailer slot ${i + 1}: ${JSON.stringify(text.slice(0, 80))}>`,
+                    reason: "regex did not match plaintext slot",
+                });
+            }
+        }
+    }
+
+    if (!foundDirectory) {
+        throw new WrongFormatError("no ligogps trailer directory");
+    }
+    return { records, skipped };
+}
+
+export const _internal = { decryptLigoGps, parseLigoGpsRecord, findLigoGpsChunkOffset, findLigoMagicOffsets };

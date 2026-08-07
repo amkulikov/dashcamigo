@@ -16,6 +16,7 @@ import type { Channel, VendorFile } from "../types.js";
 import {
     RX_70MAI,
     RX_70MAI_PATH_CHANNEL,
+    RX_BEFERICH,
     RX_BLACKVUE,
     RX_CARCAM,
     RX_CARCAM_PATH_FRONT,
@@ -88,6 +89,30 @@ const mai70Channel: FilenameChannelTechnique = {
             if (folder === "interior") return sure("interior");
         }
         return null;
+    },
+};
+
+const beferichChannel: FilenameChannelTechnique = {
+    id: "beferich-channel",
+    extract(file: VendorFile): ChannelMatch | null {
+        const m = file.file.name.match(RX_BEFERICH);
+        if (!m) return null;
+        // `f` = front is confirmed on real J18 samples. The rest of the map is
+        // the ford-channel rationale verbatim: standard mnemonics for r/b/i
+        // (the dual-channel firmware is expected to suffix the rear `r`), any
+        // other letter goes to the FREE "side" slot as a guess so it still
+        // pairs with front in one frame without colliding with a real rear.
+        switch (m[7]!.toLowerCase()) {
+            case "f":
+                return sure("front");
+            case "r":
+            case "b":
+                return sure("rear");
+            case "i":
+                return sure("interior");
+            default:
+                return guess("side");
+        }
     },
 };
 
@@ -429,6 +454,7 @@ export const FILENAME_CHANNEL: readonly FilenameChannelTechnique[] = [
     neolineChannel,
     vueroidChannel,
     mai70Channel,
+    beferichChannel,
     blackvueChannel,
     carcamChannel,
     sstarChnChannel,

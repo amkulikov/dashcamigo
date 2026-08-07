@@ -16,6 +16,7 @@
 import type { VendorFile } from "./types.js";
 import {
     RX_70MAI,
+    RX_BEFERICH,
     RX_BLACKVUE,
     RX_CARCAM,
     RX_DDPAI_EVENT,
@@ -89,6 +90,13 @@ const GPS_SOURCE_HINTS: readonly GpsSourceHint[] = [
     {
         id: "70mai",
         matches: (f) => RX_70MAI.test(f.file.name),
+        source: "embedded",
+    },
+    // Beferich J18: plaintext LigoGPS table in the file trailer
+    // (ligogps-trailer primitive).
+    {
+        id: "beferich",
+        matches: (f) => RX_BEFERICH.test(f.file.name),
         source: "embedded",
     },
     // BlackVue: X-series writes GPS in a `gps` box inside top-level `free`
