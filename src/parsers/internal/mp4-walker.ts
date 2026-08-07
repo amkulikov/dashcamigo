@@ -1040,6 +1040,13 @@ export async function listTopLevelBoxes(file: File): Promise<TopLevelBox[]> {
         let header: 8 | 16 = 8;
         const type = String.fromCharCode(dv.getUint8(4), dv.getUint8(5), dv.getUint8(6), dv.getUint8(7));
 
+        // A type outside printable ASCII is not a box - it is trailing junk
+        // (or a non-ISOBMFF vendor trailer). Stop like on any corrupt header
+        // so lastTopLevelBoxEnd marks where the trailer begins. Without this,
+        // a zero-padded trailer (size 0 + NUL type reads as "box to EOF" -
+        // Beferich LigoGPS trailer) would swallow the whole trailing region.
+        if (!/^[\x20-\x7e]{4}$/.test(type)) break;
+
         if (size === 1) {
             if (dv.byteLength < 16) break;
             header = 16;
