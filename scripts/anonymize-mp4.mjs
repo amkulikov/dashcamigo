@@ -42,7 +42,9 @@ const AUDIO_FREQ_HZ = 1000;
 const AUDIO_VOLUME_DB = -20;
 
 function usage() {
-    console.error("usage: node scripts/anonymize-mp4.mjs <input.mp4> <output.mp4> [--embedded-gps-handler <path>]");
+    console.error(
+        "usage: node scripts/anonymize-mp4.mjs <input.mp4> <output.mp4> [--embedded-gps-handler <path>] [--crf <n>]",
+    );
     exit(1);
 }
 
@@ -97,8 +99,10 @@ function pickEncoder(codecName) {
     }
 }
 
-function buildFfmpegArgs(probe, output) {
+function buildFfmpegArgs(probe, output, crf) {
     const encoder = pickEncoder(probe.codec);
+    // CRF is meaningful for the libx26x encoders only; mpeg4 ignores it.
+    const quality = crf !== null && encoder !== "mpeg4" ? ["-crf", String(crf)] : [];
     return [
         "-y",
         // Video source: testsrc2 gives color bars + a running frame counter -
@@ -111,6 +115,7 @@ function buildFfmpegArgs(probe, output) {
         "-i", `sine=frequency=${AUDIO_FREQ_HZ}:sample_rate=48000:duration=${FIXTURE_DURATION_SEC}`,
         "-filter:a", `volume=${AUDIO_VOLUME_DB}dB`,
         "-c:v", encoder,
+        ...quality,
         "-preset", "ultrafast",
         "-c:a", "aac",
         "-b:a", "64k",
@@ -127,9 +132,16 @@ async function main() {
     const output = resolve(args[1]);
 
     let embeddedGpsHandler = null;
+    let crf = null;
     for (let i = 2; i < args.length; i++) {
         if (args[i] === "--embedded-gps-handler" && args[i + 1]) {
             embeddedGpsHandler = resolve(args[i + 1]);
+            i++;
+        } else if (args[i] === "--crf" && args[i + 1]) {
+            // Fixture-size knob for high-resolution sources: default x264/x265
+            // rate control on a 1440p+ testsrc2 pattern busts the 5 MB fixture
+            // budget; callers pass a high CRF to stay under it.
+            crf = Number(args[i + 1]);
             i++;
         } else {
             console.error(`unknown argument: ${args[i]}`);
@@ -148,7 +160,7 @@ async function main() {
     const probe = probeVideo(input);
     console.log(`source: ${probe.codec} ${probe.width}x${probe.height} @ ${probe.fps}fps`);
 
-    const ffmpegArgs = buildFfmpegArgs(probe, output);
+    const ffmpegArgs = buildFfmpegArgs(probe, output, crf);
     console.log("ffmpeg", ffmpegArgs.join(" "));
     const r = spawnSync("ffmpeg", ffmpegArgs, { stdio: "inherit" });
     if (r.status !== 0) {
