@@ -1420,9 +1420,167 @@ const VENDOR_TEMPLATES: Partial<Record<Lang, VendorTemplate>> = {
     },
 };
 
+// SERP-visible head copy a template cannot express: model numbers in the
+// <title> and local search idiom in the lead. Hand-written per vendor for the
+// community locales whose templated pages already rank; the page body (CTA,
+// models note, format section, FAQ) stays on VENDOR_TEMPLATES / COMMUNITY_FAQ.
+// Values are final strings - no {vendor} substitution runs over them.
+type VendorHeadCopy = Pick<
+    VendorLocaleContent,
+    "title" | "metaDescription" | "ogTitle" | "ogDescription" | "h1" | "lead"
+>;
+
+const VENDOR_HEAD_OVERRIDES: Partial<Record<Lang, Partial<Record<VendorSlug, VendorHeadCopy>>>> = {
+    de: {
+        "70mai": {
+            title: "70mai Dashcam-Player & Viewer — X800, A800S, A810, T800 | dashcamigo",
+            metaDescription:
+                "Kostenloser Online-Player für 70mai: X800, A800S, A810, T800 im Browser. GPS-Karte, Geschwindigkeitsdiagramm, Mehrkanal. Kein Upload, keine Installation.",
+            ogTitle: "70mai Dashcam-Player online — X800, A800S, A810, T800",
+            ogDescription:
+                "Kostenloser Online-Player für 70mai-Aufnahmen. GPS-Karte, Geschwindigkeitsdiagramm, Mehrkanal. Läuft in jedem modernen Browser, nichts wird hochgeladen.",
+            h1: "70mai Dashcam-Player online — Aufnahmen im Browser abspielen",
+            lead: "Öffne Aufnahmen deiner 70mai-Dashcam direkt im Browser, auf jedem PC oder Mac — ohne Android-Emulator, ohne 70mai-App. Synchronisierte GPS-Strecke, Geschwindigkeits- und G-Kraft-Diagramm, Mehrkanal-Wiedergabe (vorn, hinten, Innenraum). Kein Upload, kein Konto.",
+        },
+        viofo: {
+            title: "Viofo Dashcam-Player & Viewer — A119, A129, A139, A229 | dashcamigo",
+            metaDescription:
+                "Kostenloser Online-Player für Viofo: A119, A129, A139, A229 im Browser. GPS-Karte, Geschwindigkeitsdiagramm, Front + Heck synchron. Kein Upload, keine Installation.",
+            ogTitle: "Viofo Dashcam-Player online — A119, A129, A139, A229",
+            ogDescription:
+                "Kostenloser Online-Player für Viofo-Aufnahmen. GPS-Karte, Geschwindigkeitsdiagramm, Mehrkanal. Läuft in jedem modernen Browser, nichts wird hochgeladen.",
+            h1: "Viofo Dashcam-Player online — Aufnahmen im Browser abspielen",
+            lead: "Öffne Aufnahmen deiner Viofo-Dashcam direkt im Browser — auf Windows, Mac und Linux, ohne Desktop-Player. Synchronisierte GPS-Strecke, Geschwindigkeits- und G-Kraft-Diagramm, Mehrkanal-Wiedergabe (vorn, hinten, Innenraum). Kostenlos, ohne Upload, ohne Konto.",
+        },
+        blackvue: {
+            title: "BlackVue Dashcam-Player & Viewer — DR900X, DR970X, DR750X | dashcamigo",
+            metaDescription:
+                "Kostenloser Online-Player für BlackVue: DR900X, DR970X, DR750X im Browser. GPS-Karte, Geschwindigkeitsdiagramm, Front + Heck synchron. Ohne BlackVue Cloud.",
+            ogTitle: "BlackVue Player online — DR900X, DR970X, DR750X",
+            ogDescription:
+                "Kostenloser Online-Player für BlackVue-Aufnahmen. GPS-Karte, Geschwindigkeitsdiagramm, Front + Heck synchron. Kein BlackVue-Cloud-Konto nötig.",
+            h1: "BlackVue Dashcam-Player online — Aufnahmen im Browser abspielen",
+            lead: "Öffne Aufnahmen der BlackVue DR-Serie direkt im Browser. Synchronisierte GPS-Strecke, Geschwindigkeits- und G-Kraft-Diagramm, Front und Heck gleichzeitig. Ohne BlackVue-Viewer-Installation, ohne BlackVue-Cloud-Konto.",
+        },
+        gopro: {
+            title: "GoPro Dashcam-Player — HERO11, HERO10, HERO9 GPMF | dashcamigo",
+            metaDescription:
+                "Kostenloser Online-Player für GoPro: HERO5–HERO13 und MAX mit GPMF-Telemetrie im Browser. GPS-Karte, Geschwindigkeits- und G-Kraft-Diagramm. Kein Upload.",
+            ogTitle: "GoPro Player online — HERO5–HERO13 GPMF-Telemetrie",
+            ogDescription:
+                "Kostenloser Online-Player für GoPro-Aufnahmen mit GPMF-GPS. Karte, Geschwindigkeits- und G-Kraft-Diagramm aus dem gpmd-Track. Läuft in jedem modernen Browser.",
+            h1: "GoPro als Dashcam — GPMF-Aufnahmen im Browser abspielen",
+            lead: "Öffne GoPro-HERO- und MAX-Aufnahmen direkt im Browser. Der GPMF-Metadaten-Track (gpmd) liefert GPS, Geschwindigkeit, Höhe und 3-Achsen-Beschleunigung — dashcamigo zeigt alles auf synchronisierter Karte und Diagramm.",
+        },
+        garmin: {
+            title: "Garmin Dash Cam Player & Viewer — 67W, 57, Mini 2/3 | dashcamigo",
+            metaDescription:
+                "Kostenloser Online-Player für Garmin Dash Cam: 67W, 57, 47, Mini 2/3, Live im Browser. GPS-Karte und Geschwindigkeitsdiagramm aus dem PNDM-Track. Kein Upload.",
+            ogTitle: "Garmin Dash Cam Player online — 67W, 57, Mini 2/3",
+            ogDescription:
+                "Kostenloser Online-Player für Garmin-Dash-Cam-Aufnahmen. GPS-Karte, Geschwindigkeitsdiagramm. Ohne Garmin Express, ohne Installation.",
+            h1: "Garmin Dash Cam Player online — Aufnahmen im Browser abspielen",
+            lead: "Öffne Garmin-Dash-Cam-Aufnahmen direkt im Browser — ohne Garmin Express. GPS, Geschwindigkeit und Beschleunigung kommen aus dem PNDM-Telemetrie-Track und landen synchron auf Karte und Diagramm.",
+        },
+        vantrue: {
+            title: "Vantrue Dashcam-Player & Editor — N4, N5, E3, X4S | dashcamigo",
+            metaDescription:
+                "Kostenloser Player & Editor für Vantrue: N4, N5, E3, X4S im Browser. GPS-Karte, Geschwindigkeitsdiagramm, Schneiden und Export. Kein Upload, keine Installation.",
+            ogTitle: "Vantrue Player & Editor online — N4, N5, E3, X4S",
+            ogDescription:
+                "Kostenloser Online-Player und -Editor für Vantrue-Aufnahmen. GPS-Karte, Geschwindigkeitsdiagramm, Schneiden und Export. Nichts wird hochgeladen.",
+            h1: "Vantrue Dashcam-Player & Editor online — abspielen und schneiden im Browser",
+            lead: "Öffne Aufnahmen deiner Vantrue-Dashcam direkt im Browser. Synchronisierte GPS-Strecke, Geschwindigkeits- und G-Kraft-Diagramm, Mehrkanal-Wiedergabe (vorn, hinten, Innenraum), dazu Schneiden und Export. Ohne Vantrue-App, ohne Upload, ohne Konto.",
+        },
+        thinkware: {
+            title: "Thinkware Dashcam-Player & Editor — F800, Q800, U1000 | dashcamigo",
+            metaDescription:
+                "Kostenloser Player & Editor für Thinkware: F800, F770, Q800 Pro, U1000 im Browser. GPS-Karte, Geschwindigkeitsdiagramm, Schneiden und Export. Kein Upload.",
+            ogTitle: "Thinkware Player & Editor online — F800, Q800, U1000",
+            ogDescription:
+                "Kostenloser Online-Player und -Editor für Thinkware-Aufnahmen. GPS-Karte, Geschwindigkeitsdiagramm, Schneiden und Export. Läuft in jedem modernen Browser.",
+            h1: "Thinkware Dashcam-Player & Editor online — abspielen und schneiden im Browser",
+            lead: "Öffne Aufnahmen deiner Thinkware-Dashcam direkt im Browser. Synchronisierte GPS-Strecke, Geschwindigkeits- und G-Kraft-Diagramm, Front- und Heck-Wiedergabe, dazu Schneiden und Export. Ohne Thinkware Dashcam Viewer, ohne Upload, ohne Konto.",
+        },
+    },
+    pl: {
+        "70mai": {
+            title: "Odtwarzacz 70mai online — X800, A800S, A810, T800 | dashcamigo",
+            metaDescription:
+                "Darmowy odtwarzacz online do 70mai: X800, A800S, A810, T800 w przeglądarce. Mapa GPS, wykres prędkości, wiele kamer naraz. Bez wysyłania plików, bez instalacji.",
+            ogTitle: "Odtwarzacz 70mai online — X800, A800S, A810, T800",
+            ogDescription:
+                "Darmowy odtwarzacz online nagrań 70mai. Mapa GPS, wykres prędkości, wiele kamer naraz. Działa w każdej nowoczesnej przeglądarce.",
+            h1: "Odtwarzacz 70mai online — nagrania wideorejestratora w przeglądarce",
+            lead: "Otwórz nagrania z wideorejestratora 70mai prosto w przeglądarce, na każdym PC i Macu — bez emulatora Androida, bez aplikacji 70mai. Zsynchronizowana trasa GPS, wykres prędkości i przeciążeń, odtwarzanie przód/tył/kabina jednocześnie. Bez wysyłania plików, bez konta.",
+        },
+        viofo: {
+            title: "Odtwarzacz Viofo online — A119, A129, A139, A229 | dashcamigo",
+            metaDescription:
+                "Darmowy odtwarzacz online do Viofo: A119, A129, A139, A229 w przeglądarce. Mapa GPS, wykres prędkości, przód i tył synchronicznie. Bez wysyłania plików.",
+            ogTitle: "Odtwarzacz Viofo online — A119, A129, A139, A229",
+            ogDescription:
+                "Darmowy odtwarzacz online nagrań Viofo. Mapa GPS, wykres prędkości, wiele kamer naraz. Działa w każdej nowoczesnej przeglądarce.",
+            h1: "Odtwarzacz Viofo online — nagrania wideorejestratora w przeglądarce",
+            lead: "Otwórz nagrania z wideorejestratora Viofo prosto w przeglądarce — na Windows, Macu i Linuksie, bez desktopowego playera. Zsynchronizowana trasa GPS, wykres prędkości i przeciążeń, odtwarzanie przód/tył/kabina jednocześnie. Za darmo, bez wysyłania plików, bez konta.",
+        },
+        blackvue: {
+            title: "Odtwarzacz BlackVue online — DR900X, DR970X, DR750X | dashcamigo",
+            metaDescription:
+                "Darmowy odtwarzacz online do BlackVue: DR900X, DR970X, DR750X w przeglądarce. Mapa GPS, wykres prędkości, przód i tył synchronicznie. Bez chmury BlackVue.",
+            ogTitle: "Odtwarzacz BlackVue online — DR900X, DR970X, DR750X",
+            ogDescription:
+                "Darmowy odtwarzacz online nagrań BlackVue. Mapa GPS, wykres prędkości, przód + tył synchronicznie. Bez konta BlackVue Cloud.",
+            h1: "Odtwarzacz BlackVue online — nagrania kamery samochodowej w przeglądarce",
+            lead: "Otwórz nagrania kamery samochodowej BlackVue serii DR prosto w przeglądarce. Zsynchronizowana trasa GPS, wykres prędkości i przeciążeń, przód i tył jednocześnie. Bez instalowania BlackVue Viewera, bez konta BlackVue Cloud.",
+        },
+        gopro: {
+            title: "Odtwarzacz GoPro online — HERO11, HERO10, HERO9 GPMF | dashcamigo",
+            metaDescription:
+                "Darmowy odtwarzacz online do GoPro: HERO5–HERO13 i MAX z telemetrią GPMF w przeglądarce. Mapa GPS, wykres prędkości i przeciążeń. Bez wysyłania plików.",
+            ogTitle: "Odtwarzacz GoPro online — telemetria GPMF HERO5–HERO13",
+            ogDescription:
+                "Darmowy odtwarzacz online nagrań GoPro z GPS (GPMF). Mapa, wykres prędkości i przeciążeń. Działa w każdej nowoczesnej przeglądarce.",
+            h1: "Odtwarzacz GoPro online — nagrania GPMF w przeglądarce",
+            lead: "Otwórz nagrania GoPro HERO i MAX prosto w przeglądarce. Ścieżka metadanych GPMF (gpmd) daje GPS, prędkość, wysokość i przyspieszenie w 3 osiach — dashcamigo rysuje wszystko na zsynchronizowanej mapie i wykresie.",
+        },
+        garmin: {
+            title: "Odtwarzacz wideorejestratora Garmin — 67W, 57, Mini 2/3 | dashcamigo",
+            metaDescription:
+                "Darmowy odtwarzacz online do Garmin Dash Cam: 67W, 57, 47, Mini 2/3, Live w przeglądarce. Mapa GPS i wykres prędkości ze ścieżki PNDM. Bez wysyłania plików.",
+            ogTitle: "Odtwarzacz Garmin Dash Cam online — 67W, 57, Mini 2/3",
+            ogDescription:
+                "Darmowy odtwarzacz online nagrań Garmin Dash Cam. Mapa GPS, wykres prędkości. Bez Garmin Express, bez instalacji.",
+            h1: "Odtwarzacz Garmin Dash Cam online — nagrania wideorejestratora w przeglądarce",
+            lead: "Otwórz nagrania z wideorejestratora Garmin Dash Cam prosto w przeglądarce — bez Garmin Express. GPS, prędkość i przyspieszenie pochodzą ze ścieżki telemetrii PNDM i trafiają na zsynchronizowaną mapę i wykres.",
+        },
+        vantrue: {
+            title: "Odtwarzacz i edytor Vantrue — N4, N5, E3, X4S | dashcamigo",
+            metaDescription:
+                "Darmowy odtwarzacz i edytor online do Vantrue: N4, N5, E3, X4S w przeglądarce. Mapa GPS, wykres prędkości, przycinanie i eksport. Bez wysyłania plików.",
+            ogTitle: "Odtwarzacz i edytor Vantrue online — N4, N5, E3, X4S",
+            ogDescription:
+                "Darmowy odtwarzacz i edytor online nagrań Vantrue. Mapa GPS, wykres prędkości, przycinanie i eksport. Nic nie jest wysyłane.",
+            h1: "Odtwarzacz i edytor Vantrue online — odtwarzaj i przycinaj w przeglądarce",
+            lead: "Otwórz nagrania z wideorejestratora Vantrue prosto w przeglądarce. Zsynchronizowana trasa GPS, wykres prędkości i przeciążeń, odtwarzanie przód/tył/kabina, do tego przycinanie i eksport. Bez aplikacji Vantrue, bez wysyłania plików, bez konta.",
+        },
+        thinkware: {
+            title: "Odtwarzacz i edytor Thinkware — F800, Q800, U1000 | dashcamigo",
+            metaDescription:
+                "Darmowy odtwarzacz i edytor online do Thinkware: F800, Q800 Pro, U1000 w przeglądarce. Mapa GPS, wykres prędkości, przycinanie i eksport. Bez wysyłania plików.",
+            ogTitle: "Odtwarzacz i edytor Thinkware — F800, Q800, U1000",
+            ogDescription:
+                "Darmowy odtwarzacz i edytor online nagrań Thinkware. Mapa GPS, wykres prędkości, przycinanie i eksport. Działa w każdej nowoczesnej przeglądarce.",
+            h1: "Odtwarzacz i edytor Thinkware online — odtwarzaj i przycinaj w przeglądarce",
+            lead: "Otwórz nagrania z wideorejestratora Thinkware prosto w przeglądarce. Zsynchronizowana trasa GPS, wykres prędkości i przeciążeń, odtwarzanie przodu i tyłu, do tego przycinanie i eksport. Bez instalowania Thinkware Dashcam Viewera, bez wysyłania plików, bez konta.",
+        },
+    },
+};
+
 // Resolve the per-locale vendor content. Returns the hand-written copy for
 // en/ru when present, otherwise instantiates VENDOR_TEMPLATES[lang] with
-// the vendor displayName substituted into {vendor} placeholders. Throws if
+// the vendor displayName substituted into {vendor} placeholders, then lays
+// any VENDOR_HEAD_OVERRIDES on top. Throws if
 // neither source is available - that means SEO_LOCALES has a locale that we
 // can't render, a build-time bug we want to surface loudly.
 function resolveVendorContent(vendor: VendorContent, lang: Lang): VendorLocaleContent {
@@ -1447,7 +1605,7 @@ function resolveVendorContent(vendor: VendorContent, lang: Lang): VendorLocaleCo
             .replaceAll("{container}", vendor.format.container)
             .replaceAll("{filename}", proseSafe(vendor.format.filenamePattern))
             .replaceAll("{layout}", proseSafe(vendor.format.sdLayout));
-    return {
+    const templated: VendorLocaleContent = {
         title: sub(template.title),
         metaDescription: sub(template.metaDescription),
         ogTitle: sub(template.ogTitle),
@@ -1465,6 +1623,8 @@ function resolveVendorContent(vendor: VendorContent, lang: Lang): VendorLocaleCo
         // build-time assertCommunityFaqParity guards against that).
         faq: COMMUNITY_FAQ[vendor.slug]?.[lang] ?? [],
     };
+    const headOverride = VENDOR_HEAD_OVERRIDES[lang]?.[vendor.slug];
+    return headOverride ? { ...templated, ...headOverride } : templated;
 }
 
 // Path segment for the locale's URL prefix. "/<segment>" for every locale
