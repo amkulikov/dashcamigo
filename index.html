@@ -566,7 +566,25 @@
                 <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
                 <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
             </svg>
-            <span id="notif-bell-dot" class="notif-bell-dot" hidden aria-hidden="true"></span>
+            <span id="notif-bell-dot" class="topbar-unread-dot" hidden aria-hidden="true"></span>
+        </button>
+
+        <!-- "What's new" - opens the changelog panel (#whats-new-modal). The
+             dot lights up when entries newer than the last acknowledged one
+             exist (src/ui/whats-new-modal.ts) - a quiet hint, never a popup.
+             Lucide sparkles: "something new" without the urgency of the bell. -->
+        <button id="whats-new-btn" type="button" class="topbar-iconbtn"
+                data-i18n-attr="aria-label:whatsnew.title,title:whatsnew.title"
+                aria-label="What's new" title="What's new">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
+                <path d="M20 3v4"/>
+                <path d="M22 5h-4"/>
+                <path d="M4 17v2"/>
+                <path d="M5 18H3"/>
+            </svg>
+            <span id="whats-new-dot" class="topbar-unread-dot" hidden aria-hidden="true"></span>
         </button>
 
         <!-- UX-26: feedback button. Lucide message-circle-question - a bubble
@@ -2180,6 +2198,22 @@
                 <!-- Filled by JS on first open. -->
             </div>
             <div class="hotkeys-modal-foot" data-i18n="hotkeys.dismissHint">? or Esc to close</div>
+        </div>
+    </div>
+
+    <!-- "What's new" changelog panel. Entries live in src/changelog/entries.ts
+         (a lazy chunk - the list loads on first open); rendered by
+         src/ui/whats-new-modal.ts. Opening acknowledges everything and turns
+         the topbar dot off. -->
+    <div id="whats-new-modal" class="whats-new-modal modal-overlay" hidden tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="whats-new-modal-title">
+        <!-- tabindex="-1": the card takes initial focus so keyboard scrolling
+             works when the list outgrows the viewport (whats-new-modal.ts). -->
+        <div class="whats-new-modal-card modal-card" tabindex="-1">
+            <div class="whats-new-modal-title" id="whats-new-modal-title" data-i18n="whatsnew.title">What's new</div>
+            <div class="whats-new-modal-body" id="whats-new-modal-body">
+                <!-- Filled by JS on first open. -->
+            </div>
+            <div class="whats-new-modal-foot" data-i18n="whatsnew.dismissHint">Esc or tap outside to close</div>
         </div>
     </div>
 

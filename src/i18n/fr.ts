@@ -435,6 +435,12 @@ export const frDict = {
     "topPanel.audio.label": "Audio",
     "export.output.legend": "Sortie",
 
+    "whatsnew.title": "Nouveautés",
+    "whatsnew.category.support": "Nouvelles caméras prises en charge",
+    "whatsnew.category.feature": "Nouvelle fonction",
+    "whatsnew.category.improvement": "Amélioration",
+    "whatsnew.category.fix": "Correction",
+    "whatsnew.dismissHint": "Échap ou toucher à côté pour fermer",
     "hotkeys.title": "Raccourcis clavier",
     "hotkeys.group.playback": "Lecture",
     "hotkeys.group.seek": "Avance",

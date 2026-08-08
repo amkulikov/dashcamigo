@@ -598,6 +598,15 @@ export type I18nKey =
     | "topPanel.audio.label"
     | "export.output.legend"
 
+    // "What's new" changelog panel (entry texts are data in
+    // src/changelog/entries.ts - only the panel chrome goes through i18n)
+    | "whatsnew.title"
+    | "whatsnew.category.support"
+    | "whatsnew.category.feature"
+    | "whatsnew.category.improvement"
+    | "whatsnew.category.fix"
+    | "whatsnew.dismissHint"
+
     // Hotkeys cheatsheet (UX-10)
     | "hotkeys.title"
     | "hotkeys.group.playback"

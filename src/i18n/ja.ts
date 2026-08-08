@@ -443,6 +443,12 @@ export const jaDict = {
     "topPanel.audio.label": "音声",
     "export.output.legend": "出力",
 
+    "whatsnew.title": "新着情報",
+    "whatsnew.category.support": "新しいカメラに対応",
+    "whatsnew.category.feature": "新機能",
+    "whatsnew.category.improvement": "改善",
+    "whatsnew.category.fix": "修正",
+    "whatsnew.dismissHint": "Esc または外側をタップで閉じる",
     "hotkeys.title": "キーボードショートカット",
     "hotkeys.group.playback": "再生",
     "hotkeys.group.seek": "シーク",

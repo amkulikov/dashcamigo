@@ -432,6 +432,12 @@ export const zhDict = {
     "topPanel.audio.label": "音频",
     "export.output.legend": "输出",
 
+    "whatsnew.title": "更新内容",
+    "whatsnew.category.support": "支持新的行车记录仪",
+    "whatsnew.category.feature": "新功能",
+    "whatsnew.category.improvement": "改进",
+    "whatsnew.category.fix": "修复",
+    "whatsnew.dismissHint": "按 Esc 或点按外部关闭",
     "hotkeys.title": "键盘快捷键",
     "hotkeys.group.playback": "播放",
     "hotkeys.group.seek": "跳转",

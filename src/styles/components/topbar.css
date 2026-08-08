@@ -93,12 +93,13 @@
     min-width: 0;
 }
 
-/* Notifications bell: same look as other topbar icon buttons, plus a
-   red unread dot anchored to the top-right corner. */
-#notif-bell {
+/* Notifications bell and the "What's new" button: same look as other topbar
+   icon buttons, plus a red unread dot anchored to the top-right corner. */
+#notif-bell,
+#whats-new-btn {
     position: relative;
 }
-.notif-bell-dot {
+.topbar-unread-dot {
     position: absolute;
     top: 1px;
     right: 1px;
@@ -109,7 +110,7 @@
     border: 2px solid var(--bg-elev);
     pointer-events: none;
 }
-.notif-bell-dot[hidden] {
+.topbar-unread-dot[hidden] {
     display: none;
 }
 

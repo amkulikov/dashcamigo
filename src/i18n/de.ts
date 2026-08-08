@@ -433,6 +433,12 @@ export const deDict = {
     "topPanel.audio.label": "Ton",
     "export.output.legend": "Ausgabe",
 
+    "whatsnew.title": "Was ist neu",
+    "whatsnew.category.support": "Unterstützung neuer Kameras",
+    "whatsnew.category.feature": "Neue Funktion",
+    "whatsnew.category.improvement": "Verbesserung",
+    "whatsnew.category.fix": "Fehlerbehebung",
+    "whatsnew.dismissHint": "Esc oder daneben tippen zum Schließen",
     "hotkeys.title": "Tastenkürzel",
     "hotkeys.group.playback": "Wiedergabe",
     "hotkeys.group.seek": "Spulen",

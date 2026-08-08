@@ -433,6 +433,12 @@ export const ptDict = {
     "topPanel.audio.label": "Áudio",
     "export.output.legend": "Saída",
 
+    "whatsnew.title": "Novidades",
+    "whatsnew.category.support": "Novas câmeras compatíveis",
+    "whatsnew.category.feature": "Novo recurso",
+    "whatsnew.category.improvement": "Melhoria",
+    "whatsnew.category.fix": "Correção",
+    "whatsnew.dismissHint": "Esc ou toque fora para fechar",
     "hotkeys.title": "Atalhos de teclado",
     "hotkeys.group.playback": "Reprodução",
     "hotkeys.group.seek": "Navegação",

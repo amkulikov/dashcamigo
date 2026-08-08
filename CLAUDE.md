@@ -323,6 +323,10 @@ go through a `themeColors()` cache invalidated on `prefers-color-scheme` change.
   `src/i18n/seo-config.ts` (`SEO_LOCALES`; a URL with an explicit `/<lang>/` segment
   is share-safe - URL wins over stored preference)
 - Hotkeys -> `src/ui/hotkeys-modal.ts`
+- User-facing changelog (data + badge id) -> `src/changelog/`; panel ->
+  `src/ui/whats-new-modal.ts`; generated CHANGELOG.md + release notes ->
+  `scripts/generate-changelog-md.mjs`, `scripts/generate-release-notes.mjs`;
+  maintenance -> `.claude/skills/changelog/SKILL.md`
 - Dependencies and versions -> `package.json`
 - SEO / IndexNow runbook -> `docs/seo.md`;
   GPS format coverage -> `docs/gps-format-coverage.md`

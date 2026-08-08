@@ -438,6 +438,12 @@ export const ruDict = {
     "topPanel.audio.label": "Звук",
     "export.output.legend": "Формат вывода",
 
+    "whatsnew.title": "Что нового",
+    "whatsnew.category.support": "Поддержка новых камер",
+    "whatsnew.category.feature": "Новая функция",
+    "whatsnew.category.improvement": "Улучшение",
+    "whatsnew.category.fix": "Исправление",
+    "whatsnew.dismissHint": "Esc или тап мимо окна — закрыть",
     "hotkeys.title": "Горячие клавиши",
     "hotkeys.group.playback": "Воспроизведение",
     "hotkeys.group.seek": "Перемотка",

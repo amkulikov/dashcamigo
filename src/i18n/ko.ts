@@ -442,6 +442,12 @@ export const koDict = {
     "topPanel.audio.label": "오디오",
     "export.output.legend": "출력",
 
+    "whatsnew.title": "새로운 소식",
+    "whatsnew.category.support": "새 카메라 지원",
+    "whatsnew.category.feature": "새 기능",
+    "whatsnew.category.improvement": "개선",
+    "whatsnew.category.fix": "수정",
+    "whatsnew.dismissHint": "Esc 또는 바깥을 탭해서 닫기",
     "hotkeys.title": "키보드 단축키",
     "hotkeys.group.playback": "재생",
     "hotkeys.group.seek": "이동",

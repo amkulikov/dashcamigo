@@ -42,6 +42,7 @@
 @import "./components/onboarding.css";
 @import "./modals/feedback.css";
 @import "./modals/hotkeys.css";
+@import "./modals/whats-new.css";
 @import "./modals/csp-modal.css";
 @import "./modals/capability-gate.css";
 @import "./components/focus-visible.css";

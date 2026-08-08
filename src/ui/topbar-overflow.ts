@@ -1,7 +1,7 @@
 // Overflow-bar configuration for the topbar.
-// When the header shrinks the low-priority buttons (theme/feedback/install)
-// move into the kebab menu. Bell, lang, settings stay always visible - we do
-// not pass them to the overflow-bar.
+// When the header shrinks the low-priority buttons (what's new/theme/feedback/
+// install) move into the kebab menu. Bell, lang, settings stay always visible -
+// we do not pass them to the overflow-bar.
 //
 // This module is only wiring: which buttons collapse, in what order, how they
 // look in the menu. The generic measuring and rendering logic is in
@@ -22,9 +22,21 @@ export function initTopbarOverflow() {
 
     const feedbackBtn = document.getElementById("feedback-btn") as HTMLButtonElement | null;
     const installBtn = document.getElementById("install-btn") as HTMLButtonElement | null;
+    const whatsNewBtn = document.getElementById("whats-new-btn") as HTMLButtonElement | null;
     const themeToggle = topbar.querySelector<HTMLElement>(".theme-toggle");
 
     const items: OverflowableItem[] = [];
+
+    if (whatsNewBtn) {
+        items.push({
+            el: whatsNewBtn,
+            // Collapses first: the panel is a curiosity, not a control. The
+            // unread dot is invisible while collapsed - accepted, the badge is
+            // a quiet hint and the kebab must not inherit its urgency.
+            priority: 5,
+            label: () => t("whatsnew.title"),
+        });
+    }
 
     if (feedbackBtn) {
         items.push({
@@ -38,7 +50,7 @@ export function initTopbarOverflow() {
     if (installBtn) {
         items.push({
             el: installBtn,
-            priority: 4, // lowest - install is usually hidden entirely
+            priority: 4, // install is usually hidden entirely
             label: () => t("pwa.install.cta"),
             isAvailable: () => !installBtn.hidden,
         });

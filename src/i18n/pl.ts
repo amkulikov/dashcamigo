@@ -433,6 +433,12 @@ export const plDict = {
     "topPanel.audio.label": "Dźwięk",
     "export.output.legend": "Wyjście",
 
+    "whatsnew.title": "Co nowego",
+    "whatsnew.category.support": "Obsługa nowych kamer",
+    "whatsnew.category.feature": "Nowa funkcja",
+    "whatsnew.category.improvement": "Ulepszenie",
+    "whatsnew.category.fix": "Poprawka",
+    "whatsnew.dismissHint": "Esc lub dotknij obok, żeby zamknąć",
     "hotkeys.title": "Skróty klawiszowe",
     "hotkeys.group.playback": "Odtwarzanie",
     "hotkeys.group.seek": "Przewijanie",

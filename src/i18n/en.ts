@@ -434,6 +434,12 @@ export const enDict = {
     "topPanel.audio.label": "Audio",
     "export.output.legend": "Output",
 
+    "whatsnew.title": "What's new",
+    "whatsnew.category.support": "New camera support",
+    "whatsnew.category.feature": "New feature",
+    "whatsnew.category.improvement": "Improvement",
+    "whatsnew.category.fix": "Fix",
+    "whatsnew.dismissHint": "Esc or tap outside to close",
     "hotkeys.title": "Keyboard shortcuts",
     "hotkeys.group.playback": "Playback",
     "hotkeys.group.seek": "Seek",

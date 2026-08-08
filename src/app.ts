@@ -76,6 +76,7 @@ import { awaitLazyEmbeddedGpsForTrip, isCurrentTripOpen, takeTripOpenToken } fro
 import { hydrateTrip } from "./ui/lazy-hydrate.js";
 import { initLazyGpsLoadModal } from "./ui/lazy-gps-load-modal.js";
 import { initHotkeysModal } from "./ui/hotkeys-modal.js";
+import { initWhatsNewModal } from "./ui/whats-new-modal.js";
 import { initExportMode } from "./ui/export-mode.js";
 import { initExportPanel } from "./ui/export-panel.js";
 import { initExportTrimBar } from "./ui/export-trim-bar.js";
@@ -398,6 +399,7 @@ initIosFolderWarningModal();
 initSwitchLangModal();
 initLazyGpsLoadModal();
 initHotkeysModal();
+initWhatsNewModal();
 // "View" dropdown - toggle chart/strip/mini-map. Reads visibility from localStorage
 // at startup and applies it; hotkeys C / E / M bound here are global so they
 // work without focusing the dropdown. Mini-map close-X is replaced by this menu.

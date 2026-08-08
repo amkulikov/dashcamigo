@@ -434,6 +434,12 @@ export const esDict = {
     "topPanel.audio.label": "Audio",
     "export.output.legend": "Salida",
 
+    "whatsnew.title": "Novedades",
+    "whatsnew.category.support": "Nuevas cámaras compatibles",
+    "whatsnew.category.feature": "Nueva función",
+    "whatsnew.category.improvement": "Mejora",
+    "whatsnew.category.fix": "Corrección",
+    "whatsnew.dismissHint": "Esc o toca fuera para cerrar",
     "hotkeys.title": "Atajos de teclado",
     "hotkeys.group.playback": "Reproducción",
     "hotkeys.group.seek": "Saltar",
