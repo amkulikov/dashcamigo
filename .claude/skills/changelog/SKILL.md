@@ -10,7 +10,7 @@ One source of truth: `src/changelog/entries.ts`. Everything else derives from it
 - The in-app "What's new" panel renders the per-locale texts (`src/ui/whats-new-modal.ts`).
 - The topbar badge compares `src/changelog/latest.ts` against the user's acknowledgment.
 - `CHANGELOG.md` is generated - never edit it by hand (`npm run generate:changelog`).
-- GitHub release notes are generated at tag time by `.github/workflows/release.yml` from the entries added since the previous `v*` tag - which is why this skill must run BEFORE the tag is pushed, or the release ships without its notes.
+- GitHub release notes are generated at tag time by `.github/workflows/release.yml` from the entries added since the previous `v*` tag - which is why this skill must run BEFORE the tag is pushed; the pipeline's changelog guard (`scripts/check-release-changelog.mjs`) enforces it, and the release skill (`.claude/skills/release/SKILL.md`) sequences all of this.
 
 The id format and ordering rules are stated in `src/changelog/id.ts`; `src/changelog/entries.test.ts` enforces them.
 

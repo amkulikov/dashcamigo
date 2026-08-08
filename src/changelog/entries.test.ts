@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
+import { ENTRY_ID_LINE_RE } from "../../scripts/_release-tags.mjs";
 import { LANGS } from "../i18n/index.js";
 import { CHANGELOG_ENTRIES } from "./entries.js";
 import { CHANGELOG_ID_PATTERN, changelogIdDate, compareChangelogIds } from "./id.js";
@@ -30,6 +33,15 @@ describe("changelog entries", () => {
 
     it("keeps latest.ts in sync with the newest entry", () => {
         expect(LATEST_CHANGELOG_ID).toBe(CHANGELOG_ENTRIES[0]!.id);
+    });
+
+    it("keeps the release-notes id extraction regex in sync with the file format", () => {
+        // The release scripts regex entry ids out of OLD revisions of
+        // entries.ts (scripts/_release-tags.mjs). If a reformat breaks the
+        // match, the failure must land here, not silently at release time
+        // where zero matches would republish the whole history as new.
+        const source = readFileSync(new URL("./entries.ts", import.meta.url), "utf8");
+        expect(source.match(ENTRY_ID_LINE_RE)).toEqual(CHANGELOG_ENTRIES.map((entry) => entry.id));
     });
 
     it("carries a non-empty single-line text for every supported locale", () => {

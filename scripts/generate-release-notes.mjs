@@ -10,12 +10,10 @@
 // entries attribute unambiguously. Requires tags in the clone (CI checks out
 // with fetch-depth: 0).
 
-import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 
 import { loadChangelogEntries, renderEntryBullet } from "./_changelog-render.mjs";
-
-const ENTRIES_PATH = "src/changelog/entries.ts";
+import { ENTRIES_PATH, entryIdsAt, previousReleaseTag } from "./_release-tags.mjs";
 
 function arg(name) {
     const i = process.argv.indexOf(name);
@@ -31,35 +29,16 @@ if (!tag?.startsWith("v")) {
 // outside CI without --repo).
 const repo = arg("--repo") ?? process.env.GITHUB_REPOSITORY ?? "";
 
-// Git's own stderr is suppressed: the one expected failure (entries.ts absent
-// at the previous tag) is handled by the caller, and a leaked "fatal:" line
-// reads like a broken run in the CI log.
-function git(...args) {
-    return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-}
+const previousTag = previousReleaseTag(tag);
 
-// Previous release = the highest v* tag that sorts below the current one.
-// The zero-padded v<yyyy>.<mm>.<dd>[.<n>] convention makes plain string order
-// chronological, and "below current" (not "second newest") keeps the diff
-// correct even when newer tags exist in the clone.
-const previousTag = git("tag", "--list", "v*")
-    .split("\n")
-    .filter((t) => t && t < tag)
-    .sort()
-    .at(-1);
-
-// Entry ids present at the previous tag. Regex over the old file text instead
-// of importing it: the revision is not on disk, and the id line format is a
-// stated contract (src/changelog/id.ts). Absent file (release predates the
-// changelog) = no ids, every current entry counts as new.
+// Entry ids present at the previous tag (extraction contract: entryIdsAt in
+// _release-tags.mjs). Absent file (the release predates the changelog) = no
+// ids, every current entry counts as new.
 let previousIds = new Set();
 if (previousTag) {
-    try {
-        const oldSource = git("show", `${previousTag}:${ENTRIES_PATH}`);
-        previousIds = new Set(oldSource.match(/(?<=^\s*id: ")\d{4}-\d{2}-\d{2}\.\d+(?=",$)/gm) ?? []);
-    } catch {
-        console.error(`note: ${ENTRIES_PATH} absent at ${previousTag} - treating all entries as new`);
-    }
+    const oldIds = entryIdsAt(previousTag);
+    if (oldIds) previousIds = new Set(oldIds);
+    else console.error(`note: ${ENTRIES_PATH} absent at ${previousTag} - treating all entries as new`);
 }
 
 const entries = await loadChangelogEntries();
