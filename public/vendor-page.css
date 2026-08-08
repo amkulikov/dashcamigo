@@ -408,6 +408,22 @@ a:hover {
     line-height: 1.4;
 }
 
+/* ----- Feature cross-links ----- */
+.vp-feature-links {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 12px 0 0;
+}
+.vp-feature-links li a {
+    color: var(--accent);
+    font-weight: 500;
+}
+.vp-feature-links li a:hover {
+    text-decoration: underline;
+}
+
 /* ----- Other vendors aside ----- */
 .vp-other-vendors {
     margin-top: 64px;

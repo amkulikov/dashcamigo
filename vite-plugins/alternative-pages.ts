@@ -40,6 +40,7 @@ import {
     COMMUNITY_ALT_INDEX,
     COMMUNITY_ALT_LABELS,
 } from "./alternative-pages-content.js";
+import { renderFeatureLinksHtml } from "./feature-links.js";
 import { maxGitMtimeIso } from "./git-mtime.js";
 import { escapeAttr, escapeText, stringifyJsonLd } from "./html-utils.js";
 import { renderHubCta } from "./hub-cta.js";
@@ -1756,6 +1757,8 @@ ${labels.howSteps.map((step) => `<li>${escapeText(step)}</li>`).join("\n")}
 </section>
 
 ${faqSectionHtml}
+
+${renderFeatureLinksHtml(lang, pathPrefix)}
 </article>
 
 <aside class="vp-other-vendors">

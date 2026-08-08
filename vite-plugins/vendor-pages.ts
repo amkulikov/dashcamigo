@@ -98,6 +98,7 @@ import { getLandingBrands, type VendorSlug } from "./supported-brands.js";
 // would double this file's length. Parity is enforced by
 // assertCommunityFaqParity().
 import { COMMUNITY_FAQ } from "./vendor-community-faq.js";
+import { renderFeatureLinksHtml } from "./feature-links.js";
 
 // Vendor-specific FAQ entry. Question/answer plain text - no markup, the
 // template HTML-escapes them on output.
@@ -1814,6 +1815,8 @@ ${labels.howSteps.map((step) => `<li>${escapeText(step)}</li>`).join("\n")}
 </section>
 
 ${faqSectionHtml}
+
+${renderFeatureLinksHtml(lang, pathPrefix)}
 </article>
 
 <aside class="vp-other-vendors">
