@@ -9,6 +9,7 @@ release tag. Localized texts ship inside the app (the "What's new" panel).
 
 ## 2026-08-08
 
+- **New:** dashcamigo now tells you what's new — the sparkles button up top lights up when something fresh lands.
 - **New camera support:** Beferich dashcams are now supported — the GPS track is read straight from the video files.
 
 ## 2026-08-07

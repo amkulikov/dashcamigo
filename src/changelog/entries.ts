@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-08-08.2",
+        category: "feature",
+        text: {
+            en: "dashcamigo now tells you what's new — the sparkles button up top lights up when something fresh lands.",
+            ru: "dashcamigo теперь рассказывает, что нового: кнопка с искрами сверху подсвечивается, когда появляется что-то свежее.",
+            de: "dashcamigo zeigt jetzt, was neu ist — der Funkeln-Button oben leuchtet auf, wenn etwas Frisches ankommt.",
+            es: "dashcamigo ahora te cuenta las novedades: el botón de destellos arriba se ilumina cuando llega algo nuevo.",
+            fr: "dashcamigo te dit maintenant ce qui est nouveau — le bouton étincelles en haut s'allume quand du neuf arrive.",
+            pl: "dashcamigo pokazuje teraz, co nowego — przycisk z iskierkami u góry podświetla się, gdy pojawi się coś świeżego.",
+            pt: "O dashcamigo agora mostra as novidades — o botão de brilhos no topo acende quando chega algo novo.",
+            zh: "dashcamigo 现在会告诉你有什么新变化——顶部的星光按钮在有新内容时会亮起。",
+            ja: "dashcamigo が新着情報を知らせるようになりました。上部のキラキラボタンが、新しい変更があると光ります。",
+            ko: "이제 dashcamigo가 새로운 소식을 알려줍니다. 상단의 반짝임 버튼이 새 변경이 있으면 켜집니다.",
+        },
+    },
+    {
         id: "2026-08-08.1",
         category: "support",
         text: {
