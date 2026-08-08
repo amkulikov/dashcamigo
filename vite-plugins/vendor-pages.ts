@@ -582,7 +582,7 @@ const VENDORS: VendorContent[] = [
                 ogDescription:
                     "Free online player for Garmin Dash Cam recordings. GPS map, speed chart, no Garmin Express, no install.",
                 h1: "Garmin Dash Cam Player Online — play recordings in your browser",
-                lead: "Open Garmin Dash Cam recordings directly in your browser. GPS, speed and acceleration are extracted from the PNDM telemetry track and rendered on a synchronized map and chart.",
+                lead: "Open Garmin Dash Cam recordings directly in your browser. GPS and speed are extracted from the PNDM telemetry track and rendered on a synchronized map and chart.",
                 ctaPrimary: "Open Garmin recordings folder",
                 modelsCompat: "and other Garmin Dash Cam models that write the PNDM telemetry track (most current and recent-generation models).",
                 formatIntro:
@@ -618,7 +618,7 @@ const VENDORS: VendorContent[] = [
                 ogDescription:
                     "Онлайн-плеер для записей Garmin Dash Cam. Карта GPS, график скорости. Без Garmin Express, без установки.",
                 h1: "Плеер Garmin Dash Cam онлайн — записи в браузере",
-                lead: "Открывай записи Garmin Dash Cam прямо в браузере. GPS, скорость и ускорение dashcamigo достаёт из трека телеметрии PNDM и рисует на синхронной карте и графике.",
+                lead: "Открывай записи Garmin Dash Cam прямо в браузере. GPS и скорость dashcamigo достаёт из трека телеметрии PNDM и рисует на синхронной карте и графике.",
                 ctaPrimary: "Открыть папку с записями Garmin",
                 modelsCompat: "и другие модели Garmin Dash Cam с треком телеметрии PNDM (большинство текущих и недавних поколений).",
                 formatIntro:
@@ -1481,7 +1481,7 @@ const VENDOR_HEAD_OVERRIDES: Partial<Record<Lang, Partial<Record<VendorSlug, Ven
             ogDescription:
                 "Kostenloser Online-Player für Garmin-Dash-Cam-Aufnahmen. GPS-Karte, Geschwindigkeitsdiagramm. Ohne Garmin Express, ohne Installation.",
             h1: "Garmin Dash Cam Player online — Aufnahmen im Browser abspielen",
-            lead: "Öffne Garmin-Dash-Cam-Aufnahmen direkt im Browser — ohne Garmin Express. GPS, Geschwindigkeit und Beschleunigung kommen aus dem PNDM-Telemetrie-Track und landen synchron auf Karte und Diagramm.",
+            lead: "Öffne Garmin-Dash-Cam-Aufnahmen direkt im Browser — ohne Garmin Express. GPS und Geschwindigkeit kommen aus dem PNDM-Telemetrie-Track und landen synchron auf der Karte und im Diagramm.",
         },
         vantrue: {
             title: "Vantrue Dashcam-Player & Editor — N4, N5, E3, X4S | dashcamigo",
@@ -1553,7 +1553,7 @@ const VENDOR_HEAD_OVERRIDES: Partial<Record<Lang, Partial<Record<VendorSlug, Ven
             ogDescription:
                 "Darmowy odtwarzacz online nagrań Garmin Dash Cam. Mapa GPS, wykres prędkości. Bez Garmin Express, bez instalacji.",
             h1: "Odtwarzacz Garmin Dash Cam online — nagrania wideorejestratora w przeglądarce",
-            lead: "Otwórz nagrania z wideorejestratora Garmin Dash Cam prosto w przeglądarce — bez Garmin Express. GPS, prędkość i przyspieszenie pochodzą ze ścieżki telemetrii PNDM i trafiają na zsynchronizowaną mapę i wykres.",
+            lead: "Otwórz nagrania z wideorejestratora Garmin Dash Cam prosto w przeglądarce — bez Garmin Express. GPS i prędkość pochodzą ze ścieżki telemetrii PNDM i trafiają na zsynchronizowaną mapę i wykres.",
         },
         vantrue: {
             title: "Odtwarzacz i edytor Vantrue — N4, N5, E3, X4S | dashcamigo",
