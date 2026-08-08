@@ -39,6 +39,11 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # CHANGELOG.md is generated from src/changelog/entries.ts; a hand edit
+      # or a skipped regeneration fails here, not inside a release asset.
+      - name: Changelog freshness
+        run: node scripts/generate-changelog-md.mjs --check
+
       # Build BEFORE the unit tests: src/csp-hash.integration.test.ts asserts
       # against dist/ artifacts and fails loudly in CI when they are absent
       # (it would otherwise silently self-skip and never gate anything).

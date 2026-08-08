@@ -286,6 +286,13 @@ jobs:
             -t "${IMAGE}:latest" \
             ${PUSH} image-ctx
 
+      # Release notes = the changelog entries added since the previous v* tag
+      # (src/changelog/entries.ts diffed between tags - the script header has
+      # the contract). Needs the full-history checkout above for the tags.
+      - name: Generate release notes from the changelog (tag push only)
+        if: github.event_name == 'push'
+        run: node scripts/generate-release-notes.mjs --out RELEASE_NOTES.md
+
       # Draft-then-publish: with release immutability enabled (repo setting,
       # docs/deploy.md) assets lock at PUBLISH time, so they must all be attached
       # while the release is still a draft. A published release can never be
@@ -308,7 +315,7 @@ jobs:
             gh release delete "$TAG" --yes
           fi
           gh release create "$TAG" "$ZIP" "$TGZ" SHA256SUMS \
-            --draft --verify-tag --generate-notes --title "dashcamigo $TAG"
+            --draft --verify-tag --notes-file RELEASE_NOTES.md --title "dashcamigo $TAG"
           gh release edit "$TAG" --draft=false
 
       # Hand the fresh release to the Pages mirror. Its release-published

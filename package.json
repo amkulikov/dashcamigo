@@ -48,6 +48,7 @@
     "check": "biome check src tests --write",
     "knip": "knip",
     "indexnow": "node scripts/indexnow-ping.mjs",
+    "generate:changelog": "node scripts/generate-changelog-md.mjs",
     "validate:styles": "node scripts/validate-map-styles.mjs",
     "screenshots:readme": "node scripts/generate-readme-screenshots.mjs"
   },

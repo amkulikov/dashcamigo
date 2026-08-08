@@ -231,8 +231,12 @@ already-built `dist/` via `docker/Dockerfile.prebuilt`, not an in-Docker
 rebuild). The fixed asset name is load-bearing: the install one-liners in
 README / `docs/self-hosting.md` rely on `releases/latest/download/`. The
 artifact build gets no env vars, so crash reporting is compiled out (the
-production site build in the `deploy` job carries the production env). To cut
-a release, tag the `main` commit staging has validated:
+production site build in the `deploy` job carries the production env). The
+release notes are generated at tag time from the user-facing changelog, so
+run the changelog skill (`.claude/skills/changelog/SKILL.md`) and land its
+commit on `main` BEFORE tagging - a tag cut first ships a notes-less release,
+and a published release is immutable. To cut a release, tag the `main` commit
+staging has validated:
 
 ```sh
 git fetch origin
