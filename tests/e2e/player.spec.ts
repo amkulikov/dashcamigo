@@ -652,6 +652,30 @@ test.describe("player", () => {
         await expect.poll(() => inExportMode()).toBe(true);
     });
 
+    test("expanded map on a narrow desktop window borrows the sidebar column, video and chart stay", async ({
+        page,
+    }) => {
+        // Foldable / portrait-tablet zone: desktop layout (>= 768) but too
+        // narrow to fit sidebar + video + map side by side. The sidebar
+        // column yields (sidebar.css) instead of the pwrap takeover hiding
+        // the video (viewer.css).
+        await page.setViewportSize({ width: 900, height: 760 });
+        await page.locator("#mini-map").click();
+        await expect(page.locator("#player-wrap")).toHaveClass(/map-expanded/);
+
+        // The map opens BESIDE the video, not instead of it.
+        await expect(page.locator(".map-wrap")).toBeVisible();
+        await expect(page.locator(".video-frame")).toBeVisible();
+        await expect(page.locator("#player-chart-canvas")).toBeVisible();
+        await expect(page.locator("#sidebar")).toBeHidden();
+
+        // Collapsing the map hands the column back to the trip list.
+        await page.locator("#map-collapse").click();
+        await expect(page.locator("#player-wrap")).not.toHaveClass(/map-expanded/);
+        await expect(page.locator("#sidebar")).toBeVisible();
+        await expect(page.locator("#mini-map")).toBeVisible();
+    });
+
     test("settings: switching units updates the speed unit label", async ({ page }) => {
         await page.locator("#settings-btn").click();
         await expect(page.locator("#settings-modal")).toBeVisible();

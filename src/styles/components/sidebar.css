@@ -872,6 +872,33 @@
         display: inline-flex;
     }
 }
+
+/* The expanded map borrows the sidebar column on a narrow desktop window.
+   With the sidebar in place the player drops below 768 and the pwrap
+   container takeover (viewer.css) swallows the video and the chart - on
+   foldables and portrait tablets that is the default state, not a squeezed
+   edge case. Freeing the column keeps the player at desktop width, so the
+   normal side-by-side map grid applies and the video stays visible. 1088 =
+   768 (player minimum) + 320 (the sidebar clamp ceiling); wider windows fit
+   both. Same 0-track + visibility mechanics as body.sidebar-collapsed above.
+   The expand tab stays hidden for the duration - restoring the sidebar
+   mid-map would just re-trigger the takeover; the sidebar returns when the
+   map collapses (the ✕ on the map). Export mode never coexists
+   (applyMapLayout drops .map-expanded there). :not(.map-unavailable): the
+   no-WebGL notice pane reuses .map-expanded and must not cost the user the
+   trip list. */
+@media (min-width: 768px) and (max-width: 1088px) and (min-height: 501px) {
+    body:not(.map-unavailable):has(.player-wrap.map-expanded) main.layout {
+        grid-template-columns: 0 0 minmax(0, 1fr);
+    }
+    body:not(.map-unavailable):has(.player-wrap.map-expanded) .sidebar,
+    body:not(.map-unavailable):has(.player-wrap.map-expanded) .sidebar-resize {
+        visibility: hidden;
+    }
+    body:not(.map-unavailable):has(.player-wrap.map-expanded) .sidebar-expand-tab {
+        display: none;
+    }
+}
 /* The collapse chevron lives among the sort controls; it is desktop-only -
    the mobile drawer closes via the burger/scrim instead. */
 @media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {

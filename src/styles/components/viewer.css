@@ -185,10 +185,15 @@ body.export-mode .player-wrap:not(:fullscreen):not(.map-expanded) {
    so tapping the mini-map "expanded the map but you can't see it" - that
    was the actual bug. Container query: video/chart/scrub hide, the map
    takes the whole grid + bar at the bottom. To go back - the ✕ button in
-   the map's corner (map-collapse-btn). The 768 breakpoint matches
-   --dc-bp-mobile, but measures the player's width, not the window's - the
-   same behavior applies when a desktop user squeezes the sidebar to the limit. */
-@container pwrap (max-width: 768px) {
+   the map's corner (map-collapse-btn). The breakpoint measures the
+   player's width, not the window's, and is strictly-below --dc-bp-mobile
+   (767, same boundary as the mobile @media) - a player at exactly the
+   desktop minimum must get the side-by-side grid, not the takeover.
+   This is the last resort: on a 768-1088 window the sidebar column yields
+   first (see sidebar.css), which keeps the player wide enough for the
+   side-by-side grid - foldables and portrait tablets live there. The
+   takeover remains reachable via a hand-widened sidebar on a mid window. */
+@container pwrap (max-width: 767px) {
     .player-wrap.map-expanded {
         grid-template-rows: minmax(0, 1fr) auto;
         grid-template-columns: 1fr;
