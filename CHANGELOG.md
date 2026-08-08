@@ -9,6 +9,8 @@ release tag. Localized texts ship inside the app (the "What's new" panel).
 
 ## 2026-08-08
 
+- **Fixed:** Expanding the map in a narrow window — a foldable or a tablet in portrait — no longer hides the video: the trip list steps aside instead.
+- **Improved:** The folder warning on iPhone and iPad now points to the faster ways in — a computer, or copying the files you need into the Files app first.
 - **New:** dashcamigo now tells you what's new — the sparkles button up top lights up when something fresh lands.
 - **New camera support:** Beferich dashcams are now supported — the GPS track is read straight from the video files.
 

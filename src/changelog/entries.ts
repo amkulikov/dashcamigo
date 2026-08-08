@@ -28,6 +28,38 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-08-08.4",
+        category: "fix",
+        text: {
+            en: "Expanding the map in a narrow window — a foldable or a tablet in portrait — no longer hides the video: the trip list steps aside instead.",
+            ru: "Развёрнутая карта в узком окне — на складном смартфоне или планшете в портрете — больше не прячет видео: вместо этого уступает место список поездок.",
+            de: "Die aufgeklappte Karte in einem schmalen Fenster — Foldable oder Tablet im Hochformat — verdeckt das Video nicht mehr: stattdessen macht die Fahrtenliste Platz.",
+            es: "Ampliar el mapa en una ventana estrecha — un plegable o una tablet en vertical — ya no oculta el vídeo: en su lugar se aparta la lista de trayectos.",
+            fr: "Agrandir la carte dans une fenêtre étroite — pliable ou tablette en portrait — ne masque plus la vidéo : c'est la liste des trajets qui s'efface.",
+            pl: "Rozwinięcie mapy w wąskim oknie — na składanym telefonie lub tablecie w pionie — nie zasłania już wideo: zamiast tego ustępuje lista przejazdów.",
+            pt: "Expandir o mapa em uma janela estreita — um celular dobrável ou tablet na vertical — não esconde mais o vídeo: a lista de viagens é que dá lugar.",
+            zh: "在窄窗口（折叠屏或竖屏平板）展开地图时，不再遮挡视频——改为收起行程列表。",
+            ja: "折りたたみスマホや縦向きタブレットなど幅の狭い画面で地図を広げても、動画が隠れなくなりました。代わりに走行リストが一時的に隠れます。",
+            ko: "폴더블이나 세로 태블릿처럼 좁은 창에서 지도를 펼쳐도 더 이상 영상이 가려지지 않습니다. 대신 주행 목록이 잠시 비켜납니다.",
+        },
+    },
+    {
+        id: "2026-08-08.3",
+        category: "improvement",
+        text: {
+            en: "The folder warning on iPhone and iPad now points to the faster ways in — a computer, or copying the files you need into the Files app first.",
+            ru: "Предупреждение о папках на iPhone и iPad теперь подсказывает пути побыстрее: компьютер — или сначала скопировать нужные файлы в приложение «Файлы».",
+            de: "Der Ordner-Hinweis auf iPhone und iPad zeigt jetzt die schnelleren Wege — ein Computer, oder die benötigten Dateien zuerst in die Dateien-App kopieren.",
+            es: "El aviso de carpetas en iPhone y iPad ahora sugiere las vías más rápidas: un ordenador, o copiar antes los archivos necesarios a la app Archivos.",
+            fr: "L'avertissement de dossier sur iPhone et iPad indique désormais les voies plus rapides — un ordinateur, ou copier d'abord les fichiers utiles dans l'app Fichiers.",
+            pl: "Ostrzeżenie o folderach na iPhonie i iPadzie podpowiada teraz szybsze drogi — komputer albo skopiowanie potrzebnych plików najpierw do aplikacji Pliki.",
+            pt: "O aviso de pastas no iPhone e iPad agora aponta os caminhos mais rápidos — um computador, ou copiar antes os arquivos necessários para o app Arquivos.",
+            zh: "iPhone 和 iPad 上的文件夹提示现在会指出更快的方式——用电脑，或先把所需文件复制到“文件”App。",
+            ja: "iPhone・iPad のフォルダに関する案内が、より速い方法を示すようになりました。パソコンを使うか、必要なファイルを先に「ファイル」アプリへコピーする方法です。",
+            ko: "iPhone과 iPad의 폴더 안내가 더 빠른 방법을 알려줍니다. 컴퓨터를 사용하거나, 필요한 파일을 먼저 '파일' 앱으로 복사하는 방법입니다.",
+        },
+    },
+    {
         id: "2026-08-08.2",
         category: "feature",
         text: {
