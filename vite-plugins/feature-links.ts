@@ -31,9 +31,9 @@ const FEATURE_LINKS: Record<Lang, FeatureLinksBlock> = {
     ru: {
         heading: "Что ещё можно сделать с записями",
         links: {
-            "combine-dashcam-cameras-into-one-video": "Объединить камеры регистратора в одно видео",
+            "combine-dashcam-cameras-into-one-video": "Склеить камеры регистратора в одно видео",
             "blur-license-plate-in-dashcam-video": "Замазать номера машин и лица перед отправкой",
-            "add-data-overlay-to-dashcam-video": "Наложить скорость и GPS-маршрут на видео",
+            "add-data-overlay-to-dashcam-video": "Наложить скорость и GPS на видео",
         },
     },
     de: {
@@ -41,21 +41,21 @@ const FEATURE_LINKS: Record<Lang, FeatureLinksBlock> = {
         links: {
             "combine-dashcam-cameras-into-one-video": "Front- und Heckkamera in einem Video vereinen",
             "blur-license-plate-in-dashcam-video": "Kennzeichen und Gesichter vor dem Teilen verpixeln",
-            "add-data-overlay-to-dashcam-video": "Geschwindigkeit und GPS als Overlay ins Video legen",
+            "add-data-overlay-to-dashcam-video": "Geschwindigkeit und GPS als Overlay aufs Video legen",
         },
     },
     es: {
         heading: "Haz más con tus grabaciones",
         links: {
-            "combine-dashcam-cameras-into-one-video": "Combina la cámara frontal y trasera en un solo vídeo",
+            "combine-dashcam-cameras-into-one-video": "Combina las cámaras frontal y trasera en un solo vídeo",
             "blur-license-plate-in-dashcam-video": "Difumina matrículas y caras antes de compartir",
-            "add-data-overlay-to-dashcam-video": "Añade velocidad y GPS sobre el vídeo",
+            "add-data-overlay-to-dashcam-video": "Añade velocidad y GPS al vídeo",
         },
     },
     fr: {
         heading: "Fais plus avec tes enregistrements",
         links: {
-            "combine-dashcam-cameras-into-one-video": "Réunir les caméras avant et arrière dans une seule vidéo",
+            "combine-dashcam-cameras-into-one-video": "Réunir les caméras avant et arrière en une seule vidéo",
             "blur-license-plate-in-dashcam-video": "Flouter les plaques et les visages avant de partager",
             "add-data-overlay-to-dashcam-video": "Incruster la vitesse et le GPS sur la vidéo",
         },
@@ -63,13 +63,13 @@ const FEATURE_LINKS: Record<Lang, FeatureLinksBlock> = {
     ja: {
         heading: "録画をもっと活用する",
         links: {
-            "combine-dashcam-cameras-into-one-video": "前後のカメラを 1 本の動画にまとめる",
+            "combine-dashcam-cameras-into-one-video": "前後のカメラを1本の動画にまとめる",
             "blur-license-plate-in-dashcam-video": "共有前にナンバーと顔をぼかす",
-            "add-data-overlay-to-dashcam-video": "速度と GPS を動画にオーバーレイ表示",
+            "add-data-overlay-to-dashcam-video": "速度と GPS を動画に重ねて表示する",
         },
     },
     ko: {
-        heading: "녹화 영상으로 더 많은 것을",
+        heading: "녹화 영상으로 더 많은 것을 해보세요",
         links: {
             "combine-dashcam-cameras-into-one-video": "전방·후방 카메라를 하나의 영상으로 합치기",
             "blur-license-plate-in-dashcam-video": "공유 전에 번호판과 얼굴 가리기",
@@ -89,7 +89,7 @@ const FEATURE_LINKS: Record<Lang, FeatureLinksBlock> = {
         links: {
             "combine-dashcam-cameras-into-one-video": "Combine as câmeras frontal e traseira em um só vídeo",
             "blur-license-plate-in-dashcam-video": "Desfoque placas e rostos antes de compartilhar",
-            "add-data-overlay-to-dashcam-video": "Adicione velocidade e GPS sobre o vídeo",
+            "add-data-overlay-to-dashcam-video": "Adicione velocidade e GPS ao vídeo",
         },
     },
     zh: {
