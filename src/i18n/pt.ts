@@ -538,6 +538,7 @@ export const ptDict = {
     "iosFolderWarning.title": "Escolher uma pasta inteira é lento no iPhone e iPad",
     "iosFolderWarning.body":
         "No iPhone e no iPad, o navegador primeiro copia todo o conteúdo da pasta escolhida — com um cartão de memória grande isso demora muito e consome o armazenamento do dispositivo. Se a cópia for interrompida, as cópias podem ficar presas no dispositivo. É bem mais rápido escolher só os vídeos de que você precisa. De qualquer forma, nada é enviado para lugar nenhum — tudo fica no seu dispositivo.",
+    "iosFolderWarning.slowMedia": "Ler direto de um cartão de memória ou pendrive também é muito lento no iPhone e no iPad — um computador dá conta disso bem melhor. Se você só tem iPhone ou iPad, copie antes os arquivos de que precisa para o app Arquivos e abra-os de lá.",
     "iosFolderWarning.files": "Escolher arquivos",
     "iosFolderWarning.folder": "Pasta inteira mesmo assim",
     "iosFolderWarning.cancel": "Cancelar",

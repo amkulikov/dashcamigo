@@ -535,6 +535,7 @@ export const zhDict = {
     "uploadWarning.cancel": "取消",
     "iosFolderWarning.title": "在 iPhone 和 iPad 上选择整个文件夹会很慢",
     "iosFolderWarning.body": "在 iPhone 和 iPad 上，浏览器会先把所选文件夹里的全部内容复制一遍 — 内存卡很大时会非常耗时，还会占用设备存储空间。复制被打断时，这些副本可能会滞留在设备上。只选需要的视频文件要快得多。无论哪种方式都不会上传任何东西 — 一切都留在你的设备上。",
+    "iosFolderWarning.slowMedia": "在 iPhone 和 iPad 上直接从内存卡或 U 盘读取也非常慢 — 电脑要合适得多。如果你只有 iPhone 或 iPad，请先把需要的文件复制到「文件」App，再从那里打开。",
     "iosFolderWarning.files": "选择文件",
     "iosFolderWarning.folder": "仍选整个文件夹",
     "iosFolderWarning.cancel": "取消",

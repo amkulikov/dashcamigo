@@ -538,6 +538,7 @@ export const plDict = {
     "iosFolderWarning.title": "Wybór całego folderu na iPhonie i iPadzie trwa długo",
     "iosFolderWarning.body":
         "Na iPhonie i iPadzie przeglądarka najpierw kopiuje całą zawartość wybranego folderu — przy dużej karcie pamięci trwa to bardzo długo i zjada miejsce na urządzeniu. Jeśli kopiowanie zostanie przerwane, kopie mogą utknąć na urządzeniu. Dużo szybciej jest wybrać tylko potrzebne pliki wideo. Tak czy inaczej nic nigdzie nie jest wysyłane — wszystko zostaje na twoim urządzeniu.",
+    "iosFolderWarning.slowMedia": "Odczyt bezpośrednio z karty pamięci lub pendrive'a też jest na iPhonie i iPadzie bardzo wolny — komputer radzi sobie z tym dużo lepiej. Jeśli masz tylko iPhone'a lub iPada, najpierw skopiuj potrzebne pliki do aplikacji Pliki i otwórz je stamtąd.",
     "iosFolderWarning.files": "Wybierz pliki",
     "iosFolderWarning.folder": "Mimo to cały folder",
     "iosFolderWarning.cancel": "Anuluj",

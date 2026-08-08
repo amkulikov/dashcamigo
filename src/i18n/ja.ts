@@ -548,6 +548,7 @@ export const jaDict = {
     "iosFolderWarning.title": "iPhone・iPad ではフォルダーごと選ぶと時間がかかります",
     "iosFolderWarning.body":
         "iPhone・iPad では、選んだフォルダーの中身をブラウザがまず全部コピーします。大容量のメモリーカードだと非常に時間がかかり、端末の容量も消費します。コピーが中断されると、コピーが端末に残ったままになることがあります。必要な動画ファイルだけを選ぶ方がずっと速いです。どちらの場合もアップロードは一切なく、すべて端末内に残ります。",
+    "iosFolderWarning.slowMedia": "メモリーカードや USB メモリーから直接読み込むのも、iPhone・iPad では非常に時間がかかります。パソコンの方がずっと快適です。iPhone・iPad しかない場合は、必要なファイルを先に「ファイル」アプリにコピーして、そこから開いてください。",
     "iosFolderWarning.files": "ファイルを選ぶ",
     "iosFolderWarning.folder": "それでもフォルダーごと",
     "iosFolderWarning.cancel": "キャンセル",

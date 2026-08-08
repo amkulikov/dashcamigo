@@ -538,6 +538,7 @@ export const enDict = {
     "iosFolderWarning.title": "Picking a whole folder is slow on iPhone and iPad",
     "iosFolderWarning.body":
         "On iPhone and iPad the browser first copies everything in the folder you pick — on a big memory card that takes very long and eats your device's storage. If the copying is interrupted, the copies can get stuck on the device. Picking just the video files you need is much faster. Either way, nothing is uploaded anywhere — everything stays on your device.",
+    "iosFolderWarning.slowMedia": "Reading straight from a memory card or USB drive is also very slow on iPhone and iPad — a computer handles it much better. If iPhone or iPad is all you have, first copy the files you need into the Files app and open them from there.",
     "iosFolderWarning.files": "Choose files",
     "iosFolderWarning.folder": "Whole folder anyway",
     "iosFolderWarning.cancel": "Cancel",

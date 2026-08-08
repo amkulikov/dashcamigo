@@ -725,6 +725,7 @@ export type I18nKey =
     | "uploadWarning.cancel"
     | "iosFolderWarning.title"
     | "iosFolderWarning.body"
+    | "iosFolderWarning.slowMedia"
     | "iosFolderWarning.files"
     | "iosFolderWarning.folder"
     | "iosFolderWarning.cancel"

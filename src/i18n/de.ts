@@ -538,6 +538,7 @@ export const deDict = {
     "iosFolderWarning.title": "Einen ganzen Ordner zu wählen ist auf iPhone und iPad langsam",
     "iosFolderWarning.body":
         "Auf iPhone und iPad kopiert der Browser erst alles aus dem gewählten Ordner — bei einer großen Speicherkarte dauert das sehr lange und frisst Speicher auf deinem Gerät. Wird das Kopieren unterbrochen, können die Kopien auf dem Gerät hängen bleiben. Viel schneller: nur die Videodateien auswählen, die du brauchst. Hochgeladen wird so oder so nichts — alles bleibt auf deinem Gerät.",
+    "iosFolderWarning.slowMedia": "Auch das Lesen direkt von einer Speicherkarte oder einem USB-Stick ist auf iPhone und iPad sehr langsam — an einem Computer geht das viel besser. Wenn du nur iPhone oder iPad hast, kopiere die benötigten Dateien zuerst in die Dateien-App und öffne sie von dort.",
     "iosFolderWarning.files": "Dateien auswählen",
     "iosFolderWarning.folder": "Trotzdem ganzer Ordner",
     "iosFolderWarning.cancel": "Abbrechen",

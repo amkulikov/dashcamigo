@@ -540,6 +540,7 @@ export const frDict = {
     "iosFolderWarning.title": "Choisir un dossier entier est lent sur iPhone et iPad",
     "iosFolderWarning.body":
         "Sur iPhone et iPad, le navigateur copie d'abord tout le contenu du dossier choisi — avec une grande carte mémoire c'est très long et ça mange le stockage de ton appareil. Si la copie est interrompue, les copies peuvent rester coincées sur l'appareil. C'est bien plus rapide de choisir seulement les vidéos dont tu as besoin. Dans tous les cas, rien n'est envoyé nulle part — tout reste sur ton appareil.",
+    "iosFolderWarning.slowMedia": "Lire directement depuis une carte mémoire ou une clé USB est aussi très lent sur iPhone et iPad — un ordinateur s'en sort bien mieux. Si tu n'as qu'un iPhone ou un iPad, copie d'abord les fichiers dont tu as besoin dans l'app Fichiers et ouvre-les depuis là.",
     "iosFolderWarning.files": "Choisir des fichiers",
     "iosFolderWarning.folder": "Le dossier entier quand même",
     "iosFolderWarning.cancel": "Annuler",

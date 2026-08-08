@@ -539,6 +539,7 @@ export const esDict = {
     "iosFolderWarning.title": "Elegir una carpeta entera es lento en iPhone y iPad",
     "iosFolderWarning.body":
         "En iPhone y iPad el navegador primero copia todo el contenido de la carpeta elegida — con una tarjeta de memoria grande tarda muchísimo y consume espacio en tu dispositivo. Si la copia se interrumpe, las copias pueden quedarse atascadas en el dispositivo. Es mucho más rápido elegir solo los vídeos que necesitas. En cualquier caso, no se sube nada a ningún sitio — todo se queda en tu dispositivo.",
+    "iosFolderWarning.slowMedia": "Leer directamente desde una tarjeta de memoria o una memoria USB también es muy lento en iPhone y iPad — en un ordenador va mucho mejor. Si solo tienes iPhone o iPad, copia primero los archivos que necesitas a la app Archivos y ábrelos desde ahí.",
     "iosFolderWarning.files": "Elegir archivos",
     "iosFolderWarning.folder": "Carpeta entera igualmente",
     "iosFolderWarning.cancel": "Cancelar",
