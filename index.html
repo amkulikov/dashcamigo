@@ -31,14 +31,19 @@
              serve this HTML while its hashed /assets/ files still 404
              (docs/deploy.md, "Deployment pipeline"), so a failed SCRIPT/LINK
              load schedules a reload on a backoff ladder. The budget lives in
-             sessionStorage ("dc-asset-retry"), is spent across reloads and
-             cleared by dc:ready; a boot that succeeds anyway cancels the
-             pending reload. While a reload is pending, #dc-retry-note says the
-             app is updating - ru/en literals, not i18n keys: the i18n bundle
-             is exactly what failed to load (same pattern as the SW offline
-             fallback). The app-level twin for lazy chunks is the
-             "vite:preloadError" listener in app.ts - key and cap are
-             hand-mirrored there.
+             sessionStorage ("dc-asset-retry") and is spent across reloads;
+             it returns only 30s AFTER dc:ready AND with no retry pending
+             (#dc-retry-note doubles as that signal) - never on dc:ready
+             itself: a boot that succeeds and THEN loses a lazy chunk to the
+             same deploy skew must keep accumulating against the cap, or each
+             successful boot resets the counter and the reload cycle never
+             ends. A boot that succeeds cancels the pending reload. While a
+             reload is pending, #dc-retry-note says the app is updating -
+             ru/en literals, not i18n keys: the i18n bundle is exactly what
+             failed to load (same pattern as the SW offline fallback). The
+             app-level twin for lazy chunks is the "vite:preloadError"
+             listener in app.ts - key, cap and ladder are hand-mirrored
+             there; it reuses the note via window.__dcRetryNote.
          The inline script's CSP hash is computed at build time by the
          vite-plugins/csp-hash.ts plugin and injected into script-src in _headers.
          The __DC_LANGS__ placeholder is replaced with a JSON array of locales
@@ -108,7 +113,7 @@
     </style>
     <script id="dc-bootstrap">
 (function(){try{var t=localStorage.getItem("dc-theme");if(t==="light")document.documentElement.classList.add("dc-light");else if(t==="dark")document.documentElement.classList.add("dc-dark")}catch(e){}var K=__DC_LANGS__,p=(location.pathname.split("/").filter(function(s){return s.length>0})[0]||"");if(p&&K.indexOf(p)!==-1){document.documentElement.lang=p}else{var s=null;try{s=localStorage.getItem("dashcamigo:lang")}catch(e){}var n=(navigator.language||"").toLowerCase().split("-")[0],l=(s&&K.indexOf(s)!==-1)?s:(K.indexOf(n)!==-1?n:"en");if(!p){location.replace("/"+l+"/"+location.search+location.hash);return}document.documentElement.lang=l}document.documentElement.classList.add("is-loading");function h(){document.documentElement.classList.remove("is-loading");setTimeout(function(){var el=document.getElementById("dc-loader");if(el)el.remove()},500)}addEventListener("dc:ready",h,{once:true});setTimeout(h,15000)})();
-(function(){var K="dc-asset-retry",D=[4000,15000,45000,90000],armed=false,booted=false,timer=0;function go(){location.reload()}function note(){if(document.getElementById("dc-retry-note"))return;var d=document.createElement("div");d.id="dc-retry-note";d.textContent=(document.documentElement.lang||"").indexOf("ru")===0?"Обновляем приложение…":"Updating the app…";(document.body||document.documentElement).appendChild(d)}addEventListener("dc:ready",function(){booted=true;try{sessionStorage.removeItem(K)}catch(e){}if(timer)clearTimeout(timer);removeEventListener("online",go);var d=document.getElementById("dc-retry-note");if(d)d.remove()},{once:true});addEventListener("error",function(ev){var el=ev.target;if(armed||booted||!el||!el.tagName)return;var tag=el.tagName;if(tag!=="SCRIPT"&&tag!=="LINK")return;var u=el.src||el.href||"";if(typeof u!=="string"||u.indexOf(location.origin+"/assets/")!==0)return;var n;try{n=parseInt(sessionStorage.getItem(K)||"0",10)||0;if(n>=D.length)return;sessionStorage.setItem(K,String(n+1))}catch(e){return}armed=true;note();if(navigator.onLine===false){addEventListener("online",go,{once:true})}else{timer=setTimeout(go,D[n])}},true)})();
+(function(){var K="dc-asset-retry",D=[4000,15000,45000,90000],armed=false,booted=false,timer=0;function go(){location.reload()}function note(){if(document.getElementById("dc-retry-note"))return;var d=document.createElement("div");d.id="dc-retry-note";d.textContent=(document.documentElement.lang||"").indexOf("ru")===0?"Обновляем приложение…":"Updating the app…";(document.body||document.documentElement).appendChild(d)}window.__dcRetryNote=note;addEventListener("dc:ready",function(){booted=true;setTimeout(function(){if(document.getElementById("dc-retry-note"))return;try{sessionStorage.removeItem(K)}catch(e){}},30000);if(timer)clearTimeout(timer);removeEventListener("online",go);var d=document.getElementById("dc-retry-note");if(d)d.remove()},{once:true});addEventListener("error",function(ev){var el=ev.target;if(armed||booted||!el||!el.tagName)return;var tag=el.tagName;if(tag!=="SCRIPT"&&tag!=="LINK")return;var u=el.src||el.href||"";if(typeof u!=="string"||u.indexOf(location.origin+"/assets/")!==0)return;var n;try{n=parseInt(sessionStorage.getItem(K)||"0",10)||0;if(n>=D.length)return;sessionStorage.setItem(K,String(n+1))}catch(e){return}armed=true;note();if(navigator.onLine===false){addEventListener("online",go,{once:true})}else{timer=setTimeout(go,D[n])}},true)})();
     </script>
 
     <!-- Description for SERPs. The literal in HTML is English (baseline for

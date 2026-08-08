@@ -185,6 +185,11 @@ declare global {
             dumpLog: typeof getLogBuffer;
             downloadLog: typeof downloadLogBuffer;
         };
+        /** Shows the "updating the app" line over the splash/landing. Defined
+         *  by the dc-bootstrap inline script in index.html; the asset-retry
+         *  reload path below reuses it so both retry layers announce
+         *  themselves the same way. */
+        __dcRetryNote?: () => void;
     }
 }
 window.__dashcamigo = { state, dom, dumpLog: getLogBuffer, downloadLog: downloadLogBuffer };
@@ -235,10 +240,17 @@ window.addEventListener("unhandledrejection", (ev) => {
 });
 
 // Hand-mirrored with the boot-time asset retry in index.html (dc-bootstrap):
-// same key, same cap - reloads spent there and here draw from one budget,
-// and dc:ready clears it after a successful boot.
+// same key, same cap, same backoff ladder - reloads spent there and here
+// draw from one budget. The budget returns only after 30s of uptime AND
+// with no retry pending (dc-bootstrap checks #dc-retry-note - the note this
+// handler shows below doubles as that signal). Clearing on dc:ready alone
+// would let a boot that succeeds moments before a lazy chunk 404s keep
+// resetting the counter - an unbounded reload loop through the whole
+// edge-propagation window; clearing on a bare 30s timer would do the same
+// past the ladder rungs that outwait it.
 const ASSET_RETRY_STORAGE_KEY = "dc-asset-retry";
 const ASSET_RETRY_MAX_ATTEMPTS = 4;
+const ASSET_RETRY_BACKOFF_MS = [4000, 15000, 45000, 90000];
 
 // A lazy chunk that fails to load means the deployment changed under this
 // session: the CF-edge propagation window right after a release, or a
@@ -246,17 +258,26 @@ const ASSET_RETRY_MAX_ATTEMPTS = 4;
 // (docs/deploy.md, "Deployment pipeline"). Reload only while there is
 // nothing to lose - with trips loaded or an ingest running a reload would
 // destroy the tab's in-memory state, so the import rejection flows to the
-// caller's error path instead (and gets logged by the handlers above). An
-// immediate reload is enough: if the fresh HTML's assets still 404, the
-// boot-time retry takes over with its backoff.
+// caller's error path instead (and gets logged by the handlers above). The
+// reload waits out the same ladder as the boot-time retry and shows the
+// same "updating" note: the skew window lasts seconds to minutes, so an
+// immediate reload would just burn the budget into a visible flicker.
+let assetRetryReloadArmed = false;
 window.addEventListener("vite:preloadError", (ev) => {
     if (state.trips.length > 0 || state.ingestController !== null) return;
     // Offline a reload cannot fetch the missing chunk anyway - don't burn a
     // retry from the budget; the failure surfaces through the usual error
     // paths (the boot-time retry in dc-bootstrap waits for `online` instead).
     if (navigator.onLine === false) return;
+    if (assetRetryReloadArmed) {
+        // A reload is already scheduled; a second failing chunk changes
+        // nothing - just keep Vite from rethrowing.
+        ev.preventDefault();
+        return;
+    }
+    let attempts = 0;
     try {
-        const attempts = Number.parseInt(sessionStorage.getItem(ASSET_RETRY_STORAGE_KEY) ?? "0", 10) || 0;
+        attempts = Number.parseInt(sessionStorage.getItem(ASSET_RETRY_STORAGE_KEY) ?? "0", 10) || 0;
         if (attempts >= ASSET_RETRY_MAX_ATTEMPTS) return;
         sessionStorage.setItem(ASSET_RETRY_STORAGE_KEY, String(attempts + 1));
     } catch {
@@ -264,8 +285,19 @@ window.addEventListener("vite:preloadError", (ev) => {
         // potential reload loop.
         return;
     }
+    assetRetryReloadArmed = true;
     ev.preventDefault();
-    location.reload();
+    window.__dcRetryNote?.();
+    setTimeout(() => {
+        // The backoff wait opened a window for the user to start something:
+        // re-check, and step down (note included) rather than destroy it.
+        if (state.trips.length > 0 || state.ingestController !== null) {
+            document.getElementById("dc-retry-note")?.remove();
+            return;
+        }
+        location.reload();
+        // In-bounds by construction: attempts < MAX_ATTEMPTS = ladder length.
+    }, ASSET_RETRY_BACKOFF_MS[attempts]!);
 });
 
 // Warn before close/reload. No backend: loaded trips and the index live
