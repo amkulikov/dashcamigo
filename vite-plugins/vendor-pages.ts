@@ -1425,10 +1425,10 @@ const VENDOR_TEMPLATES: Partial<Record<Lang, VendorTemplate>> = {
 // <title> and local search idiom in the lead. Hand-written per vendor for the
 // community locales whose templated pages already rank; the page body (CTA,
 // models note, format section, FAQ) stays on VENDOR_TEMPLATES / COMMUNITY_FAQ.
-// Values are final strings - no {vendor} substitution runs over them.
-type VendorHeadCopy = Pick<
-    VendorLocaleContent,
-    "title" | "metaDescription" | "ogTitle" | "ogDescription" | "h1" | "lead"
+// Values are final strings - no {vendor} substitution runs over them. An
+// override may carry any subset of the head fields; the rest stay templated.
+type VendorHeadCopy = Partial<
+    Pick<VendorLocaleContent, "title" | "metaDescription" | "ogTitle" | "ogDescription" | "h1" | "lead">
 >;
 
 const VENDOR_HEAD_OVERRIDES: Partial<Record<Lang, Partial<Record<VendorSlug, VendorHeadCopy>>>> = {
@@ -1574,6 +1574,40 @@ const VENDOR_HEAD_OVERRIDES: Partial<Record<Lang, Partial<Record<VendorSlug, Ven
                 "Darmowy odtwarzacz i edytor online do nagrań Thinkware. Mapa GPS, wykres prędkości, przycinanie i eksport. Działa w każdej nowoczesnej przeglądarce.",
             h1: "Odtwarzacz i edytor Thinkware online — odtwarzaj i przycinaj w przeglądarce",
             lead: "Otwórz nagrania z wideorejestratora Thinkware prosto w przeglądarce. Zsynchronizowana trasa GPS, wykres prędkości i przeciążeń, jednoczesne odtwarzanie obrazu z przodu i z tyłu, do tego przycinanie i eksport. Bez instalowania Thinkware Dashcam Viewera, bez wysyłania plików, bez konta.",
+        },
+    },
+    // Garmin's PNDM track carries GPS and speed only - the templated lead
+    // promises a G-force chart (and multi-channel playback), so every locale
+    // still on the template overrides just the lead with a fact-true one,
+    // mirroring the hand-written en/ru/de/pl leads.
+    es: {
+        garmin: {
+            lead: "Abre las grabaciones de tu Garmin Dash Cam directamente en el navegador — sin Garmin Express. dashcamigo extrae el GPS y la velocidad de la pista de telemetría PNDM y los dibuja en un mapa y un gráfico sincronizados.",
+        },
+    },
+    fr: {
+        garmin: {
+            lead: "Ouvre les enregistrements de ta Garmin Dash Cam directement dans le navigateur — sans Garmin Express. Le GPS et la vitesse sont extraits de la piste de télémétrie PNDM et tracés sur une carte et un graphique synchronisés.",
+        },
+    },
+    ja: {
+        garmin: {
+            lead: "Garmin Dash Cam の録画をブラウザで直接開けます。Garmin Express は不要です。GPS と速度は PNDM テレメトリートラックから取り出し、同期したマップとグラフに表示します。",
+        },
+    },
+    ko: {
+        garmin: {
+            lead: "Garmin Dash Cam 녹화를 브라우저에서 바로 열어보세요. Garmin Express는 필요 없어요. GPS와 속도는 PNDM 텔레메트리 트랙에서 읽어 동기화된 지도와 그래프에 표시돼요.",
+        },
+    },
+    pt: {
+        garmin: {
+            lead: "Abra as gravações da sua Garmin Dash Cam direto no navegador — sem Garmin Express. O GPS e a velocidade vêm da trilha de telemetria PNDM e aparecem em um mapa e um gráfico sincronizados.",
+        },
+    },
+    zh: {
+        garmin: {
+            lead: "直接在浏览器中打开 Garmin Dash Cam 的录像，无需 Garmin Express。GPS 和速度来自 PNDM 遥测数据，同步显示在地图和图表上。",
         },
     },
 };
