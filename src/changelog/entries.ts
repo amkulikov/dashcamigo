@@ -28,6 +28,38 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-08-11.1",
+        category: "fix",
+        text: {
+            en: "Fixed GPS for 70mai 4K cameras (A810, M500): routes were drawn tens of kilometers off to the side — open your folder again and the track lands on the road you actually drove.",
+            ru: "Починен GPS у 70mai 4K (A810, M500): маршрут рисовался в десятках километров в стороне — открой папку заново, и трек ляжет на реальную дорогу.",
+            de: "GPS bei 70mai-4K-Kameras (A810, M500) repariert: Die Route lag Dutzende Kilometer daneben — öffne den Ordner erneut, und die Strecke liegt auf der tatsächlich gefahrenen Straße.",
+            es: "Arreglado el GPS de las 70mai 4K (A810, M500): la ruta se dibujaba a decenas de kilómetros de distancia — vuelve a abrir la carpeta y la traza cae sobre la carretera real.",
+            fr: "GPS des 70mai 4K (A810, M500) réparé : le trajet était tracé à des dizaines de kilomètres à côté — rouvre le dossier et la trace retombe sur la vraie route.",
+            pl: "Naprawiony GPS w kamerach 70mai 4K (A810, M500): trasa była rysowana dziesiątki kilometrów obok — otwórz folder ponownie, a ślad ułoży się na prawdziwej drodze.",
+            pt: "GPS das 70mai 4K (A810, M500) corrigido: a rota era desenhada a dezenas de quilômetros de distância — abra a pasta de novo e o trajeto cai na estrada real.",
+            zh: "修复了 70mai 4K（A810、M500）的 GPS：路线此前会偏移几十公里——重新打开文件夹，轨迹就会落在实际行驶的道路上。",
+            ja: "70mai 4K（A810、M500）の GPS を修正しました。ルートが数十キロずれて描かれていましたが、フォルダを開き直せば実際に走った道路の上に軌跡が乗ります。",
+            ko: "70mai 4K(A810, M500)의 GPS를 고쳤습니다. 경로가 수십 킬로미터 옆에 그려졌는데, 폴더를 다시 열면 실제로 달린 도로 위에 트랙이 표시됩니다.",
+        },
+    },
+    {
+        id: "2026-08-08.5",
+        category: "fix",
+        text: {
+            en: "Right after an update rolls out, the app could get stuck reloading in a loop — now it waits a moment and picks up the new version cleanly.",
+            ru: "Сразу после выхода обновления приложение могло застрять в бесконечной перезагрузке — теперь оно выжидает и спокойно подхватывает новую версию.",
+            de: "Direkt nach einem Update konnte die App in einer Neuladeschleife hängen bleiben — jetzt wartet sie kurz und holt sich die neue Version sauber.",
+            es: "Justo después de publicarse una actualización, la app podía quedarse recargando en bucle — ahora espera un momento y carga la versión nueva sin problemas.",
+            fr: "Juste après la sortie d'une mise à jour, l'appli pouvait rester bloquée à se recharger en boucle — désormais elle patiente un instant et récupère la nouvelle version proprement.",
+            pl: "Tuż po wydaniu aktualizacji aplikacja mogła utknąć w pętli przeładowań — teraz chwilę odczekuje i spokojnie wczytuje nową wersję.",
+            pt: "Logo após sair uma atualização, o app podia ficar preso recarregando em loop — agora ele espera um instante e carrega a versão nova sem problemas.",
+            zh: "更新刚发布时，应用可能陷入反复刷新的循环——现在它会稍等片刻，平稳加载新版本。",
+            ja: "アップデート公開直後にアプリが再読み込みを繰り返して固まることがありました。今は少し待ってから、新しいバージョンをきちんと読み込みます。",
+            ko: "업데이트 직후 앱이 새로고침을 반복하며 멈출 수 있었는데, 이제는 잠시 기다렸다가 새 버전을 깔끔하게 불러옵니다.",
+        },
+    },
+    {
         id: "2026-08-08.4",
         category: "fix",
         text: {

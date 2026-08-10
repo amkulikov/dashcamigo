@@ -7,8 +7,13 @@ User-facing changes, newest first. Dates are when the change landed on
 [beta](https://beta.dashcamigo.app); production picks it up with the next
 release tag. Localized texts ship inside the app (the "What's new" panel).
 
+## 2026-08-11
+
+- **Fixed:** Fixed GPS for 70mai 4K cameras (A810, M500): routes were drawn tens of kilometers off to the side — open your folder again and the track lands on the road you actually drove.
+
 ## 2026-08-08
 
+- **Fixed:** Right after an update rolls out, the app could get stuck reloading in a loop — now it waits a moment and picks up the new version cleanly.
 - **Fixed:** Expanding the map in a narrow window — a foldable or a tablet in portrait — no longer hides the video: the trip list steps aside instead.
 - **Improved:** The folder warning on iPhone and iPad now points to the faster ways in — a computer, or copying the files you need into the Files app first.
 - **New:** dashcamigo now tells you what's new — the sparkles button up top lights up when something fresh lands.
