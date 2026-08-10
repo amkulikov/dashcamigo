@@ -719,7 +719,7 @@ describe("createFreeGpsBlockParser: backward anchor-scan fallback", () => {
     });
 
     it("a renamed-70mai-dialect block never emits through the generic parser", () => {
-        // 70mai blocks (int32*1e7 coords at offset 27) are parsed by their own
+        // 70mai blocks (ddmm.mmmm*1e5 int32 coords at offset 27) are parsed by their own
         // injected parser; through the GENERIC factory they must yield nothing.
         const build70mai = (): DataView => {
             const bytes = new Uint8Array(64);

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Anonymize a real 70mai 4K (A810/M500) embedded-freeGPS MP4 into a public-safe
 // fixture that exercises the STRUCTURAL path: moov -> `gps ` index atom with a
-// (offset,size) table pointing at freeGPS blocks (int32*1e7 dialect).
+// (offset,size) table pointing at freeGPS blocks (ddmm.mmmm*1e5 dialect).
 //
 // Unlike anonymize-novatek-mp4.mjs (DDmm-float, streaming), this preserves the
 // real `gps ` atom table shape and real block signatures, replacing only the
@@ -15,8 +15,8 @@
 // `gps ` table layout (version word, big-endian count + entry pairs), the
 // freeGPS magic, the self-referential 70mai tag (u16@8==u16@14, u16@10==0),
 // the active/void byte and the heading. What is ANONYMIZED: lat/lon only,
-// snapped to whole-degree sentinels (50 N / 30 E) plus a per-block +0.001 deg
-// step so the synthetic track moves. The per-record window (64 bytes) stops
+// snapped to whole-degree sentinels (50 N / 30 E) plus a small per-block step
+// so the synthetic track moves. The per-record window (64 bytes) stops
 // well before the block-start unix at literal+0x169, so no timestamp is copied.
 
 import { openSync, readSync, closeSync, statSync, writeFileSync } from "node:fs";
@@ -30,7 +30,14 @@ const BLOCK_WINDOW = 64;
 const LAT_BASE_DEG = 50;
 const LON_BASE_DEG = 30;
 const STEP_DEG = 0.0002; // ~22 m between fixes (~22 m/s, a plausible speed under the cap)
-const COORD_SCALE = 1e7;
+
+// Decimal degrees -> the firmware's int32: NMEA ddmm.mmmm * 1e5, sign = hemisphere.
+function encodeDdmm(degrees) {
+    const abs = Math.abs(degrees);
+    const dd = Math.floor(abs);
+    const minutes = (abs - dd) * 60;
+    return Math.round(Math.sign(degrees) * (dd * 100 + minutes) * 1e5);
+}
 
 // 70mai block field offsets from the freeGPS literal (see freegps-70mai.ts).
 const OFF_TAG = 8;
@@ -152,8 +159,8 @@ function main() {
             // Whole-degree sentinel plus a per-block step (northbound track).
             const lat = LAT_BASE_DEG + i * STEP_DEG;
             const lon = LON_BASE_DEG;
-            dv.setInt32(lit + OFF_LAT, Math.round(lat * COORD_SCALE), true);
-            dv.setInt32(lit + OFF_LON, Math.round(lon * COORD_SCALE), true);
+            dv.setInt32(lit + OFF_LAT, encodeDdmm(lat), true);
+            dv.setInt32(lit + OFF_LON, encodeDdmm(lon), true);
             windows.push(win);
         }
 

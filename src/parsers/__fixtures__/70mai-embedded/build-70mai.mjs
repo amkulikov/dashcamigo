@@ -11,14 +11,22 @@
 //
 // Block layout (offsets from the `freeGPS ` magic):
 //   [8..9] tag, [10..11]=0, [12..13]=type, [14..15]=tag mirror,
-//   [16..25] opaque filler, [26] 'A'/'V', [27..30] lat*1e7 i32 LE,
-//   [31..34] lon*1e7 i32 LE, [35..38] heading i32 LE.
+//   [16..25] opaque filler, [26] 'A'/'V', [27..30] lat ddmm.mmmm*1e5 i32 LE,
+//   [31..34] lon ddmm.mmmm*1e5 i32 LE, [35..38] heading i32 LE.
 //
 // Run: node src/parsers/__fixtures__/70mai-embedded/build-70mai.mjs
 
 import { writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+// Decimal degrees -> the firmware's int32: NMEA ddmm.mmmm * 1e5, sign = hemisphere.
+function encodeDdmm(degrees) {
+    const abs = Math.abs(degrees);
+    const dd = Math.floor(abs);
+    const minutes = (abs - dd) * 60;
+    return Math.round(Math.sign(degrees) * (dd * 100 + minutes) * 1e5);
+}
 
 function fourCC(s) {
     return Buffer.from(s, "ascii");
@@ -46,8 +54,8 @@ function build70maiBlock({ latDeg, lonDeg, heading, active = true }) {
     b.writeUInt16LE(0x01ed, 14); // tag mirror (== offset 8)
     FILLER.copy(b, 16);
     b.writeUInt8(active ? 0x41 : 0x56, 26); // 'A' / 'V'
-    b.writeInt32LE(Math.round(latDeg * 1e7), 27);
-    b.writeInt32LE(Math.round(lonDeg * 1e7), 31);
+    b.writeInt32LE(encodeDdmm(latDeg), 27);
+    b.writeInt32LE(encodeDdmm(lonDeg), 31);
     b.writeInt32LE(heading, 35);
     return b;
 }

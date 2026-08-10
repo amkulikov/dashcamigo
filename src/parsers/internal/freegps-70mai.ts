@@ -4,10 +4,12 @@
 // It is a `freeGPS ` block like Novatek's, but a different dialect than the
 // VIOFO/Vantrue variants in freegps.ts, with two defining differences:
 //
-//  1. Coordinates are plaintext int32 * 1e7 decimal degrees (NOT Novatek's
-//     DDDmm.mmmm float). Reverse-engineered from real A810 + M500 samples
-//     (private/samples); 2999/2999 and 1800/1800 blocks match the
-//     signature, decoding to continuous, in-region tracks at realistic speed.
+//  1. Coordinates are int32 * 1e5 NMEA ddmm.mmmm (degrees*100 + minutes), NOT
+//     decimal degrees and NOT Novatek's DDDmm.mmmm float. Verified two ways:
+//     the on-video OSD coordinate stamp matches the ddmm digits exactly
+//     (a decimal read of the same int32 lands tens of km away - up to 0.4 deg
+//     inside a degree cell), and ExifTool's A810 branch (QuickTimeStream.pl,
+//     GPSType 19) reads the same offsets as Get32s/1e5 + minutes conversion.
 //
 //  2. There is NO trustworthy per-record timestamp. The only time field is a
 //     single constant file-start unix at offset 0x169, and it carries the known
@@ -20,13 +22,14 @@
 // Block layout (byte offsets from the 8-byte `freeGPS ` magic):
 //   [8..9]    u16 LE block tag; equals [14..15], and [10..11] == 0  (signature)
 //   [26]      'A' (0x41) active fix / 'V' (0x56) void
-//   [27..30]  int32 LE latitude  * 1e7  (signed: negative = S)
-//   [31..34]  int32 LE longitude * 1e7  (signed: negative = W)
+//   [27..30]  int32 LE latitude  ddmm.mmmm * 1e5  (signed: negative = S)
+//   [31..34]  int32 LE longitude ddmm.mmmm * 1e5  (signed: negative = W)
 //   [35..38]  int32 LE heading degrees, [0..360)
-//   [39..42]  int32 LE - candidate speed; scale is unexplained (~6x of the
-//             haversine m/s on two samples, not a clean unit, unverified at a
-//             standstill) so it is NOT trusted. Speed is derived from the
-//             trajectory instead (see finalize70maiRecords).
+//   [39..42]  int32 LE speed, km/h (ExifTool reads it the same way; on real
+//             samples it sits at 3.6x the trajectory m/s). Left unused: its
+//             behavior at a standstill / through a signal gap is unverified,
+//             while the trajectory-derived speed is validated - see
+//             finalize70maiRecords.
 //   [0x169]   int32 LE constant file-start unix (8h-shifted) - unused.
 //
 // Blocks repeat once per video frame (~28-30x per GPS second); identical
@@ -34,6 +37,7 @@
 // by dedupRecords, which keys timeUnsynced rows on position only).
 
 import { haversineKm } from "../../parser.js";
+import { ddmmToDegrees } from "./ddmm.js";
 import type { GpsRecord } from "../types.js";
 
 // Field offsets from the freeGPS magic start.
@@ -48,9 +52,20 @@ const OFF_HEADING = 35;
 // Smallest window the parser touches (heading ends at byte 38).
 const MIN_BLOCK_LEN = OFF_HEADING + 4;
 
-const COORD_SCALE = 1e7;
+const COORD_SCALE = 1e5; // int32 -> ddmm.mmmm
 const ACTIVE = 0x41; // 'A'
 const VOID = 0x56; // 'V'
+
+// Whether the value is a plausible NMEA ddmm.mmmm coordinate: the minutes part
+// is < 60 by construction, so a value failing this is not this dialect (a
+// decimal-degrees int32 read as ddmm trips it on most fixes).
+function isValidDdmm(ddmm: number, maxDegrees: number): boolean {
+    if (!Number.isFinite(ddmm)) return false;
+    const abs = Math.abs(ddmm);
+    const minutes = abs - Math.floor(abs / 100) * 100;
+    if (minutes >= 60) return false;
+    return Math.abs(ddmmToDegrees(ddmm)) <= maxDegrees;
+}
 
 // `freeGPS ` magic bytes - the view passed by the scanner starts here; verify
 // defensively so the parser is safe to call directly (tests, future callers).
@@ -67,9 +82,10 @@ function startsWithMagic(view: DataView): boolean {
 /**
  * Whether the block is a 70mai-dialect freeGPS block. The signature is the
  * self-referential tag (u16@8 == u16@14, u16@10 == 0) plus an active/void byte
- * and in-range int32*1e7 coordinates. Strong enough that real VIOFO/Novatek
- * Type-3 blocks (which have 0x00 at offset 26 and unrelated tag bytes) never
- * match - verified against SilverStone F1 / 2E Drive samples.
+ * and in-range ddmm.mmmm coordinates (minutes < 60, degrees within 90/180).
+ * Strong enough that real VIOFO/Novatek Type-3 blocks (which have 0x00 at
+ * offset 26 and unrelated tag bytes) never match - verified against
+ * SilverStone F1 / 2E Drive samples.
  */
 export function is70maiFreeGpsBlock(view: DataView): boolean {
     if (view.byteLength < MIN_BLOCK_LEN) return false;
@@ -78,11 +94,10 @@ export function is70maiFreeGpsBlock(view: DataView): boolean {
     if (view.getUint16(OFF_TAG_ZERO, true) !== 0) return false;
     const active = view.getUint8(OFF_ACTIVE);
     if (active !== ACTIVE && active !== VOID) return false;
-    const lat = view.getInt32(OFF_LAT, true) / COORD_SCALE;
-    const lon = view.getInt32(OFF_LON, true) / COORD_SCALE;
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
-    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return false;
-    if (lat === 0 && lon === 0) return false;
+    const latDdmm = view.getInt32(OFF_LAT, true) / COORD_SCALE;
+    const lonDdmm = view.getInt32(OFF_LON, true) / COORD_SCALE;
+    if (!isValidDdmm(latDdmm, 90) || !isValidDdmm(lonDdmm, 180)) return false;
+    if (latDdmm === 0 && lonDdmm === 0) return false;
     return true;
 }
 
@@ -103,8 +118,8 @@ export function parse70maiFreeGpsBlock(view: DataView, mp4Filename: string): Gps
     if (!is70maiFreeGpsBlock(view)) return [];
     if (view.getUint8(OFF_ACTIVE) !== ACTIVE) return []; // void fix, skip
 
-    const lat = view.getInt32(OFF_LAT, true) / COORD_SCALE;
-    const lon = view.getInt32(OFF_LON, true) / COORD_SCALE;
+    const lat = ddmmToDegrees(view.getInt32(OFF_LAT, true) / COORD_SCALE);
+    const lon = ddmmToDegrees(view.getInt32(OFF_LON, true) / COORD_SCALE);
     let bearingDeg = view.getInt32(OFF_HEADING, true);
     // Heading is degrees already; clamp obvious garbage to 0 (trajectory bearing
     // is not reconstructed here - a single bad heading is harmless).

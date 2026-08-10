@@ -115,7 +115,7 @@ import { csv70maiPrimitive } from "./csv-70mai.js";
 //      only because its marker is a precomputed boolean while this one scans
 //      headerBytes at 188-byte stride.
 //   9. freegps-70mai    - 70mai filename + hasFreeGpsMarker. Before the generic
-//      freegps so a 70mai file is parsed with the 70mai int32*1e7 dialect, not
+//      freegps so a 70mai file is parsed with the 70mai ddmm*1e5 dialect, not
 //      misread by the VIOFO Type-3 variant. Gated on the 70mai name so it never
 //      touches VIOFO/Vantrue files.
 //  10. freegps          - structural is cheap, streaming is the most expensive.

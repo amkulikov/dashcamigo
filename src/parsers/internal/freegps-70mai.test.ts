@@ -1,9 +1,19 @@
-// Unit tests for the 70mai-embedded freeGPS block parser (int32*1e7 dialect).
+// Unit tests for the 70mai-embedded freeGPS block parser (ddmm.mmmm*1e5 dialect).
 import { describe, it, expect } from "vitest";
 import type { GpsRecord } from "../types.js";
 import { finalize70maiRecords, is70maiFreeGpsBlock, parse70maiFreeGpsBlock } from "./freegps-70mai.js";
 
+// Encodes decimal degrees into the firmware's int32: NMEA ddmm.mmmm * 1e5,
+// hemisphere as the sign.
+function encodeDdmm(degrees: number): number {
+    const abs = Math.abs(degrees);
+    const dd = Math.floor(abs);
+    const minutes = (abs - dd) * 60;
+    return Math.round(Math.sign(degrees) * (dd * 100 + minutes) * 1e5);
+}
+
 // Builds a 70mai freeGPS block (64-byte window is enough for the parser).
+// `latRaw`/`lonRaw` override the encoded int32 verbatim for malformed-input cases.
 function block(opts: {
     lat: number;
     lon: number;
@@ -11,6 +21,8 @@ function block(opts: {
     active?: boolean;
     breakSig?: boolean;
     noMagic?: boolean;
+    latRaw?: number;
+    lonRaw?: number;
 }): DataView {
     const { lat, lon, heading = 45, active = true, breakSig = false, noMagic = false } = opts;
     const b = new Uint8Array(64);
@@ -20,8 +32,8 @@ function block(opts: {
     dv.setUint16(10, breakSig ? 0x0001 : 0x0000, true);
     dv.setUint16(14, 0x01ed, true);
     b[26] = active ? 0x41 : 0x56; // 'A' / 'V'
-    dv.setInt32(27, Math.round(lat * 1e7), true);
-    dv.setInt32(31, Math.round(lon * 1e7), true);
+    dv.setInt32(27, opts.latRaw ?? encodeDdmm(lat), true);
+    dv.setInt32(31, opts.lonRaw ?? encodeDdmm(lon), true);
     dv.setInt32(35, heading, true);
     return dv;
 }
@@ -43,6 +55,13 @@ describe("is70maiFreeGpsBlock", () => {
     it("rejects out-of-range coordinates and the 0,0 fix", () => {
         expect(is70maiFreeGpsBlock(block({ lat: 200, lon: 30 }))).toBe(false);
         expect(is70maiFreeGpsBlock(block({ lat: 0, lon: 0 }))).toBe(false);
+    });
+
+    it("rejects a ddmm value whose minutes part is >= 60", () => {
+        // 5075.00000: "50 deg 75 min" cannot come from a GPS fix - this is what
+        // a decimal-degrees int32 (50.75 * 1e7) looks like when read as ddmm.
+        expect(is70maiFreeGpsBlock(block({ lat: 50, lon: 30, latRaw: 507500000 }))).toBe(false);
+        expect(is70maiFreeGpsBlock(block({ lat: 50, lon: 30, lonRaw: 307500000 }))).toBe(false);
     });
 
     it("rejects a VIOFO-style block (no self-referential tag, byte26=0)", () => {
@@ -73,6 +92,15 @@ describe("parse70maiFreeGpsBlock", () => {
         const [r] = parse70maiFreeGpsBlock(block({ lat: -33.86, lon: -70.65 }), "x");
         expect(r!.lat).toBeCloseTo(-33.86, 5);
         expect(r!.lon).toBeCloseTo(-70.65, 5);
+    });
+
+    it("converts the ddmm minutes part, not a decimal shift of the raw int32", () => {
+        // Raw firmware ints whose OSD stamp reads 9 deg 58.340' N, 78 deg 5.719' E:
+        // ddmm 958.34060 / 7805.71910. A decimal read (raw/1e7) lands ~43 km off
+        // at 9.583406/78.057191 - the exact wrong-track failure mode.
+        const [r] = parse70maiFreeGpsBlock(block({ lat: 0, lon: 0, latRaw: 95834060, lonRaw: 780571910 }), "x");
+        expect(r!.lat).toBeCloseTo(9 + 58.3406 / 60, 6);
+        expect(r!.lon).toBeCloseTo(78 + 5.7191 / 60, 6);
     });
 
     it("returns an empty array for a void (no-fix) block", () => {

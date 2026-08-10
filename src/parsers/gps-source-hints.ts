@@ -86,7 +86,7 @@ const GPS_SOURCE_HINTS: readonly GpsSourceHint[] = [
     // embedded probe. A CSV-model MP4 dropped WITHOUT its sidecar does reach the
     // probe, but carries no freeGPS marker and yields nothing - correct, only a
     // wasted index build on that edge case. The newer 4K models are the intended
-    // embedded path. Confirmed on real A810 + M500 samples (plaintext int32*1e7).
+    // embedded path. Confirmed on real A810 + M500 samples (ddmm.mmmm*1e5 int32).
     {
         id: "70mai",
         matches: (f) => RX_70MAI.test(f.file.name),
