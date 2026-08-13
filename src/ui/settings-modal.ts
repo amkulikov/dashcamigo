@@ -38,7 +38,8 @@ import { getUnits, setUnits, type Units } from "../units-pref.js";
 import { APP_VERSION } from "../version.js";
 import { rebuildChartFromTrip } from "./chart.js";
 import { formatBytes } from "./format.js";
-import { refreshMap } from "./map.js";
+import { reapplyMapLabelScale, refreshMap } from "./map.js";
+import { getMapLabelScale, MAP_LABEL_SCALE_VALUES, setMapLabelScale } from "./map-label-scale.js";
 import { activateModal, deactivateModal, wireBackdropDismiss } from "./modal-helper.js";
 import { notify } from "./notifications.js";
 import { resetOnboarding } from "./onboarding.js";
@@ -94,6 +95,7 @@ function openSettings(): void {
     if (!m) return;
     syncCrashToggleFromState();
     syncUnitsSelect();
+    syncMapLabelScaleSelect();
     syncSeekStepInputs();
     syncEventsThresholdInputs();
     syncTripGapInput();
@@ -142,6 +144,11 @@ function syncEventsThresholdInputs(): void {
 function syncUnitsSelect(): void {
     const sel = document.getElementById("settings-units-select") as HTMLSelectElement | null;
     if (sel) sel.value = getUnits();
+}
+
+function syncMapLabelScaleSelect(): void {
+    const sel = document.getElementById("settings-map-label-scale-select") as HTMLSelectElement | null;
+    if (sel) sel.value = String(getMapLabelScale());
 }
 
 /**
@@ -428,6 +435,21 @@ export function initSettingsModal(): void {
         if (v === "metric" || v === "imperial") {
             setUnits(v as Units);
         }
+    });
+
+    // --- Map: label size ---
+    //
+    // Applies immediately to the live maps (a setStyle re-apply of the cached
+    // style with the new factor). The export overlay map has its own per-export
+    // control and is untouched by this preference.
+
+    document.getElementById("settings-map-label-scale-select")?.addEventListener("change", (ev) => {
+        const sel = ev.target as HTMLSelectElement;
+        const parsed = Number(sel.value);
+        const match = MAP_LABEL_SCALE_VALUES.find((v) => v === parsed);
+        if (match === undefined) return;
+        setMapLabelScale(match);
+        reapplyMapLabelScale();
     });
 
     // --- Playback: arrow-key seek step ---

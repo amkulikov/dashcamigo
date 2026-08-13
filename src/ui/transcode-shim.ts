@@ -148,32 +148,36 @@ function runInWorker(
         // mirrors the worker's own output-width derivation (same aspect + height).
         const outputWidthPx = computeOutputSize(transferArgs.output.height, transferArgs.output.aspect).width;
         const targetSlotWidthPx = outputWidthPx * MAP_BASE_WIDTH_PCT * (overlayMap.scalePct / 100);
-        snapshotterPromise = createExportMapSnapshotter(records, "export", mapTheme, targetSlotWidthPx).then(
-            async (snap) => {
-                // Pre-warm tiles immediately so the very first per-frame snapshot
-                // does not block on tile fetch. Aborted via the transcode signal:
-                // the user cancelled, no point loading more tiles.
-                if (overlays?.map) {
-                    // Only the exported range (plus a viewport margin): the
-                    // export never snapshots outside the range, and a
-                    // whole-trip walk on a slow network can starve the first
-                    // snapshot's worker-side timeout, dropping the map from
-                    // the entire export.
-                    const prewarmRecords = recordsInWallWindow(
-                        records,
-                        overlays.rangeStartUtcSec,
-                        overlays.rangeEndUtcSec,
-                        PREWARM_RANGE_MARGIN_SEC,
-                    );
-                    try {
-                        await snap.prewarm(prewarmRecords, overlays.map.zoomKm, signal, chase);
-                    } catch (err) {
-                        log.warn("map snapshot prewarm threw", { err: String(err) });
-                    }
+        snapshotterPromise = createExportMapSnapshotter(
+            records,
+            "export",
+            mapTheme,
+            targetSlotWidthPx,
+            overlayMap.labelScalePct,
+        ).then(async (snap) => {
+            // Pre-warm tiles immediately so the very first per-frame snapshot
+            // does not block on tile fetch. Aborted via the transcode signal:
+            // the user cancelled, no point loading more tiles.
+            if (overlays?.map) {
+                // Only the exported range (plus a viewport margin): the
+                // export never snapshots outside the range, and a
+                // whole-trip walk on a slow network can starve the first
+                // snapshot's worker-side timeout, dropping the map from
+                // the entire export.
+                const prewarmRecords = recordsInWallWindow(
+                    records,
+                    overlays.rangeStartUtcSec,
+                    overlays.rangeEndUtcSec,
+                    PREWARM_RANGE_MARGIN_SEC,
+                );
+                try {
+                    await snap.prewarm(prewarmRecords, overlays.map.zoomKm, signal, chase);
+                } catch (err) {
+                    log.warn("map snapshot prewarm threw", { err: String(err) });
                 }
-                return snap;
-            },
-        );
+            }
+            return snap;
+        });
         return snapshotterPromise;
     };
     // Eager start: kick off MapLibre init + prewarm at export start instead of

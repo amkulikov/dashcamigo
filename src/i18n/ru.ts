@@ -725,6 +725,7 @@ export const ruDict = {
     "export.overlays.mapTheme.light": "Светлая",
     "export.overlays.mapTheme.dark": "Тёмная",
     "export.overlays.mapTheme.neon": "Неон",
+    "export.overlays.mapLabelSize": "Размер текста",
     "export.overlays.mapMode": "Вид",
     "export.overlays.mapMode.north": "Север сверху",
     "export.overlays.mapMode.chase": "Сзади",
@@ -798,6 +799,10 @@ export const ruDict = {
     "settings.playback.seekStep.arrow": "Стрелка",
     "settings.playback.seekStep.shiftArrow": "Shift + стрелка",
     "settings.playback.seekStep.unit": "секунд",
+    "settings.map.section": "Карта",
+    "settings.map.labelScale.label": "Размер надписей на карте",
+    "settings.map.labelScale.standard": "Обычный",
+    "settings.map.labelScale.description": "Названия улиц и мест на карте станут крупнее и разборчивее.",
 
     "settings.events.section": "Маркеры событий",
     "settings.events.threshold.label": "Порог чувствительности к ударам",

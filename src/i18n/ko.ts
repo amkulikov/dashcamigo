@@ -727,6 +727,7 @@ export const koDict = {
     "export.overlays.mapTheme.light": "밝음",
     "export.overlays.mapTheme.dark": "어두움",
     "export.overlays.mapTheme.neon": "네온",
+    "export.overlays.mapLabelSize": "글자 크기",
     "export.overlays.mapMode": "보기",
     "export.overlays.mapMode.north": "북쪽 위로",
     "export.overlays.mapMode.chase": "추적",
@@ -802,6 +803,10 @@ export const koDict = {
     "settings.playback.seekStep.arrow": "화살표",
     "settings.playback.seekStep.shiftArrow": "Shift + 화살표",
     "settings.playback.seekStep.unit": "초",
+    "settings.map.section": "지도",
+    "settings.map.labelScale.label": "지도 글자 크기",
+    "settings.map.labelScale.standard": "기본",
+    "settings.map.labelScale.description": "지도의 도로명과 지명을 더 읽기 쉽게 만듭니다.",
 
     "settings.events.section": "이벤트 마커",
     "settings.events.threshold.label": "충격 감지 임계값",

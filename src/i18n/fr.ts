@@ -722,6 +722,7 @@ export const frDict = {
     "export.overlays.mapTheme.light": "Clair",
     "export.overlays.mapTheme.dark": "Sombre",
     "export.overlays.mapTheme.neon": "Néon",
+    "export.overlays.mapLabelSize": "Taille du texte",
     "export.overlays.mapMode": "Vue",
     "export.overlays.mapMode.north": "Nord en haut",
     "export.overlays.mapMode.chase": "Poursuite",
@@ -795,6 +796,10 @@ export const frDict = {
     "settings.playback.seekStep.arrow": "Flèche",
     "settings.playback.seekStep.shiftArrow": "Maj + flèche",
     "settings.playback.seekStep.unit": "secondes",
+    "settings.map.section": "Carte",
+    "settings.map.labelScale.label": "Taille du texte sur la carte",
+    "settings.map.labelScale.standard": "Standard",
+    "settings.map.labelScale.description": "Rend les noms de rues et de lieux plus lisibles sur la carte.",
 
     "settings.events.section": "Marqueurs d'événements",
     "settings.events.threshold.label": "Seuil de sensibilité aux chocs",

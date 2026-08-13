@@ -717,6 +717,7 @@ export const zhDict = {
     "export.overlays.mapTheme.light": "浅色",
     "export.overlays.mapTheme.dark": "深色",
     "export.overlays.mapTheme.neon": "霓虹",
+    "export.overlays.mapLabelSize": "文字大小",
     "export.overlays.mapMode": "视图",
     "export.overlays.mapMode.north": "正北朝上",
     "export.overlays.mapMode.chase": "追车",
@@ -792,6 +793,10 @@ export const zhDict = {
     "settings.playback.seekStep.arrow": "方向键",
     "settings.playback.seekStep.shiftArrow": "Shift + 方向键",
     "settings.playback.seekStep.unit": "秒",
+    "settings.map.section": "地图",
+    "settings.map.labelScale.label": "地图文字大小",
+    "settings.map.labelScale.standard": "标准",
+    "settings.map.labelScale.description": "让地图上的街道和地名更容易辨认。",
 
     "settings.events.section": "事件标记",
     "settings.events.threshold.label": "冲击检测灵敏度",

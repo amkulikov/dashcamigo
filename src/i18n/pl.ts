@@ -720,6 +720,7 @@ export const plDict = {
     "export.overlays.mapTheme.light": "Jasny",
     "export.overlays.mapTheme.dark": "Ciemny",
     "export.overlays.mapTheme.neon": "Neon",
+    "export.overlays.mapLabelSize": "Rozmiar tekstu",
     "export.overlays.mapMode": "Widok",
     "export.overlays.mapMode.north": "Północ u góry",
     "export.overlays.mapMode.chase": "Pościg",
@@ -793,6 +794,10 @@ export const plDict = {
     "settings.playback.seekStep.arrow": "Strzałka",
     "settings.playback.seekStep.shiftArrow": "Shift + strzałka",
     "settings.playback.seekStep.unit": "sekund",
+    "settings.map.section": "Mapa",
+    "settings.map.labelScale.label": "Rozmiar tekstu na mapie",
+    "settings.map.labelScale.standard": "Standardowy",
+    "settings.map.labelScale.description": "Nazwy ulic i miejsc na mapie będą łatwiejsze do odczytania.",
 
     "settings.events.section": "Znaczniki zdarzeń",
     "settings.events.threshold.label": "Próg czułości na wstrząsy",

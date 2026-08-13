@@ -720,6 +720,7 @@ export const ptDict = {
     "export.overlays.mapTheme.light": "Claro",
     "export.overlays.mapTheme.dark": "Escuro",
     "export.overlays.mapTheme.neon": "Néon",
+    "export.overlays.mapLabelSize": "Tamanho do texto",
     "export.overlays.mapMode": "Vista",
     "export.overlays.mapMode.north": "Norte para cima",
     "export.overlays.mapMode.chase": "Perseguição",
@@ -793,6 +794,10 @@ export const ptDict = {
     "settings.playback.seekStep.arrow": "Seta",
     "settings.playback.seekStep.shiftArrow": "Shift + seta",
     "settings.playback.seekStep.unit": "segundos",
+    "settings.map.section": "Mapa",
+    "settings.map.labelScale.label": "Tamanho do texto no mapa",
+    "settings.map.labelScale.standard": "Padrão",
+    "settings.map.labelScale.description": "Torna os nomes de ruas e lugares no mapa mais fáceis de ler.",
 
     "settings.events.section": "Marcadores de eventos",
     "settings.events.threshold.label": "Sensibilidade a impactos",

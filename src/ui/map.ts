@@ -54,6 +54,7 @@ import type { FollowMode, LngLatTuple, MiniMapData } from "./state.js";
 import { formatSpeedFromMs } from "../units-pref.js";
 import { currentMapTheme, getCssVar, themeColors } from "./theme.js";
 import type { MapStyleId, MapTheme } from "./theme.js";
+import { getMapLabelScale, scaleStyleTextSizes } from "./map-label-scale.js";
 import { buildMercatorCumulativeDistances, buildSpeedGradient, mercatorY } from "./speed-gradient.js";
 
 // --- lazy maplibre-gl loading (T9) ---
@@ -300,8 +301,25 @@ function applyLoadedStyle(style: maplibregl.StyleSpecification, theme: MapStyleI
     // diff:false - do not try to preserve sources/layers across styles. The trip
     // line redraws via style.load; diff:true could place our layer at a wrong
     // z-order in the new style.
-    if (state.map) state.map.setStyle(style, { diff: false });
-    if (state.miniMap) state.miniMap.setStyle(style, { diff: false });
+    //
+    // Label scale is applied to a clone HERE, not in loadMapStyle: the cache
+    // must stay pristine because the export snapshotter reads the same cache
+    // with its own independent per-export factor.
+    const scaled = scaleStyleTextSizes(style, getMapLabelScale());
+    if (state.map) state.map.setStyle(scaled, { diff: false });
+    if (state.miniMap) state.miniMap.setStyle(scaled, { diff: false });
+}
+
+/**
+ * Re-applies the current theme's cached style to the live maps so a changed
+ * label-scale preference takes effect immediately. Called by the settings
+ * modal; a no-op while the style fetch is still in flight (the pending
+ * loadMapStyle().then(applyLoadedStyle) will pick the new scale up anyway).
+ */
+export function reapplyMapLabelScale(): void {
+    const theme = currentMapTheme();
+    const cached = cachedMapStyle[theme];
+    if (cached) applyLoadedStyle(cached, theme);
 }
 
 function showMapStyleError(): void {
@@ -968,7 +986,7 @@ export function ensureMiniMap(): maplibregl.Map | null {
     const theme = currentMapTheme();
     const cached = cachedMapStyle[theme];
     if (cached && state.miniMap) {
-        state.miniMap.setStyle(cached, { diff: false });
+        state.miniMap.setStyle(scaleStyleTextSizes(cached, getMapLabelScale()), { diff: false });
     }
 
     return mini;

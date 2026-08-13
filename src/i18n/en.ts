@@ -720,6 +720,7 @@ export const enDict = {
     "export.overlays.mapTheme.light": "Light",
     "export.overlays.mapTheme.dark": "Dark",
     "export.overlays.mapTheme.neon": "Neon",
+    "export.overlays.mapLabelSize": "Text size",
     "export.overlays.mapMode": "View",
     "export.overlays.mapMode.north": "North up",
     "export.overlays.mapMode.chase": "Chase",
@@ -793,6 +794,10 @@ export const enDict = {
     "settings.playback.seekStep.arrow": "Arrow",
     "settings.playback.seekStep.shiftArrow": "Shift + Arrow",
     "settings.playback.seekStep.unit": "seconds",
+    "settings.map.section": "Map",
+    "settings.map.labelScale.label": "Text size on the map",
+    "settings.map.labelScale.standard": "Standard",
+    "settings.map.labelScale.description": "Makes street and place names on the map easier to read.",
 
     "settings.events.section": "Event markers",
     "settings.events.threshold.label": "Impact sensitivity threshold",

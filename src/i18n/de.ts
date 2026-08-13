@@ -720,6 +720,7 @@ export const deDict = {
     "export.overlays.mapTheme.light": "Hell",
     "export.overlays.mapTheme.dark": "Dunkel",
     "export.overlays.mapTheme.neon": "Neon",
+    "export.overlays.mapLabelSize": "Textgröße",
     "export.overlays.mapMode": "Ansicht",
     "export.overlays.mapMode.north": "Norden oben",
     "export.overlays.mapMode.chase": "Verfolgung",
@@ -793,6 +794,10 @@ export const deDict = {
     "settings.playback.seekStep.arrow": "Pfeiltaste",
     "settings.playback.seekStep.shiftArrow": "Shift + Pfeiltaste",
     "settings.playback.seekStep.unit": "Sekunden",
+    "settings.map.section": "Karte",
+    "settings.map.labelScale.label": "Textgröße auf der Karte",
+    "settings.map.labelScale.standard": "Standard",
+    "settings.map.labelScale.description": "Macht Straßen- und Ortsnamen auf der Karte besser lesbar.",
 
     "settings.events.section": "Ereignis-Marker",
     "settings.events.threshold.label": "Empfindlichkeitsschwelle für Stöße",

@@ -858,6 +858,9 @@ export type I18nKey =
     | "export.overlays.mapTheme.light"
     | "export.overlays.mapTheme.dark"
     | "export.overlays.mapTheme.neon"
+    // Label size of the burned-in map's street/place names, per export -
+    // independent of the viewer's settings.map.labelScale preference.
+    | "export.overlays.mapLabelSize"
     // Map overlay view: north-up vs the tilted heading-up "chase" camera, with a
     // tilt slider and a speed-adaptive-zoom toggle when chase is selected.
     | "export.overlays.mapMode"
@@ -1013,6 +1016,15 @@ export type I18nKey =
     | "settings.playback.seekStep.arrow"
     | "settings.playback.seekStep.shiftArrow"
     | "settings.playback.seekStep.unit"
+
+    // Settings -> Map: label-size multiplier for street/place names on the live
+    // maps. Presets in src/ui/map-label-scale.ts (stored in
+    // localStorage["dashcamigo:mapLabelScale"]); the export overlay map has its
+    // own per-export control (export.overlays.mapLabelSize).
+    | "settings.map.section"
+    | "settings.map.labelScale.label"
+    | "settings.map.labelScale.standard"
+    | "settings.map.labelScale.description"
 
     // Settings -> Events: automatic impact/brake detection threshold in g.
     // Below this value, accel-spikes don't get a marker on the chart/map/strip.

@@ -93,6 +93,12 @@ export interface OverlayMapState {
      *  semi-transparent black slot with orange-glowing features). Independent of
      *  the app UI theme. */
     theme: MapStyleId;
+    /** Label size of the burned-in map's street/place names, percent of the
+     *  style's own sizes (one of the MAP_LABEL_SIZE_PCT_VALUES presets). A
+     *  render-only concern like `theme`: the snapshotter scales the style on
+     *  the main thread. Independent of the viewer's label-scale preference -
+     *  the overlay slot is sized for a video frame, not the user's screen. */
+    labelScalePct: number;
     /** Camera view. "north" = north-up (the legacy look); "chase" = tilted,
      *  heading-up (the car points up, road ahead in view). Default "north". */
     mode: MapViewMode;
@@ -183,6 +189,10 @@ export interface ExportPanelState {
     blurStyle: BlurStyle;
 }
 
+/** Presets for OverlayMapState.labelScalePct (percent of the style's own
+ *  label sizes). Mirrors the viewer's MAP_LABEL_SCALE_VALUES ratios. */
+export const MAP_LABEL_SIZE_PCT_VALUES = [100, 125, 150, 200] as const;
+
 /** Default brand-orange accent for new overlays. Mirrors --dc-orange. */
 export const OVERLAY_ACCENT_DEFAULT = "#FF9000";
 
@@ -233,6 +243,7 @@ function freshExportPanelState(): ExportPanelState {
             // inspector.
             shape: "circle",
             theme: "neon",
+            labelScalePct: 100,
             mode: "chase",
             pitchDeg: 58,
             adaptiveZoom: true,

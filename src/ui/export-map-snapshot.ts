@@ -34,6 +34,7 @@ import type { GpsRecord } from "../parsers/types.js";
 import { type MapStyleId, themeColors } from "./theme.js";
 import { buildMercatorCumulativeDistances, buildSpeedGradient } from "./speed-gradient.js";
 import { addBuildings3dLayer, loadMaplibre, loadMapStyle, type MapLoadSource, removeBuildings3dLayer } from "./map.js";
+import { scaleStyleTextSizes } from "./map-label-scale.js";
 
 const log = createLogger("export-map-snapshot");
 
@@ -173,12 +174,18 @@ export interface ExportMapSnapshotter {
  * derived from it - clamped - so a 640-logical-px render fills the slot without
  * over-rendering at the inherited devicePixelRatio. Omit it (preview, a one-shot
  * render) to keep devicePixelRatio for on-screen crispness.
+ *
+ * `labelScalePct` scales the style's street/place-name sizes (the user's
+ * per-export "text size" pick), applied to a clone so the shared style cache
+ * stays pristine. The instance renders one style for its lifetime - a changed
+ * value needs a rebuild, same as `theme`.
  */
 export async function createExportMapSnapshotter(
     records: GpsRecord[],
     source: MapLoadSource = "export",
     theme: MapStyleId = "light",
     targetSlotWidthPx?: number,
+    labelScalePct = 100,
 ): Promise<ExportMapSnapshotter> {
     // Resolution policy: derive pixelRatio from the slot the snapshot lands in,
     // not the device. Undefined (no slot hint) leaves the maplibre default
@@ -215,11 +222,12 @@ export async function createExportMapSnapshotter(
     // User-selected base layer (default "light" - higher contrast against the
     // orange car marker and the typical daytime recording). ensureMap prefetches
     // both themes at startup, so either is usually a cache hit.
-    const style = await loadMapStyle(theme, false, source);
-    if (!style) {
+    const styleFromCache = await loadMapStyle(theme, false, source);
+    if (!styleFromCache) {
         host.remove();
         throw new Error("map style unavailable");
     }
+    const style = scaleStyleTextSizes(styleFromCache, labelScalePct / 100);
 
     // Seed the camera from a finite ACTIVE record, not records[0]: a leading
     // inactive/lost-fix entry can carry NaN coords, and a NaN center throws in

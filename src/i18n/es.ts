@@ -721,6 +721,7 @@ export const esDict = {
     "export.overlays.mapTheme.light": "Claro",
     "export.overlays.mapTheme.dark": "Oscuro",
     "export.overlays.mapTheme.neon": "Neón",
+    "export.overlays.mapLabelSize": "Tamaño del texto",
     "export.overlays.mapMode": "Vista",
     "export.overlays.mapMode.north": "Norte arriba",
     "export.overlays.mapMode.chase": "Persecución",
@@ -794,6 +795,10 @@ export const esDict = {
     "settings.playback.seekStep.arrow": "Flecha",
     "settings.playback.seekStep.shiftArrow": "Mayús + flecha",
     "settings.playback.seekStep.unit": "segundos",
+    "settings.map.section": "Mapa",
+    "settings.map.labelScale.label": "Tamaño del texto en el mapa",
+    "settings.map.labelScale.standard": "Estándar",
+    "settings.map.labelScale.description": "Hace más legibles los nombres de calles y lugares en el mapa.",
 
     "settings.events.section": "Marcadores de eventos",
     "settings.events.threshold.label": "Sensibilidad de detección de impactos",

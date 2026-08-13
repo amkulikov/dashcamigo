@@ -730,6 +730,7 @@ export const jaDict = {
     "export.overlays.mapTheme.light": "ライト",
     "export.overlays.mapTheme.dark": "ダーク",
     "export.overlays.mapTheme.neon": "ネオン",
+    "export.overlays.mapLabelSize": "文字サイズ",
     "export.overlays.mapMode": "表示",
     "export.overlays.mapMode.north": "北が上",
     "export.overlays.mapMode.chase": "チェイス",
@@ -805,6 +806,10 @@ export const jaDict = {
     "settings.playback.seekStep.arrow": "矢印",
     "settings.playback.seekStep.shiftArrow": "Shift + 矢印",
     "settings.playback.seekStep.unit": "秒",
+    "settings.map.section": "地図",
+    "settings.map.labelScale.label": "地図上の文字サイズ",
+    "settings.map.labelScale.standard": "標準",
+    "settings.map.labelScale.description": "地図上の通りや地名を読みやすくします。",
 
     "settings.events.section": "イベントマーカー",
     "settings.events.threshold.label": "衝撃の検出感度",

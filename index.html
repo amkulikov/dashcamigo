@@ -2314,6 +2314,24 @@
                     <p class="settings-toggle-desc" data-i18n="settings.playback.seekStep.description">How far the left / right arrow keys jump in the player. Shift extends the jump.</p>
                 </div>
             </div>
+            <!-- Map: label size multiplier for street/place names on the live
+                 maps (pref + transform in src/ui/map-label-scale.ts, applied in
+                 src/ui/map.ts). The export overlay map has its own control. -->
+            <div class="export-modal-section">
+                <h3 class="settings-section-title" data-i18n="settings.map.section">Map</h3>
+                <div class="settings-row">
+                    <label class="settings-select-row">
+                        <span class="settings-select-label" data-i18n="settings.map.labelScale.label">Text size on the map</span>
+                        <select id="settings-map-label-scale-select" class="settings-select">
+                            <option value="1" data-i18n="settings.map.labelScale.standard">Standard</option>
+                            <option value="1.25">125 %</option>
+                            <option value="1.5">150 %</option>
+                            <option value="2">200 %</option>
+                        </select>
+                    </label>
+                    <p class="settings-toggle-desc" data-i18n="settings.map.labelScale.description">Makes street and place names on the map easier to read.</p>
+                </div>
+            </div>
             <!-- Events: brake/impact detection threshold. detectEvents in
                  src/events.ts reads the threshold via getBrakeThresholdG();
                  the never-checkbox stores +Infinity ("off") to disable

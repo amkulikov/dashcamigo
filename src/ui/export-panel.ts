@@ -17,6 +17,7 @@ import {
     closeExportMode,
     type ExportOutputKind,
     exportPanelState,
+    MAP_LABEL_SIZE_PCT_VALUES,
     type MapViewMode,
     notifyExportStateChanged,
     openExportMode,
@@ -2252,6 +2253,7 @@ function refreshOverlayInspector(): void {
     if (def.isMap) {
         root.appendChild(renderMapShapeSegment());
         root.appendChild(renderMapThemeSegment());
+        root.appendChild(renderMapLabelSizeSegment());
         root.appendChild(
             renderOverlaySlider(
                 t("export.overlays.mapScale"),
@@ -2339,6 +2341,38 @@ function renderMapThemeSegment(): HTMLElement {
             exportPanelState.overlayMap.theme = theme;
             for (const b of Array.from(seg.children)) {
                 b.classList.toggle("is-active", (b as HTMLElement).dataset.maptheme === theme);
+            }
+            notifyExportStateChanged();
+        });
+        seg.appendChild(btn);
+    }
+    wrap.appendChild(seg);
+    return wrap;
+}
+
+/** Map label-size segmented control (inspector, map only). Scales the burned-in
+ *  map's street/place names; independent of the viewer's settings preference.
+ *  Both the preview and the export rebuild their hidden MapLibre on change (the
+ *  style is fixed at snapshotter construction, same as the theme). */
+function renderMapLabelSizeSegment(): HTMLElement {
+    const wrap = document.createElement("div");
+    wrap.className = "export-panel__ov-field";
+    const label = document.createElement("span");
+    label.className = "export-panel__ov-field-label";
+    label.textContent = t("export.overlays.mapLabelSize");
+    wrap.appendChild(label);
+    const seg = document.createElement("div");
+    seg.className = "export-panel__segment";
+    for (const pct of MAP_LABEL_SIZE_PCT_VALUES) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = `${pct}%`;
+        btn.dataset.maplabelsize = String(pct);
+        btn.classList.toggle("is-active", exportPanelState.overlayMap.labelScalePct === pct);
+        btn.addEventListener("click", () => {
+            exportPanelState.overlayMap.labelScalePct = pct;
+            for (const b of Array.from(seg.children)) {
+                b.classList.toggle("is-active", (b as HTMLElement).dataset.maplabelsize === String(pct));
             }
             notifyExportStateChanged();
         });
