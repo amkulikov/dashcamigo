@@ -27,6 +27,7 @@ import {
     RX_FITCAMX,
     RX_FORD,
     RX_FORD_PATH,
+    RX_HPIM,
     RX_IBOX,
     RX_JUSCAR,
     RX_MIVUE,
@@ -171,6 +172,19 @@ const GPS_SOURCE_HINTS: readonly GpsSourceHint[] = [
     {
         id: "ford",
         matches: (f) => RX_FORD.test(f.file.name) && RX_FORD_PATH.test(f.relativePath),
+        source: "none",
+    },
+    // HP f969x (SigmaStar CarDV TS): GPS reaches the firmware (the OSD burns
+    // coordinates + speed into the picture) but is written NOWHERE machine-
+    // readable - the PMT-declared private data streams stay empty, no SEI, no
+    // NMEA, clean stuffing, the JPEG poster's APP15 GPS placeholder is zeroed,
+    // and the mic-off AAC track is one canned silence frame on repeat.
+    // Verified by a full-file scan of two real samples, one with an on-screen
+    // confirmed fix. Switch to "embedded" if a firmware that fills the slots
+    // surfaces.
+    {
+        id: "hpim",
+        matches: (f) => RX_HPIM.test(f.file.name),
         source: "none",
     },
     // iBox (iCON WiFi Signature Dual, ...): Ambarella tail-atoms - byte-identical

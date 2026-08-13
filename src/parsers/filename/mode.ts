@@ -21,6 +21,7 @@ import {
     RX_FITCAMX_PATH_EVENT,
     RX_FITCAMX_PATH_NORMAL,
     RX_FORD,
+    RX_HPIM,
     RX_IBOX,
     RX_IBOX_PATH_EVENT,
     RX_IBOX_PATH_PARKING,
@@ -219,6 +220,29 @@ const mivueMode: FilenameModeTechnique = {
     },
 };
 
+const hpimMode: FilenameModeTechnique = {
+    id: "hpim-mode",
+    extract(file: VendorFile): RecordingMode | null {
+        // Name gate first - the mode folder names are generic (see mivue-mode).
+        if (!RX_HPIM.test(file.file.name)) return null;
+        // Same Normal/Event/Parking folder language as MiVue; Normal/ is
+        // corpus-confirmed, the other two are the standard CarDV set.
+        const m = file.relativePath.match(RX_MIVUE_PATH_MODE);
+        if (m) {
+            switch (m[1]!.toLowerCase()) {
+                case "event":
+                    return "event";
+                case "parking":
+                    return "parking";
+                case "normal":
+                    return "normal";
+            }
+        }
+        // Flat drop: loop recordings are the bulk (the mivue rationale).
+        return "normal";
+    },
+};
+
 const novatekMode: FilenameModeTechnique = {
     id: "novatek-mode",
     extract(file: VendorFile): RecordingMode | null {
@@ -337,12 +361,14 @@ const wolfboxMode: FilenameModeTechnique = {
 };
 
 export const FILENAME_MODE: readonly FilenameModeTechnique[] = [
-    // mivue-mode and vueroid-mode are filename-gated and must precede the
-    // path-only techniques (70mai-mode, escort-mode) whose Normal/Event/Parking
-    // folder regexes would otherwise greedily claim their clips and mislabel
-    // the technique. Safe at the front: both return null for any foreign name.
+    // mivue-mode, vueroid-mode and hpim-mode are filename-gated and must
+    // precede the path-only techniques (70mai-mode, escort-mode) whose
+    // Normal/Event/Parking folder regexes would otherwise greedily claim their
+    // clips and mislabel the technique. Safe at the front: all return null for
+    // any foreign name.
     mivueMode,
     vueroidMode,
+    hpimMode,
     mai70Mode,
     blackvueMode,
     carcamMode,

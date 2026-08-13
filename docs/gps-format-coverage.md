@@ -83,8 +83,16 @@ re-encodes), 70mai app-exported `NO...<ch>-<14-digit stamp>` clips (export
 strips the freeGPS blocks; filename techniques still classify them), the
 `REC<date>-<time>-<seq>` SigmaStar shape (its only ssmd track is a JPEG
 thumbnail), a `YYYY-MM-DD hh-mm-ss.MP4` unknown camera that writes an EMPTY
-Novatek `gps ` atom (zero entries), and DDPAI MOLA N3 normal clips (GPS lives
-in `.gpx` sidecars, absent unless exported alongside).
+Novatek `gps ` atom (zero entries), DDPAI MOLA N3 normal clips (GPS lives
+in `.gpx` sidecars, absent unless exported alongside), and the HP f969x
+`HPIM...F.TS` samples (SigmaStar CarDV: GPS demonstrably reaches the firmware
+- the OSD burns coordinates and speed into the picture - yet a full-file scan
+of a confirmed-fix clip finds it nowhere machine-readable: the two PMT-declared
+private data streams next to the JPEG poster carry zero packets, no SEI in
+either video stream, no NMEA, all stuffing honest, the JPEG's APP15 GPS
+placeholder is zeroed, and the mic-off AAC track is a single canned silence
+frame on repeat - a constant cannot carry data; hint "none" at
+`gps-source-hints.ts`).
 
 ## Implemented from foreign source (awaiting first real sample)
 

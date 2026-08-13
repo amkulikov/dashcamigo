@@ -91,6 +91,8 @@ describe("classifyGpsSource", () => {
         expect(classifyGpsSource(vf("front.mp4", "TeslaCam/SentryClips/2026-04-29_18-30-15/front.mp4"))).toBe("none");
         // Ford: claimed only inside FordFootage/ (the generic name alone is not enough).
         expect(classifyGpsSource(vf("2026-04-29_18_26_00_f.ts", "FordFootage/2026-04-29_18_26_00_f.ts"))).toBe("none");
+        // HP f969x: OSD-only GPS, the declared private data streams stay empty.
+        expect(classifyGpsSource(vf("HPIM20260811-170040F.TS", "Normal/F/HPIM20260811-170040F.TS"))).toBe("none");
     });
 
     it("ford lookalike name outside FordFootage/ is unclaimed (generic .ts shape)", () => {

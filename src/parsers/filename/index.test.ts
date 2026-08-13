@@ -11,6 +11,7 @@ import {
     RX_70MAI,
     RX_DDPAI_NORMAL,
     RX_FORD,
+    RX_HPIM,
     RX_MIVUE,
     RX_MOV_SEQ_FRI,
     RX_NEOLINE,
@@ -827,6 +828,60 @@ describe("novatek-ts techniques", () => {
         );
         expect(matchFilenameTime(vf("20260101120000_000188A.ts")).matchedId).toBe("fitcamx-time");
         expect(matchFilenameTime(vf("20260101120000_000188.mp4")).matchedId).toBe("ddpai-time");
+    });
+});
+
+// HP (f969x, SigmaStar CarDV): HPIM<8-digit>-<6-digit><letter>.TS under
+// <Mode>/<channel letter>/ folders. Front-only corpus; other letters are
+// mnemonic assumptions.
+describe("hpim techniques", () => {
+    const path = "0811/f969x/Normal/F/HPIM20260811-170040F.TS";
+
+    it("F letter -> front confident; unknown letter -> side guess", () => {
+        const ch = matchFilenameChannel(vf("HPIM20260811-170040F.TS", path));
+        expect(ch.matchedId).toBe("hpim-channel");
+        expect(ch.value).toEqual({ channel: "front", confident: true });
+        expect(classifyFilenameChannel(vf("HPIM20260811-170040R.TS"))).toEqual({ channel: "rear", confident: true });
+        expect(classifyFilenameChannel(vf("HPIM20260811-170040X.TS"))).toEqual({ channel: "side", confident: false });
+    });
+
+    it("mode from the folder above the channel letter; flat drop defaults to normal", () => {
+        const mode = matchFilenameMode(vf("HPIM20260811-170040F.TS", path));
+        expect(mode.matchedId).toBe("hpim-mode");
+        expect(mode.value).toBe("normal");
+        expect(classifyFilenameMode(vf("HPIM20260811-170040F.TS", "Event/F/HPIM20260811-170040F.TS"))).toBe("event");
+        expect(classifyFilenameMode(vf("HPIM20260811-170040F.TS", "Parking/F/HPIM20260811-170040F.TS"))).toBe(
+            "parking",
+        );
+        expect(classifyFilenameMode(vf("HPIM20260811-170040F.TS"))).toBe("normal");
+    });
+
+    it("time stays on the generic fallback; no sequence in the name", () => {
+        const t = matchFilenameTime(vf("HPIM20260811-170040F.TS", path));
+        expect(t.matchedId).toBe("generic-datetime");
+        expect(t.value?.toISOString()).toBe("2026-08-11T17:00:40.000Z");
+        expect(matchFilenameSequence(vf("HPIM20260811-170040F.TS")).matchedId).toBeNull();
+    });
+
+    it("camera-key: channels and mode folders converge, the card root above them stays", () => {
+        const front = cameraFingerprint(vf("HPIM20260811-170040F.TS", path));
+        expect(front, "rear in its own letter folder shares the key").toBe(
+            cameraFingerprint(vf("HPIM20260811-170040R.TS", "0811/f969x/Normal/R/HPIM20260811-170040R.TS")),
+        );
+        expect(front, "an event clip of the same camera shares the key").toBe(
+            cameraFingerprint(vf("HPIM20260811-171000F.TS", "0811/f969x/Event/F/HPIM20260811-171000F.TS")),
+        );
+        expect(front, "a different card root is a different camera").not.toBe(
+            cameraFingerprint(vf("HPIM20260811-170040F.TS", "0812/other/Normal/F/HPIM20260811-170040F.TS")),
+        );
+    });
+
+    it("negative: prefix-less and foreign .ts families are not claimed", () => {
+        expect(RX_HPIM.test("20260811-170040F.TS")).toBe(false); // HPIM literal mandatory
+        expect(RX_HPIM.test("HPIM20260811-170040.TS")).toBe(false); // letter mandatory
+        expect(RX_HPIM.test("HPIM20260811-170040F.mp4")).toBe(false); // .ts only
+        expect(matchFilenameChannel(vf("20260811_170040F.ts")).matchedId).toBe("juscar-channel");
+        expect(matchFilenameChannel(vf("CH1-20260811-170040.ts")).matchedId).toBe("sstar-chn-channel");
     });
 });
 

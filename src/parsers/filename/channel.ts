@@ -30,6 +30,7 @@ import {
     RX_FITCAMX_PATH_FRONT,
     RX_FITCAMX_PATH_REAR,
     RX_FORD,
+    RX_HPIM,
     RX_IBOX,
     RX_JUSCAR,
     RX_JUSCAR_PATH_FRONT,
@@ -244,6 +245,29 @@ const fordChannel: FilenameChannelTechnique = {
         // novatek-viofo (T -> side) and nextbase (B -> interior). Guessed mount
         // -> positional UI label regardless of the slot.
         switch (m[7]!.toLowerCase()) {
+            case "f":
+                return sure("front");
+            case "r":
+            case "b":
+                return sure("rear");
+            case "i":
+                return sure("interior");
+            default:
+                return guess("side");
+        }
+    },
+};
+
+const hpimChannel: FilenameChannelTechnique = {
+    id: "hpim-channel",
+    extract(file: VendorFile): ChannelMatch | null {
+        const m = file.file.name.match(RX_HPIM);
+        if (!m) return null;
+        // `f` = front is corpus-confirmed. The other letters follow the ford
+        // rationale: standard mnemonics for r/b/i, any other letter goes to
+        // the FREE "side" slot as a guess so it still pairs with front in one
+        // frame without colliding with a real rear.
+        switch (m[3]!.toLowerCase()) {
             case "f":
                 return sure("front");
             case "r":
@@ -486,6 +510,7 @@ export const FILENAME_CHANNEL: readonly FilenameChannelTechnique[] = [
     eaceChannel,
     fitcamxChannel,
     fordChannel,
+    hpimChannel,
     iboxChannel,
     juscarChannel,
     movSeqFriChannel,

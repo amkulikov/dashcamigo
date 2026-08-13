@@ -34,6 +34,7 @@ import {
     RX_ESCORT,
     RX_FITCAMX,
     RX_FORD,
+    RX_HPIM,
     RX_IBOX,
     RX_JUSCAR,
     RX_MOV_SEQ_FRI,
@@ -312,6 +313,28 @@ const fordCameraKey: FilenameCameraKeyTechnique = {
     },
 };
 
+// HP card layout is `<Mode>/<channel letter>/<file>` (Normal/F/...). Both
+// levels are per-clip attributes, not camera identity: strippedParentDir's
+// bottom-up walk pops the single-letter channel folder first, then the mode
+// folder above it (the mai70 rationale - an event clip written mid-loop must
+// chain into the same trip as its normal siblings). Event/Parking/Manual are
+// the standard CarDV set; an unknown mode folder simply stays in the key and
+// degrades to a per-folder trip split, same as before this technique.
+const HPIM_STRIP_FOLDERS = ["f", "r", "b", "i", "normal", "event", "parking", "manual"];
+
+const hpimCameraKey: FilenameCameraKeyTechnique = {
+    id: "hpim-camera-key",
+    extract(file: VendorFile): string | null {
+        const m = file.file.name.match(RX_HPIM);
+        if (!m) return null;
+        // Channel letter at group [3], one char before `.TS`. Strip it so all
+        // channels of one camera converge on one fingerprint.
+        const masked = maskNameWithTrailingLetterStripped(file.file.name, m[3]!);
+        const dir = strippedParentDir(file.relativePath, HPIM_STRIP_FOLDERS);
+        return `hpim|${dir}|${masked}`;
+    },
+};
+
 const iboxCameraKey: FilenameCameraKeyTechnique = {
     id: "ibox-camera-key",
     extract(file: VendorFile): string | null {
@@ -561,6 +584,7 @@ export const FILENAME_CAMERA_KEY: readonly FilenameCameraKeyTechnique[] = [
     escortCameraKey,
     fitcamxCameraKey,
     fordCameraKey,
+    hpimCameraKey,
     iboxCameraKey,
     juscarCameraKey,
     movSeqFriCameraKey,

@@ -146,6 +146,17 @@ export const RX_FORD = /^(\d{4})-(\d{2})-(\d{2})_(\d{2})_(\d{2})_(\d{2})_([a-z])
 // this path so a same-named .ts from another camera is not silently skipped.
 export const RX_FORD_PATH = /(?:^|\/)FordFootage\//i;
 
+// HP (f969x; SigmaStar CarDV firmware per the TS service descriptor): HPIM +
+// 8-digit date - 6-digit time + channel letter + .TS, card layout
+// `<Mode>/<channel letter>/` (Normal/F/ in the corpus). `f` = front is the
+// only letter observed; other letters map by mnemonic (see hpim-channel).
+// The container is HEVC + a low-res H264 preview + AAC + a JPEG poster on a
+// private PES. GPS burns into the picture (OSD coordinates + speed) but is
+// written nowhere machine-readable - the PMT-declared private data slots stay
+// empty even with an on-screen confirmed fix, so the format carries a "none"
+// gps-source hint (rationale at the hint entry).
+export const RX_HPIM = /^HPIM(\d{8})-(\d{6})([A-Z])\.ts$/i;
+
 // iBox: FILE + 2-digit-year YY MM DD - HHMMSS + F/R/I channel + extension.
 export const RX_IBOX = /^FILE(\d{2})(\d{2})(\d{2})-(\d{6})([FRI])\.(mp4|mov)$/i;
 export const RX_IBOX_PATH_EVENT = /(?:^|\/)event\//i;
@@ -161,7 +172,9 @@ export const RX_IBOX_PATH_PARKING = /(?:^|\/)parking\//i;
 export const RX_MIVUE = /^FILE(\d{2})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})\.(?:mp4|mov)$/i;
 // MiVue SD layout splits recording mode into top-level folders (Normal/, Event/,
 // Parking/; Photo/ holds JPEG snapshots, not videos). Generic names, so the mode
-// technique gates on RX_MIVUE first before trusting the folder.
+// technique gates on RX_MIVUE first before trusting the folder. Shared with
+// hpim-mode - the HP card speaks the same Normal/Event/Parking folder language
+// (Normal/ is corpus-confirmed, the other two are the standard CarDV set).
 export const RX_MIVUE_PATH_MODE = /(?:^|\/)(Normal|Event|Parking)\//i;
 
 // Juscar: 8-digit date _ 6-digit time + F/R + .ts.
