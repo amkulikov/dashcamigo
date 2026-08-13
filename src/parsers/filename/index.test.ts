@@ -7,7 +7,16 @@ import { describe, expect, it } from "vitest";
 
 import { cameraFingerprint } from "../camera-fingerprint.js";
 import type { VendorFile } from "../types.js";
-import { RX_70MAI, RX_DDPAI_NORMAL, RX_FORD, RX_MIVUE, RX_NEOLINE, RX_REC_SINGLE, RX_VUEROID } from "./_patterns.js";
+import {
+    RX_70MAI,
+    RX_DDPAI_NORMAL,
+    RX_FORD,
+    RX_MIVUE,
+    RX_MOV_SEQ_FRI,
+    RX_NEOLINE,
+    RX_REC_SINGLE,
+    RX_VUEROID,
+} from "./_patterns.js";
 import {
     classifyFilenameChannel,
     classifyFilenameMode,
@@ -818,6 +827,55 @@ describe("novatek-ts techniques", () => {
         );
         expect(matchFilenameTime(vf("20260101120000_000188A.ts")).matchedId).toBe("fitcamx-time");
         expect(matchFilenameTime(vf("20260101120000_000188.mp4")).matchedId).toBe("ddpai-time");
+    });
+});
+
+// Unknown-vendor 3-channel .mov camera: <14-digit>_<7-digit><F|R|I>.mov.
+// Filename-only corpus (diagnostic report); the F/R/I mnemonics are
+// content-unvalidated.
+describe("mov-seq-fri techniques", () => {
+    it("F/R/I letters map to mnemonic mounts, confident", () => {
+        const front = matchFilenameChannel(vf("20260811083704_0000826F.mov"));
+        expect(front.matchedId).toBe("mov-seq-fri-channel");
+        expect(front.value).toEqual({ channel: "front", confident: true });
+        expect(classifyFilenameChannel(vf("20260811083704_0000826R.mov"))).toEqual({
+            channel: "rear",
+            confident: true,
+        });
+        expect(classifyFilenameChannel(vf("20260811083706_0000826I.mov"))).toEqual({
+            channel: "interior",
+            confident: true,
+        });
+    });
+
+    it("sequence resolves; time stays on the generic fallback; no mode", () => {
+        const seq = matchFilenameSequence(vf("20260811083704_0000826F.mov"));
+        expect(seq.matchedId).toBe("mov-seq-fri-sequence");
+        expect(seq.value).toBe(826);
+        const t = matchFilenameTime(vf("20260811083704_0000826F.mov"));
+        expect(t.matchedId).toBe("generic-datetime");
+        expect(t.value?.toISOString()).toBe("2026-08-11T08:37:04.000Z");
+        expect(matchFilenameMode(vf("20260811083704_0000826F.mov")).matchedId).toBeNull();
+    });
+
+    it("camera-key: all three channels converge on one fingerprint despite the interior's later stamp", () => {
+        const front = cameraFingerprint(vf("20260811083704_0000826F.mov", "dash/20260811083704_0000826F.mov"));
+        expect(front, "rear shares the key").toBe(
+            cameraFingerprint(vf("20260811083704_0000826R.mov", "dash/20260811083704_0000826R.mov")),
+        );
+        expect(front, "interior shares the key").toBe(
+            cameraFingerprint(vf("20260811083706_0000826I.mov", "dash/20260811083706_0000826I.mov")),
+        );
+    });
+
+    it("negative: extension/counter-width twins stay off the technique", () => {
+        expect(RX_MOV_SEQ_FRI.test("20260811083704_0000826F.mp4")).toBe(false); // .mov only
+        expect(RX_MOV_SEQ_FRI.test("20260811083704_000826F.mov")).toBe(false); // 6-digit counter
+        expect(RX_MOV_SEQ_FRI.test("20260811083704_0000826.mov")).toBe(false); // letter mandatory
+        expect(RX_MOV_SEQ_FRI.test("20260811083704_0000826A.mov")).toBe(false); // only F/R/I
+        // The neighbouring stamp+counter families keep their own techniques.
+        expect(matchFilenameTime(vf("20260811083704_082606F.ts")).matchedId).toBe("fitcamx-time");
+        expect(matchFilenameTime(vf("20260811083704_0000826.mp4")).matchedId).toBe("ddpai-time");
     });
 });
 

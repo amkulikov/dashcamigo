@@ -9,6 +9,7 @@ import {
     RX_DDPAI_EVENT,
     RX_DDPAI_NORMAL,
     RX_DDPAI_TIMELAPSE,
+    RX_MOV_SEQ_FRI,
     RX_NAVITEL,
     RX_NEOLINE,
     RX_NEXTBASE,
@@ -70,6 +71,14 @@ const ddpaiSequence: FilenameSequenceTechnique = {
         const ev = file.file.name.match(RX_DDPAI_EVENT);
         if (ev) return Number(ev[2]);
         return null;
+    },
+};
+
+const movSeqFriSequence: FilenameSequenceTechnique = {
+    id: "mov-seq-fri-sequence",
+    extract(file: VendorFile): number | null {
+        const m = file.file.name.match(RX_MOV_SEQ_FRI);
+        return m ? Number(m[2]) : null;
     },
 };
 
@@ -153,6 +162,7 @@ export const FILENAME_SEQUENCE: readonly FilenameSequenceTechnique[] = [
     carcamSequence,
     recSingleSequence,
     ddpaiSequence,
+    movSeqFriSequence,
     navitelSequence,
     neolineSequence,
     nextbaseSequence,

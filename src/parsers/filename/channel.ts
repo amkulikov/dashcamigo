@@ -34,6 +34,7 @@ import {
     RX_JUSCAR,
     RX_JUSCAR_PATH_FRONT,
     RX_JUSCAR_PATH_REAR,
+    RX_MOV_SEQ_FRI,
     RX_NAVITEL,
     RX_NEOLINE,
     RX_NEXTBASE,
@@ -328,6 +329,26 @@ const navitelChannel: FilenameChannelTechnique = {
     },
 };
 
+const movSeqFriChannel: FilenameChannelTechnique = {
+    id: "mov-seq-fri-channel",
+    extract(file: VendorFile): ChannelMatch | null {
+        const m = file.file.name.match(RX_MOV_SEQ_FRI);
+        if (!m) return null;
+        // F/R/I are standard mnemonics under a tightly gated shape -> sure()
+        // per the mnemonic rule above, even though the corpus is
+        // filename-only (see RX_MOV_SEQ_FRI).
+        switch (m[3]!.toUpperCase()) {
+            case "F":
+                return sure("front");
+            case "R":
+                return sure("rear");
+            case "I":
+                return sure("interior");
+        }
+        return null;
+    },
+};
+
 const novatekViofoChannel: FilenameChannelTechnique = {
     id: "novatek-viofo-channel",
     extract(file: VendorFile): ChannelMatch | null {
@@ -467,6 +488,7 @@ export const FILENAME_CHANNEL: readonly FilenameChannelTechnique[] = [
     fordChannel,
     iboxChannel,
     juscarChannel,
+    movSeqFriChannel,
     navitelChannel,
     nextbaseChannel,
     teslaChannel,

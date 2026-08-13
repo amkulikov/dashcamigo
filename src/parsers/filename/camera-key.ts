@@ -36,6 +36,7 @@ import {
     RX_FORD,
     RX_IBOX,
     RX_JUSCAR,
+    RX_MOV_SEQ_FRI,
     RX_NAVITEL,
     RX_NEOLINE,
     RX_NEXTBASE,
@@ -336,6 +337,22 @@ const juscarCameraKey: FilenameCameraKeyTechnique = {
     },
 };
 
+const movSeqFriCameraKey: FilenameCameraKeyTechnique = {
+    id: "mov-seq-fri-camera-key",
+    extract(file: VendorFile): string | null {
+        const m = file.file.name.match(RX_MOV_SEQ_FRI);
+        if (!m) return null;
+        // Channel letter F/R/I at group [3], immediately before `.mov`. Strip
+        // it so all three channels of one capture converge on one fingerprint
+        // and pair into one multichannel frame (the interior clip starts a
+        // couple seconds behind front/rear; the groupTrips snap absorbs that).
+        const masked = maskNameWithTrailingLetterStripped(file.file.name, m[3]!);
+        // One-folder corpus; defensive strip for hand-split channels.
+        const dir = strippedParentDir(file.relativePath, ["front", "rear", "interior"]);
+        return `mov-seq-fri|${dir}|${masked}`;
+    },
+};
+
 const navitelCameraKey: FilenameCameraKeyTechnique = {
     id: "navitel-camera-key",
     extract(file: VendorFile): string | null {
@@ -546,6 +563,7 @@ export const FILENAME_CAMERA_KEY: readonly FilenameCameraKeyTechnique[] = [
     fordCameraKey,
     iboxCameraKey,
     juscarCameraKey,
+    movSeqFriCameraKey,
     navitelCameraKey,
     neolineCameraKey,
     nextbaseCameraKey,

@@ -174,6 +174,17 @@ export const RX_JUSCAR_PATH_VIDEO = /(?:^|\/)video\//i;
 // Navitel: FILE + 2-digit-year YY MM DD - HH MM SS - 6-digit sequence + optional letter.
 export const RX_NAVITEL = /^FILE(\d{2})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-(\d{6})([A-Z])?\.(?:mov|mp4)$/i;
 
+// Unknown-vendor 3-channel .mov camera: 14-digit datetime + _ + 7-digit
+// sequence + F/R/I channel letter. The FitCamX stamp+counter language, but
+// `.mov` with a 7-digit counter (FitCamX is `.ts` with a 6-digit token) -
+// extension and counter width keep the two disjoint, and the mandatory
+// trailing letter keeps it off RX_DDPAI_NORMAL twins. F/R/I are standard
+// mnemonics; the corpus is filename-only (diagnostic report, all three
+// letters observed as one capture), so the mapping is content-unvalidated.
+// No gps-source hint on purpose: where GPS lives is unknown, the default
+// embedded probe stays on.
+export const RX_MOV_SEQ_FRI = /^(\d{14})_(\d{7})([FRI])\.mov$/i;
+
 // Nextbase (322GW family): yyMMdd_HHmmss_NNN_<channel><quality>.MP4.
 // Channel B/F/R; quality H/L = parallel high/low-bitrate streams of the same
 // lens recorded simultaneously. Upstream accepts the identical language as a
