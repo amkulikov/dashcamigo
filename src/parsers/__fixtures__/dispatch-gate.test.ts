@@ -90,6 +90,15 @@ const CASES = [
         extractor: "juscar-ts",
     },
     {
+        // Third no-moov variant: the GPS table sits PAST the last whole TS
+        // packet, so the kind-gate keys off index.tsGpsTrailer - nothing in
+        // headerBytes or the box walk can see it.
+        label: "LigoGPS trailer at EOF of a MPEG-TS -> ligogps-trailer-ts",
+        rel: "ligogps-trailer-ts/real-anonymized.TS",
+        name: "20260813211138_0000002F.ts",
+        extractor: "ligogps-trailer-ts",
+    },
+    {
         // Same no-moov container class: the kind-gate keys off the
         // findNovatekTsGpsPid headerBytes scan.
         label: "Novatek GPS struct in MPEG-TS private PES -> novatek-ts",

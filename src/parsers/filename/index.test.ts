@@ -885,9 +885,10 @@ describe("hpim techniques", () => {
     });
 });
 
-// Unknown-vendor 3-channel .mov camera: <14-digit>_<7-digit><F|R|I>.mov.
-// Filename-only corpus (diagnostic report); the F/R/I mnemonics are
-// content-unvalidated.
+// Unknown-vendor <14-digit>_<7-digit><F|R|I> family. Two corpora: the
+// 3-channel .mov trio (filename-only diagnostic report, mnemonics
+// content-unvalidated) and the 2-channel .ts card (real files with a
+// LigoGPS/LCAI trailer; channels in single-letter F/ R/ folders).
 describe("mov-seq-fri techniques", () => {
     it("F/R/I letters map to mnemonic mounts, confident", () => {
         const front = matchFilenameChannel(vf("20260811083704_0000826F.mov"));
@@ -923,11 +924,32 @@ describe("mov-seq-fri techniques", () => {
         );
     });
 
+    it(".ts shape rides the same techniques: channel, sequence, single-letter folder convergence", () => {
+        const ch = matchFilenameChannel(vf("20260813211138_0000002F.ts", "video/F/20260813211138_0000002F.ts"));
+        expect(ch.matchedId).toBe("mov-seq-fri-channel");
+        expect(ch.value).toEqual({ channel: "front", confident: true });
+        expect(classifyFilenameChannel(vf("20260813211138_0000002R.ts"))).toEqual({
+            channel: "rear",
+            confident: true,
+        });
+        expect(matchFilenameSequence(vf("20260813211138_0000002F.ts")).value).toBe(2);
+        // The channel letter lives in the name AND as a single-letter folder;
+        // both are stripped so front/rear converge on one fingerprint.
+        const front = cameraFingerprint(vf("20260813211138_0000002F.ts", "video/F/20260813211138_0000002F.ts"));
+        expect(front, "rear in its own letter folder shares the key").toBe(
+            cameraFingerprint(vf("20260813211138_0000002R.ts", "video/R/20260813211138_0000002R.ts")),
+        );
+        expect(front, "a different card root is a different camera").not.toBe(
+            cameraFingerprint(vf("20260813211138_0000002F.ts", "other/F/20260813211138_0000002F.ts")),
+        );
+    });
+
     it("negative: extension/counter-width twins stay off the technique", () => {
-        expect(RX_MOV_SEQ_FRI.test("20260811083704_0000826F.mp4")).toBe(false); // .mov only
+        expect(RX_MOV_SEQ_FRI.test("20260811083704_0000826F.mp4")).toBe(false); // .mov/.ts only
         expect(RX_MOV_SEQ_FRI.test("20260811083704_000826F.mov")).toBe(false); // 6-digit counter
         expect(RX_MOV_SEQ_FRI.test("20260811083704_0000826.mov")).toBe(false); // letter mandatory
         expect(RX_MOV_SEQ_FRI.test("20260811083704_0000826A.mov")).toBe(false); // only F/R/I
+        expect(RX_MOV_SEQ_FRI.test("20260813211138_000002F.ts")).toBe(false); // 6-digit counter .ts twin
         // The neighbouring stamp+counter families keep their own techniques.
         expect(matchFilenameTime(vf("20260811083704_082606F.ts")).matchedId).toBe("fitcamx-time");
         expect(matchFilenameTime(vf("20260811083704_0000826.mp4")).matchedId).toBe("ddpai-time");

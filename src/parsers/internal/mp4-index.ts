@@ -49,6 +49,8 @@ import {
 import { hasFreeGpsMarker, findFreeGpsOffsets } from "./freegps.js";
 import { findLigoGpsChunkOffset } from "./ligogps.js";
 import { createLogger } from "../../log.js";
+import { findTsGpsTrailer, type TsGpsTrailer } from "../../ts-trailer.js";
+import { isTransportStreamName } from "../../video-format-names.js";
 
 const log = createLogger("mp4-index");
 
@@ -248,6 +250,15 @@ export interface Mp4Index {
      * without doing IO of its own. null when there is no trailing region.
      */
     trailerHead: Uint8Array | null;
+
+    /**
+     * GPS trailer appended past the last whole TS packet of a .ts recording
+     * (src/ts-trailer.ts). Detected eagerly - two reads under 32 bytes, only
+     * for transport-stream filenames - so the synchronous embedded-GPS kind
+     * gate sees this carrier without IO of its own. null for every other
+     * container and for TS files with no trailer.
+     */
+    tsGpsTrailer: TsGpsTrailer | null;
 
     /**
      * KodakVersion string from the top-level `frea` atom's 'ver ' child
@@ -558,6 +569,13 @@ export async function buildMp4Index(file: File, opts: BuildMp4IndexOptions = {})
     // whole frea payload (it also carries thma/scra thumbnail JPEGs).
     const kodakVersion = freaBox ? await readKodakVersionFromFrea(file, freaBox) : null;
 
+    // Step 5d: EOF GPS trailer on transport streams. Name-gated, so no other
+    // container pays the two probe reads.
+    let tsGpsTrailer: TsGpsTrailer | null = null;
+    if (isTransportStreamName(file.name)) {
+        tsGpsTrailer = await findTsGpsTrailer(file).catch(() => null);
+    }
+
     // Step 6: optional marker probe.
     const index: Mp4Index = {
         headerBytes: null,
@@ -586,6 +604,7 @@ export async function buildMp4Index(file: File, opts: BuildMp4IndexOptions = {})
         topLevelUdtaAtoms,
         lastTopLevelBoxEnd,
         trailerHead,
+        tsGpsTrailer,
         kodakVersion,
         firstSampleCache: new Map(),
         sliceCost,

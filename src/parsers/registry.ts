@@ -242,6 +242,9 @@ function classifyEmbeddedGpsKind(index: Mp4Index): EmbeddedGpsKind {
     if (index.headerBytes && findNovatekTsGpsPid(index.headerBytes) !== null) return "light";
     // Same no-moov container class: INNOVV / DOD LS600W private PES.
     if (index.headerBytes && findTsPesGpsStream(index.headerBytes) !== null) return "light";
+    // TS files whose GPS table sits in the EOF trailer (ligogps-trailer-ts).
+    // Detected during indexing precisely so this gate stays synchronous.
+    if (index.tsGpsTrailer !== null) return "light";
     // Older 70mai Pro: a top-level `GPS ` box decoded by gps-box-70mai. Cheap -
     // one bounded slice of the box - so "light". Without this the kind gate
     // returns "none" and tryParseOne short-circuits before the primitive runs.

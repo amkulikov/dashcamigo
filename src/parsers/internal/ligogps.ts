@@ -23,6 +23,7 @@
 // Alternative plaintext format (Redtiger F9 4K) - not encrypted, same
 // regex after `^.{4}\d{4}/\d{2}/\d{2}` without decryption. Both branches supported.
 
+import { findTsGpsTrailer, TS_TRAILER_SLOTS_OFFSET } from "../../ts-trailer.js";
 import type { GpsRecord, ParsedRecords, SkippedLine, VendorFile } from "../types.js";
 import { KNOTS_TO_MS, WrongFormatError } from "../types.js";
 import { loadSamples, readSampleTable } from "./mp4-walker.js";
@@ -517,6 +518,58 @@ export async function parseLigoGpsTrailer(file: VendorFile, index: Mp4Index): Pr
 
     if (!foundDirectory) {
         throw new WrongFormatError("no ligogps trailer directory");
+    }
+    return { records, skipped };
+}
+
+// ---------------------------------------------------------------------------
+// MPEG-TS file-trailer carrier (LCAI magic variant).
+//
+// The firmware writes the encrypted LigoGPS stream in-file (private PES on
+// its own PID, 1 Hz, classic LIGOGPSINFO + '####' chunks - unclaimed, the
+// unfuzz question of FUZZ_SETTLED_SAMPLE_FORMAT applies) and appends a
+// plaintext twin table to the END of the .ts, after the last whole 188-byte
+// packet. Only the plaintext table is claimed. Structure and detection live
+// in src/ts-trailer.ts (shared with the AV-side clamp that keeps mediabunny
+// from choking on the same bytes); the slot layout is the Beferich trailer's:
+// 132-byte slots of u32 index + ASCII record, speed already km/h.
+//
+// The record datetime is the camera's local clock (it tracks the filename
+// stamp to the second on the real corpus) - parsed as UTC here, shifted by
+// the orchestrator via estimateTzByFingerprint, the juscar-ts convention.
+
+/**
+ * Extracts GpsRecords from the plaintext trailer of a MPEG-TS file. Throws
+ * WrongFormatError when the file carries no trailer (the marker() result went
+ * stale or the caller skipped it); a structurally valid trailer whose slots
+ * do not parse returns zero records with skipped entries.
+ */
+export async function parseLigoGpsTsTrailer(file: VendorFile): Promise<ParsedRecords> {
+    const trailer = await findTsGpsTrailer(file.file);
+    if (!trailer) throw new WrongFormatError("no ligogps trailer on this ts file");
+    const buf = new Uint8Array(
+        await file.file.slice(trailer.cleanLength, trailer.cleanLength + trailer.trailerLength).arrayBuffer(),
+    );
+
+    const records: GpsRecord[] = [];
+    const skipped: SkippedLine[] = [];
+    for (let off = TS_TRAILER_SLOTS_OFFSET; off + LIGO_SLOT_SIZE <= buf.length; off += LIGO_SLOT_SIZE) {
+        if (isHashMarker(buf, off)) break; // '####' + length copy terminates the table
+        const slot = buf.subarray(off, off + LIGO_SLOT_SIZE);
+        // Blank (all-zero) slots are a normal firmware gap, not an error.
+        if (slot.every((b) => b === 0)) continue;
+        const text = bytesToAscii(slot).replace(/\0+$/, "");
+        const record = parseLigoGpsRecord(text, file.file.name, "kmh");
+        if (record) {
+            records.push(record);
+        } else {
+            const slotIndex = (off - TS_TRAILER_SLOTS_OFFSET) / LIGO_SLOT_SIZE + 1;
+            skipped.push({
+                line: slotIndex,
+                raw: `<ligogps ts trailer slot ${slotIndex}: ${JSON.stringify(text.slice(0, 80))}>`,
+                reason: "regex did not match plaintext slot",
+            });
+        }
     }
     return { records, skipped };
 }

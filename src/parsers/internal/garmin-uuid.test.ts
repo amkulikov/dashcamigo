@@ -113,6 +113,7 @@ function indexFromMoov(bytes: Uint8Array | null): Mp4Index {
         topLevelUdtaAtoms: [],
         lastTopLevelBoxEnd: null,
         trailerHead: null,
+        tsGpsTrailer: null,
         kodakVersion: null,
         firstSampleCache: new Map(),
         sliceCost: 0,

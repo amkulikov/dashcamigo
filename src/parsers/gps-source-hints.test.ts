@@ -77,6 +77,15 @@ describe("classifyGpsSource", () => {
         expect(classifyGpsSource(vf("20210318153933_000188.ts"))).toBe("embedded");
     });
 
+    it("seq-fri family: the .ts shape is embedded (LigoGPS trailer), the .mov trio stays unknown", () => {
+        expect(classifyGpsSource(vf("20260813211138_0000002F.ts", "video/F/20260813211138_0000002F.ts"))).toBe(
+            "embedded",
+        );
+        expect(classifyGpsSource(vf("20260813211138_0000002R.ts"))).toBe("embedded");
+        // No GPS-carrying .mov sample yet - the default embedded probe stays on.
+        expect(classifyGpsSource(vf("20260811083704_0000826F.mov"))).toBe("unknown");
+    });
+
     it("viofo names with no sequence counter keep the novatek embedded hint", () => {
         // T130 parking clips and some OEM firmwares drop the counter
         // (`..._F.mp4` / `..._PR.mp4`); freeGPS is real-sample-validated in

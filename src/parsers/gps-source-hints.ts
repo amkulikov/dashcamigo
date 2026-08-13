@@ -31,6 +31,7 @@ import {
     RX_IBOX,
     RX_JUSCAR,
     RX_MIVUE,
+    RX_MOV_SEQ_FRI,
     RX_NAVITEL,
     RX_NEOLINE,
     RX_NEXTBASE,
@@ -213,6 +214,15 @@ const GPS_SOURCE_HINTS: readonly GpsSourceHint[] = [
         matches: (f) => RX_MIVUE.test(f.file.name),
         source: "basename-sidecar",
         probeIfNoRecords: true,
+    },
+    // Unknown-vendor <14-digit>_<7-digit><letter> family, .ts shape only:
+    // plaintext LigoGPS/LCAI trailer at EOF (ligogps-trailer-ts primitive).
+    // The .mov trio of the same family stays unhinted - no GPS-carrying
+    // sample (see RX_MOV_SEQ_FRI).
+    {
+        id: "seq-fri-ts",
+        matches: (f) => RX_MOV_SEQ_FRI.test(f.file.name) && /\.ts$/i.test(f.file.name),
+        source: "embedded",
     },
     // Navitel R-series: GPS in tail atoms after moov (`gps0` + `IDIT`).
     {

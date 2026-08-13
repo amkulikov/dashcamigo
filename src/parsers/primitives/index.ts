@@ -21,6 +21,7 @@ import { kenwoodPrimitive } from "./kenwood.js";
 import { ligoJsonPrimitive } from "./ligo-json.js";
 import { ligoGpsPrimitive } from "./ligogps.js";
 import { ligoGpsTrailerPrimitive } from "./ligogps-trailer.js";
+import { ligoGpsTrailerTsPrimitive } from "./ligogps-trailer-ts.js";
 import { navitelTailPrimitive } from "./navitel-tail.js";
 import { nextbaseGdatPrimitive } from "./nextbase-gdat.js";
 import { nextbaseSubtitlePrimitive } from "./nextbase-subtitle.js";
@@ -106,6 +107,10 @@ import { csv70maiPrimitive } from "./csv-70mai.js";
 //      no text log carries. Cost of the late position is zero: a file without a
 //      subtitle track fails those markers on the sample table alone.
 //   8. juscar-ts        - name regex + hasLigoGpsMarker; handles MPEG-TS.
+//   8a. ligogps-trailer-ts - sync index.tsGpsTrailer check for the
+//      LigoGPS/LCAI plaintext trailer at EOF (.ts files). Sits with the other
+//      TS primitives; among them the order is cost only - each rejects the
+//      others' files (a trailer at EOF vs a signature in the PES stream).
 //   8c. ts-pes-gps      - INNOVV / DOD LS600W records in a private PES. After
 //      novatek-ts: all three probe TS bodies, and each rejects the others'
 //      signatures, so order is cost, not correctness.
@@ -144,6 +149,7 @@ export const VIDEO_EMBEDDED_PRIMITIVES: readonly Primitive[] = [
     nmeaSubtitlePrimitive,
     gpsLogNbmtPrimitive,
     juscarTsPrimitive,
+    ligoGpsTrailerTsPrimitive,
     novatekTsPrimitive,
     tsPesGpsPrimitive,
     freegps70maiPrimitive,
