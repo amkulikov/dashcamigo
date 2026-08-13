@@ -32,6 +32,7 @@ import { type OrtRuntime } from "../tracking/ort-runtime.js";
 import { PlateDetector } from "../tracking/plate-detector.js";
 import { boxVisibleFraction, EXIT_CONFIRM_SEC, EXIT_VISIBLE_FRACTION } from "../tracking/track-guards.js";
 import { type VitTrack, VitTrackerSession, VITTRACK_SCORE_THRESHOLD, type TrackBox } from "../tracking/vittrack.js";
+import { clampTsGpsTrailer } from "../ts-trailer.js";
 import { VIDEO_INPUT_FORMATS } from "../video-formats.js";
 import type { CropRect } from "../transcode/compose.js";
 
@@ -175,7 +176,10 @@ async function runTrackPass(
         const endLocal = Math.min(seg.endInFile, req.endContentSec - seg.tripStart);
         if (endLocal - seedLocal <= 0) continue;
 
-        const input = new Input({ source: new BlobSource(seg.file), formats: VIDEO_INPUT_FORMATS });
+        const input = new Input({
+            source: new BlobSource(await clampTsGpsTrailer(seg.file)),
+            formats: VIDEO_INPUT_FORMATS,
+        });
         try {
             const track = await input.getPrimaryVideoTrack();
             if (!track) continue;
@@ -497,7 +501,10 @@ async function runDetectPass(
             const endLocal = Math.min(seg.endInFile, interval.endSec - seg.tripStart);
             if (endLocal - startLocal <= 0) continue;
 
-            const input = new Input({ source: new BlobSource(seg.file), formats: VIDEO_INPUT_FORMATS });
+            const input = new Input({
+                source: new BlobSource(await clampTsGpsTrailer(seg.file)),
+                formats: VIDEO_INPUT_FORMATS,
+            });
             try {
                 const vtrack = await input.getPrimaryVideoTrack();
                 if (!vtrack) continue;

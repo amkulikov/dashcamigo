@@ -26,6 +26,7 @@ import {
 } from "mediabunny";
 
 import { createLogger } from "../log.js";
+import { clampTsGpsTrailer } from "../ts-trailer.js";
 import { VIDEO_INPUT_FORMATS } from "../video-formats.js";
 
 import { getCanvasNearestForward } from "./canvas-seek.js";
@@ -83,7 +84,10 @@ async function getOrOpenDecoder(file: File): Promise<DecoderEntry | null> {
         return cached;
     }
     try {
-        const input = new Input({ source: new BlobSource(file), formats: VIDEO_INPUT_FORMATS });
+        const input = new Input({
+            source: new BlobSource(await clampTsGpsTrailer(file)),
+            formats: VIDEO_INPUT_FORMATS,
+        });
         const track = await input.getPrimaryVideoTrack();
         if (!track) {
             input.dispose();

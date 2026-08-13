@@ -10,6 +10,7 @@
 
 import { BlobSource, CanvasSink, Input, InputDisposedError, UnsupportedInputFormatError } from "mediabunny";
 
+import { clampTsGpsTrailer } from "../ts-trailer.js";
 import { VIDEO_INPUT_FORMATS } from "../video-formats.js";
 
 import {
@@ -35,7 +36,7 @@ const PREVIEW_JPEG_QUALITY = 0.7;
 async function extractFirstFrameDataUrl(file: File): Promise<string | null> {
     let input: Input | null = null;
     try {
-        input = new Input({ source: new BlobSource(file), formats: VIDEO_INPUT_FORMATS });
+        input = new Input({ source: new BlobSource(await clampTsGpsTrailer(file)), formats: VIDEO_INPUT_FORMATS });
         const track = await input.getPrimaryVideoTrack();
         if (!track) return null;
 

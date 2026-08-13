@@ -33,6 +33,7 @@ import { createLogger } from "../log.js";
 import { cleanHvccDescription, hasVideoContent } from "../hevc-remux.js";
 import { type AdpcmAudioReader, openAdpcmAudioAuto } from "../transcode/adpcm-audio.js";
 import { createEncodeAudioSource, resolveEncodeAudioCodec } from "../transcode/capabilities.js";
+import { clampTsGpsTrailer } from "../ts-trailer.js";
 import { VIDEO_INPUT_FORMATS } from "../video-formats.js";
 import {
     MSE_NOTIFY_DISPOSE,
@@ -315,7 +316,7 @@ async function onInit(file: File, initialStartSec: number, wantTranscodeAudio: b
     if (disposed) throw new Error("init-on-disposed-worker");
     workerFile = file;
     startSec = Math.max(0, initialStartSec);
-    input = new Input({ source: new BlobSource(file), formats: VIDEO_INPUT_FORMATS });
+    input = new Input({ source: new BlobSource(await clampTsGpsTrailer(file)), formats: VIDEO_INPUT_FORMATS });
     const vt = await input.getPrimaryVideoTrack();
     if (!vt) throw new Error("no-video-track");
     videoTrack = vt;

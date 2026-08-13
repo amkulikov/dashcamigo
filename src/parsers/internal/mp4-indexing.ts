@@ -9,6 +9,7 @@ import type { VideoCodec } from "mediabunny";
 import { createLogger } from "../../log.js";
 import { needsHevcRemux } from "../../hevc-remux.js";
 import { detectMoovRepairs } from "../../repair/moov-repair.js";
+import { clampTsGpsTrailer } from "../../ts-trailer.js";
 import { VIDEO_INPUT_FORMATS } from "../../video-formats.js";
 import { isNonIsobmffContainerName } from "../../video-format-names.js";
 import type { IndexedMp4, IndexerRepair } from "../../workers/indexer-protocol.js";
@@ -183,7 +184,9 @@ export async function indexNonIsobmffFile(file: File, signal?: AbortSignal): Pro
     let input: Input | null = null;
     let onAbort: (() => void) | null = null;
     try {
-        input = new Input({ source: new BlobSource(file), formats: VIDEO_INPUT_FORMATS });
+        // A GPS trailer at EOF breaks mediabunny's TS packet-sync scan (it made
+        // whole cards read as "empty folder"); clamp reads to the clean stream.
+        input = new Input({ source: new BlobSource(await clampTsGpsTrailer(file)), formats: VIDEO_INPUT_FORMATS });
         // mediabunny has no InputOptions.signal - dispose() is the documented way
         // to cancel in-flight reads. computeDuration scans the whole TS container
         // (no moov) and is 10+ s on a cold SD card; without this an ingest cancel
