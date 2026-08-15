@@ -38,6 +38,11 @@ export default defineConfig({
     expect: {
         timeout: 10 * 1000,
         // Small tolerance absorbs antialiasing without hiding real changes.
+        // Caveat: the modal locators are full-viewport overlays, so a small
+        // intended change (one added settings row) can dilute under this ratio
+        // and PASS - and --update-snapshots rewrites only on mismatch, leaving
+        // the baseline stale. To refresh deliberately: delete the PNG, rerun
+        // with --update-snapshots, and eyeball the regenerated image.
         toHaveScreenshot: { maxDiffPixelRatio: 0.02, animations: "disabled" },
     },
     use: {

@@ -750,9 +750,10 @@ let mapSnapshotterTripUtc: number | null = null;
 // rebuild the hidden MapLibre instance (the style is fixed at construction), so
 // it invalidates the cache the same way a trip change does.
 let mapSnapshotterTheme: MapStyleId | null = null;
-// Label scale the cached snapshotter was built for - fixed at construction like
-// the theme, so a change invalidates the same way.
+// Label scale / street-name density the cached snapshotter was built for -
+// fixed at construction like the theme, so a change invalidates the same way.
 let mapSnapshotterLabelScalePct: number | null = null;
+let mapSnapshotterLabelDensity: string | null = null;
 let mapLastRequestKey = "";
 // Monotonic gate: a burst of frames/drag launches several snapshot promises;
 // only the latest result is allowed to paint (else a slow earlier frame
@@ -778,7 +779,7 @@ async function refreshMapSnapshot(
     // same playhead position) is not skipped by the early-return below. Speed is
     // included only when adaptive zoom is on (it changes the zoom then).
     const speedBucket = headingUp && om.adaptiveZoom ? Math.round(pos.speedMs) : 0;
-    const key = `${pos.lat.toFixed(4)}|${pos.lon.toFixed(4)}|${zoomKm}|${Math.round(pos.bearingDeg)}|${theme}|${om.labelScalePct}|${om.mode}|${om.pitchDeg}|${om.adaptiveZoom ? 1 : 0}|${speedBucket}`;
+    const key = `${pos.lat.toFixed(4)}|${pos.lon.toFixed(4)}|${zoomKm}|${Math.round(pos.bearingDeg)}|${theme}|${om.labelScalePct}|${om.labelDensity}|${om.mode}|${om.pitchDeg}|${om.adaptiveZoom ? 1 : 0}|${speedBucket}`;
     if (key === mapLastRequestKey) return;
     mapLastRequestKey = key;
     const seqAtStart = ++mapSnapshotSeq;
@@ -787,19 +788,21 @@ async function refreshMapSnapshot(
         !mapSnapshotterPromise ||
         mapSnapshotterTripUtc !== tripStartUtc ||
         mapSnapshotterTheme !== theme ||
-        mapSnapshotterLabelScalePct !== om.labelScalePct
+        mapSnapshotterLabelScalePct !== om.labelScalePct ||
+        mapSnapshotterLabelDensity !== om.labelDensity
     ) {
         disposeMapSnapshotter();
         mapLastRequestKey = key;
         mapSnapshotterTripUtc = tripStartUtc;
         mapSnapshotterTheme = theme;
         mapSnapshotterLabelScalePct = om.labelScalePct;
+        mapSnapshotterLabelDensity = om.labelDensity;
         const myPromise: Promise<ExportMapSnapshotter | null> = createExportMapSnapshotter(
             records,
             "preview",
             theme,
             undefined,
-            om.labelScalePct,
+            { labelScalePct: om.labelScalePct, labelDensity: om.labelDensity },
         ).then(
             (s) => {
                 if (myPromise !== mapSnapshotterPromise) {
@@ -886,6 +889,7 @@ function disposeMapSnapshotter(): void {
     mapSnapshotterTripUtc = null;
     mapSnapshotterTheme = null;
     mapSnapshotterLabelScalePct = null;
+    mapSnapshotterLabelDensity = null;
     mapLastRequestKey = "";
     if (snap) {
         // Defer map.remove() behind any snapshot still mid-await on this instance

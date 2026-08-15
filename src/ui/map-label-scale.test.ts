@@ -10,7 +10,7 @@ import { join } from "node:path";
 import type { StyleSpecification } from "maplibre-gl";
 import { describe, expect, it } from "vitest";
 
-import { scaleStyleTextSizes } from "./map-label-scale.js";
+import { applyStreetLabelDensity, scaleStyleTextSizes } from "./map-label-scale.js";
 
 const STYLE_NAMES = ["light", "dark", "neon"] as const;
 
@@ -108,6 +108,38 @@ describe("scaleStyleTextSizes", () => {
         ]);
     });
 
+    for (const name of STYLE_NAMES) {
+        it(`compensates line-label spacing in ${name}.json (bigger text fits rarer without it)`, () => {
+            const original = loadStyle(name);
+            const scaled = scaleStyleTextSizes(original, 2);
+            let lineLabelLayers = 0;
+            for (let i = 0; i < original.layers.length; i++) {
+                const before = original.layers[i]!;
+                const after = scaled.layers[i]!;
+                const layoutBefore = (before.layout ?? {}) as Record<string, unknown>;
+                const layoutAfter = (after.layout ?? {}) as Record<string, unknown>;
+                if (before.type !== "symbol" || layoutBefore["text-size"] === undefined) continue;
+                const placement = layoutBefore["symbol-placement"];
+                const isLinePlaced = placement === "line" || placement === "line-center" || Array.isArray(placement);
+                if (!isLinePlaced) {
+                    expect(layoutAfter["symbol-spacing"], `${before.id}: point-label spacing untouched`).toEqual(
+                        layoutBefore["symbol-spacing"],
+                    );
+                    continue;
+                }
+                lineLabelLayers++;
+                // 250 = the style-spec default synthesized when absent; 60 = the
+                // transform's floor (mirrored here, not imported - the floor is
+                // part of the pinned contract).
+                const base = typeof layoutBefore["symbol-spacing"] === "number" ? layoutBefore["symbol-spacing"] : 250;
+                expect(layoutAfter["symbol-spacing"], `${before.id}: spacing divides by the factor`).toBe(
+                    Math.max(60, Math.round(base / 2)),
+                );
+            }
+            expect(lineLabelLayers, "style has line-placed text layers").toBeGreaterThan(0);
+        });
+    }
+
     it("leaves an unrecognized expression unchanged instead of corrupting it", () => {
         const weird = ["match", ["get", "class"], "motorway", 14, 10];
         const style = {
@@ -118,4 +150,53 @@ describe("scaleStyleTextSizes", () => {
         const scaled = scaleStyleTextSizes(style, 2);
         expect((scaled.layers[0]!.layout as Record<string, unknown>)["text-size"]).toEqual(weird);
     });
+});
+
+describe("applyStreetLabelDensity", () => {
+    it("returns the same reference untouched for standard", () => {
+        const style = loadStyle("light");
+        expect(applyStreetLabelDensity(style, "standard")).toBe(style);
+    });
+
+    for (const name of STYLE_NAMES) {
+        it(`densifies only road-name layers in ${name}.json and leaves the rest alone`, () => {
+            const original = loadStyle(name);
+            const dense = applyStreetLabelDensity(original, "more");
+            expect(dense, "must be a clone, the cached style stays pristine").not.toBe(original);
+
+            let roadNameLayers = 0;
+            for (let i = 0; i < original.layers.length; i++) {
+                const before = original.layers[i]! as {
+                    id: string;
+                    type: string;
+                    minzoom?: number;
+                    "source-layer"?: string;
+                    layout?: Record<string, unknown>;
+                };
+                const after = dense.layers[i]! as typeof before;
+                if (before.type !== "symbol" || before["source-layer"] !== "transportation_name") {
+                    expect(after, `${before.id}: non-road layer untouched`).toEqual(before);
+                    continue;
+                }
+                roadNameLayers++;
+                if (typeof before.minzoom === "number") {
+                    expect(after.minzoom, `${before.id}: turns on one zoom earlier`).toBeCloseTo(before.minzoom - 1, 6);
+                }
+                const placement = before.layout?.["symbol-placement"];
+                const isLinePlaced = placement === "line" || placement === "line-center" || Array.isArray(placement);
+                if (isLinePlaced) {
+                    // 250/60 mirror the transform's default and floor (see the
+                    // spacing-compensation test above).
+                    const base =
+                        typeof before.layout?.["symbol-spacing"] === "number" ? before.layout["symbol-spacing"] : 250;
+                    expect(after.layout?.["symbol-spacing"], `${before.id}: names repeat denser`).toBe(
+                        Math.max(60, Math.round(base * 0.6)),
+                    );
+                }
+            }
+            // Plausibility: a transform over zero road-name layers would
+            // vacuously pass everything above.
+            expect(roadNameLayers, "style has road-name layers").toBeGreaterThan(0);
+        });
+    }
 });

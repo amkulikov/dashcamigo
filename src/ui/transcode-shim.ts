@@ -148,13 +148,10 @@ function runInWorker(
         // mirrors the worker's own output-width derivation (same aspect + height).
         const outputWidthPx = computeOutputSize(transferArgs.output.height, transferArgs.output.aspect).width;
         const targetSlotWidthPx = outputWidthPx * MAP_BASE_WIDTH_PCT * (overlayMap.scalePct / 100);
-        snapshotterPromise = createExportMapSnapshotter(
-            records,
-            "export",
-            mapTheme,
-            targetSlotWidthPx,
-            overlayMap.labelScalePct,
-        ).then(async (snap) => {
+        snapshotterPromise = createExportMapSnapshotter(records, "export", mapTheme, targetSlotWidthPx, {
+            labelScalePct: overlayMap.labelScalePct,
+            labelDensity: overlayMap.labelDensity,
+        }).then(async (snap) => {
             // Pre-warm tiles immediately so the very first per-frame snapshot
             // does not block on tile fetch. Aborted via the transcode signal:
             // the user cancelled, no point loading more tiles.

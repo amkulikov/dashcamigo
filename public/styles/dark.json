@@ -891,7 +891,7 @@
       ],
       "layout": {
         "symbol-placement": "line",
-        "symbol-spacing": 350,
+        "symbol-spacing": 250,
         "text-field": "{name:latin} {name:nonlatin}",
         "text-font": [
           "Noto Sans Regular"
@@ -937,7 +937,7 @@
       ],
       "layout": {
         "symbol-placement": "line",
-        "symbol-spacing": 350,
+        "symbol-spacing": 250,
         "text-field": "{ref}",
         "text-font": [
           "Noto Sans Regular"

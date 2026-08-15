@@ -92,6 +92,7 @@ import {
 } from "./blur-assets.js";
 import { subscribeConnectivity } from "./connectivity.js";
 import { isMapAvailable } from "./map.js";
+import { STREET_LABEL_DENSITY_LABEL_KEYS, STREET_LABEL_DENSITY_VALUES } from "./map-label-scale.js";
 
 const log = createLogger("export-panel");
 
@@ -2254,6 +2255,7 @@ function refreshOverlayInspector(): void {
         root.appendChild(renderMapShapeSegment());
         root.appendChild(renderMapThemeSegment());
         root.appendChild(renderMapLabelSizeSegment());
+        root.appendChild(renderMapStreetNamesSegment());
         root.appendChild(
             renderOverlaySlider(
                 t("export.overlays.mapScale"),
@@ -2373,6 +2375,38 @@ function renderMapLabelSizeSegment(): HTMLElement {
             exportPanelState.overlayMap.labelScalePct = pct;
             for (const b of Array.from(seg.children)) {
                 b.classList.toggle("is-active", (b as HTMLElement).dataset.maplabelsize === String(pct));
+            }
+            notifyExportStateChanged();
+        });
+        seg.appendChild(btn);
+    }
+    wrap.appendChild(seg);
+    return wrap;
+}
+
+/** Map street-name density segmented control (inspector, map only). Same
+ *  rebuild lifecycle as the text-size segment above; label wording is shared
+ *  with the viewer preference (STREET_LABEL_DENSITY_LABEL_KEYS), the value is
+ *  per-export and independent of it. */
+function renderMapStreetNamesSegment(): HTMLElement {
+    const wrap = document.createElement("div");
+    wrap.className = "export-panel__ov-field";
+    const label = document.createElement("span");
+    label.className = "export-panel__ov-field-label";
+    label.textContent = t("export.overlays.mapStreetNames");
+    wrap.appendChild(label);
+    const seg = document.createElement("div");
+    seg.className = "export-panel__segment";
+    for (const density of STREET_LABEL_DENSITY_VALUES) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = t(STREET_LABEL_DENSITY_LABEL_KEYS[density]);
+        btn.dataset.mapstreetnames = density;
+        btn.classList.toggle("is-active", exportPanelState.overlayMap.labelDensity === density);
+        btn.addEventListener("click", () => {
+            exportPanelState.overlayMap.labelDensity = density;
+            for (const b of Array.from(seg.children)) {
+                b.classList.toggle("is-active", (b as HTMLElement).dataset.mapstreetnames === density);
             }
             notifyExportStateChanged();
         });

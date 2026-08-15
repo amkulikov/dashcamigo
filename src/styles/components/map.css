@@ -216,6 +216,111 @@
     color: var(--dc-black);
 }
 
+/* Gear popover: map view preferences anchored to the gear button in the
+   controls column (position:relative wrapper so the flyout tracks the gear's
+   row regardless of what is visible above it). One row today (label size);
+   new map-scoped settings land as more .map-settings-row blocks. */
+.map-settings {
+    position: relative;
+}
+.map-settings-popover {
+    position: absolute;
+    left: calc(100% + var(--dc-space-1));
+    top: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-2);
+    width: max-content;
+    padding: var(--dc-space-2);
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-sm);
+    box-shadow: var(--dc-shadow-card);
+    /* Scrolls instead of growing past the JS-set max sizes (see below). */
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+.map-settings-popover[hidden] {
+    display: none;
+}
+/* Fallbacks when the pane would clip the default flyout - .map-wrap is
+   overflow:hidden, so anything past its edge is cut, not shown. --below drops
+   the panel under the gear; --compact stacks the presets vertically for panes
+   too narrow even for that. Applied by fitPopoverToPane() in
+   src/ui/map-settings-popover.ts, which measures against the live pane box -
+   pane width follows the video/map splitter, invisible to media queries. */
+.map-settings-popover--below {
+    left: 0;
+    top: calc(100% + var(--dc-space-1));
+}
+.map-settings-popover--compact .map-settings-segment {
+    flex-direction: column;
+    align-items: stretch;
+}
+.map-settings-popover--compact .map-settings-seg-btn:first-child {
+    border-radius: var(--dc-radius-sm) var(--dc-radius-sm) 0 0;
+}
+.map-settings-popover--compact .map-settings-seg-btn:last-child {
+    border-radius: 0 0 var(--dc-radius-sm) var(--dc-radius-sm);
+}
+.map-settings-popover--compact .map-settings-seg-btn + .map-settings-seg-btn {
+    /* Vertical stack: merge borders top-to-bottom instead of left-to-right. */
+    border-left: 1px solid var(--border);
+    border-top: 0;
+}
+.map-settings-row {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-1);
+}
+.map-settings-row-label {
+    font-size: var(--dc-text-sm);
+    color: var(--fg-dim);
+}
+/* Same joined-segment look as .map-follow-segments, but with text pills. */
+.map-settings-segment {
+    display: inline-flex;
+}
+.map-settings-seg-btn {
+    height: var(--dc-iconbtn);
+    padding: 0 var(--dc-space-2);
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    cursor: pointer;
+    font-size: var(--dc-text-sm);
+    line-height: 1;
+    transition:
+        background var(--dc-dur-fast) var(--dc-ease),
+        color var(--dc-dur-fast) var(--dc-ease);
+}
+.map-settings-seg-btn:first-child {
+    border-radius: var(--dc-radius-sm) 0 0 var(--dc-radius-sm);
+}
+.map-settings-seg-btn:last-child {
+    border-radius: 0 var(--dc-radius-sm) var(--dc-radius-sm) 0;
+}
+.map-settings-seg-btn + .map-settings-seg-btn {
+    border-left: 0;
+}
+.map-settings-seg-btn:hover {
+    background: var(--bg-hover);
+    color: var(--accent);
+}
+.map-settings-seg-btn:active {
+    background: var(--bg-active);
+}
+.map-settings-seg-btn[aria-pressed="true"] {
+    background: var(--accent);
+    color: var(--dc-black);
+    border-color: var(--accent);
+}
+.map-settings-seg-btn[aria-pressed="true"]:hover {
+    background: var(--accent-hot);
+    color: var(--dc-black);
+}
+
 /* Chase-mode sub-controls: tilt slider + speed-adaptive-zoom toggle. Stack
    under the follow segmented control; shown only while followMode === "chase"
    (JS toggles [hidden]). The toggle button reuses .map-control-btn (+ .active). */

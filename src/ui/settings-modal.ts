@@ -38,8 +38,15 @@ import { getUnits, setUnits, type Units } from "../units-pref.js";
 import { APP_VERSION } from "../version.js";
 import { rebuildChartFromTrip } from "./chart.js";
 import { formatBytes } from "./format.js";
-import { reapplyMapLabelScale, refreshMap } from "./map.js";
-import { getMapLabelScale, MAP_LABEL_SCALE_VALUES, setMapLabelScale } from "./map-label-scale.js";
+import { reapplyMapLabelPrefs, refreshMap } from "./map.js";
+import {
+    getMapLabelScale,
+    getStreetLabelDensity,
+    MAP_LABEL_SCALE_VALUES,
+    setMapLabelScale,
+    setStreetLabelDensity,
+    STREET_LABEL_DENSITY_VALUES,
+} from "./map-label-scale.js";
 import { activateModal, deactivateModal, wireBackdropDismiss } from "./modal-helper.js";
 import { notify } from "./notifications.js";
 import { resetOnboarding } from "./onboarding.js";
@@ -149,6 +156,8 @@ function syncUnitsSelect(): void {
 function syncMapLabelScaleSelect(): void {
     const sel = document.getElementById("settings-map-label-scale-select") as HTMLSelectElement | null;
     if (sel) sel.value = String(getMapLabelScale());
+    const density = document.getElementById("settings-map-street-names-select") as HTMLSelectElement | null;
+    if (density) density.value = getStreetLabelDensity();
 }
 
 /**
@@ -437,11 +446,11 @@ export function initSettingsModal(): void {
         }
     });
 
-    // --- Map: label size ---
+    // --- Map: label size + street-name density ---
     //
-    // Applies immediately to the live maps (a setStyle re-apply of the cached
-    // style with the new factor). The export overlay map has its own per-export
-    // control and is untouched by this preference.
+    // Both apply immediately to the live maps (a setStyle re-apply of the
+    // cached style with the new prefs). The export overlay map has its own
+    // per-export text-size control and is untouched by these preferences.
 
     document.getElementById("settings-map-label-scale-select")?.addEventListener("change", (ev) => {
         const sel = ev.target as HTMLSelectElement;
@@ -449,7 +458,15 @@ export function initSettingsModal(): void {
         const match = MAP_LABEL_SCALE_VALUES.find((v) => v === parsed);
         if (match === undefined) return;
         setMapLabelScale(match);
-        reapplyMapLabelScale();
+        reapplyMapLabelPrefs();
+    });
+
+    document.getElementById("settings-map-street-names-select")?.addEventListener("change", (ev) => {
+        const sel = ev.target as HTMLSelectElement;
+        const match = STREET_LABEL_DENSITY_VALUES.find((v) => v === sel.value);
+        if (match === undefined) return;
+        setStreetLabelDensity(match);
+        reapplyMapLabelPrefs();
     });
 
     // --- Playback: arrow-key seek step ---

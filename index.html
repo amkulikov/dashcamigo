@@ -1606,6 +1606,35 @@
                             <!-- locate-fixed -->
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="2" x2="5" y1="12" y2="12"/><line x1="19" x2="22" y1="12" y2="12"/><line x1="12" x2="12" y1="2" y2="5"/><line x1="12" x2="12" y1="19" y2="22"/><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
                         </button>
+                        <!-- Map view preferences at the point of use: a gear with a
+                             popover, built to host more map-scoped rows over time. The
+                             same label-size preference also lives in the settings modal
+                             for users who never expand the big map. Segment buttons are
+                             rendered from MAP_LABEL_SCALE_VALUES by
+                             src/ui/map-settings-popover.ts. -->
+                        <div class="map-settings">
+                            <button id="map-settings-toggle" class="map-control-btn" type="button"
+                                    aria-haspopup="true" aria-expanded="false"
+                                    data-i18n-attr="aria-label:map.settings,title:map.settings"
+                                    aria-label="Map settings" title="Map settings">
+                                <!-- settings (gear) -->
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                            </button>
+                            <div id="map-settings-popover" class="map-settings-popover" hidden>
+                                <div class="map-settings-row">
+                                    <span class="map-settings-row-label" data-i18n="settings.map.labelScale.label">Text size on the map</span>
+                                    <div id="map-label-scale-segment" class="map-settings-segment" role="radiogroup"
+                                         data-i18n-attr="aria-label:settings.map.labelScale.label"
+                                         aria-label="Text size on the map"></div>
+                                </div>
+                                <div class="map-settings-row">
+                                    <span class="map-settings-row-label" data-i18n="settings.map.streetNames.label">Street names</span>
+                                    <div id="map-street-names-segment" class="map-settings-segment" role="radiogroup"
+                                         data-i18n-attr="aria-label:settings.map.streetNames.label"
+                                         aria-label="Street names"></div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <!-- Button to collapse the map back into the mini-map. Sits separately
                          from .map-controls in the top-right corner - the standard
@@ -2330,6 +2359,17 @@
                         </select>
                     </label>
                     <p class="settings-toggle-desc" data-i18n="settings.map.labelScale.description">Makes street and place names on the map easier to read.</p>
+                </div>
+                <div class="settings-row">
+                    <label class="settings-select-row">
+                        <span class="settings-select-label" data-i18n="settings.map.streetNames.label">Street names</span>
+                        <select id="settings-map-street-names-select" class="settings-select">
+                            <option value="standard" data-i18n="settings.map.streetNames.standard">Standard</option>
+                            <option value="more" data-i18n="settings.map.streetNames.more">More</option>
+                            <option value="max" data-i18n="settings.map.streetNames.max">Max</option>
+                        </select>
+                    </label>
+                    <p class="settings-toggle-desc" data-i18n="settings.map.streetNames.description">Shows street names more often and from farther out.</p>
                 </div>
             </div>
             <!-- Events: brake/impact detection threshold. detectEvents in

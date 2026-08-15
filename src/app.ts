@@ -64,6 +64,7 @@ import { registerTimelineOverlaySync } from "./ui/chart.js";
 import { initIngestOverlay } from "./ui/ingest-overlay.js";
 import { initNotifications } from "./ui/notifications.js";
 import { initPwaInstall } from "./ui/pwa-install.js";
+import { initMapSettingsPopover } from "./ui/map-settings-popover.js";
 import { initSettingsModal } from "./ui/settings-modal.js";
 import { initNoRecordingsModal } from "./ui/no-recordings-modal.js";
 import { isIntentionalNavigation } from "./ui/nav-intent.js";
@@ -419,6 +420,7 @@ initOfflineBanner();
 // Settings modal provides the gear icon in the header. Hidden when
 // analytics is disabled in the build (nothing else to configure yet).
 initSettingsModal();
+initMapSettingsPopover();
 initIngestOverlay();
 initUnsupportedFormatsModal();
 initNoRecordingsModal();

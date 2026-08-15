@@ -274,6 +274,11 @@ export const dom = {
     mapChaseTilt: $id<HTMLInputElement>("map-chase-tilt"),
     mapChaseAdaptive: $id<HTMLButtonElement>("map-chase-adaptive"),
     mapRecenterBtn: $id<HTMLButtonElement>("map-recenter"),
+    // Gear popover with map view preferences (see src/ui/map-settings-popover.ts).
+    mapSettingsToggle: $id<HTMLButtonElement>("map-settings-toggle"),
+    mapSettingsPopover: $id<HTMLDivElement>("map-settings-popover"),
+    mapLabelScaleSegment: $id<HTMLDivElement>("map-label-scale-segment"),
+    mapStreetNamesSegment: $id<HTMLDivElement>("map-street-names-segment"),
     mapCollapseBtn: $id<HTMLButtonElement>("map-collapse"),
     playerMapBtn: $id<HTMLButtonElement>("player-map"),
     miniMap: $id<HTMLDivElement>("mini-map"),

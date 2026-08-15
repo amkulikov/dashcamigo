@@ -14,6 +14,7 @@ import type { BlurStyle } from "../blur-regions.js";
 import type { MapShape, OverlayStyleId, WatermarkAnchor } from "../transcode/types.js";
 import type { Trip } from "../trips.js";
 
+import type { StreetLabelDensity } from "./map-label-scale.js";
 import { activeTrip, state } from "./state.js";
 import type { MapStyleId } from "./theme.js";
 
@@ -99,6 +100,10 @@ export interface OverlayMapState {
      *  the main thread. Independent of the viewer's label-scale preference -
      *  the overlay slot is sized for a video frame, not the user's screen. */
     labelScalePct: number;
+    /** Street-name density of the burned-in map (how often road names repeat
+     *  and how early by zoom they turn on). Same lifecycle as labelScalePct;
+     *  independent of the viewer's density preference. */
+    labelDensity: StreetLabelDensity;
     /** Camera view. "north" = north-up (the legacy look); "chase" = tilted,
      *  heading-up (the car points up, road ahead in view). Default "north". */
     mode: MapViewMode;
@@ -244,6 +249,7 @@ function freshExportPanelState(): ExportPanelState {
             shape: "circle",
             theme: "neon",
             labelScalePct: 100,
+            labelDensity: "standard",
             mode: "chase",
             pitchDeg: 58,
             adaptiveZoom: true,

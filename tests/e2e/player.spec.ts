@@ -271,6 +271,75 @@ test.describe("player", () => {
         await expect.poll(pitch).toBeGreaterThan(20);
     });
 
+    test("map gear popover changes and persists the label-size preference", async ({ page }) => {
+        // The gear lives on the expanded map's controls column.
+        await page.locator(".mini-map").click();
+        const toggle = page.locator("#map-settings-toggle");
+        const popover = page.locator("#map-settings-popover");
+        await expect(toggle).toBeVisible();
+        await expect(popover).toBeHidden();
+
+        const scaleSeg = popover.locator("#map-label-scale-segment");
+        const namesSeg = popover.locator("#map-street-names-segment");
+        await toggle.click();
+        await expect(popover).toBeVisible();
+        await expect(scaleSeg.locator('button[aria-pressed="true"]'), "default size preset is pressed").toHaveText(
+            "100%",
+        );
+        await expect(namesSeg.locator('button[aria-pressed="true"]'), "default density preset is pressed").toHaveText(
+            "Standard",
+        );
+
+        // Picking presets applies them but keeps the popover open - the user
+        // compares variants against the live map behind it.
+        await scaleSeg.getByRole("button", { name: "150%" }).click();
+        await namesSeg.getByRole("button", { name: "More" }).click();
+        await expect(popover).toBeVisible();
+        await expect(scaleSeg.locator('button[aria-pressed="true"]')).toHaveText("150%");
+        await expect(namesSeg.locator('button[aria-pressed="true"]')).toHaveText("More");
+        const stored = await page.evaluate(() => [
+            localStorage.getItem("dashcamigo:mapLabelScale"),
+            localStorage.getItem("dashcamigo:streetLabelDensity"),
+        ]);
+        expect(stored, "preferences must survive to the next session").toEqual(["1.5", "more"]);
+
+        // Escape closes; reopening reflects the stored preferences.
+        await page.keyboard.press("Escape");
+        await expect(popover).toBeHidden();
+        await toggle.click();
+        await expect(scaleSeg.locator('button[aria-pressed="true"]')).toHaveText("150%");
+        await expect(namesSeg.locator('button[aria-pressed="true"]')).toHaveText("More");
+
+        // A click on the map outside the popover closes it.
+        const map = await boxOf(page, "#map");
+        await page.mouse.click(map.x + map.width / 2, map.y + map.height - 20);
+        await expect(popover).toBeHidden();
+    });
+
+    test("map gear popover stays inside a narrow map pane", async ({ page }) => {
+        // .map-wrap clips at overflow:hidden, so a popover past the pane edge
+        // is silently cut - the regression this guards is a preset row wider
+        // than the pane at the splitter's minimum.
+        await page.locator(".mini-map").click();
+        await page.locator("#video-map-resize").focus();
+        await page.keyboard.press("End"); // End = narrowest map (MAP_PCT_MIN)
+        await page.locator("#map-settings-toggle").click();
+        const popover = page.locator("#map-settings-popover");
+        await expect(popover).toBeVisible();
+        const pane = await boxOf(page, ".map-wrap");
+        const pop = await boxOf(page, "#map-settings-popover");
+        expect(pop.x + pop.width, "popover right edge inside the clipping pane").toBeLessThanOrEqual(
+            pane.x + pane.width,
+        );
+        expect(pop.y + pop.height, "popover bottom edge inside the clipping pane").toBeLessThanOrEqual(
+            pane.y + pane.height,
+        );
+        // Presets stay clickable in the fallback layout.
+        const scaleSeg = popover.locator("#map-label-scale-segment");
+        await scaleSeg.getByRole("button", { name: "200%" }).click();
+        await expect(scaleSeg.locator('button[aria-pressed="true"]')).toHaveText("200%");
+    });
+
     test("manual zoom on the chase map keeps speed-adaptive zoom on", async ({ page }) => {
         await page.locator(".mini-map").click(); // expand -> chase (default) engaged
         const adaptive = page.locator("#map-chase-adaptive");
