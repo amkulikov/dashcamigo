@@ -90,11 +90,23 @@ version. The API existing does not mean a codec decodes - always probe.
   why CI uses Google Chrome on Linux), and **Linux Firefox** needs system
   codecs (gstreamer/ffmpeg/OpenH264).
 - **HEVC / H.265** - reliable on Apple platforms and macOS Chromium (OS
-  software fallback) and Android with a hardware HEVC decoder. On
-  **Windows/Linux Chrome/Edge it is hardware-only**; Windows Edge and Windows
-  Firefox additionally need the **paid** Microsoft "HEVC Video Extensions".
-  Flaky-to-absent on HW-less Windows/Linux desktops - which is why we keep the
-  MSE/WASM remux fallback and the `hevc` e2e test self-skips where decode is
+  software fallback) and Android with a hardware HEVC decoder. On Windows the
+  two Chromium decode paths differ (per Microsoft's Edge video-playback
+  troubleshooting doc and StaZhu/enable-chromium-hevc-hardware-decoding):
+  **Chrome uses its own D3D11VA path - nothing to install, but hardware-only**
+  (no software fallback, so a GPU/driver without HEVC decode means no HEVC at
+  all); **Edge routes through Media Foundation and needs the Microsoft Store
+  "HEVC Video Extensions"** (paid; the free "from Device Manufacturer" twin is
+  OEM-preinstalled on many PCs and hidden from Settings > Apps -
+  `Get-AppxPackage -AllUsers *HEVC*` is the reliable check). The MFT path
+  software-falls-back, so Edge + the Store codec works even without HEVC
+  hardware - the one Windows setup that always can. Opera's path is
+  undocumented - do not promise it to users. Windows Firefox also needs the
+  Store extension; Linux desktops are flaky-to-absent. This is why the
+  codec-unsupported overlay and the export panel share the per-browser advice
+  (`codecPlaybackAdviceHtml` in `src/ui/empty-state.ts`), we keep the MSE remux
+  fallback (container-level only - there is no WASM software decoder, decode is
+  always the platform's), and the `hevc` e2e test self-skips where decode is
   absent.
 
 ### Library floors
