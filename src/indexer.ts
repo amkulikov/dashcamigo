@@ -23,7 +23,7 @@ import { createWorkerClient, type WorkerClient } from "./workers/_protocol/worke
 const log = createLogger("indexer");
 
 // Re-exports for back-compat with existing imports across the codebase.
-export type { IndexedMp4, IndexerRepair } from "./workers/indexer-protocol.js";
+export type { IndexerRepair } from "./workers/indexer-protocol.js";
 export type { Mp4Rotation } from "./parsers/internal/mp4-walker.js";
 
 /**

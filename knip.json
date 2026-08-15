@@ -4,8 +4,7 @@
     "entry": [
         "scripts/*.mjs",
         "src/parsers/__fixtures__/**/build-*.mjs",
-        "public/sw.js",
-        "public/privacy.js"
+        "public/sw.js"
     ],
     "project": [
         "src/**/*.ts",

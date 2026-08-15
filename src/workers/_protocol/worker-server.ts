@@ -12,7 +12,6 @@
 // NOT need to wrap calls in try/catch for the wire path.
 
 import {
-    type WireMessage,
     type WireNotification,
     type WireRequest,
     type WireResponseErr,
@@ -159,6 +158,3 @@ export function createWorkerServer(endpoint: WorkerScopeEndpoint, opts: WorkerSe
         },
     };
 }
-
-/** Re-export for shims that build their own messages on top. */
-export type { WireMessage };

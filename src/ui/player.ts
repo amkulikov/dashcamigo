@@ -20,7 +20,6 @@
 //   - seekTripTime(sec)               // trip-relative
 //   - getTripCurrentTime()            // trip-relative
 //   - driftSyncSlaves()               // called by the marker rAF loop
-//   - setExportInProgress(bool)       // export-modal handshake
 //   - sync*Button() / updatePlayerProgressUi()   // one-shot DOM syncs
 //     (Play, Mute, Speed, Loop, Fullscreen, Capture, Export, plus the
 //     progress UI used by chart/sidebar lifecycle)
@@ -89,7 +88,7 @@ import {
     resetVideoZoom,
 } from "./player-zoom.js";
 import { initPlayerMetrics, refreshMetricsFromActiveFrame, resyncMetricsForTrip } from "./player-metrics.js";
-import { setExportInProgress, syncExportButton } from "./player-export-button.js";
+import { syncExportButton } from "./player-export-button.js";
 import { initPlayerFullscreen, syncFullscreenButton, toggleFullscreen } from "./player-fullscreen.js";
 import { persistCurrentLayout, restoreLayoutForTrip } from "./player-layout-pref.js";
 import { initPlayerLoop, syncLoopButton, toggleLoop } from "./player-loop.js";
@@ -121,7 +120,6 @@ import {
 import { syncTopPanel } from "./top-panel.js";
 
 export {
-    setExportInProgress,
     syncCaptureButton,
     syncExportButton,
     syncFullscreenButton,

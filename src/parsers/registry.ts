@@ -25,7 +25,7 @@ import { forwardFillBearingsIfAllZero } from "../parser.js";
 // already import everything from this module.
 import { type ClassifiedFile, splitVideosByExtension } from "./registry-light.js";
 
-export { type ClassifiedFile, mergeAccelSamples, RX_VIDEO_EXT, splitVideosByExtension } from "./registry-light.js";
+export { type ClassifiedFile, mergeAccelSamples } from "./registry-light.js";
 import {
     type AccelSample,
     type AccelSidecarHandler,

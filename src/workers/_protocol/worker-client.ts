@@ -20,7 +20,6 @@ import { createLogger, installWorkerLogBridge } from "../../log.js";
 import { captureSentryException } from "../../sentry.js";
 
 import {
-    type SerializedError,
     type WireAbort,
     type WireNotification,
     type WireRequest,
@@ -387,9 +386,3 @@ export function createWorkerClient(endpoint: WorkerEndpoint, opts: WorkerClientO
         },
     };
 }
-
-/**
- * Convenience: serializeError is re-exported so shims can attach extra
- * context without depending on wire.ts directly.
- */
-export type { SerializedError, WireNotification };
