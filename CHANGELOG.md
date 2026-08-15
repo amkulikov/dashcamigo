@@ -7,6 +7,16 @@ User-facing changes, newest first. Dates are when the change landed on
 [beta](https://beta.dashcamigo.app); production picks it up with the next
 release tag. Localized texts ship inside the app (the "What's new" panel).
 
+## 2026-08-15
+
+- **Fixed:** Fixed false speed spikes on the speed chart for 70mai 4K (A810, M500).
+- **New:** Street and place names on the map are now adjustable — a gear right on the map sets the text size and how many street names to show.
+
+## 2026-08-14
+
+- **Fixed:** Fixed playback of some kinds of .ts recordings.
+- **New camera support:** Added support for new recording folder and file layouts.
+
 ## 2026-08-11
 
 - **Fixed:** Fixed GPS for 70mai 4K cameras (A810, M500): routes were drawn tens of kilometers off to the side — open your folder again and the track lands on the road you actually drove.
