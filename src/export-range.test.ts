@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { type FileSegment, rangeSourceBitrateBps, rangeSourceFps, sliceCandidatesForRange } from "./export-range.js";
+import {
+    candidatesInRange,
+    type FileSegment,
+    rangeSourceBitrateBps,
+    rangeSourceFps,
+    sliceCandidatesForRange,
+} from "./export-range.js";
 import { buildTripTimeline, type TripFrame, type VideoCandidate } from "./trips.js";
 
 /**
@@ -178,6 +184,19 @@ describe("sliceCandidatesForRange", () => {
         expect(segs[0]!.endInFile, "previous file covers up to its shifted end").toBeCloseTo(60, 6);
         expect(segs[1]!.startInFile).toBeCloseTo(0, 6);
         expect(segs[1]!.endInFile).toBeCloseTo(90 - 62.018, 6);
+    });
+
+    it("candidatesInRange returns the overlapping candidates themselves", () => {
+        // The export decode preflight walks candidates (not file slices) to
+        // find an undecodable source - the selection must match the slicer's.
+        const a = makeCandidate({ name: "a.mp4", startUtc: 0, durationSec: 60 });
+        const b = makeCandidate({ name: "b.mp4", startUtc: 60, durationSec: 60 });
+        const timeline = buildTripTimeline([frameOf(0, 60, a), frameOf(60, 60, b)]);
+        const before = candidatesInRange([a, b], timeline, 0, 50);
+        expect(before.map((e) => e.candidate)).toEqual([a]);
+        const spanning = candidatesInRange([a, b], timeline, 30, 90);
+        expect(spanning.map((e) => e.candidate)).toEqual([a, b]);
+        expect(spanning[1]!.fileStart).toBeCloseTo(60, 6);
     });
 
     it("the shifted tail file ends exactly where the other channel's tail ends", () => {

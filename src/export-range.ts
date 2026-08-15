@@ -56,7 +56,30 @@ export function sliceCandidatesForRange(
     startContentSec: number,
     endContentSec: number,
 ): FileSegment[] {
-    const out: FileSegment[] = [];
+    return candidatesInRange(candidates, timeline, startContentSec, endContentSec).map(({ candidate, fileStart }) => ({
+        file: candidate.file,
+        startInFile: Math.max(0, startContentSec - fileStart),
+        endInFile: Math.min(candidate.durationSec, endContentSec - fileStart),
+        tripStart: fileStart,
+        fps: candidate.fps,
+        fileDurationSec: candidate.durationSec,
+    }));
+}
+
+/**
+ * The candidates whose footage overlaps [startContentSec, endContentSec] on the
+ * content axis, each with its resolved footage start. The placement half of
+ * sliceCandidatesForRange, exposed separately for consumers that need the
+ * candidates themselves (e.g. the export decode preflight checking canPlay)
+ * rather than file slices.
+ */
+export function candidatesInRange(
+    candidates: VideoCandidate[],
+    timeline: TripTimeline,
+    startContentSec: number,
+    endContentSec: number,
+): Array<{ candidate: VideoCandidate; fileStart: number }> {
+    const out: Array<{ candidate: VideoCandidate; fileStart: number }> = [];
     for (const v of candidates) {
         // A single file never spans a pause, so its footage span is contiguous:
         // [fileStart, fileStart + durationSec] on the content axis. driftLeadSec
@@ -66,19 +89,9 @@ export function sliceCandidatesForRange(
         // actually is. Consecutive placements stay monotonic (the lead grows a
         // few ms per file), so the early-break below remains valid.
         const fileStart = wallToContentSec(timeline, v.startUtc) + (v.driftLeadSec ?? 0);
-        const fileEnd = fileStart + v.durationSec;
         if (endContentSec <= fileStart) break;
-        if (startContentSec >= fileEnd) continue;
-        const startInFile = Math.max(0, startContentSec - fileStart);
-        const endInFile = Math.min(v.durationSec, endContentSec - fileStart);
-        out.push({
-            file: v.file,
-            startInFile,
-            endInFile,
-            tripStart: fileStart,
-            fps: v.fps,
-            fileDurationSec: v.durationSec,
-        });
+        if (startContentSec >= fileStart + v.durationSec) continue;
+        out.push({ candidate: v, fileStart });
     }
     return out;
 }
