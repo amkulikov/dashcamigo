@@ -12,7 +12,8 @@
 // Block layout (offsets from the `freeGPS ` magic):
 //   [8..9] tag, [10..11]=0, [12..13]=type, [14..15]=tag mirror,
 //   [16..25] opaque filler, [26] 'A'/'V', [27..30] lat ddmm.mmmm*1e5 i32 LE,
-//   [31..34] lon ddmm.mmmm*1e5 i32 LE, [35..38] heading i32 LE.
+//   [31..34] lon ddmm.mmmm*1e5 i32 LE, [35..38] heading i32 LE,
+//   [39..42] speed km/h i32 LE.
 //
 // Run: node src/parsers/__fixtures__/70mai-embedded/build-70mai.mjs
 
@@ -45,7 +46,7 @@ function u32be(n) {
 
 const FILLER = Buffer.from([0x00, 0x00, 0x00, 0x0f, 0x00, 0x00, 0x70, 0x08, 0x00, 0x00]);
 
-function build70maiBlock({ latDeg, lonDeg, heading, active = true }) {
+function build70maiBlock({ latDeg, lonDeg, heading, speedKmh = 0, active = true }) {
     const b = Buffer.alloc(256);
     b.write("freeGPS ", 0, 8, "ascii");
     b.writeUInt16LE(0x01ed, 8); // tag
@@ -57,6 +58,7 @@ function build70maiBlock({ latDeg, lonDeg, heading, active = true }) {
     b.writeInt32LE(encodeDdmm(latDeg), 27);
     b.writeInt32LE(encodeDdmm(lonDeg), 31);
     b.writeInt32LE(heading, 35);
+    b.writeInt32LE(speedKmh, 39);
     return b;
 }
 
@@ -67,9 +69,9 @@ const ftyp = box(
 
 // 3 fixes, each repeated 3x, then 1 void block.
 const fixes = [
-    { latDeg: 50.0, lonDeg: 30.0, heading: 45 },
-    { latDeg: 50.0005, lonDeg: 30.0005, heading: 46 },
-    { latDeg: 50.001, lonDeg: 30.001, heading: 47 },
+    { latDeg: 50.0, lonDeg: 30.0, heading: 45, speedKmh: 43 },
+    { latDeg: 50.0005, lonDeg: 30.0005, heading: 46, speedKmh: 45 },
+    { latDeg: 50.001, lonDeg: 30.001, heading: 47, speedKmh: 47 },
 ];
 const blocks = [];
 for (const f of fixes) {

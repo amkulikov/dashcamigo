@@ -36,7 +36,9 @@ describe("70mai embedded freeGPS - synthetic fixture", () => {
         expect(result.records.every((r) => r.active === true)).toBe(true);
         expect(result.records[2]!.bearingDeg).toBe(47);
 
-        // Speed reconstructed from the trajectory (> 0 for the moving fixes).
-        expect(result.records[1]!.speedMs).toBeGreaterThan(0);
+        // Speed comes from the block's km/h field (43/45/47 in the fixture).
+        expect(result.records[0]!.speedMs).toBeCloseTo(43 / 3.6, 5);
+        expect(result.records[1]!.speedMs).toBeCloseTo(45 / 3.6, 5);
+        expect(result.records[2]!.speedMs).toBeCloseTo(47 / 3.6, 5);
     });
 });

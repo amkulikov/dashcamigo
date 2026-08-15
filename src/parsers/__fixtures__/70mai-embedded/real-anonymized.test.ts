@@ -69,8 +69,8 @@ describe("real-anonymized 70mai A810 - structural `gps ` atom path", () => {
         expect(result.records).toHaveLength(BLOCKS);
         expect(result.records[0]!.lat).toBeCloseTo(50, 4);
         expect(result.records[BLOCKS - 1]!.lat).toBeCloseTo(50 + (BLOCKS - 1) * 0.0002, 4);
-        // Speed is reconstructed from the trajectory (~22 m/s), under the cap.
-        expect(result.records[1]!.speedMs).toBeGreaterThan(0);
-        expect(result.records[1]!.speedMs).toBeLessThan(90);
+        // Speed is the block's km/h field - real firmware bytes (45 km/h),
+        // untouched by the coordinate anonymization.
+        expect(result.records[1]!.speedMs).toBeCloseTo(45 / 3.6, 5);
     });
 });

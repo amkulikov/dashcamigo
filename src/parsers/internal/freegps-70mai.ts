@@ -25,20 +25,20 @@
 //   [27..30]  int32 LE latitude  ddmm.mmmm * 1e5  (signed: negative = S)
 //   [31..34]  int32 LE longitude ddmm.mmmm * 1e5  (signed: negative = W)
 //   [35..38]  int32 LE heading degrees, [0..360)
-//   [39..42]  int32 LE speed, km/h (ExifTool reads it the same way; on real
-//             samples it sits at 3.6x the trajectory m/s). Left unused: its
-//             behavior at a standstill / through a signal gap is unverified,
-//             while the trajectory-derived speed is validated - see
-//             finalize70maiRecords.
+//   [39..42]  int32 LE speed, km/h - the emitted speed source (ExifTool's A810
+//             branch reads it the same way). Verified on a real A810 clip:
+//             matches the trajectory-implied speed to tenths on every normal
+//             ~1 Hz fix, reads 0 at a standstill, and stays live through a
+//             position-freeze gap - where a trajectory reconstruction under a
+//             fixed dt=1s assumption produced 2-4x spikes instead.
 //   [0x169]   int32 LE constant file-start unix (8h-shifted) - unused.
 //
 // Blocks repeat once per video frame (~28-30x per GPS second); identical
 // consecutive fixes are collapsed in finalize70maiRecords (and again globally
 // by dedupRecords, which keys timeUnsynced rows on position only).
 
-import { haversineKm } from "../../parser.js";
 import { ddmmToDegrees } from "./ddmm.js";
-import type { GpsRecord } from "../types.js";
+import { KMH_TO_MS, type GpsRecord } from "../types.js";
 
 // Field offsets from the freeGPS magic start.
 const OFF_TAG = 8;
@@ -48,13 +48,19 @@ const OFF_ACTIVE = 26;
 const OFF_LAT = 27;
 const OFF_LON = 31;
 const OFF_HEADING = 35;
+const OFF_SPEED = 39;
 
-// Smallest window the parser touches (heading ends at byte 38).
-const MIN_BLOCK_LEN = OFF_HEADING + 4;
+// Smallest window the parser touches (speed ends at byte 42).
+const MIN_BLOCK_LEN = OFF_SPEED + 4;
 
 const COORD_SCALE = 1e5; // int32 -> ddmm.mmmm
 const ACTIVE = 0x41; // 'A'
 const VOID = 0x56; // 'V'
+
+// ~324 km/h - a speed-field reading above this (or negative) is firmware
+// garbage, not motion, and reads as 0 (honest "unknown" over a wrong spike).
+// Generous on purpose: it must not clip genuine fast highway driving.
+const MAX_PLAUSIBLE_SPEED_MS = 90;
 
 // Whether the value is a plausible NMEA ddmm.mmmm coordinate: the minutes part
 // is < 60 by construction, so a value failing this is not this dialect (a
@@ -106,10 +112,10 @@ export function is70maiFreeGpsBlock(view: DataView): boolean {
  * empty array for a non-70mai block or a void fix; a one-element array
  * otherwise (the block carries a single fix - the array shape comes from the
  * multi-record ParseFreeGpsBlock contract). unixSeconds is a placeholder (the
- * block has no usable per-record clock) and speedMs is left at 0 - both are
- * filled in later (reanchorUnsyncedTimes for time, finalize70maiRecords for
- * speed). The record is flagged `timeUnsynced` so the time layer treats it
- * accordingly.
+ * block has no usable per-record clock), filled later by
+ * reanchorUnsyncedTimes; the record is flagged `timeUnsynced` so the time
+ * layer treats it accordingly. Speed comes from the block's km/h field; an
+ * out-of-range value (negative or beyond the vehicle ceiling) reads as 0.
  *
  * Signature matches the ParseFreeGpsBlock contract so it can be injected into
  * the shared streamScanFreeGps scanner.
@@ -124,6 +130,8 @@ export function parse70maiFreeGpsBlock(view: DataView, mp4Filename: string): Gps
     // Heading is degrees already; clamp obvious garbage to 0 (trajectory bearing
     // is not reconstructed here - a single bad heading is harmless).
     if (!Number.isFinite(bearingDeg) || bearingDeg < 0 || bearingDeg >= 360) bearingDeg = 0;
+    let speedMs = view.getInt32(OFF_SPEED, true) * KMH_TO_MS;
+    if (!Number.isFinite(speedMs) || speedMs < 0 || speedMs > MAX_PLAUSIBLE_SPEED_MS) speedMs = 0;
 
     return [
         {
@@ -132,7 +140,7 @@ export function parse70maiFreeGpsBlock(view: DataView, mp4Filename: string): Gps
             lat,
             lon,
             bearingDeg,
-            speedMs: 0, // filled from the trajectory in finalize70maiRecords
+            speedMs,
             accelXg: 0,
             accelYg: 0,
             accelZg: 0,
@@ -143,22 +151,15 @@ export function parse70maiFreeGpsBlock(view: DataView, mp4Filename: string): Gps
 }
 
 /**
- * Collapses the per-frame repeats into one record per GPS fix and fills speedMs
- * from the trajectory. The 70mai block has no reliable speed field, but its
- * fixes are ~1 Hz, so the haversine distance between consecutive fixes is the
- * speed in m/s (dt ~ 1 s). This is approximate - the true cadence can be a few
- * percent off 1 Hz and reanchorUnsyncedTimes later spaces the points by the
- * real video duration - but it is honest (no invented unit scale) and good
- * enough for the speed chart. The first point copies the second so it is not
- * stuck at 0. An implausibly high value means the dt~1s assumption broke (a GPS
- * gap/reacquire put two valid fixes far apart, not real motion); above a sane
- * vehicle ceiling we drop it to 0 rather than show a 1000+ km/h spike.
+ * Collapses the per-frame repeats into one record per GPS fix (blocks repeat
+ * once per video frame; consecutive blocks with the same position are the same
+ * fix). Speed is NOT reconstructed here: each block carries the receiver's own
+ * km/h field, read in parse70maiFreeGpsBlock. A trajectory reconstruction under
+ * a fixed dt=1s assumption was tried and produced 2-4x spikes whenever the
+ * firmware froze the position for 2+ seconds (the next unique fix is then 2+
+ * seconds of travel away) - the recorded field stays correct through exactly
+ * that case.
  */
-// ~324 km/h - any car dashcam reading above this is a GPS jump, not motion, so
-// the trajectory speed is meaningless and zeroed (honest "unknown" over a wrong
-// spike). Generous on purpose: it must not clip genuine fast highway driving.
-const MAX_PLAUSIBLE_SPEED_MS = 90;
-
 export function finalize70maiRecords(records: GpsRecord[]): GpsRecord[] {
     const uniq: GpsRecord[] = [];
     for (const r of records) {
@@ -166,13 +167,5 @@ export function finalize70maiRecords(records: GpsRecord[]): GpsRecord[] {
         if (last && last.lat === r.lat && last.lon === r.lon) continue;
         uniq.push(r);
     }
-    for (let i = 1; i < uniq.length; i++) {
-        const prev = uniq[i - 1]!;
-        const cur = uniq[i]!;
-        // Shared great-circle helper (parser.ts), km -> m; dt ~ 1 s so m == m/s.
-        const v = haversineKm(prev.lat, prev.lon, cur.lat, cur.lon) * 1000;
-        cur.speedMs = v > MAX_PLAUSIBLE_SPEED_MS ? 0 : v;
-    }
-    if (uniq.length > 1) uniq[0]!.speedMs = uniq[1]!.speedMs;
     return uniq;
 }

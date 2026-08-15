@@ -5,10 +5,11 @@
 //
 // This is a SEPARATE primitive from the generic Novatek `freegps` (not just
 // another FreeGpsVariant) because the semantics differ enough to warrant it:
-// no per-record clock (records are emitted `timeUnsynced` and re-anchored), and
-// speed is reconstructed from the trajectory. Keeping it apart leaves the VIOFO
-// per-block-UTC path untouched. The marker is gated on the 70mai filename so it
-// never shadows VIOFO/Vantrue files - those fall through to `freegps`.
+// no per-record clock (records are emitted `timeUnsynced` and re-anchored),
+// ddmm*1e5 int32 coordinates and a km/h speed field. Keeping it apart leaves
+// the VIOFO per-block-UTC path untouched. The marker is gated on the 70mai
+// filename so it never shadows VIOFO/Vantrue files - those fall through to
+// `freegps`.
 
 import { type ParsedRecords, type VendorFile, WrongFormatError } from "../types.js";
 import { RX_70MAI } from "../filename/_patterns.js";
@@ -40,8 +41,8 @@ export const freegps70maiPrimitive: Primitive = {
         // atom inside moov (u32-BE offset/size pairs) pointing at every block,
         // so the shared table reader fetches only the blocks (~tens of KB)
         // instead of linearly scanning the whole 4K clip (~500 MB IO). We inject
-        // the 70mai block parser; finalize collapses per-frame repeats and fills
-        // speed exactly as on the streaming path.
+        // the 70mai block parser; finalize collapses per-frame repeats exactly
+        // as on the streaming path.
         const structural = await tryStructuralPath(file.file, index, parse70maiFreeGpsBlock, signal);
         if (structural) {
             const records = finalize70maiRecords(structural.records);

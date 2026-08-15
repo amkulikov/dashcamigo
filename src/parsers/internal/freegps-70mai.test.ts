@@ -18,13 +18,14 @@ function block(opts: {
     lat: number;
     lon: number;
     heading?: number;
+    speedKmh?: number;
     active?: boolean;
     breakSig?: boolean;
     noMagic?: boolean;
     latRaw?: number;
     lonRaw?: number;
 }): DataView {
-    const { lat, lon, heading = 45, active = true, breakSig = false, noMagic = false } = opts;
+    const { lat, lon, heading = 45, speedKmh = 0, active = true, breakSig = false, noMagic = false } = opts;
     const b = new Uint8Array(64);
     if (!noMagic) b.set([0x66, 0x72, 0x65, 0x65, 0x47, 0x50, 0x53, 0x20], 0); // "freeGPS "
     const dv = new DataView(b.buffer);
@@ -35,6 +36,7 @@ function block(opts: {
     dv.setInt32(27, opts.latRaw ?? encodeDdmm(lat), true);
     dv.setInt32(31, opts.lonRaw ?? encodeDdmm(lon), true);
     dv.setInt32(35, heading, true);
+    dv.setInt32(39, speedKmh, true);
     return dv;
 }
 
@@ -75,8 +77,11 @@ describe("is70maiFreeGpsBlock", () => {
 });
 
 describe("parse70maiFreeGpsBlock", () => {
-    it("decodes lat/lon/heading into a one-element array and flags timeUnsynced", () => {
-        const recs = parse70maiFreeGpsBlock(block({ lat: 50.123456, lon: 30.654321, heading: 217 }), "NO.MP4");
+    it("decodes lat/lon/heading/speed into a one-element array and flags timeUnsynced", () => {
+        const recs = parse70maiFreeGpsBlock(
+            block({ lat: 50.123456, lon: 30.654321, heading: 217, speedKmh: 54 }),
+            "NO.MP4",
+        );
         expect(recs).toHaveLength(1);
         const r = recs[0]!;
         expect(r.lat).toBeCloseTo(50.123456, 6);
@@ -84,8 +89,18 @@ describe("parse70maiFreeGpsBlock", () => {
         expect(r.bearingDeg).toBe(217);
         expect(r.active).toBe(true);
         expect(r.timeUnsynced).toBe(true);
-        expect(r.speedMs).toBe(0); // filled later by finalize70maiRecords
+        expect(r.speedMs).toBeCloseTo(15, 5); // 54 km/h -> m/s
         expect(r.mp4Filename).toBe("NO.MP4");
+    });
+
+    it("reads a zero speed field as a genuine standstill, not a gap", () => {
+        const [r] = parse70maiFreeGpsBlock(block({ lat: 50, lon: 30, speedKmh: 0 }), "x");
+        expect(r!.speedMs).toBe(0);
+    });
+
+    it("zeroes a negative or implausibly high speed field (firmware garbage)", () => {
+        expect(parse70maiFreeGpsBlock(block({ lat: 50, lon: 30, speedKmh: -5 }), "x")[0]!.speedMs).toBe(0);
+        expect(parse70maiFreeGpsBlock(block({ lat: 50, lon: 30, speedKmh: 1000 }), "x")[0]!.speedMs).toBe(0);
     });
 
     it("preserves the sign for southern/western hemispheres", () => {
@@ -114,14 +129,14 @@ describe("parse70maiFreeGpsBlock", () => {
 });
 
 describe("finalize70maiRecords", () => {
-    function rec(lat: number, lon: number): GpsRecord {
+    function rec(lat: number, lon: number, speedMs = 0): GpsRecord {
         return {
             unixSeconds: 0,
             active: true,
             lat,
             lon,
             bearingDeg: 0,
-            speedMs: 0,
+            speedMs,
             accelXg: 0,
             accelYg: 0,
             accelZg: 0,
@@ -137,29 +152,21 @@ describe("finalize70maiRecords", () => {
         expect(out.map((r) => r.lat)).toEqual([50, 50.001, 50.002]);
     });
 
-    it("derives speed from the trajectory (haversine, dt~1s) with the first copying the second", () => {
-        // 0.0005 deg of latitude ~ 55.6 m -> ~55.6 m/s at dt=1s (under the cap).
-        const out = finalize70maiRecords([rec(50, 30), rec(50.0005, 30), rec(50.001, 30)]);
-        expect(out[1]!.speedMs).toBeCloseTo(55.6, 0);
-        expect(out[0]!.speedMs).toBe(out[1]!.speedMs); // first copies second, not stuck at 0
-        expect(out[2]!.speedMs).toBeCloseTo(55.6, 0);
+    it("keeps the recorded per-fix speed through a position-freeze gap", () => {
+        // The firmware froze the position for a while (repeats collapse into
+        // one record), then the next fix lands 2+ seconds of travel away. The
+        // recorded field stays the receiver's true speed - the exact case where
+        // a dt=1s trajectory reconstruction produced a 2-4x spike.
+        const input = [rec(50, 30, 14), rec(50, 30, 15), rec(50, 30, 15), rec(50.001, 30, 15)];
+        const out = finalize70maiRecords(input);
+        expect(out).toHaveLength(2);
+        expect(out[0]!.speedMs).toBe(14); // first record of the frozen run
+        expect(out[1]!.speedMs).toBe(15); // ~111 m step, speed NOT re-derived from it
     });
 
     it("handles an empty and single-element input", () => {
         expect(finalize70maiRecords([])).toEqual([]);
         const one = finalize70maiRecords([rec(50, 30)]);
         expect(one).toHaveLength(1);
-        expect(one[0]!.speedMs).toBe(0);
-    });
-
-    it("zeroes an implausible trajectory-speed spike (GPS gap, not motion)", () => {
-        // ~1 deg of latitude (~111 km) between consecutive fixes -> ~111 km/s:
-        // a GPS gap/reacquire, not real motion. Dropped to 0 over the cap rather
-        // than shown as a 1000+ km/h spike. The normal small step is kept.
-        const out = finalize70maiRecords([rec(50, 30), rec(51, 30), rec(51.0005, 30)]);
-        expect(out[1]!.speedMs).toBe(0); // the 1-deg jump, over the cap
-        expect(out[2]!.speedMs).toBeGreaterThan(0); // ~55 m/s, kept
-        expect(out[2]!.speedMs).toBeLessThan(90);
-        expect(out[0]!.speedMs).toBe(0); // first copies second (0 here)
     });
 });
