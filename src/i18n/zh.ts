@@ -49,6 +49,7 @@ export const zhDict = {
     // folder sources: the row per folder the loaded trips came from
     "folderSources.title": "来源",
     "folderSources.looseFiles": "拖入的文件",
+    "folderSources.driveRoot": "驱动器根目录",
     "folderSources.load": "加载",
     "folderSources.loadAria": "加载 {folder}",
     "folderSources.loadHint": "把这个文件夹的录像加载到列表",

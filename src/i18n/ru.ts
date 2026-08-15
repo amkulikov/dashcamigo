@@ -55,6 +55,7 @@ export const ruDict = {
     // folder sources: the row per folder the loaded trips came from
     "folderSources.title": "Источники",
     "folderSources.looseFiles": "Перетащенные файлы",
+    "folderSources.driveRoot": "Корень диска",
     "folderSources.load": "Загрузить",
     "folderSources.loadAria": "Загрузить {folder}",
     "folderSources.loadHint": "Загрузить записи из этой папки в список",

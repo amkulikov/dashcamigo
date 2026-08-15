@@ -36,6 +36,7 @@ import { dom } from "./dom.js";
 import {
     bindSourceToFolder,
     disambiguatedLabels,
+    folderDisplayLabel,
     notifyFolderOpened,
     purgeAllFolderSessionState,
     purgeFolderSessionState,
@@ -153,7 +154,7 @@ async function openFolderHandle(
         notify({
             severity: "warn",
             messageKey: "recentFolders.openFailed",
-            messageParams: { name: handle.name },
+            messageParams: { name: folderDisplayLabel(handle.name) },
         });
         return null;
     }
@@ -198,7 +199,7 @@ async function openRememberedFolder(folder: RememberedFolder): Promise<void> {
                 notify({
                     severity: "warn",
                     messageKey: "recentFolders.permissionDenied",
-                    messageParams: { name: folder.label },
+                    messageParams: { name: folderDisplayLabel(folder.label) },
                 });
                 return;
             }
@@ -265,7 +266,7 @@ async function refreshChips(): Promise<void> {
     const labels = disambiguatedLabels(folders);
     const chipById = new Map<string, HTMLElement>();
     for (const folder of folders) {
-        const chip = buildChip(folder, labels.get(folder.id) ?? folder.label);
+        const chip = buildChip(folder, labels.get(folder.id) ?? folderDisplayLabel(folder.label));
         chipById.set(folder.id, chip);
         chipsList.appendChild(chip);
     }

@@ -51,6 +51,7 @@ export const enDict = {
     // folder sources: the row per folder the loaded trips came from
     "folderSources.title": "Sources",
     "folderSources.looseFiles": "Dropped files",
+    "folderSources.driveRoot": "Drive root",
     "folderSources.load": "Load",
     "folderSources.loadAria": "Load {folder}",
     "folderSources.loadHint": "Load this folder's recordings into the list",

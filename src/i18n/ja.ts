@@ -60,6 +60,7 @@ export const jaDict = {
     // folder sources: the row per folder the loaded trips came from
     "folderSources.title": "ソース",
     "folderSources.looseFiles": "ドロップしたファイル",
+    "folderSources.driveRoot": "ドライブのルート",
     "folderSources.load": "読み込む",
     "folderSources.loadAria": "{folder} を読み込む",
     "folderSources.loadHint": "このフォルダの録画をリストに読み込む",

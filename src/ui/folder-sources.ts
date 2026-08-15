@@ -95,6 +95,14 @@ export function purgeAllFolderSessionState(): void {
     refreshRememberedFolders();
 }
 
+/** Clears the module-level session state between unit tests. */
+export function _resetForTests(): void {
+    sourcesByKey.clear();
+    folderIdByFileKey.clear();
+    rememberedCache = [];
+    rememberedAvailability.clear();
+}
+
 // The sidecar layer merges its file after a folder opens or is remembered. A
 // registered hook, not an import - the sidecar module reads annotations, which
 // resolve their folder id through this module.
@@ -236,24 +244,37 @@ function unloadedRemembered(): RememberedFolder[] {
 }
 
 /**
+ * Human form of a folder/source root name. Chromium names a drive-root handle
+ * after the bare path separator ("\" on a Windows flash card), which on screen
+ * reads as a rendering glitch - substitute a real label. Every other name
+ * passes through unchanged, including "" (the loose-files row owns that case).
+ */
+export function folderDisplayLabel(rootName: string): string {
+    return /^[\\/]+$/.test(rootName) ? t("folderSources.driveRoot") : rootName;
+}
+
+/**
  * Display labels for remembered folders, duplicates suffixed " (2)", " (3)"...
  * in addedAt order (stable across re-renders, unlike the lastOpenedAt list
  * order). The handle exposes only the folder's leaf name - two SD cards named
  * "DCIM" are otherwise indistinguishable. Shared with the landing chips.
+ * Buckets by the DISPLAY label, so two drive roots ("\" and "/") collide the
+ * way the user sees them collide.
  */
 export function disambiguatedLabels(folders: RememberedFolder[]): Map<string, string> {
     const byLabel = new Map<string, RememberedFolder[]>();
     for (const folder of folders) {
-        const bucket = byLabel.get(folder.label);
+        const label = folderDisplayLabel(folder.label);
+        const bucket = byLabel.get(label);
         if (bucket) bucket.push(folder);
-        else byLabel.set(folder.label, [folder]);
+        else byLabel.set(label, [folder]);
     }
     const out = new Map<string, string>();
-    for (const bucket of byLabel.values()) {
+    for (const [label, bucket] of byLabel) {
         if (bucket.length === 1) continue;
         bucket.sort((a, b) => a.addedAt - b.addedAt);
         bucket.forEach((folder, index) => {
-            if (index > 0) out.set(folder.id, `${folder.label} (${index + 1})`);
+            if (index > 0) out.set(folder.id, `${label} (${index + 1})`);
         });
     }
     return out;
@@ -273,17 +294,30 @@ function rootNameOf(relativePath: string): string {
  * appears together with the trips it explains.
  */
 export function registerIngestSource(files: VendorFile[], origin: IngestOrigin | null): void {
-    // An empty batch still names a folder when it came from the picker: opening
-    // an already-loaded card dedups every file away, and the row must still
-    // gain its handle (and with it the offer to remember).
     const keysByRoot = new Map<string, string[]>();
-    if (origin) keysByRoot.set(origin.handle.name, []);
-    for (const vendorFile of files) {
-        const root = rootNameOf(vendorFile.relativePath);
-        const identityKey = fileIdentityKey(fileIdentityOf(vendorFile.file, vendorFile.relativePath));
-        const bucket = keysByRoot.get(root);
-        if (bucket) bucket.push(identityKey);
-        else keysByRoot.set(root, [identityKey]);
+    if (origin) {
+        // A picker batch has exactly one root by construction - the picked
+        // handle - so the whole batch lands on its row. Grouping by the paths'
+        // first segment instead would shatter it when the handle's name is a
+        // bare separator (a Windows drive root is named "\", which the path
+        // split swallows, leaving the subfolders posing as roots). An empty
+        // batch still names the folder: opening an already-loaded card dedups
+        // every file away, and the row must still gain its handle (and with
+        // it the offer to remember).
+        keysByRoot.set(
+            origin.handle.name,
+            files.map((vendorFile) => fileIdentityKey(fileIdentityOf(vendorFile.file, vendorFile.relativePath))),
+        );
+    } else {
+        // Handle-less paths (classic input, drag-and-drop): the leading path
+        // segment is all there is to group by.
+        for (const vendorFile of files) {
+            const root = rootNameOf(vendorFile.relativePath);
+            const identityKey = fileIdentityKey(fileIdentityOf(vendorFile.file, vendorFile.relativePath));
+            const bucket = keysByRoot.get(root);
+            if (bucket) bucket.push(identityKey);
+            else keysByRoot.set(root, [identityKey]);
+        }
     }
     if (keysByRoot.size === 0) return;
     for (const [root, identityKeys] of keysByRoot) {
@@ -295,11 +329,7 @@ export function registerIngestSource(files: VendorFile[], origin: IngestOrigin |
             identityKeys: new Set<string>(),
         };
         for (const identityKey of identityKeys) source.identityKeys.add(identityKey);
-        // The FSA enumeration prefixes every path with the handle's own name,
-        // so the origin belongs to exactly the root that matches it - a drop
-        // that also carried other roots (never today, but the shape allows it)
-        // must not inherit the handle.
-        if (origin && origin.handle.name === root) {
+        if (origin) {
             source.handle = origin.handle;
             source.availability = "available";
             // Bind the source's WHOLE key set, not just this batch: files the
@@ -383,7 +413,7 @@ function renderSources(): void {
     // is on screen explains itself first, what can be added follows.
     const labels = disambiguatedLabels(rememberedCache);
     for (const folder of unloaded) {
-        listElement.appendChild(buildUnloadedRow(folder, labels.get(folder.id) ?? folder.label));
+        listElement.appendChild(buildUnloadedRow(folder, labels.get(folder.id) ?? folderDisplayLabel(folder.label)));
     }
 }
 
@@ -401,7 +431,7 @@ function buildRow(source: FolderSource): HTMLElement {
 
     // A bare drop has no folder to name; say what it is instead of showing an
     // empty row - the trips still came from somewhere the user recognizes.
-    const displayLabel = source.key || t("folderSources.looseFiles");
+    const displayLabel = folderDisplayLabel(source.key) || t("folderSources.looseFiles");
     const label = document.createElement("span");
     label.className = "folder-source__label";
     label.textContent = displayLabel;
@@ -535,7 +565,7 @@ async function onRemember(source: FolderSource, button: HTMLButtonElement): Prom
         notify({
             severity: "warn",
             messageKey: "folderSources.rememberFailed",
-            messageParams: { name: source.key },
+            messageParams: { name: folderDisplayLabel(source.key) },
         });
     }
 }

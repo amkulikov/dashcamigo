@@ -59,6 +59,7 @@ export const koDict = {
     // folder sources: the row per folder the loaded trips came from
     "folderSources.title": "소스",
     "folderSources.looseFiles": "드롭한 파일",
+    "folderSources.driveRoot": "드라이브 루트",
     "folderSources.load": "불러오기",
     "folderSources.loadAria": "{folder} 불러오기",
     "folderSources.loadHint": "이 폴더의 녹화를 목록에 불러오기",

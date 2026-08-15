@@ -48,6 +48,7 @@ export const deDict = {
     // folder sources: the row per folder the loaded trips came from
     "folderSources.title": "Quellen",
     "folderSources.looseFiles": "Abgelegte Dateien",
+    "folderSources.driveRoot": "Stammverzeichnis des Laufwerks",
     "folderSources.load": "Laden",
     "folderSources.loadAria": "{folder} laden",
     "folderSources.loadHint": "Aufnahmen aus diesem Ordner in die Liste laden",

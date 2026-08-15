@@ -50,6 +50,7 @@ export const frDict = {
     // folder sources: the row per folder the loaded trips came from
     "folderSources.title": "Sources",
     "folderSources.looseFiles": "Fichiers déposés",
+    "folderSources.driveRoot": "Racine du disque",
     "folderSources.load": "Charger",
     "folderSources.loadAria": "Charger {folder}",
     "folderSources.loadHint": "Charger les enregistrements de ce dossier dans la liste",

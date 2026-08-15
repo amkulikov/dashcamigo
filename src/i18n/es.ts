@@ -50,6 +50,7 @@ export const esDict = {
     // folder sources: the row per folder the loaded trips came from
     "folderSources.title": "Fuentes",
     "folderSources.looseFiles": "Archivos sueltos",
+    "folderSources.driveRoot": "Raíz de la unidad",
     "folderSources.load": "Cargar",
     "folderSources.loadAria": "Cargar {folder}",
     "folderSources.loadHint": "Cargar las grabaciones de esta carpeta en la lista",

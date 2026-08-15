@@ -50,6 +50,7 @@ export const plDict = {
     // folder sources: the row per folder the loaded trips came from
     "folderSources.title": "Źródła",
     "folderSources.looseFiles": "Upuszczone pliki",
+    "folderSources.driveRoot": "Katalog główny dysku",
     "folderSources.load": "Wczytaj",
     "folderSources.loadAria": "Wczytaj {folder}",
     "folderSources.loadHint": "Wczytaj nagrania z tego folderu do listy",

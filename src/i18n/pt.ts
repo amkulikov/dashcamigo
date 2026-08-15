@@ -50,6 +50,7 @@ export const ptDict = {
     // folder sources: the row per folder the loaded trips came from
     "folderSources.title": "Fontes",
     "folderSources.looseFiles": "Arquivos soltos",
+    "folderSources.driveRoot": "Raiz da unidade",
     "folderSources.load": "Carregar",
     "folderSources.loadAria": "Carregar {folder}",
     "folderSources.loadHint": "Carregar as gravações desta pasta na lista",

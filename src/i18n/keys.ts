@@ -73,6 +73,7 @@ export type I18nKey =
     // folder sources: the row per folder the loaded trips came from
     | "folderSources.title"
     | "folderSources.looseFiles"
+    | "folderSources.driveRoot"
     | "folderSources.load"
     | "folderSources.loadAria"
     | "folderSources.loadHint"
