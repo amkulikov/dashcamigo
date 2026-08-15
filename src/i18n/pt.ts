@@ -331,6 +331,10 @@ export const ptDict = {
 
     "codecUnsupported.title": "Este navegador não consegue reproduzir este vídeo ({codec})",
     "codecUnsupported.hint": "O Chrome, o Edge ou o Safari normalmente conseguem reproduzir este formato — abra lá a mesma pasta.",
+    "codecUnsupported.hint.windows": "Experimente o Chrome — ele normalmente reproduz estes vídeos. Se não, o Microsoft Edge com a extensão {link} da Microsoft Store consegue.",
+    "codecUnsupported.hint.windowsChrome": "Abra a mesma pasta no Microsoft Edge com a extensão {link} da Microsoft Store — essa combinação reproduz estes vídeos em quase qualquer PC.",
+    "codecUnsupported.hint.windowsEdge": "Instale a extensão {link} da Microsoft Store e recarregue a página. Ou abra a mesma pasta no Chrome — ele normalmente reproduz estes vídeos sem extensões.",
+    "codecUnsupported.stillWorks": "O mapa, o gráfico de velocidade e a exportação de clipes sem alterações continuam funcionando.",
     "codecUnsupported.unknown": "desconhecido",
 
     "unsupported.modal.title": "Alguns arquivos não vou conseguir abrir",
@@ -768,6 +772,8 @@ export const ptDict = {
     "export.progress.bytes": "gravado {bytes}",
     "export.error.generic": "Algo deu errado e a exportação foi interrompida. Tente novamente.",
     "export.error.cannotEncodeResolution": "Este dispositivo não consegue salvar vídeo nesta resolução. Escolha uma resolução menor e tente novamente.",
+    "export.error.sourceNotPlayable": "Este navegador não consegue reproduzir este vídeo, então aqui não dá para salvá-lo com alterações.",
+    "export.error.sourceNotPlayable.asIs": "Salvar sem alterações funciona aqui mesmo: desative as opções de edição e escolha a qualidade máxima.",
     "export.error.tooLargeForMemory": "Este clipe é grande demais para salvar neste navegador. Encurte o intervalo, reduza a resolução ou exporte-o no Chrome.",
     "export.error.diskFull": "Espaço em disco insuficiente para salvar este clipe. Libere espaço suficiente para o arquivo ou encurte o intervalo e tente novamente.",
     "export.error.destinationLost": "Não foi possível terminar de salvar: o arquivo desapareceu. O disco pode ter sido desconectado ou outro aplicativo o moveu. Tente novamente e salve em uma pasta no computador.",

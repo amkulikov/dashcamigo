@@ -341,6 +341,10 @@ export const jaDict = {
 
     "codecUnsupported.title": "このブラウザではこの動画を再生できません（{codec}）",
     "codecUnsupported.hint": "Chrome、Edge、Safari ならたいていこの形式を再生できます。同じフォルダーをそちらで開いてみてください。",
+    "codecUnsupported.hint.windows": "Chrome をお試しください — たいていこの動画を再生できます。だめな場合は、Microsoft Store の {link} アドオンを入れた Microsoft Edge なら再生できます。",
+    "codecUnsupported.hint.windowsChrome": "Microsoft Store の {link} アドオンを入れた Microsoft Edge で同じフォルダーを開いてください — この組み合わせなら、ほぼどの PC でもこの動画を再生できます。",
+    "codecUnsupported.hint.windowsEdge": "Microsoft Store から {link} アドオンをインストールして、このページを再読み込みしてください。または Chrome で同じフォルダーを開いてみてください — たいていアドオンなしで再生できます。",
+    "codecUnsupported.stillWorks": "地図、速度グラフ、無編集でのクリップ書き出しは引き続き使えます。",
     "codecUnsupported.unknown": "不明",
 
     "unsupported.modal.title": "一部のファイルは開けません",
@@ -780,6 +784,8 @@ export const jaDict = {
     "export.progress.bytes": "書き込み {bytes}",
     "export.error.generic": "問題が発生し、書き出しが中断されました。もう一度お試しください。",
     "export.error.cannotEncodeResolution": "この端末ではこの解像度で動画を保存できません。解像度を下げて、もう一度お試しください。",
+    "export.error.sourceNotPlayable": "このブラウザではこの動画を再生できないため、ここでは編集を加えて保存できません。",
+    "export.error.sourceNotPlayable.asIs": "そのままの保存はここでも可能です：編集オプションをオフにして最高画質を選んでください。",
     "export.error.tooLargeForMemory": "このクリップはこのブラウザで保存するには大きすぎます。範囲を短くするか、解像度を下げるか、Chrome で書き出してください。",
     "export.error.diskFull": "このクリップを保存するディスクの空き容量が足りません。ファイルに十分な空き容量を確保するか範囲を短くして、もう一度お試しください。",
     "export.error.destinationLost": "保存中のファイルが見つからなくなり、最後まで保存できませんでした。ドライブが取り外されたか、ほかのアプリが移動した可能性があります。パソコン内のフォルダーを選んで、もう一度お試しください。",

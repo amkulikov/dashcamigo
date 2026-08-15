@@ -4,8 +4,37 @@
 import { t } from "../i18n/index.js";
 import type { VideoCodec } from "mediabunny";
 
+import { identifyBrowser } from "../capabilities.js";
 import { dom } from "./dom.js";
 import { state } from "./state.js";
+
+// Official Microsoft Store listing of the "HEVC Video Extensions" add-on - the
+// one Microsoft's own Edge troubleshooting doc links to. Linked directly so
+// users don't land on look-alike codec downloads outside the Store.
+const MS_STORE_HEVC_URL = "https://apps.microsoft.com/detail/9n4wgh0z6vhq";
+
+/**
+ * Advice line for an undecodable video, as HTML (may carry the Store link).
+ * Shared by the player overlay and the export panel's re-encode-blocked note so
+ * the guidance never diverges. HEVC on Windows branches by browser: Edge plays
+ * HEVC only through the OS decoder that the Store add-on provides (works even
+ * without a hardware decoder), while Chrome needs no install but silently lacks
+ * HEVC on machines without hardware decode - so a user already in Chrome is
+ * pointed at Edge and vice versa. Every other codec/OS keeps the generic "try
+ * another browser" line.
+ */
+export function codecPlaybackAdviceHtml(codec: VideoCodec | null): string {
+    const browser = identifyBrowser();
+    if (codec !== "hevc" || browser.os !== "windows") return t("codecUnsupported.hint");
+    const link = `<a href="${MS_STORE_HEVC_URL}" target="_blank" rel="noopener noreferrer">HEVC Video Extensions</a>`;
+    const key =
+        browser.name === "Edge"
+            ? "codecUnsupported.hint.windowsEdge"
+            : browser.name === "Chrome"
+              ? "codecUnsupported.hint.windowsChrome"
+              : "codecUnsupported.hint.windows";
+    return t(key, { link });
+}
 
 /**
  * Toggles empty-state vs player-wrap visibility and fills the placeholder text.
@@ -57,6 +86,12 @@ export function showCodecUnsupportedOverlay(codec: VideoCodec | null): void {
     if (titleEl) {
         const codecName = codec ? codec.toUpperCase() : t("codecUnsupported.unknown");
         titleEl.textContent = t("codecUnsupported.title", { codec: codecName });
+    }
+    // The hint is per-codec/per-browser, so it is filled here rather than left
+    // to the static data-i18n default (which stays as the generic fallback).
+    const hintEl = document.getElementById("codec-unsupported-hint");
+    if (hintEl) {
+        hintEl.innerHTML = `${codecPlaybackAdviceHtml(codec)} ${t("codecUnsupported.stillWorks")}`;
     }
 }
 

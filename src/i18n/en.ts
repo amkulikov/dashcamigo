@@ -332,6 +332,10 @@ export const enDict = {
 
     "codecUnsupported.title": "This browser can't play this video ({codec})",
     "codecUnsupported.hint": "Chrome, Edge or Safari can usually play this format — open the same folder there.",
+    "codecUnsupported.hint.windows": "Try Chrome — it usually plays these videos. If it doesn't, Microsoft Edge with the {link} add-on from the Microsoft Store will.",
+    "codecUnsupported.hint.windowsChrome": "Open the same folder in Microsoft Edge with the {link} add-on from the Microsoft Store — that combination plays these videos on almost any PC.",
+    "codecUnsupported.hint.windowsEdge": "Install the {link} add-on from the Microsoft Store, then reload this page. Or open the same folder in Chrome — it usually plays these videos without add-ons.",
+    "codecUnsupported.stillWorks": "The map, the speed chart and exporting clips unchanged still work.",
     "codecUnsupported.unknown": "unknown",
 
     "unsupported.modal.title": "Some files I can't open",
@@ -768,6 +772,8 @@ export const enDict = {
     "export.progress.bytes": "wrote {bytes}",
     "export.error.generic": "Something went wrong and the export stopped. Please try again.",
     "export.error.cannotEncodeResolution": "This device can't save video at this resolution. Pick a lower resolution and try again.",
+    "export.error.sourceNotPlayable": "This browser can't play this video, so it can't be saved with changes here.",
+    "export.error.sourceNotPlayable.asIs": "Saving it unchanged works right here: turn off the editing options and pick the top quality.",
     "export.error.tooLargeForMemory": "This clip is too large to save in this browser. Shorten the range, lower the resolution, or export it in Chrome.",
     "export.error.diskFull": "Not enough disk space to save this clip. Free up enough room for the file, or shorten the range, then try again.",
     "export.error.destinationLost": "Couldn't finish saving — the file being written is gone. The drive may have been unplugged, or another app moved it. Try again and save to a folder on your computer.",

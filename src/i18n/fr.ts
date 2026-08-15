@@ -333,6 +333,10 @@ export const frDict = {
 
     "codecUnsupported.title": "Ce navigateur ne peut pas lire cette vidéo ({codec})",
     "codecUnsupported.hint": "Chrome, Edge ou Safari lisent en général ce format — ouvre le même dossier dans l'un d'eux.",
+    "codecUnsupported.hint.windows": "Essaie Chrome — il lit en général ces vidéos. Sinon, Microsoft Edge avec le module {link} du Microsoft Store y arrivera.",
+    "codecUnsupported.hint.windowsChrome": "Ouvre le même dossier dans Microsoft Edge avec le module {link} du Microsoft Store — cette combinaison lit ces vidéos sur presque tous les PC.",
+    "codecUnsupported.hint.windowsEdge": "Installe le module {link} depuis le Microsoft Store, puis recharge la page. Ou ouvre le même dossier dans Chrome — il lit en général ces vidéos sans module.",
+    "codecUnsupported.stillWorks": "La carte, la courbe de vitesse et l'export de clips sans modification fonctionnent toujours.",
     "codecUnsupported.unknown": "inconnu",
 
     "unsupported.modal.title": "Certains fichiers ne s'ouvriront pas",
@@ -770,6 +774,8 @@ export const frDict = {
     "export.progress.bytes": "écrit {bytes}",
     "export.error.generic": "Un problème est survenu et l'export s'est arrêté. Réessaie.",
     "export.error.cannotEncodeResolution": "Cet appareil ne peut pas enregistrer la vidéo à cette résolution. Choisis une résolution plus basse et réessaie.",
+    "export.error.sourceNotPlayable": "Ce navigateur ne peut pas lire cette vidéo, donc impossible de l'enregistrer ici avec des modifications.",
+    "export.error.sourceNotPlayable.asIs": "L'enregistrer sans modification marche ici même : désactive les options de montage et choisis la qualité maximale.",
     "export.error.tooLargeForMemory": "Ce clip est trop volumineux pour être enregistré dans ce navigateur. Raccourcis la plage, réduis la résolution ou exporte-le dans Chrome.",
     "export.error.diskFull": "Espace disque insuffisant pour enregistrer ce clip. Libère assez de place pour le fichier, ou raccourcis la plage, puis réessaie.",
     "export.error.destinationLost": "Impossible de terminer l'enregistrement : le fichier a disparu. Le disque a peut-être été débranché, ou une autre application l'a déplacé. Réessaie en enregistrant dans un dossier de ton ordinateur.",

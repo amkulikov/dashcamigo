@@ -330,6 +330,10 @@ export const zhDict = {
 
     "codecUnsupported.title": "此浏览器无法播放此视频（{codec}）",
     "codecUnsupported.hint": "Chrome、Edge 或 Safari 通常能播放这种格式 — 在那里打开同一个文件夹即可。",
+    "codecUnsupported.hint.windows": "试试 Chrome — 它通常能播放这类视频。如果不行，安装了 Microsoft Store 的 {link} 扩展的 Microsoft Edge 可以播放。",
+    "codecUnsupported.hint.windowsChrome": "在 Microsoft Edge 中打开同一个文件夹，并从 Microsoft Store 安装 {link} 扩展 — 这套组合几乎在任何电脑上都能播放这类视频。",
+    "codecUnsupported.hint.windowsEdge": "从 Microsoft Store 安装 {link} 扩展，然后刷新此页面。或者在 Chrome 中打开同一个文件夹 — 它通常无需扩展即可播放这类视频。",
+    "codecUnsupported.stillWorks": "地图、速度图表和不作修改的剪辑导出仍然可用。",
     "codecUnsupported.unknown": "未知",
 
     "unsupported.modal.title": "有些文件打不开",
@@ -767,6 +771,8 @@ export const zhDict = {
     "export.progress.bytes": "已写入 {bytes}",
     "export.error.generic": "出现问题，导出已停止。请重试。",
     "export.error.cannotEncodeResolution": "此设备无法以该分辨率保存视频。请降低分辨率后重试。",
+    "export.error.sourceNotPlayable": "此浏览器无法播放此视频，因此在这里无法在修改后保存。",
+    "export.error.sourceNotPlayable.asIs": "不作修改的话，在这里就能保存：关闭编辑选项并选择最高画质即可。",
     "export.error.tooLargeForMemory": "此片段太大，无法在此浏览器中保存。请缩短范围、降低分辨率，或在 Chrome 中导出。",
     "export.error.diskFull": "磁盘空间不足，无法保存此片段。请为文件释放足够空间，或缩短范围后重试。",
     "export.error.destinationLost": "保存中的文件不见了，没能保存完。可能是磁盘被拔出，或者被其他程序移动了。请重试，并保存到电脑本地的文件夹。",

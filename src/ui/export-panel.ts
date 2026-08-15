@@ -12,6 +12,7 @@ import { identifyBrowser } from "../capabilities.js";
 import { clampManualBitrateMbps, MANUAL_BITRATE_MAX_MBPS, MANUAL_BITRATE_MIN_MBPS } from "../export-bitrate.js";
 import { createLogger } from "../log.js";
 import { dom } from "./dom.js";
+import { codecPlaybackAdviceHtml } from "./empty-state.js";
 import { activateModal, deactivateModal, wireBackdropDismiss } from "./modal-helper.js";
 import {
     closeExportMode,
@@ -920,15 +921,24 @@ function syncEstimate(): void {
  */
 function syncEncodeNote(est: ReturnType<typeof estimateExport>): void {
     const note = encodeNoteEl;
+    const undecodable = est ? est.sourceUndecodable : null;
     const blocked = !!est?.blocked;
     const capped = !!est?.deviceCapped;
     if (note) {
-        // Hard block (error tone, disabled Save) takes precedence over the soft
-        // device-capped warning. The no-native RAM path is no longer pre-blocked
-        // by size - an oversized export surfaces at run time as a clean
-        // "use desktop Chrome" message (see export-flow), and the persistent
-        // fallbackWarn already flags the in-memory limit before Save.
-        if (blocked) {
+        // Hard blocks (error tone, disabled Save) take precedence over the soft
+        // device-capped warning; an undecodable source outranks the encode
+        // ceiling (more fundamental, and its guidance supersedes). The no-native
+        // RAM path is no longer pre-blocked by size - an oversized export
+        // surfaces at run time as a clean "use desktop Chrome" message (see
+        // export-flow), and the persistent fallbackWarn already flags the
+        // in-memory limit before Save.
+        if (undecodable) {
+            // Why it is blocked + how to get a browser where editing works
+            // (shared advice, may carry the Store link) + what works right here.
+            note.hidden = false;
+            note.classList.add("is-error");
+            note.innerHTML = `${t("export.error.sourceNotPlayable")} ${codecPlaybackAdviceHtml(undecodable.codec)} ${t("export.error.sourceNotPlayable.asIs")}`;
+        } else if (blocked) {
             note.hidden = false;
             note.classList.add("is-error");
             note.textContent = t("export.error.cannotEncodeResolution");
@@ -942,7 +952,7 @@ function syncEncodeNote(est: ReturnType<typeof estimateExport>): void {
             note.textContent = "";
         }
     }
-    if (saveBtnEl) saveBtnEl.disabled = blocked;
+    if (saveBtnEl) saveBtnEl.disabled = blocked || undecodable !== null;
 }
 
 // Refs touched by syncSpeedDependentUi: the speed buttons (highlight the active

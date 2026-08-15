@@ -340,6 +340,10 @@ export const koDict = {
 
     "codecUnsupported.title": "이 브라우저는 이 영상을 재생할 수 없어요 ({codec})",
     "codecUnsupported.hint": "Chrome, Edge, Safari에서는 보통 이 형식을 재생할 수 있어요 — 같은 폴더를 거기서 열어 보세요.",
+    "codecUnsupported.hint.windows": "Chrome을 써 보세요 — 보통 이런 영상을 재생할 수 있어요. 안 되면 Microsoft Store의 {link} 추가 기능을 설치한 Microsoft Edge로는 재생돼요.",
+    "codecUnsupported.hint.windowsChrome": "Microsoft Store의 {link} 추가 기능을 설치한 Microsoft Edge에서 같은 폴더를 열어 보세요 — 이 조합이면 거의 모든 PC에서 이런 영상이 재생돼요.",
+    "codecUnsupported.hint.windowsEdge": "Microsoft Store에서 {link} 추가 기능을 설치한 뒤 페이지를 새로고침해 주세요. 또는 Chrome에서 같은 폴더를 열어 보세요 — 보통 추가 기능 없이도 재생돼요.",
+    "codecUnsupported.stillWorks": "지도, 속도 차트, 변경 없는 클립 내보내기는 계속 사용할 수 있어요.",
     "codecUnsupported.unknown": "알 수 없음",
 
     "unsupported.modal.title": "일부 파일은 못 열어요",
@@ -777,6 +781,8 @@ export const koDict = {
     "export.progress.bytes": "기록됨 {bytes}",
     "export.error.generic": "문제가 생겨 내보내기가 중단됐어요. 다시 시도해 주세요.",
     "export.error.cannotEncodeResolution": "이 기기에서는 이 해상도로 영상을 저장할 수 없어요. 더 낮은 해상도를 골라 다시 시도해 주세요.",
+    "export.error.sourceNotPlayable": "이 브라우저는 이 영상을 재생할 수 없어서 여기서는 편집한 상태로 저장할 수 없어요.",
+    "export.error.sourceNotPlayable.asIs": "변경 없이 저장은 바로 여기서 가능해요: 편집 옵션을 끄고 최고 품질을 골라 주세요.",
     "export.error.tooLargeForMemory": "이 클립은 이 브라우저에서 저장하기에 너무 커요. 구간을 줄이거나 해상도를 낮추거나 Chrome 에서 내보내세요.",
     "export.error.diskFull": "이 클립을 저장할 디스크 공간이 부족해요. 파일이 들어갈 만큼 공간을 비우거나 범위를 줄인 뒤 다시 시도해 주세요.",
     "export.error.destinationLost": "저장하던 파일이 사라져서 끝까지 저장하지 못했어요. 드라이브가 분리되었거나 다른 앱이 파일을 옮겼을 수 있어요. 컴퓨터 안의 폴더에 저장해 다시 시도해 주세요.",

@@ -410,9 +410,15 @@ export type I18nKey =
     // opens the feedback form (a trip loaded but recognition may be wrong).
     | "emptyState.withTrips.report"
 
-    // Codec unsupported overlay
+    // Codec unsupported overlay. The three windows* hints are the HEVC-on-Windows
+    // branches (Edge needs the Store codec add-on, Chrome is hardware-only) -
+    // see codecUnsupportedHintHtml in ui/empty-state.ts; {link} is the Store link.
     | "codecUnsupported.title"
     | "codecUnsupported.hint"
+    | "codecUnsupported.hint.windows"
+    | "codecUnsupported.hint.windowsChrome"
+    | "codecUnsupported.hint.windowsEdge"
+    | "codecUnsupported.stillWorks"
     | "codecUnsupported.unknown"
 
     // Browser-compatibility surfacing (src/capabilities.ts + ui/capability-gate.ts).
@@ -984,6 +990,12 @@ export type I18nKey =
     | "export.progress.bytes"
     | "export.error.generic"
     | "export.error.cannotEncodeResolution"
+    // Source can't be decoded by this browser (canPlay=false), so any export
+    // that re-encodes is impossible; export-as-is (stream-copy) still works.
+    // The panel note assembles: sourceNotPlayable (why) + the shared browser
+    // advice (codecPlaybackAdviceHtml) + .asIs (what works right here).
+    | "export.error.sourceNotPlayable"
+    | "export.error.sourceNotPlayable.asIs"
     | "export.error.tooLargeForMemory"
     | "export.error.diskFull"
     | "export.error.destinationLost"

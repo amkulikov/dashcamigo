@@ -331,6 +331,10 @@ export const plDict = {
 
     "codecUnsupported.title": "Ta przeglądarka nie odtworzy tego wideo ({codec})",
     "codecUnsupported.hint": "Chrome, Edge lub Safari zwykle odtwarzają ten format — otwórz tam ten sam folder.",
+    "codecUnsupported.hint.windows": "Wypróbuj Chrome — zwykle odtwarza takie wideo. Jeśli nie, poradzi sobie Microsoft Edge z dodatkiem {link} ze sklepu Microsoft Store.",
+    "codecUnsupported.hint.windowsChrome": "Otwórz ten sam folder w Microsoft Edge z dodatkiem {link} ze sklepu Microsoft Store — to połączenie odtwarza takie wideo na niemal każdym komputerze.",
+    "codecUnsupported.hint.windowsEdge": "Zainstaluj dodatek {link} ze sklepu Microsoft Store i odśwież stronę. Albo otwórz ten sam folder w Chrome — zwykle odtwarza takie wideo bez dodatków.",
+    "codecUnsupported.stillWorks": "Mapa, wykres prędkości i eksport klipów bez zmian nadal działają.",
     "codecUnsupported.unknown": "nieznany",
 
     "unsupported.modal.title": "Niektórych plików nie otworzę",
@@ -768,6 +772,8 @@ export const plDict = {
     "export.progress.bytes": "zapisano {bytes}",
     "export.error.generic": "Coś poszło nie tak i zapis został przerwany. Spróbuj ponownie.",
     "export.error.cannotEncodeResolution": "To urządzenie nie może zapisać wideo w tej rozdzielczości. Wybierz niższą rozdzielczość i spróbuj ponownie.",
+    "export.error.sourceNotPlayable": "Ta przeglądarka nie odtworzy tego wideo, więc nie da się go tu zapisać ze zmianami.",
+    "export.error.sourceNotPlayable.asIs": "Zapis bez zmian działa tutaj od ręki: wyłącz opcje edycji i wybierz najwyższą jakość.",
     "export.error.tooLargeForMemory": "Ten klip jest zbyt duży, aby zapisać go w tej przeglądarce. Skróć zakres, zmniejsz rozdzielczość lub wyeksportuj go w Chrome.",
     "export.error.diskFull": "Za mało miejsca na dysku, aby zapisać ten klip. Zwolnij tyle miejsca, ile potrzebuje plik, albo skróć zakres i spróbuj ponownie.",
     "export.error.destinationLost": "Nie udało się dokończyć zapisu — plik zniknął. Dysk mógł zostać odłączony albo inny program go przeniósł. Spróbuj ponownie i zapisz do folderu na komputerze.",

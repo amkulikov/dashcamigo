@@ -331,6 +331,10 @@ export const deDict = {
 
     "codecUnsupported.title": "Dieser Browser kann dieses Video nicht abspielen ({codec})",
     "codecUnsupported.hint": "Chrome, Edge oder Safari können dieses Format meist abspielen — öffne dort denselben Ordner.",
+    "codecUnsupported.hint.windows": "Probier Chrome — dort laufen solche Videos meistens. Wenn nicht, hilft Microsoft Edge mit der Erweiterung {link} aus dem Microsoft Store.",
+    "codecUnsupported.hint.windowsChrome": "Öffne denselben Ordner in Microsoft Edge mit der Erweiterung {link} aus dem Microsoft Store — diese Kombination spielt solche Videos auf fast jedem PC ab.",
+    "codecUnsupported.hint.windowsEdge": "Installiere die Erweiterung {link} aus dem Microsoft Store und lade die Seite neu. Oder öffne denselben Ordner in Chrome — dort laufen solche Videos meistens ohne Zusätze.",
+    "codecUnsupported.stillWorks": "Karte, Geschwindigkeitsdiagramm und der Export unveränderter Clips funktionieren weiterhin.",
     "codecUnsupported.unknown": "unbekannt",
 
     "unsupported.modal.title": "Manche Dateien kann ich nicht öffnen",
@@ -768,6 +772,8 @@ export const deDict = {
     "export.progress.bytes": "geschrieben {bytes}",
     "export.error.generic": "Etwas ist schiefgelaufen und der Export wurde gestoppt. Bitte versuche es erneut.",
     "export.error.cannotEncodeResolution": "Dieses Gerät kann kein Video in dieser Auflösung speichern. Wähle eine niedrigere Auflösung und versuche es erneut.",
+    "export.error.sourceNotPlayable": "Dieser Browser kann dieses Video nicht abspielen, deshalb lässt es sich hier nicht mit Änderungen speichern.",
+    "export.error.sourceNotPlayable.asIs": "Unverändert speichern geht direkt hier: Schalte die Bearbeitungsoptionen aus und wähle die oberste Qualität.",
     "export.error.tooLargeForMemory": "Dieser Clip ist zu groß, um ihn in diesem Browser zu speichern. Kürze den Bereich, verringere die Auflösung oder exportiere ihn in Chrome.",
     "export.error.diskFull": "Nicht genug Speicherplatz, um diesen Clip zu speichern. Gib genug Platz für die Datei frei oder kürze den Bereich und versuche es dann erneut.",
     "export.error.destinationLost": "Die Datei konnte nicht fertig gespeichert werden — sie ist verschwunden. Vielleicht wurde das Laufwerk getrennt oder ein anderes Programm hat sie verschoben. Versuche es erneut und speichere in einen Ordner auf deinem Computer.",

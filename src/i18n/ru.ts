@@ -336,6 +336,10 @@ export const ruDict = {
 
     "codecUnsupported.title": "Этот браузер не воспроизводит это видео ({codec})",
     "codecUnsupported.hint": "Chrome, Edge или Safari обычно справляются с этим форматом — открой в одном из них ту же папку.",
+    "codecUnsupported.hint.windows": "Попробуй Chrome — он обычно играет такие видео. Если нет — поможет Microsoft Edge с дополнением {link} из Microsoft Store.",
+    "codecUnsupported.hint.windowsChrome": "Открой эту же папку в Microsoft Edge с дополнением {link} из Microsoft Store — эта связка играет такие видео почти на любом компьютере.",
+    "codecUnsupported.hint.windowsEdge": "Установи дополнение {link} из Microsoft Store и перезагрузи страницу. Или открой эту же папку в Chrome — он обычно играет такие видео без дополнений.",
+    "codecUnsupported.stillWorks": "Карта, график скорости и экспорт клипов без изменений работают.",
     "codecUnsupported.unknown": "неизвестный",
 
     "unsupported.modal.title": "Эти форматы не открою",
@@ -773,6 +777,8 @@ export const ruDict = {
     "export.progress.bytes": "записано {bytes}",
     "export.error.generic": "Что-то пошло не так, и сохранение прервалось. Попробуй ещё раз.",
     "export.error.cannotEncodeResolution": "Это устройство не может сохранить видео в таком разрешении. Выбери разрешение поменьше и попробуй снова.",
+    "export.error.sourceNotPlayable": "Браузер не воспроизводит это видео, поэтому сохранить его с изменениями здесь не получится.",
+    "export.error.sourceNotPlayable.asIs": "А без изменений можно сохранить прямо здесь: отключи правки и выбери верхнее качество.",
     "export.error.tooLargeForMemory": "Этот клип слишком большой, чтобы сохранить его в этом браузере. Сократи диапазон, уменьши разрешение или экспортируй в Chrome.",
     "export.error.diskFull": "Недостаточно места на диске, чтобы сохранить этот клип. Освободи место под файл или сократи диапазон и попробуй снова.",
     "export.error.destinationLost": "Не получилось дописать файл — он исчез. Возможно, отключился диск или файл переместила другая программа. Попробуй ещё раз и сохрани в папку на компьютере.",

@@ -332,6 +332,10 @@ export const esDict = {
 
     "codecUnsupported.title": "Este navegador no puede reproducir este vídeo ({codec})",
     "codecUnsupported.hint": "Chrome, Edge o Safari suelen reproducir este formato — abre allí la misma carpeta.",
+    "codecUnsupported.hint.windows": "Prueba Chrome — suele reproducir estos vídeos. Si no, Microsoft Edge con el complemento {link} de Microsoft Store podrá.",
+    "codecUnsupported.hint.windowsChrome": "Abre la misma carpeta en Microsoft Edge con el complemento {link} de Microsoft Store — esa combinación reproduce estos vídeos en casi cualquier PC.",
+    "codecUnsupported.hint.windowsEdge": "Instala el complemento {link} desde Microsoft Store y recarga la página. O abre la misma carpeta en Chrome — suele reproducir estos vídeos sin complementos.",
+    "codecUnsupported.stillWorks": "El mapa, la gráfica de velocidad y la exportación de clips sin cambios siguen funcionando.",
     "codecUnsupported.unknown": "desconocido",
 
     "unsupported.modal.title": "Algunos archivos no se pueden abrir",
@@ -769,6 +773,8 @@ export const esDict = {
     "export.progress.bytes": "escrito {bytes}",
     "export.error.generic": "Algo salió mal y la exportación se detuvo. Inténtalo de nuevo.",
     "export.error.cannotEncodeResolution": "Este dispositivo no puede guardar el vídeo en esta resolución. Elige una resolución más baja e inténtalo de nuevo.",
+    "export.error.sourceNotPlayable": "Este navegador no puede reproducir este vídeo, así que aquí no se puede guardar con cambios.",
+    "export.error.sourceNotPlayable.asIs": "Guardarlo sin cambios funciona aquí mismo: desactiva las opciones de edición y elige la calidad máxima.",
     "export.error.tooLargeForMemory": "Este clip es demasiado grande para guardarlo en este navegador. Acorta el intervalo, baja la resolución o expórtalo en Chrome.",
     "export.error.diskFull": "No hay suficiente espacio en disco para guardar este clip. Libera espacio para el archivo o acorta el intervalo y vuelve a intentarlo.",
     "export.error.destinationLost": "No se pudo terminar de guardar: el archivo ha desaparecido. Puede que se haya desconectado la unidad o que otra aplicación lo haya movido. Vuelve a intentarlo y guarda en una carpeta de tu ordenador.",

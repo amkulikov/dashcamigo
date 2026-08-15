@@ -21,9 +21,17 @@ import { showSaveFilePicker } from "native-file-system-adapter";
 // export-mode/export-panel), so they are pulled via dynamic import() at their
 // run-time call sites to keep that graph out of the landing entry chunk
 // (guarded by scripts/check-lazy-chunks.mjs). Type-only imports stay static.
+import type { VideoCodec } from "mediabunny";
+
 import type { ExportClipResult } from "../export.js";
 import { reencodeBitrateForQuality } from "../export-bitrate.js";
-import { buildClipGpx, rangeSourceBitrateBps, rangeSourceFps, sliceCandidatesForRange } from "../export-range.js";
+import {
+    buildClipGpx,
+    candidatesInRange,
+    rangeSourceBitrateBps,
+    rangeSourceFps,
+    sliceCandidatesForRange,
+} from "../export-range.js";
 import { recordsHaveGps } from "../parser.js";
 import { t, getCurrentLang, getDateLocale, type Lang } from "../i18n/index.js";
 import type { I18nKey } from "../i18n/keys.js";
@@ -233,6 +241,27 @@ function blurRegionsForExport(detected: readonly BlurRegion[]): BlurRegion[] | n
  *  the config is stream-copy-eligible. quality "medium"/"low" always re-encode. */
 function canStreamCopy(): boolean {
     return exportPanelState.quality === "original" && streamCopyEligibleConfig();
+}
+
+/**
+ * First source file in the export range this browser cannot decode
+ * (canPlay=false, typically HEVC without platform decode support), carried as
+ * {codec} (the codec itself may be unknown/null), or null when everything
+ * decodes. Every re-encode branch decodes exactly these files, so a hit makes
+ * any re-encoding config impossible - only stream-copy remains. The panel
+ * disables Save with guidance; the save handler backstops.
+ */
+function undecodableSource(trip: Trip): { codec: VideoCodec | null } | null {
+    const range = exportPanelState.range;
+    const startSec = range ? range.startTripSec : 0;
+    const endSec = range ? range.endTripSec : trip.timeline.contentDurationSec;
+    for (const channel of state.composition.channelOrder) {
+        const overlapping = candidatesInRange(tripCandidatesByChannel(trip, channel), trip.timeline, startSec, endSec);
+        for (const { candidate } of overlapping) {
+            if (!candidate.canPlay) return { codec: candidate.codec };
+        }
+    }
+    return null;
 }
 
 /** Every widget enable flag, so the stream-copy gate and the args builder agree
@@ -474,6 +503,12 @@ export interface ExportEstimate {
     /** Re-encode path only: the device cannot encode at this resolution at all,
      *  even at the lowest rung. The panel pre-disables Save and shows guidance. */
     blocked: boolean;
+    /** Re-encode path only: a source file in the range this browser cannot
+     *  decode ({codec} may itself be unknown/null) - the export cannot run at
+     *  all with the current config. null when all sources decode (or on the
+     *  stream-copy path, which never decodes). The panel disables Save and
+     *  shows the shared codec advice. */
+    sourceUndecodable: { codec: VideoCodec | null } | null;
     /** Whether the current config (regardless of selected tier) would let the top
      *  tier stream-copy. False = re-encode is unavoidable, so the panel relabels
      *  the top tier "Original" -> "High". */
@@ -526,6 +561,7 @@ export function estimateExport(): ExportEstimate | null {
     const ceiling = stream ? null : ceilingFor(dims, desiredReencodeBitrate);
     const deviceCapped = !!ceiling && ceiling.degraded;
     const blocked = !!ceiling && ceiling.blocked;
+    const sourceUndecodable = stream ? null : undecodableSource(trip);
     // Use the bitrate that will actually be encoded: the device cap when it
     // forced a reduction, else the requested bitrate. Stream-copy uses source.
     let videoBitrate: number;
@@ -562,6 +598,7 @@ export function estimateExport(): ExportEstimate | null {
         sourceBitrate,
         deviceCapped,
         blocked,
+        sourceUndecodable,
         topStreamCopyEligible: topEligible,
     };
 }
@@ -875,6 +912,15 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
     // before the panel's async probe resolved).
     let reencodeBitrate = 0;
     if (!canStreamCopy()) {
+        // Decode preflight: a source this browser cannot decode makes every
+        // re-encode branch impossible. The panel already disables Save with
+        // guidance; this backstops a Save clicked before the panel synced.
+        const undecodable = undecodableSource(trip);
+        if (undecodable) {
+            log.warn("re-encode export blocked: source not decodable in this browser", { codec: undecodable.codec });
+            hooks.onError("export.error.sourceNotPlayable");
+            return;
+        }
         const dims = resolveOutputDims();
         const desiredBitrate = resolveReencodeBitrate(trip, dims);
         const { resolveEncodableH264 } = await import("../transcode/capabilities.js");
