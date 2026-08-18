@@ -185,7 +185,12 @@ export const RX_JUSCAR_PATH_EVENT = /(?:^|\/)event\//i;
 export const RX_JUSCAR_PATH_VIDEO = /(?:^|\/)video\//i;
 
 // Navitel: FILE + 2-digit-year YY MM DD - HH MM SS - 6-digit sequence + optional letter.
-export const RX_NAVITEL = /^FILE(\d{2})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-(\d{6})([A-Z])?\.(?:mov|mp4)$/i;
+// The .ts spelling is a 2-channel motorcycle-cam firmware that writes a plain
+// ISO-BMFF file (ftyp/moov/mdat + the same IDIT/gps0 tail) under a .TS
+// extension, channels split into single-letter F/ R/ folders. Extension-wise
+// it cannot collide with the real MPEG-TS families: none of them start with
+// "FILE".
+export const RX_NAVITEL = /^FILE(\d{2})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-(\d{6})([A-Z])?\.(?:mov|mp4|ts)$/i;
 
 // Unknown-vendor camera family: 14-digit datetime + _ + 7-digit sequence +
 // F/R/I channel letter. Two corpora share the shape: a 3-channel `.mov` trio

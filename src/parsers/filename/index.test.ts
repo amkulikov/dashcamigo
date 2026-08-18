@@ -14,6 +14,7 @@ import {
     RX_HPIM,
     RX_MIVUE,
     RX_MOV_SEQ_FRI,
+    RX_NAVITEL,
     RX_NEOLINE,
     RX_REC_SINGLE,
     RX_VUEROID,
@@ -461,6 +462,52 @@ describe("mio/navman mivue techniques", () => {
         // ...and those names still resolve through their own techniques, not mivue.
         expect(matchFilenameTime(vf("FILE251231-235959F.mp4")).matchedId).toBe("ibox-time");
         expect(matchFilenameTime(vf("FILE251231-235959-000001.mov")).matchedId).toBe("navitel-time");
+    });
+});
+
+// Navitel .TS spelling: a 2-channel motorcycle-cam firmware writes plain
+// ISO-BMFF (same IDIT/gps0 tail as the .mov/.mp4 R-series) under a .TS
+// extension, card layout `<Mode>/<channel letter>/` (Normal/F/, Normal/R/).
+describe("navitel .TS variant", () => {
+    const frontPath = "0817/CARD/Normal/F/FILE260817-180301-000004F.TS";
+    const rearPath = "0817/CARD/Normal/R/FILE260817-180301-000004R.TS";
+
+    it("time, channel and sequence resolve via the navitel techniques", () => {
+        const t = matchFilenameTime(vf("FILE260817-180301-000004F.TS", frontPath));
+        expect(t.matchedId).toBe("navitel-time");
+        expect(t.value?.toISOString()).toBe("2026-08-17T18:03:01.000Z");
+        expect(matchFilenameChannel(vf("FILE260817-180301-000004F.TS")).matchedId).toBe("navitel-channel");
+        expect(classifyFilenameChannel(vf("FILE260817-180301-000004F.TS"))).toEqual({
+            channel: "front",
+            confident: true,
+        });
+        expect(classifyFilenameChannel(vf("FILE260817-180301-000004R.TS"))).toEqual({
+            channel: "rear",
+            confident: true,
+        });
+        expect(matchFilenameSequence(vf("FILE260817-180301-000004F.TS")).matchedId).toBe("navitel-sequence");
+        expect(classifyFilenameSequence(vf("FILE260817-180301-000004F.TS"))).toBe(4);
+    });
+
+    it("camera-key: channel letter, letter folder and mode folder all converge", () => {
+        const front = cameraFingerprint(vf("FILE260817-180301-000004F.TS", frontPath));
+        expect(front, "rear in its own letter folder shares the key").toBe(
+            cameraFingerprint(vf("FILE260817-180301-000004R.TS", rearPath)),
+        );
+        expect(front, "an event clip of the same camera shares the key").toBe(
+            cameraFingerprint(vf("FILE260817-181000-000005F.TS", "0817/CARD/Event/F/FILE260817-181000-000005F.TS")),
+        );
+        expect(front, "a different card root is a different camera").not.toBe(
+            cameraFingerprint(vf("FILE260817-180301-000004F.TS", "0818/OTHER/Normal/F/FILE260817-180301-000004F.TS")),
+        );
+    });
+
+    it("the classic .mov spelling keeps resolving and shares nothing with foreign .ts families", () => {
+        expect(matchFilenameTime(vf("FILE201104-163014-000429F.mov")).matchedId).toBe("navitel-time");
+        expect(RX_NAVITEL.test("FILE260817-180301F.TS")).toBe(false); // no sequence -> not navitel
+        expect(RX_NAVITEL.test("HPIM20260817-180301F.TS")).toBe(false); // hpim prefix
+        expect(matchFilenameChannel(vf("HPIM20260817-180301F.TS")).matchedId).toBe("hpim-channel");
+        expect(matchFilenameChannel(vf("20260817_180301F.ts")).matchedId).toBe("juscar-channel");
     });
 });
 

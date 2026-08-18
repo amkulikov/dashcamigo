@@ -54,6 +54,15 @@ const CASES = [
         extractor: "navitel-tail",
     },
     {
+        // The .TS spelling of the same gps0 tail: a plain ISO-BMFF file under
+        // a .TS extension (2-channel motorcycle cam) - the kind-gate must key
+        // off the box walk, not the extension.
+        label: "Navitel gps0 tail in an ISO-BMFF .TS -> navitel-tail",
+        rel: "navitel/real-anonymized.TS",
+        name: "FILE260817-180301-000004F.TS",
+        extractor: "navitel-tail",
+    },
+    {
         label: "Thinkware F200 PRO subtitle -> nmea-subtitle",
         rel: "thinkware/real-anonymized.mp4",
         name: "REC_2026_06_01_21_16_47_F.MP4",

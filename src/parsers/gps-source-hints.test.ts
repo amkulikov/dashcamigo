@@ -44,6 +44,7 @@ describe("classifyGpsSource", () => {
         expect(classifyGpsSource(vf("20211011_141314_NF.mp4"))).toBe("embedded"); // BlackVue X
         expect(classifyGpsSource(vf("REC20250607-180617-527-A.mp4"))).toBe("embedded"); // Carcam
         expect(classifyGpsSource(vf("FILE201104-163014-000429F.mov"))).toBe("embedded"); // Navitel
+        expect(classifyGpsSource(vf("FILE260817-180301-000004F.TS"))).toBe("embedded"); // Navitel .TS spelling
         expect(classifyGpsSource(vf("FILE230422-154515F.MOV"))).toBe("embedded"); // iBox (gps0 tail-atoms)
         expect(classifyGpsSource(vf("2023_0821_180010_062F.MP4"))).toBe("embedded"); // Novatek VIOFO
         // Viofo E (impact) / T (telephoto) letters ride the same novatek hint.

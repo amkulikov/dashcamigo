@@ -378,6 +378,8 @@ const movSeqFriCameraKey: FilenameCameraKeyTechnique = {
     },
 };
 
+const NAVITEL_STRIP_FOLDERS = ["front", "rear", "f", "r", "normal", "event", "parking", "manual"];
+
 const navitelCameraKey: FilenameCameraKeyTechnique = {
     id: "navitel-camera-key",
     extract(file: VendorFile): string | null {
@@ -391,7 +393,12 @@ const navitelCameraKey: FilenameCameraKeyTechnique = {
         } else {
             masked = maskName(file.file.name);
         }
-        const dir = strippedParentDir(file.relativePath, ["front", "rear"]);
+        // The .ts variant lays the card out as `<Mode>/<channel letter>/`
+        // (Normal/F/, Normal/R/) - the hpim layout, same strip rationale:
+        // both levels are per-clip attributes, not camera identity, and an
+        // event clip written mid-loop must chain into the same trip as its
+        // normal siblings. Spelled-out names cover hand-split channels.
+        const dir = strippedParentDir(file.relativePath, NAVITEL_STRIP_FOLDERS);
         return `navitel|${dir}|${masked}`;
     },
 };
