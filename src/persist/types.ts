@@ -16,7 +16,7 @@ import type { VideoCandidate } from "../trips.js";
  * hints + extractors + sidecars) that is easy to get wrong, and a silently
  * stale cache is worse than one extra re-index.
  */
-export const INDEX_CACHE_VERSION = 10;
+export const INDEX_CACHE_VERSION = 11;
 
 /**
  * Cheap cross-session identity of a file inside a picked folder, matchable

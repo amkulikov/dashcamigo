@@ -27,6 +27,8 @@ import {
     RX_DDPAI_NORMAL,
     RX_DDPAI_TIMELAPSE,
     RX_E_ACE,
+    RX_FITCAMX,
+    RX_FITCAMX_MP4,
     RX_FITCAMX_PATH_FRONT,
     RX_FITCAMX_PATH_REAR,
     RX_FORD,
@@ -222,6 +224,17 @@ const eaceChannel: FilenameChannelTechnique = {
 const fitcamxChannel: FilenameChannelTechnique = {
     id: "fitcamx-channel",
     extract(file: VendorFile): ChannelMatch | null {
+        // MP4 variant: channel is the middle letter of the 3-letter suffix.
+        // A/B is an index convention (both channels share one folder), not a mnemonic
+        // -> guess, so the pair still lands in one frame but the UI shows a
+        // positional label instead of asserting a mount.
+        const mp4 = file.file.name.match(RX_FITCAMX_MP4);
+        if (mp4) return mp4[3]!.toUpperCase() === "A" ? guess("front") : guess("rear");
+        // .ts variant: channel comes from the Movie|EMR vs Movie_E|EMR_E folder
+        // pair. The name gate is load-bearing: a bare path claim would mark ANY
+        // file inside an EMR/ or Movie/ folder sure("front"), including other
+        // formats' rear files, and break their channel pairing.
+        if (!RX_FITCAMX.test(file.file.name)) return null;
         const path = file.relativePath;
         if (RX_FITCAMX_PATH_REAR.test(path)) return sure("rear");
         if (RX_FITCAMX_PATH_FRONT.test(path)) return sure("front");

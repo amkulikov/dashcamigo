@@ -18,6 +18,8 @@ import {
     RX_ESCORT_PATH_EVENT,
     RX_ESCORT_PATH_MANUAL,
     RX_ESCORT_PATH_NORMAL,
+    RX_FITCAMX,
+    RX_FITCAMX_MP4,
     RX_FITCAMX_PATH_EVENT,
     RX_FITCAMX_PATH_NORMAL,
     RX_FORD,
@@ -159,6 +161,9 @@ const escortMode: FilenameModeTechnique = {
 const fitcamxMode: FilenameModeTechnique = {
     id: "fitcamx-mode",
     extract(file: VendorFile): RecordingMode | null {
+        // Name gate: a bare Movie|EMR path claim would label other formats'
+        // files that happen to sit in same-named folders (see fitcamx-channel).
+        if (!RX_FITCAMX.test(file.file.name) && !RX_FITCAMX_MP4.test(file.file.name)) return null;
         const path = file.relativePath;
         if (RX_FITCAMX_PATH_EVENT.test(path)) return "event";
         if (RX_FITCAMX_PATH_NORMAL.test(path)) return "normal";
@@ -401,12 +406,12 @@ export const FILENAME_MODE: readonly FilenameModeTechnique[] = [
     ddpaiMode,
     eaceMode,
     escortMode,
-    // novatek-mode must precede fitcamx-mode: fitcamx's claim is path-only
-    // (Movie/ with no filename gate) and would otherwise label every Viofo
-    // clip under DCIM/Movie/ "normal", shadowing the P/E mode letter and the
-    // Movie/RO/ lock folder. Mirrors FILENAME_CHANNEL, where the novatek*
-    // techniques already precede fitcamx. Safe: novatek regexes are
-    // name-gated and cannot match FitCamX's \d{14}_\d{6}[A-Z].ts names.
+    // novatek-mode precedes fitcamx-mode so the mnemonic P/E letter and the
+    // Movie/RO/ lock folder stay authoritative regardless of walk changes;
+    // fitcamx's Movie|EMR path claim is additionally name-gated, so it cannot
+    // reach Viofo clips under DCIM/Movie/ at all. Mirrors FILENAME_CHANNEL,
+    // where the novatek* techniques already precede fitcamx. Safe: novatek
+    // regexes are name-gated and cannot match FitCamX names.
     novatekMode,
     fitcamxMode,
     fordMode,

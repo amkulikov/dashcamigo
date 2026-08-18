@@ -34,6 +34,7 @@ import {
     RX_E_ACE,
     RX_ESCORT,
     RX_FITCAMX,
+    RX_FITCAMX_MP4,
     RX_FORD,
     RX_HPIM,
     RX_IBOX,
@@ -285,14 +286,32 @@ const escortCameraKey: FilenameCameraKeyTechnique = {
     },
 };
 
+const FITCAMX_STRIP_FOLDERS = ["movie", "movie_e", "emr", "emr_e"];
+
 const fitcamxCameraKey: FilenameCameraKeyTechnique = {
     id: "fitcamx-camera-key",
     extract(file: VendorFile): string | null {
-        if (!RX_FITCAMX.test(file.file.name)) return null;
-        // Channel comes purely from parent folder (Movie/Movie_E/EMR/EMR_E).
-        // Strip the channel/mode folder; nothing to remove from the name itself.
-        const dir = strippedParentDir(file.relativePath, ["movie", "movie_e", "emr", "emr_e"]);
-        return `fitcamx|${dir}|${maskName(file.file.name)}`;
+        const name = file.file.name;
+        // MP4 variant: the 3-letter suffix ends in <channel><mode letter>.
+        // Both are per-clip attributes, not camera identity - the corpus shows
+        // EMR clips running the uninterrupted minute cadence of a normal loop
+        // (event written INSTEAD of the normal segment, the redtiger
+        // rationale), and the .ts branch below already strips the mode FOLDER
+        // for the same reason. Drop both letters so the A/B pair and the
+        // normal/event siblings all converge on one key.
+        if (RX_FITCAMX_MP4.test(name)) {
+            const suffixStart = name.length - ".mp4".length - 2;
+            const stripped = name.slice(0, suffixStart) + name.slice(suffixStart + 2);
+            const masked = maskName(stripped);
+            const dir = strippedParentDir(file.relativePath, FITCAMX_STRIP_FOLDERS);
+            return `fitcamx|${dir}|${masked}`;
+        }
+        if (!RX_FITCAMX.test(name)) return null;
+        // .ts variant: channel comes purely from parent folder (Movie/Movie_E/
+        // EMR/EMR_E). Strip the channel/mode folder; nothing to remove from
+        // the name itself.
+        const dir = strippedParentDir(file.relativePath, FITCAMX_STRIP_FOLDERS);
+        return `fitcamx|${dir}|${maskName(name)}`;
     },
 };
 

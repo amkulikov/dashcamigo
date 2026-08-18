@@ -10,6 +10,7 @@ import type { VendorFile } from "../types.js";
 import {
     RX_70MAI,
     RX_DDPAI_NORMAL,
+    RX_FITCAMX_MP4,
     RX_FORD,
     RX_HPIM,
     RX_MIVUE,
@@ -1063,6 +1064,91 @@ describe("redtiger techniques", () => {
         // The stamp+counter neighbours keep their own techniques.
         expect(matchFilenameTime(vf("20260708073453_000002F.ts")).matchedId).toBe("fitcamx-time");
         expect(matchFilenameTime(vf("20260708073453_000002.MP4")).matchedId).toBe("ddpai-time");
+    });
+});
+
+// FitCamX MP4 variant: `<14-digit>_<6-digit>A<A|B><mode letter>.MP4`, both
+// channels in one mode folder (EMR/), channel = the middle suffix letter (an
+// index convention, not a mnemonic). Filename-only corpus (diagnostic report);
+// embedded GPS unknown pending a real sample. The .ts variant keeps its
+// folder-based channel/mode claims, gated on the name shape.
+describe("fitcamx techniques", () => {
+    const frontPath = "EMR/20260807191037_000922AAE.MP4";
+    const rearPath = "EMR/20260807191037_000923ABE.MP4";
+
+    it("MP4 suffix letters map to guessed channels (A pairs as front, B as rear)", () => {
+        const ch = matchFilenameChannel(vf("20260807191037_000922AAE.MP4", frontPath));
+        expect(ch.matchedId).toBe("fitcamx-channel");
+        expect(ch.value).toEqual({ channel: "front", confident: false });
+        expect(classifyFilenameChannel(vf("20260807191037_000923ABE.MP4", rearPath))).toEqual({
+            channel: "rear",
+            confident: false,
+        });
+    });
+
+    it("camera-key: the A/B pair in one shared folder converges on one key", () => {
+        const front = cameraFingerprint(vf("20260807191037_000922AAE.MP4", frontPath));
+        expect(front, "rear shares the key despite the differing suffix").toBe(
+            cameraFingerprint(vf("20260807191037_000923ABE.MP4", rearPath)),
+        );
+        expect(front, "a different card root is a different camera").not.toBe(
+            cameraFingerprint(vf("20260807191037_000922AAE.MP4", "other/EMR/20260807191037_000922AAE.MP4")),
+        );
+    });
+
+    it("mode from the folder: EMR -> event for the MP4 shape; time stays generic", () => {
+        expect(classifyFilenameMode(vf("20260807191037_000922AAE.MP4", frontPath))).toBe("event");
+        const t = matchFilenameTime(vf("20260807191037_000922AAE.MP4", frontPath));
+        expect(t.matchedId).toBe("generic-datetime");
+        expect(t.value?.toISOString()).toBe("2026-08-07T19:10:37.000Z");
+    });
+
+    it(".ts variant keeps folder channels: Movie -> front, Movie_E -> rear, both sure", () => {
+        expect(classifyFilenameChannel(vf("20260101120000_000188A.ts", "Movie/20260101120000_000188A.ts"))).toEqual({
+            channel: "front",
+            confident: true,
+        });
+        expect(classifyFilenameChannel(vf("20260101120000_000188A.ts", "Movie_E/20260101120000_000188A.ts"))).toEqual({
+            channel: "rear",
+            confident: true,
+        });
+    });
+
+    it("regression: a foreign file inside an EMR/ folder gets no fitcamx claim", () => {
+        // The path claims are name-gated: without the gate ANY file in an
+        // EMR|Movie folder would be marked sure("front") + a mode, breaking
+        // other formats' channel pairing.
+        expect(matchFilenameChannel(vf("clip.mp4", "EMR/clip.mp4")).matchedId).toBeNull();
+        expect(matchFilenameMode(vf("clip.mp4", "EMR/clip.mp4")).matchedId).toBeNull();
+    });
+
+    it("an unseen trailing mode letter still pairs: channel from A/B, mode from the folder", () => {
+        // The corpus is EMR-only, so every observed name ends in E; the trailing
+        // letter mirrors the mode folder and normal clips will carry another
+        // value. Pinning E would un-pair them, hence [A-Z] + folder-decided mode.
+        const normalPath = "Movie/20260807191037_000100AAN.MP4";
+        expect(classifyFilenameChannel(vf("20260807191037_000100AAN.MP4", normalPath))).toEqual({
+            channel: "front",
+            confident: false,
+        });
+        expect(classifyFilenameMode(vf("20260807191037_000100AAN.MP4", normalPath))).toBe("normal");
+        expect(cameraFingerprint(vf("20260807191037_000100AAN.MP4", normalPath)), "A/B pair converges").toBe(
+            cameraFingerprint(vf("20260807191037_000101ABN.MP4", "Movie/20260807191037_000101ABN.MP4")),
+        );
+        expect(
+            cameraFingerprint(vf("20260807191037_000100AAN.MP4", normalPath)),
+            "an event clip of the same camera shares the key (mode letter + folder are per-clip)",
+        ).toBe(cameraFingerprint(vf("20260807191037_000922AAE.MP4", frontPath)));
+    });
+
+    it("negative: RX_FITCAMX_MP4 pins the suffix language", () => {
+        expect(RX_FITCAMX_MP4.test("20260807191037_000922AAE.ts")).toBe(false); // .mp4 only
+        expect(RX_FITCAMX_MP4.test("20260807191037_000922ACE.MP4")).toBe(false); // channel letter is A|B
+        expect(RX_FITCAMX_MP4.test("20260807191037_000922BAE.MP4")).toBe(false); // leading letter is literal A
+        expect(RX_FITCAMX_MP4.test("20260807191037_000922AA1.MP4")).toBe(false); // trailing slot is a letter
+        expect(RX_FITCAMX_MP4.test("20260807191037_000922F.MP4")).toBe(false); // single letter = RedTiger
+        // The single-letter .MP4 twin stays with RedTiger.
+        expect(matchFilenameChannel(vf("20260807191037_000922F.MP4")).matchedId).toBe("redtiger-channel");
     });
 });
 

@@ -126,6 +126,19 @@ export const RX_ESCORT_PATH_NORMAL = /(?:^|\/)normal\//i;
 // FitCamX: 14-digit timestamp + _ + 6-digit token + letter + .ts.
 // Channel/mode come from parent folder (Movie / Movie_E / EMR / EMR_E).
 export const RX_FITCAMX = /^(\d{14})_(\d{6})([A-Z])\.ts$/i;
+// FitCamX MP4 variant (2-channel HEVC models): same stamp+counter language,
+// but a 3-letter suffix and BOTH channels dropped into one mode folder (EMR/).
+// Decoded from a diagnostic-report corpus: the middle letter A/B is the channel
+// index (a pair shares one to-the-second timestamp and interleaves one shared
+// counter; A runs the higher bitrate of the two), the leading A is constant -
+// kept literal until a sample shows another value. The corpus (EMR-only, all
+// clips locked/emergency) ends every name in E, which lines up with the folder
+// - so the trailing letter is read as a mode marker and left [A-Z]: normal
+// clips of the same camera will carry some other letter, and pinning E would
+// un-pair them. The FOLDER stays the mode source either way (the letter->mode
+// table is unknown). Filename-only knowledge; embedded GPS unknown, so no
+// source hint.
+export const RX_FITCAMX_MP4 = /^(\d{14})_(\d{6})A([AB])([A-Z])\.mp4$/i;
 export const RX_FITCAMX_PATH_REAR = /(?:^|\/)(movie_e|emr_e)\//i;
 export const RX_FITCAMX_PATH_FRONT = /(?:^|\/)(movie|emr)\//i;
 export const RX_FITCAMX_PATH_EVENT = /(?:^|\/)(emr|emr_e)\//i;
