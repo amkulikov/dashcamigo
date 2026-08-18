@@ -12,6 +12,10 @@ describe("feature sitemap entries", () => {
     const indexable = getIndexableSeoLocales();
     const slugCount = getFeatureListings().length;
 
+    it("omits lastmod when per-URL source history is unavailable", () => {
+        expect(entries.every((entry) => entry.lastmod === undefined)).toBe(true);
+    });
+
     it("includes every feature page × every indexable locale", () => {
         expect(entries.length).toBe(slugCount * indexable.length);
     });

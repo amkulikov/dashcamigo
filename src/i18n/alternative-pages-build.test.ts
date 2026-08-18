@@ -13,6 +13,10 @@ describe("alternative sitemap entries", () => {
     const indexable = getIndexableSeoLocales();
     const slugCount = getAlternativeSlugs().length;
 
+    it("omits lastmod when per-URL source history is unavailable", () => {
+        expect(entries.every((entry) => entry.lastmod === undefined)).toBe(true);
+    });
+
     it("includes an /alternatives/ index entry for every indexable locale", () => {
         const indexEntries = entries.filter((e) => /\/alternatives\/$/.test(e.loc));
         expect(indexEntries.length).toBe(indexable.length);

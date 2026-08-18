@@ -41,7 +41,6 @@ import {
     COMMUNITY_ALT_LABELS,
 } from "./alternative-pages-content.js";
 import { renderFeatureLinksHtml } from "./feature-links.js";
-import { maxGitMtimeIso } from "./git-mtime.js";
 import { escapeAttr, escapeText, stringifyJsonLd } from "./html-utils.js";
 import { renderHubCta } from "./hub-cta.js";
 import type { SeoBuildOptions } from "./seo-prerender.js";
@@ -54,19 +53,6 @@ import {
     buildOgLocaleAlternatesHtml,
     pathPrefixFor,
 } from "./vendor-pages.js";
-
-// Source files that contribute to every alternative page's HTML - their max git
-// mtime is the sitemap <lastmod> for these URLs (same policy as vendor-pages).
-const ALT_SHARED_SOURCES = [
-    "vite-plugins/alternative-pages.ts",
-    "vite-plugins/alternative-pages-content.ts",
-    // Shared page chrome (BRAND_ICON_SVG, buildHreflangLinksHtml,
-    // pathPrefixFor, ...) is imported from vendor-pages.ts and rendered
-    // into every alternative page - its mtime is part of the content.
-    "vite-plugins/vendor-pages.ts",
-    "src/i18n/seo-config.ts",
-    "vite-plugins/html-utils.ts",
-];
 
 // Slugs of the competitor pages. Drives VendorContent-style discrimination and
 // the dev/route matcher. Order = sitemap order + "other tools" cross-link order.
@@ -2076,13 +2062,9 @@ export function getAlternativeSitemapEntries(): AltSitemapEntry[] {
     const defaultLang = getDefaultSeoLocale().lang;
     const defaultSegment = getDefaultSeoLocale().urlSegment;
 
-    // lastmod is shared by every alternatives URL: ALL page content (en/ru
-    // copy in ALTERNATIVES, community translations, shared chrome, escaping)
-    // lives in ALT_SHARED_SOURCES. The app dictionaries (src/i18n/<lang>.ts)
-    // deliberately do NOT contribute - these pages render nothing from them
-    // (only `type Lang` is imported), so an app-translation PR must not bump
-    // these URLs' <lastmod>.
-    const sharedLastmod = maxGitMtimeIso(ALT_SHARED_SOURCES) ?? undefined;
+    // Locale and competitor content shares monolithic source files. Their
+    // mtimes cannot identify which URL changed, so omit lastmod rather than
+    // publish a site-wide false freshness signal.
 
     const indexAlternates = buildHreflangAlternatesMap(
         (loc) => `${SITE_ORIGIN}/${loc.urlSegment}/alternatives/`,
@@ -2095,7 +2077,6 @@ export function getAlternativeSitemapEntries(): AltSitemapEntry[] {
             priority: loc.lang === defaultLang ? "0.8" : "0.7",
             alternates: indexAlternates,
             xDefaultUrl: indexXDefault,
-            lastmod: sharedLastmod,
         });
     }
 
@@ -2111,7 +2092,6 @@ export function getAlternativeSitemapEntries(): AltSitemapEntry[] {
                 priority: loc.lang === defaultLang ? "0.7" : "0.6",
                 alternates: compAlternates,
                 xDefaultUrl: compXDefault,
-                lastmod: sharedLastmod,
             });
         }
     }

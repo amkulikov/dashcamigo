@@ -43,28 +43,9 @@ import {
     getSeoLocaleByLang,
     type SeoLocale,
 } from "../src/i18n/seo-config.js";
-import { maxGitMtimeIso } from "./git-mtime.js";
 import { escapeAttr, escapeText, stringifyJsonLd } from "./html-utils.js";
 import { renderHubCta } from "./hub-cta.js";
 import type { SeoBuildOptions } from "./seo-prerender.js";
-
-// Source files that contribute to every vendor page's HTML. Shared across
-// all locale × vendor combinations - VENDOR_SHARED_SOURCES is the constant
-// part, per-call we add the locale dict + (optionally) the vendor-specific
-// source if vendors ever move out of this single file. lastmod for the
-// /cameras/<slug>/ pages = max git mtime of the shared sources + dict.
-const VENDOR_SHARED_SOURCES = [
-    "vite-plugins/vendor-pages.ts",
-    // Community-locale FAQ translations embedded into the rendered pages
-    // (COMMUNITY_FAQ) - an FAQ edit must bump <lastmod> for vendor pages.
-    "vite-plugins/vendor-community-faq.ts",
-    "vite-plugins/supported-brands.ts",
-    "src/i18n/seo-config.ts",
-    // Same reasoning as in seo-prerender.ts HOMEPAGE_SHARED_SOURCES:
-    // html-utils is the escaping layer that produces the final HTML, so
-    // its mtime is part of "when did this URL's content change".
-    "vite-plugins/html-utils.ts",
-];
 
 // HTML snippet inserted right after <head> open when SeoBuildOptions.noIndex
 // is set. Keeps the directive ahead of <title> so crawlers see it during
@@ -2223,12 +2204,9 @@ export function getVendorSitemapEntries(): VendorSitemapEntry[] {
     const defaultLang = getDefaultSeoLocale().lang;
     const defaultSegment = getDefaultSeoLocale().urlSegment;
 
-    // lastmod is shared by every vendor URL: ALL page content (en/ru copy in
-    // VENDORS, community FAQ, chrome, escaping) lives in VENDOR_SHARED_SOURCES.
-    // The app dictionaries (src/i18n/<lang>.ts) deliberately do NOT contribute -
-    // vendor pages render nothing from them (only `type Lang` is imported), so
-    // an app-translation PR must not bump these URLs' <lastmod>.
-    const sharedLastmod = maxGitMtimeIso(VENDOR_SHARED_SOURCES) ?? undefined;
+    // Locale and vendor content shares monolithic source files. Their mtimes
+    // cannot identify which URL changed, so omit lastmod rather than publish
+    // a site-wide false freshness signal.
 
     // /cameras/ section index alternates: every locale's /cameras/ page.
     const indexAlternates = buildHreflangAlternatesMap(
@@ -2242,18 +2220,12 @@ export function getVendorSitemapEntries(): VendorSitemapEntry[] {
             priority: loc.lang === defaultLang ? "0.8" : "0.7",
             alternates: indexAlternates,
             xDefaultUrl: indexXDefault,
-            lastmod: sharedLastmod,
         });
     }
 
     // Individual vendor pages: one entry per vendor × indexable locale
     // (7 vendors × 10 locales = 70 today). Each vendor has its own alternates
-    // map (different from /cameras/ siblings). lastmod is the same across all
-    // vendors today: vendor content lives inside vendor-pages.ts itself
-    // (VENDORS array) plus vendor-community-faq.ts, so any vendor-content
-    // change touches a shared source and bumps every vendor at once. If
-    // vendor content ever splits into per-vendor files (e.g.
-    // vite-plugins/vendor-content/70mai.ts), pass that path here too.
+    // map (different from /cameras/ siblings).
     for (const vendor of VENDORS) {
         const vendorAlternates = buildHreflangAlternatesMap(
             (loc) => `${SITE_ORIGIN}/${loc.urlSegment}/cameras/${vendor.slug}/`,
@@ -2266,10 +2238,8 @@ export function getVendorSitemapEntries(): VendorSitemapEntry[] {
                 priority: loc.lang === defaultLang ? "0.7" : "0.6",
                 alternates: vendorAlternates,
                 xDefaultUrl: vendorXDefault,
-                lastmod: sharedLastmod,
             });
         }
     }
     return entries;
 }
-

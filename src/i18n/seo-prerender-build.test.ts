@@ -43,6 +43,10 @@ describe("vendor sitemap entries", () => {
     const entries = getVendorSitemapEntries();
     const indexable = getIndexableSeoLocales();
 
+    it("omits lastmod when per-URL source history is unavailable", () => {
+        expect(entries.every((entry) => entry.lastmod === undefined)).toBe(true);
+    });
+
     it("includes /cameras/ index entry for every indexable locale", () => {
         // 12 indexable locales × 1 /cameras/ index = 12 entries.
         const indexEntries = entries.filter((e) => /\/cameras\/$/.test(e.loc));

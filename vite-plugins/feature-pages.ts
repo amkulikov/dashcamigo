@@ -34,7 +34,6 @@ import {
     getSeoLocaleByLang,
 } from "../src/i18n/seo-config.js";
 import { COMMUNITY_FEATURE_CONTENT, COMMUNITY_FEATURE_LABELS } from "./feature-pages-content.js";
-import { maxGitMtimeIso } from "./git-mtime.js";
 import { escapeAttr, escapeText, stringifyJsonLd } from "./html-utils.js";
 import type { SeoBuildOptions } from "./seo-prerender.js";
 // Shared page chrome - reused from vendor-pages.ts rather than duplicated
@@ -46,20 +45,6 @@ import {
     buildOgLocaleAlternatesHtml,
     pathPrefixFor,
 } from "./vendor-pages.js";
-
-// Source files that contribute to every feature page's HTML - their max git
-// mtime is the sitemap <lastmod> for these URLs (same policy as alternative
-// pages: app dictionaries deliberately do NOT contribute - these pages render
-// nothing from them, only `type Lang` is imported).
-const FEATURE_SHARED_SOURCES = [
-    "vite-plugins/feature-pages.ts",
-    "vite-plugins/feature-pages-content.ts",
-    // Shared chrome (BRAND_ICON_SVG, buildHreflangLinksHtml, pathPrefixFor, ...)
-    // is imported from vendor-pages.ts and rendered into every feature page.
-    "vite-plugins/vendor-pages.ts",
-    "src/i18n/seo-config.ts",
-    "vite-plugins/html-utils.ts",
-];
 
 // Slugs of the use-case pages. The slug is intentionally general (not
 // "front-and-rear", not "speed-gps") so it survives the feature growing:
@@ -901,7 +886,9 @@ export function getFeatureSitemapEntries(): FeatureSitemapEntry[] {
     const indexable = getIndexableSeoLocales();
     const defaultLang = getDefaultSeoLocale().lang;
     const defaultSegment = getDefaultSeoLocale().urlSegment;
-    const sharedLastmod = maxGitMtimeIso(FEATURE_SHARED_SOURCES) ?? undefined;
+    // Locale and feature content shares monolithic source files. Their mtimes
+    // cannot identify which URL changed, so omit lastmod rather than publish
+    // a site-wide false freshness signal.
 
     for (const page of FEATURE_PAGES) {
         const alternates = buildHreflangAlternatesMap((loc) => `${SITE_ORIGIN}/${loc.urlSegment}/${page.slug}/`);
@@ -913,7 +900,6 @@ export function getFeatureSitemapEntries(): FeatureSitemapEntry[] {
                 priority: loc.lang === defaultLang ? "0.7" : "0.6",
                 alternates,
                 xDefaultUrl: xDefault,
-                lastmod: sharedLastmod,
             });
         }
     }

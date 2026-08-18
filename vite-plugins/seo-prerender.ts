@@ -33,10 +33,10 @@
 //  - sitemapPlugin: writes dist/sitemap.xml with all locale URLs + vendor
 //    pages + privacy.html. Each <url> carries xhtml:link alternates pointing
 //    to ALL indexable locale variants of THAT specific URL (complete graph
-//    matches the in-HTML hreflang). <lastmod> is derived per URL from the
-//    git mtimes of the source files that produce it (see git-mtime.ts);
-//    stamping build-date on every URL would train crawlers to ignore the
-//    signal site-wide, so when git history is unusable we omit it instead.
+//    matches the in-HTML hreflang). <lastmod> is emitted only when a URL has
+//    independently trackable source history (see git-mtime.ts). Programmatic
+//    families backed by shared monolithic files omit it; a shared file mtime
+//    would falsely claim that every generated URL changed together.
 //
 // HTML rewriting is regex-based - the source HTML is under our control,
 // attribute order is stable post-minifier-terser (sortAttributes: true),
@@ -359,19 +359,18 @@ export function sitemapPlugin(options: SeoBuildOptions = {}): Plugin {
             }
 
             // Vendor pages: emitted by vendor-pages.ts and described in
-            // getVendorSitemapEntries(). Already carry per-page alternates
-            // and (since the lastmod migration) per-URL lastmod derived
-            // from the vendor entry / dict / vendor-pages.ts git mtimes.
+            // getVendorSitemapEntries(). They carry per-page alternates and
+            // omit lastmod while their content shares monolithic files.
             entries.push(...getVendorSitemapEntries());
 
             // Competitor "alternative-to" pages: /alternatives/ hub + per
-            // competitor, per locale. Same per-page-alternates + git-mtime
-            // lastmod policy as vendor pages (see getAlternativeSitemapEntries).
+            // competitor, per locale. Same alternates and omitted-lastmod
+            // policy as vendor pages (see getAlternativeSitemapEntries).
             entries.push(...getAlternativeSitemapEntries());
 
             // Use-case feature pages: /<lang>/<slug>/ for combine-cameras and
-            // data-overlay, per locale. Same per-page-alternates + git-mtime
-            // lastmod policy as the vendor / alternative pages.
+            // data-overlay, per locale. Same alternates and omitted-lastmod
+            // policy as the vendor / alternative pages.
             entries.push(...getFeatureSitemapEntries());
 
             // Privacy is a standalone page with internal lang switcher
