@@ -7,8 +7,15 @@ User-facing changes, newest first. Dates are when the change landed on
 [beta](https://beta.dashcamigo.app); production picks it up with the next
 release tag. Localized texts ship inside the app (the "What's new" panel).
 
+## 2026-08-18
+
+- **Fixed:** RedTiger and FitCamX two-camera recordings now join the front and rear cameras into one trip instead of two separate ones.
+- **New camera support:** Navitel recordings in .TS files now show their GPS track, with correct speed and direction.
+
 ## 2026-08-15
 
+- **Fixed:** Picking a whole memory card or drive now shows it as one source with its real name.
+- **Improved:** When a video can't be played in your browser (often HEVC on Windows), the player now explains why and shows how to fix it.
 - **Fixed:** Fixed false speed spikes on the speed chart for 70mai 4K (A810, M500).
 - **New:** Street and place names on the map are now adjustable — a gear right on the map sets the text size and how many street names to show.
 
