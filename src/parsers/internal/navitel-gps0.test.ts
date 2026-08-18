@@ -1,8 +1,10 @@
 // Unit tests for the Navitel gps0 extractor (low-level layer): parseIditDate,
 // decodeGps0Record, parseNavitelTail on hand-crafted bytes.
-// End-to-end tests against a real MP4 live in navitel.test.ts.
+// End-to-end tests against real-byte fixtures live in
+// __fixtures__/navitel/*.test.ts and __fixtures__/ibox/synthetic.test.ts.
 
 import { describe, it, expect } from "vitest";
+import { KNOTS_TO_MS } from "../types.js";
 import { ddmmToDegrees } from "./ddmm.js";
 import {
     decodeGps0Record,
@@ -103,9 +105,11 @@ describe("decodeGps0Record", () => {
         expect(decodeGps0Record(view, 0, 2020, 11, "x")).toBeNull();
     });
 
-    it("decodes speed from bytes 20-21 as plain km/h (not the altitude at 16)", () => {
-        // altitude 140 m next to speed 68 km/h - the pre-fix parser read the
+    it("decodes speed from bytes 20-21 as provisional km/h (not the altitude at 16)", () => {
+        // altitude 140 m next to speed 68 - the pre-fix parser read the
         // altitude bytes and reported a constant ~14 km/h on the real sample.
+        // The unit itself (km/h vs knots) is firmware-dependent and resolved
+        // later by parseNavitelTail's calibration pass.
         const view = makeRecord({ altitude: 140, speed: 68 });
         const rec = decodeGps0Record(view, 0, 2020, 11, "x");
         expect(rec!.speedMs).toBeCloseTo(68 / 3.6, 4);
@@ -131,10 +135,12 @@ describe("decodeGps0Record", () => {
         expect(rec!.unixSeconds).toBeCloseTo(Date.UTC(2020, 10, 4, 13, 30, 15) / 1000, 5);
     });
 
-    it("decodes course as byte * 2 and drops implausible values", () => {
+    it("decodes course as provisional byte * 2 and drops implausible values", () => {
+        // The encoding (halved vs mod 256) is firmware-dependent and resolved
+        // later by parseNavitelTail's calibration pass.
         const rec = decodeGps0Record(makeRecord({ course: 46 }), 0, 2020, 11, "x");
         expect(rec!.bearingDeg).toBe(92);
-        // >= 180 raw would be >= 360 deg - treated as "no course".
+        // >= 180 raw would be >= 360 deg under the halved reading - "no course".
         const bad = decodeGps0Record(makeRecord({ course: 200 }), 0, 2020, 11, "x");
         expect(bad!.bearingDeg).toBe(0);
     });
@@ -164,6 +170,7 @@ describe("parseNavitelTail", () => {
             hour: number;
             min: number;
             sec: number;
+            course?: number;
         }>,
     ): Uint8Array {
         const payload = Buffer.alloc(records.length * 32);
@@ -179,6 +186,7 @@ describe("parseNavitelTail", () => {
             payload.writeUInt8(r.hour, off + 25);
             payload.writeUInt8(r.min, off + 26);
             payload.writeUInt8(r.sec, off + 27);
+            payload.writeUInt8(r.course ?? 0, off + 28);
             payload.writeUInt8(0x01, off + 29);
             payload.writeUInt8(0x01, off + 30);
         }
@@ -299,6 +307,87 @@ describe("parseNavitelTail", () => {
         expect(parsed!.records[0]!.unixSeconds).toBeCloseTo(Date.UTC(2025, 1, 1, 1, 0, 0) / 1000, 0);
     });
 
+    // Speed-unit and course-encoding calibration against the trajectory.
+    // Two firmware dialects share the 32-byte layout: km/h + course/2
+    // (Navitel R600-1, iBOX iCON) vs knots + course mod 256 (the .TS
+    // motorcycle cam, OSD-verified). Tracks below are built at a known
+    // ground speed: 1 arcmin of latitude = 1852 m, so 20 m/s due north is
+    // +0.6479 arcmin of DDmm per minute, i.e. +0.010799 per second.
+    describe("speed/course dialect calibration", () => {
+        const LAT_ARCMIN_PER_20M = 20 / 1852; // ddmm minutes per 20 m going north
+        const LON_ARCMIN_PER_20M_AT50N = 20 / (1852 * Math.cos((50 * Math.PI) / 180));
+        const idit = () => makeIditBytes("2020-11-04 16:30:14");
+
+        /** N records at 1 Hz along a constant displacement vector, ddmm units.
+         *  Base 50°30' / 30°30' keeps naive ddmm +/- arithmetic inside the
+         *  0..60 minutes field for any direction (3000.0 minus a step would be
+         *  2999.99 = invalid NMEA, not a position slightly west). */
+        function track(opts: { n: number; dLat: number; dLon: number; speed: number; course: number }) {
+            return Array.from({ length: opts.n }, (_, i) => ({
+                lat: 5030.0 + i * opts.dLat,
+                lon: 3030.0 + i * opts.dLon,
+                speed: opts.speed,
+                day: 4,
+                hour: 13,
+                min: 30,
+                sec: 10 + i,
+                course: opts.course,
+            }));
+        }
+
+        it("detects a knots speed field from the implied/field ratio", () => {
+            // 20 m/s due north = 72 km/h = 38.9 kn; field says 39 -> knots.
+            const gps0 = makeGps0Bytes(track({ n: 10, dLat: LAT_ARCMIN_PER_20M, dLon: 0, speed: 39, course: 0 }));
+            const parsed = parseNavitelTail(idit(), gps0, "x.TS");
+            expect(parsed!.records[0]!.speedMs).toBeCloseTo(39 * KNOTS_TO_MS, 3);
+        });
+
+        it("keeps km/h when the field already matches the trajectory", () => {
+            const gps0 = makeGps0Bytes(track({ n: 10, dLat: LAT_ARCMIN_PER_20M, dLon: 0, speed: 72, course: 0 }));
+            const parsed = parseNavitelTail(idit(), gps0, "x.MOV");
+            expect(parsed!.records[0]!.speedMs).toBeCloseTo(72 / 3.6, 3);
+        });
+
+        it("keeps the provisional km/h reading below the sample floor", () => {
+            // Knots-shaped ratio but only 3 moving pairs - not enough evidence
+            // to leave the default (this is what keeps a short or parked clip,
+            // and the 2-record iBOX fixture, on the verified km/h reading).
+            const gps0 = makeGps0Bytes(track({ n: 4, dLat: LAT_ARCMIN_PER_20M, dLon: 0, speed: 39, course: 0 }));
+            const parsed = parseNavitelTail(idit(), gps0, "x.MOV");
+            expect(parsed!.records[0]!.speedMs).toBeCloseTo(39 / 3.6, 3);
+        });
+
+        it("detects a raw (non-halved) course byte against the trajectory", () => {
+            // Due east at 50 N; byte 90 = the true heading. The course/2
+            // reading (180 deg) is 90 deg off the trajectory - raw must win.
+            const gps0 = makeGps0Bytes(
+                track({ n: 10, dLat: 0, dLon: LON_ARCMIN_PER_20M_AT50N, speed: 72, course: 90 }),
+            );
+            const parsed = parseNavitelTail(idit(), gps0, "x.TS");
+            for (const r of parsed!.records) expect(r.bearingDeg).toBe(90);
+        });
+
+        it("resolves the +256 alias of a mod-256 course byte", () => {
+            // Due north-west (315 deg): the u16-to-u8 cast stores 315 - 256 =
+            // 59. The raw hypothesis must both win and restore 315.
+            const dLat = LAT_ARCMIN_PER_20M * Math.cos(Math.PI / 4);
+            const dLon = -LON_ARCMIN_PER_20M_AT50N * Math.cos(Math.PI / 4);
+            const gps0 = makeGps0Bytes(track({ n: 10, dLat, dLon, speed: 72, course: 59 }));
+            const parsed = parseNavitelTail(idit(), gps0, "x.TS");
+            for (const r of parsed!.records) expect(r.bearingDeg).toBe(315);
+        });
+
+        it("keeps the halved course when it matches the trajectory", () => {
+            // Due east, byte 45 -> course/2 reading 90 fits exactly; the raw
+            // reading (45 deg) is off. The provisional decode must survive.
+            const gps0 = makeGps0Bytes(
+                track({ n: 10, dLat: 0, dLon: LON_ARCMIN_PER_20M_AT50N, speed: 72, course: 45 }),
+            );
+            const parsed = parseNavitelTail(idit(), gps0, "x.MOV");
+            for (const r of parsed!.records) expect(r.bearingDeg).toBe(90);
+        });
+    });
+
     // Stale-row glitch patterns observed on the real iBOX iCON sample: the
     // firmware interleaves the valid 1 Hz track with ring-buffer leftovers.
     describe("stale firmware row filter", () => {
@@ -331,6 +420,44 @@ describe("parseNavitelTail", () => {
             expect(parsed!.records).toHaveLength(3);
             expect(parsed!.records.map((r) => r.lat).every((lat) => lat > 49.99)).toBe(true);
             expect(parsed!.skipped.some((s) => s.reason.includes("implausible displacement"))).toBe(true);
+        });
+
+        it("drops a consecutive PAIR of stale rows, not the valid row before them", () => {
+            // Two buffered rows in a burst: a single-follower arbiter would
+            // side with the pair (they continue each other) and drop the
+            // valid row - the wider vote must not.
+            const idit = makeIditBytes("2020-11-04 16:30:14");
+            const gps0 = makeGps0Bytes([
+                { ...base, sec: 15 },
+                { ...base, lat: 5000.01, sec: 16 },
+                { ...base, lat: 4999.5, min: 29, sec: 17 }, // stale burst, 1 min back
+                { ...base, lat: 4999.5, min: 29, sec: 18 },
+                { ...base, lat: 5000.02, sec: 17 },
+                { ...base, lat: 5000.03, sec: 18 },
+            ]);
+            const parsed = parseNavitelTail(idit, gps0, "x.MOV");
+            expect(parsed!.records).toHaveLength(4);
+            expect(parsed!.records.map((r) => r.lat).every((lat) => lat > 49.99)).toBe(true);
+            expect(parsed!.skipped).toHaveLength(2);
+        });
+
+        it("drops an RTC-stamped first fix row instead of the whole UTC track after it", () => {
+            // The .TS motorcycle cam stamps the FIRST fix row of a cold start
+            // with the camera-local RTC clock (hours ahead of UTC); the rows
+            // after it carry satellite UTC. A keep-max greedy pass would keep
+            // that one row and drop the other ~150 as "backward" - the next
+            // row must arbitrate instead.
+            const idit = makeIditBytes("2020-11-04 16:30:14");
+            const gps0 = makeGps0Bytes([
+                { ...base, hour: 15, sec: 33 }, // RTC local (+2 h) on the first fix
+                { ...base, lat: 5000.01, sec: 35 },
+                { ...base, lat: 5000.02, sec: 36 },
+                { ...base, lat: 5000.03, sec: 37 },
+            ]);
+            const parsed = parseNavitelTail(idit, gps0, "x.TS");
+            expect(parsed!.records).toHaveLength(3);
+            expect(parsed!.records[0]!.unixSeconds).toBeCloseTo(Date.UTC(2020, 10, 4, 13, 30, 35) / 1000, 0);
+            expect(parsed!.skipped.some((s) => s.reason.includes("RTC-stamped"))).toBe(true);
         });
 
         it("keeps a genuine relocation confirmed by the following row", () => {

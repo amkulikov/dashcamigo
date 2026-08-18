@@ -14,16 +14,25 @@
 //   gps0  size + 'gps0' + N × 32-byte records
 //         Each record (LE), layout per ExifTool QuickTimeStream.pl
 //         Process_gps0 (DuDuBell M1 / VSYS M6L family), field-by-field
-//         verified on both real samples (Navitel R600-1, iBOX iCON):
+//         verified on real samples (Navitel R600-1, iBOX iCON, the .TS
+//         motorcycle cam):
 //           [0..7]   double lat in NMEA format `DDmm.mmmm`
 //                      DD = floor(value/100), minutes = value % 100
 //           [8..15]  double lon in NMEA format `DDDmm.mmmm`
 //           [16..19] i32 altitude, metres (slow drift 128..158 on real
 //                      samples; GpsRecord has no altitude field - not
 //                      extracted, documented so nobody re-misreads it)
-//           [20..21] u16 speed in km/h (0..68 / 40..77 on real samples,
-//                      matches haversine; the PRE-FIX parser misread the
-//                      altitude bytes at 16 as speed - constant ~14 km/h)
+//           [20..21] u16 speed - UNIT VARIES BY FIRMWARE: km/h on the
+//                      Navitel R600-1 / iBOX iCON samples (matches
+//                      haversine), KNOTS on the .TS motorcycle cam
+//                      (haversine ratio 1.87 across 7 files AND the
+//                      burned-in OSD: field 25 while OSD says 46 km/h =
+//                      25 kn). No byte-level discriminator found (gpsa
+//                      flags not preserved for the km/h samples), so the
+//                      unit is calibrated per file against the trajectory
+//                      - see calibrateGps0SpeedAndCourse. (The PRE-FIX
+//                      parser misread the altitude bytes at 16 as speed -
+//                      constant ~14 km/h.)
 //           [22]     u8 year - 2000
 //           [23]     u8 month 1..12 (so records are self-describing; the
 //                      IDIT baseline below stays as fallback for firmware
@@ -32,11 +41,17 @@
 //           [25]     u8 hour (UTC, not TZ - confirmed by IDIT comparison)
 //           [26]     u8 minute
 //           [27]     u8 second
-//           [28]     u8 course / 2, degrees (ExifTool marks it "NC" =
-//                      not confirmed; on both real samples it tracks the
-//                      trajectory bearing, so we take it; values >= 180
-//                      would mean >= 360 deg - treated as absent)
-//           [29..31] constant 0x01 0x01 0x00 (undecoded per ExifTool)
+//           [28]     u8 course - ENCODING VARIES BY FIRMWARE: course/2
+//                      (ExifTool's reading, marked "NC") on the R600-1 /
+//                      iBOX samples, but the LOW BYTE of the full course
+//                      (mod 256, the u16-to-u8 cast loses the high bit) on
+//                      the .TS motorcycle cam: raw byte tracks the
+//                      trajectory bearing within ~1 deg median, and NW
+//                      headings alias (269 deg stored as 13). Calibrated
+//                      per file against the trajectory alongside speed.
+//           [29..31] constant 0x01 0x01 0x00 (undecoded per ExifTool; NOT
+//                      a course high byte - stays 0x01 0x01 0x00 on the
+//                      mod-256 firmware at all headings)
 //
 //   gsea + gsen - g-sensor tail atoms. gsen is parsed (parseGsenAtom); the
 //                 known local sample carries 0 records, so the decode itself
@@ -47,8 +62,8 @@
 // negative values = S/W (signed DDmm.mmmm convention). Verify on S/W samples
 // if they appear.
 
-import { haversineKm } from "../../parser.js";
-import { KMH_TO_MS } from "../types.js";
+import { fillForwardBearings, haversineKm } from "../../parser.js";
+import { KMH_TO_MS, KNOTS_TO_MS } from "../types.js";
 import type { AccelSample, GpsRecord, ParsedRecords, SkippedLine } from "../types.js";
 import { ddmmToDegrees } from "./ddmm.js";
 import { removeGravityBaselineOrZero } from "./accel-baseline.js";
@@ -147,9 +162,15 @@ export function gps0HasSelfDescribedDates(gps0Bytes: Uint8Array): boolean {
 // the file): full-stale rows (timestamp ~1 min in the past + position from
 // the already-driven path) and half-stale rows (fresh timestamp, stale
 // position ~800 m back). Two passes:
-//   A) greedy keep-max by time - a row older than the last accepted one is
-//      stale by construction (buffered rows are always from the past, never
-//      the future), so the pass cannot eat valid data;
+//   A) backward time steps - on a conflict (a row older than the last kept
+//      one) the side that disagrees with the FOLLOWING row's timeline is
+//      dropped. Usually that is the backward row itself (a buffered stale
+//      row from the past), but not always: the .TS motorcycle cam stamps the
+//      FIRST fix row of a cold start with the camera-local RTC clock and
+//      only the rows after it with satellite UTC, so the first kept row sits
+//      hours in the future and a keep-max greedy pass would discard the
+//      entire remaining track. Continuity with the next row tells the two
+//      cases apart;
 //   B) isolated position outliers - a row whose implied speed from the last
 //      kept fix is impossible AND whose removal restores continuity to the
 //      next row. The continuity check protects legitimate teleports (GPS
@@ -207,6 +228,11 @@ export function parseIditDate(payload: Uint8Array): IditDate | null {
  * when the in-record month byte is out of range (defensive fallback for
  * firmware that zero-fills those bytes). Returns null for an empty fix
  * (lat=0 && lon=0) or corrupt data (out-of-range coordinates, NaN double).
+ *
+ * speedMs and bearingDeg are PROVISIONAL: the km/h + course/2 reading. Speed
+ * unit and course encoding vary by firmware (see the layout comment above);
+ * parseNavitelTail re-derives both via calibrateGps0SpeedAndCourse from the
+ * raw field values once the whole track is available.
  */
 export function decodeGps0Record(
     view: DataView,
@@ -251,9 +277,10 @@ export function decodeGps0Record(
     const baseMs = Date.UTC(year, month - 1, day, hour, minute, second);
     if (!Number.isFinite(baseMs)) return null;
 
-    // Course is stored halved (u8 can't hold 0..359). >= 180 raw would mean
-    // >= 360 deg - treat as "no course" and let the dispatcher forward-fill
-    // from the trajectory.
+    // Provisional course/2 reading. >= 180 raw would mean >= 360 deg under
+    // this encoding - treat as "no course"; the calibration pass in
+    // parseNavitelTail decides whether the byte is actually halved or the
+    // low byte of the full course.
     const bearingDeg = courseByte < 180 ? courseByte * 2 : 0;
 
     return {
@@ -335,7 +362,7 @@ export function parseNavitelTail(
     if (recordCount === 0) return null;
 
     const view = new DataView(gps0Bytes.buffer, gps0Bytes.byteOffset + payloadStart, recordCount * GPS0_RECORD_SIZE);
-    const records: GpsRecord[] = [];
+    const rows: Gps0Row[] = [];
     const skipped: SkippedLine[] = [];
 
     // FALLBACK year/month baseline (IDIT mode only). Records normally carry
@@ -418,19 +445,191 @@ export function parseNavitelTail(
             continue;
         }
 
-        // Pass A of the stale-row glitch filter: backward time step.
-        const prev = records[records.length - 1];
-        if (prev && rec.unixSeconds < prev.unixSeconds) {
-            skipped.push({ line: i + 1, raw: `<gps0 record ${i}>`, reason: "backward time step (stale firmware row)" });
-            continue;
-        }
         prevDay = day;
-        records.push(rec);
+        rows.push({
+            rec,
+            recordIndex: i,
+            speedField: view.getUint16(i * GPS0_RECORD_SIZE + 20, true),
+            courseByte: view.getUint8(i * GPS0_RECORD_SIZE + 28),
+        });
     }
 
-    const cleaned = dropPositionOutliers(records, skipped);
+    const cleaned = dropPositionOutliers(dropStaleTimeRows(rows, skipped), skipped);
     if (cleaned.length === 0) return null;
-    return { records: cleaned, skipped };
+    calibrateGps0SpeedAndCourse(cleaned);
+    return { records: cleaned.map((row) => row.rec), skipped };
+}
+
+// How many following rows vote on a backward-time conflict. A single-row
+// arbiter would side with a PAIR of consecutive stale rows against the valid
+// row before them; five rows out-vote any short stale burst.
+const STALE_ARBITRATION_WINDOW = 5;
+
+/**
+ * Pass A of the stale-row glitch filter: resolves backward time steps. When a
+ * row is older than the last kept one, the following rows vote: if most of
+ * the next few rows lie between the current row and the kept one, the kept
+ * row is the outlier (the RTC-stamped first fix of a cold start, stamped
+ * hours ahead) and is dropped retroactively; otherwise the current row is the
+ * stale one (a ring-buffer leftover from the past). Appends a SkippedLine per
+ * dropped row.
+ */
+function dropStaleTimeRows(rows: Gps0Row[], skipped: SkippedLine[]): Gps0Row[] {
+    const kept: Gps0Row[] = [];
+    for (let i = 0; i < rows.length; i++) {
+        const cur = rows[i]!;
+        let dropCur = false;
+        while (kept.length > 0 && cur.rec.unixSeconds < kept[kept.length - 1]!.rec.unixSeconds) {
+            const top = kept[kept.length - 1]!;
+            let continuingFromCur = 0;
+            let voters = 0;
+            for (let j = i + 1; j < rows.length && voters < STALE_ARBITRATION_WINDOW; j++, voters++) {
+                const t = rows[j]!.rec.unixSeconds;
+                if (t >= cur.rec.unixSeconds && t < top.rec.unixSeconds) continuingFromCur++;
+            }
+            if (continuingFromCur * 2 <= voters) {
+                dropCur = true;
+                break;
+            }
+            kept.pop();
+            skipped.push({
+                line: top.recordIndex + 1,
+                raw: `<gps0 record ${top.recordIndex}>`,
+                reason: "timestamp ahead of the following track (RTC-stamped row)",
+            });
+        }
+        if (dropCur) {
+            skipped.push({
+                line: cur.recordIndex + 1,
+                raw: `<gps0 record ${cur.recordIndex}>`,
+                reason: "backward time step (stale firmware row)",
+            });
+            continue;
+        }
+        kept.push(cur);
+    }
+    return kept;
+}
+
+// One kept gps0 record plus the raw field bytes the calibration pass needs:
+// the provisional GpsRecord cannot round-trip a course byte >= 180 (mapped to
+// "no course" under the course/2 reading) and must not be trusted for the
+// speed unit.
+interface Gps0Row {
+    rec: GpsRecord;
+    recordIndex: number; // 0-based index in the raw gps0 payload, for skip diagnostics
+    speedField: number; // u16 at 20-21, km/h or knots depending on firmware
+    courseByte: number; // u8 at 28, course/2 or course mod 256 depending on firmware
+}
+
+// Calibration gates. Ratio/course statistics only use records that are
+// genuinely moving (trajectory-implied speed and the raw field both above
+// noise) over small gaps, and a verdict needs enough of them that one GPS
+// glitch cannot flip it. Below the sample floor the provisional reading
+// (km/h + course/2) stands - on a parked or fix-less clip the speeds are ~0
+// and the unit does not matter.
+const CALIBRATION_MIN_SAMPLES = 8;
+const CALIBRATION_MAX_GAP_SEC = 5;
+const CALIBRATION_MIN_IMPLIED_KMH = 10;
+const CALIBRATION_MIN_SPEED_FIELD = 6;
+// Midpoint of the two candidate units: ratio 1.0 = the field is km/h,
+// 1.852 = knots. (A hypothetical mph firmware, 1.609, would be labeled knots
+// - a 15% error instead of 61%; no such sample has been seen.)
+const KNOTS_RATIO_THRESHOLD = 1.4;
+// The raw-course hypothesis picks the best of two aliases per sample, which
+// gives it an inherent fit advantage over course/2 - it must win by a margin,
+// not a hair, before the provisional reading is dropped. Observed medians are
+// far apart (~1 deg vs ~85+ deg on real samples of either firmware).
+const RAW_COURSE_WIN_MARGIN_DEG = 10;
+
+/** Shortest angular distance between two headings, degrees in [0, 180]. */
+function angularGapDeg(a: number, b: number): number {
+    return Math.abs(((a - b + 540) % 360) - 180);
+}
+
+/** Middle element of a sorted copy; callers guarantee a non-empty array. */
+function median(values: number[]): number {
+    const sorted = [...values].sort((x, y) => x - y);
+    return sorted[Math.floor(sorted.length / 2)]!;
+}
+
+/**
+ * Resolves the two firmware-dependent gps0 fields in place by checking each
+ * hypothesis against the trajectory:
+ *
+ *   - speed unit: median of (haversine-implied km/h / raw field) over moving
+ *     records - ~1.0 means the field is km/h (keep the provisional m/s),
+ *     ~1.852 means knots (recompute from the raw field);
+ *   - course encoding: median angular error of course/2 vs the trajectory
+ *     bearing against that of the raw byte (allowing the +256 alias - the
+ *     mod-256 firmware casts a u16 course to u8, so headings >= 256 deg store
+ *     only the low byte). If raw wins, each record gets whichever of
+ *     {byte, byte+256} lies closer to its trajectory bearing.
+ *
+ * This is unit/encoding inference, not speed-from-coordinates: the emitted
+ * values still come from the record fields. Undecidable input (too short,
+ * parked, no displacement) keeps the provisional km/h + course/2 reading.
+ */
+function calibrateGps0SpeedAndCourse(rows: Gps0Row[]): void {
+    if (rows.length < 2) return;
+
+    // Trajectory-implied speed per row, from the previous kept row. null =
+    // no usable pair (first row, duplicate second, gap too long).
+    const impliedKmh: (number | null)[] = rows.map(() => null);
+    for (let i = 1; i < rows.length; i++) {
+        const prev = rows[i - 1]!.rec;
+        const cur = rows[i]!.rec;
+        const dtSec = cur.unixSeconds - prev.unixSeconds;
+        if (dtSec < 1 || dtSec > CALIBRATION_MAX_GAP_SEC) continue;
+        impliedKmh[i] = (haversineKm(prev.lat, prev.lon, cur.lat, cur.lon) / dtSec) * 3600;
+    }
+
+    const speedRatios: number[] = [];
+    for (let i = 1; i < rows.length; i++) {
+        const implied = impliedKmh[i]!;
+        const field = rows[i]!.speedField;
+        if (implied === null || implied < CALIBRATION_MIN_IMPLIED_KMH || field < CALIBRATION_MIN_SPEED_FIELD) continue;
+        speedRatios.push(implied / field);
+    }
+    if (speedRatios.length >= CALIBRATION_MIN_SAMPLES && median(speedRatios) > KNOTS_RATIO_THRESHOLD) {
+        for (const row of rows) row.rec.speedMs = row.speedField * KNOTS_TO_MS;
+    }
+
+    // Reference bearings come from the same helper the course-less formats
+    // use, computed on clones so a course/2 verdict leaves the native field
+    // untouched. Runs after the speed verdict - fillForwardBearings treats
+    // sub-0.5 m/s records as stationary, and knots-corrected speeds classify
+    // slow rolling correctly.
+    const clones = rows.map((row) => ({ ...row.rec }));
+    fillForwardBearings(clones);
+
+    const halfErrs: number[] = [];
+    const rawErrs: number[] = [];
+    for (let i = 1; i < rows.length; i++) {
+        const implied = impliedKmh[i]!;
+        if (implied === null || implied < CALIBRATION_MIN_IMPLIED_KMH) continue;
+        const ref = clones[i]!.bearingDeg;
+        const byte = rows[i]!.courseByte;
+        // A byte >= 180 cannot be a halved course at all - hard penalty
+        // instead of a skip, because its very presence is evidence for the
+        // mod-256 encoding.
+        halfErrs.push(byte < 180 ? angularGapDeg(byte * 2, ref) : 180);
+        rawErrs.push(
+            byte + 256 < 360
+                ? Math.min(angularGapDeg(byte, ref), angularGapDeg(byte + 256, ref))
+                : angularGapDeg(byte, ref),
+        );
+    }
+    if (rawErrs.length < CALIBRATION_MIN_SAMPLES) return;
+    if (median(rawErrs) + RAW_COURSE_WIN_MARGIN_DEG >= median(halfErrs)) return;
+
+    for (let i = 0; i < rows.length; i++) {
+        const byte = rows[i]!.courseByte;
+        const ref = clones[i]!.bearingDeg;
+        const aliased = byte + 256;
+        rows[i]!.rec.bearingDeg =
+            aliased < 360 && angularGapDeg(aliased, ref) < angularGapDeg(byte, ref) ? aliased : byte;
+    }
 }
 
 /**
@@ -441,18 +640,18 @@ export function parseNavitelTail(
  * (no follower to confirm a genuine new position). Appends a SkippedLine per
  * dropped row.
  */
-function dropPositionOutliers(records: GpsRecord[], skipped: SkippedLine[]): GpsRecord[] {
-    if (records.length < 2) return records;
-    const kept: GpsRecord[] = [records[0]!];
-    for (let i = 1; i < records.length; i++) {
-        const rec = records[i]!;
-        const prev = kept[kept.length - 1]!;
+function dropPositionOutliers(rows: Gps0Row[], skipped: SkippedLine[]): Gps0Row[] {
+    if (rows.length < 2) return rows;
+    const kept: Gps0Row[] = [rows[0]!];
+    for (let i = 1; i < rows.length; i++) {
+        const rec = rows[i]!.rec;
+        const prev = kept[kept.length - 1]!.rec;
         const dt = rec.unixSeconds - prev.unixSeconds;
         // dt=0 (duplicate second) has no defined implied speed - keep.
         if (dt >= 1) {
             const impliedMs = (haversineKm(prev.lat, prev.lon, rec.lat, rec.lon) * 1000) / dt;
             if (impliedMs > GLITCH_MAX_IMPLIED_SPEED_MS) {
-                const next = records[i + 1];
+                const next = rows[i + 1]?.rec;
                 const nextDt = next ? next.unixSeconds - prev.unixSeconds : 0;
                 const nextPlausible =
                     next !== undefined &&
@@ -461,8 +660,8 @@ function dropPositionOutliers(records: GpsRecord[], skipped: SkippedLine[]): Gps
                         GLITCH_MAX_IMPLIED_SPEED_MS;
                 if (nextPlausible || next === undefined) {
                     skipped.push({
-                        line: i + 1,
-                        raw: `<gps0 record kept-index ${i}>`,
+                        line: rows[i]!.recordIndex + 1,
+                        raw: `<gps0 record ${rows[i]!.recordIndex}>`,
                         reason: "implausible displacement (stale firmware row)",
                     });
                     continue;
@@ -472,7 +671,7 @@ function dropPositionOutliers(records: GpsRecord[], skipped: SkippedLine[]): Gps
                 // accept it as the new anchor.
             }
         }
-        kept.push(rec);
+        kept.push(rows[i]!);
     }
     return kept;
 }

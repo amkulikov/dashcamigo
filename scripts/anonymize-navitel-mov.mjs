@@ -7,15 +7,21 @@
 //
 // Anonymization:
 //   1. Find IDIT and gps0 top-level boxes by forward-walk.
-//   2. Redact gps0 records: round lat/lon DDmm.mmmm doubles to integer
-//      degrees (50.0 N / 30.0 E sentinel coords). Keep first N records.
+//   2. Redact gps0 records: translate the track so its first valid fix lands
+//      on the 50.0 N / 30.0 E sentinel anchor, PRESERVING the per-record
+//      displacement deltas. The parser calibrates the speed unit and course
+//      encoding against the trajectory (see internal/navitel-gps0.ts), so a
+//      fixture with a fabricated walk would not exercise that path. The
+//      absolute position is the PII; the relative shape of a few dozen
+//      seconds is already implied by the kept speed/course bytes. No-fix
+//      filler rows (implausible coords) pass through untouched.
 //   3. Wrap into a minimal MP4: ftyp + tiny moov-stub + IDIT (real bytes)
 //      + gps0 (with redacted records). gpsa/gsea/gsen dropped - our extractor
 //      doesn't need them.
 //
-// Real fields kept (not PII): IDIT date string, gps0 record speed/day/hour/
-// minute/second/sub-second, padding bytes. Only the lat/lon doubles are
-// overwritten.
+// Real fields kept (not PII): IDIT date string, gps0 record speed/course/
+// day/hour/minute/second, padding bytes. Only the lat/lon doubles are
+// rewritten.
 //
 // Usage:
 //   node scripts/anonymize-navitel-mov.mjs <input.mov> <output.mov> [numRecords=5]
@@ -78,6 +84,14 @@ function degToDDmm(deg) {
     return sign * (d * 100 + m);
 }
 
+// Convert NMEA DDmm.mmmm -> decimal degrees (mirror of the parser's ddmm).
+function ddmmToDeg(v) {
+    const sign = v < 0 ? -1 : 1;
+    const abs = Math.abs(v);
+    const d = Math.floor(abs / 100);
+    return sign * (d + (abs - d * 100) / 60);
+}
+
 const [, , inputPath, outputPath, numRecArg] = process.argv;
 if (!inputPath || !outputPath) {
     console.error("usage: anonymize-navitel-mov.mjs <input.mov> <output.mov> [numRecords=5]");
@@ -113,12 +127,24 @@ const keepCount = Math.min(numRecords, recordCount);
 
 const baseLatDeg = 50.0;
 const baseLonDeg = 30.0;
+// Anchor = the first valid fix among the kept records; every valid record is
+// translated by (anchor -> base), which keeps the real displacement chain.
+let anchorLatDeg = null;
+let anchorLonDeg = null;
 for (let i = 0; i < keepCount; i++) {
     const off = payloadStart + i * GPS0_RECORD_SIZE;
-    const latDeg = baseLatDeg + i * 0.0001;
-    const lonDeg = baseLonDeg + i * 0.0001;
-    gps0Buf.writeDoubleLE(degToDDmm(latDeg), off);
-    gps0Buf.writeDoubleLE(degToDDmm(lonDeg), off + 8);
+    const latDeg = ddmmToDeg(gps0Buf.readDoubleLE(off));
+    const lonDeg = ddmmToDeg(gps0Buf.readDoubleLE(off + 8));
+    const validFix =
+        Number.isFinite(latDeg) && Number.isFinite(lonDeg) && Math.abs(latDeg) <= 90 && Math.abs(lonDeg) <= 180 &&
+        !(latDeg === 0 && lonDeg === 0);
+    if (!validFix) continue; // no-fix filler row, nothing to redact
+    if (anchorLatDeg === null) {
+        anchorLatDeg = latDeg;
+        anchorLonDeg = lonDeg;
+    }
+    gps0Buf.writeDoubleLE(degToDDmm(baseLatDeg + latDeg - anchorLatDeg), off);
+    gps0Buf.writeDoubleLE(degToDDmm(baseLonDeg + lonDeg - anchorLonDeg), off + 8);
 }
 
 // Trim gps0 to keepCount records.
