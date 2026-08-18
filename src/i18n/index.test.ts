@@ -236,7 +236,7 @@ describe("t() basic substitution", () => {
     it("substitutes placeholders", async () => {
         localStorage.setItem("dashcamigo:lang", "ru");
         const { t } = await loadI18n();
-        expect(t("ingestOverlay.stage.indexing", { done: 5, total: 12 })).toBe("Индексирую видео: 5 / 12");
+        expect(t("ingestOverlay.stage.indexing", { done: 5, total: 12 })).toBe("Читаю видео: 5 / 12");
     });
 });
 
@@ -259,7 +259,7 @@ describe("t() format-failure fallback", () => {
         localStorage.setItem("dashcamigo:lang", "ru");
         const { t } = await loadI18n();
         t("ingestOverlay.stage.indexing"); // missing params - falls back to raw
-        expect(t("ingestOverlay.stage.indexing", { done: 5, total: 12 })).toBe("Индексирую видео: 5 / 12");
+        expect(t("ingestOverlay.stage.indexing", { done: 5, total: 12 })).toBe("Читаю видео: 5 / 12");
     });
 });
 
