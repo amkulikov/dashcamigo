@@ -22,6 +22,7 @@
 import type { VendorFile } from "../types.js";
 import {
     MAI70_MODE_FOLDERS,
+    REDTIGER_MODE_FOLDERS,
     RX_70MAI,
     RX_70MAI_CHANNEL_STRIP,
     RX_BEFERICH,
@@ -46,6 +47,7 @@ import {
     RX_NOVATEK_VANTRUE,
     RX_NOVATEK_VIOFO,
     RX_REC_SINGLE,
+    RX_REDTIGER,
     RX_SSTAR_CHN,
     RX_TESLA_EVENT_FILENAME,
     RX_TESLA_PATH,
@@ -508,6 +510,29 @@ const nextbaseCameraKey: FilenameCameraKeyTechnique = {
     },
 };
 
+// RedTiger splits channels into sibling `<mode>_<channel letter>` folders
+// (Movie_F/, Movie_R/, Event_F/, ...). Both the folder and the trailing letter
+// are per-clip attributes, not camera identity: the corpus shows an event pair
+// slotted exactly into the 3-minute loop cadence between its Movie neighbours
+// (the firmware writes the event clip INSTEAD of the normal segment), so an
+// Event clip must chain into the same trip as its Movie siblings - the
+// mai70/hpim rationale.
+const REDTIGER_STRIP_FOLDERS = REDTIGER_MODE_FOLDERS.flatMap((mode) =>
+    ["f", "r"].map((channelLetter) => `${mode}_${channelLetter}`),
+);
+
+const redtigerCameraKey: FilenameCameraKeyTechnique = {
+    id: "redtiger-camera-key",
+    extract(file: VendorFile): string | null {
+        const m = file.file.name.match(RX_REDTIGER);
+        if (!m) return null;
+        // Channel letter at group [3], one char before `.MP4`.
+        const masked = maskNameWithTrailingLetterStripped(file.file.name, m[3]!);
+        const dir = strippedParentDir(file.relativePath, REDTIGER_STRIP_FOLDERS);
+        return `redtiger|${dir}|${masked}`;
+    },
+};
+
 const teslaCameraKey: FilenameCameraKeyTechnique = {
     id: "tesla-camera-key",
     extract(file: VendorFile): string | null {
@@ -600,6 +625,7 @@ export const FILENAME_CAMERA_KEY: readonly FilenameCameraKeyTechnique[] = [
     navitelCameraKey,
     neolineCameraKey,
     nextbaseCameraKey,
+    redtigerCameraKey,
     teslaCameraKey,
     thinkwareCameraKey,
     vueroidCameraKey,

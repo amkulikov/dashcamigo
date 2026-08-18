@@ -42,6 +42,7 @@ import {
     RX_NOVATEK_SINGLE,
     RX_NOVATEK_VANTRUE,
     RX_NOVATEK_VIOFO,
+    RX_REDTIGER,
     RX_SSTAR_CHN,
     RX_TESLA_EVENT_FILENAME,
     RX_TESLA_PATH,
@@ -353,6 +354,17 @@ const navitelChannel: FilenameChannelTechnique = {
     },
 };
 
+const redtigerChannel: FilenameChannelTechnique = {
+    id: "redtiger-channel",
+    extract(file: VendorFile): ChannelMatch | null {
+        const m = file.file.name.match(RX_REDTIGER);
+        if (!m) return null;
+        // F/R mnemonics, corroborated by the per-channel card folders
+        // (Movie_F/ holds ...F.MP4 files); both letters are corpus-confirmed.
+        return m[3]!.toUpperCase() === "F" ? sure("front") : sure("rear");
+    },
+};
+
 const movSeqFriChannel: FilenameChannelTechnique = {
     id: "mov-seq-fri-channel",
     extract(file: VendorFile): ChannelMatch | null {
@@ -516,6 +528,7 @@ export const FILENAME_CHANNEL: readonly FilenameChannelTechnique[] = [
     movSeqFriChannel,
     navitelChannel,
     nextbaseChannel,
+    redtigerChannel,
     teslaChannel,
     thinkwareChannel,
     wolfboxChannel,

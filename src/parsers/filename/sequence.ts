@@ -18,6 +18,7 @@ import {
     RX_NOVATEK_VANTRUE,
     RX_NOVATEK_VIOFO,
     RX_REC_SINGLE,
+    RX_REDTIGER,
     RX_TESLA_EVENT_FILENAME,
     RX_TESLA_PATH,
     RX_TESLA_RECENT,
@@ -145,6 +146,14 @@ const recSingleSequence: FilenameSequenceTechnique = {
     },
 };
 
+const redtigerSequence: FilenameSequenceTechnique = {
+    id: "redtiger-sequence",
+    extract(file: VendorFile): number | null {
+        const m = file.file.name.match(RX_REDTIGER);
+        return m ? Number(m[2]) : null;
+    },
+};
+
 const teslaSequence: FilenameSequenceTechnique = {
     id: "tesla-sequence",
     extract(file: VendorFile): number | null {
@@ -168,5 +177,6 @@ export const FILENAME_SEQUENCE: readonly FilenameSequenceTechnique[] = [
     nextbaseSequence,
     novatekSequence,
     novatekTsSequence,
+    redtigerSequence,
     teslaSequence,
 ];

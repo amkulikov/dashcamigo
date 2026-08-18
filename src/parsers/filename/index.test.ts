@@ -17,6 +17,7 @@ import {
     RX_NAVITEL,
     RX_NEOLINE,
     RX_REC_SINGLE,
+    RX_REDTIGER,
     RX_VUEROID,
 } from "./_patterns.js";
 import {
@@ -1000,6 +1001,68 @@ describe("mov-seq-fri techniques", () => {
         // The neighbouring stamp+counter families keep their own techniques.
         expect(matchFilenameTime(vf("20260811083704_082606F.ts")).matchedId).toBe("fitcamx-time");
         expect(matchFilenameTime(vf("20260811083704_0000826.mp4")).matchedId).toBe("ddpai-time");
+    });
+});
+
+// RedTiger F7NP-4K 2-channel: `<14-digit>_<6-digit><F|R>.MP4` under
+// `CARDV/<Mode>_<channel letter>/` folders. Filename-only corpus (diagnostic
+// report); GPS extraction is a separate concern pending real samples.
+describe("redtiger techniques", () => {
+    const path = "NO NAME/CARDV/Movie_F/20260708073453_000002F.MP4";
+
+    it("F/R letters map to mnemonic mounts, confident", () => {
+        const ch = matchFilenameChannel(vf("20260708073453_000002F.MP4", path));
+        expect(ch.matchedId).toBe("redtiger-channel");
+        expect(ch.value).toEqual({ channel: "front", confident: true });
+        expect(classifyFilenameChannel(vf("20260708073453_000003R.MP4"))).toEqual({
+            channel: "rear",
+            confident: true,
+        });
+    });
+
+    it("mode from the <Mode>_<channel> folder; flat drop defaults to normal", () => {
+        const mode = matchFilenameMode(vf("20260708073453_000002F.MP4", path));
+        expect(mode.matchedId).toBe("redtiger-mode");
+        expect(mode.value).toBe("normal");
+        expect(
+            classifyFilenameMode(vf("20260708074540_000008R.MP4", "NO NAME/CARDV/Event_R/20260708074540_000008R.MP4")),
+        ).toBe("event");
+        expect(
+            classifyFilenameMode(vf("20260708074540_000009F.MP4", "CARDV/Parking_F/20260708074540_000009F.MP4")),
+        ).toBe("parking");
+        expect(classifyFilenameMode(vf("20260708073453_000002F.MP4"))).toBe("normal");
+    });
+
+    it("sequence resolves; time stays on the generic fallback", () => {
+        const seq = matchFilenameSequence(vf("20260708073453_000002F.MP4"));
+        expect(seq.matchedId).toBe("redtiger-sequence");
+        expect(seq.value).toBe(2);
+        const t = matchFilenameTime(vf("20260708073453_000002F.MP4", path));
+        expect(t.matchedId).toBe("generic-datetime");
+        expect(t.value?.toISOString()).toBe("2026-07-08T07:34:53.000Z");
+    });
+
+    it("camera-key: channels and mode folders converge, the card root above them stays", () => {
+        const front = cameraFingerprint(vf("20260708073453_000002F.MP4", path));
+        expect(front, "rear in its own folder shares the key").toBe(
+            cameraFingerprint(vf("20260708073453_000003R.MP4", "NO NAME/CARDV/Movie_R/20260708073453_000003R.MP4")),
+        );
+        expect(front, "an event clip of the same camera shares the key").toBe(
+            cameraFingerprint(vf("20260708074540_000009F.MP4", "NO NAME/CARDV/Event_F/20260708074540_000009F.MP4")),
+        );
+        expect(front, "a different card root is a different camera").not.toBe(
+            cameraFingerprint(vf("20260708073453_000002F.MP4", "other/DASHCAM/Movie_F/20260708073453_000002F.MP4")),
+        );
+    });
+
+    it("negative: extension/counter-width twins stay off the technique", () => {
+        expect(RX_REDTIGER.test("20260708073453_000002F.ts")).toBe(false); // .mp4 only - the .ts twin is FitCamX language
+        expect(RX_REDTIGER.test("20260708073453_0000002F.MP4")).toBe(false); // 7-digit counter = mov-seq-fri width
+        expect(RX_REDTIGER.test("20260708073453_000002.MP4")).toBe(false); // letter mandatory (ddpai-normal territory)
+        expect(RX_REDTIGER.test("20260708073453_000002I.MP4")).toBe(false); // only F/R in the corpus
+        // The stamp+counter neighbours keep their own techniques.
+        expect(matchFilenameTime(vf("20260708073453_000002F.ts")).matchedId).toBe("fitcamx-time");
+        expect(matchFilenameTime(vf("20260708073453_000002.MP4")).matchedId).toBe("ddpai-time");
     });
 });
 

@@ -33,6 +33,8 @@ import {
     RX_NOVATEK_SINGLE,
     RX_NOVATEK_VANTRUE,
     RX_NOVATEK_VIOFO,
+    RX_REDTIGER,
+    RX_REDTIGER_PATH_MODE,
     RX_TESLA_PATH,
     RX_TESLA_PATH_RECENT,
     RX_TESLA_PATH_SAVED,
@@ -289,6 +291,30 @@ const novatekMode: FilenameModeTechnique = {
     },
 };
 
+const redtigerMode: FilenameModeTechnique = {
+    id: "redtiger-mode",
+    extract(file: VendorFile): RecordingMode | null {
+        // Name gate first - a `<mode>_f/` folder alone must not claim foreign
+        // files (the mivue-mode rationale).
+        if (!RX_REDTIGER.test(file.file.name)) return null;
+        const m = file.relativePath.match(RX_REDTIGER_PATH_MODE);
+        if (m) {
+            switch (m[1]!.toLowerCase()) {
+                case "movie":
+                    return "normal";
+                case "event":
+                    return "event";
+                case "parking":
+                    // Movie/Event are corpus-confirmed; Parking is the
+                    // conventional CarDV third (the hpim precedent).
+                    return "parking";
+            }
+        }
+        // Flat drop: loop recordings are the bulk (the mivue rationale).
+        return "normal";
+    },
+};
+
 const vueroidMode: FilenameModeTechnique = {
     id: "vueroid-mode",
     extract(file: VendorFile): RecordingMode | null {
@@ -386,6 +412,7 @@ export const FILENAME_MODE: readonly FilenameModeTechnique[] = [
     fordMode,
     iboxMode,
     juscarMode,
+    redtigerMode,
     teslaMode,
     thinkwareMode,
     wolfboxMode,

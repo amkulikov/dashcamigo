@@ -225,6 +225,22 @@ export const RX_NEXTBASE = /^(\d{6})_(\d{6})_(\d{3})_([BFR])([HL])\.mp4$/i;
 // (SigmaStar ssmd track; extraction is a separate primitive concern).
 export const RX_NEOLINE = /^INF(\d{8})-(\d{6})-(\d+)-([FR])\.mp4$/i;
 
+// RedTiger (F7NP-4K, 2-channel): 14-digit datetime + _ + 6-digit card-global
+// counter + F/R mnemonic channel letter + .MP4, card layout
+// `CARDV/<Mode>_<channel letter>/` (Movie_F/, Movie_R/, Event_F/, Event_R/
+// corpus-confirmed; Parking_* is the conventional CarDV third). The .mp4
+// extension keeps it off RX_FITCAMX (the same stamp+counter+letter language
+// in .ts), and the mandatory trailing letter keeps it off RX_DDPAI_NORMAL
+// twins. Filename-only corpus (573-file diagnostic report): name
+// classification only - where the GPS lives is unknown, the default embedded
+// probe stays on.
+export const RX_REDTIGER = /^(\d{14})_(\d{6})([FR])\.mp4$/i;
+// Recording-mode folder stems on a RedTiger card (the folder name is
+// `<stem>_<channel letter>`). Single source for the path-mode regex and
+// camera-key's parent-dir strip list (the MAI70_MODE_FOLDERS pattern).
+export const REDTIGER_MODE_FOLDERS = ["movie", "event", "parking"] as const;
+export const RX_REDTIGER_PATH_MODE = new RegExp(`(?:^|/)(${REDTIGER_MODE_FOLDERS.join("|")})_[fr]/`, "i");
+
 // Wolfbox (G900/i07 family, 1-3 channels): YYYY_MM_DD_HHMMSS_EE_C.MP4 where
 // EE is a 2-digit event code (00 = normal, 02 = g-sensor event) and
 // C = F/I/R channel letter. SD layout: <channel>_<mode> folders
