@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-08-19.1",
+        category: "improvement",
+        text: {
+            en: "Localization has been improved.",
+            ru: "Улучшена локализация.",
+            de: "Die Lokalisierung wurde verbessert.",
+            es: "Se ha mejorado la localización.",
+            fr: "La localisation a été améliorée.",
+            pl: "Ulepszono lokalizację.",
+            pt: "A localização foi aprimorada.",
+            zh: "改进了本地化。",
+            ja: "ローカライズを改善しました。",
+            ko: "현지화를 개선했습니다.",
+        },
+    },
+    {
         id: "2026-08-18.2",
         category: "fix",
         text: {
