@@ -1,64 +1,64 @@
-# Self-hosting / running locally
+# Run dashcamigo privately
 
-dashcamigo is a static, no-backend web app: the build output (`dist/`) is plain
-files, recordings never leave the browser, and any static file server can host
-it. Prebuilt zips are attached to
-[GitHub Releases](https://github.com/amkulikov/dashcamigo/releases); building
-it yourself needs no accounts, no keys and no configuration.
+This guide is for personal and internal installations: a local computer, a home
+network or an organization's private server. dashcamigo is a static web app, so
+you can run a prebuilt release, use the Docker image, copy the files to an
+internal web server or build the project yourself. Recordings stay in the
+browser whichever route you choose.
 
-**Maybe you don't need self-hosting at all.** If the goal is an app that works
-offline, [dashcamigo.app](https://dashcamigo.app) installs as an app straight
-from the browser (the Install button in Chrome/Edge, Add to Dock/Home Screen
-in Safari) - it keeps working offline after that, with no terminal, no
-downloads and no setup. The paths below are for running your own copy.
+The project is not distributed as a white-label product. These instructions do
+not grant permission to publish a separate service under the dashcamigo name,
+logo or brand mark. The exact code-license and branding boundary is summarized
+at the end of this guide.
 
-Pick the path that matches what you already have:
+If you only want dashcamigo to work offline, you may not need to host it.
+[dashcamigo.app](https://dashcamigo.app) can be installed from the browser and
+keeps working without a connection after the first visit. Continue below when
+you need a private installation you control.
 
-- **A web server you already run (nginx, Caddy, NAS, ...)** ->
-  [Prebuilt zip](#prebuilt-zip) into its web root, per the
-  [serving rules](#serving-rules-any-server)
-- **Node.js or Python installed** -> [Prebuilt zip](#prebuilt-zip), served
-  with a one-liner
-- **Docker, nothing else** -> [Run with Docker](#run-with-docker)
-- **Hacking on the source** -> [Run from source](#run-from-source)
+## Choose a setup
 
-## Prebuilt zip
+- **Node.js is already installed:** [download and run a release](#run-a-release-with-nodejs).
+- **You prefer a container:** [run the Docker image](#run-with-docker).
+- **You already have nginx, Caddy, a NAS or an internal web server:** download a
+  release and follow the [server requirements](#serve-it-on-an-internal-web-server).
+- **You want to change the code:** [build from source](#build-from-source).
 
-With Node.js installed, one line downloads the latest build into a
-`dashcamigo` folder in the current directory and serves it.
+## Run a release with Node.js
 
-macOS / Linux:
+The following commands download the latest release into a `dashcamigo` folder
+and start a local server.
+
+macOS or Linux:
 
 ```sh
 curl -fsSL https://github.com/amkulikov/dashcamigo/releases/latest/download/dashcamigo.tar.gz | tar -xz && npx serve dashcamigo
 ```
 
-Windows (PowerShell - `curl.exe` and `tar` ship with Windows 10+; `curl.exe`
-with the extension, the bare name is a PowerShell alias for something else):
+Windows PowerShell (`curl.exe` and `tar` are included with current Windows
+versions):
 
 ```powershell
 curl.exe -fsSL https://github.com/amkulikov/dashcamigo/releases/latest/download/dashcamigo.tar.gz -o dashcamigo.tar.gz; tar -xzf dashcamigo.tar.gz; npx serve dashcamigo
 ```
 
-Re-running the line extracts the new release over the same folder - delete
-the folder first for a guaranteed-clean update. Prefer clicking? Download
-`dashcamigo-<version>.zip` from the
+Open the local address printed by `npx serve`.
+
+Prefer a regular download? Get `dashcamigo-<version>.zip` from the
 [latest release](https://github.com/amkulikov/dashcamigo/releases/latest),
-unzip it, and serve the `dashcamigo` folder it contains the same way:
-`npx serve dashcamigo`.
+unzip it and run `npx serve dashcamigo`. Extract an update into a fresh folder
+so files left over from an older release cannot remain in the installation.
 
-Both archives are built from the same commit the official site deploys, with
-no environment variables set - so crash reporting is compiled out and the app
-contacts nothing except the map tiles. Open the
-printed `http://localhost:...` URL. Or copy the folder's contents into your
-web server's root - see the [serving rules](#serving-rules-any-server).
-`python3 -m http.server` also works, with one caveat: the extension-less
-pages linked from the footer 404 there.
+The release archives are built from the same tagged commit as the official
+release. They are a separate, environment-free build without the hosted site's
+analytics or optional crash reporting. At runtime, they only contact the map
+tile service.
 
-Releases are published immutable, and every asset (`SHA256SUMS` included)
-carries a signed build provenance. To verify a download (needs the
-[GitHub CLI](https://cli.github.com), logged in; same commands work for the
-zip):
+### Verify a downloaded release
+
+Every release includes `SHA256SUMS` and signed build provenance. With the
+[GitHub CLI](https://cli.github.com) installed and signed in, replace `<tag>`
+with the release tag and run:
 
 ```sh
 gh release verify-asset <tag> dashcamigo.tar.gz -R amkulikov/dashcamigo
@@ -66,21 +66,23 @@ gh attestation verify dashcamigo.tar.gz -R amkulikov/dashcamigo \
   --signer-workflow amkulikov/dashcamigo/.github/workflows/release.yml
 ```
 
-The first proves the file is byte-identical to the immutable release asset;
-the second proves it was built by this repository's release workflow from a
-specific commit.
+The first command checks that the archive matches the immutable GitHub release.
+The second confirms that this repository's release workflow built it from the
+recorded commit. The same commands work for the zip archive when you substitute
+its filename.
 
 ## Run with Docker
 
-No Node.js required, same command on Windows, macOS and Linux. The prebuilt
-image (amd64 / arm64) serves exactly the files the release archives carry -
-the release workflow packages the same build it attests:
+The published image supports amd64 and arm64 and needs no volumes or environment
+variables:
 
 ```sh
 docker run -d --name dashcamigo -p 8080:80 ghcr.io/amkulikov/dashcamigo
 ```
 
-Then open http://localhost:8080. Or with compose:
+Open [localhost:8080](http://localhost:8080).
+
+With Docker Compose:
 
 ```yaml
 # docker-compose.yml
@@ -92,20 +94,23 @@ services:
     restart: unless-stopped
 ```
 
-The image is stateless: no volumes, no environment variables, nothing to back
-up. `latest` tracks the newest release; `v*` image tags match
-[Releases](https://github.com/amkulikov/dashcamigo/releases). Prefer building
-your own? The committed `Dockerfile` builds the app inside the image, from a
-clone: `docker build -t dashcamigo . && docker run -d -p 8080:80 dashcamigo`.
+The image is stateless, so there is nothing to back up. `latest` follows the
+newest release; versioned `v*` tags match
+[GitHub Releases](https://github.com/amkulikov/dashcamigo/releases).
 
-Exposing it beyond localhost (NAS, home server): read
-[HTTPS, localhost, and what degrades](#https-localhost-and-what-degrades-without-them)
-first.
+To build the image from your checkout instead:
 
-## Run from source
+```sh
+docker build -t dashcamigo .
+docker run -d --name dashcamigo -p 8080:80 dashcamigo
+```
 
-Requirements: [Node.js](https://nodejs.org) at the version `engines` in
-`package.json` requires, and git.
+If other devices will open the app through a NAS or home server, read
+[HTTPS and local networks](#https-and-local-networks) before exposing it.
+
+## Build from source
+
+You need Git and the Node.js version required by `package.json`:
 
 ```sh
 git clone https://github.com/amkulikov/dashcamigo.git
@@ -115,76 +120,71 @@ npm run build
 npx serve dist
 ```
 
-Then open the printed `http://localhost:...` URL. `npx serve` is the
-recommended one-liner because it resolves the extension-less URLs the app
-links to (see "Serving rules") out of the box.
+Open the address printed by `npx serve`. The build needs no accounts, API keys
+or local configuration.
 
-Alternatives, both with the same small caveat - the app itself works, but the
-extension-less pages linked from the footer 404:
+All environment variables are optional and documented in `.env.example`. With
+none set, crash reporting is left out of the build. The build only needs network
+access to install npm packages; fonts and map styles are already in the
+repository. A source archive without Git history also builds successfully, but
+omits version and page-modification metadata.
 
-- `npm run preview` - Vite's preview server on the production build.
-- `python3 -m http.server -d dist`
+`npx serve` is recommended because it handles dashcamigo's extension-less URLs.
+`npm run preview` and `python3 -m http.server -d dist` can serve the app itself,
+but links such as `/privacy` return 404 without an additional rewrite rule.
 
-`npm run dev` is for hacking on the source, not for serving.
+## Serve it on an internal web server
 
-## What the build needs
+Copy the contents of the release folder or `dist/` to the root of the site.
+Subpath deployments such as `https://example.com/dashcamigo/` are not supported.
 
-- **No secrets.** Every environment variable is optional and defaults to off;
-  `.env.example` documents each one. A build with none set contains no crash
-  reporting.
-- **No network beyond the npm registry.** Fonts and map styles are committed;
-  nothing is fetched at build time (what each style loads at runtime lives in
-  `public/styles/*.json`).
-- **Git history is optional.** Building from a tarball only omits
-  version/`lastmod` metadata; it does not fail.
+Your server needs these rules:
 
-## Serving rules (any server)
+- Serve a directory index for locale paths such as `/en/` and `/ru/`. The root
+  path redirects to the appropriate locale.
+- Resolve extension-less pages to their HTML files. For nginx, use
+  `try_files $uri $uri.html $uri/ =404`.
+- Send `/sw.js` with `Cache-Control: max-age=0, must-revalidate` so returning
+  browsers pick up updates promptly.
+- Cache hashed files under `/assets/` indefinitely; their names change whenever
+  their contents do.
 
-- Serve `dist/` at the **site root**. Subpath deployments
-  (`http://host/dashcamigo/`) are not supported - absolute `/...` URLs are
-  baked into the build.
-- The app lives at `/<lang>/` (`/en/`, `/ru/`, ...); `/` is a small redirect
-  page. Directory index (`/en/` -> `/en/index.html`) is required; every common
-  server does this.
-- Clean URLs: internal links use extension-less paths (`/privacy` ->
-  `privacy.html`). nginx: `try_files $uri $uri.html $uri/ =404`. `npx serve`
-  does this by default.
-- Do not long-cache `/sw.js` (send `Cache-Control: max-age=0,
-  must-revalidate`), or returning browsers will be slow to pick up a new
-  deployment. Hashed `/assets/*` files are immutable and safe to cache
-  forever. `public/_headers` is the reference for everything Cloudflare Pages
-  sends in production, including a Content-Security-Policy worth adapting if
-  your server can send one.
+The committed `docker/nginx.conf` is the complete reference for rewrites,
+cache headers and the 404 page. `public/_headers` contains the production
+security and caching headers, including the Content Security Policy.
 
-## HTTPS, localhost, and what degrades without them
+## HTTPS and local networks
 
-The editor features (export re-encode, preview thumbnails) use browser APIs
-that only exist in a secure context:
+Some editing and export features require a secure browser context:
 
-- `http://localhost` **is** a secure context - a local run is fully
-  functional over plain http.
-- Plain `http://` on a LAN IP (the "runs on the NAS, opened from the phone"
-  setup) is **not**: viewing, the map, the chart and stream-copy export keep
-  working, but editing/export/thumbnails are off and the offline cache is
-  skipped. The app tells the user so (i18n `caps.notice.insecureContext`).
-  Put it behind HTTPS - any reverse proxy - to get everything back.
+- `http://localhost` counts as secure, so a local installation works fully over
+  plain HTTP.
+- A plain HTTP address on your local network does not. Video, the route, charts
+  and original-quality export keep working, but editing, previews, some export
+  options and offline caching are unavailable.
 
-## External services at runtime
+Use HTTPS through your web server or reverse proxy when other devices connect
+to dashcamigo over the network. The app also explains this limitation when it
+detects an insecure address.
 
-The only external dependency of a default build is the map base layer: tiles,
-sprites and glyphs come from OpenFreeMap (URLs live in `public/styles/*.json`).
-Without internet the basemap is blank but the route, markers, chart and video
-all keep working. Nothing else is contacted.
+## Network access at runtime
 
-## Branding
+In a default self-hosted build, the only external requests are for OpenFreeMap
+tiles, sprites and map text. Their URLs live in `public/styles/*.json`.
 
-Re-encoded exports carry the dashcamigo.app watermark
-(`src/transcode/watermark.ts`); stream-copy ("original") exports are untouched.
-Per the trademark note in `README.md`, a public fork must rename the mark along
-with the rest of the brand.
+Without an internet connection, the basemap is blank, but the route, markers,
+chart and video continue to work. Nothing else is contacted unless you enable
+an optional integration from `.env.example`.
 
-## Reference config
+## License and branding
 
-The committed `Dockerfile` and `docker/nginx.conf` implement everything above
-(rewrites, cache headers, 404 page). Running your own server? Translate
-`docker/nginx.conf` - it is annotated for exactly that.
+Exports that include overlays carry the dashcamigo.app watermark. Original
+quality exports are left untouched.
+
+The source code is available under the AGPL-3.0-only license. If a modified
+version is made available to other people over a network, the license requires
+its complete source to be offered under the same terms. The **dashcamigo** name,
+logo and brand mark are not included in that license and may not identify a
+fork, mirror, rehosted copy or separate hosted service. See
+[README.md](../README.md#license) and [LICENSE](../LICENSE) for the binding
+terms.

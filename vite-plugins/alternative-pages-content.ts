@@ -123,7 +123,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 },
                 {
                     "q": "Werden meine Aufnahmen irgendwohin hochgeladen?",
-                    "a": "Nein. dashcamigo hat kein Backend. Dein Browser liest die Dateien lokal und dekodiert sie auf deinem Gerät — es wird nichts hochgeladen. Dieselbe Privatsphäre wie bei einem Desktop-Player, nur ohne dass du einen installieren musst."
+                    "a": "Nein. dashcamigo hat keinen Server für deine Aufnahmen. Dein Browser liest die Dateien direkt von deinem Gerät — es wird nichts hochgeladen. Dieselbe Privatsphäre wie bei einem Desktop-Player, nur ohne dass du einen installieren musst."
                 },
                 {
                     "q": "Ist dashcamigo kostenlos wie RegistratorViewer?",
@@ -238,7 +238,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 },
                 {
                     "q": "¿Se subirán mis grabaciones a algún sitio?",
-                    "a": "No. dashcamigo no tiene servidor. Tu navegador lee los archivos localmente y los decodifica en tu dispositivo — no se sube nada. La misma privacidad que un visor de escritorio, pero sin instalar ninguno."
+                    "a": "No. dashcamigo no tiene servidor. Tu navegador lee los archivos directamente desde tu dispositivo — no se sube nada. La misma privacidad que un visor de escritorio, pero sin instalar ninguno."
                 },
                 {
                     "q": "¿Es dashcamigo gratis como RegistratorViewer?",
@@ -254,7 +254,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
             "h1": "Une alternative gratuite à RegistratorViewer qui reçoit encore des mises à jour — et une carte qui fonctionne",
             "lead": "RegistratorViewer (aussi connu sous le nom de DATAKAM Player) a été l'un des meilleurs lecteurs de dashcam gratuits de son époque — mais il n'a plus reçu de mise à jour depuis des années, il est conçu d'abord pour Windows, et sa carte Google intégrée a cessé de fonctionner après que Google a mis fin à l'accès gratuit et sans clé à son API Maps. dashcamigo prend le relais là où il s'est arrêté : un lecteur maintenu, dans le navigateur, avec une carte GPS synchronisée, une courbe de vitesse et de force G, et une carte sans clé — aucune clé d'API qui puisse expirer.",
             "cardHint": "Gratuit, mais non maintenu depuis 2015 — et sa carte ne fonctionne plus",
-            "whatItIs": "RegistratorViewer (fourni sous le nom de DATAKAM Player pour les caméras DATAKAM) est un lecteur de bureau gratuit pour Windows qui était vraiment en avance sur son temps — découpe et assemblage sans perte, lecture continue d'un fichier à l'autre, un tracé GPS avec courbes de vitesse et de capteur G, capture d'image avec le GPS dans l'EXIF de la photo, et export du tracé en GPX, KML et SRT. Il lit encore très bien beaucoup d'enregistrements. Le hic, c'est la longévité : le développement s'est arrêté en 2015, le site d'origine a disparu, et la carte Google intégrée a cessé de fonctionner quand Google a mis fin à l'accès à l'API Maps sans clé — la faire revivre aujourd'hui demande une retouche du registre Windows ou une build communautaire non officielle. Il n'existe pas de correctif officiel, car le projet n'est plus maintenu et son code source n'a jamais été publié.",
+            "whatItIs": "RegistratorViewer (fourni sous le nom de DATAKAM Player pour les caméras DATAKAM) est un lecteur de bureau gratuit pour Windows qui était vraiment en avance sur son temps — découpe et assemblage sans perte, lecture continue d'un fichier à l'autre, un tracé GPS avec courbes de vitesse et de capteur G, capture d'image avec le GPS dans l'EXIF de la photo, et export du tracé en GPX, KML et SRT. Il lit encore très bien beaucoup d'enregistrements. Le hic, c'est la longévité : le développement s'est arrêté en 2015, le site d'origine a disparu, et la carte Google intégrée a cessé de fonctionner quand Google a mis fin à l'accès à l'API Maps sans clé — la faire revivre aujourd'hui demande une retouche du registre Windows ou une version communautaire non officielle. Il n'existe pas de correctif officiel, car le projet n'est plus maintenu et son code source n'a jamais été publié.",
             "comparisonIntro": "RegistratorViewer est figé en 2015. Voici comment dashcamigo se compare sur les points qui ont le plus mal vieilli — et sur ceux où ils sont tout simplement à égalité.",
             "compareRows": [
                 {
@@ -276,7 +276,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                     },
                     "them": {
                         "mark": "no",
-                        "note": "Conçu d'abord pour Windows (une build Mac séparée et limitée existe)"
+                        "note": "Conçu d'abord pour Windows (une version Mac séparée et limitée existe)"
                     }
                 },
                 {
@@ -349,11 +349,11 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 },
                 {
                     "q": "dashcamigo fonctionne-t-il sur Mac, Linux ou mon téléphone ?",
-                    "a": "Oui. Il tourne dans le navigateur, donc Windows, macOS, Linux et mobile fonctionnent tous. RegistratorViewer est conçu d'abord pour Windows ; sa build Mac est une application séparée, aux fonctions limitées, distribuée surtout via des miroirs tiers."
+                    "a": "Oui. Il tourne dans le navigateur, donc Windows, macOS, Linux et les appareils mobiles fonctionnent tous. RegistratorViewer est conçu d'abord pour Windows ; sa version Mac est une application séparée, aux fonctions limitées, distribuée surtout via des miroirs tiers."
                 },
                 {
                     "q": "Mes enregistrements seront-ils téléversés quelque part ?",
-                    "a": "Non. dashcamigo n'a pas de serveur. Votre navigateur lit les fichiers en local et les décode sur votre appareil — rien n'est téléversé. La même confidentialité qu'un lecteur de bureau, mais sans en installer un."
+                    "a": "Non. dashcamigo n'a pas de serveur. Votre navigateur lit les fichiers directement sur votre appareil — rien n'est téléversé. La même confidentialité qu'un lecteur de bureau, mais sans en installer un."
                 },
                 {
                     "q": "dashcamigo est-il gratuit comme RegistratorViewer ?",
@@ -468,7 +468,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 },
                 {
                     "q": "私の録画はどこかにアップロードされますか？",
-                    "a": "いいえ。dashcamigoにはバックエンドがありません。ブラウザがファイルをローカルで読み、あなたのデバイス上でデコードします — 何もアップロードされません。デスクトップビューアと同じプライバシーを、インストールなしで。"
+                    "a": "いいえ。dashcamigo には録画を受け取るサーバーがありません。ブラウザがデバイス上のファイルを直接読み取るため、何もアップロードされません。デスクトップビューアと同じプライバシーを、インストールなしで。"
                 },
                 {
                     "q": "dashcamigoはRegistratorViewerのように無料ですか？",
@@ -583,7 +583,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 },
                 {
                     "q": "제 녹화 영상이 어딘가로 업로드되나요?",
-                    "a": "아니요. dashcamigo에는 백엔드가 없습니다. 브라우저가 파일을 로컬에서 읽어 기기에서 디코딩합니다 — 아무것도 업로드되지 않습니다. 데스크톱 뷰어와 같은 수준의 프라이버시를, 설치 없이 누립니다."
+                    "a": "아니요. dashcamigo에는 녹화 영상을 받을 서버가 없습니다. 브라우저가 기기의 파일을 직접 읽어서 아무것도 업로드되지 않습니다. 데스크톱 뷰어와 같은 수준의 프라이버시를, 설치 없이 누립니다."
                 },
                 {
                     "q": "dashcamigo도 RegistratorViewer처럼 무료인가요?",
@@ -698,7 +698,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 },
                 {
                     "q": "Czy moje nagrania będą gdzieś wysyłane?",
-                    "a": "Nie. dashcamigo nie ma backendu. Twoja przeglądarka czyta pliki lokalnie i dekoduje je na Twoim urządzeniu — nic nie jest wysyłane. Taka sama prywatność jak w odtwarzaczu na pulpit, ale bez instalowania go."
+                    "a": "Nie. dashcamigo nie ma serwera, na który trafiałyby nagrania. Przeglądarka odczytuje pliki bezpośrednio z twojego urządzenia — nic nie jest wysyłane. Taka sama prywatność jak w odtwarzaczu na pulpit, ale bez instalowania go."
                 },
                 {
                     "q": "Czy dashcamigo jest darmowe, tak jak RegistratorViewer?",
@@ -813,7 +813,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 },
                 {
                     "q": "Minhas gravações serão enviadas para algum lugar?",
-                    "a": "Não. O dashcamigo não tem backend. Seu navegador lê os arquivos localmente e os decodifica no seu dispositivo — nada é enviado. A mesma privacidade de um visualizador de desktop, mas sem precisar instalar um."
+                    "a": "Não. O dashcamigo não tem servidor para receber suas gravações. Seu navegador lê os arquivos direto do seu dispositivo — nada é enviado. A mesma privacidade de um visualizador de desktop, mas sem precisar instalar um."
                 },
                 {
                     "q": "O dashcamigo é gratuito como o RegistratorViewer?",
@@ -928,7 +928,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 },
                 {
                     "q": "我的录像会被上传到什么地方吗？",
-                    "a": "不会。dashcamigo 没有后端。你的浏览器在本地读取文件并在你的设备上解码——什么都不会上传。隐私和桌面播放器一样，但不用安装。"
+                    "a": "不会。dashcamigo 没有用于接收录像的服务器。浏览器会直接读取你设备上的文件，什么都不会上传。隐私和桌面播放器一样，但不用安装。"
                 },
                 {
                     "q": "dashcamigo 像 RegistratorViewer 一样免费吗？",
@@ -1044,7 +1044,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
             "faq": [
                 {
                     "q": "Ist dashcamigo wirklich kostenlos? Wo ist der Haken?",
-                    "a": "Es ist kostenlos, ohne kostenpflichtige Stufe und ohne Konto — es gibt keinen Haken. Es gibt auch kein Backend: Deine Dateien werden lokal in deinem Browser gelesen und dekodiert, es wird nichts hochgeladen. Wir verkaufen weder dein Videomaterial noch deine Daten."
+                    "a": "Es ist kostenlos, ohne kostenpflichtige Stufe und ohne Konto — es gibt keinen Haken. Es gibt auch keinen Server für deine Aufnahmen: Dein Browser liest die Dateien direkt von deinem Gerät; nichts wird hochgeladen. Wir verkaufen weder dein Videomaterial noch deine Daten."
                 },
                 {
                     "q": "Kann dashcamigo dieselben Kameras öffnen wie Dashcam Viewer?",
@@ -1170,7 +1170,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
             "faq": [
                 {
                     "q": "¿De verdad dashcamigo es gratis? ¿Cuál es la trampa?",
-                    "a": "Es gratis sin plan de pago y sin cuenta — no hay trampa. Tampoco hay servidor: tus archivos se leen y decodifican localmente en tu navegador, no se sube nada. No vendemos tus grabaciones ni tus datos."
+                    "a": "Es gratis sin plan de pago y sin cuenta — no hay trampa. Tampoco hay servidor: tu navegador lee los archivos directamente desde tu dispositivo; no se sube nada. No vendemos tus grabaciones ni tus datos."
                 },
                 {
                     "q": "¿Puede dashcamigo abrir las mismas cámaras que Dashcam Viewer?",
@@ -1296,7 +1296,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
             "faq": [
                 {
                     "q": "dashcamigo est-il vraiment gratuit ? Où est le piège ?",
-                    "a": "Il est gratuit, sans palier payant et sans compte — il n'y a pas de piège. Il n'y a pas non plus de serveur : vos fichiers sont lus et décodés en local dans votre navigateur, rien n'est téléversé. Nous ne vendons ni vos images ni vos données."
+                    "a": "Il est gratuit, sans palier payant et sans compte — il n'y a pas de piège. Il n'y a pas non plus de serveur : votre navigateur lit les fichiers directement sur votre appareil ; rien n'est téléversé. Nous ne vendons ni vos images ni vos données."
                 },
                 {
                     "q": "dashcamigo ouvre-t-il les mêmes caméras que Dashcam Viewer ?",
@@ -1422,7 +1422,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
             "faq": [
                 {
                     "q": "dashcamigoは本当に無料ですか？ 裏があるのでは？",
-                    "a": "有料プランもアカウントもなしで無料です — 裏はありません。バックエンドもありません。ファイルはブラウザ内でローカルに読み込まれデコードされ、何もアップロードされません。あなたの映像やデータを売ることもありません。"
+                    "a": "有料プランもアカウントもなしで無料です — 裏はありません。録画を受け取るサーバーもありません。ブラウザがデバイス上のファイルを直接読み取るため、何もアップロードされません。あなたの映像やデータを売ることもありません。"
                 },
                 {
                     "q": "dashcamigoはDashcam Viewerと同じカメラを開けますか？",
@@ -1548,7 +1548,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
             "faq": [
                 {
                     "q": "dashcamigo가 정말 무료인가요? 함정이 있나요?",
-                    "a": "유료 등급도 계정도 없는 무료입니다 — 함정은 없습니다. 백엔드도 없습니다. 파일은 브라우저에서 로컬로 읽고 디코딩되며 아무것도 업로드되지 않습니다. 저희는 여러분의 영상이나 데이터를 팔지 않습니다."
+                    "a": "유료 등급도 계정도 없는 무료입니다 — 함정은 없습니다. 녹화 영상을 받을 서버도 없습니다. 브라우저가 기기의 파일을 직접 읽어서 아무것도 업로드되지 않습니다. 저희는 여러분의 영상이나 데이터를 팔지 않습니다."
                 },
                 {
                     "q": "dashcamigo는 Dashcam Viewer와 같은 카메라를 열 수 있나요?",
@@ -1674,7 +1674,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
             "faq": [
                 {
                     "q": "Czy dashcamigo jest naprawdę darmowe? W czym haczyk?",
-                    "a": "Jest darmowe, bez płatnego planu i bez konta — nie ma haczyka. Nie ma też backendu: Twoje pliki są czytane i dekodowane lokalnie w przeglądarce, nic nie jest wysyłane. Nie sprzedajemy Twoich nagrań ani Twoich danych."
+                    "a": "Jest darmowe, bez płatnego planu i bez konta — nie ma haczyka. Nie ma też serwera, na który trafiałyby nagrania: przeglądarka odczytuje pliki bezpośrednio z twojego urządzenia; nic nie jest wysyłane. Nie sprzedajemy Twoich nagrań ani Twoich danych."
                 },
                 {
                     "q": "Czy dashcamigo otworzy te same kamery co Dashcam Viewer?",
@@ -1800,7 +1800,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
             "faq": [
                 {
                     "q": "O dashcamigo é realmente gratuito? Qual é a pegadinha?",
-                    "a": "Ele é gratuito, sem plano pago e sem conta — não há pegadinha. Também não há backend: seus arquivos são lidos e decodificados localmente no seu navegador, nada é enviado. Não vendemos suas filmagens nem seus dados."
+                    "a": "Ele é gratuito, sem plano pago e sem conta — não há pegadinha. Também não há servidor para receber suas gravações: seu navegador lê os arquivos direto do seu dispositivo; nada é enviado. Não vendemos suas filmagens nem seus dados."
                 },
                 {
                     "q": "O dashcamigo abre as mesmas câmeras que o Dashcam Viewer?",
@@ -1926,7 +1926,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
             "faq": [
                 {
                     "q": "dashcamigo 真的免费吗？有什么套路？",
-                    "a": "它免费，没有付费版，也不用账户——没有套路。也没有后端：你的文件在浏览器里本地读取和解码，什么都不会上传。我们不会出售你的录像或你的数据。"
+                    "a": "它免费，没有付费版，也不用账户——没有套路。也没有用于接收录像的服务器：浏览器会直接读取你设备上的文件，什么都不会上传。我们不会出售你的录像或你的数据。"
                 },
                 {
                     "q": "dashcamigo 能打开和 Dashcam Viewer 一样的摄像头吗？",
@@ -2062,7 +2062,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 },
                 {
                     "q": "Ist dashcamigo kostenlos und privat wie VLC?",
-                    "a": "Ja. dashcamigo ist kostenlos, ohne Konto, quelloffen unter der AGPL-3.0 und hat kein Backend — deine Dateien werden lokal in deinem Browser gelesen und dekodiert, es wird nichts hochgeladen. VLC ist ebenfalls kostenlos, quelloffen und lokal; in diesen Punkten sind sie gleichauf."
+                    "a": "Ja. dashcamigo ist kostenlos, ohne Konto, quelloffen unter der AGPL-3.0 und hat keinen Server für deine Aufnahmen — dein Browser liest die Dateien direkt von deinem Gerät; nichts wird hochgeladen. VLC ist ebenfalls kostenlos, quelloffen und lokal; in diesen Punkten sind sie gleichauf."
                 },
                 {
                     "q": "Von welchen Dashcams liest dashcamigo das GPS aus?",
@@ -2188,7 +2188,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 },
                 {
                     "q": "¿Es dashcamigo gratuito y privado como VLC?",
-                    "a": "Sí. dashcamigo es gratis, sin cuenta, de código abierto bajo la licencia AGPL-3.0, y no tiene servidor — tus archivos se leen y decodifican localmente en tu navegador, no se sube nada. VLC también es gratuito, de código abierto y local; en esos puntos están a la par."
+                    "a": "Sí. dashcamigo es gratis, sin cuenta, de código abierto bajo la licencia AGPL-3.0, y no tiene servidor — tu navegador lee los archivos directamente desde tu dispositivo; no se sube nada. VLC también es gratuito, de código abierto y local; en esos puntos están a la par."
                 },
                 {
                     "q": "¿De qué dashcams lee el GPS dashcamigo?",
@@ -2314,7 +2314,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 },
                 {
                     "q": "dashcamigo est-il gratuit et privé comme VLC ?",
-                    "a": "Oui. dashcamigo est gratuit, sans compte, open source sous licence AGPL-3.0, et il n'a pas de serveur — vos fichiers sont lus et décodés en local dans votre navigateur, rien n'est téléversé. VLC est lui aussi gratuit, open source et local ; sur ces points, ils sont à égalité."
+                    "a": "Oui. dashcamigo est gratuit, sans compte, open source sous licence AGPL-3.0, et il n'a pas de serveur — votre navigateur lit les fichiers directement sur votre appareil ; rien n'est téléversé. VLC est lui aussi gratuit, open source et local ; sur ces points, ils sont à égalité."
                 },
                 {
                     "q": "De quelles dashcams dashcamigo lit-il le GPS ?",
@@ -2440,7 +2440,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 },
                 {
                     "q": "dashcamigoはVLCのように無料でプライベートですか？",
-                    "a": "はい。dashcamigoはアカウント不要で無料、AGPL-3.0のオープンソースで、バックエンドがありません — ファイルはブラウザ内でローカルに読み込まれデコードされ、何もアップロードされません。VLCも無料、オープンソースで、ローカルです。その点では互角です。"
+                    "a": "はい。dashcamigoはアカウント不要で無料、AGPL-3.0のオープンソースで、録画を受け取るサーバーはありません — ブラウザがデバイス上のファイルを直接読み取るため、何もアップロードされません。VLCも無料、オープンソースで、ローカルです。その点では互角です。"
                 },
                 {
                     "q": "dashcamigoはどのドラレコからGPSを読み取れますか？",
@@ -2566,7 +2566,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 },
                 {
                     "q": "dashcamigo는 VLC처럼 무료이고 프라이버시를 지키나요?",
-                    "a": "네. dashcamigo는 계정 없이 무료이고 AGPL-3.0 오픈소스이며 백엔드가 없습니다 — 파일은 브라우저에서 로컬로 읽고 디코딩되며 아무것도 업로드되지 않습니다. VLC 역시 무료, 오픈소스, 로컬입니다. 그 점에서는 둘이 대등합니다."
+                    "a": "네. dashcamigo는 계정 없이 무료이고 AGPL-3.0 오픈소스이며 녹화 영상을 받을 서버가 없습니다 — 브라우저가 기기의 파일을 직접 읽어서 아무것도 업로드되지 않습니다. VLC 역시 무료, 오픈소스, 로컬입니다. 그 점에서는 둘이 대등합니다."
                 },
                 {
                     "q": "dashcamigo는 어떤 블랙박스에서 GPS를 읽나요?",
@@ -2692,7 +2692,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 },
                 {
                     "q": "Czy dashcamigo jest darmowe i prywatne jak VLC?",
-                    "a": "Tak. dashcamigo jest darmowe, bez konta, otwartoźródłowe na licencji AGPL-3.0 i nie ma backendu — Twoje pliki są czytane i dekodowane lokalnie w przeglądarce, nic nie jest wysyłane. VLC też jest darmowy, otwartoźródłowy i lokalny; w tych punktach są na równi."
+                    "a": "Tak. dashcamigo jest darmowe, bez konta, otwartoźródłowe na licencji AGPL-3.0 i nie ma serwera, na który trafiałyby nagrania — przeglądarka odczytuje pliki bezpośrednio z twojego urządzenia; nic nie jest wysyłane. VLC też jest darmowy, otwartoźródłowy i lokalny; w tych punktach są na równi."
                 },
                 {
                     "q": "Z których kamer dashcamigo czyta GPS?",
@@ -2818,7 +2818,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 },
                 {
                     "q": "O dashcamigo é gratuito e privado como o VLC?",
-                    "a": "Sim. O dashcamigo é gratuito, sem conta, de código aberto sob a licença AGPL-3.0, e não tem backend — seus arquivos são lidos e decodificados localmente no seu navegador, nada é enviado. O VLC também é gratuito, de código aberto e local; nesses pontos eles estão empatados."
+                    "a": "Sim. O dashcamigo é gratuito, sem conta, de código aberto sob a licença AGPL-3.0, e não tem servidor para receber suas gravações — seu navegador lê os arquivos direto do seu dispositivo; nada é enviado. O VLC também é gratuito, de código aberto e local; nesses pontos eles estão empatados."
                 },
                 {
                     "q": "De quais dashcams o dashcamigo lê o GPS?",
@@ -2944,7 +2944,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 },
                 {
                     "q": "dashcamigo 像 VLC 一样免费和私密吗？",
-                    "a": "是的。dashcamigo 免费，无需账户，以 AGPL-3.0 开源，而且它没有后端——你的文件在浏览器里本地读取和解码，什么都不会上传。VLC 也免费、开源且本地运行；在这些点上它们打平。"
+                    "a": "是的。dashcamigo 免费，无需账户，以 AGPL-3.0 开源，而且它没有用于接收录像的服务器——浏览器会直接读取你设备上的文件，什么都不会上传。VLC 也免费、开源且本地运行；在这些点上它们打平。"
                 },
                 {
                     "q": "dashcamigo 能读取哪些行车记录仪的 GPS？",
@@ -3903,7 +3903,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 },
                 {
                     "q": "Wird mein Material hochgeladen?",
-                    "a": "Nein. dashcamigo liest und dekodiert deine Dateien lokal im Browser — es wird nichts hochgeladen. DashWare ist ebenfalls lokal; beide behalten dein Material auf deinem Rechner."
+                    "a": "Nein. dashcamigo liest deine Dateien direkt von deinem Gerät — es wird nichts hochgeladen. DashWare ist ebenfalls lokal; beide behalten dein Material auf deinem Rechner."
                 }
             ]
         },
@@ -4018,7 +4018,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 },
                 {
                     "q": "¿Se subirá mi material a algún sitio?",
-                    "a": "No. dashcamigo lee y decodifica tus archivos localmente en el navegador — no se sube nada. DashWare también es local; ambas mantienen tu material en tu máquina."
+                    "a": "No. dashcamigo lee tus archivos directamente desde tu dispositivo — no se sube nada. DashWare también es local; ambas mantienen tu material en tu máquina."
                 }
             ]
         },
@@ -4133,7 +4133,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 },
                 {
                     "q": "Mes vidéos seront-elles téléversées ?",
-                    "a": "Non. dashcamigo lit et décode vos fichiers localement dans le navigateur — rien n'est téléversé. DashWare est également local ; tous deux gardent vos vidéos sur votre machine."
+                    "a": "Non. dashcamigo lit vos fichiers directement sur votre appareil — rien n'est téléversé. DashWare est également local ; tous deux gardent vos vidéos sur votre machine."
                 }
             ]
         },
@@ -4248,7 +4248,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 },
                 {
                     "q": "私の映像はアップロードされますか？",
-                    "a": "いいえ。dashcamigo はブラウザ内でローカルにファイルを読み取り、デコードします — 何もアップロードされません。DashWare もローカルで動きます。どちらも映像をあなたのマシン内に保ちます。"
+                    "a": "いいえ。dashcamigo はデバイス上のファイルを直接読み取ります — 何もアップロードされません。DashWare もローカルで動きます。どちらも映像をあなたのマシン内に保ちます。"
                 }
             ]
         },
@@ -4363,7 +4363,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 },
                 {
                     "q": "제 영상이 업로드되나요?",
-                    "a": "아니요. dashcamigo는 브라우저에서 파일을 로컬로 읽고 디코딩합니다 — 아무것도 업로드되지 않습니다. DashWare도 로컬이며, 둘 다 영상을 사용자의 기기에 둡니다."
+                    "a": "아니요. dashcamigo는 기기의 파일을 직접 읽습니다 — 아무것도 업로드되지 않습니다. DashWare도 로컬이며, 둘 다 영상을 사용자의 기기에 둡니다."
                 }
             ]
         },
@@ -4478,7 +4478,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 },
                 {
                     "q": "Czy moje nagrania będą wysyłane gdziekolwiek?",
-                    "a": "Nie. dashcamigo czyta i dekoduje Twoje pliki lokalnie w przeglądarce — nic nie jest wysyłane. DashWare również działa lokalnie; oba trzymają Twoje nagrania na Twoim komputerze."
+                    "a": "Nie. dashcamigo odczytuje pliki bezpośrednio z twojego urządzenia — nic nie jest wysyłane. DashWare również działa lokalnie; oba trzymają Twoje nagrania na Twoim komputerze."
                 }
             ]
         },
@@ -4593,7 +4593,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 },
                 {
                     "q": "Minha gravação será enviada?",
-                    "a": "Não. O dashcamigo lê e decodifica seus arquivos localmente no navegador — nada é enviado. O DashWare também é local; ambos mantêm sua gravação na sua máquina."
+                    "a": "Não. O dashcamigo lê os arquivos direto do seu dispositivo — nada é enviado. O DashWare também é local; ambos mantêm sua gravação na sua máquina."
                 }
             ]
         },
@@ -4708,7 +4708,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 },
                 {
                     "q": "我的素材会被上传吗？",
-                    "a": "不会。dashcamigo 在浏览器里本地读取并解码你的文件 — 什么都不会上传。DashWare 也是本地运行的；两者都把你的素材留在你自己的机器上。"
+                    "a": "不会。dashcamigo 会直接读取你设备上的文件 — 什么都不会上传。DashWare 也是本地运行的；两者都把你的素材留在你自己的机器上。"
                 }
             ]
         }
@@ -5747,7 +5747,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
             },
             {
                 "q": "Ist dashcamigo kostenlos und privat wie Navitel DVR Player?",
-                "a": "Ja — kostenlos, kein Konto und kein Backend: Deine Dateien werden lokal in deinem Browser gelesen und dekodiert, nichts wird hochgeladen. Beide Tools sind kostenlos; dashcamigo spart dir zusätzlich die Installation."
+                "a": "Ja — kostenlos, kein Konto und kein Server für deine Aufnahmen: Dein Browser liest die Dateien direkt von deinem Gerät; nichts wird hochgeladen. Beide Tools sind kostenlos; dashcamigo spart dir zusätzlich die Installation."
             }
         ]
     },
@@ -5862,7 +5862,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
             },
             {
                 "q": "¿Es dashcamigo gratis y privado como Navitel DVR Player?",
-                "a": "Sí — gratis, sin cuenta y sin servidor: tus archivos se leen y se decodifican localmente en tu navegador, no se sube nada. Las dos herramientas son gratuitas; dashcamigo además se salta la instalación."
+                "a": "Sí — gratis, sin cuenta y sin servidor: tu navegador lee los archivos directamente desde tu dispositivo; no se sube nada. Las dos herramientas son gratuitas; dashcamigo además se salta la instalación."
             }
         ]
     },
@@ -5977,7 +5977,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
             },
             {
                 "q": "dashcamigo est-il gratuit et confidentiel comme Navitel DVR Player ?",
-                "a": "Oui — gratuit, sans compte, et sans serveur : vos fichiers sont lus et décodés en local dans votre navigateur, rien n'est téléversé. Les deux outils sont gratuits ; dashcamigo se passe en plus de l'installation."
+                "a": "Oui — gratuit, sans compte, et sans serveur : votre navigateur lit les fichiers directement sur votre appareil ; rien n'est téléversé. Les deux outils sont gratuits ; dashcamigo se passe en plus de l'installation."
             }
         ]
     },
@@ -6092,7 +6092,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
             },
             {
                 "q": "dashcamigoはNavitel DVR Playerのように無料でプライベートですか？",
-                "a": "はい — 無料、アカウント不要、バックエンドなし。ファイルはあなたのブラウザ内でローカルに読み込み・デコードされ、何もアップロードされません。どちらのツールも無料です。dashcamigoはさらにインストールも不要です。"
+                "a": "はい — 無料、アカウント不要、録画を受け取るサーバーもありません。ブラウザがデバイス上のファイルを直接読み取るため、何もアップロードされません。どちらのツールも無料です。dashcamigoはさらにインストールも不要です。"
             }
         ]
     },
@@ -6207,7 +6207,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
             },
             {
                 "q": "dashcamigo도 Navitel DVR Player처럼 무료이고 프라이버시를 지키나요?",
-                "a": "네 — 무료이고, 계정도 없고, 백엔드도 없습니다. 파일은 브라우저 안에서 로컬로 읽히고 디코딩되며, 아무것도 업로드되지 않습니다. 두 도구 모두 무료이고, dashcamigo는 거기에 더해 설치도 건너뜁니다."
+                "a": "네 — 무료이고, 계정도 없고, 녹화 영상을 받을 서버도 없습니다. 브라우저가 기기의 파일을 직접 읽어서 아무것도 업로드되지 않습니다. 두 도구 모두 무료이고, dashcamigo는 거기에 더해 설치도 건너뜁니다."
             }
         ]
     },
@@ -6322,7 +6322,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
             },
             {
                 "q": "Czy dashcamigo jest darmowy i prywatny jak Navitel DVR Player?",
-                "a": "Tak — za darmo, bez konta i bez backendu: Twoje pliki są czytane i dekodowane lokalnie w przeglądarce, nic nie jest wysyłane. Oba narzędzia są darmowe; dashcamigo dodatkowo obywa się bez instalacji."
+                "a": "Tak — za darmo, bez konta i bez serwera na nagrania: przeglądarka odczytuje pliki bezpośrednio z twojego urządzenia; nic nie jest wysyłane. Oba narzędzia są darmowe; dashcamigo dodatkowo obywa się bez instalacji."
             }
         ]
     },
@@ -6437,7 +6437,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
             },
             {
                 "q": "O dashcamigo é gratuito e privado como o Navitel DVR Player?",
-                "a": "Sim — gratuito, sem conta e sem backend: seus arquivos são lidos e decodificados localmente no seu navegador, nada é enviado. As duas ferramentas são gratuitas; o dashcamigo ainda dispensa a instalação."
+                "a": "Sim — gratuito, sem conta e sem servidor para as gravações: seu navegador lê os arquivos direto do seu dispositivo; nada é enviado. As duas ferramentas são gratuitas; o dashcamigo ainda dispensa a instalação."
             }
         ]
     },
@@ -6552,7 +6552,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
             },
             {
                 "q": "dashcamigo 像 Navitel DVR Player 一样免费且私密吗？",
-                "a": "是的——免费、无需账户，也没有后端：你的文件在你的浏览器里本地读取和解码，什么都不会上传。两款工具都免费；dashcamigo 还省去了安装。"
+                "a": "是的——免费、无需账户，也没有用于接收录像的服务器：浏览器会直接读取你设备上的文件，什么都不会上传。两款工具都免费；dashcamigo 还省去了安装。"
             }
         ]
     }
@@ -6818,7 +6818,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
         "h1": "Une alternative gratuite à CamGeoPlayer — dans votre navigateur, et qui fait plus",
         "lead": "CamGeoPlayer est une petite application Windows gratuite qui lit le GPS de vos vidéos de dashcam et trace l'itinéraire sur une carte — la réponse d'un seul développeur face aux lecteurs payants bridés par leur version d'essai. dashcamigo fait la même chose dans votre navigateur, sans rien à télécharger, et ajoute ce que CamGeoPlayer n'a pas : une courbe de vitesse et de force G, l'avant/l'arrière/l'intérieur en synchro, les trajets regroupés automatiquement, et l'export de clip avec le GPS conservé à l'intérieur. La même idée — lire votre GPS, le montrer sur une carte — poussée plus loin et tenue à jour.",
         "cardHint": "Lecteur Windows indé et gratuit ; encore en bêta précoce",
-        "whatItIs": "CamGeoPlayer est une application Windows gratuite (nécessite .NET) signée par un développeur indépendant, qui l'a créée après avoir trouvé les lecteurs GPS existants payants ou peu pratiques. Vous chargez une file de vidéos et il les lit l'une après l'autre, lisant le GPS intégré à chacune et dessinant tout le trajet sur une carte OpenStreetMap avec un marqueur qui se déplace en synchro avec la lecture — il s'appuie sur ExifTool pour extraire le GPS et sur Leaflet pour la carte. Il n'y a pas d'installeur : vous téléchargez un gros zip, vous le décompressez et vous lancez le .exe (certains antivirus le signalent, ce que le développeur explique par le moteur de navigateur et exiftool embarqués à l'intérieur). Il assume d'être à un stade précoce — la build actuelle est une bêta précoce, sans version publique plus récente.",
+        "whatItIs": "CamGeoPlayer est une application Windows gratuite (nécessite .NET) signée par un développeur indépendant, qui l'a créée après avoir trouvé les lecteurs GPS existants payants ou peu pratiques. Vous chargez une file de vidéos et il les lit l'une après l'autre, lisant le GPS intégré à chacune et dessinant tout le trajet sur une carte OpenStreetMap avec un marqueur qui se déplace en synchro avec la lecture — il s'appuie sur ExifTool pour extraire le GPS et sur Leaflet pour la carte. Il n'y a pas d'installeur : vous téléchargez un gros zip, vous le décompressez et vous lancez le .exe (certains antivirus le signalent, ce que le développeur explique par le moteur de navigateur et exiftool embarqués à l'intérieur). Il assume d'être à un stade précoce — la version actuelle est une bêta précoce, sans version publique plus récente.",
         "comparisonIntro": "Les deux sont gratuits et les deux lisent votre GPS sur une carte. Voici ce que dashcamigo ajoute — et là où il est plus simple à faire tourner.",
         "compareRows": [
             {
@@ -7619,7 +7619,7 @@ export const COMMUNITY_ALT_LABELS: Partial<Record<Lang, AltSharedLabels>> = {
         "breadcrumbHome": "Accueil",
         "breadcrumbAlternatives": "Alternatives",
         "whatItIsHeading": "Qu'est-ce que {name} ?",
-        "comparisonHeading": "{name} vs dashcamigo",
+        "comparisonHeading": "{name} face à dashcamigo",
         "compareColUs": "dashcamigo",
         "officialSiteLabel": "Site officiel ↗",
         "howHeading": "Passer à dashcamigo",
@@ -7641,7 +7641,7 @@ export const COMMUNITY_ALT_LABELS: Partial<Record<Lang, AltSharedLabels>> = {
         "breadcrumbHome": "ホーム",
         "breadcrumbAlternatives": "代替ツール",
         "whatItIsHeading": "{name}とは？",
-        "comparisonHeading": "{name} vs dashcamigo",
+        "comparisonHeading": "{name} と dashcamigo の比較",
         "compareColUs": "dashcamigo",
         "officialSiteLabel": "公式サイト ↗",
         "howHeading": "dashcamigoへの乗り換え",
@@ -7663,7 +7663,7 @@ export const COMMUNITY_ALT_LABELS: Partial<Record<Lang, AltSharedLabels>> = {
         "breadcrumbHome": "홈",
         "breadcrumbAlternatives": "대안",
         "whatItIsHeading": "{name}란?",
-        "comparisonHeading": "{name} vs dashcamigo",
+        "comparisonHeading": "{name}와 dashcamigo 비교",
         "compareColUs": "dashcamigo",
         "officialSiteLabel": "공식 사이트 ↗",
         "howHeading": "dashcamigo로 전환하기",
@@ -7707,7 +7707,7 @@ export const COMMUNITY_ALT_LABELS: Partial<Record<Lang, AltSharedLabels>> = {
         "breadcrumbHome": "Início",
         "breadcrumbAlternatives": "Alternativas",
         "whatItIsHeading": "O que é o {name}?",
-        "comparisonHeading": "{name} vs dashcamigo",
+        "comparisonHeading": "{name} x dashcamigo",
         "compareColUs": "dashcamigo",
         "officialSiteLabel": "Site oficial ↗",
         "howHeading": "Migrando para o dashcamigo",

@@ -526,16 +526,16 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
         },
         "pt": {
             "title": "Junte as câmeras da dashcam em um único vídeo — grátis, no seu navegador | dashcamigo",
-            "metaDescription": "Junte as câmeras frontal, traseira e interna da dashcam em um vídeo só — lado a lado, em grade ou picture-in-picture. Grátis, no navegador, nada vai pra nuvem. Funciona com 70mai, BlackVue, Viofo e mais.",
+            "metaDescription": "Junte as câmeras frontal, traseira e interna da dashcam em um vídeo só — lado a lado, em grade ou imagem sobre imagem. Grátis, no navegador, nada vai pra nuvem. Funciona com 70mai, BlackVue, Viofo e mais.",
             "ogTitle": "Junte as câmeras da dashcam em um vídeo só — grátis",
-            "ogDescription": "Coloque a frontal, a traseira e a interna num vídeo só — lado a lado, em grade ou picture-in-picture. Grátis, no navegador, nada vai pra nuvem.",
+            "ogDescription": "Coloque a frontal, a traseira e a interna num vídeo só — lado a lado, em grade ou imagem sobre imagem. Grátis, no navegador, nada vai pra nuvem.",
             "h1": "Junte as câmeras da sua dashcam em um único vídeo",
-            "lead": "A maioria das dashcams salva cada câmera num arquivo separado — a frontal num, a traseira noutro, a interna num terceiro. A dashcamigo coloca tudo num vídeo só: lado a lado, em grade ou uma grande com as demais em picture-in-picture. Roda no seu navegador, então nada vai pra nuvem, e ela lê 70mai, BlackVue, Viofo, Garmin, Vantrue e dezenas de outras — não só uma marca.",
+            "lead": "A maioria das dashcams salva cada câmera num arquivo separado — a frontal num, a traseira noutro, a interna num terceiro. O dashcamigo coloca tudo num vídeo só: lado a lado, em grade ou uma grande com as demais em imagem sobre imagem. Ele roda no seu navegador, então nada vai pra nuvem, e lê 70mai, BlackVue, Viofo, Garmin, Vantrue e dezenas de outras — não só uma marca.",
             "breadcrumbName": "Juntar câmeras em um vídeo",
             "introHeading": "Um arquivo no lugar de três",
             "introBody": "Assistir a um clipe da frontal e a um da traseira do mesmo minuto vira um malabarismo de janelas. Juntos num vídeo só, viram um único arquivo pra compartilhar, apresentar como prova ou guardar — com todas as câmeras no mesmo quadro, sincronizadas.",
-            "introBody2": "A dashcamigo faz isso sem mandar nada pra nenhum servidor. Suas gravações são lidas e juntadas localmente, ali na aba do navegador, e o vídeo pronto é salvo direto no seu computador.",
-            "optionsHeading": "Layouts",
+            "introBody2": "O dashcamigo faz isso sem mandar nada pra nenhum servidor. Suas gravações são lidas e juntadas localmente, ali na aba do navegador, e o vídeo pronto é salvo direto no seu computador.",
+            "optionsHeading": "Disposições",
             "options": [
                 {
                     "name": "Lado a lado",
@@ -550,7 +550,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
                     "desc": "Até quatro câmeras numa grade 2×2 — frontal, traseira, interna e uma câmera lateral juntas."
                 },
                 {
-                    "name": "Picture-in-picture",
+                    "name": "Imagem sobre imagem",
                     "desc": "Uma câmera ocupa o quadro inteiro; as outras ficam em pequenos quadrinhos arredondados que você move e redimensiona."
                 },
                 {
@@ -562,22 +562,22 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
             "howSteps": [
                 "Coloque o cartão SD no computador e arraste a pasta inteira pra dashcamigo.app.",
                 "Abra a viagem — frontal, traseira e interna se alinham sozinhas numa mesma linha do tempo.",
-                "Abra a exportação, escolha um layout (lado a lado, grade ou picture-in-picture) e selecione o trecho pra salvar.",
+                "Abra a exportação, escolha uma disposição (lado a lado, grade ou imagem sobre imagem) e selecione o trecho pra salvar.",
                 "Salve — o vídeo combinado é gravado direto no seu computador, com o trajeto GPS dentro dele."
             ],
             "brandsHeading": "Frontal e traseira num arquivo só — mesmo quando o app da câmera não deixa",
-            "brandsBody": "Os apps dos fabricantes costumam parar por aqui: tocam a frontal e a traseira juntas, mas exportam cada câmera num arquivo próprio, não um único clipe combinado. A dashcamigo é um player de dashcam gratuito que lê BlackVue, Viofo, 70mai, Vantrue, Thinkware, Garmin e outras — e grava o vídeo combinado que os apps deles deixam de fora. Mesma viagem, todas as câmeras, um arquivo só.",
+            "brandsBody": "Os apps dos fabricantes costumam parar por aqui: tocam a frontal e a traseira juntas, mas exportam cada câmera num arquivo próprio, não um único clipe combinado. O dashcamigo é um player de dashcam gratuito que lê BlackVue, Viofo, 70mai, Vantrue, Thinkware, Garmin e outras — e grava o vídeo combinado que os apps deles deixam de fora. Mesma viagem, todas as câmeras, um arquivo só.",
             "noteHeading": "Bom saber",
             "noteBody": "Juntar recodifica o vídeo, então não é instantâneo — um trecho longo leva um tempinho. Pra exportar do jeito mais tranquilo, use Chrome, Edge ou outro navegador Chromium num computador. Isso costura as câmeras num mesmo quadro; juntar os clipes curtos de uma viagem em sequência, num arquivo contínuo, acontece automaticamente quando você escolhe um trecho.",
             "faqHeading": "Perguntas frequentes",
             "faq": [
                 {
                     "q": "Dá pra juntar o vídeo da frontal e da traseira num arquivo só?",
-                    "a": "Dá. Abra a viagem, escolha um layout lado a lado, empilhado ou picture-in-picture, selecione o trecho e salve. A frontal e a traseira são gravadas num vídeo só, em sincronia, com o trajeto GPS dentro do arquivo."
+                    "a": "Dá. Abra a viagem, escolha uma disposição lado a lado, empilhada ou com imagem sobre imagem, selecione o trecho e salve. A frontal e a traseira são gravadas num vídeo só, em sincronia, com o trajeto GPS dentro do arquivo."
                 },
                 {
                     "q": "Funciona com três câmeras (frontal, traseira e interna)?",
-                    "a": "Funciona. Use a grade 2×2 ou um layout picture-in-picture pra colocar três ou quatro câmeras num vídeo só. Frontal, traseira, interna e uma câmera lateral podem dividir o mesmo quadro."
+                    "a": "Funciona. Use a grade 2×2 ou uma disposição com imagem sobre imagem pra colocar três ou quatro câmeras num vídeo só. Frontal, traseira, interna e uma câmera lateral podem dividir o mesmo quadro."
                 },
                 {
                     "q": "Meu vídeo vai pra algum lugar?",
@@ -1068,10 +1068,10 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
             "ogTitle": "Adicione velocidade, GPS e mapa ao vídeo da dashcam",
             "ogDescription": "Grave velocidade, coordenadas e um mapa em movimento no vídeo exportado — grátis, no navegador, nada vai pra nuvem.",
             "h1": "Adicione uma sobreposição de velocidade, GPS e mapa ao vídeo da sua dashcam",
-            "lead": "A dashcamigo grava sua velocidade, suas coordenadas GPS e um minimapa em movimento direto no vídeo exportado — leituras limpas embutidas na imagem, sem precisar de outro app. Roda no seu navegador, nada vai pra nuvem, e funciona com o GPS que sua dashcam já gravou.",
+            "lead": "O dashcamigo grava sua velocidade, suas coordenadas GPS e um minimapa em movimento direto no vídeo exportado — leituras limpas embutidas na imagem, sem precisar de outro app. Roda no seu navegador, nada vai pra nuvem e funciona com o GPS que sua dashcam já gravou.",
             "breadcrumbName": "Adicionar sobreposição de dados",
             "introHeading": "Velocidade e localização, embutidas na imagem",
-            "introBody": "Sozinho, um clipe de dashcam não mostra a que velocidade você ia nem onde estava. A dashcamigo lê o GPS que sua câmera salvou e desenha isso no vídeo exportado: a leitura da velocidade, suas coordenadas e um mapinha que se move com o trajeto. Os dados fazem parte da imagem, então ficam visíveis onde quer que o arquivo seja reproduzido — sem precisar de um player especial.",
+            "introBody": "Sozinho, um clipe de dashcam não mostra a que velocidade você ia nem onde estava. O dashcamigo lê o GPS que sua câmera salvou e desenha isso no vídeo exportado: a leitura da velocidade, suas coordenadas e um mapinha que se move com o trajeto. Os dados fazem parte da imagem, então ficam visíveis onde quer que o arquivo seja reproduzido — sem precisar de um player especial.",
             "introBody2": "Tudo acontece no seu navegador. Suas gravações são lidas localmente e a sobreposição é renderizada no seu dispositivo; o vídeo pronto é salvo direto no seu computador.",
             "optionsHeading": "O que dá pra sobrepor",
             "options": [
@@ -1100,14 +1100,14 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
                 "Salve — a sobreposição é renderizada no vídeo e gravada direto no seu computador."
             ],
             "brandsHeading": "Grátis, no navegador, pra gravações de dashcam",
-            "brandsBody": "Gravar velocidade e um mapa no vídeo costuma ser tarefa de programas pagos de desktop feitos pra câmeras de ação. A dashcamigo faz a versão pra dashcam de graça, numa aba do navegador: ela lê o GPS de 70mai, BlackVue, Viofo, Garmin, Vantrue e outras, e desenha velocidade, coordenadas e um mapa em movimento na exportação — sem instalar, sem conta, nada vai pra nuvem.",
+            "brandsBody": "Gravar velocidade e um mapa no vídeo costuma ser tarefa de programas pagos de desktop feitos pra câmeras de ação. O dashcamigo faz a versão pra dashcam de graça, numa aba do navegador: lê o GPS de 70mai, BlackVue, Viofo, Garmin, Vantrue e outras, e desenha velocidade, coordenadas e um mapa em movimento na exportação — sem instalar, sem conta, nada vai pra nuvem.",
             "noteHeading": "Bom saber",
             "noteBody": "A sobreposição precisa de GPS na sua gravação — se um registro não tem trajeto GPS, não há o que desenhar. Além de velocidade, coordenadas e o mapa em movimento, ela também pode mostrar a hora, sua direção, a distância percorrida e uma leitura de força G — tudo calculado a partir do mesmo GPS, não de um sensor separado. A renderização recodifica o vídeo, então um trecho longo leva um tempinho; Chrome, Edge ou outro navegador Chromium num computador é o mais tranquilo.",
             "faqHeading": "Perguntas frequentes",
             "faq": [
                 {
                     "q": "Como adiciono uma sobreposição de velocidade ao vídeo da dashcam?",
-                    "a": "Abra a viagem, vá em exportar e ligue a sobreposição de velocidade. A dashcamigo lê o GPS que sua câmera gravou e grava a leitura da velocidade (km/h ou mph) no vídeo exportado. Você pode colocá-la em qualquer canto."
+                    "a": "Abra a viagem, vá em exportar e ligue a sobreposição de velocidade. O dashcamigo lê o GPS que sua câmera gravou e grava a leitura da velocidade (km/h ou mph) no vídeo exportado. Você pode colocá-la em qualquer canto."
                 },
                 {
                     "q": "Dá pra mostrar coordenadas GPS e um mapa no vídeo?",

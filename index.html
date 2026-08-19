@@ -230,7 +230,7 @@
         "description": "Free, open-source online dashcam player & editor. Combine multiple cameras into one video, overlay speed, GPS and a moving map, then export — right in your browser. No upload, no install, no ads.",
         "applicationCategory": "MultimediaApplication",
         "operatingSystem": "Web",
-        "browserRequirements": "Works in any current browser; the GPS map needs WebGL2, re-encoded export needs WebCodecs",
+        "browserRequirements": "Works in any current browser; the GPS map needs WebGL2, and edited exports need WebCodecs",
         "inLanguage": ["de", "en", "es", "fr", "ja", "ko", "pl", "pt-BR", "ru", "zh-Hans"],
         "isAccessibleForFree": true,
         "keywords": "dashcam player, dashcam editor, dashcam viewer, dashcam video editor, trim dashcam video, combine front and rear dashcam, dashcam split screen video, add speed overlay to dashcam video, dashcam gps overlay, online dashcam player, web dashcam player, dashcam gps viewer, dashcam app for pc, 70mai, viofo, blackvue, gopro, garmin, vantrue, thinkware, fitcamx",
@@ -238,13 +238,13 @@
             "Plays MP4, MOV and MPEG-TS dashcam recordings in the browser",
             "Synchronized GPS map with the route",
             "Speed and G-force chart with event markers",
-            "Multi-channel playback (front, rear, cabin, side)",
+            "Multi-camera playback (front, rear, cabin, side)",
             "Trim and export a range to MP4 with GPS (GPMF) inside",
-            "Crop and re-layout multi-channel video, then re-encode the export",
-            "Burn speed, coordinates and a mini-map onto exported MP4 frames",
+            "Crop and rearrange multiple cameras in one exported video",
+            "Add speed, coordinates and a mini-map to exported MP4 video",
             "Blur or pixelate license plates and faces with automatic tracking",
             "Separate GPX export",
-            "Frame capture",
+            "Save still images",
             "70mai, Viofo, BlackVue, GoPro, Garmin, Vantrue, Thinkware, Nextbase, FitCamX, Vueroid, Neoline, Juscar, Escort, Carcam, Navitel, SilverStone F1, Roadgid, iBOX, RVMI vendor support"
         ],
         "offers": {
@@ -372,7 +372,7 @@
                 "name": "Can I cut out a clip and save it as a file?",
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "Yes. You can trim the timeline, stitch cameras, burn speed, coordinates and a mini-map onto each frame, and save as MP4 with GPS inside the file or as a separate .gpx track. A single frame saves as a .jpg."
+                    "text": "Yes. You can trim the timeline, stitch cameras, burn speed, coordinates and a mini-map onto the video, and save as MP4 with GPS inside the file or as a separate .gpx track. A still image saves as a .jpg."
                 }
             },
             {
@@ -743,7 +743,7 @@
                  has one permanent home (the landing chips disappear after the
                  first ingest). -->
             <div class="sidebar-sources">
-                <h2 data-i18n="folderSources.title">Sources</h2>
+                <h2 data-i18n="folderSources.title">Recording folders</h2>
                 <!-- Compact CTA button for adding files. label[for="folder-input"]
                      opens the system file picker, and also works as a drop target
                      (window-level DnD listeners pick it up anyway). Appears after
@@ -1098,7 +1098,7 @@
                             </details>
                             <details class="landing-faq-item">
                                 <summary><span data-i18n="landing.faq.q6">Can I cut out a clip and save it as a file?</span><svg class="landing-faq-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
-                                <div class="landing-faq-body" data-i18n="landing.faq.a6">Yes. You can trim the timeline, stitch cameras, burn speed, coordinates and a mini-map onto each frame, and save as MP4 with GPS inside the file or as a separate .gpx track. A single frame saves as a .jpg.</div>
+                                <div class="landing-faq-body" data-i18n="landing.faq.a6">Yes. You can trim the timeline, stitch cameras, burn speed, coordinates and a mini-map onto the video, and save as MP4 with GPS inside the file or as a separate .gpx track. A still image saves as a .jpg.</div>
                             </details>
                             <details class="landing-faq-item">
                                 <summary><span data-i18n="landing.faq.q10">Can I blur a license plate or a face before sharing?</span><svg class="landing-faq-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
@@ -1555,7 +1555,7 @@
                                     data-follow-mode="off"
                                     aria-pressed="true"
                                     data-i18n-attr="aria-label:map.follow.off,title:map.follow.off"
-                                    aria-label="No follow" title="No follow">
+                                    aria-label="Don't follow the car" title="Don't follow the car">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="2" x2="5" y1="12" y2="12"/><line x1="19" x2="22" y1="12" y2="12"/><line x1="12" x2="12" y1="2" y2="5"/><line x1="12" x2="12" y1="19" y2="22"/><circle cx="12" cy="12" r="7"/></svg>
                             </button>
                             <button class="map-control-btn map-follow-seg" type="button"
@@ -1650,7 +1650,7 @@
                          and markers keep working on top of the empty
                          canvas regardless. Hidden by default. -->
                     <div id="map-style-error" class="map-style-error" hidden role="status" aria-live="polite">
-                        <span class="map-style-error-text" data-i18n="map.styleError.text">Map tiles unavailable</span>
+                        <span class="map-style-error-text" data-i18n="map.styleError.text">Map background unavailable</span>
                         <button id="map-style-retry" class="map-style-error-btn" type="button" data-i18n="map.styleError.retry">Retry</button>
                         <button id="map-style-dismiss" class="map-style-error-close" type="button"
                                 data-i18n-attr="aria-label:map.styleError.dismiss,title:map.styleError.dismiss"
@@ -1765,7 +1765,7 @@
                     </div>
                     <button id="player-capture" class="player-btn" type="button" aria-keyshortcuts="S"
                             data-i18n-attr="aria-label:player.capture,title:player.capture"
-                            aria-label="Save frame (S)" title="Save frame (S)">
+                            aria-label="Save still image (S)" title="Save still image (S)">
                         <!-- camera (lucide) -->
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
                     </button>
@@ -1785,8 +1785,8 @@
                     <button id="player-view-mode" class="player-btn" type="button"
                             data-mode="focus"
                             data-i18n-attr="aria-label:player.view.toggle,title:player.view.toggle"
-                            aria-label="Channel layout"
-                            title="Channel layout" hidden>
+                            aria-label="Camera layout"
+                            title="Camera layout" hidden>
                         <!-- picture-in-picture-2 (focus mode) -->
                         <svg class="i-vm i-vm-focus" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 9V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h7"/><rect width="10" height="7" x="12" y="13" rx="2"/></svg>
                         <!-- grid-2x2 (split mode) -->
@@ -2377,10 +2377,10 @@
                  the never-checkbox stores +Infinity ("off") to disable
                  markers everywhere - chart, map, strip, sidebar chip. -->
             <div class="export-modal-section">
-                <h3 class="settings-section-title" data-i18n="settings.events.section">Event markers</h3>
+                <h3 class="settings-section-title" data-i18n="settings.events.section">Detected events</h3>
                 <div class="settings-row">
                     <label class="settings-select-row">
-                        <span class="settings-select-label" data-i18n="settings.events.threshold.label">Impact sensitivity threshold</span>
+                        <span class="settings-select-label" data-i18n="settings.events.threshold.label">Impact sensitivity</span>
                         <span class="settings-numeric-row">
                             <input id="settings-events-threshold-input" type="number" inputmode="decimal" class="settings-number-input"
                                    min="0.1" max="2" step="0.05">
@@ -2416,7 +2416,7 @@
                         <span class="settings-toggle-slider" aria-hidden="true"></span>
                         <span class="settings-toggle-label" data-i18n="settings.ingest.gap.never">Never split - one trip from all files</span>
                     </label>
-                    <p class="settings-toggle-desc" data-i18n="settings.ingest.gap.description">Applies to future imports and re-groups already-loaded trips.</p>
+                    <p class="settings-toggle-desc" data-i18n="settings.ingest.gap.description">Applies to folders you open from now on and re-groups trips already loaded.</p>
                 </div>
             </div>
             <div class="export-modal-section" id="settings-privacy-section">
@@ -2439,27 +2439,27 @@
                  Clearing touches ONLY the indexCache store - folders and
                  annotations stay. -->
             <div class="export-modal-section">
-                <h3 class="settings-section-title" data-i18n="settings.cache.section">Recordings cache</h3>
+                <h3 class="settings-section-title" data-i18n="settings.cache.section">Saved recording info</h3>
                 <div class="settings-row">
-                    <p class="settings-toggle-desc" data-i18n="settings.cache.description">Remembers what dashcamigo read from your recordings, so folders you open again load instantly. The videos themselves are never stored.</p>
+                    <p class="settings-toggle-desc" data-i18n="settings.cache.description">Remembers details dashcamigo has already read, so folders you open again load instantly. The videos themselves are never stored.</p>
                     <div class="settings-info-row">
                         <span class="settings-info-label" data-i18n="settings.cache.usage.label">Space used</span>
                         <span id="settings-cache-usage-value" class="settings-info-value">—</span>
                     </div>
                     <label class="settings-select-row">
-                        <span class="settings-select-label" data-i18n="settings.cache.limit.label">Size limit</span>
+                        <span class="settings-select-label" data-i18n="settings.cache.limit.label">Space limit</span>
                         <span class="settings-numeric-row">
                             <input id="settings-cache-limit-input" type="number" inputmode="numeric" class="settings-number-input"
                                    min="64" max="4096" step="64">
                             <span class="settings-numeric-unit" data-i18n="settings.cache.limit.unit">MB</span>
                         </span>
                     </label>
-                    <p class="settings-toggle-desc" data-i18n="settings.cache.limit.description">When the cache outgrows the limit, the oldest folders are forgotten first.</p>
+                    <p class="settings-toggle-desc" data-i18n="settings.cache.limit.description">When this space fills up, the oldest folders are forgotten first.</p>
                 </div>
                 <div class="settings-row">
                     <button id="settings-cache-clear-btn" class="dc-btn dc-btn--secondary" type="button"
-                            data-i18n="settings.cache.clear.label">Clear recordings cache</button>
-                    <p class="settings-toggle-desc" data-i18n="settings.cache.clear.description">Folders will load from scratch the next time you open them. Trip names, notes and markers are kept.</p>
+                            data-i18n="settings.cache.clear.label">Clear saved recording info</button>
+                    <p class="settings-toggle-desc" data-i18n="settings.cache.clear.description">dashcamigo will read each folder from scratch the next time you open it. Trip names, notes and markers are kept.</p>
                 </div>
             </div>
             <!-- About & diagnostics: read-only info (version, storage) and
@@ -2484,8 +2484,8 @@
                 </div>
                 <div class="settings-row">
                     <button id="settings-clear-cache-btn" class="dc-btn dc-btn--secondary" type="button"
-                            data-i18n="settings.about.clearCache.label">Clear offline cache</button>
-                    <p class="settings-toggle-desc" data-i18n="settings.about.clearCache.description">Forces a fresh download of the app on the next visit. Settings and language are kept.</p>
+                            data-i18n="settings.about.clearCache.label">Refresh offline app</button>
+                    <p class="settings-toggle-desc" data-i18n="settings.about.clearCache.description">Downloads a fresh copy of the app next time you open it. Settings and language stay the same.</p>
                 </div>
             </div>
             <!-- Danger zone. Wired up in src/ui/settings-modal.ts: the button
@@ -2493,7 +2493,7 @@
                  src/ui/reset.ts. Visually separated from Privacy via the
                  .settings-danger class (red accents, divider above). -->
             <div class="export-modal-section settings-danger">
-                <h3 class="settings-section-title" data-i18n="settings.danger.section">Danger zone</h3>
+                <h3 class="settings-section-title" data-i18n="settings.danger.section">Reset app data</h3>
                 <div class="settings-row">
                     <p class="settings-toggle-desc" data-i18n="settings.danger.onboarding.description">Show the first-run tips (trips, player, export) again next time you use them.</p>
                     <button id="settings-reset-onboarding-btn" class="dc-btn dc-btn--secondary" type="button"

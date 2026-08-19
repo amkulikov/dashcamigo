@@ -252,7 +252,7 @@ jobs:
           #   - versioned zip - the browser-download asset, version visible in
           #     the filename;
           #   - fixed-name tar.gz - the target of the copy-paste one-liner in
-          #     README / docs/self-hosting.md. releases/latest/download/<asset>
+          #     docs/self-hosting.md. releases/latest/download/<asset>
           #     only resolves an asset whose name is stable across releases.
           # The top-level folder is a fixed "dashcamigo" (not versioned) so the
           # one-liner can `npx serve dashcamigo` without knowing the version;

@@ -1,9 +1,29 @@
 # GPS format coverage
 
-Status of dashcam GPS-storage formats vs. the parser layer (`src/parsers/`).
-Ground truth is real device recordings - not redistributable, so only the
-anonymized fixtures under `tests/testdata/` and `src/parsers/__fixtures__/` are
-committed - plus the ExifTool `QuickTimeStream.pl` byte layouts.
+## Find your camera
+
+Use your browser's Find command to search this page for the camera brand or
+model. The section where it appears tells you how confidently its GPS data is
+supported:
+
+- **Verified with a real recording** means the format has been tested against
+  files produced by the camera.
+- **Implemented from an open-source reference** means support is available but
+  still needs confirmation from the first real sample.
+- **Not supported** explains known formats that dashcamigo deliberately does not
+  claim.
+
+If your camera is not listed, create a file-name report at
+[dashcamigo.app/add-my-camera](https://dashcamigo.app/add-my-camera). New formats
+are added from real recordings, and the report is the easiest place to start.
+
+## What this document records
+
+This is the evidence log for dashcam GPS formats. Ground truth comes from real
+device recordings and verified open-source implementations such as ExifTool's
+`QuickTimeStream.pl`. Real recordings are not committed; the repository only
+contains anonymized fixtures under `tests/testdata/` and
+`src/parsers/__fixtures__/`.
 
 **Division of labor.** Which format is claimed by which primitive/variant,
 probe order, filename techniques, and embedded-vs-sidecar source hints are
@@ -16,7 +36,7 @@ unit/scale quirks, sign conventions, firmware clock biases, unresolved
 upstream conflicts, and the deliberate non-support decisions. Where a
 byte-layout claim here disagrees with the code, the code wins - fix the doc.
 
-## Rule: sample-first, with a foreign-source waiver
+## Adding a format: sample first
 
 The gold standard is a byte parser that ships with a **real sample**
 (`extractor + sample + tests`); when a sample exists, the `onboard-format`
@@ -45,7 +65,7 @@ our real samples, the format is not implemented at all - and the reasoning
 lives as a comment at the bail-out in code, not as a backlog entry here. Unresolved upstream conflicts (units, scales, hemisphere conventions) are
 carried as explicit caveats in the tables - never silently picked and forgotten.
 
-## Verified against a real local sample
+## Verified with a real recording
 
 | Format | Real sample | Notes |
 |---|---|---|

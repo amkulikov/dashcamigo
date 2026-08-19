@@ -1,26 +1,27 @@
-# Browser & OS support
+# Browser and OS support
 
-What dashcamigo actually needs from a browser, which versions provide it, how we
-detect gaps, and what the user sees when something is missing.
+## The short answer
 
-We advertise "opens anywhere with a browser". That is true for the **core job**
-(load an SD-card folder, watch a recording with the GPS map and speed chart) on
-any current-or-previous-major browser. It is not true feature-for-feature on
-every engine: editing/export, the map, and HEVC/TS playback each lean on a Web
-API that some browsers lack. This file is the source of truth for that boundary.
+Use a current desktop browser for the smoothest experience. Chrome and Edge
+offer the broadest support, especially when editing a trip or saving a large
+export directly to disk.
 
-Implementation:
-- Detection: `src/capabilities.ts` (pure, tested) - probes each API, classifies
-  it by severity, identifies the browser/OS for tailored advice.
-- Surfacing: `src/ui/capability-gate.ts` - the blocking gate (fatal) + the
-  proactive notice (degraded), called from `src/app.ts`.
-- Map degradation: `src/ui/map.ts` (`ensureMap`/`ensureMiniMap` preflight a
-  WebGL context, `refreshMapless` keeps the chart working without a map).
-- Export sink selection: `src/ui/export-flow.ts` chooses disk-stream vs
-  in-memory; the probe (`nativeFsaAvailable()`) and the RAM-backed handle live
-  in `src/ui/in-memory-file.ts`.
+Safari and Firefox handle the core job — opening recordings, playing a trip,
+and showing its route and charts — when the browser and operating system can
+play the camera's video format. Some editing and export options may be limited.
 
-## Severity model
+On phones and tablets, the available features also depend on the operating
+system. On iPhone and iPad, selecting the individual recordings you need is
+safer than selecting an entire SD-card folder. The map requires WebGL2 and may
+be unavailable when hardware acceleration is disabled or the graphics hardware
+is too old.
+
+dashcamigo checks these capabilities when it opens. If something important is
+missing, the app explains which feature is affected and what you can do. The
+rest of this document records the exact boundary for maintainers and technical
+troubleshooting.
+
+## Capability model
 
 Each capability is one of three severities:
 
@@ -42,12 +43,15 @@ Per-capability severity assignment and the rationale behind each one: `SEVERITY`
 in `src/capabilities.ts` - one map, one comment per capability, the single place
 to revisit if a gap's classification should change.
 
-## What the user sees
+### Implementation
 
-Which gap maps to which severity, which surface announces it (blocking gate,
-proactive notice, in-place overlay), and the wording of the advice live in
-three places: `SEVERITY` in `src/capabilities.ts`, the gate/notice wiring in
-`src/ui/capability-gate.ts`, and the `caps.*` keys in `src/i18n/`.
+- Detection and severity: `src/capabilities.ts`.
+- Blocking and degraded-state notices: `src/ui/capability-gate.ts`, with copy
+  in the `caps.*` keys under `src/i18n/`.
+- Map degradation: `src/ui/map.ts`; `refreshMapless` keeps the chart working
+  without a map.
+- Export destination selection: `src/ui/export-flow.ts` and
+  `src/ui/in-memory-file.ts`.
 
 ## Minimum versions (first stable, no flag)
 

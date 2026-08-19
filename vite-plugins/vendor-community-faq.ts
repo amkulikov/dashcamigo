@@ -35,11 +35,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Werden meine 70mai-Aufnahmen irgendwohin hochgeladen?",
-                "a": "Nein. Es gibt kein Backend. Dein Browser liest die Dateien lokal mit der File System Access API und dekodiert sie mit WebCodecs. Nichts verlässt dein Gerät."
+                "a": "Nein. Dein Browser liest die Dateien direkt von deinem Gerät. dashcamigo hat keinen Server, an den sie gesendet werden könnten. Nichts verlässt dein Gerät."
             },
             {
                 "q": "Kann dashcamigo mit Mehrkanal-70mai-Kameras (S500, A810, T800) umgehen?",
-                "a": "Ja. 70mai-Mehrkanal-Modelle schreiben in Unterordner wie Normal/Front/, Normal/Back/, Normal/Interior/. dashcamigo erkennt dieses Layout, gruppiert die Dateien zu Fahrten und spielt alle Kanäle synchron ab. Klick einen beliebigen Kanal an, um ihn zur Hauptansicht zu machen, oder behalte sie nebeneinander."
+                "a": "Ja. 70mai-Mehrkanal-Modelle schreiben in Unterordner wie Normal/Front/, Normal/Back/, Normal/Interior/. dashcamigo erkennt dieses Layout, gruppiert die Dateien zu Fahrten und spielt alle Kameras synchron ab. Klick eine beliebige Kamera an, um sie zur Hauptansicht zu machen, oder behalte sie nebeneinander."
             },
             {
                 "q": "Kann ich einen zugeschnittenen Clip aus einer 70mai-Fahrt exportieren?",
@@ -61,11 +61,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "¿Se subirán mis grabaciones de 70mai a algún sitio?",
-                "a": "No. No hay backend. Tu navegador lee los archivos localmente con la File System Access API y los decodifica con WebCodecs. Nada sale de tu dispositivo."
+                "a": "No. Tu navegador lee los archivos directamente desde tu dispositivo. dashcamigo no tiene ningún servidor al que enviarlos, así que nada sale de tu dispositivo."
             },
             {
                 "q": "¿Puede dashcamigo con las cámaras 70mai multicanal (S500, A810, T800)?",
-                "a": "Sí. Los modelos 70mai multicanal escriben en subcarpetas como Normal/Front/, Normal/Back/, Normal/Interior/. dashcamigo detecta esta estructura, agrupa los archivos en trayectos y reproduce todos los canales sincronizados. Haz clic en cualquier canal para convertirlo en la vista principal, o mantenlos en paralelo."
+                "a": "Sí. Los modelos 70mai multicanal escriben en subcarpetas como Normal/Front/, Normal/Back/, Normal/Interior/. dashcamigo detecta esta estructura, agrupa los archivos en trayectos y reproduce todas las cámaras sincronizadas. Haz clic en cualquier cámara para convertirla en la vista principal, o mantenlas en paralelo."
             },
             {
                 "q": "¿Puedo exportar un clip recortado de un trayecto 70mai?",
@@ -87,11 +87,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Mes enregistrements 70mai seront-ils téléversés quelque part ?",
-                "a": "Non. Il n'y a aucun serveur. Ton navigateur lit les fichiers localement avec la File System Access API et les décode avec WebCodecs. Rien ne quitte ton appareil."
+                "a": "Non. Ton navigateur lit les fichiers directement sur ton appareil. dashcamigo n'a aucun serveur où les envoyer : rien ne quitte ton appareil."
             },
             {
                 "q": "dashcamigo gère-t-il les caméras 70mai multi-canaux (S500, A810, T800) ?",
-                "a": "Oui. Les modèles 70mai multi-canaux écrivent dans des sous-dossiers comme Normal/Front/, Normal/Back/, Normal/Interior/. dashcamigo détecte cette structure, regroupe les fichiers en trajets et lit tous les canaux en synchronisation. Clique sur n'importe quel canal pour en faire la vue principale, ou garde-les côte à côte."
+                "a": "Oui. Les modèles 70mai multi-canaux écrivent dans des sous-dossiers comme Normal/Front/, Normal/Back/, Normal/Interior/. dashcamigo détecte cette structure, regroupe les fichiers en trajets et lit toutes les caméras en synchronisation. Clique sur n'importe quelle caméra pour en faire la vue principale, ou garde-les côte à côte."
             },
             {
                 "q": "Puis-je exporter un extrait découpé d'un trajet 70mai ?",
@@ -113,11 +113,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Czy moje nagrania 70mai będą gdzieś wysyłane?",
-                "a": "Nie. Nie ma żadnego backendu. Twoja przeglądarka odczytuje pliki lokalnie przez File System Access API i dekoduje je przez WebCodecs. Nic nie opuszcza Twojego urządzenia."
+                "a": "Nie. Przeglądarka odczytuje pliki bezpośrednio z twojego urządzenia. dashcamigo nie ma serwera, na który mogłaby je wysłać, więc nic nie opuszcza urządzenia."
             },
             {
                 "q": "Czy dashcamigo obsługuje wielokanałowe kamery 70mai (S500, A810, T800)?",
-                "a": "Tak. Wielokanałowe modele 70mai zapisują dane do podfolderów takich jak Normal/Front/, Normal/Back/, Normal/Interior/. dashcamigo wykrywa ten układ, grupuje pliki w przejazdy i odtwarza wszystkie kanały synchronicznie. Kliknij dowolny kanał, aby ustawić go jako główny widok, albo zostaw je obok siebie."
+                "a": "Tak. Wielokanałowe modele 70mai zapisują dane do podfolderów takich jak Normal/Front/, Normal/Back/, Normal/Interior/. dashcamigo wykrywa ten układ, grupuje pliki w przejazdy i odtwarza wszystkie kamery synchronicznie. Kliknij dowolną kamerę, aby ustawić ją jako główny widok, albo zostaw je obok siebie."
             },
             {
                 "q": "Czy mogę wyeksportować przycięty fragment z przejazdu 70mai?",
@@ -139,11 +139,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Minhas gravações da 70mai vão ser enviadas para algum lugar?",
-                "a": "Não. Não existe backend. Seu navegador lê os arquivos localmente com a File System Access API e os decodifica com WebCodecs. Nada sai do seu dispositivo."
+                "a": "Não. O navegador lê os arquivos direto do seu dispositivo. O dashcamigo não tem servidor para onde enviá-los, então nada sai do aparelho."
             },
             {
                 "q": "O dashcamigo lida com câmeras 70mai multicanal (S500, A810, T800)?",
-                "a": "Sim. Os modelos multicanal da 70mai gravam em subpastas como Normal/Front/, Normal/Back/, Normal/Interior/. O dashcamigo detecta essa estrutura, agrupa os arquivos em viagens e reproduz todos os canais em sincronia. Clique em qualquer canal para torná-lo a visualização principal, ou mantenha-os lado a lado."
+                "a": "Sim. Os modelos multicanal da 70mai gravam em subpastas como Normal/Front/, Normal/Back/, Normal/Interior/. O dashcamigo detecta essa estrutura, agrupa os arquivos em viagens e reproduz todas as câmeras em sincronia. Clique em qualquer câmera para torná-la a visualização principal, ou mantenha-as lado a lado."
             },
             {
                 "q": "Posso exportar um clipe recortado de uma viagem da 70mai?",
@@ -165,11 +165,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "我的 70mai 录像会被上传到什么地方吗？",
-                "a": "不会。这里没有后端。浏览器通过 File System Access API 在本地读取文件，并用 WebCodecs 解码。没有任何东西会离开你的设备。"
+                "a": "不会。浏览器会直接读取你设备上的文件。dashcamigo 没有用于接收文件的服务器，因此录像不会离开你的设备。"
             },
             {
                 "q": "dashcamigo 能处理多通道的 70mai 记录仪（S500、A810、T800）吗？",
-                "a": "能。70mai 多通道型号会写入诸如 Normal/Front/、Normal/Back/、Normal/Interior/ 之类的子文件夹。dashcamigo 会识别这种结构，将文件分组为行程，并同步播放所有通道。点击任意通道即可将其设为主画面，或者让它们并排显示。"
+                "a": "能。70mai 多通道型号会写入诸如 Normal/Front/、Normal/Back/、Normal/Interior/ 之类的子文件夹。dashcamigo 会识别这种结构，将文件分组为行程，并同步播放所有摄像头画面。点击任意摄像头画面即可将其设为主画面，或者让它们并排显示。"
             },
             {
                 "q": "我能从一段 70mai 行程中导出剪辑好的片段吗？",
@@ -191,11 +191,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "70mai の録画がどこかにアップロードされることはありますか?",
-                "a": "いいえ。バックエンドはありません。ブラウザが File System Access API でファイルをローカルに読み込み、WebCodecs でデコードします。デバイスから外に出るものは何もありません。"
+                "a": "いいえ。ブラウザがデバイス上のファイルを直接読み取ります。dashcamigo にはファイルの送信先となるサーバーがないため、デバイスの外には出ません。"
             },
             {
                 "q": "dashcamigo はマルチチャンネルの 70mai カメラ (S500、A810、T800) に対応していますか?",
-                "a": "はい。70mai のマルチチャンネルモデルは Normal/Front/、Normal/Back/、Normal/Interior/ のようなサブフォルダに書き込みます。dashcamigo はこのレイアウトを検出し、ファイルを走行ごとにまとめて全チャンネルを同期再生します。任意のチャンネルをクリックするとメイン表示に切り替わり、並べて表示したままにもできます。"
+                "a": "はい。70mai のマルチチャンネルモデルは Normal/Front/、Normal/Back/、Normal/Interior/ のようなサブフォルダに書き込みます。dashcamigo はこのレイアウトを検出し、ファイルを走行ごとにまとめてすべてのカメラ映像を同期再生します。任意のカメラ映像をクリックするとメイン表示に切り替わり、並べて表示したままにもできます。"
             },
             {
                 "q": "70mai の走行からクリップを切り出してエクスポートできますか?",
@@ -217,11 +217,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "제 70mai 녹화가 어딘가로 업로드되나요?",
-                "a": "아니요. 백엔드가 없어요. 브라우저가 File System Access API로 파일을 로컬에서 읽고 WebCodecs로 디코딩해요. 기기 밖으로 나가는 건 아무것도 없어요."
+                "a": "아니요. 브라우저가 기기의 파일을 직접 읽어요. dashcamigo에는 파일을 보낼 서버가 없어서 녹화 영상은 기기 밖으로 나가지 않아요."
             },
             {
                 "q": "dashcamigo가 멀티 채널 70mai 카메라(S500, A810, T800)를 처리할 수 있나요?",
-                "a": "네. 70mai 멀티 채널 모델은 Normal/Front/, Normal/Back/, Normal/Interior/ 같은 하위 폴더에 기록해요. dashcamigo는 이 구조를 인식해서 파일을 주행별로 묶고 모든 채널을 동기화해서 재생해요. 채널을 클릭하면 그게 메인 화면이 되거나, 나란히 둘 수도 있어요."
+                "a": "네. 70mai 멀티 채널 모델은 Normal/Front/, Normal/Back/, Normal/Interior/ 같은 하위 폴더에 기록해요. dashcamigo는 이 구조를 인식해서 파일을 주행별로 묶고 모든 카메라 화면을 동기화해서 재생해요. 카메라 화면을 클릭하면 그게 메인 화면이 되거나, 나란히 둘 수도 있어요."
             },
             {
                 "q": "70mai 주행에서 잘라낸 클립을 내보낼 수 있나요?",
@@ -245,11 +245,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Werden Viofo-Aufnahmen hochgeladen?",
-                "a": "Nein. Es gibt kein Backend. Der Browser liest die Dateien lokal und dekodiert sie mit WebCodecs. Nichts verlässt dein Gerät."
+                "a": "Nein. Dein Browser liest die Dateien direkt von deinem Gerät. dashcamigo hat keinen Server, an den sie gesendet werden könnten. Nichts verlässt dein Gerät."
             },
             {
                 "q": "Kommt dashcamigo mit Viofo-Zweikanal-Kameras (A129/A229) zurecht?",
-                "a": "Ja. Das Kanalkürzel (F = vorn, R = hinten, I = Innenraum) im Viofo-Dateinamenschema sagt dashcamigo, welche Datei welche ist. Dateien aus demselben Moment werden zu einer Fahrt gruppiert und synchron abgespielt. Klick einen beliebigen Kanal an, um ihn zur Hauptansicht zu machen."
+                "a": "Ja. Das Kanalkürzel (F = vorn, R = hinten, I = Innenraum) im Viofo-Dateinamenschema sagt dashcamigo, welche Datei welche ist. Dateien aus demselben Moment werden zu einer Fahrt gruppiert und synchron abgespielt. Klick eine beliebige Kamera an, um sie zur Hauptansicht zu machen."
             },
             {
                 "q": "Kann ich einen Clip aus einer Viofo-Aufnahme zuschneiden?",
@@ -271,11 +271,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "¿Se subirán las grabaciones de Viofo?",
-                "a": "No. No hay backend. El navegador lee los archivos localmente y los decodifica con WebCodecs. Nada sale de tu dispositivo."
+                "a": "No. Tu navegador lee los archivos directamente desde tu dispositivo. dashcamigo no tiene ningún servidor al que enviarlos, así que nada sale de tu dispositivo."
             },
             {
                 "q": "¿Funciona dashcamigo con las cámaras Viofo de doble canal (A129/A229)?",
-                "a": "Sí. El sufijo de canal (F = frontal, R = trasera, I = interior) del patrón de nombre de Viofo le indica a dashcamigo qué archivo es cuál. Los archivos del mismo momento se agrupan en un solo trayecto y se reproducen sincronizados. Haz clic en cualquier canal para convertirlo en la vista principal."
+                "a": "Sí. El sufijo de canal (F = frontal, R = trasera, I = interior) del patrón de nombre de Viofo le indica a dashcamigo qué archivo es cuál. Los archivos del mismo momento se agrupan en un solo trayecto y se reproducen sincronizados. Haz clic en cualquier cámara para convertirla en la vista principal."
             },
             {
                 "q": "¿Puedo recortar un clip de una grabación Viofo?",
@@ -297,11 +297,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Les enregistrements Viofo seront-ils téléversés ?",
-                "a": "Non. Il n'y a aucun serveur. Le navigateur lit les fichiers localement et les décode avec WebCodecs. Rien ne quitte ton appareil."
+                "a": "Non. Ton navigateur lit les fichiers directement sur ton appareil. dashcamigo n'a aucun serveur où les envoyer : rien ne quitte ton appareil."
             },
             {
                 "q": "dashcamigo gère-t-il les caméras Viofo à deux canaux (A129/A229) ?",
-                "a": "Oui. Le suffixe de canal (F = avant, R = arrière, I = habitacle) dans le modèle de nom de fichier Viofo indique à dashcamigo quel fichier est lequel. Les fichiers du même instant sont regroupés en un seul trajet et lus en synchronisation. Clique sur n'importe quel canal pour en faire la vue principale."
+                "a": "Oui. Le suffixe de canal (F = avant, R = arrière, I = habitacle) dans le modèle de nom de fichier Viofo indique à dashcamigo quel fichier est lequel. Les fichiers du même instant sont regroupés en un seul trajet et lus en synchronisation. Clique sur n'importe quelle caméra pour en faire la vue principale."
             },
             {
                 "q": "Puis-je découper un extrait d'un enregistrement Viofo ?",
@@ -323,11 +323,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Czy nagrania Viofo będą wysyłane?",
-                "a": "Nie. Nie ma żadnego backendu. Przeglądarka odczytuje pliki lokalnie i dekoduje je przez WebCodecs. Nic nie opuszcza Twojego urządzenia."
+                "a": "Nie. Przeglądarka odczytuje pliki bezpośrednio z twojego urządzenia. dashcamigo nie ma serwera, na który mogłaby je wysłać, więc nic nie opuszcza urządzenia."
             },
             {
                 "q": "Czy dashcamigo obsługuje dwukanałowe kamery Viofo (A129/A229)?",
-                "a": "Tak. Sufiks kanału (F = przód, R = tył, I = kabina) we wzorcu nazwy pliku Viofo mówi dashcamigo, który plik jest który. Pliki z tego samego momentu w czasie są grupowane w jeden przejazd i odtwarzane synchronicznie. Kliknij dowolny kanał, aby ustawić go jako główny widok."
+                "a": "Tak. Sufiks kanału (F = przód, R = tył, I = kabina) we wzorcu nazwy pliku Viofo mówi dashcamigo, który plik jest który. Pliki z tego samego momentu w czasie są grupowane w jeden przejazd i odtwarzane synchronicznie. Kliknij dowolną kamerę, aby ustawić ją jako główny widok."
             },
             {
                 "q": "Czy mogę przyciąć fragment z nagrania Viofo?",
@@ -349,11 +349,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "As gravações da Viofo vão ser enviadas?",
-                "a": "Não. Não existe backend. O navegador lê os arquivos localmente e os decodifica com WebCodecs. Nada sai do seu dispositivo."
+                "a": "Não. O navegador lê os arquivos direto do seu dispositivo. O dashcamigo não tem servidor para onde enviá-los, então nada sai do aparelho."
             },
             {
                 "q": "O dashcamigo lida com câmeras Viofo de dois canais (A129/A229)?",
-                "a": "Sim. O sufixo de canal (F = frente, R = traseira, I = interior) no padrão de nome de arquivo da Viofo diz ao dashcamigo qual arquivo é qual. Os arquivos do mesmo momento no tempo são agrupados em uma única viagem e reproduzidos em sincronia. Clique em qualquer canal para torná-lo a visualização principal."
+                "a": "Sim. O sufixo de canal (F = frente, R = traseira, I = interior) no padrão de nome de arquivo da Viofo diz ao dashcamigo qual arquivo é qual. Os arquivos do mesmo momento no tempo são agrupados em uma única viagem e reproduzidos em sincronia. Clique em qualquer câmera para torná-la a visualização principal."
             },
             {
                 "q": "Posso recortar um clipe de uma gravação da Viofo?",
@@ -375,11 +375,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Viofo 录像会被上传吗？",
-                "a": "不会。这里没有后端。浏览器在本地读取文件，并用 WebCodecs 解码。没有任何东西会离开你的设备。"
+                "a": "不会。浏览器会直接读取你设备上的文件。dashcamigo 没有用于接收文件的服务器，因此录像不会离开你的设备。"
             },
             {
                 "q": "dashcamigo 能处理 Viofo 双通道（A129/A229）记录仪吗？",
-                "a": "能。Viofo 文件名规则中的通道后缀（F = 前、R = 后、I = 车内）会告诉 dashcamigo 哪个文件是哪个。同一时刻的文件会被分组为一段行程并同步播放。点击任意通道即可将其设为主画面。"
+                "a": "能。Viofo 文件名规则中的通道后缀（F = 前、R = 后、I = 车内）会告诉 dashcamigo 哪个文件是哪个。同一时刻的文件会被分组为一段行程并同步播放。点击任意摄像头画面即可将其设为主画面。"
             },
             {
                 "q": "我能从 Viofo 录像中剪出一段片段吗？",
@@ -401,11 +401,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Viofo の録画はアップロードされますか?",
-                "a": "いいえ。バックエンドはありません。ブラウザがファイルをローカルに読み込み、WebCodecs でデコードします。デバイスから外に出るものは何もありません。"
+                "a": "いいえ。ブラウザがデバイス上のファイルを直接読み取ります。dashcamigo にはファイルの送信先となるサーバーがないため、デバイスの外には出ません。"
             },
             {
                 "q": "dashcamigo は Viofo のデュアルチャンネル (A129/A229) カメラに対応していますか?",
-                "a": "はい。Viofo のファイル命名パターンに含まれるチャンネルのサフィックス (F = 前方、R = 後方、I = 車内) によって、dashcamigo はどのファイルがどれかを判別します。同じ時刻のファイルは 1 つの走行にまとめられ、同期再生されます。任意のチャンネルをクリックするとメイン表示に切り替わります。"
+                "a": "はい。Viofo のファイル命名パターンに含まれるチャンネルのサフィックス (F = 前方、R = 後方、I = 車内) によって、dashcamigo はどのファイルがどれかを判別します。同じ時刻のファイルは 1 つの走行にまとめられ、同期再生されます。任意のカメラ映像をクリックするとメイン表示に切り替わります。"
             },
             {
                 "q": "Viofo の録画からクリップを切り出せますか?",
@@ -427,11 +427,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Viofo 녹화가 업로드되나요?",
-                "a": "아니요. 백엔드가 없어요. 브라우저가 파일을 로컬에서 읽고 WebCodecs로 디코딩해요. 기기 밖으로 나가는 건 아무것도 없어요."
+                "a": "아니요. 브라우저가 기기의 파일을 직접 읽어요. dashcamigo에는 파일을 보낼 서버가 없어서 녹화 영상은 기기 밖으로 나가지 않아요."
             },
             {
                 "q": "dashcamigo가 Viofo 듀얼 채널(A129/A229) 카메라를 처리하나요?",
-                "a": "네. Viofo 파일 이름 규칙의 채널 접미사(F = 전방, R = 후방, I = 실내)가 어떤 파일이 어떤 건지 dashcamigo에게 알려줘요. 같은 시각의 파일들은 하나의 주행으로 묶여 동기화 재생돼요. 채널을 클릭하면 그게 메인 화면이 돼요."
+                "a": "네. Viofo 파일 이름 규칙의 채널 접미사(F = 전방, R = 후방, I = 실내)가 어떤 파일이 어떤 건지 dashcamigo에게 알려줘요. 같은 시각의 파일들은 하나의 주행으로 묶여 동기화 재생돼요. 카메라 화면을 클릭하면 그게 메인 화면이 돼요."
             },
             {
                 "q": "Viofo 녹화에서 클립을 잘라낼 수 있나요?",
@@ -455,11 +455,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Werden meine BlackVue-Aufnahmen auf einen Server hochgeladen?",
-                "a": "Nein. Es gibt überhaupt kein Backend. Der Browser liest die Dateien lokal mit der File System Access API. Nichts verlässt dein Gerät — anders als bei BlackVue Cloud, das über deren Server läuft."
+                "a": "Nein. Dein Browser liest die Dateien direkt von deinem Gerät. Anders als BlackVue Cloud sendet dashcamigo nichts über einen Server."
             },
             {
                 "q": "Zeigt dashcamigo sowohl die vordere als auch die hintere BlackVue-Kamera?",
-                "a": "Ja. BlackVue-Zweikanal-Modelle schreiben denselben Zeitstempel in eine vordere (F) und eine hintere (R) Datei. dashcamigo gruppiert sie zu einer Fahrt und spielt beide synchron ab. Klick einen beliebigen Kanal an, um ihn zur Hauptansicht zu machen, oder behalte sie nebeneinander."
+                "a": "Ja. BlackVue-Zweikanal-Modelle schreiben denselben Zeitstempel in eine vordere (F) und eine hintere (R) Datei. dashcamigo gruppiert sie zu einer Fahrt und spielt beide synchron ab. Klick eine beliebige Kamera an, um sie zur Hauptansicht zu machen, oder behalte sie nebeneinander."
             },
             {
                 "q": "Kann ich einen Clip aus einer BlackVue-Fahrt exportieren?",
@@ -477,11 +477,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "¿Se subirán mis grabaciones de BlackVue a un servidor?",
-                "a": "No. No hay ningún backend. El navegador lee los archivos localmente con la File System Access API. Nada sale de tu dispositivo, a diferencia de BlackVue Cloud, que enruta a través de sus servidores."
+                "a": "No. Tu navegador lee los archivos directamente desde tu dispositivo. A diferencia de BlackVue Cloud, dashcamigo no envía nada a través de un servidor."
             },
             {
                 "q": "¿Muestra dashcamigo las cámaras frontal y trasera de BlackVue a la vez?",
-                "a": "Sí. Los modelos BlackVue de doble canal escriben la misma marca de tiempo en un archivo frontal (F) y otro trasero (R). dashcamigo los agrupa en un solo trayecto y reproduce ambos sincronizados. Haz clic en cualquiera de los canales para convertirlo en la vista principal, o mantenlos en paralelo."
+                "a": "Sí. Los modelos BlackVue de doble canal escriben la misma marca de tiempo en un archivo frontal (F) y otro trasero (R). dashcamigo los agrupa en un solo trayecto y reproduce ambos sincronizados. Haz clic en cualquiera de las cámaras para convertirla en la vista principal, o mantenlas en paralelo."
             },
             {
                 "q": "¿Puedo exportar un clip de un trayecto BlackVue?",
@@ -499,11 +499,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Mes enregistrements BlackVue seront-ils téléversés sur un serveur ?",
-                "a": "Non. Il n'y a aucun serveur du tout. Le navigateur lit les fichiers localement avec la File System Access API. Rien ne quitte ton appareil — contrairement à BlackVue Cloud, qui passe par leurs serveurs."
+                "a": "Non. Ton navigateur lit les fichiers directement sur ton appareil. Contrairement à BlackVue Cloud, dashcamigo ne transmet rien par un serveur."
             },
             {
                 "q": "dashcamigo affiche-t-il les caméras BlackVue avant et arrière ensemble ?",
-                "a": "Oui. Les modèles BlackVue à deux canaux écrivent le même horodatage dans un fichier avant (F) et un fichier arrière (R). dashcamigo les regroupe en un seul trajet et lit les deux en synchronisation. Clique sur l'un ou l'autre canal pour en faire la vue principale, ou garde-les côte à côte."
+                "a": "Oui. Les modèles BlackVue à deux canaux écrivent le même horodatage dans un fichier avant (F) et un fichier arrière (R). dashcamigo les regroupe en un seul trajet et lit les deux en synchronisation. Clique sur l'une ou l'autre caméra pour en faire la vue principale, ou garde-les côte à côte."
             },
             {
                 "q": "Puis-je exporter un extrait d'un trajet BlackVue ?",
@@ -521,11 +521,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Czy moje nagrania BlackVue będą wysyłane na serwer?",
-                "a": "Nie. Nie ma w ogóle żadnego backendu. Przeglądarka odczytuje pliki lokalnie przez File System Access API. Nic nie opuszcza Twojego urządzenia — w przeciwieństwie do BlackVue Cloud, które przesyła dane przez ich serwery."
+                "a": "Nie. Przeglądarka odczytuje pliki bezpośrednio z twojego urządzenia. W przeciwieństwie do BlackVue Cloud dashcamigo nie przesyła niczego przez serwer."
             },
             {
                 "q": "Czy dashcamigo pokazuje jednocześnie przednią i tylną kamerę BlackVue?",
-                "a": "Tak. Dwukanałowe modele BlackVue zapisują ten sam znacznik czasu do pliku przedniego (F) i tylnego (R). dashcamigo grupuje je w jeden przejazd i odtwarza oba synchronicznie. Kliknij dowolny kanał, aby ustawić go jako główny widok, albo zostaw je obok siebie."
+                "a": "Tak. Dwukanałowe modele BlackVue zapisują ten sam znacznik czasu do pliku przedniego (F) i tylnego (R). dashcamigo grupuje je w jeden przejazd i odtwarza oba synchronicznie. Kliknij dowolną kamerę, aby ustawić ją jako główny widok, albo zostaw je obok siebie."
             },
             {
                 "q": "Czy mogę wyeksportować fragment z przejazdu BlackVue?",
@@ -543,11 +543,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Minhas gravações da BlackVue vão ser enviadas para um servidor?",
-                "a": "Não. Não existe backend nenhum. O navegador lê os arquivos localmente com a File System Access API. Nada sai do seu dispositivo — diferente do BlackVue Cloud, que passa pelos servidores deles."
+                "a": "Não. O navegador lê os arquivos direto do seu dispositivo. Diferente do BlackVue Cloud, o dashcamigo não envia nada por um servidor."
             },
             {
                 "q": "O dashcamigo mostra as câmeras BlackVue da frente e da traseira juntas?",
-                "a": "Sim. Os modelos BlackVue de dois canais gravam o mesmo timestamp em um arquivo da frente (F) e um da traseira (R). O dashcamigo os agrupa em uma única viagem e reproduz os dois em sincronia. Clique em qualquer um dos canais para torná-lo a visualização principal, ou mantenha-os lado a lado."
+                "a": "Sim. Os modelos BlackVue de dois canais gravam o mesmo timestamp em um arquivo da frente (F) e um da traseira (R). O dashcamigo os agrupa em uma única viagem e reproduz os dois em sincronia. Clique em qualquer câmera para torná-la a visualização principal, ou mantenha-as lado a lado."
             },
             {
                 "q": "Posso exportar um clipe de uma viagem da BlackVue?",
@@ -565,11 +565,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "我的 BlackVue 录像会被上传到服务器吗？",
-                "a": "不会。根本没有后端。浏览器通过 File System Access API 在本地读取文件。没有任何东西会离开你的设备 — 这与会经过他们服务器中转的 BlackVue Cloud 不同。"
+                "a": "不会。浏览器会直接读取你设备上的文件。与 BlackVue Cloud 不同，dashcamigo 不会通过服务器传输任何内容。"
             },
             {
                 "q": "dashcamigo 能同时显示 BlackVue 的前后两个摄像头吗？",
-                "a": "能。BlackVue 双通道型号会把相同的时间戳写入一个前置（F）文件和一个后置（R）文件。dashcamigo 会把它们分组为一段行程并同步播放。点击任意通道即可将其设为主画面，或者让它们并排显示。"
+                "a": "能。BlackVue 双通道型号会把相同的时间戳写入一个前置（F）文件和一个后置（R）文件。dashcamigo 会把它们分组为一段行程并同步播放。点击任意摄像头画面即可将其设为主画面，或者让它们并排显示。"
             },
             {
                 "q": "我能从一段 BlackVue 行程中导出片段吗？",
@@ -587,11 +587,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "BlackVue の録画がサーバーにアップロードされることはありますか?",
-                "a": "いいえ。バックエンドは一切ありません。ブラウザが File System Access API でファイルをローカルに読み込みます。自社サーバーを経由する BlackVue Cloud とは違い、デバイスから外に出るものは何もありません。"
+                "a": "いいえ。ブラウザがデバイス上のファイルを直接読み取ります。BlackVue Cloud とは異なり、dashcamigo はサーバー経由で何も送信しません。"
             },
             {
                 "q": "dashcamigo は BlackVue の前方カメラと後方カメラの両方を表示しますか?",
-                "a": "はい。BlackVue のデュアルチャンネルモデルは、前方 (F) と後方 (R) のファイルに同じタイムスタンプを書き込みます。dashcamigo はそれらを 1 つの走行にまとめ、両方を同期再生します。どちらかのチャンネルをクリックするとメイン表示に切り替わり、並べて表示したままにもできます。"
+                "a": "はい。BlackVue のデュアルチャンネルモデルは、前方 (F) と後方 (R) のファイルに同じタイムスタンプを書き込みます。dashcamigo はそれらを 1 つの走行にまとめ、両方を同期再生します。どちらかのカメラ映像をクリックするとメイン表示に切り替わり、並べて表示したままにもできます。"
             },
             {
                 "q": "BlackVue の走行からクリップをエクスポートできますか?",
@@ -609,11 +609,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "제 BlackVue 녹화가 서버로 업로드되나요?",
-                "a": "아니요. 백엔드가 아예 없어요. 브라우저가 File System Access API로 파일을 로컬에서 읽어요. 기기 밖으로 나가는 건 아무것도 없어요 — 자사 서버를 거치는 BlackVue Cloud와는 달라요."
+                "a": "아니요. 브라우저가 기기의 파일을 직접 읽어요. BlackVue Cloud와 달리 dashcamigo는 서버를 통해 아무것도 보내지 않아요."
             },
             {
                 "q": "dashcamigo가 BlackVue 전방과 후방 카메라를 모두 보여주나요?",
-                "a": "네. BlackVue 듀얼 채널 모델은 같은 타임스탬프를 전방(F) 파일과 후방(R) 파일에 기록해요. dashcamigo는 이들을 하나의 주행으로 묶어 둘 다 동기화해서 재생해요. 한쪽 채널을 클릭하면 그게 메인 화면이 되거나, 나란히 둘 수도 있어요."
+                "a": "네. BlackVue 듀얼 채널 모델은 같은 타임스탬프를 전방(F) 파일과 후방(R) 파일에 기록해요. dashcamigo는 이들을 하나의 주행으로 묶어 둘 다 동기화해서 재생해요. 한쪽 카메라 화면을 클릭하면 그게 메인 화면이 되거나, 나란히 둘 수도 있어요."
             },
             {
                 "q": "BlackVue 주행에서 클립을 내보낼 수 있나요?",
@@ -637,7 +637,7 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Werden meine GoPro-Aufnahmen auf einen Server hochgeladen?",
-                "a": "Nein. Es gibt kein Backend. Der Browser liest die Dateien lokal mit der File System Access API. Nichts verlässt dein Gerät."
+                "a": "Nein. Dein Browser liest die Dateien direkt von deinem Gerät. dashcamigo hat keinen Server, an den sie gesendet werden könnten. Nichts verlässt dein Gerät."
             },
             {
                 "q": "Kann ich einen zugeschnittenen Clip mit GoPro-GPS darin exportieren?",
@@ -659,7 +659,7 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "¿Se suben mis grabaciones de GoPro a un servidor?",
-                "a": "No. No hay backend. El navegador lee los archivos localmente con la File System Access API. Nada sale de tu dispositivo."
+                "a": "No. Tu navegador lee los archivos directamente desde tu dispositivo. dashcamigo no tiene ningún servidor al que enviarlos, así que nada sale de tu dispositivo."
             },
             {
                 "q": "¿Puedo exportar un clip recortado con el GPS de GoPro dentro?",
@@ -681,7 +681,7 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Mes enregistrements GoPro sont-ils téléversés sur un serveur ?",
-                "a": "Non. Il n'y a aucun serveur. Le navigateur lit les fichiers localement avec la File System Access API. Rien ne quitte ton appareil."
+                "a": "Non. Ton navigateur lit les fichiers directement sur ton appareil. dashcamigo n'a aucun serveur où les envoyer : rien ne quitte ton appareil."
             },
             {
                 "q": "Puis-je exporter un extrait découpé avec le GPS GoPro à l'intérieur ?",
@@ -703,7 +703,7 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Czy moje nagrania GoPro są wysyłane na serwer?",
-                "a": "Nie. Nie ma żadnego backendu. Przeglądarka odczytuje pliki lokalnie przez File System Access API. Nic nie opuszcza Twojego urządzenia."
+                "a": "Nie. Przeglądarka odczytuje pliki bezpośrednio z twojego urządzenia. dashcamigo nie ma serwera, na który mogłaby je wysłać, więc nic nie opuszcza urządzenia."
             },
             {
                 "q": "Czy mogę wyeksportować przycięty fragment z GPS GoPro wewnątrz?",
@@ -725,7 +725,7 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Minhas gravações da GoPro são enviadas para um servidor?",
-                "a": "Não. Não existe backend. O navegador lê os arquivos localmente com a File System Access API. Nada sai do seu dispositivo."
+                "a": "Não. O navegador lê os arquivos direto do seu dispositivo. O dashcamigo não tem servidor para onde enviá-los, então nada sai do aparelho."
             },
             {
                 "q": "Posso exportar um clipe recortado com o GPS da GoPro dentro?",
@@ -747,7 +747,7 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "我的 GoPro 录像会被上传到服务器吗？",
-                "a": "不会。这里没有后端。浏览器通过 File System Access API 在本地读取文件。没有任何东西会离开你的设备。"
+                "a": "不会。浏览器会直接读取你设备上的文件。dashcamigo 没有用于接收文件的服务器，因此录像不会离开你的设备。"
             },
             {
                 "q": "我能导出一段内含 GoPro GPS 的剪辑片段吗？",
@@ -769,7 +769,7 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "GoPro の録画はサーバーにアップロードされますか?",
-                "a": "いいえ。バックエンドはありません。ブラウザが File System Access API でファイルをローカルに読み込みます。デバイスから外に出るものは何もありません。"
+                "a": "いいえ。ブラウザがデバイス上のファイルを直接読み取ります。dashcamigo にはファイルの送信先となるサーバーがないため、デバイスの外には出ません。"
             },
             {
                 "q": "GoPro の GPS を内蔵したクリップを切り出してエクスポートできますか?",
@@ -791,7 +791,7 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "제 GoPro 녹화가 서버로 업로드되나요?",
-                "a": "아니요. 백엔드가 없어요. 브라우저가 File System Access API로 파일을 로컬에서 읽어요. 기기 밖으로 나가는 건 아무것도 없어요."
+                "a": "아니요. 브라우저가 기기의 파일을 직접 읽어요. dashcamigo에는 파일을 보낼 서버가 없어서 녹화 영상은 기기 밖으로 나가지 않아요."
             },
             {
                 "q": "GoPro GPS가 안에 들어간 잘라낸 클립을 내보낼 수 있나요?",
@@ -811,11 +811,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Werden meine Garmin-Aufnahmen hochgeladen?",
-                "a": "Nein. Es gibt kein Backend. Der Browser liest die Dateien lokal und dekodiert sie mit WebCodecs. Nichts verlässt dein Gerät."
+                "a": "Nein. Dein Browser liest die Dateien direkt von deinem Gerät. dashcamigo hat keinen Server, an den sie gesendet werden könnten. Nichts verlässt dein Gerät."
             },
             {
                 "q": "Zeigt dashcamigo auch die Innenraumkamera der Garmin Tandem?",
-                "a": "Ja. Die Garmin Tandem schreibt pro Moment zwei MP4-Dateien (nach vorn und in den Innenraum gerichtet). dashcamigo gruppiert sie zu einer Fahrt und spielt beide synchron ab. Klick einen beliebigen Kanal an, um ihn zur Hauptansicht zu machen."
+                "a": "Ja. Die Garmin Tandem schreibt pro Moment zwei MP4-Dateien (nach vorn und in den Innenraum gerichtet). dashcamigo gruppiert sie zu einer Fahrt und spielt beide synchron ab. Klick eine beliebige Kamera an, um sie zur Hauptansicht zu machen."
             },
             {
                 "q": "Kann ich einen Garmin-Clip mit GPS darin exportieren?",
@@ -833,11 +833,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "¿Se subirán mis grabaciones de Garmin?",
-                "a": "No. No hay backend. El navegador lee los archivos localmente y los decodifica con WebCodecs. Nada sale de tu dispositivo."
+                "a": "No. Tu navegador lee los archivos directamente desde tu dispositivo. dashcamigo no tiene ningún servidor al que enviarlos, así que nada sale de tu dispositivo."
             },
             {
                 "q": "¿Muestra dashcamigo también la cámara de cabina de la Garmin Tandem?",
-                "a": "Sí. La Garmin Tandem escribe dos archivos MP4 por momento (uno hacia la carretera y otro hacia la cabina). dashcamigo los agrupa en un solo trayecto y reproduce ambos sincronizados. Haz clic en cualquiera de los canales para convertirlo en la vista principal."
+                "a": "Sí. La Garmin Tandem escribe dos archivos MP4 por momento (uno hacia la carretera y otro hacia la cabina). dashcamigo los agrupa en un solo trayecto y reproduce ambos sincronizados. Haz clic en cualquiera de las cámaras para convertirla en la vista principal."
             },
             {
                 "q": "¿Puedo exportar un clip de Garmin con el GPS dentro?",
@@ -855,11 +855,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Mes enregistrements Garmin seront-ils téléversés ?",
-                "a": "Non. Il n'y a aucun serveur. Le navigateur lit les fichiers localement et les décode avec WebCodecs. Rien ne quitte ton appareil."
+                "a": "Non. Ton navigateur lit les fichiers directement sur ton appareil. dashcamigo n'a aucun serveur où les envoyer : rien ne quitte ton appareil."
             },
             {
                 "q": "dashcamigo affiche-t-il aussi la caméra d'habitacle du Garmin Tandem ?",
-                "a": "Oui. Le Garmin Tandem écrit deux fichiers MP4 par instant (orienté route et orienté habitacle). dashcamigo les regroupe en un seul trajet et lit les deux en synchronisation. Clique sur l'un ou l'autre canal pour en faire la vue principale."
+                "a": "Oui. Le Garmin Tandem écrit deux fichiers MP4 par instant (orienté route et orienté habitacle). dashcamigo les regroupe en un seul trajet et lit les deux en synchronisation. Clique sur l'une ou l'autre caméra pour en faire la vue principale."
             },
             {
                 "q": "Puis-je exporter un extrait Garmin avec le GPS à l'intérieur ?",
@@ -877,11 +877,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Czy moje nagrania Garmin będą wysyłane?",
-                "a": "Nie. Nie ma żadnego backendu. Przeglądarka odczytuje pliki lokalnie i dekoduje je przez WebCodecs. Nic nie opuszcza Twojego urządzenia."
+                "a": "Nie. Przeglądarka odczytuje pliki bezpośrednio z twojego urządzenia. dashcamigo nie ma serwera, na który mogłaby je wysłać, więc nic nie opuszcza urządzenia."
             },
             {
                 "q": "Czy dashcamigo pokazuje też kamerę kabinową Garmin Tandem?",
-                "a": "Tak. Garmin Tandem zapisuje dwa pliki MP4 na każdy moment (skierowany na drogę i na kabinę). dashcamigo grupuje je w jeden przejazd i odtwarza oba synchronicznie. Kliknij dowolny kanał, aby ustawić go jako główny widok."
+                "a": "Tak. Garmin Tandem zapisuje dwa pliki MP4 na każdy moment (skierowany na drogę i na kabinę). dashcamigo grupuje je w jeden przejazd i odtwarza oba synchronicznie. Kliknij dowolną kamerę, aby ustawić ją jako główny widok."
             },
             {
                 "q": "Czy mogę wyeksportować fragment z Garmin z GPS wewnątrz?",
@@ -899,11 +899,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Minhas gravações da Garmin vão ser enviadas?",
-                "a": "Não. Não existe backend. O navegador lê os arquivos localmente e os decodifica com WebCodecs. Nada sai do seu dispositivo."
+                "a": "Não. O navegador lê os arquivos direto do seu dispositivo. O dashcamigo não tem servidor para onde enviá-los, então nada sai do aparelho."
             },
             {
                 "q": "O dashcamigo mostra também a câmera de interior da Garmin Tandem?",
-                "a": "Sim. A Garmin Tandem grava dois arquivos MP4 por momento (um voltado para a estrada e outro para o interior). O dashcamigo os agrupa em uma única viagem e reproduz os dois em sincronia. Clique em qualquer um dos canais para torná-lo a visualização principal."
+                "a": "Sim. A Garmin Tandem grava dois arquivos MP4 por momento (um voltado para a estrada e outro para o interior). O dashcamigo os agrupa em uma única viagem e reproduz os dois em sincronia. Clique em qualquer câmera para torná-la a visualização principal."
             },
             {
                 "q": "Posso exportar um clipe da Garmin com o GPS dentro?",
@@ -921,11 +921,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "我的 Garmin 录像会被上传吗？",
-                "a": "不会。这里没有后端。浏览器在本地读取文件，并用 WebCodecs 解码。没有任何东西会离开你的设备。"
+                "a": "不会。浏览器会直接读取你设备上的文件。dashcamigo 没有用于接收文件的服务器，因此录像不会离开你的设备。"
             },
             {
                 "q": "dashcamigo 也会显示 Garmin Tandem 的车内摄像头吗？",
-                "a": "会。Garmin Tandem 在每个时刻会写入两个 MP4 文件（朝向道路和朝向车内）。dashcamigo 会把它们分组为一段行程并同步播放。点击任意通道即可将其设为主画面。"
+                "a": "会。Garmin Tandem 在每个时刻会写入两个 MP4 文件（朝向道路和朝向车内）。dashcamigo 会把它们分组为一段行程并同步播放。点击任意摄像头画面即可将其设为主画面。"
             },
             {
                 "q": "我能导出一段内含 GPS 的 Garmin 片段吗？",
@@ -943,11 +943,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Garmin の録画はアップロードされますか?",
-                "a": "いいえ。バックエンドはありません。ブラウザがファイルをローカルに読み込み、WebCodecs でデコードします。デバイスから外に出るものは何もありません。"
+                "a": "いいえ。ブラウザがデバイス上のファイルを直接読み取ります。dashcamigo にはファイルの送信先となるサーバーがないため、デバイスの外には出ません。"
             },
             {
                 "q": "dashcamigo は Garmin Tandem の車内カメラも表示しますか?",
-                "a": "はい。Garmin Tandem は 1 つの時刻につき 2 つの MP4 ファイル (前方向きと車内向き) を書き込みます。dashcamigo はそれらを 1 つの走行にまとめ、両方を同期再生します。どちらかのチャンネルをクリックするとメイン表示に切り替わります。"
+                "a": "はい。Garmin Tandem は 1 つの時刻につき 2 つの MP4 ファイル (前方向きと車内向き) を書き込みます。dashcamigo はそれらを 1 つの走行にまとめ、両方を同期再生します。どちらかのカメラ映像をクリックするとメイン表示に切り替わります。"
             },
             {
                 "q": "Garmin のクリップを GPS 入りで切り出してエクスポートできますか?",
@@ -965,11 +965,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "제 Garmin 녹화가 업로드되나요?",
-                "a": "아니요. 백엔드가 없어요. 브라우저가 파일을 로컬에서 읽고 WebCodecs로 디코딩해요. 기기 밖으로 나가는 건 아무것도 없어요."
+                "a": "아니요. 브라우저가 기기의 파일을 직접 읽어요. dashcamigo에는 파일을 보낼 서버가 없어서 녹화 영상은 기기 밖으로 나가지 않아요."
             },
             {
                 "q": "dashcamigo가 Garmin Tandem 실내 카메라도 보여주나요?",
-                "a": "네. Garmin Tandem은 한 순간마다 두 개의 MP4 파일(도로 방향과 실내 방향)을 기록해요. dashcamigo는 이들을 하나의 주행으로 묶어 둘 다 동기화해서 재생해요. 한쪽 채널을 클릭하면 그게 메인 화면이 돼요."
+                "a": "네. Garmin Tandem은 한 순간마다 두 개의 MP4 파일(도로 방향과 실내 방향)을 기록해요. dashcamigo는 이들을 하나의 주행으로 묶어 둘 다 동기화해서 재생해요. 한쪽 카메라 화면을 클릭하면 그게 메인 화면이 돼요."
             },
             {
                 "q": "GPS가 안에 들어간 Garmin 클립을 내보낼 수 있나요?",
@@ -989,11 +989,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Werden meine Vantrue-Aufnahmen hochgeladen?",
-                "a": "Nein. Es gibt kein Backend. Der Browser liest die Dateien lokal mit der File System Access API und dekodiert sie mit WebCodecs. Nichts verlässt dein Gerät."
+                "a": "Nein. Dein Browser liest die Dateien direkt von deinem Gerät. dashcamigo hat keinen Server, an den sie gesendet werden könnten. Nichts verlässt dein Gerät."
             },
             {
                 "q": "Kommt dashcamigo mit Zwei- und Dreikanal-Vantrue-Kameras (N4, N5, Sonnet 3) zurecht?",
-                "a": "Ja. Vantrue-Mehrkanal-Modelle schreiben für denselben Moment eine vordere, eine hintere und (bei Dreikanal-Modellen) eine Innenraum-Datei. dashcamigo gruppiert sie zu einer Fahrt und spielt alle Kanäle synchron ab. Klick einen beliebigen Kanal an, um ihn zur Hauptansicht zu machen, oder behalte sie nebeneinander."
+                "a": "Ja. Vantrue-Mehrkanal-Modelle schreiben für denselben Moment eine vordere, eine hintere und (bei Dreikanal-Modellen) eine Innenraum-Datei. dashcamigo gruppiert sie zu einer Fahrt und spielt alle Kameras synchron ab. Klick eine beliebige Kamera an, um sie zur Hauptansicht zu machen, oder behalte sie nebeneinander."
             },
             {
                 "q": "Kann ich einen Clip aus einer Vantrue-Aufnahme zuschneiden und exportieren?",
@@ -1011,11 +1011,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "¿Se subirán mis grabaciones de Vantrue?",
-                "a": "No. No hay backend. El navegador lee los archivos localmente con la File System Access API y los decodifica con WebCodecs. Nada sale de tu dispositivo."
+                "a": "No. Tu navegador lee los archivos directamente desde tu dispositivo. dashcamigo no tiene ningún servidor al que enviarlos, así que nada sale de tu dispositivo."
             },
             {
                 "q": "¿Funciona dashcamigo con las cámaras Vantrue de doble y triple canal (N4, N5, Sonnet 3)?",
-                "a": "Sí. Los modelos Vantrue multicanal escriben un archivo frontal, otro trasero y (en los modelos de tres canales) uno de cabina para el mismo momento. dashcamigo los agrupa en un solo trayecto y reproduce todos los canales sincronizados. Haz clic en cualquier canal para convertirlo en la vista principal, o mantenlos en paralelo."
+                "a": "Sí. Los modelos Vantrue multicanal escriben un archivo frontal, otro trasero y (en los modelos de tres canales) uno de cabina para el mismo momento. dashcamigo los agrupa en un solo trayecto y reproduce todas las cámaras sincronizadas. Haz clic en cualquier cámara para convertirla en la vista principal, o mantenlas en paralelo."
             },
             {
                 "q": "¿Puedo recortar y exportar un clip de una grabación Vantrue?",
@@ -1033,11 +1033,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Mes enregistrements Vantrue seront-ils téléversés ?",
-                "a": "Non. Il n'y a aucun serveur. Le navigateur lit les fichiers localement avec la File System Access API et les décode avec WebCodecs. Rien ne quitte ton appareil."
+                "a": "Non. Ton navigateur lit les fichiers directement sur ton appareil. dashcamigo n'a aucun serveur où les envoyer : rien ne quitte ton appareil."
             },
             {
                 "q": "dashcamigo gère-t-il les caméras Vantrue à deux et trois canaux (N4, N5, Sonnet 3) ?",
-                "a": "Oui. Les modèles Vantrue multi-canaux écrivent un fichier avant, un fichier arrière et (sur les modèles à trois canaux) un fichier habitacle pour le même instant. dashcamigo les regroupe en un seul trajet et lit tous les canaux en synchronisation. Clique sur n'importe quel canal pour en faire la vue principale, ou garde-les côte à côte."
+                "a": "Oui. Les modèles Vantrue multi-canaux écrivent un fichier avant, un fichier arrière et (sur les modèles à trois canaux) un fichier habitacle pour le même instant. dashcamigo les regroupe en un seul trajet et lit toutes les caméras en synchronisation. Clique sur n'importe quelle caméra pour en faire la vue principale, ou garde-les côte à côte."
             },
             {
                 "q": "Puis-je découper et exporter un extrait d'un enregistrement Vantrue ?",
@@ -1055,11 +1055,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Czy moje nagrania Vantrue będą wysyłane?",
-                "a": "Nie. Nie ma żadnego backendu. Przeglądarka odczytuje pliki lokalnie przez File System Access API i dekoduje je przez WebCodecs. Nic nie opuszcza Twojego urządzenia."
+                "a": "Nie. Przeglądarka odczytuje pliki bezpośrednio z twojego urządzenia. dashcamigo nie ma serwera, na który mogłaby je wysłać, więc nic nie opuszcza urządzenia."
             },
             {
                 "q": "Czy dashcamigo obsługuje dwu- i trzykanałowe kamery Vantrue (N4, N5, Sonnet 3)?",
-                "a": "Tak. Wielokanałowe modele Vantrue zapisują plik przedni, tylny i (w modelach trzykanałowych) kabinowy dla tego samego momentu. dashcamigo grupuje je w jeden przejazd i odtwarza wszystkie kanały synchronicznie. Kliknij dowolny kanał, aby ustawić go jako główny widok, albo zostaw je obok siebie."
+                "a": "Tak. Wielokanałowe modele Vantrue zapisują plik przedni, tylny i (w modelach trzykanałowych) kabinowy dla tego samego momentu. dashcamigo grupuje je w jeden przejazd i odtwarza wszystkie kamery synchronicznie. Kliknij dowolną kamerę, aby ustawić ją jako główny widok, albo zostaw je obok siebie."
             },
             {
                 "q": "Czy mogę przyciąć i wyeksportować fragment z nagrania Vantrue?",
@@ -1077,11 +1077,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Minhas gravações da Vantrue vão ser enviadas?",
-                "a": "Não. Não existe backend. O navegador lê os arquivos localmente com a File System Access API e os decodifica com WebCodecs. Nada sai do seu dispositivo."
+                "a": "Não. O navegador lê os arquivos direto do seu dispositivo. O dashcamigo não tem servidor para onde enviá-los, então nada sai do aparelho."
             },
             {
                 "q": "O dashcamigo lida com câmeras Vantrue de dois e de três canais (N4, N5, Sonnet 3)?",
-                "a": "Sim. Os modelos multicanal da Vantrue gravam um arquivo da frente, da traseira e (nos modelos de três canais) do interior para o mesmo momento. O dashcamigo os agrupa em uma única viagem e reproduz todos os canais em sincronia. Clique em qualquer canal para torná-lo a visualização principal, ou mantenha-os lado a lado."
+                "a": "Sim. Os modelos multicanal da Vantrue gravam um arquivo da frente, da traseira e (nos modelos de três canais) do interior para o mesmo momento. O dashcamigo os agrupa em uma única viagem e reproduz todas as câmeras em sincronia. Clique em qualquer câmera para torná-la a visualização principal, ou mantenha-as lado a lado."
             },
             {
                 "q": "Posso recortar e exportar um clipe de uma gravação da Vantrue?",
@@ -1099,11 +1099,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "我的 Vantrue 录像会被上传吗？",
-                "a": "不会。这里没有后端。浏览器通过 File System Access API 在本地读取文件，并用 WebCodecs 解码。没有任何东西会离开你的设备。"
+                "a": "不会。浏览器会直接读取你设备上的文件。dashcamigo 没有用于接收文件的服务器，因此录像不会离开你的设备。"
             },
             {
                 "q": "dashcamigo 能处理双通道和三通道的 Vantrue 记录仪（N4、N5、Sonnet 3）吗？",
-                "a": "能。Vantrue 多通道型号会为同一时刻写入前置、后置以及（在三通道型号上）车内文件。dashcamigo 会把它们分组为一段行程并同步播放所有通道。点击任意通道即可将其设为主画面，或者让它们并排显示。"
+                "a": "能。Vantrue 多通道型号会为同一时刻写入前置、后置以及（在三通道型号上）车内文件。dashcamigo 会把它们分组为一段行程并同步播放所有摄像头画面。点击任意摄像头画面即可将其设为主画面，或者让它们并排显示。"
             },
             {
                 "q": "我能从 Vantrue 录像中剪出并导出一段片段吗？",
@@ -1121,11 +1121,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Vantrue の録画はアップロードされますか?",
-                "a": "いいえ。バックエンドはありません。ブラウザが File System Access API でファイルをローカルに読み込み、WebCodecs でデコードします。デバイスから外に出るものは何もありません。"
+                "a": "いいえ。ブラウザがデバイス上のファイルを直接読み取ります。dashcamigo にはファイルの送信先となるサーバーがないため、デバイスの外には出ません。"
             },
             {
                 "q": "dashcamigo はデュアル・トリプルチャンネルの Vantrue カメラ (N4、N5、Sonnet 3) に対応していますか?",
-                "a": "はい。Vantrue のマルチチャンネルモデルは、同じ時刻について前方、後方、(3 チャンネルモデルでは) 車内のファイルを書き込みます。dashcamigo はそれらを 1 つの走行にまとめ、全チャンネルを同期再生します。任意のチャンネルをクリックするとメイン表示に切り替わり、並べて表示したままにもできます。"
+                "a": "はい。Vantrue のマルチチャンネルモデルは、同じ時刻について前方、後方、(3 チャンネルモデルでは) 車内のファイルを書き込みます。dashcamigo はそれらを 1 つの走行にまとめ、すべてのカメラ映像を同期再生します。任意のカメラ映像をクリックするとメイン表示に切り替わり、並べて表示したままにもできます。"
             },
             {
                 "q": "Vantrue の録画からクリップを切り出してエクスポートできますか?",
@@ -1143,11 +1143,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "제 Vantrue 녹화가 업로드되나요?",
-                "a": "아니요. 백엔드가 없어요. 브라우저가 File System Access API로 파일을 로컬에서 읽고 WebCodecs로 디코딩해요. 기기 밖으로 나가는 건 아무것도 없어요."
+                "a": "아니요. 브라우저가 기기의 파일을 직접 읽어요. dashcamigo에는 파일을 보낼 서버가 없어서 녹화 영상은 기기 밖으로 나가지 않아요."
             },
             {
                 "q": "dashcamigo가 듀얼 및 3채널 Vantrue 카메라(N4, N5, Sonnet 3)를 처리하나요?",
-                "a": "네. Vantrue 멀티 채널 모델은 같은 순간에 대해 전방, 후방, 그리고 (3채널 모델의 경우) 실내 파일을 기록해요. dashcamigo는 이들을 하나의 주행으로 묶어 모든 채널을 동기화해서 재생해요. 채널을 클릭하면 그게 메인 화면이 되거나, 나란히 둘 수도 있어요."
+                "a": "네. Vantrue 멀티 채널 모델은 같은 순간에 대해 전방, 후방, 그리고 (3채널 모델의 경우) 실내 파일을 기록해요. dashcamigo는 이들을 하나의 주행으로 묶어 모든 카메라 화면을 동기화해서 재생해요. 카메라 화면을 클릭하면 그게 메인 화면이 되거나, 나란히 둘 수도 있어요."
             },
             {
                 "q": "Vantrue 녹화에서 클립을 잘라내고 내보낼 수 있나요?",
@@ -1167,11 +1167,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Werden meine Thinkware-Aufnahmen hochgeladen?",
-                "a": "Nein. Es gibt kein Backend. Der Browser liest die Dateien lokal mit der File System Access API und dekodiert sie mit WebCodecs. Nichts verlässt dein Gerät."
+                "a": "Nein. Dein Browser liest die Dateien direkt von deinem Gerät. dashcamigo hat keinen Server, an den sie gesendet werden könnten. Nichts verlässt dein Gerät."
             },
             {
                 "q": "Zeigt dashcamigo sowohl die vordere als auch die hintere Thinkware-Kamera?",
-                "a": "Ja. Thinkware-Zweikanal-Modelle schreiben für denselben Moment eine vordere (F) und eine hintere (R) Datei. dashcamigo gruppiert sie zu einer Fahrt und spielt beide synchron ab. Klick einen beliebigen Kanal an, um ihn zur Hauptansicht zu machen, oder behalte sie nebeneinander."
+                "a": "Ja. Thinkware-Zweikanal-Modelle schreiben für denselben Moment eine vordere (F) und eine hintere (R) Datei. dashcamigo gruppiert sie zu einer Fahrt und spielt beide synchron ab. Klick eine beliebige Kamera an, um sie zur Hauptansicht zu machen, oder behalte sie nebeneinander."
             },
             {
                 "q": "Kann ich einen Clip aus einer Thinkware-Aufnahme zuschneiden und exportieren?",
@@ -1189,11 +1189,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "¿Se subirán mis grabaciones de Thinkware?",
-                "a": "No. No hay backend. El navegador lee los archivos localmente con la File System Access API y los decodifica con WebCodecs. Nada sale de tu dispositivo."
+                "a": "No. Tu navegador lee los archivos directamente desde tu dispositivo. dashcamigo no tiene ningún servidor al que enviarlos, así que nada sale de tu dispositivo."
             },
             {
                 "q": "¿Muestra dashcamigo las cámaras frontal y trasera de Thinkware a la vez?",
-                "a": "Sí. Los modelos Thinkware de doble canal escriben un archivo frontal (F) y otro trasero (R) para el mismo momento. dashcamigo los agrupa en un solo trayecto y reproduce ambos sincronizados. Haz clic en cualquiera de los canales para convertirlo en la vista principal, o mantenlos en paralelo."
+                "a": "Sí. Los modelos Thinkware de doble canal escriben un archivo frontal (F) y otro trasero (R) para el mismo momento. dashcamigo los agrupa en un solo trayecto y reproduce ambos sincronizados. Haz clic en cualquiera de las cámaras para convertirla en la vista principal, o mantenlas en paralelo."
             },
             {
                 "q": "¿Puedo recortar y exportar un clip de una grabación Thinkware?",
@@ -1211,11 +1211,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Mes enregistrements Thinkware seront-ils téléversés ?",
-                "a": "Non. Il n'y a aucun serveur. Le navigateur lit les fichiers localement avec la File System Access API et les décode avec WebCodecs. Rien ne quitte ton appareil."
+                "a": "Non. Ton navigateur lit les fichiers directement sur ton appareil. dashcamigo n'a aucun serveur où les envoyer : rien ne quitte ton appareil."
             },
             {
                 "q": "dashcamigo affiche-t-il les caméras Thinkware avant et arrière ensemble ?",
-                "a": "Oui. Les modèles Thinkware à deux canaux écrivent un fichier avant (F) et un fichier arrière (R) pour le même instant. dashcamigo les regroupe en un seul trajet et lit les deux en synchronisation. Clique sur l'un ou l'autre canal pour en faire la vue principale, ou garde-les côte à côte."
+                "a": "Oui. Les modèles Thinkware à deux canaux écrivent un fichier avant (F) et un fichier arrière (R) pour le même instant. dashcamigo les regroupe en un seul trajet et lit les deux en synchronisation. Clique sur l'une ou l'autre caméra pour en faire la vue principale, ou garde-les côte à côte."
             },
             {
                 "q": "Puis-je découper et exporter un extrait d'un enregistrement Thinkware ?",
@@ -1233,11 +1233,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Czy moje nagrania Thinkware będą wysyłane?",
-                "a": "Nie. Nie ma żadnego backendu. Przeglądarka odczytuje pliki lokalnie przez File System Access API i dekoduje je przez WebCodecs. Nic nie opuszcza Twojego urządzenia."
+                "a": "Nie. Przeglądarka odczytuje pliki bezpośrednio z twojego urządzenia. dashcamigo nie ma serwera, na który mogłaby je wysłać, więc nic nie opuszcza urządzenia."
             },
             {
                 "q": "Czy dashcamigo pokazuje jednocześnie przednią i tylną kamerę Thinkware?",
-                "a": "Tak. Dwukanałowe modele Thinkware zapisują plik przedni (F) i tylny (R) dla tego samego momentu. dashcamigo grupuje je w jeden przejazd i odtwarza oba synchronicznie. Kliknij dowolny kanał, aby ustawić go jako główny widok, albo zostaw je obok siebie."
+                "a": "Tak. Dwukanałowe modele Thinkware zapisują plik przedni (F) i tylny (R) dla tego samego momentu. dashcamigo grupuje je w jeden przejazd i odtwarza oba synchronicznie. Kliknij dowolną kamerę, aby ustawić ją jako główny widok, albo zostaw je obok siebie."
             },
             {
                 "q": "Czy mogę przyciąć i wyeksportować fragment z nagrania Thinkware?",
@@ -1255,11 +1255,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Minhas gravações da Thinkware vão ser enviadas?",
-                "a": "Não. Não existe backend. O navegador lê os arquivos localmente com a File System Access API e os decodifica com WebCodecs. Nada sai do seu dispositivo."
+                "a": "Não. O navegador lê os arquivos direto do seu dispositivo. O dashcamigo não tem servidor para onde enviá-los, então nada sai do aparelho."
             },
             {
                 "q": "O dashcamigo mostra as câmeras Thinkware da frente e da traseira juntas?",
-                "a": "Sim. Os modelos Thinkware de dois canais gravam um arquivo da frente (F) e um da traseira (R) para o mesmo momento. O dashcamigo os agrupa em uma única viagem e reproduz os dois em sincronia. Clique em qualquer um dos canais para torná-lo a visualização principal, ou mantenha-os lado a lado."
+                "a": "Sim. Os modelos Thinkware de dois canais gravam um arquivo da frente (F) e um da traseira (R) para o mesmo momento. O dashcamigo os agrupa em uma única viagem e reproduz os dois em sincronia. Clique em qualquer câmera para torná-la a visualização principal, ou mantenha-as lado a lado."
             },
             {
                 "q": "Posso recortar e exportar um clipe de uma gravação da Thinkware?",
@@ -1277,11 +1277,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "我的 Thinkware 录像会被上传吗？",
-                "a": "不会。这里没有后端。浏览器通过 File System Access API 在本地读取文件，并用 WebCodecs 解码。没有任何东西会离开你的设备。"
+                "a": "不会。浏览器会直接读取你设备上的文件。dashcamigo 没有用于接收文件的服务器，因此录像不会离开你的设备。"
             },
             {
                 "q": "dashcamigo 能同时显示 Thinkware 的前后两个摄像头吗？",
-                "a": "能。Thinkware 双通道型号会为同一时刻写入一个前置（F）文件和一个后置（R）文件。dashcamigo 会把它们分组为一段行程并同步播放。点击任意通道即可将其设为主画面，或者让它们并排显示。"
+                "a": "能。Thinkware 双通道型号会为同一时刻写入一个前置（F）文件和一个后置（R）文件。dashcamigo 会把它们分组为一段行程并同步播放。点击任意摄像头画面即可将其设为主画面，或者让它们并排显示。"
             },
             {
                 "q": "我能从 Thinkware 录像中剪出并导出一段片段吗？",
@@ -1299,11 +1299,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "Thinkware の録画はアップロードされますか?",
-                "a": "いいえ。バックエンドはありません。ブラウザが File System Access API でファイルをローカルに読み込み、WebCodecs でデコードします。デバイスから外に出るものは何もありません。"
+                "a": "いいえ。ブラウザがデバイス上のファイルを直接読み取ります。dashcamigo にはファイルの送信先となるサーバーがないため、デバイスの外には出ません。"
             },
             {
                 "q": "dashcamigo は Thinkware の前方カメラと後方カメラの両方を表示しますか?",
-                "a": "はい。Thinkware のデュアルチャンネルモデルは、同じ時刻について前方 (F) と後方 (R) のファイルを書き込みます。dashcamigo はそれらを 1 つの走行にまとめ、両方を同期再生します。どちらかのチャンネルをクリックするとメイン表示に切り替わり、並べて表示したままにもできます。"
+                "a": "はい。Thinkware のデュアルチャンネルモデルは、同じ時刻について前方 (F) と後方 (R) のファイルを書き込みます。dashcamigo はそれらを 1 つの走行にまとめ、両方を同期再生します。どちらかのカメラ映像をクリックするとメイン表示に切り替わり、並べて表示したままにもできます。"
             },
             {
                 "q": "Thinkware の録画からクリップを切り出してエクスポートできますか?",
@@ -1321,11 +1321,11 @@ export const COMMUNITY_FAQ: Partial<Record<VendorSlug, Partial<Record<Lang, Comm
             },
             {
                 "q": "제 Thinkware 녹화가 업로드되나요?",
-                "a": "아니요. 백엔드가 없어요. 브라우저가 File System Access API로 파일을 로컬에서 읽고 WebCodecs로 디코딩해요. 기기 밖으로 나가는 건 아무것도 없어요."
+                "a": "아니요. 브라우저가 기기의 파일을 직접 읽어요. dashcamigo에는 파일을 보낼 서버가 없어서 녹화 영상은 기기 밖으로 나가지 않아요."
             },
             {
                 "q": "dashcamigo가 Thinkware 전방과 후방 카메라를 모두 보여주나요?",
-                "a": "네. Thinkware 듀얼 채널 모델은 같은 순간에 대해 전방(F) 파일과 후방(R) 파일을 기록해요. dashcamigo는 이들을 하나의 주행으로 묶어 둘 다 동기화해서 재생해요. 한쪽 채널을 클릭하면 그게 메인 화면이 되거나, 나란히 둘 수도 있어요."
+                "a": "네. Thinkware 듀얼 채널 모델은 같은 순간에 대해 전방(F) 파일과 후방(R) 파일을 기록해요. dashcamigo는 이들을 하나의 주행으로 묶어 둘 다 동기화해서 재생해요. 한쪽 카메라 화면을 클릭하면 그게 메인 화면이 되거나, 나란히 둘 수도 있어요."
             },
             {
                 "q": "Thinkware 녹화에서 클립을 잘라내고 내보낼 수 있나요?",

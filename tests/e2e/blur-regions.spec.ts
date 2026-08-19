@@ -232,7 +232,7 @@ test.describe("blur regions", () => {
         await openExport(page);
         await expect(page.locator("#export-panel-blur-faces")).toBeDisabled();
         await expect(page.locator("#export-panel-blur-plates")).toBeDisabled();
-        await expect(page.getByText("Finding plates and faces needs GPU access")).toBeVisible();
+        await expect(page.getByText("Automatic plate and face finding isn't available in this browser")).toBeVisible();
         // The degradation is detect-only - manual zones with Follow stay
         // available (vittrack runs on wasm).
         await expect(page.locator(".export-panel__blur-add-btn")).toBeEnabled();

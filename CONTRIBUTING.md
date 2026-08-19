@@ -1,58 +1,61 @@
 # Contributing to dashcamigo
 
-The most valuable things you can send:
+Thanks for helping make dashcamigo better. You do not need to write code to
+make a useful contribution:
 
-- **Bug reports and suggestions** - open a GitHub issue.
-- **Support for a new camera** - the contribution that helps most. It takes a
-  real sample. Start at
-  [dashcamigo.app/add-my-camera](https://dashcamigo.app/add-my-camera) - the
-  app packages a file-name-only report you can send - or open a camera-support
-  issue.
-- **Security reports** - see [SECURITY.md](SECURITY.md).
-- **Translation fixes** - the UI ships in 10 languages; wording corrections
-  are welcome as issues with the exact current string and the suggested
-  replacement.
+- **Found a bug or have an idea?** Open a GitHub issue and tell us what you
+  expected to happen.
+- **Want to add a camera?** Start at
+  [dashcamigo.app/add-my-camera](https://dashcamigo.app/add-my-camera) or open a
+  camera-support issue. Reliable support needs a real recording from the
+  camera.
+- **Spotted an awkward translation?** Open an issue with the current wording
+  and the replacement you suggest.
+- **Found a security problem?** Please report it privately as described in
+  [SECURITY.md](SECURITY.md).
 
 ## Development
+
+Use the Node.js version in `.nvmrc`, then install the dependencies and start the
+development server:
 
 ```sh
 npm install
 npm run dev
 ```
 
-Node version: `.nvmrc`. A fresh clone builds and runs with no keys and no
-configuration.
+A fresh clone runs without accounts, API keys or local configuration.
 
 ## Pull requests
 
-Pull requests are welcome. Two rules keep review workable on a
-solo-maintained project:
+Small, focused fixes are welcome as direct pull requests. Before starting a
+larger feature, refactor or new dependency, open an issue so we can agree on
+the direction first. This avoids asking you to rework a contribution that does
+not fit the project's architecture.
 
-- **A fix or a small correction** - open a PR directly.
-- **Anything larger** (a feature, a refactor, a new dependency) - open an
-  issue first and get a yes before writing code. A big PR that skips this
-  step risks being closed for architectural reasons.
+Before opening a pull request:
 
-Every PR: `npm run typecheck` and `npm run check` pass, behavior changes come
-with tests, and UI copy goes through i18n, never as a literal in code.
-English is required; the other dictionaries carry either the English value
-under `// TODO i18n:` or your own translation - both are normalized on review.
+- Run `npm run typecheck` and `npm run check`.
+- Add tests for behavior changes.
+- Put UI text through i18n rather than adding literals to the code. English and
+  Russian ship together; keep the other locale dictionaries in sync, using the
+  existing `// TODO i18n:` convention when a community translation is not yet
+  available.
 
-Review can take a while - one maintainer, best effort.
+Review is handled by one maintainer and may take a little time.
 
-### Parser PRs
+### Adding a recording format
 
-No sample -> no parser: support cannot be validated from a format
-description alone. The one exception, porting from a verified open-source
-implementation, has strict conditions - the foreign-source waiver in
+A format can only be validated against a real recording. A description of the
+format is useful context, but it cannot replace the sample itself. The narrow
+exception for verified open-source implementations is documented in
 [docs/gps-format-coverage.md](docs/gps-format-coverage.md).
 
-The path:
+The usual path is:
 
-1. Open a camera-support issue and share a sample. Review starts when it
-   arrives.
-2. The PR contains the extractor, tests, and anonymized fixtures
-   (coordinates rounded to whole degrees, no real footage). The committed
-   `scripts/anonymize-*.mjs` scripts show the pattern - a new format brings
-   its own. Unsure? Say so in the PR - fixtures can be derived from the
-   shared sample on review.
+1. Open a camera-support issue and share a sample privately or publicly. Review
+   can begin once the sample is available.
+2. Include the extractor, tests and anonymized fixtures in the pull request.
+   Coordinates are rounded to whole degrees and real footage is replaced.
+   Follow the committed `scripts/anonymize-*.mjs` examples, or say in the pull
+   request if you need help preparing the fixtures.

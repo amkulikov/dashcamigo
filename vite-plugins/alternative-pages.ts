@@ -203,7 +203,7 @@ const ALTERNATIVES: Competitor[] = [
                     },
                     {
                         q: "Will my recordings be uploaded anywhere?",
-                        a: "No. dashcamigo has no backend. Your browser reads the files locally and decodes them on your device — nothing is uploaded. Same privacy as a desktop viewer, but without installing one.",
+                        a: "No. Your browser reads the files directly from your device. dashcamigo has no server to send them to, so nothing is uploaded. You get the privacy of a desktop viewer without installing one.",
                     },
                     {
                         q: "Is dashcamigo free like RegistratorViewer?",
@@ -219,7 +219,7 @@ const ALTERNATIVES: Competitor[] = [
                 ogDescription:
                     "RegistratorViewer — отличный, но давно не обновлявшийся плеер для Windows (последнее обновление в 2015), встроенная карта которого больше не работает. dashcamigo — живая кросс-платформенная альтернатива в браузере.",
                 h1: "Бесплатная альтернатива RegistratorViewer, которую ещё обновляют — и с работающей картой",
-                lead: "RegistratorViewer (он же DATAKAM Player) был одним из лучших бесплатных плееров для регистратора своего времени — но обновлений нет уже годы, программа осталась Windows-first, а встроенная карта Google перестала работать после того, как Google закрыл бесплатный доступ к Maps API без ключа. dashcamigo продолжает с того места: живой плеер в браузере с синхронной картой GPS, графиком скорости и G-нагрузки и картой без ключей, в которой нечему истекать.",
+                lead: "RegistratorViewer (он же DATAKAM Player) был одним из лучших бесплатных плееров для видеорегистраторов своего времени. Но он много лет не обновляется, ориентирован на Windows, а встроенная карта Google перестала работать после закрытия бесплатного доступа к Maps API без ключа. dashcamigo продолжает эту идею: современный плеер в браузере с синхронной картой GPS и графиком скорости и перегрузок. Карте не нужен API-ключ, поэтому истекать нечему.",
                 cardHint: "Бесплатный, но не обновляется с 2015 — и встроенная карта больше не работает",
                 whatItIs:
                     "RegistratorViewer (в варианте DATAKAM Player для камер DATAKAM) — бесплатный плеер для Windows, опережавший своё время: склейка и нарезка без перекодирования, непрерывное воспроизведение через границы файлов, GPS-трек с графиками скорости и G-сенсора, захват кадра с GPS в EXIF и экспорт трека в GPX, KML и SRT. Многие записи он открывает до сих пор. Проблема в долговечности: разработка остановилась в 2015-м, оригинальный сайт исчез, а встроенная карта Google сломалась, когда Google закрыл доступ к Maps API без ключа — оживить её теперь можно только правкой реестра Windows или неофициальной сборкой сообщества, и официального фикса нет: проект не поддерживается, а исходники так и не открыли.",
@@ -243,7 +243,7 @@ const ALTERNATIVES: Competitor[] = [
                         them: { mark: "no", note: "Перестала работать после смены API у Google; нужен ручной фикс" },
                     },
                     {
-                        dimension: "График скорости и G-нагрузки",
+                        dimension: "График скорости и перегрузок",
                         us: { mark: "yes", note: "Да" },
                         them: { mark: "yes", note: "Да" },
                     },
@@ -265,7 +265,7 @@ const ALTERNATIVES: Competitor[] = [
                 faq: [
                     {
                         q: "dashcamigo — это полноценная замена RegistratorViewer?",
-                        a: "Для основной задачи — открыть записи с картой GPS, графиком скорости и G-нагрузки и вырезать кусок — да, и всё это в любом современном браузере без установки. У RegistratorViewer шире легаси-список устройств и есть пара специфичных фич (склейка многих файлов без потерь, ремонт битых файлов); dashcamigo делает ставку на живой кросс-платформенный плеер с картой, которая продолжает работать.",
+                        a: "Для основной задачи — открыть записи с картой GPS и графиком скорости и перегрузок, а затем вырезать фрагмент — да. Всё работает в любом современном браузере без установки. RegistratorViewer поддерживает больше старых устройств и умеет несколько особых вещей, например склеивать много файлов без потерь и восстанавливать повреждённые записи. dashcamigo делает ставку на современный плеер для разных платформ с исправно работающей картой.",
                     },
                     {
                         q: "Почему у RegistratorViewer перестала работать карта?",
@@ -277,7 +277,7 @@ const ALTERNATIVES: Competitor[] = [
                     },
                     {
                         q: "Мои записи куда-то загружаются?",
-                        a: "Нет. У dashcamigo нет сервера. Браузер читает файлы локально и декодирует их на твоём устройстве — наружу ничего не уходит. Та же приватность, что у десктопного плеера, только ставить ничего не надо.",
+                        a: "Нет. Браузер читает файлы прямо с твоего устройства. У dashcamigo нет сервера для их загрузки, поэтому записи никуда не уходят. Та же конфиденциальность, что у программы на компьютере, только устанавливать ничего не нужно.",
                     },
                     {
                         q: "dashcamigo бесплатный, как RegistratorViewer?",
@@ -295,10 +295,10 @@ const ALTERNATIVES: Competitor[] = [
             en: {
                 title: "Dashcam Viewer alternative — free, no install, in your browser | dashcamigo",
                 metaDescription:
-                    "A free Dashcam Viewer alternative that runs in your browser — no license fee, no install. GPS map, speed chart and a 3-channel grid. Nothing uploaded.",
+                    "A free Dashcam Viewer alternative that runs in your browser — no license fee, no install. GPS map, speed chart and a three-camera grid. Nothing uploaded.",
                 ogTitle: "Free Dashcam Viewer alternative — in your browser",
                 ogDescription:
-                    "Dashcam Viewer is a mature paid desktop app. dashcamigo is the free, no-install, in-browser alternative with a keyless map and a 3-channel grid.",
+                    "Dashcam Viewer is a mature paid desktop app. dashcamigo is the free, no-install, in-browser alternative with a keyless map and a three-camera grid.",
                 h1: "A free Dashcam Viewer alternative — in your browser, nothing to install",
                 lead: "Dashcam Viewer by Earthshine is a polished, cross-brand desktop player — and a paid one, with a tightly limited free tier. dashcamigo does the everyday job for free, in your browser: open the SD card, see the trip on a GPS map with a speed and G-force chart, play front, rear and interior in sync, and trim a clip. No install, no license code, nothing uploaded.",
                 cardHint: "Mature paid desktop app; we're the free browser one",
@@ -328,9 +328,9 @@ const ALTERNATIVES: Competitor[] = [
                         them: { mark: "partial", note: "Online provider; Google Maps dropped, MapQuest default" },
                     },
                     {
-                        dimension: "Channels at once",
-                        us: { mark: "yes", note: "3-channel grid (front/rear/interior)" },
-                        them: { mark: "partial", note: "Up to 2 channels" },
+                        dimension: "Cameras at once",
+                        us: { mark: "yes", note: "Three-camera grid (front/rear/interior)" },
+                        them: { mark: "partial", note: "Up to two cameras" },
                     },
                     {
                         dimension: "Cameras supported",
@@ -355,7 +355,7 @@ const ALTERNATIVES: Competitor[] = [
                 faq: [
                     {
                         q: "Is dashcamigo really free? What's the catch?",
-                        a: "It's free with no paid tier and no account — there's no catch. There's also no backend: your files are read and decoded locally in your browser, nothing is uploaded. We don't sell your footage or your data.",
+                        a: "It's free with no paid tier and no account — there's no catch. Your browser reads the files directly from your device, and dashcamigo has no server to upload them to. We don't sell your footage or your data.",
                     },
                     {
                         q: "Can dashcamigo open the same cameras as Dashcam Viewer?",
@@ -367,7 +367,7 @@ const ALTERNATIVES: Competitor[] = [
                     },
                     {
                         q: "Can it show front and rear (and interior) at the same time?",
-                        a: "Yes — dashcamigo plays a synchronized 3-channel grid. Dashcam Viewer displays up to two channels at once across all of its tiers.",
+                        a: "Yes — dashcamigo plays three cameras in a synchronized grid. Dashcam Viewer displays up to two cameras at once across all of its tiers.",
                     },
                     {
                         q: "Do I need to install anything or buy a license?",
@@ -378,12 +378,12 @@ const ALTERNATIVES: Competitor[] = [
             ru: {
                 title: "Альтернатива Dashcam Viewer — бесплатно, без установки, в браузере | dashcamigo",
                 metaDescription:
-                    "Бесплатная альтернатива Dashcam Viewer в браузере — без лицензии и без установки. Карта GPS, график скорости и сетка из 3 каналов. Ничего не загружается.",
+                    "Бесплатная альтернатива Dashcam Viewer в браузере — без лицензии и установки. Карта GPS, график скорости и сетка из трёх камер. Ничего не загружается.",
                 ogTitle: "Бесплатная альтернатива Dashcam Viewer — в браузере",
                 ogDescription:
-                    "Dashcam Viewer — зрелое платное десктоп-приложение. dashcamigo — бесплатная альтернатива в браузере без установки, с картой без ключей и сеткой из 3 каналов.",
+                    "Dashcam Viewer — зрелая платная программа для компьютера. dashcamigo — бесплатная альтернатива в браузере без установки, с картой без ключей и сеткой из трёх камер.",
                 h1: "Бесплатная альтернатива Dashcam Viewer — в браузере, без установки",
-                lead: "Dashcam Viewer от Earthshine — вылизанный кросс-брендовый десктопный плеер, и платный, с жёстко урезанным бесплатным режимом. dashcamigo делает повседневную задачу бесплатно и в браузере: открой SD-карту, увидь поездку на карте GPS с графиком скорости и G-нагрузки, проиграй фронт, тыл и салон синхронно и вырежи кусок. Без установки, без лицензионного ключа, ничего не загружается.",
+                lead: "Dashcam Viewer от Earthshine — хорошо сделанный платный плеер для компьютера, который поддерживает разные марки видеорегистраторов. Бесплатный режим сильно ограничен. dashcamigo решает повседневную задачу бесплатно и в браузере: открой SD-карту, посмотри поездку на карте GPS с графиком скорости и перегрузок, синхронно включи переднюю, заднюю и салонную камеры и вырежи нужный фрагмент. Без установки, лицензионного ключа и загрузки файлов на сервер.",
                 cardHint: "Зрелое платное приложение; мы — бесплатно в браузере",
                 whatItIs:
                     "Dashcam Viewer (и версии Plus / Pro) от Earthshine Software — зрелое, активно поддерживаемое десктопное приложение для Windows и macOS с очень широким каталогом моделей регистраторов. Это реально глубокий инструмент — синхронное видео, карта GPS и подробные графики скорости, дистанции, высоты, числа спутников и не только, плюс экспорт GPS в нескольких форматах. Покупка платная и разовая, с жёстко урезанным бесплатным режимом; ставится нативно и активируется ключом, который присылают на почту после покупки.",
@@ -411,9 +411,9 @@ const ALTERNATIVES: Competitor[] = [
                         them: { mark: "partial", note: "Онлайн-провайдер; Google Maps убрали, по умолчанию MapQuest" },
                     },
                     {
-                        dimension: "Каналов одновременно",
-                        us: { mark: "yes", note: "Сетка из 3 каналов (фронт/тыл/салон)" },
-                        them: { mark: "partial", note: "До 2 каналов" },
+                        dimension: "Камер одновременно",
+                        us: { mark: "yes", note: "Три камеры в сетке (передняя, задняя и салонная)" },
+                        them: { mark: "partial", note: "До двух камер" },
                     },
                     {
                         dimension: "Поддержка камер",
@@ -438,7 +438,7 @@ const ALTERNATIVES: Competitor[] = [
                 faq: [
                     {
                         q: "dashcamigo правда бесплатный? В чём подвох?",
-                        a: "Он бесплатный, без платных тарифов и без аккаунта — подвоха нет. И сервера нет: файлы читаются и декодируются локально в твоём браузере, наружу ничего не уходит. Мы не торгуем твоим видео и твоими данными.",
+                        a: "Он бесплатный, без платных тарифов и аккаунта — подвоха нет. Браузер читает файлы прямо с твоего устройства, а у dashcamigo нет сервера для их загрузки. Мы не продаём твои записи и данные.",
                     },
                     {
                         q: "dashcamigo открывает те же камеры, что и Dashcam Viewer?",
@@ -450,7 +450,7 @@ const ALTERNATIVES: Competitor[] = [
                     },
                     {
                         q: "Он покажет фронт и тыл (и салон) одновременно?",
-                        a: "Да — dashcamigo проигрывает синхронную сетку из 3 каналов. Dashcam Viewer показывает до двух каналов одновременно на всех тарифах.",
+                        a: "Да — dashcamigo синхронно показывает три камеры в одной сетке. Dashcam Viewer показывает до двух камер одновременно на всех тарифах.",
                     },
                     {
                         q: "Нужно что-то ставить или покупать лицензию?",
@@ -468,7 +468,7 @@ const ALTERNATIVES: Competitor[] = [
             en: {
                 title: "View dashcam GPS that VLC can't show — free, in your browser | dashcamigo",
                 metaDescription:
-                    "VLC plays dashcam video but shows no GPS, speed or map. dashcamigo adds the GPS map, speed & G-force chart and multi-channel view — free, in your browser.",
+                    "VLC plays dashcam video but shows no GPS, speed or map. dashcamigo adds the GPS map, speed and G-force chart, plus a synchronized multi-camera view — free, in your browser.",
                 ogTitle: "Dashcam GPS map for footage VLC can't read",
                 ogDescription:
                     "VLC is a great universal player, but it has no dashcam GPS, map or speed overlay. dashcamigo reads the telemetry and shows it — free, in the browser.",
@@ -476,7 +476,7 @@ const ALTERNATIVES: Competitor[] = [
                 lead: "VLC will happily open any dashcam file, but it stops at the picture: no GPS map, no speed or G-force, no front/rear sync. That telemetry is sitting inside your recordings — dashcamigo reads it and draws a live map and chart alongside the video, free and in your browser. Keep VLC for everything else; use dashcamigo when the footage needs its GPS.",
                 cardHint: "A great universal player — but it shows no dashcam GPS",
                 whatItIs:
-                    "VLC, by the non-profit VideoLAN, is the universal media player — free, open-source, and able to play practically any video on practically any operating system, phones included. For dashcam clips that makes it a reliable way to just watch the picture. What it deliberately doesn't do is understand dashcam telemetry: it has no GPS map, no speed or G-force readout, no multi-channel sync, and it won't group a card full of clips into a trip. The only way to get a location or speed stamp \"through\" VLC is to generate an external subtitle file with another tool first — a flat text overlay, not an interactive map.",
+                    "VLC, by the non-profit VideoLAN, is the universal media player — free, open-source, and able to play practically any video on practically any operating system, phones included. For dashcam clips that makes it a reliable way to just watch the picture. What it deliberately doesn't do is understand dashcam telemetry: it has no GPS map, no speed or G-force readout, it doesn't sync multiple cameras, and it won't group a card full of clips into a trip. The only way to get a location or speed stamp \"through\" VLC is to generate an external subtitle file with another tool first — a flat text overlay, not an interactive map.",
                 comparisonIntro:
                     "VLC and dashcamigo aren't really rivals — VLC plays the video, dashcamigo adds the dashcam layer on top. Here's the split.",
                 compareRows: [
@@ -502,7 +502,7 @@ const ALTERNATIVES: Competitor[] = [
                     },
                     {
                         dimension: "Front/rear/interior in sync",
-                        us: { mark: "yes", note: "3-channel grid" },
+                        us: { mark: "yes", note: "Three-camera grid" },
                         them: { mark: "no", note: "One stream at a time" },
                     },
                     {
@@ -532,11 +532,11 @@ const ALTERNATIVES: Competitor[] = [
                     },
                     {
                         q: "Do I have to stop using VLC?",
-                        a: "Not at all — they do different jobs. VLC is the best universal player; dashcamigo is the dashcam-aware viewer. Use VLC for general playback and dashcamigo when you want the route, speed and multi-channel view.",
+                        a: "Not at all — they do different jobs. VLC is the best universal player; dashcamigo is the dashcam-aware viewer. Use VLC for general playback and dashcamigo when you want the route, speed and synchronized cameras.",
                     },
                     {
                         q: "Is dashcamigo free and private like VLC?",
-                        a: "Yes. dashcamigo is free with no account, open-source under the AGPL-3.0, and it has no backend — your files are read and decoded locally in your browser, nothing is uploaded. VLC is also free, open-source and local; on those points they're equal.",
+                        a: "Yes. dashcamigo is free, needs no account and is open-source under the AGPL-3.0. Your browser reads files directly from your device; there is no server to upload them to. VLC is also free, open-source and local, so they're equal on those points.",
                     },
                     {
                         q: "Which dashcams does dashcamigo read GPS from?",
@@ -551,7 +551,7 @@ const ALTERNATIVES: Competitor[] = [
             ru: {
                 title: "Покажи GPS с регистратора, который не видит VLC — бесплатно, в браузере | dashcamigo",
                 metaDescription:
-                    "VLC проигрывает видео с регистратора, но не показывает GPS, скорость и карту. dashcamigo добавляет карту GPS, график скорости и G и мультиканал — бесплатно, в браузере.",
+                    "VLC проигрывает видео с регистратора, но не показывает GPS, скорость и карту. dashcamigo добавляет карту GPS, график скорости и перегрузок, а также синхронный просмотр нескольких камер — бесплатно и прямо в браузере.",
                 ogTitle: "Карта GPS для записей, которые VLC не читает",
                 ogDescription:
                     "VLC — отличный универсальный плеер, но в нём нет GPS, карты и оверлея скорости регистратора. dashcamigo читает телеметрию и показывает её — бесплатно, в браузере.",
@@ -559,7 +559,7 @@ const ALTERNATIVES: Competitor[] = [
                 lead: "VLC спокойно откроет любой файл с регистратора, но дальше картинки не идёт: ни карты GPS, ни скорости с G, ни синхронного фронта и тыла. А эта телеметрия лежит прямо внутри записей — dashcamigo читает её и рисует живую карту и график рядом с видео, бесплатно и в браузере. Оставь VLC для всего остального; включай dashcamigo, когда записи нужны вместе с их GPS.",
                 cardHint: "Отличный универсальный плеер — но GPS регистратора не показывает",
                 whatItIs:
-                    "VLC от некоммерческой VideoLAN — универсальный медиаплеер: бесплатный, с открытым кодом, играет почти любое видео почти на любой системе, включая телефоны. Для клипов с регистратора это надёжный способ просто посмотреть картинку. Чего он намеренно не делает — так это не понимает телеметрию регистратора: нет карты GPS, нет показа скорости и G, нет синхронизации каналов, и он не соберёт папку клипов в одну поездку. Единственный способ получить отметку координат или скорости \"через\" VLC — сначала сгенерировать внешний файл субтитров другим инструментом, и это плоский текст поверх видео, а не интерактивная карта.",
+                    "VLC от некоммерческой VideoLAN — универсальный медиаплеер: бесплатный, с открытым кодом, играет почти любое видео почти на любой системе, включая телефоны. Для клипов с регистратора это надёжный способ просто посмотреть картинку. Но телеметрию регистратора он не понимает: не показывает карту GPS, скорость и перегрузки, не синхронизирует несколько камер и не собирает папку клипов в одну поездку. Единственный способ добавить отметку координат или скорости через VLC — сначала создать внешний файл субтитров в другой программе. Это будет обычный текст поверх видео, а не интерактивная карта.",
                 comparisonIntro:
                     "VLC и dashcamigo — не совсем соперники: VLC проигрывает видео, а dashcamigo добавляет сверху слой регистратора. Вот как делятся роли.",
                 compareRows: [
@@ -574,7 +574,7 @@ const ALTERNATIVES: Competitor[] = [
                         them: { mark: "no", note: "Карты нет" },
                     },
                     {
-                        dimension: "График скорости и G-нагрузки",
+                        dimension: "График скорости и перегрузок",
                         us: { mark: "yes", note: "Да" },
                         them: { mark: "no", note: "Нет" },
                     },
@@ -585,7 +585,7 @@ const ALTERNATIVES: Competitor[] = [
                     },
                     {
                         dimension: "Фронт/тыл/салон синхронно",
-                        us: { mark: "yes", note: "Сетка из 3 каналов" },
+                        us: { mark: "yes", note: "Сетка из трёх камер" },
                         them: { mark: "no", note: "По одному потоку за раз" },
                     },
                     {
@@ -615,11 +615,11 @@ const ALTERNATIVES: Competitor[] = [
                     },
                     {
                         q: "Мне придётся отказаться от VLC?",
-                        a: "Вовсе нет — у них разные задачи. VLC — лучший универсальный плеер; dashcamigo — плеер, заточенный под регистратор. Используй VLC для обычного воспроизведения, а dashcamigo — когда нужны маршрут, скорость и мультиканал.",
+                        a: "Вовсе нет — у них разные задачи. VLC — отличный универсальный плеер, а dashcamigo понимает записи видеорегистраторов. Используй VLC для обычного воспроизведения, а dashcamigo — когда нужны маршрут, скорость и несколько камер в синхронизации.",
                     },
                     {
                         q: "dashcamigo бесплатный и приватный, как VLC?",
-                        a: "Да. dashcamigo бесплатный, без аккаунта, с открытым кодом под AGPL-3.0, и у него нет сервера — файлы читаются и декодируются локально в браузере, наружу ничего не уходит. VLC тоже бесплатный, с открытым кодом и локальный; в этом они наравне.",
+                        a: "Да. dashcamigo бесплатный, не требует аккаунта и распространяется с открытым кодом по лицензии AGPL-3.0. Браузер читает файлы прямо с твоего устройства, а сервера для их загрузки нет. VLC тоже бесплатный, открытый и работает локально — в этом они наравне.",
                     },
                     {
                         q: "С каких регистраторов dashcamigo читает GPS?",
@@ -671,7 +671,7 @@ const ALTERNATIVES: Competitor[] = [
                     },
                     {
                         dimension: "Front/rear/interior at once",
-                        us: { mark: "yes", note: "3-channel grid" },
+                        us: { mark: "yes", note: "Three-camera grid" },
                         them: { mark: "partial", note: "Front + rear" },
                     },
                     {
@@ -692,7 +692,7 @@ const ALTERNATIVES: Competitor[] = [
                 faq: [
                     {
                         q: "Is dashcamigo a replacement for Navitel DVR Player?",
-                        a: "For the everyday job — opening a trip with a GPS map, a speed and G-force chart, multi-channel playback and trimming a clip — yes, free and in any browser, and it reads Navitel GPS too. For a Navitel-branded camera specifically, the official player goes deeper (firmware updates, five-format track export), so plenty of Navitel owners keep both.",
+                        a: "For the everyday job — opening a trip with a GPS map, a speed and G-force chart, synchronized cameras and clip trimming — yes, free and in any browser, and it reads Navitel GPS too. For a Navitel-branded camera specifically, the official player goes deeper (firmware updates, five-format track export), so plenty of Navitel owners keep both.",
                     },
                     {
                         q: "Does dashcamigo read the GPS from my Navitel dashcam?",
@@ -708,7 +708,7 @@ const ALTERNATIVES: Competitor[] = [
                     },
                     {
                         q: "Is dashcamigo free and private like Navitel DVR Player?",
-                        a: "Yes — free, no account, and no backend: your files are read and decoded locally in your browser, nothing is uploaded. Both tools are free; dashcamigo also skips the install.",
+                        a: "Yes — it's free and needs no account. Your browser reads files directly from your device, and there is no server to upload them to. Both tools are free; dashcamigo also skips the install.",
                     },
                 ],
             },
@@ -720,7 +720,7 @@ const ALTERNATIVES: Competitor[] = [
                 ogDescription:
                     "Navitel DVR Player — бесплатный плеер только под Windows, сделанный под камеры Navitel. dashcamigo — кросс-платформенная альтернатива в браузере, читающая много брендов.",
                 h1: "Бесплатная кросс-платформенная альтернатива Navitel DVR Player — в браузере",
-                lead: "Navitel DVR Player — собственный бесплатный десктопный плеер Navitel, и вполне дельный: карта GPS, графики скорости и высоты, экспорт трека в нескольких форматах. Загвоздка в том, что он только под Windows и заточен под камеры самой Navitel. dashcamigo делает повседневную задачу в браузере на любом устройстве: открой SD-карту, увидь поездку на карте GPS без ключей с графиком скорости и G-нагрузки, проиграй фронт, тыл и салон синхронно и вырежи кусок — и для камер Navitel, и для многих других брендов. Ставить ничего не надо.",
+                lead: "Navitel DVR Player — хороший бесплатный плеер Navitel для компьютера: в нём есть карта GPS, графики скорости и высоты, а также экспорт маршрута в нескольких форматах. Но он работает только в Windows и рассчитан на камеры Navitel. dashcamigo решает повседневную задачу в браузере на любом устройстве: открой SD-карту, посмотри поездку на карте GPS с графиком скорости и перегрузок, синхронно включи переднюю, заднюю и салонную камеры и вырежи нужный фрагмент. Работает с Navitel и многими другими марками, устанавливать ничего не нужно.",
                 cardHint: "Бесплатный официальный плеер — но только Windows и под Navitel",
                 whatItIs:
                     "Navitel DVR Player от Navitel — бесплатное десктопное приложение для Windows для владельцев регистраторов Navitel. Инструмент крепкий: проигрывает записи MOV, AVI, MP4 и TS, показывает маршрут на карте с графиками скорости и высоты, по клику на точку маршрута перематывает видео к этому моменту, раскладывает записи на поездки, стоянки и события, режет и сохраняет фрагменты, экспортирует GPS-трек в пяти форматах — NMEA, KML, CSV, GPX и PLT — и умеет проверять прошивки камер Navitel. Два честных ограничения для всех остальных: он только под Windows, и Navitel сама пишет, что не гарантирует работу всех функций с чужими регистраторами — а его карте GPS нужны отдельные .NMEA-файлы трека, скопированные рядом с видео.",
@@ -745,7 +745,7 @@ const ALTERNATIVES: Competitor[] = [
                     },
                     {
                         dimension: "Фронт/тыл/салон одновременно",
-                        us: { mark: "yes", note: "Сетка из 3 каналов" },
+                        us: { mark: "yes", note: "Сетка из трёх камер" },
                         them: { mark: "partial", note: "Фронт + тыл" },
                     },
                     {
@@ -766,7 +766,7 @@ const ALTERNATIVES: Competitor[] = [
                 faq: [
                     {
                         q: "dashcamigo — замена Navitel DVR Player?",
-                        a: "Для повседневной задачи — открыть поездку с картой GPS, графиком скорости и G-нагрузки, мультиканальным просмотром и вырезать кусок — да, бесплатно и в любом браузере, и GPS Navitel он тоже читает. Конкретно для камеры Navitel официальный плеер копает глубже (прошивки, экспорт трека в пяти форматах), так что многие владельцы Navitel держат обе программы.",
+                        a: "Для повседневной задачи — открыть поездку с картой GPS, графиком скорости и перегрузок, синхронно посмотреть несколько камер и вырезать фрагмент — да. Всё бесплатно и работает в любом браузере, включая GPS из записей Navitel. Для камер Navitel официальный плеер умеет больше специальных вещей — например, обновлять прошивку и экспортировать маршрут в пяти форматах, — поэтому многие владельцы используют обе программы.",
                     },
                     {
                         q: "dashcamigo читает GPS с моей камеры Navitel?",
@@ -782,7 +782,7 @@ const ALTERNATIVES: Competitor[] = [
                     },
                     {
                         q: "dashcamigo бесплатный и приватный, как Navitel DVR Player?",
-                        a: "Да — бесплатный, без аккаунта, и без сервера: файлы читаются и декодируются локально в твоём браузере, наружу ничего не уходит. Обе программы бесплатны; dashcamigo вдобавок без установки.",
+                        a: "Да — он бесплатный и не требует аккаунта. Браузер читает файлы прямо с твоего устройства, а сервера для их загрузки нет. Обе программы бесплатны; dashcamigo вдобавок не нужно устанавливать.",
                     },
                 ],
             },
@@ -796,7 +796,7 @@ const ALTERNATIVES: Competitor[] = [
             en: {
                 title: "CamGeoPlayer alternative — free, no download, in your browser | dashcamigo",
                 metaDescription:
-                    "A free CamGeoPlayer alternative that runs in your browser — no big download, no .NET. GPS map, speed chart, multi-channel and clip export. Nothing to install.",
+                    "A free CamGeoPlayer alternative that runs in your browser — no big download, no .NET. GPS map, speed chart, synchronized cameras and clip export. Nothing to install.",
                 ogTitle: "Free CamGeoPlayer alternative — in your browser",
                 ogDescription:
                     "CamGeoPlayer is a free indie Windows viewer that shows your dashcam GPS on a map. dashcamigo does that in the browser — plus a speed chart and clip export.",
@@ -836,7 +836,7 @@ const ALTERNATIVES: Competitor[] = [
                     },
                     {
                         dimension: "Front/rear/interior in sync",
-                        us: { mark: "yes", note: "3-channel grid" },
+                        us: { mark: "yes", note: "Three-camera grid" },
                         them: { mark: "no", note: "Plays one video at a time" },
                     },
                     {
@@ -847,7 +847,7 @@ const ALTERNATIVES: Competitor[] = [
                 ],
                 whenStayTitle: "When CamGeoPlayer is a fine choice",
                 whenStay:
-                    "CamGeoPlayer is a likeable single-purpose tool: free, made by one developer scratching the same itch, and once it's unzipped it runs as a self-contained Windows app, fully offline. If you're on Windows, you just want your video with its route on a map, and you don't mind an app that's still an early beta, it does that one job simply. dashcamigo aims wider — cross-platform and mobile, a speed and G-force chart, multi-channel sync, automatic trip grouping and clip export — and it's actively maintained.",
+                    "CamGeoPlayer is a likeable single-purpose tool: free, made by one developer scratching the same itch, and once it's unzipped it runs as a self-contained Windows app, fully offline. If you're on Windows, you just want your video with its route on a map, and you don't mind an app that's still an early beta, it does that one job simply. dashcamigo aims wider — cross-platform and mobile, a speed and G-force chart, synchronized cameras, automatic trip grouping and clip export — and it's actively maintained.",
                 ctaPrimary: "Open your recordings",
                 faq: [
                     {
@@ -868,19 +868,19 @@ const ALTERNATIVES: Competitor[] = [
                     },
                     {
                         q: "Does dashcamigo read GPS off the video like CamGeoPlayer?",
-                        a: "Yes — it reads the GPS embedded in common dashcam files automatically and draws a live map, then adds a speed and G-force chart synced to playback, multi-channel view and clip export. CamGeoPlayer reads embedded GPS and shows it on an OpenStreetMap map with a moving marker; dashcamigo takes the same idea further.",
+                        a: "Yes — it reads the GPS embedded in common dashcam files automatically and draws a live map, then adds a speed and G-force chart synced to playback, a multi-camera view and clip export. CamGeoPlayer reads embedded GPS and shows it on an OpenStreetMap map with a moving marker; dashcamigo takes the same idea further.",
                     },
                 ],
             },
             ru: {
                 title: "Альтернатива CamGeoPlayer — бесплатно, без скачивания, в браузере | dashcamigo",
                 metaDescription:
-                    "Бесплатная альтернатива CamGeoPlayer в браузере — без большой загрузки и без .NET. Карта GPS, график скорости, мультиканал и экспорт клипа. Ставить ничего не надо.",
+                    "Бесплатная альтернатива CamGeoPlayer в браузере — без большой загрузки и без .NET. Карта GPS, график скорости, синхронный просмотр камер и экспорт клипа. Ставить ничего не надо.",
                 ogTitle: "Бесплатная альтернатива CamGeoPlayer — в браузере",
                 ogDescription:
                     "CamGeoPlayer — бесплатный indie-вьюер под Windows, показывающий GPS регистратора на карте. dashcamigo делает это в браузере — плюс график скорости и экспорт клипа.",
                 h1: "Бесплатная альтернатива CamGeoPlayer — в браузере, и умеет больше",
-                lead: "CamGeoPlayer — бесплатная небольшая программа под Windows, которая читает GPS в видео с регистратора и рисует маршрут на карте — ответ одного разработчика платным вьюерам с лимитами пробной версии. dashcamigo делает то же в браузере, без всякого скачивания, и добавляет то, чего у CamGeoPlayer нет: график скорости и G-нагрузки, фронт/тыл/салон синхронно, автоматическую группировку в поездки и экспорт клипа с GPS внутри. Та же идея — прочитать GPS и показать на карте — только дальше и с поддержкой.",
+                lead: "CamGeoPlayer — небольшая бесплатная программа для Windows, которая читает GPS из видео с регистратора и рисует маршрут на карте. Её создал один разработчик как альтернативу платным плеерам с ограниченными пробными версиями. dashcamigo делает то же прямо в браузере и добавляет график скорости и перегрузок, синхронный просмотр передней, задней и салонной камер, автоматическую группировку записей в поездки и экспорт клипа с GPS внутри. Та же идея, только с большими возможностями и регулярными обновлениями.",
                 cardHint: "Бесплатный indie-вьюер под Windows; всё ещё ранняя бета",
                 whatItIs:
                     "CamGeoPlayer — бесплатная программа под Windows (нужен .NET) от независимого разработчика, который написал её, когда не нашёл бесплатного и удобного GPS-вьюера. Ты загружаешь очередь видео, и она проигрывает их одно за другим, читая встроенный в каждое GPS и рисуя весь маршрут на карте OpenStreetMap с маркером, который двигается синхронно — GPS она достаёт через ExifTool, а карту рисует на Leaflet. Установщика нет: качаешь большой zip, распаковываешь и запускаешь .exe (некоторые антивирусы на него ругаются, и разработчик объясняет это вшитыми внутрь браузерным движком и программой exiftool). Он честно говорит, что это ранняя версия: текущая сборка — ранняя бета, новее публичных сборок не выходило.",
@@ -909,13 +909,13 @@ const ALTERNATIVES: Competitor[] = [
                         them: { mark: "yes", note: "Leaflet + OpenStreetMap" },
                     },
                     {
-                        dimension: "График скорости и G-нагрузки",
+                        dimension: "График скорости и перегрузок",
                         us: { mark: "yes", note: "Да" },
                         them: { mark: "no", note: "Только карта" },
                     },
                     {
                         dimension: "Фронт/тыл/салон синхронно",
-                        us: { mark: "yes", note: "Сетка из 3 каналов" },
+                        us: { mark: "yes", note: "Сетка из трёх камер" },
                         them: { mark: "no", note: "Проигрывает по одному видео за раз" },
                     },
                     {
@@ -926,12 +926,12 @@ const ALTERNATIVES: Competitor[] = [
                 ],
                 whenStayTitle: "Когда CamGeoPlayer — нормальный выбор",
                 whenStay:
-                    "CamGeoPlayer — симпатичный инструмент под одну задачу: бесплатный, сделанный одним разработчиком с той же болью, и после распаковки работает как самодостаточное Windows-приложение полностью офлайн. Если ты на Windows, тебе нужно просто видео с маршрутом на карте и не смущает программа, которая всё ещё в ранней бете, — она делает эту одну вещь просто. dashcamigo берёт шире — кросс-платформенно и на мобильном, график скорости и G-нагрузки, мультиканал, автоматическая группировка в поездки и экспорт клипа — и его активно поддерживают.",
+                    "CamGeoPlayer — приятный инструмент для одной задачи: он бесплатный, создан одним разработчиком и после распаковки работает как самостоятельная Windows-программа без интернета. Если у тебя Windows, нужен только маршрут рядом с видео и не смущает ранняя бета, программа справляется. dashcamigo умеет больше: работает на разных платформах и телефонах, показывает график скорости и перегрузок, синхронизирует камеры, сам группирует записи в поездки и экспортирует клипы. И его активно поддерживают.",
                 ctaPrimary: "Открыть свои записи",
                 faq: [
                     {
                         q: "dashcamigo — бесплатная альтернатива CamGeoPlayer?",
-                        a: "Да — оба бесплатны, но dashcamigo работает в любом браузере без всякого скачивания (ни большого zip, ни .NET) и добавляет график скорости и G-нагрузки, фронт/тыл/салон синхронно, автоматическую группировку в поездки и экспорт клипа поверх той самой связки видео-и-карта, что есть у CamGeoPlayer.",
+                        a: "Да. Обе программы бесплатны, но dashcamigo работает в любом браузере: не нужно скачивать большой архив или устанавливать .NET. Помимо видео и карты, он показывает график скорости и перегрузок, синхронизирует переднюю, заднюю и салонную камеры, сам группирует записи в поездки и экспортирует клипы.",
                     },
                     {
                         q: "CamGeoPlayer ещё обновляют?",
@@ -947,7 +947,7 @@ const ALTERNATIVES: Competitor[] = [
                     },
                     {
                         q: "dashcamigo читает GPS из видео, как CamGeoPlayer?",
-                        a: "Да — он автоматически читает GPS, встроенный в распространённые файлы регистраторов, и рисует живую карту, а сверху добавляет график скорости и G-нагрузки синхронно с воспроизведением, мультиканал и экспорт клипа. CamGeoPlayer читает встроенный GPS и показывает его на карте OpenStreetMap с движущимся маркером; dashcamigo развивает ту же идею дальше.",
+                        a: "Да. Он автоматически читает GPS из распространённых файлов видеорегистраторов и рисует живую карту, а ещё показывает синхронный график скорости и перегрузок, объединяет камеры и экспортирует клипы. CamGeoPlayer тоже читает встроенный GPS и показывает его на OpenStreetMap с движущимся маркером; dashcamigo развивает эту идею дальше.",
                     },
                 ],
             },
@@ -1039,7 +1039,7 @@ const ALTERNATIVES: Competitor[] = [
                 ogDescription:
                     "Telemetry Overlay — платная десктоп-программа для оверлеев. Для записей регистратора dashcamigo читает GPS и наносит оверлей скорости/карты бесплатно, в браузере.",
                 h1: "Бесплатная браузерная альтернатива Telemetry Overlay — для записей регистратора",
-                lead: "Telemetry Overlay — мощная платная десктоп-программа, которая наносит датчики на видео с экшн-камер. Если твоё видео с регистратора и нужно просто увидеть маршрут, скорость и G-нагрузку — и, может, нанести простой оверлей скорости и карты — dashcamigo делает это бесплатно, в браузере, читая GPS прямо с карты. Без лицензии, без установки. Для глубокой работы с датчиками Telemetry Overlay всё же мощнее.",
+                lead: "Telemetry Overlay — мощная платная программа для компьютера, которая добавляет показания датчиков на видео с экшн-камер. Если у тебя запись с видеорегистратора и нужно увидеть маршрут, скорость и перегрузки или добавить на видео скорость и карту, dashcamigo сделает это бесплатно прямо в браузере, прочитав GPS с карты памяти. Без лицензии и установки. Для сложной работы с данными датчиков Telemetry Overlay всё же мощнее.",
                 cardHint: "Платная десктоп-программа оверлеев; мы читаем GPS регистратора бесплатно в браузере",
                 whatItIs:
                     "Telemetry Overlay (от Goprotelemetryextractor) — платное десктоп-приложение для Windows, macOS и Linux, которое наносит настраиваемые датчики скорости, GPS и сенсоров на видео и экспортирует результат. Оно заточено под экшн-камеры — GoPro, DJI, Insta360, Garmin — с глубокой библиотекой датчиков и широкой поддержкой форматов данных (GPX, FIT, NMEA и др.) и встроенной картой от Mapbox. Полная версия — платная разовая покупка (с пробной версией и водяным знаком); GPS регистратора читается через общий путь извлечения, выключенный по умолчанию. Это инструмент рендера и экспорта, а не интерактивный плеер для пролистывания папки клипов.",
@@ -1073,7 +1073,7 @@ const ALTERNATIVES: Competitor[] = [
                     },
                     {
                         dimension: "Глубина датчиков и сенсоров",
-                        us: { mark: "partial", note: "Скорость, GPS, G-нагрузка" },
+                        us: { mark: "partial", note: "Скорость, GPS, перегрузки" },
                         them: { mark: "yes", note: "Сотни датчиков, много источников" },
                     },
                 ],
@@ -1193,7 +1193,7 @@ const ALTERNATIVES: Competitor[] = [
                 ogDescription:
                     "DashWare не обновляется с 2017, только под Windows и без живой карты. dashcamigo читает GPS регистратора и показывает настоящую карту без ключей — бесплатно, в браузере.",
                 h1: "Живая браузерная альтернатива DashWare — с настоящей картой",
-                lead: "DashWare была популярной бесплатной программой для оверлеев телеметрии, но GoPro перестала её обновлять после 2017 года, она только под Windows, и настоящей встроенной карты в ней не было — лишь линия трека поверх вручную сделанного скриншота карты. dashcamigo — живая браузерная альтернатива для записей регистратора: читает GPS с карты и показывает живую карту без ключей с графиком скорости и G-нагрузки. А вот для сборки кастомных оверлеев с датчиками редактор DashWare — всё же инструмент другого рода.",
+                lead: "DashWare была популярной бесплатной программой для наложения телеметрии на видео, но GoPro перестала обновлять её после 2017 года. Она работает только в Windows, а настоящей встроенной карты в ней не было — лишь линия маршрута поверх заранее сделанного снимка карты. dashcamigo — современная альтернатива для записей видеорегистратора: он работает в браузере, читает GPS с карты памяти и показывает живую карту без ключей вместе с графиком скорости и перегрузок. Для сложных авторских панелей с датчиками редактор DashWare всё же остаётся инструментом другого класса.",
                 cardHint: "Бесплатна, но заброшена (2017), только Windows, без живой карты",
                 whatItIs:
                     "DashWare, купленная GoPro, — бесплатный Windows-редактор оверлеев телеметрии: ты приносишь видео плюс отдельный лог данных (GPS, пульс, обороты), а она наносит на кадр большую библиотеку настраиваемых датчиков. Её редактор датчиков и широкая поддержка логгеров были сильной стороной. Но разработка остановилась в 2017-м — она не поддерживается, только под Windows (на Mac нужна виртуальная машина), не читает встроенный GPS бытовых регистраторов (видео для неё — просто фоновый слой), и даже у новых GoPro не вытягивает GPS. Её \"карта\" — это 2D-линия трека без тайлов; собственный FAQ DashWare советует сделать скриншот Google или Bing и подложить вручную.",
@@ -1255,7 +1255,7 @@ const ALTERNATIVES: Competitor[] = [
                     },
                     {
                         q: "Моё видео загружается?",
-                        a: "Нет. dashcamigo читает и декодирует файлы локально в браузере — наружу ничего не уходит. DashWare тоже локальна; обе держат видео на твоей машине.",
+                        a: "Нет. dashcamigo читает файлы прямо с твоего устройства — наружу ничего не уходит. DashWare тоже работает локально; обе программы оставляют видео на твоём компьютере.",
                     },
                 ],
             },
@@ -1352,7 +1352,7 @@ const ALTERNATIVES: Competitor[] = [
                 ogDescription:
                     "RaceRender — десктопный редактор гоночных оверлеев (бесплатно: логотип + лимит 3 мин). Для записей регистратора dashcamigo читает GPS и показывает живую карту бесплатно, в браузере.",
                 h1: "Бесплатная браузерная альтернатива RaceRender — для записей регистратора",
-                lead: "RaceRender — мощный десктопный инструмент для сборки гоночных видео с телеметрией, но у его бесплатной версии стоит логотип и лимит вывода в три минуты, полное снятие требует платной лицензии, и обычно он ждёт отдельный файл с логгера. Для записей регистратора dashcamigo читает GPS прямо с карты и показывает живую карту без ключей с графиком скорости и G-нагрузки, бесплатно и в браузере, без водяного знака и лимита длины. Для глубокого гоночного продакшна RaceRender идёт дальше.",
+                lead: "RaceRender — мощная программа для монтажа гоночных видео с телеметрией. В бесплатной версии на видео остаётся логотип и действует ограничение в три минуты; для снятия ограничений нужна платная лицензия, а данные обычно приходится загружать отдельным файлом. Для записей видеорегистратора dashcamigo читает GPS прямо с карты памяти и бесплатно показывает в браузере живую карту с графиком скорости и перегрузок — без водяного знака и ограничения по длине. Для профессионального монтажа гоночных видео RaceRender умеет больше.",
                 cardHint: "Десктопный редактор гоночных оверлеев; у бесплатной версии логотип + лимит 3 мин",
                 whatItIs:
                     "RaceRender (от HP Tuners) — десктопное приложение для Windows и macOS, которое собирает оверлеи телеметрии — датчики, карты, многокамерные раскладки — и рендерит готовое гоночное видео. Оно безразлично к камере и источнику данных (GoPro, VIRB, Sony, плюс логи CSV, VBO, NMEA, GPX, FIT) и сделано для авторов трек-дней и гонок, обычно в паре с приложением-логгером вроде TrackAddict или Harry's LapTimer. Модель freemium с платной разовой лицензией: у бесплатной версии стоит логотип RaceRender и лимит вывода в 3 минуты, а полное снятие логотипа требует платной версии. Его карта трека — локальная линия по данным, встроенной интерактивной карты нет.",
@@ -1534,7 +1534,7 @@ const INDEX_LOCALES: Partial<Record<Lang, AltIndexLocale>> = {
         ogDescription:
             "See how dashcamigo compares to RegistratorViewer, Dashcam Viewer and VLC — free, in the browser, with a GPS map that has no API key to expire.",
         h1: "Free, in-browser alternatives to popular dashcam tools",
-        lead: "Switching from another dashcam viewer? dashcamigo plays your recordings in the browser — free, nothing to install — with a synchronized GPS map, a speed and G-force chart, and multi-channel playback. Here's how it compares to the tools people use today.",
+        lead: "Switching from another dashcam viewer? dashcamigo plays your recordings in the browser — free, nothing to install — with a synchronized GPS map, a speed and G-force chart, and multi-camera playback. Here's how it compares to the tools people use today.",
     },
     ru: {
         title: "Бесплатные альтернативы плеерам регистратора — в браузере | dashcamigo",
@@ -1544,7 +1544,7 @@ const INDEX_LOCALES: Partial<Record<Lang, AltIndexLocale>> = {
         ogDescription:
             "Сравни dashcamigo с RegistratorViewer, Dashcam Viewer и VLC — бесплатно, в браузере, с картой GPS без ключей — истекать нечему.",
         h1: "Бесплатные альтернативы популярным программам для регистратора",
-        lead: "Переходишь с другого плеера регистратора? dashcamigo проигрывает записи прямо в браузере — бесплатно, без установки — с синхронной картой GPS, графиком скорости и G-нагрузки и мультиканальным просмотром. Вот как он смотрится рядом с тем, чем пользуются сегодня.",
+        lead: "Переходишь с другого плеера для видеорегистратора? dashcamigo показывает записи прямо в браузере — бесплатно и без установки — вместе с синхронной картой GPS, графиком скорости и перегрузок и несколькими камерами. Вот как он выглядит рядом с популярными программами.",
     },
 };
 

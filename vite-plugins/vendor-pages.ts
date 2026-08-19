@@ -172,12 +172,12 @@ const VENDORS: VendorContent[] = [
             en: {
                 title: "70mai Dashcam Player & Viewer — X800, A800S, A810, T800 | dashcamigo",
                 metaDescription:
-                    "Free online 70mai dashcam player. Open X800, A800S, A810, T800 and other 70mai recordings in your browser. GPS map, speed chart, multi-channel playback. No upload, no install.",
+                    "Free online 70mai dashcam player. Open X800, A800S, A810, T800 and other 70mai recordings in your browser. GPS map, speed chart and synchronized cameras. No upload, no install.",
                 ogTitle: "70mai Dashcam Player Online — X800, A800S, A810, T800",
                 ogDescription:
-                    "Free online player for 70mai dashcam recordings. GPS map, speed chart, multi-channel. Works in any modern browser, nothing uploaded.",
+                    "Free online player for 70mai dashcam recordings. GPS map, speed chart and synchronized cameras. Works in any modern browser, nothing uploaded.",
                 h1: "70mai Dashcam Player Online — play recordings in your browser",
-                lead: "Open recordings from 70mai dashcams directly in your browser, on any PC or Mac — no Android emulator, no 70mai app. Synchronized GPS track, speed and G-force chart, multi-channel front/rear/cabin playback. No upload, no account.",
+                lead: "Open recordings from 70mai dashcams directly in your browser, on any PC or Mac — no Android emulator, no 70mai app. See the GPS route, speed and G-force chart, plus synchronized front, rear and cabin cameras. No upload, no account.",
                 ctaPrimary: "Open 70mai recordings folder",
                 modelsCompat: "and most other 70mai cameras — the 4K models embed GPS in the video, the 2019–2021 Pro / Pro Lite / Pro Plus generation writes its own embedded GPS box, and older models keep a GPSData*.txt log ($V02). dashcamigo reads all three. If yours isn't recognized, send a sample to feedback@dashcamigo.app and we'll add it; we add formats from real recordings.",
                 formatIntro:
@@ -185,7 +185,7 @@ const VENDORS: VendorContent[] = [
                 faq: [
                     {
                         q: "Which 70mai models work in dashcamigo?",
-                        a: "These 70mai models work: X800, A800/A800S/A810, A500/A500S, M500/M800/M310, S500, T800, X1000/X1000S, Omni 4G, plus the 2019–2021 Pro / Pro Lite / Pro Plus generation. The 4K models embed GPS in the video, the Pro generation writes its own embedded GPS box, and older ones keep a GPSData*.txt log ($V02) — dashcamigo reads all three. Multi-channel models (S500, A810, T800) play front, rear and cabin together. If your 70mai isn't recognized, send a sample to feedback@dashcamigo.app and we'll add it; we add formats from real recordings.",
+                        a: "These 70mai models work: X800, A800/A800S/A810, A500/A500S, M500/M800/M310, S500, T800, X1000/X1000S, Omni 4G, plus the 2019–2021 Pro / Pro Lite / Pro Plus generation. The 4K models embed GPS in the video, the Pro generation writes its own embedded GPS box, and older ones keep a GPSData*.txt log ($V02) — dashcamigo reads all three. Models with several cameras (S500, A810, T800) play front, rear and cabin together. If your 70mai isn't recognized, send a sample to feedback@dashcamigo.app and we'll add it; we add formats from real recordings.",
                     },
                     {
                         q: "Do I need to install the 70mai app?",
@@ -193,11 +193,11 @@ const VENDORS: VendorContent[] = [
                     },
                     {
                         q: "Will my 70mai recordings be uploaded anywhere?",
-                        a: "No. There is no backend. Your browser reads the files locally with the File System Access API and decodes them with WebCodecs. Nothing leaves your device.",
+                        a: "No. Your browser reads the files directly from your device. dashcamigo has no server to send them to, so nothing leaves your device.",
                     },
                     {
-                        q: "Can dashcamigo handle multi-channel 70mai cameras (S500, A810, T800)?",
-                        a: "Yes. 70mai multi-channel models write to subfolders like Normal/Front/, Normal/Back/, Normal/Interior/. dashcamigo detects this layout, groups files into trips and plays all channels in sync. Click any channel to make it the main view, or keep them side-by-side.",
+                        q: "Can dashcamigo handle multi-camera 70mai models (S500, A810, T800)?",
+                        a: "Yes. These 70mai models write each camera to a subfolder such as Normal/Front/, Normal/Back/ or Normal/Interior/. dashcamigo detects the layout, groups the files into trips and plays every camera in sync. Click any camera to make it the main view, or keep them side by side.",
                     },
                     {
                         q: "Can I export a trimmed clip from a 70mai trip?",
@@ -212,12 +212,12 @@ const VENDORS: VendorContent[] = [
             ru: {
                 title: "Плеер 70mai — просмотр записей X800, A800S, A810, T800 | dashcamigo",
                 metaDescription:
-                    "Бесплатный онлайн-плеер 70mai. Открой записи X800, A800S, A810, T800 и других моделей прямо в браузере. Карта GPS, график скорости, многоканальный просмотр. Без загрузки и установки.",
+                    "Бесплатный онлайн-плеер 70mai. Открой записи X800, A800S, A810, T800 и других моделей прямо в браузере. Карта GPS, график скорости и несколько камер в синхронизации. Без загрузки и установки.",
                 ogTitle: "Плеер 70mai онлайн — X800, A800S, A810, T800",
                 ogDescription:
-                    "Онлайн-плеер для записей с видеорегистратора 70mai. Карта GPS, график скорости, многоканалка. Работает в любом современном браузере, ничего никуда не загружается.",
+                    "Онлайн-плеер для записей с видеорегистратора 70mai. Карта GPS, график скорости и синхронный просмотр камер. Работает в любом современном браузере, ничего никуда не загружается.",
                 h1: "Плеер 70mai онлайн — записи в браузере, без установки",
-                lead: "Открывай записи с видеорегистраторов 70mai прямо в браузере, на любом ПК или Mac — без Android-эмулятора, без приложения 70mai. Синхронный GPS-трек на карте, график скорости и G-нагрузки, проигрывание фронта/тыла/салона одновременно. Без загрузки на сервер, без аккаунта.",
+                lead: "Открывай записи с видеорегистраторов 70mai прямо в браузере на любом ПК или Mac — без Android-эмулятора и приложения 70mai. Смотри маршрут GPS, график скорости и перегрузок, а также переднюю, заднюю и салонную камеры в синхронизации. Без загрузки на сервер и аккаунта.",
                 ctaPrimary: "Открыть папку с записями 70mai",
                 modelsCompat: "и большинство других 70mai — 4K-модели вшивают GPS прямо в видео, поколение Pro / Pro Lite / Pro Plus 2019–2021 годов кладёт GPS в собственный встроенный бокс, а модели постарше ведут отдельный лог GPSData*.txt ($V02). dashcamigo читает все три варианта. Если твою камеру не распознало — пришли запись на feedback@dashcamigo.app, форматы мы добавляем по реальным файлам.",
                 formatIntro:
@@ -225,7 +225,7 @@ const VENDORS: VendorContent[] = [
                 faq: [
                     {
                         q: "Какие модели 70mai работают в dashcamigo?",
-                        a: "Работают эти 70mai: X800, A800/A800S/A810, A500/A500S, M500/M800/M310, S500, T800, X1000/X1000S, Omni 4G, плюс поколение Pro / Pro Lite / Pro Plus 2019–2021 годов. 4K-модели вшивают GPS в видео, Pro-поколение пишет его в собственный встроенный бокс, а модели постарше ведут лог GPSData*.txt ($V02) — dashcamigo читает все три. Многоканалки (S500, A810, T800) играют фронт+тыл+салон одновременно. Если твою 70mai не распознало — пришли запись на feedback@dashcamigo.app, форматы мы добавляем по реальным файлам.",
+                        a: "Работают эти 70mai: X800, A800/A800S/A810, A500/A500S, M500/M800/M310, S500, T800, X1000/X1000S, Omni 4G, плюс поколение Pro / Pro Lite / Pro Plus 2019–2021 годов. 4K-модели вшивают GPS в видео, поколение Pro хранит его внутри файла, а более старые модели ведут журнал GPSData*.txt ($V02) — dashcamigo читает все три варианта. В моделях S500, A810 и T800 передняя, задняя и салонная камеры воспроизводятся одновременно. Если твоя 70mai не распозналась, пришли пример записи на feedback@dashcamigo.app — мы добавляем форматы по реальным файлам.",
                     },
                     {
                         q: "Нужно ли ставить приложение 70mai?",
@@ -233,11 +233,11 @@ const VENDORS: VendorContent[] = [
                     },
                     {
                         q: "Куда уходит видео?",
-                        a: "Никуда. Сервера нет. Браузер читает файлы локально через File System Access API и декодирует через WebCodecs. Никаких загрузок наружу.",
+                        a: "Никуда. Браузер читает файлы прямо с твоего устройства. У dashcamigo нет сервера для их загрузки, поэтому записи никуда не уходят.",
                     },
                     {
-                        q: "Поддерживаются ли многоканальные модели 70mai (S500, A810, T800)?",
-                        a: "Да. Многоканальные 70mai пишут в подпапки Normal/Front/, Normal/Back/, Normal/Interior/. dashcamigo распознаёт эту раскладку, собирает файлы в поездки и проигрывает все каналы синхронно. Кликни любой канал — он станет главным, или оставь все рядом.",
+                        q: "Поддерживаются ли модели 70mai с несколькими камерами (S500, A810, T800)?",
+                        a: "Да. Эти модели 70mai сохраняют каждую камеру в своей подпапке: Normal/Front/, Normal/Back/ или Normal/Interior/. dashcamigo распознаёт такую раскладку, собирает файлы в поездки и синхронно показывает все камеры. Нажми на любую камеру, чтобы сделать её основной, или оставь все рядом.",
                     },
                     {
                         q: "Можно ли вырезать кусок из поездки 70mai?",
@@ -269,9 +269,9 @@ const VENDORS: VendorContent[] = [
                     "Free online Viofo dashcam player. Open A119, A129 Plus Duo, A129 Pro, A139, A229 Pro and T130 recordings in your browser. GPS map, speed chart, no upload, no install.",
                 ogTitle: "Viofo Dashcam Player Online — A119, A129, A139, A229",
                 ogDescription:
-                    "Free online player for Viofo dashcam recordings. GPS map, speed chart, multi-channel. Works in any modern browser, nothing uploaded.",
+                    "Free online player for Viofo dashcam recordings. GPS map, speed chart and synchronized cameras. Works in any modern browser, nothing uploaded.",
                 h1: "Viofo Dashcam Player Online — play recordings in your browser",
-                lead: "Open recordings from Viofo dashcams directly in your browser. Synchronized GPS, speed and G-force chart, multi-channel front/rear/interior playback. Free, no upload, no install.",
+                lead: "Open recordings from Viofo dashcams directly in your browser. See the synchronized GPS route, speed and G-force chart, plus front, rear and interior cameras together. Free, no upload, no install.",
                 ctaPrimary: "Open Viofo recordings folder",
                 modelsCompat: "and most other Viofo models built on the Novatek chipset family (the same parser also handles Vantrue, Akaso, Azdome, Kenwood and Nextbase 512GW).",
                 formatIntro:
@@ -287,11 +287,11 @@ const VENDORS: VendorContent[] = [
                     },
                     {
                         q: "Will Viofo recordings be uploaded?",
-                        a: "No. There is no backend. The browser reads files locally and decodes them with WebCodecs. Nothing leaves your device.",
+                        a: "No. Your browser reads the files directly from your device. dashcamigo has no server to send them to, so nothing leaves your device.",
                     },
                     {
-                        q: "Does dashcamigo handle Viofo dual-channel (A129/A229) cameras?",
-                        a: "Yes. The channel suffix (F = front, R = rear, I = interior) in the Viofo filename pattern tells dashcamigo which file is which. Files from the same moment in time are grouped into one trip and play in sync. Click any channel to make it the main view.",
+                        q: "Does dashcamigo handle Viofo dual-camera models (A129/A229)?",
+                        a: "Yes. The camera suffix in each filename (F = front, R = rear, I = interior) tells dashcamigo which view it contains. Files from the same moment are grouped into one trip and play in sync. Click any camera to make it the main view.",
                     },
                     {
                         q: "Can I trim a clip from a Viofo recording?",
@@ -309,9 +309,9 @@ const VENDORS: VendorContent[] = [
                     "Бесплатный онлайн-плеер Viofo. Открой записи A119, A129 Plus Duo, A129 Pro, A139, A229 Pro и T130 прямо в браузере. Карта GPS, график скорости, без загрузки и установки.",
                 ogTitle: "Плеер Viofo онлайн — A119, A129, A139, A229",
                 ogDescription:
-                    "Онлайн-плеер для записей с видеорегистратора Viofo. Карта GPS, график скорости, многоканалка. Работает в любом современном браузере.",
+                    "Онлайн-плеер для записей с видеорегистратора Viofo. Карта GPS, график скорости и синхронный просмотр камер. Работает в любом современном браузере.",
                 h1: "Плеер Viofo онлайн — записи в браузере, без установки",
-                lead: "Открывай записи с видеорегистраторов Viofo прямо в браузере. Синхронный GPS, график скорости и G-нагрузки, проигрывание фронта/тыла/салона одновременно. Бесплатно, без загрузки, без установки.",
+                lead: "Открывай записи с видеорегистраторов Viofo прямо в браузере. Смотри синхронный маршрут GPS, график скорости и перегрузок, а также переднюю, заднюю и салонную камеры одновременно. Бесплатно, без загрузки и установки.",
                 ctaPrimary: "Открыть папку с записями Viofo",
                 modelsCompat: "и большинство других моделей Viofo на чипе Novatek (тот же парсер берёт также Vantrue, Akaso, Azdome, Kenwood и Nextbase 512GW).",
                 formatIntro:
@@ -327,11 +327,11 @@ const VENDORS: VendorContent[] = [
                     },
                     {
                         q: "Куда уходит видео?",
-                        a: "Никуда. Сервера нет. Браузер читает файлы локально и декодирует через WebCodecs. Никаких загрузок наружу.",
+                        a: "Никуда. Браузер читает файлы прямо с твоего устройства. У dashcamigo нет сервера для их загрузки, поэтому записи никуда не уходят.",
                     },
                     {
-                        q: "Поддерживаются ли двухканальные Viofo (A129/A229)?",
-                        a: "Да. Суффикс канала в имени файла (F = фронт, R = тыл, I = салон) говорит dashcamigo, какой файл какой. Файлы за одно и то же время группируются в одну поездку и играют синхронно. Кликни любой канал — он станет главным.",
+                        q: "Поддерживаются ли модели Viofo с двумя камерами (A129/A229)?",
+                        a: "Да. Суффикс камеры в имени файла (F — передняя, R — задняя, I — салонная) помогает dashcamigo понять, что снято в каждом файле. Записи за одно и то же время собираются в одну поездку и воспроизводятся синхронно. Нажми на любую камеру, чтобы сделать её основной.",
                     },
                     {
                         q: "Можно ли вырезать кусок из записи Viofo?",
@@ -339,7 +339,7 @@ const VENDORS: VendorContent[] = [
                     },
                     {
                         q: "Есть ли плеер Viofo для ПК или Mac?",
-                        a: "У Viofo есть свой десктопный плеер (VIOFO Player для Windows и Mac) — он умеет проигрывать отдельные файлы с картой GPS. dashcamigo — вариант без установки: открой dashcamigo.app в браузере на Windows, macOS, Linux или ChromeOS, перетащи всю папку SD-карты — и каждая поездка играет на одном таймлайне: фронт и тыл синхронно, график скорости и G-нагрузки, обрезка и экспорт в комплекте.",
+                        a: "У Viofo есть собственный плеер для Windows и Mac — VIOFO Player. Он воспроизводит отдельные файлы вместе с картой GPS. dashcamigo устанавливать не нужно: открой его в браузере на Windows, macOS, Linux или ChromeOS и перетащи всю папку с SD-карты. Каждая поездка появится на одной шкале времени, передняя и задняя камеры будут синхронизированы, а рядом откроется график скорости и перегрузок. Обрезка и экспорт тоже доступны.",
                     },
                 ],
             },
@@ -372,7 +372,7 @@ const VENDORS: VendorContent[] = [
                 ogDescription:
                     "Free online player for BlackVue dashcam recordings. GPS map, speed chart, front+rear in sync. Works in any browser, no BlackVue Cloud account needed.",
                 h1: "BlackVue Dashcam Player Online — play recordings in your browser",
-                lead: "Open BlackVue DR-series recordings directly in your browser. Synchronized GPS, speed and G-force chart, dual-channel front+rear playback. No BlackVue Viewer install, no BlackVue Cloud account.",
+                lead: "Open BlackVue DR-series recordings directly in your browser. See the synchronized GPS route, speed and G-force chart, plus front and rear cameras together. No BlackVue Viewer install or BlackVue Cloud account.",
                 ctaPrimary: "Open BlackVue recordings folder",
                 modelsCompat: "and most other BlackVue DR-series cameras. Modern X-series (DR900X, DR970X, DR750X, DR770X, DR590X) store GPS inside the MP4; the legacy DR450/500/550/650 line uses a separate .gps sidecar file — both work.",
                 formatIntro:
@@ -388,11 +388,11 @@ const VENDORS: VendorContent[] = [
                     },
                     {
                         q: "Will my BlackVue recordings be uploaded to a server?",
-                        a: "No. There is no backend at all. The browser reads files locally with the File System Access API. Nothing leaves your device — unlike BlackVue Cloud, which routes through their servers.",
+                        a: "No. Your browser reads the files directly from your device. Nothing leaves it — unlike BlackVue Cloud, which sends data through BlackVue's servers.",
                     },
                     {
                         q: "Does dashcamigo show both front and rear BlackVue cameras?",
-                        a: "Yes. BlackVue dual-channel models write the same timestamp to a front (F) and rear (R) file. dashcamigo groups them into one trip and plays both in sync. Click either channel to make it the main view, or keep them side by side.",
+                        a: "Yes. BlackVue models with front and rear cameras give both files the same timestamp. dashcamigo groups them into one trip and plays them in sync. Click either camera to make it the main view, or keep both side by side.",
                     },
                     {
                         q: "Can I export a clip from a BlackVue trip?",
@@ -408,7 +408,7 @@ const VENDORS: VendorContent[] = [
                 ogDescription:
                     "Онлайн-плеер для записей с BlackVue. Карта GPS, график скорости, фронт+тыл синхронно. Работает в любом браузере, без аккаунта BlackVue Cloud.",
                 h1: "Плеер BlackVue онлайн — записи в браузере, без BlackVue Viewer",
-                lead: "Открывай записи BlackVue DR-серии прямо в браузере. Синхронный GPS, график скорости и G-нагрузки, фронт+тыл одновременно. Без BlackVue Viewer, без аккаунта BlackVue Cloud.",
+                lead: "Открывай записи BlackVue DR-серии прямо в браузере. Смотри синхронный маршрут GPS, график скорости и перегрузок, а также переднюю и заднюю камеры одновременно. Без BlackVue Viewer и аккаунта BlackVue Cloud.",
                 ctaPrimary: "Открыть папку с записями BlackVue",
                 modelsCompat: "и большинство других BlackVue DR-серии. Современные X-серии (DR900X, DR970X, DR750X, DR770X, DR590X) хранят GPS прямо в MP4; старые DR450/500/550/650 пишут отдельный .gps-файл — оба варианта работают.",
                 formatIntro:
@@ -424,7 +424,7 @@ const VENDORS: VendorContent[] = [
                     },
                     {
                         q: "Уйдут ли мои записи на сервер?",
-                        a: "Нет. Сервера нет вообще. Браузер читает файлы локально через File System Access API. В отличие от BlackVue Cloud (который гонит трафик через их серверы), тут наружу не уходит ничего.",
+                        a: "Нет. Браузер читает файлы прямо с твоего устройства, и наружу ничего не уходит. В отличие от dashcamigo, BlackVue Cloud передаёт данные через серверы BlackVue.",
                     },
                     {
                         q: "Показывает ли dashcamigo фронт и тыл BlackVue вместе?",
@@ -488,7 +488,7 @@ const VENDORS: VendorContent[] = [
                     },
                     {
                         q: "Are my GoPro recordings uploaded to a server?",
-                        a: "No. There is no backend. The browser reads files locally with the File System Access API. Nothing leaves your device.",
+                        a: "No. Your browser reads the files directly from your device. dashcamigo has no server to send them to, so nothing leaves your device.",
                     },
                     {
                         q: "Can I export a trimmed clip with GoPro GPS inside?",
@@ -502,7 +502,7 @@ const VENDORS: VendorContent[] = [
                     "Бесплатный онлайн-плеер GoPro. Открой записи HERO5–HERO13 и MAX с GPMF-телеметрией в браузере. Карта GPS, графики скорости и G по треку gpmd. Без загрузки.",
                 ogTitle: "Плеер GoPro онлайн — HERO5–HERO13 GPMF",
                 ogDescription:
-                    "Онлайн-плеер для записей GoPro с GPMF GPS. Карта, скорость и G-нагрузка по треку gpmd. Работает в любом современном браузере.",
+                    "Онлайн-плеер для записей GoPro с GPMF GPS. Карта, скорость и перегрузки из данных gpmd. Работает в любом современном браузере.",
                 h1: "Плеер GoPro онлайн — записи с GPMF прямо в браузере",
                 lead: "Открывай записи GoPro HERO и MAX прямо в браузере. Из метатрека GPMF (gpmd) dashcamigo достаёт GPS, скорость, высоту и 3-осевой акселерометр — и рисует всё это на синхронной карте и графике.",
                 ctaPrimary: "Открыть папку с записями GoPro",
@@ -516,7 +516,7 @@ const VENDORS: VendorContent[] = [
                     },
                     {
                         q: "Что даёт GPMF кроме GPS?",
-                        a: "GPMF содержит GPS-координаты, высоту, скорость по земле и 3-осевой акселерометр, замеры несколько раз в секунду. dashcamigo рисует карту по GPS, считает график скорости и использует акселерометр для линии G-нагрузки и автоматических меток событий.",
+                        a: "GPMF содержит GPS-координаты, высоту, скорость по земле и показания трёхосевого акселерометра несколько раз в секунду. dashcamigo рисует маршрут по GPS, строит график скорости и использует показания акселерометра для графика перегрузок и автоматических меток событий.",
                     },
                     {
                         q: "Поддерживается ли GoPro MAX (360)?",
@@ -524,7 +524,7 @@ const VENDORS: VendorContent[] = [
                     },
                     {
                         q: "Куда уходят мои записи?",
-                        a: "Никуда. Сервера нет. Браузер читает файлы локально через File System Access API. Наружу ничего не уходит.",
+                        a: "Никуда. Браузер читает файлы прямо с твоего устройства. У dashcamigo нет сервера для их загрузки, поэтому записи никуда не уходят.",
                     },
                     {
                         q: "Можно ли вырезать кусок с GoPro GPS внутри?",
@@ -579,11 +579,11 @@ const VENDORS: VendorContent[] = [
                     },
                     {
                         q: "Will my Garmin recordings be uploaded?",
-                        a: "No. There is no backend. The browser reads files locally and decodes them with WebCodecs. Nothing leaves your device.",
+                        a: "No. Your browser reads the files directly from your device. dashcamigo has no server to send them to, so nothing leaves your device.",
                     },
                     {
                         q: "Does dashcamigo show the Garmin Tandem cabin camera too?",
-                        a: "Yes. Garmin Tandem writes two MP4 files per moment (road-facing and cabin-facing). dashcamigo groups them into one trip and plays both in sync. Click either channel to make it the main view.",
+                        a: "Yes. Garmin Tandem writes two MP4 files for each moment, one facing the road and one facing the cabin. dashcamigo groups them into one trip and plays both in sync. Click either camera to make it the main view.",
                     },
                     {
                         q: "Can I export a Garmin clip with GPS inside?",
@@ -615,11 +615,11 @@ const VENDORS: VendorContent[] = [
                     },
                     {
                         q: "Куда уходят записи?",
-                        a: "Никуда. Сервера нет. Браузер читает файлы локально и декодирует через WebCodecs. Наружу ничего не уходит.",
+                        a: "Никуда. Браузер читает файлы прямо с твоего устройства. У dashcamigo нет сервера для их загрузки, поэтому записи никуда не уходят.",
                     },
                     {
                         q: "Показывает ли dashcamigo салонную камеру Garmin Tandem?",
-                        a: "Да. Garmin Tandem пишет два MP4 на один момент (дорога и салон). dashcamigo собирает их в одну поездку и играет синхронно. Кликни любой канал — он станет главным.",
+                        a: "Да. Garmin Tandem сохраняет два MP4 за один момент — с дороги и из салона. dashcamigo собирает их в одну поездку и воспроизводит синхронно. Нажми на любую камеру, чтобы сделать её основной.",
                     },
                     {
                         q: "Можно ли вырезать кусок с GPS внутри?",
@@ -661,7 +661,7 @@ const VENDORS: VendorContent[] = [
                 ogDescription:
                     "Free online player and editor for Vantrue dashcam recordings. GPS map, speed chart, trim and export. Works in any modern browser, nothing uploaded.",
                 h1: "Vantrue Dashcam Player & Editor Online — play and trim in your browser",
-                lead: "Open recordings from Vantrue dashcams directly in your browser. Synchronized GPS track, speed and G-force chart, multi-channel front/rear/cabin playback, plus trim and export. No Vantrue Cam app, no upload, no account.",
+                lead: "Open recordings from Vantrue dashcams directly in your browser. See the synchronized GPS route, speed and G-force chart, plus front, rear and cabin cameras together. Trim and export without the Vantrue Cam app, uploads or an account.",
                 ctaPrimary: "Open Vantrue recordings folder",
                 modelsCompat:
                     "and most other Vantrue models built on the Novatek chipset family, which embed GPS as freeGPS blocks inside the MP4 (the same parser also handles Viofo, Akaso, Azdome, Kenwood and Nextbase 512GW).",
@@ -678,11 +678,11 @@ const VENDORS: VendorContent[] = [
                     },
                     {
                         q: "Will my Vantrue recordings be uploaded?",
-                        a: "No. There is no backend. The browser reads files locally with the File System Access API and decodes them with WebCodecs. Nothing leaves your device.",
+                        a: "No. Your browser reads the files directly from your device. dashcamigo has no server to send them to, so nothing leaves your device.",
                     },
                     {
-                        q: "Does dashcamigo handle dual- and three-channel Vantrue cameras (N4, N5, Sonnet 3)?",
-                        a: "Yes. Vantrue multi-channel models write a front, rear and (on three-channel models) cabin file for the same moment. dashcamigo groups them into one trip and plays all channels in sync. Click any channel to make it the main view, or keep them side by side.",
+                        q: "Does dashcamigo handle dual- and three-camera Vantrue models (N4, N5, Sonnet 3)?",
+                        a: "Yes. These Vantrue models save front, rear and, when available, cabin files for the same moment. dashcamigo groups them into one trip and plays every camera in sync. Click any camera to make it the main view, or keep them side by side.",
                     },
                     {
                         q: "Can I trim and export a clip from a Vantrue recording?",
@@ -698,7 +698,7 @@ const VENDORS: VendorContent[] = [
                 ogDescription:
                     "Онлайн-плеер и редактор для записей с Vantrue. Карта GPS, график скорости, обрезка и экспорт. Работает в любом современном браузере, ничего не загружается.",
                 h1: "Плеер и редактор Vantrue онлайн — смотри и режь в браузере",
-                lead: "Открывай записи с видеорегистраторов Vantrue прямо в браузере. Синхронный GPS-трек, график скорости и G-нагрузки, проигрывание фронта/тыла/салона, плюс обрезка и экспорт. Без приложения Vantrue Cam, без загрузки на сервер, без аккаунта.",
+                lead: "Открывай записи с видеорегистраторов Vantrue прямо в браузере. Смотри синхронный маршрут GPS, график скорости и перегрузок, а также переднюю, заднюю и салонную камеры. Обрезай и экспортируй без приложения Vantrue Cam, загрузки на сервер и аккаунта.",
                 ctaPrimary: "Открыть папку с записями Vantrue",
                 modelsCompat:
                     "и большинство других моделей Vantrue на чипе Novatek, которые пишут GPS блоками freeGPS прямо в MP4 (тот же парсер берёт также Viofo, Akaso, Azdome, Kenwood и Nextbase 512GW).",
@@ -715,11 +715,11 @@ const VENDORS: VendorContent[] = [
                     },
                     {
                         q: "Куда уходит видео?",
-                        a: "Никуда. Сервера нет. Браузер читает файлы локально через File System Access API и декодирует через WebCodecs. Наружу ничего не уходит.",
+                        a: "Никуда. Браузер читает файлы прямо с твоего устройства. У dashcamigo нет сервера для их загрузки, поэтому записи никуда не уходят.",
                     },
                     {
-                        q: "Поддерживаются ли двух- и трёхканальные Vantrue (N4, N5, Sonnet 3)?",
-                        a: "Да. Многоканальные Vantrue пишут на один момент файл фронта, тыла и (на трёхканальных) салона. dashcamigo собирает их в одну поездку и проигрывает все каналы синхронно. Кликни любой канал — он станет главным, или оставь все рядом.",
+                        q: "Поддерживаются ли модели Vantrue с двумя и тремя камерами (N4, N5, Sonnet 3)?",
+                        a: "Да. Эти модели Vantrue сохраняют за один момент записи с передней, задней и, если она есть, салонной камеры. dashcamigo собирает их в одну поездку и воспроизводит синхронно. Нажми на любую камеру, чтобы сделать её основной, или оставь все рядом.",
                     },
                     {
                         q: "Можно ли вырезать и экспортировать кусок из записи Vantrue?",
@@ -775,11 +775,11 @@ const VENDORS: VendorContent[] = [
                     },
                     {
                         q: "Will my Thinkware recordings be uploaded?",
-                        a: "No. There is no backend. The browser reads files locally with the File System Access API and decodes them with WebCodecs. Nothing leaves your device.",
+                        a: "No. Your browser reads the files directly from your device. dashcamigo has no server to send them to, so nothing leaves your device.",
                     },
                     {
                         q: "Does dashcamigo show both front and rear Thinkware cameras?",
-                        a: "Yes. Thinkware dual-channel models write a front (F) and rear (R) file for the same moment. dashcamigo groups them into one trip and plays both in sync. Click either channel to make it the main view, or keep them side by side.",
+                        a: "Yes. Thinkware models with front and rear cameras save both files for the same moment. dashcamigo groups them into one trip and plays them in sync. Click either camera to make it the main view, or keep both side by side.",
                     },
                     {
                         q: "Can I trim and export a clip from a Thinkware recording?",
@@ -795,7 +795,7 @@ const VENDORS: VendorContent[] = [
                 ogDescription:
                     "Онлайн-плеер и редактор для записей с Thinkware. Карта GPS, график скорости, обрезка и экспорт. Работает в любом современном браузере, ничего не загружается.",
                 h1: "Плеер и редактор Thinkware онлайн — смотри и режь в браузере",
-                lead: "Открывай записи с видеорегистраторов Thinkware прямо в браузере. Синхронный GPS-трек, график скорости и G-нагрузки, проигрывание фронта и тыла, плюс обрезка и экспорт. Без программы Thinkware Dashcam Viewer, без загрузки на сервер, без аккаунта.",
+                lead: "Открывай записи с видеорегистраторов Thinkware прямо в браузере. Смотри синхронный маршрут GPS, график скорости и перегрузок, а также переднюю и заднюю камеры. Обрезай и экспортируй без Thinkware Dashcam Viewer, загрузки на сервер и аккаунта.",
                 ctaPrimary: "Открыть папку с записями Thinkware",
                 modelsCompat:
                     "и большинство других моделей Thinkware F-серии и новее, которые пишут GPS NMEA-строками в субтитровый трек MP4.",
@@ -812,11 +812,11 @@ const VENDORS: VendorContent[] = [
                     },
                     {
                         q: "Куда уходит видео?",
-                        a: "Никуда. Сервера нет. Браузер читает файлы локально через File System Access API и декодирует через WebCodecs. Наружу ничего не уходит.",
+                        a: "Никуда. Браузер читает файлы прямо с твоего устройства. У dashcamigo нет сервера для их загрузки, поэтому записи никуда не уходят.",
                     },
                     {
-                        q: "Показывает ли dashcamigo фронт и тыл Thinkware вместе?",
-                        a: "Да. Двухканальные Thinkware пишут на один момент файл фронта (F) и тыла (R). dashcamigo собирает их в одну поездку и проигрывает синхронно. Кликни любой канал — он станет главным, или оставь рядом.",
+                        q: "Показывает ли dashcamigo переднюю и заднюю камеры Thinkware вместе?",
+                        a: "Да. Такие модели Thinkware сохраняют за один момент файлы передней (F) и задней (R) камер. dashcamigo собирает их в одну поездку и воспроизводит синхронно. Нажми на любую камеру, чтобы сделать её основной, или оставь обе рядом.",
                     },
                     {
                         q: "Можно ли вырезать и экспортировать кусок из записи Thinkware?",
