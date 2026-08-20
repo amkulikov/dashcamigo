@@ -128,49 +128,22 @@
     display: none;
 }
 
-/* Custom mini attribution control (see MiniAttributionControl in src/ui/map.ts).
-   Replaces the default MapLibre AttributionControl - that one starts in an
-   <details open> state on first paint and floods the bottom of the map. We
-   keep a tiny pill that opens a popup only on click. Styled to match
-   .map-control-btn for visual consistency with the rest of the controls. */
+/* Provider credits stay directly visible on the map. */
 .dc-map-attrib {
-    /* maplibregl-ctrl already gives outer margin; we just need the pill geometry. */
-    position: relative;
-}
-.dc-map-attrib-btn {
-    width: var(--dc-iconbtn-mini);
-    height: var(--dc-iconbtn-mini);
-    border-radius: 50%;
-    background: var(--bg-elev);
-    border: 1px solid var(--border);
-    color: var(--fg);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font: italic 700 var(--dc-text-sm) / 1 var(--dc-font-body);
-    box-shadow: var(--dc-shadow-card);
-    padding: 0;
-}
-.dc-map-attrib-btn:hover {
-    color: var(--accent);
-}
-.dc-map-attrib-text {
-    position: absolute;
-    bottom: 28px;
-    right: 0;
-    min-width: 260px;
-    max-width: 340px;
-    padding: var(--dc-space-1) var(--dc-space-2);
+    max-width: min(440px, calc(100vw - 16px));
+    padding: 2px var(--dc-space-1);
     background: var(--bg-elev);
     border: 1px solid var(--border);
     border-radius: var(--dc-radius-sm);
     box-shadow: var(--dc-shadow-card);
+}
+.dc-map-attrib-text {
     font-size: var(--dc-text-xs);
     color: var(--fg-dim);
-    line-height: 1.45;
+    line-height: 1.25;
     pointer-events: auto;
     white-space: normal;
+    text-align: right;
 }
 .dc-map-attrib-text a {
     color: var(--fg);
@@ -179,10 +152,6 @@
 .dc-map-attrib-text a:hover {
     color: var(--accent);
 }
-.dc-map-attrib-text[hidden] {
-    display: none;
-}
-
 /* UX-18: segmented control - 3 follow-mode buttons (off/follow/rotate)
    glued into one group. The active one is highlighted orange. Lucide stroke
    icons (locate-off / locate-fixed / compass), same as the old single
@@ -680,9 +649,6 @@ body.map-unavailable #player-map {
 @media (pointer: coarse) {
     .map-control-btn,
     .map-collapse-btn,
-    /* The attribution pill is the only path to the map credits on the expanded
-       touch map; grow it like the other corner controls. */
-    .dc-map-attrib-btn,
     /* The tile-error close (×) - Retry only needs a taller min-height (below). */
     .map-style-error-close {
         width: var(--dc-iconbtn-touch);

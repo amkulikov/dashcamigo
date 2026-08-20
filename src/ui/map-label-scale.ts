@@ -181,15 +181,20 @@ export function scaleStyleTextSizes(style: StyleSpecification, factor: number): 
  * Returns a clone of `style` where road names repeat more densely along their
  * lines and their layers turn on earlier by zoom. "standard" returns the
  * input untouched (same reference). Road-name layers are identified by their
- * vector source-layer - "transportation_name" in the OpenMapTiles schema all
- * shipped styles use - so place/POI labels stay at the style's own density.
+ * vector source-layer: "transportation_name" for OpenMapTiles and
+ * "street_labels" for Shortbread. Place/POI labels stay at the style's own
+ * density.
  */
 export function applyStreetLabelDensity(style: StyleSpecification, density: StreetLabelDensity): StyleSpecification {
     if (density === "standard") return style;
     const { spacingFactor, minzoomDelta } = DENSITY_TUNING[density];
     const clone = structuredClone(style);
     for (const layer of clone.layers) {
-        if (layer.type !== "symbol" || layer["source-layer"] !== "transportation_name") continue;
+        if (
+            layer.type !== "symbol" ||
+            (layer["source-layer"] !== "transportation_name" && layer["source-layer"] !== "street_labels")
+        )
+            continue;
         if (typeof layer.minzoom === "number") {
             layer.minzoom = Math.max(0, layer.minzoom - minzoomDelta);
         }

@@ -97,6 +97,8 @@ import { loadChart } from "./ui/chart.js";
 import { prewarmGpsExtract } from "./ui/gps-extract-shim.js";
 import { prewarmIngest } from "./ui/ingest-shim.js";
 import { isMapAvailable, loadMaplibre, reloadMapStyleForCurrentTheme } from "./ui/map.js";
+import { forceMapProvider, type MapProvider } from "./ui/map-provider.js";
+import { getSharedMapTileCacheStats, type SharedTileCacheStats } from "./ui/map-tile-cache.js";
 import { prewarmPreview } from "./ui/trip-preview.js";
 import { initThemeToggle } from "./ui/theme-toggle.js";
 import { initMobileDrawer } from "./ui/mobile-drawer.js";
@@ -185,6 +187,8 @@ declare global {
             dom: typeof dom;
             dumpLog: typeof getLogBuffer;
             downloadLog: typeof downloadLogBuffer;
+            setMapProvider: (provider: MapProvider) => MapProvider;
+            mapTileCacheStats: () => SharedTileCacheStats;
         };
         /** Shows the "updating the app" line over the splash/landing. Defined
          *  by the dc-bootstrap inline script in index.html; the asset-retry
@@ -193,7 +197,14 @@ declare global {
         __dcRetryNote?: () => void;
     }
 }
-window.__dashcamigo = { state, dom, dumpLog: getLogBuffer, downloadLog: downloadLogBuffer };
+window.__dashcamigo = {
+    state,
+    dom,
+    dumpLog: getLogBuffer,
+    downloadLog: downloadLogBuffer,
+    setMapProvider: forceMapProvider,
+    mapTileCacheStats: getSharedMapTileCacheStats,
+};
 
 // Global uncaught-error hooks. Regular try/catch misses sync throws from
 // event listeners and unhandled promise rejections. We route both through

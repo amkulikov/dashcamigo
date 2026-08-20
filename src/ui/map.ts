@@ -55,6 +55,13 @@ import { formatSpeedFromMs } from "../units-pref.js";
 import { currentMapTheme, getCssVar, themeColors } from "./theme.js";
 import type { MapStyleId, MapTheme } from "./theme.js";
 import { applyViewerLabelPrefs } from "./map-label-scale.js";
+import { getMapProvider, reportMapProviderTileError, subscribeMapProvider, type MapProvider } from "./map-provider.js";
+import { registerSharedMapTileCache, transformMapTileRequest } from "./map-tile-cache.js";
+import {
+    createFallbackMapStyle,
+    OSM_SHORTBREAD_BUILDING_SOURCE_LAYER,
+    OSM_SHORTBREAD_SOURCE_ID,
+} from "./osm-fallback-style.js";
 import { buildMercatorCumulativeDistances, buildSpeedGradient, mercatorY } from "./speed-gradient.js";
 
 // --- lazy maplibre-gl loading (T9) ---
@@ -80,6 +87,7 @@ export async function loadMaplibre(): Promise<MaplibreNamespace> {
         // so v6 requires the consumer to hand it the URL. Must happen before the
         // first Map is constructed - the dispatcher is created eagerly with it.
         mod.setWorkerUrl(maplibreWorkerUrl);
+        registerSharedMapTileCache(mod.addProtocol);
         mlg = mod;
     }
     return mlg;
@@ -140,26 +148,19 @@ const EMPTY_STYLE: maplibregl.StyleSpecification = {
 // prefetched from ensureMap (the inactive one with source="prefetch", silent on
 // failure) so theme toggles and the export-overlay snapshotter (always "light")
 // hit the cache instead of triggering a fresh fetch with its own failure surface.
-const cachedMapStyle: Record<MapStyleId, maplibregl.StyleSpecification | null> = {
-    light: null,
-    dark: null,
-    neon: null,
-};
-const mapStyleLoadPromise: Record<MapStyleId, Promise<maplibregl.StyleSpecification | null> | null> = {
-    light: null,
-    dark: null,
-    neon: null,
-};
+type MapStyleCacheKey = `${MapProvider}:${MapStyleId}`;
+const cachedMapStyles = new Map<MapStyleCacheKey, maplibregl.StyleSpecification>();
+const mapStyleLoadPromises = new Map<MapStyleCacheKey, Promise<maplibregl.StyleSpecification | null>>();
 // AbortController for the in-flight fetch per theme. force=true aborts it via
 // signal.reason="superseded" so the .catch knows the failure was our own
 // teardown and stays silent (no analytics event, no banner). Without this the
 // orphaned fetch keeps running and its eventual failure fires a spurious
 // map_load_failed.
-const mapStyleLoadCtrl: Record<MapStyleId, AbortController | null> = {
-    light: null,
-    dark: null,
-    neon: null,
-};
+const mapStyleLoadControllers = new Map<MapStyleCacheKey, AbortController>();
+
+function styleCacheKey(provider: MapProvider, theme: MapStyleId): MapStyleCacheKey {
+    return `${provider}:${theme}`;
+}
 // Theme of the most recent failure. Retry uses this instead of
 // currentMapTheme() so the click actually re-fetches what broke. Without it
 // the export-overlay code path (always loads "light") would fail on a dark
@@ -193,25 +194,35 @@ export function loadMapStyle(
     theme: MapStyleId,
     force = false,
     source: MapLoadSource = "main",
+    provider: MapProvider = getMapProvider(),
 ): Promise<maplibregl.StyleSpecification | null> {
+    const key = styleCacheKey(provider, theme);
     if (force) {
         // Actually abort the previous fetch instead of just dropping the
         // reference. Otherwise it keeps running, its eventual catch can stomp
         // the freshly-set mapStyleLoadPromise[theme] and emits a stale
         // map_load_failed analytics event.
-        const oldCtrl = mapStyleLoadCtrl[theme];
+        const oldCtrl = mapStyleLoadControllers.get(key);
         if (oldCtrl) oldCtrl.abort("superseded");
-        cachedMapStyle[theme] = null;
-        mapStyleLoadPromise[theme] = null;
-        mapStyleLoadCtrl[theme] = null;
+        cachedMapStyles.delete(key);
+        mapStyleLoadPromises.delete(key);
+        mapStyleLoadControllers.delete(key);
     }
-    const cached = cachedMapStyle[theme];
+    const cached = cachedMapStyles.get(key);
     if (cached) return Promise.resolve(cached);
-    const inflight = mapStyleLoadPromise[theme];
+    const inflight = mapStyleLoadPromises.get(key);
     if (inflight) return inflight;
 
+    if (provider !== "openfreemap") {
+        const style = createFallbackMapStyle(provider, theme);
+        cachedMapStyles.set(key, style);
+        hideMapStyleError();
+        log.info("map style loaded", { theme, provider, durationMs: 0 });
+        return Promise.resolve(style);
+    }
+
     const ctrl = new AbortController();
-    mapStyleLoadCtrl[theme] = ctrl;
+    mapStyleLoadControllers.set(key, ctrl);
     // Pass a distinct reason so the catch can tell timeout-abort apart from
     // force-supersede-abort. Default DOMException would conflate the two.
     const timeoutId = window.setTimeout(() => ctrl.abort("timeout"), MAP_STYLE_TIMEOUT_MS);
@@ -234,13 +245,17 @@ export function loadMapStyle(
             if (typeof style.glyphs === "string" && style.glyphs.startsWith("/")) {
                 style.glyphs = new URL(style.glyphs, location.origin).href;
             }
-            cachedMapStyle[theme] = style;
+            cachedMapStyles.set(key, style);
             if (lastFailedTheme === theme) lastFailedTheme = null;
             hideMapStyleError();
             // The tile server is the only external runtime dependency. Style load
             // time is the first proxy for network issues; clearly visible in a
             // "map opens slowly" bug report.
-            log.info("map style loaded", { theme, durationMs: Math.round(performance.now() - fetchStart) });
+            log.info("map style loaded", {
+                theme,
+                provider,
+                durationMs: Math.round(performance.now() - fetchStart),
+            });
             return style;
         })
         .catch((err: unknown) => {
@@ -260,11 +275,11 @@ export function loadMapStyle(
             // real new fetch. Guard with identity check: between our request
             // start and our own .catch a force=true may have already replaced
             // both fields - we must not stomp the newer references.
-            if (mapStyleLoadPromise[theme] === promise) {
-                mapStyleLoadPromise[theme] = null;
+            if (mapStyleLoadPromises.get(key) === promise) {
+                mapStyleLoadPromises.delete(key);
             }
-            if (mapStyleLoadCtrl[theme] === ctrl) {
-                mapStyleLoadCtrl[theme] = null;
+            if (mapStyleLoadControllers.get(key) === ctrl) {
+                mapStyleLoadControllers.delete(key);
             }
             // Background prefetch failures stay invisible: no banner, no
             // lastFailedTheme (retry must not fixate on a theme the user is
@@ -281,7 +296,7 @@ export function loadMapStyle(
             window.clearTimeout(timeoutId);
         });
 
-    mapStyleLoadPromise[theme] = promise;
+    mapStyleLoadPromises.set(key, promise);
     return promise;
 }
 
@@ -293,11 +308,11 @@ export function loadMapStyle(
  * Theme is checked before applying: the user may have toggled prefers-color-scheme
  * while the style was loading, making this result stale.
  */
-function applyLoadedStyle(style: maplibregl.StyleSpecification, theme: MapStyleId): void {
+function applyLoadedStyle(style: maplibregl.StyleSpecification, theme: MapStyleId, provider = getMapProvider()): void {
     // Only the live UI theme is ever applied to the on-screen maps. A retried
     // "neon" fetch (export-overlay failure) re-caches neon.json but never equals
     // currentMapTheme(), so it falls out here - the next export reads the cache.
-    if (theme !== currentMapTheme()) return;
+    if (theme !== currentMapTheme() || provider !== getMapProvider()) return;
     // diff:false - do not try to preserve sources/layers across styles. The trip
     // line redraws via style.load; diff:true could place our layer at a wrong
     // z-order in the new style.
@@ -320,8 +335,9 @@ function applyLoadedStyle(style: maplibregl.StyleSpecification, theme: MapStyleI
  */
 export function reapplyMapLabelPrefs(): void {
     const theme = currentMapTheme();
-    const cached = cachedMapStyle[theme];
-    if (cached) applyLoadedStyle(cached, theme);
+    const provider = getMapProvider();
+    const cached = cachedMapStyles.get(styleCacheKey(provider, theme));
+    if (cached) applyLoadedStyle(cached, theme, provider);
 }
 
 function showMapStyleError(): void {
@@ -470,41 +486,24 @@ function setTrailProgress(progress: number): void {
 }
 
 /**
- * Minimal custom attribution control. The default MapLibre one starts in an
- * "open" <details> state under some viewport widths even with compact:true,
- * which floods the bottom of the map with text on first load. We render a
- * fixed-size pill instead: an "i" button + a popup with links to OSM,
- * OpenMapTiles and OpenFreeMap. Always starts collapsed.
+ * Minimal always-visible attribution control. Credits deliberately have no
+ * compact or collapsed state.
  */
-class MiniAttributionControl implements maplibregl.IControl {
+class MapAttributionControl implements maplibregl.IControl {
     private root: HTMLDivElement | null = null;
-    private button: HTMLButtonElement | null = null;
+    private text: HTMLDivElement | null = null;
 
     onAdd(_map: maplibregl.Map): HTMLElement {
         const root = document.createElement("div");
         // Inherit maplibre ctrl spacing so it sits flush with NavigationControl
         // / ScaleControl - same outer margin, our CSS adds the visual style.
         root.className = "maplibregl-ctrl dc-map-attrib";
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "dc-map-attrib-btn";
-        btn.textContent = "i";
         const text = document.createElement("div");
         text.className = "dc-map-attrib-text";
-        text.hidden = true;
-        text.innerHTML =
-            '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors' +
-            ' · © <a href="https://openmaptiles.org/" target="_blank" rel="noopener noreferrer">OpenMapTiles</a>' +
-            ' · © <a href="https://openfreemap.org/" target="_blank" rel="noopener noreferrer">OpenFreeMap</a>';
-        btn.addEventListener("click", (e) => {
-            e.stopPropagation();
-            text.hidden = !text.hidden;
-            btn.setAttribute("aria-expanded", text.hidden ? "false" : "true");
-        });
-        root.appendChild(btn);
         root.appendChild(text);
         this.root = root;
-        this.button = btn;
+        this.text = text;
+        this.setProvider(getMapProvider());
         this.applyLabels();
         return root;
     }
@@ -512,22 +511,27 @@ class MiniAttributionControl implements maplibregl.IControl {
     onRemove(): void {
         this.root?.remove();
         this.root = null;
-        this.button = null;
+        this.text = null;
     }
 
     /** Re-applies i18n labels. Called on language change. */
     applyLabels(): void {
-        if (!this.button) return;
-        const label = t("map.ctrl.attribution");
-        this.button.setAttribute("aria-label", label);
-        this.button.setAttribute("title", label);
-        if (!this.button.hasAttribute("aria-expanded")) {
-            this.button.setAttribute("aria-expanded", "false");
-        }
+        if (this.root) this.root.setAttribute("aria-label", t("map.ctrl.attribution"));
+    }
+
+    setProvider(provider: MapProvider): void {
+        if (!this.text) return;
+        const osm =
+            '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors';
+        this.text.innerHTML =
+            provider === "openfreemap"
+                ? `${osm} · © <a href="https://openmaptiles.org/" target="_blank" rel="noopener noreferrer">OpenMapTiles</a>` +
+                  ' · © <a href="https://openfreemap.org/" target="_blank" rel="noopener noreferrer">OpenFreeMap</a>'
+                : osm;
     }
 }
 
-const miniAttributionControl = new MiniAttributionControl();
+const mapAttributionControl = new MapAttributionControl();
 
 /**
  * Installs a transparent 1x1 stub for every icon the style asks for but the
@@ -641,6 +645,7 @@ export function ensureMap(): maplibregl.Map | null {
             // overlay hint). The wide desktop split keeps plain wheel-zoom.
             // syncCooperativeGestures() resyncs on pointer/layout flips.
             cooperativeGestures: isCoarsePointer() || isMobileLayout(),
+            transformRequest: transformMapTileRequest,
             // Localized overlay text ("use two fingers"). MapLibre bakes it into the
             // DOM at enable() time from this table; langchange refresh via
             // localizeCooperativeOverlay() below.
@@ -664,6 +669,7 @@ export function ensureMap(): maplibregl.Map | null {
     map.on("error", (ev) => {
         const e = ev?.error || ev;
         const message = e?.message ?? String(e);
+        reportMapProviderTileError(e);
         // A tile fetch that failed with a NETWORK error (server unreachable)
         // means we are offline - including "connected but no internet" limbo,
         // where navigator.onLine stays true. status===0 / "failed to fetch" are
@@ -739,10 +745,9 @@ export function ensureMap(): maplibregl.Map | null {
     // the Latin defaults stand and the translation value is low.
     map.addControl(new mlg!.ScaleControl({ maxWidth: 120, unit: "metric" }), "bottom-left");
 
-    // Custom attribution: tiny "i" pill in the bottom-right that opens a popup
-    // with OSM/OpenMapTiles/OpenFreeMap credits. Replaces the default
-    // AttributionControl (see attributionControl:false above).
-    map.addControl(miniAttributionControl, "bottom-right");
+    // Custom attribution stays visible in the bottom-right. Replaces the
+    // default AttributionControl (see attributionControl:false above).
+    map.addControl(mapAttributionControl, "bottom-right");
 
     // NavigationControl buttons ship with English title/aria-label from
     // MapLibre's defaultLocale. Overwrite them via DOM queries now and on every
@@ -833,8 +838,9 @@ export function ensureMap(): maplibregl.Map | null {
     // Start loading the real style. Promise is cached so a subsequent
     // ensureMiniMap call does not double-fetch.
     const theme = currentMapTheme();
-    loadMapStyle(theme).then((style) => {
-        if (style) applyLoadedStyle(style, theme);
+    const provider = getMapProvider();
+    loadMapStyle(theme, false, "main", provider).then((style) => {
+        if (style) applyLoadedStyle(style, theme, provider);
     });
 
     // Background prefetch the other theme. Two reasons:
@@ -847,7 +853,7 @@ export function ensureMap(): maplibregl.Map | null {
     // source="prefetch" makes failures silent (no banner) - the user never
     // explicitly asked for this fetch.
     const otherTheme: MapTheme = theme === "light" ? "dark" : "light";
-    loadMapStyle(otherTheme, false, "prefetch");
+    loadMapStyle(otherTheme, false, "prefetch", provider);
 
     return map;
 }
@@ -929,6 +935,7 @@ export function ensureMiniMap(): maplibregl.Map | null {
             // build time). Propagates to the setStyle(diff:false) path used to
             // apply the cached style below. See ensureMap for the full rationale.
             validateStyle: false,
+            transformRequest: transformMapTileRequest,
         });
     } catch (err) {
         handleMapInitFailure(err);
@@ -943,6 +950,7 @@ export function ensureMiniMap(): maplibregl.Map | null {
     mini.on("error", (ev) => {
         const e = ev?.error || ev;
         const message = e?.message ?? String(e);
+        reportMapProviderTileError(e);
         if (seenMiniMapErrors.has(message)) return;
         seenMiniMapErrors.add(message);
         log.error("maplibre mini error", e instanceof Error ? e : { message });
@@ -986,7 +994,8 @@ export function ensureMiniMap(): maplibregl.Map | null {
     // just re-apply the same style a second time to both maps (full setStyle
     // diff:false = teardown + re-parse of the heavy style.json).
     const theme = currentMapTheme();
-    const cached = cachedMapStyle[theme];
+    const provider = getMapProvider();
+    const cached = cachedMapStyles.get(styleCacheKey(provider, theme));
     if (cached && state.miniMap) {
         state.miniMap.setStyle(applyViewerLabelPrefs(cached), { diff: false });
     }
@@ -2905,7 +2914,7 @@ function firstSymbolLayerId(map: maplibregl.Map): string | undefined {
 
 /**
  * Adds the 3D building extrusion layer if it is not already present and the map
- * carries the OpenFreeMap vector source. Idempotent. `theme` picks the wall
+ * carries an OpenFreeMap or Shortbread vector source. Idempotent. `theme` picks the wall
  * color (the export snapshotter passes its own base-layer theme, independent of
  * the app UI theme). The flat "building" fill in the style has maxzoom 14, so it
  * is already hidden at the z14+ where this extrusion (minzoom 14) renders - no
@@ -2918,7 +2927,11 @@ export function addBuildings3dLayer(map: maplibregl.Map, theme: MapStyleId): voi
     if (map.getLayer(BUILDINGS_3D_LAYER_ID)) return;
     // Style may still be EMPTY_STYLE (tiles unavailable) or mid-swap - bail
     // silently; the live style.load handler re-adds it once chase is active.
-    if (!map.getSource(VECTOR_SOURCE_ID)) return;
+    const hasOpenMapTiles = Boolean(map.getSource(VECTOR_SOURCE_ID));
+    const hasShortbread = Boolean(map.getSource(OSM_SHORTBREAD_SOURCE_ID));
+    if (!hasOpenMapTiles && !hasShortbread) return;
+    const source = hasOpenMapTiles ? VECTOR_SOURCE_ID : OSM_SHORTBREAD_SOURCE_ID;
+    const sourceLayer = hasOpenMapTiles ? BUILDING_SOURCE_LAYER : OSM_SHORTBREAD_BUILDING_SOURCE_LAYER;
     // Neon: lit amber walls so buildings glow with the rest of the slot. Dark:
     // near-black. Light: bone.
     const walls = theme === "neon" ? "#7a4a16" : theme === "dark" ? "#2b2b30" : "#e4ddcd";
@@ -2926,16 +2939,23 @@ export function addBuildings3dLayer(map: maplibregl.Map, theme: MapStyleId): voi
         {
             id: BUILDINGS_3D_LAYER_ID,
             type: "fill-extrusion",
-            source: VECTOR_SOURCE_ID,
-            "source-layer": BUILDING_SOURCE_LAYER,
+            source,
+            "source-layer": sourceLayer,
             minzoom: 14,
             paint: {
                 "fill-extrusion-color": walls,
                 // OpenMapTiles carries render_height/render_min_height; fall back
                 // to height/min_height, then a 5 m default so footprints without
                 // a height still read as low buildings rather than vanishing.
-                "fill-extrusion-height": ["coalesce", ["get", "render_height"], ["get", "height"], 5],
-                "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], ["get", "min_height"], 0],
+                // Shortbread 1.0 exposes footprints but no height fields. Keep
+                // chase depth with a conservative 5 m extrusion; OpenMapTiles
+                // retains its data-driven heights.
+                "fill-extrusion-height": hasOpenMapTiles
+                    ? ["coalesce", ["get", "render_height"], ["get", "height"], 5]
+                    : 5,
+                "fill-extrusion-base": hasOpenMapTiles
+                    ? ["coalesce", ["get", "render_min_height"], ["get", "min_height"], 0]
+                    : 0,
                 // Fade in across z14->15.5 so buildings do not pop at the minzoom
                 // edge while the user is zooming into chase.
                 "fill-extrusion-opacity": ["interpolate", ["linear"], ["zoom"], 14, 0, 15.5, 0.92],
@@ -3060,6 +3080,15 @@ function syncChaseControls(): void {
 export function initMap(cb: MapCallbacks): void {
     callbacks = cb;
 
+    subscribeMapProvider((provider, previous) => {
+        mapAttributionControl.setProvider(provider);
+        if (previous === null && provider === "openfreemap") return;
+        const theme = currentMapTheme();
+        loadMapStyle(theme, false, "main", provider).then((style) => {
+            if (style) applyLoadedStyle(style, theme, provider);
+        });
+    });
+
     // UX-18: 3-button segmented control with a delegated listener on the container.
     // Each button directly selects a mode (no cycle), making all options visible.
     dom.mapFollowSegments.addEventListener("click", (e) => {
@@ -3166,9 +3195,10 @@ export function initMap(cb: MapCallbacks): void {
     dom.mapStyleRetry.addEventListener("click", () => {
         dom.mapStyleRetry.disabled = true;
         const theme = lastFailedTheme ?? currentMapTheme();
-        loadMapStyle(theme, true)
+        const provider = getMapProvider();
+        loadMapStyle(theme, true, "main", provider)
             .then((style) => {
-                if (style) applyLoadedStyle(style, theme);
+                if (style) applyLoadedStyle(style, theme, provider);
             })
             .finally(() => {
                 dom.mapStyleRetry.disabled = false;
@@ -3286,9 +3316,10 @@ export function reloadMapStyleForCurrentTheme(): void {
     // fetch; applyLoadedStyle would no-op anyway, but we also save the network request.
     if (!state.map) return;
     const theme = currentMapTheme();
-    loadMapStyle(theme).then((style) => {
+    const provider = getMapProvider();
+    loadMapStyle(theme, false, "main", provider).then((style) => {
         if (style) {
-            applyLoadedStyle(style, theme);
+            applyLoadedStyle(style, theme, provider);
             return;
         }
         // null = either an in-flight prefetch (or a previous call) failed

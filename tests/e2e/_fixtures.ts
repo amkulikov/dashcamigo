@@ -4,7 +4,7 @@
 // actually catch the bugs they missed):
 //
 //  1. HERMETIC. The only external dependency the app makes at runtime is the
-//     OpenFreeMap tile/sprite/glyph/font server. We abort every request to it.
+//     map tile servers. We abort every request to them.
 //     That removes network flakiness from CI AND doubles as a regression test
 //     for the documented invariant "if the tile server is down, the functional
 //     app keeps working" (CLAUDE.md / docs). Everything else (video, GPS, chart,
@@ -77,14 +77,14 @@ function isBenignConsole(text: string, url: string): boolean {
     // Browser resource-load failure for an aborted tile-server request
     // ("Failed to load resource: net::ERR_FAILED"): msg.location().url is the
     // openfreemap request URL itself.
-    if (/openfreemap\.org/i.test(url)) return true;
+    if (/openfreemap\.org|(?:tile|vector)\.openstreetmap\.org/i.test(url)) return true;
     // Firefox raw browser CORS console error for an aborted tile request
     // ("Cross-Origin Request Blocked: ... https://tiles.openfreemap.org/...")
     // carries the domain in the TEXT, not in the console message's url field, so
     // the url check above misses it. The openfreemap.org domain only ever appears
     // because WE abort every request to it, so trusting it in text is as safe as
     // trusting it in the url - a tile server being unreachable IS the invariant.
-    if (/openfreemap\.org/i.test(text)) return true;
+    if (/openfreemap\.org|(?:tile|vector)\.openstreetmap\.org/i.test(text)) return true;
     // src/ui/map.ts mirrors map.on("error") / mini.on("error") through the app
     // logger as "[map] maplibre [mini ]error <cause>". Tolerate ONLY the causes
     // the aborted tile server actually produces (verified by capturing every
@@ -99,7 +99,7 @@ function isBenignConsole(text: string, url: string): boolean {
     // mentions "tile" or "AbortError" outside this exact logger line (e.g. a
     // video-tile feature, an export/ingest cancel) - is NOT masked.
     const isMaplibreLogLine = /^\[map\] maplibre (mini )?error /.test(text);
-    if (isMaplibreLogLine && /openfreemap\.org/i.test(text)) return true;
+    if (isMaplibreLogLine && /openfreemap\.org|(?:tile|vector)\.openstreetmap\.org/i.test(text)) return true;
     if (isMaplibreLogLine && /\bAbortError\b/.test(text)) return true;
     // MapLibre "Style is not done loading" race on style swap - phrasing is
     // maplibre-specific, safe to match anywhere.
@@ -127,7 +127,7 @@ const UPLOAD_BODY_LIMIT = 256 * 1024;
 
 /**
  * Whether a request URL is an allowed network egress for the hermetic suite:
- * same-origin (the preview server) or openfreemap (which we abort anyway).
+ * same-origin (the preview server) or a map provider (which we abort anyway).
  * data:/blob: and any non-HTTP scheme are inert (not egress). Anything else -
  * a request to a third-party host - would mean bytes leaving the machine,
  * violating CLAUDE.md's "No backend. Video is never uploaded."
@@ -141,7 +141,11 @@ function isEgressAllowed(reqUrl: string, baseHost: string): boolean {
     }
     if (u.protocol !== "http:" && u.protocol !== "https:") return true;
     if (u.host === baseHost) return true;
-    return /(^|\.)openfreemap\.org$/i.test(u.hostname);
+    return (
+        /(^|\.)openfreemap\.org$/i.test(u.hostname) ||
+        u.hostname === "vector.openstreetmap.org" ||
+        u.hostname === "tile.openstreetmap.org"
+    );
 }
 
 // Override the built-in `page` fixture.
@@ -181,7 +185,7 @@ export const test = base.extend<{ tolerateConsole: RegExp[] }>({
         });
 
         // Hermetic + degradation guard: block the tile server.
-        await page.route(/openfreemap\.org/i, (route) => route.abort());
+        await page.route(/openfreemap\.org|(?:tile|vector)\.openstreetmap\.org/i, (route) => route.abort());
 
         await use(page);
 

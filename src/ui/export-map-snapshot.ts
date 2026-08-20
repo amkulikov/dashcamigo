@@ -35,6 +35,8 @@ import { type MapStyleId, themeColors } from "./theme.js";
 import { buildMercatorCumulativeDistances, buildSpeedGradient } from "./speed-gradient.js";
 import { addBuildings3dLayer, loadMaplibre, loadMapStyle, type MapLoadSource, removeBuildings3dLayer } from "./map.js";
 import { applyStreetLabelDensity, scaleStyleTextSizes, type StreetLabelDensity } from "./map-label-scale.js";
+import { getMapProvider, reportMapProviderTileError, subscribeMapProvider } from "./map-provider.js";
+import { transformMapTileRequest } from "./map-tile-cache.js";
 
 const log = createLogger("export-map-snapshot");
 
@@ -229,7 +231,8 @@ export async function createExportMapSnapshotter(
     // User-selected base layer (default "light" - higher contrast against the
     // orange car marker and the typical daytime recording). ensureMap prefetches
     // both themes at startup, so either is usually a cache hit.
-    const styleFromCache = await loadMapStyle(theme, false, source);
+    let activeProvider = getMapProvider();
+    const styleFromCache = await loadMapStyle(theme, false, source, activeProvider);
     if (!styleFromCache) {
         host.remove();
         throw new Error("map style unavailable");
@@ -282,6 +285,7 @@ export async function createExportMapSnapshotter(
         // is the single biggest validation cost. The style is static, self-hosted
         // and gated at build time by scripts/validate-map-styles.mjs.
         validateStyle: false,
+        transformRequest: transformMapTileRequest,
     });
 
     // Route maplibre error events through the logger - with NO listener,
@@ -292,12 +296,38 @@ export async function createExportMapSnapshotter(
     // the overlay still renders the track per the offline invariant).
     map.on("error", (ev) => {
         const cause = (ev as { error?: unknown }).error;
+        reportMapProviderTileError(cause);
         log.warn("maplibre error", cause instanceof Error ? cause : { message: String(cause) });
     });
 
     await waitForLoad(map);
 
     addTrackLayer(map, records);
+
+    let isDisposed = false;
+    let providerStyleChange = Promise.resolve();
+    const unsubscribeProvider = subscribeMapProvider((provider, previous) => {
+        if (provider === activeProvider || isDisposed) return;
+        activeProvider = provider;
+        providerStyleChange = providerStyleChange
+            .then(async () => {
+                const nextStyle = await loadMapStyle(theme, false, source, provider);
+                if (!nextStyle || isDisposed || provider !== activeProvider) return;
+                const styled = applyStreetLabelDensity(
+                    scaleStyleTextSizes(nextStyle, labelScalePct / 100),
+                    labelDensity,
+                );
+                await setStyleAndWait(map, styled);
+                if (!map.getSource(TRACK_SOURCE_ID)) addTrackLayer(map, records);
+            })
+            .catch((err: unknown) => {
+                log.warn("provider style switch failed", {
+                    provider,
+                    err: err instanceof Error ? err.message : String(err),
+                });
+            });
+        if (previous !== null) log.info("snapshot map provider changed", { from: previous, to: provider });
+    });
 
     // Reused across snapshots so per-frame allocation churn stays low.
     // Sized lazily on the first snapshot to match map.getCanvas() dimensions
@@ -317,6 +347,7 @@ export async function createExportMapSnapshotter(
 
     return {
         async prewarm(recs, zoomKm, signal, chase): Promise<void> {
+            await providerStyleChange;
             // Filter first: an inactive/NaN seed or waypoint would make
             // distanceM return NaN (NaN < step is false -> not skipped) and feed
             // jumpTo a NaN center, which destabilizes the MapLibre instance.
@@ -383,6 +414,7 @@ export async function createExportMapSnapshotter(
             });
         },
         async snapshot(req, opts): Promise<ImageBitmap> {
+            await providerStyleChange;
             // Defensive guard: pipeline already filters non-finite positions,
             // but a malformed direct call would otherwise pass NaN into
             // jumpTo and crash maplibre. Throw a typed error so the worker
@@ -477,6 +509,8 @@ export async function createExportMapSnapshotter(
             return await createImageBitmap(composite);
         },
         dispose(): void {
+            isDisposed = true;
+            unsubscribeProvider();
             try {
                 map.remove();
             } catch (err) {
@@ -485,6 +519,21 @@ export async function createExportMapSnapshotter(
             host.remove();
         },
     };
+}
+
+function setStyleAndWait(map: maplibregl.Map, style: maplibregl.StyleSpecification): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+            map.off("style.load", onLoad);
+            reject(new Error(`map style load timed out after ${MAP_LOAD_TIMEOUT_MS}ms`));
+        }, MAP_LOAD_TIMEOUT_MS);
+        const onLoad = (): void => {
+            clearTimeout(timeoutId);
+            resolve();
+        };
+        map.once("style.load", onLoad);
+        map.setStyle(style, { diff: false });
+    });
 }
 
 // Ceiling for the style "load" wait. The style.json fetch is same-origin and

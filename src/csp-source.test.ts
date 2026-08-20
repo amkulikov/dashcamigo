@@ -62,6 +62,8 @@ describe("csp-source", () => {
                 "'self'",
                 "https://tiles.openfreemap.org", // map tiles/style
                 "https://*.openfreemap.org",
+                "https://vector.openstreetmap.org", // vector map fallback
+                "https://tile.openstreetmap.org", // raster map fallback
                 "https://cloudflareinsights.com", // CF Web Analytics beacon
                 "https://o4511528520843264.ingest.de.sentry.io", // Sentry envelope
             ]),

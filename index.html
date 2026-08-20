@@ -2662,7 +2662,7 @@
                             <div>
                                 <span data-i18n="landing.csp.modal.sec1.b3.intro">Outbound requests are limited to three categories only:</span>
                                 <ul class="landing-csp-modal-sub">
-                                    <li data-i18n="landing.csp.modal.sec1.b3.tiles">tiles.openfreemap.org — vector map tiles. Only the tile coordinates are sent, no file content.</li>
+                                    <li data-i18n="landing.csp.modal.sec1.b3.tiles">tiles.openfreemap.org, vector.openstreetmap.org, and tile.openstreetmap.org — map tiles. Only the tile coordinates are sent, no file content.</li>
                                     <li data-i18n="landing.csp.modal.sec1.b3.cf">cloudflareinsights.com — anonymous visit and performance metrics.</li>
                                     <li data-i18n="landing.csp.modal.sec1.b3.crash">ingest.sentry.io — anonymized crash reports. On by default; can be turned off in Settings.</li>
                                 </ul>
@@ -2682,7 +2682,7 @@
                     <h4 data-i18n="landing.csp.modal.sec3.title">How to check it yourself — 30 seconds</h4>
                     <ol class="landing-csp-modal-verify">
                         <li data-i18n="landing.csp.modal.sec3.s1">Open DevTools — F12 or ⌥⌘I, the Network tab.</li>
-                        <li data-i18n="landing.csp.modal.sec3.s2">Drop a folder of recordings onto the page. The Initiator column shows no requests carrying your files — only tiles.openfreemap.org for the map.</li>
+                        <li data-i18n="landing.csp.modal.sec3.s2">Drop a folder of recordings onto the page. The Initiator column shows no requests carrying your files — only the map-tile hosts listed above.</li>
                         <li data-i18n="landing.csp.modal.sec3.s3">Network → document response name → Headers shows the same CSP as above. Tampering attempts get flagged in the console.</li>
                         <li data-i18n="landing.csp.modal.sec3.s4">Disconnect from the internet entirely (Network → Offline) and keep watching the recording — it works.</li>
                     </ol>
@@ -2695,7 +2695,7 @@
          to the policy CF Pages emits (public/_headers). csp-source.test.ts
          locks both files together. -->
     <script type="application/json" id="csp-source">
-"default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://tiles.openfreemap.org https://*.openfreemap.org; connect-src 'self' https://tiles.openfreemap.org https://*.openfreemap.org https://cloudflareinsights.com https://o4511528520843264.ingest.de.sentry.io; worker-src 'self' blob:; media-src 'self' blob:; manifest-src 'self'; object-src 'none'; frame-src 'none'; child-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'; upgrade-insecure-requests"
+"default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://tiles.openfreemap.org https://*.openfreemap.org https://tile.openstreetmap.org; connect-src 'self' https://tiles.openfreemap.org https://*.openfreemap.org https://vector.openstreetmap.org https://tile.openstreetmap.org https://cloudflareinsights.com https://o4511528520843264.ingest.de.sentry.io; worker-src 'self' blob:; media-src 'self' blob:; manifest-src 'self'; object-src 'none'; frame-src 'none'; child-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'; upgrade-insecure-requests"
     </script>
 
     <!-- Active locale's i18n dictionary, baked in by the prerender per /<lang>/
