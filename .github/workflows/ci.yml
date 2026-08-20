@@ -104,4 +104,4 @@ jobs:
       - name: Build synthetic mirror profile
         run: npm run build
       - name: Test synthetic mirror artifact
-        run: npm test
+        run: npm run test:deployment-profile

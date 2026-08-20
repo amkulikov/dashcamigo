@@ -36,6 +36,7 @@
     "typecheck": "tsc --noEmit",
     "pretest": "node scripts/validate-map-styles.mjs",
     "test": "TZ=UTC vitest run",
+    "test:deployment-profile": "TZ=UTC vitest run src/i18n/deployment-profile.test.ts src/i18n/static-search-meta.test.ts src/csp-hash.integration.test.ts src/sw-precache.integration.test.ts",
     "test:watch": "TZ=UTC vitest",
     "test:coverage": "TZ=UTC vitest run --coverage",
     "test:perf": "playwright test --config=tests/playwright.perf.config.ts",
