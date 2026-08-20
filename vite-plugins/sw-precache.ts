@@ -7,25 +7,26 @@
 // a cache on install, so an installed PWA boots and runs offline.
 //
 // What goes IN the precache (the app's real boot+run graph):
-//   - everything under /assets/ (entry JS+CSS, lazy chunks, workers, inlined
-//     images) and /fonts/ (self-hosted, font-src 'self');
-//   - the 12 per-locale shells (/<lang>/), the root stub (/), the web app
-//     manifest and the favicon/maskable icons.
-// What stays OUT (handled by runtime stale-while-revalidate if ever requested):
+//   - JS/CSS under /assets/ (entry, lazy chunks and workers);
+//   - every per-locale shell (/<lang>/) and the root stub (/).
+// What stays OUT (loaded and cached only if the page actually requests it):
+//   - fonts, icons and other media. The SW cache-first route stores fonts when
+//     the page actually uses their unicode range; a missing offline font falls
+//     back to the system face and cannot break app functionality;
+//   - the web app manifest and install icons. The browser/OS owns installed-PWA
+//     metadata; duplicating it in the app's Cache Storage does not help boot;
 //   - SEO/marketing/legal HTML (privacy, 404, /<lang>/cameras, /alternatives…),
 //     OG/share images, screenshots, sitemap/robots/llms - none are needed to
 //     boot the app, and precaching them would pin stale markup and waste quota.
-//   - .wasm artifacts under /assets/ - see the skip in collectPrecacheEntries.
 //
 // Revision = first 16 hex of the file's SHA-256. Hashed asset filenames already
 // encode content, but a uniform per-file revision lets the SW reconcile every
 // entry the same way (re-fetch only when the revision changed), including the
-// non-hashed HTML shells and icons.
+// non-hashed HTML shells.
 //
 // ORDERING (critical): this plugin's closeBundle MUST run
-//   - AFTER i18nPrerenderPlugin + rootStubPlugin (so all 12 shells and the stub
-//     exist in dist/), and after Vite has emitted assets/fonts and copied
-//     public/ (manifest, icons, sw.js);
+//   - AFTER i18nPrerenderPlugin + rootStubPlugin (so all locale shells and the stub
+//     exist in dist/), and after Vite has emitted assets and copied public/sw.js;
 //   - BEFORE minifyServiceWorker() (which reads, minifies and overwrites
 //     dist/sw.js) - we must inject into the readable source first.
 // Vite runs closeBundle hooks in plugin-array order, so this plugin sits after
@@ -45,21 +46,6 @@ export interface PrecacheEntry {
     // First 16 hex chars of the file's SHA-256 content hash.
     revision: string;
 }
-
-// Root-level static files that are part of the app shell (exist-checked, so a
-// missing optional icon is simply skipped rather than failing the build).
-const ROOT_SHELL_FILES = [
-    "manifest.webmanifest",
-    "favicon.svg",
-    "favicon.ico",
-    "favicon-32.png",
-    "favicon-192.png",
-    "favicon-512.png",
-    "icon-maskable-512.png",
-];
-
-// Directories whose entire (recursive) contents are part of the shell.
-const SHELL_DIRS = ["assets", "fonts"];
 
 function sha16(buf: Buffer): string {
     return createHash("sha256").update(buf).digest("hex").slice(0, 16);
@@ -98,24 +84,13 @@ export function collectPrecacheEntries(distDir: string, localeSegments: Readonly
         entries.push({ url, revision: sha16(readFileSync(full)) });
     };
 
-    // 1) /assets/* and /fonts/* (recursive), EXCEPT .wasm artifacts.
-    for (const dir of SHELL_DIRS) {
-        for (const rel of listFilesRecursive(resolve(distDir, dir))) {
-            // WASM stays OUT of the boot shell. The only /assets wasm today is
-            // the ~13 MB onnxruntime blob - a bundler-emitted duplicate of the
-            // copy self-hosted under /ort/, which is what the tracker actually
-            // loads at runtime (ort.env.wasm.wasmPaths = "/ort/"); the /assets
-            // copy is never fetched. Precaching it ~tripled the shell and raised
-            // partial-install / quota-eviction odds (a bloated best-effort
-            // install is likelier to drop an app-code chunk, which then fails a
-            // module worker with load-failure). This enforces the stated intent
-            // of vite-plugins/tracker-assets.ts ("must stay a runtime-cached lazy
-            // download, not part of the offline shell") at the precache layer.
-            // If a future wasm is ever boot-critical, allowlist it here rather
-            // than removing this skip.
-            if (rel.endsWith(".wasm")) continue;
-            add(`${dir}/${rel}`, `/${dir}/${rel}`);
-        }
+    // 1) Functional code under /assets/ (recursive). Vite gives every emitted
+    // JS/CSS file a content hash; images and other media are presentation-only
+    // and stay cache-as-used. WASM under /assets/ is an unused ORT duplicate;
+    // the tracker loads its runtime from /ort/ into its dedicated cache.
+    for (const rel of listFilesRecursive(resolve(distDir, "assets"))) {
+        if (!rel.endsWith(".js") && !rel.endsWith(".css")) continue;
+        add(`assets/${rel}`, `/assets/${rel}`);
     }
 
     // 2) Per-locale shells, requested as "/<seg>/" (CF serves the index.html).
@@ -132,11 +107,6 @@ export function collectPrecacheEntries(distDir: string, localeSegments: Readonly
         throw new Error("sw-precache: dist/index.html missing - root stub did not run before this plugin");
     }
     add("index.html", "/");
-
-    // 4) Root-level shell files (manifest, icons) that actually exist.
-    for (const f of ROOT_SHELL_FILES) {
-        if (existsSync(resolve(distDir, f))) add(f, `/${f}`);
-    }
 
     entries.sort((a, b) => (a.url < b.url ? -1 : a.url > b.url ? 1 : 0));
     return entries;

@@ -1,9 +1,9 @@
 // Service worker for dashcamigo: the offline app shell (PWA precache).
 //
 // At build time vite-plugins/sw-precache.ts injects a precache manifest (every
-// same-origin asset the app needs to boot and run: the entry JS+CSS, lazy
-// chunks, workers, self-hosted fonts, the 12 per-locale shells, the root stub,
-// manifest and icons) with a per-file content revision. On install the SW
+// same-origin code asset the app needs to boot and run: the entry JS+CSS, lazy
+// chunks and workers, plus every per-locale shell and the root stub) with a
+// per-file content revision. On install the SW
 // reconciles that manifest into a cache (fetching ONLY entries whose revision
 // changed since the last install), so an installed PWA opens and works with no
 // network. Map tile server and analytics are cross-origin and skip the SW
@@ -131,9 +131,13 @@ async function fetchForPrecache(entryUrl) {
     const attempts = 3;
     for (let i = 0; i < attempts; i++) {
         try {
-            // {cache:"reload"} bypasses the browser HTTP cache so we store the
-            // freshest bytes, not a stale long-max-age copy.
-            const res = await fetch(new Request(entryUrl, { cache: "reload" }));
+            // Vite's /assets/ filenames are content addresses. Reusing an HTTP-
+            // cached response is therefore exact, including when the page just
+            // fetched its boot graph before this first SW install. Stable shell
+            // URLs still bypass HTTP cache: their manifest revision can change
+            // without the URL changing, so install must fetch the new bytes.
+            const cacheMode = entryUrl.startsWith("/assets/") ? "force-cache" : "reload";
+            const res = await fetch(new Request(entryUrl, { cache: cacheMode }));
             if (res.ok || i === attempts - 1) return res;
         } catch (err) {
             if (i === attempts - 1) throw err;
@@ -295,9 +299,9 @@ self.addEventListener("fetch", (evt) => {
         return;
     }
 
-    // 4) Precached assets (and anything under /assets//fonts) - cache-first.
-    // These are content-hashed/immutable or carry a revision, so a cache hit
-    // is always correct and instant; offline it is the only way to get them.
+    // 4) Precached assets and cache-as-used /assets/ + /fonts/ - cache-first.
+    // Code is content-hashed; a font URL is immutable under the hosting cache
+    // contract. A Cache Storage hit is therefore correct and instant.
     if (PRECACHE_URLS.has(url.href) || url.pathname.startsWith("/assets/") || url.pathname.startsWith("/fonts/")) {
         evt.respondWith(cacheFirst(req, evt));
         return;

@@ -1,10 +1,10 @@
 // Integration test for the precache injection pipeline. Reads the built
 // artifacts and asserts:
 //
-//   1. The manifest the plugin builds from the real dist/ covers the actual
-//      boot graph of /en/ (entry <script>, every modulepreload chunk, the
-//      stylesheet) and every file in dist/fonts/. A boot dependency missing
-//      from the precache is an offline-boot failure visible only in the field.
+//   1. The manifest the plugin builds from the real dist/ covers every emitted
+//      JS/CSS file, including the actual /en/ boot graph, while fonts and media
+//      stay cache-as-used. A code dependency missing from the precache is an
+//      offline failure visible only in the field.
 //
 //   2. All prerendered locale shells (/<lang>/) are in the manifest.
 //
@@ -66,14 +66,23 @@ describe("sw-precache integration: manifest covers the real boot graph", () => {
         }
     });
 
-    itIf("every self-hosted font is in the precache manifest", () => {
+    itIf("every emitted JS/CSS file is in the precache manifest", () => {
         const segments = SEO_LOCALES.map((l) => l.urlSegment);
         const urls = new Set(collectPrecacheEntries(DIST_DIR, segments).map((e) => e.url));
-        const fontDir = resolve(DIST_DIR, "fonts");
-        const fonts = existsSync(fontDir) ? readdirSync(fontDir) : [];
+        const assets = readdirSync(resolve(DIST_DIR, "assets")).filter((file) => /\.(?:js|css)$/.test(file));
+        expect(assets.length, "dist/assets has emitted JS/CSS").toBeGreaterThan(0);
+        for (const asset of assets) {
+            expect(urls.has(`/assets/${asset}`), `code asset /assets/${asset} must be precached`).toBe(true);
+        }
+    });
+
+    itIf("self-hosted fonts stay out of the precache manifest", () => {
+        const segments = SEO_LOCALES.map((l) => l.urlSegment);
+        const urls = new Set(collectPrecacheEntries(DIST_DIR, segments).map((e) => e.url));
+        const fonts = readdirSync(resolve(DIST_DIR, "fonts"));
         expect(fonts.length, "dist/fonts has self-hosted fonts").toBeGreaterThan(0);
         for (const f of fonts) {
-            expect(urls.has(`/fonts/${f}`), `font /fonts/${f} must be precached`).toBe(true);
+            expect(urls.has(`/fonts/${f}`), `font /fonts/${f} must stay cache-as-used`).toBe(false);
         }
     });
 

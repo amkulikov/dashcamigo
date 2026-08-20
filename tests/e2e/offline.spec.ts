@@ -17,7 +17,7 @@
 //   therefore assert offline behavior two ways that ARE reliable under
 //   Playwright: (a) the navigation document is served from cache (the exact
 //   thing that was broken - the launch no longer hits the browser offline
-//   page), and (b) every boot resource is served from the SW cache via
+//   page), and (b) every functional code resource is served from the SW cache via
 //   programmatic fetch (proving the app has all it needs to run offline).
 
 import { expect, test } from "@playwright/test";
@@ -100,24 +100,26 @@ test.describe("offline", () => {
         await expect(page.locator("#folder-input")).toBeAttached();
     });
 
-    test("service worker serves the full offline boot graph from cache", async ({ page, context }) => {
+    test("service worker serves the functional offline code graph from cache", async ({ page, context }) => {
         await installServiceWorker(page);
 
         // The asset URLs the /en/ document declares: entry <script>, every
-        // modulepreload chunk, the stylesheet and the preloaded font.
+        // modulepreload chunk and the stylesheet. Fonts deliberately stay out:
+        // their unicode-range files cache only when used, and system fonts are
+        // the functional offline fallback.
         const declared = await page.evaluate(() => {
             const urls = new Set<string>();
             for (const s of document.querySelectorAll<HTMLScriptElement>("script[src]")) {
                 urls.add(new URL(s.src).pathname);
             }
             for (const l of document.querySelectorAll<HTMLLinkElement>(
-                'link[rel="modulepreload"][href], link[rel="stylesheet"][href], link[rel="preload"][as="font"][href]',
+                'link[rel="modulepreload"][href], link[rel="stylesheet"][href]',
             )) {
                 urls.add(new URL(l.href).pathname);
             }
-            return [...urls].filter((u) => u.startsWith("/assets/") || u.startsWith("/fonts/"));
+            return [...urls].filter((u) => u.startsWith("/assets/"));
         });
-        expect(declared.length, "parsed the entry + preloads + css/font from /en/").toBeGreaterThanOrEqual(3);
+        expect(declared.length, "parsed the entry + preloads + css from /en/").toBeGreaterThanOrEqual(2);
 
         // A worker chunk: proves the offline cache covers ingest (reading an SD
         // card spins up these workers), not just the landing shell.

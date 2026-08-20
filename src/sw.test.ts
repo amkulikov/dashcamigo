@@ -18,7 +18,7 @@
 //     NAV_NETWORK_TIMEOUT_MS and the cached shell is served.
 //   - install fails loudly when an /assets/ chunk cannot be cached (a silent
 //     hole in app code detonates later as a module-worker load-failure), but
-//     tolerates degradable entries (shells, icons).
+//     tolerates degradable locale shells.
 //   - activate DEMOTES the previous deploy's precache entries to RUNTIME
 //     instead of deleting them, and cacheFirst falls back to that copy when the
 //     network 404s a stale hash - together these keep an old-build tab alive
@@ -174,8 +174,10 @@ function loadSw(opts: LoadOptions) {
         URL,
         Request: class {
             url: string;
-            constructor(input: string, _init?: unknown) {
+            cache: string;
+            constructor(input: string, init?: { cache?: string }) {
                 this.url = new URL(input, ORIGIN).toString();
+                this.cache = init?.cache ?? "default";
             }
         },
         // The SW constructs `new Response(...)` for the baked-in offline page
@@ -389,6 +391,28 @@ describe("sw install", () => {
 
         expect(await pre.match("/assets/app-AAAA.js")).toBeTruthy();
         expect(await pre.match("/en/")).toBeUndefined();
+    });
+
+    it("reuses HTTP cache for content-addressed assets and reloads stable shell URLs", async () => {
+        const manifest = [
+            { url: "/assets/app-AAAA.js", revision: "r1" },
+            { url: "/en/", revision: "r2" },
+        ];
+        const { fire, fetchSpy } = loadSw({
+            onLine: true,
+            manifest,
+            fetch: async () => res("network"),
+        });
+
+        await fire("install");
+
+        const requests = fetchSpy.mock.calls.map(([req]) => req as unknown as { url: string; cache: string });
+        expect(requests).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ url: abs("/assets/app-AAAA.js"), cache: "force-cache" }),
+                expect.objectContaining({ url: abs("/en/"), cache: "reload" }),
+            ]),
+        );
     });
 });
 

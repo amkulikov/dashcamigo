@@ -235,7 +235,7 @@ export default defineConfig(({ command }) => {
         // later HTML edit would break offline reconciliation.
         cspHashPlugin(),
         // Inject the precache manifest into dist/sw.js for offline support. MUST
-        // run AFTER i18nPrerenderPlugin + rootStubPlugin (all 12 shells + the
+        // run AFTER i18nPrerenderPlugin + rootStubPlugin (all locale shells + the
         // stub must exist in dist/) and BEFORE minifyServiceWorker() (which then
         // minifies the SW with the manifest already injected). See
         // vite-plugins/sw-precache.ts.

@@ -1,10 +1,10 @@
 // Unit test for the precache-manifest builder (vite-plugins/sw-precache.ts).
 //
 // Hermetic: builds a synthetic dist/ tree in a temp dir and asserts
-// collectPrecacheEntries picks up exactly the app boot+run graph and nothing
-// else. A missing font or entry chunk in the manifest is an offline-boot
-// failure that only shows up in the field, so this is the cheap gate that
-// catches a scan-scope regression at build time.
+// collectPrecacheEntries picks up exactly the functional code graph and locale
+// shells, and nothing else. A missing entry/lazy chunk in the manifest is an
+// offline failure that only shows up in the field, so this is the cheap gate
+// that catches a scan-scope regression at build time.
 
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -31,14 +31,18 @@ function makeDist(files: Record<string, string>): string {
     return dir;
 }
 
-// A realistic-enough tree: app assets + fonts + two locale shells + stub +
-// manifest + icons, plus the SEO/marketing noise that must stay OUT.
+// A realistic-enough tree: app code + presentation assets + two locale shells
+// and a stub, plus the SEO/marketing noise that must stay OUT.
 function realisticDist(): string {
     return makeDist({
         "assets/index-AAAA1111.js": "// entry",
         "assets/index-BBBB2222.css": "/* css */",
         "assets/maplibre-CCCC3333.js": "// maplibre",
         "assets/ingest-worker-DDDD.js": "// worker",
+        "assets/workers/nested-worker-EEEE.js": "// nested worker",
+        "assets/credits/maplibre.svg": "<svg/>",
+        "assets/landing-image.png": "PNG",
+        "assets/ort-runtime.wasm": "WASM",
         "fonts/inter-var-latin.woff2": "FONT",
         "fonts/space-grotesk-700-latin.woff2": "FONT2",
         "en/index.html": "<html>en</html>",
@@ -60,34 +64,36 @@ function realisticDist(): string {
 }
 
 describe("collectPrecacheEntries", () => {
-    it("includes the full app shell (assets, fonts, locale shells, stub, manifest, icons)", () => {
+    it("includes functional JS/CSS, locale shells and the root stub", () => {
         const dir = realisticDist();
         const urls = collectPrecacheEntries(dir, ["en", "ru"]).map((e) => e.url);
 
-        expect(urls).toEqual(
-            expect.arrayContaining([
-                "/assets/index-AAAA1111.js",
-                "/assets/index-BBBB2222.css",
-                "/assets/maplibre-CCCC3333.js",
-                "/assets/ingest-worker-DDDD.js",
-                "/fonts/inter-var-latin.woff2",
-                "/fonts/space-grotesk-700-latin.woff2",
-                "/en/",
-                "/ru/",
-                "/",
-                "/manifest.webmanifest",
-                "/favicon.svg",
-                "/favicon-192.png",
-                "/icon-maskable-512.png",
-            ]),
-        );
+        expect(urls).toEqual([
+            "/",
+            "/assets/index-AAAA1111.js",
+            "/assets/index-BBBB2222.css",
+            "/assets/ingest-worker-DDDD.js",
+            "/assets/maplibre-CCCC3333.js",
+            "/assets/workers/nested-worker-EEEE.js",
+            "/en/",
+            "/ru/",
+        ]);
     });
 
-    it("excludes SEO/marketing/legal pages, share images and the SW itself", () => {
+    it("excludes fonts, media, install metadata, SEO pages and the SW itself", () => {
         const dir = realisticDist();
         const urls = new Set(collectPrecacheEntries(dir, ["en", "ru"]).map((e) => e.url));
 
         for (const out of [
+            "/assets/credits/maplibre.svg",
+            "/assets/landing-image.png",
+            "/assets/ort-runtime.wasm",
+            "/fonts/inter-var-latin.woff2",
+            "/fonts/space-grotesk-700-latin.woff2",
+            "/manifest.webmanifest",
+            "/favicon.svg",
+            "/favicon-192.png",
+            "/icon-maskable-512.png",
             "/og-cover.png",
             "/pwa-install-card-wide.png",
             "/privacy.html",
@@ -101,10 +107,10 @@ describe("collectPrecacheEntries", () => {
         }
     });
 
-    it("excludes .wasm from the shell (runtime lazy download, not boot shell)", () => {
+    it("excludes .wasm from the shell (runtime lazy download, not app code)", () => {
         // The ~13 MB onnxruntime wasm is emitted into /assets by the bundler but
         // loaded from /ort/ at runtime; precaching the /assets duplicate only
-        // bloats the shell and races eviction. JS/CSS/fonts stay in.
+        // bloats the shell and races eviction. Functional JS/CSS stay in.
         const dir = makeDist({
             "assets/index-AAAA1111.js": "// entry",
             "assets/ort-wasm-simd-threaded-Cpm-ox6i.wasm": "WASM",
