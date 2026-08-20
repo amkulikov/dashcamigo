@@ -60,13 +60,20 @@ import { plDict } from "../src/i18n/pl.js";
 import { ptDict } from "../src/i18n/pt.js";
 import { ruDict } from "../src/i18n/ru.js";
 import {
-    SITE_ORIGIN,
     buildHreflangAlternatesMap,
     getDefaultSeoLocale,
     getHreflangCodes,
     getIndexableSeoLocales,
     type SeoLocale,
 } from "../src/i18n/seo-config.js";
+import {
+    PRIMARY_SITE_ORIGIN,
+    canonicalLocaleUrl,
+    canonicalOriginForLocale,
+    currentSiteOrigin,
+    localeNeedsYandexNoIndex,
+    profileOwnsCanonicalUrl,
+} from "./deployment-profile.js";
 import { zhDict } from "../src/i18n/zh.js";
 import { getGitMtimeIso, maxGitMtimeIso } from "./git-mtime.js";
 import { escapeAttr, escapeText, stringifyJsonLd } from "./html-utils.js";
@@ -384,7 +391,7 @@ export function sitemapPlugin(options: SeoBuildOptions = {}): Plugin {
             // dislikes redirecting URLs in sitemaps - it expects canonical /
             // 200-responding URLs there.
             entries.push({
-                loc: `${SITE_ORIGIN}/privacy`,
+                loc: `${PRIMARY_SITE_ORIGIN}/privacy`,
                 changefreq: "monthly",
                 priority: "0.3",
                 lastmod: getGitMtimeIso("public/privacy.html") ?? undefined,
@@ -393,7 +400,7 @@ export function sitemapPlugin(options: SeoBuildOptions = {}): Plugin {
             // Terms of use - same standalone / internal lang-switcher shape
             // as privacy (public/terms.html), same canonical rules.
             entries.push({
-                loc: `${SITE_ORIGIN}/terms`,
+                loc: `${PRIMARY_SITE_ORIGIN}/terms`,
                 changefreq: "monthly",
                 priority: "0.3",
                 lastmod: getGitMtimeIso("public/terms.html") ?? undefined,
@@ -404,13 +411,16 @@ export function sitemapPlugin(options: SeoBuildOptions = {}): Plugin {
             // extension-less URL, no alternates. It is a support / onboarding
             // funnel, so keep priority low.
             entries.push({
-                loc: `${SITE_ORIGIN}/add-my-camera`,
+                loc: `${PRIMARY_SITE_ORIGIN}/add-my-camera`,
                 changefreq: "monthly",
                 priority: "0.3",
                 lastmod: getGitMtimeIso("public/add-my-camera.html") ?? undefined,
             });
 
-            const xml = buildSitemap(entries);
+            // Each origin advertises only URLs it canonically owns. Alternates
+            // inside those entries still form the complete cross-origin graph.
+            const ownedEntries = entries.filter((entry) => profileOwnsCanonicalUrl(entry.loc));
+            const xml = buildSitemap(ownedEntries);
             writeFileSync(resolve(distDir, "sitemap.xml"), xml);
 
             // Staging / preview deploys: overwrite the static robots.txt
@@ -446,6 +456,20 @@ export function sitemapPlugin(options: SeoBuildOptions = {}): Plugin {
                 writeFileSync(
                     headersPath,
                     `${existing.replace(/\n*$/, "\n\n")}# Staging / preview deploy (VITE_NO_INDEX): keep every response out of search indexes.\n/*\n  X-Robots-Tag: noindex\n`,
+                );
+            } else {
+                const origin = currentSiteOrigin();
+                writeFileSync(
+                    resolve(distDir, "robots.txt"),
+                    [
+                        `# ${new URL(origin).hostname} robots.txt`,
+                        "# Public web app, no backend, no private routes.",
+                        "User-agent: *",
+                        "Allow: /",
+                        "",
+                        `Sitemap: ${origin}/sitemap.xml`,
+                        "",
+                    ].join("\n"),
                 );
             }
         },
@@ -524,7 +548,7 @@ function buildSitemap(entries: SitemapEntry[]): string {
 // Cloudflare Pages 308-redirects /xx → /xx/, so we keep canonical URLs
 // slash-terminated.
 function localeHomeUrl(locale: SeoLocale): string {
-    return `${SITE_ORIGIN}/${locale.urlSegment}/`;
+    return canonicalLocaleUrl(locale);
 }
 
 
@@ -607,7 +631,7 @@ export function applyLocale(html: string, locale: LocalePrerenderConfig, options
     // og:image / twitter:image - per-locale 1200x630 cover. Source HTML ships
     // with EN cover; we have hand-designed Russian cover at og-cover-ru.png;
     // other 10 locales fall back to EN cover (seo-config.ts decides per locale).
-    const ogImage = `${SITE_ORIGIN}/${locale.seo.ogImage}`;
+    const ogImage = `${canonicalOriginForLocale(locale.seo)}/${locale.seo.ogImage}`;
     out = replaceAttr(out, /<meta\b[^>]*\bproperty="og:image"/i, "content", ogImage);
     out = replaceAttr(out, /<meta\b[^>]*\bname="twitter:image"/i, "content", ogImage);
 
@@ -719,6 +743,11 @@ export function applyLocale(html: string, locale: LocalePrerenderConfig, options
     // start parsing. Production builds (without VITE_NO_INDEX) skip this.
     if (options.noIndex) {
         out = out.replace(/<head>/i, '<head><meta name="robots" content="noindex, nofollow">');
+    } else if (localeNeedsYandexNoIndex(locale.seo)) {
+        // Google must still crawl the duplicate and see its cross-domain
+        // canonical. This narrower directive suppresses only Yandex, which
+        // does not consolidate cross-host canonicals for this migration.
+        out = out.replace(/<head>/i, '<head><meta name="yandex" content="noindex">');
     }
 
     return out;

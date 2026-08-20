@@ -30,11 +30,11 @@
 import type { Plugin } from "vite";
 import {
     SEO_LOCALES,
-    SITE_ORIGIN,
     getDefaultSeoLocale,
     getHreflangCodes,
     getIndexableSeoLocales,
 } from "../src/i18n/seo-config.js";
+import { canonicalLocaleUrl } from "./deployment-profile.js";
 
 // Build the full hreflang link block - one <link> per hreflang code of each
 // indexable locale (generic aliases like "pt" emit an extra link to the
@@ -43,9 +43,9 @@ import {
 // appear in hreflang at all (it's a redirect-only page).
 function buildHreflangHtml(): string {
     const indexable = getIndexableSeoLocales();
-    const defaultUrl = `${SITE_ORIGIN}/${getDefaultSeoLocale().urlSegment}/`;
+    const defaultUrl = canonicalLocaleUrl(getDefaultSeoLocale());
     const lines = indexable.flatMap((loc) => {
-        const url = `${SITE_ORIGIN}/${loc.urlSegment}/`;
+        const url = canonicalLocaleUrl(loc);
         return getHreflangCodes(loc).map(
             (code) => `    <link rel="alternate" hreflang="${code}" href="${url}">`,
         );

@@ -91,7 +91,7 @@ describe("vendor sitemap entries", () => {
         // every other locale, not at /.
         const enVendor = entries.find((e) => e.loc === "https://dashcamigo.app/en/cameras/70mai/");
         expect(enVendor).toBeDefined();
-        expect(enVendor?.alternates.de).toBe("https://dashcamigo.app/de/cameras/70mai/");
+        expect(enVendor?.alternates.de).toMatch(/\/de\/cameras\/70mai\/$/);
         expect(enVendor?.alternates.ja).toBe("https://dashcamigo.app/ja/cameras/70mai/");
     });
 });
@@ -291,8 +291,8 @@ describe("applyLocale", () => {
         expect(localized).toContain(`content="${ru.ogDescription}" property="og:description"`);
     });
 
-    it("does NOT inject noindex when options.noIndex is false/undefined", () => {
-        expect(out).not.toContain('content="noindex');
+    it("does NOT inject a general robots noindex when options.noIndex is false/undefined", () => {
+        expect(out).not.toContain('name="robots" content="noindex');
     });
 
     it("injects noindex meta-robots when options.noIndex is true", () => {

@@ -6,11 +6,16 @@ import { sentryVitePlugin } from "@sentry/vite-plugin";
 import { minify as minifyHtml } from "html-minifier-terser";
 import { defineConfig, minify as minifyOxc } from "vite";
 import { cspHashPlugin } from "./vite-plugins/csp-hash.js";
+import {
+    profileRequiresGlobalNoIndex,
+    resolveSeoDeploymentContext,
+} from "./vite-plugins/deployment-profile.js";
 import { dynamicBaselinePlugin } from "./vite-plugins/dynamic-baseline.js";
 import { indexnowKeyPlugin } from "./vite-plugins/indexnow-key.js";
 import { llmsTxtPlugin } from "./vite-plugins/llms-txt.js";
 import { redirectsPlugin } from "./vite-plugins/redirects.js";
 import { rootStubPlugin } from "./vite-plugins/root-stub.js";
+import { staticSearchMetaPlugin } from "./vite-plugins/static-search-meta.js";
 import { computeTrackerAssets, trackerAssetsPlugin } from "./vite-plugins/tracker-assets.js";
 import { swPrecachePlugin } from "./vite-plugins/sw-precache.js";
 import { getSeoLocales, i18nPrerenderPlugin, sitemapPlugin } from "./vite-plugins/seo-prerender.js";
@@ -121,7 +126,11 @@ function minifyHtmlPlugin() {
 //     both noindex signals from crawlers (a disallowed URL is never
 //     fetched) and externally-linked URLs could be indexed content-less.
 //     See SeoBuildOptions in vite-plugins/seo-prerender.ts.
-const NO_INDEX = process.env.VITE_NO_INDEX === "1" || process.env.VITE_NO_INDEX === "true";
+const SEO_DEPLOYMENT = resolveSeoDeploymentContext();
+const NO_INDEX =
+    process.env.VITE_NO_INDEX === "1" ||
+    process.env.VITE_NO_INDEX === "true" ||
+    profileRequiresGlobalNoIndex(SEO_DEPLOYMENT);
 
 // Source-map upload to Sentry runs ONLY when all three build-time secrets are
 // present (set on the CF Pages project env). Gating on presence keeps local dev,
@@ -146,6 +155,9 @@ export default defineConfig(({ command }) => {
         // Available across app code as `__APP_VERSION__: string`. Inlined
         // literally by the minifier (Oxc) - typed in `src/version.ts`.
         __APP_VERSION__: JSON.stringify(APP_VERSION),
+        // Generic build origin tag for diagnostics. SEO ownership details and
+        // mirror hostname/locales remain build-only in SEO_MIRROR_CONFIG.
+        __DEPLOYMENT_PROFILE__: JSON.stringify(SEO_DEPLOYMENT.profile),
         // Cache-busted tracker asset URLs for src/ui/blur-assets.ts. Typed +
         // guarded there (vitest gets no define). See tracker-assets.ts.
         __DC_TRACKER_ASSETS__: JSON.stringify(trackerAssets.app),
@@ -227,13 +239,21 @@ export default defineConfig(({ command }) => {
         // so the hash plugin sees the stub's bootstrap (identical to locale
         // pages by construction).
         rootStubPlugin({ noIndex: NO_INDEX }),
+        // public/*.html bypasses Vite's HTML transform hooks. Apply the same
+        // search policy to those standalone documents before CSP and precache
+        // hash their final bytes.
+        staticSearchMetaPlugin({ noIndex: NO_INDEX, deployment: SEO_DEPLOYMENT }),
         // CSP for the inline bootstrap: 'sha256-...' into dist/_headers, plus
         // (META_CSP=1 builds) the policy as a <meta> in every HTML for hosts
         // that cannot send headers. MUST run AFTER every HTML-writing plugin
         // above (the hash and the meta need the final markup) and BEFORE
         // swPrecachePlugin - the precache manifest hashes the shells, so a
         // later HTML edit would break offline reconciliation.
-        cspHashPlugin(),
+        cspHashPlugin({
+            stripCloudflareAnalytics:
+                process.env.DISABLE_CLOUDFLARE_ANALYTICS === "1" ||
+                process.env.DISABLE_CLOUDFLARE_ANALYTICS === "true",
+        }),
         // Inject the precache manifest into dist/sw.js for offline support. MUST
         // run AFTER i18nPrerenderPlugin + rootStubPlugin (all locale shells + the
         // stub must exist in dist/) and BEFORE minifyServiceWorker() (which then

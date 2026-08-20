@@ -145,6 +145,10 @@ jobs:
       - name: Build (production env)
         if: steps.gate.outputs.deploy == 'true'
         env:
+          # Optional multi-origin SEO ownership. Values stay in Actions;
+          # unset keeps the historical single-origin build unchanged.
+          SEO_MIRROR_CONFIG: ${{ secrets.SEO_MIRROR_CONFIG }}
+          SEO_CUTOVER: ${{ vars.SEO_CUTOVER }}
           VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}

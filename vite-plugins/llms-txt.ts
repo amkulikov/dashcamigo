@@ -17,8 +17,13 @@
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Plugin } from "vite";
-import { REPO_URL, ROOT_URL, SITE_ORIGIN, getDefaultSeoLocale, getIndexableSeoLocales } from "../src/i18n/seo-config.js";
+import { REPO_URL, getDefaultSeoLocale, getIndexableSeoLocales } from "../src/i18n/seo-config.js";
 import { getAlternativeListings } from "./alternative-pages.js";
+import {
+    PRIMARY_SITE_ORIGIN,
+    canonicalLocaleUrl,
+    currentSiteOrigin,
+} from "./deployment-profile.js";
 import { getFeatureListings } from "./feature-pages.js";
 import { SUPPORTED_BRANDS, getAllBrandsCommaSeparated } from "./supported-brands.js";
 import { VENDOR_LIST } from "./vendor-list.js";
@@ -30,7 +35,8 @@ export function llmsTxtPlugin(): Plugin {
         closeBundle() {
             const distDir = resolve(process.cwd(), "dist");
             const defaultLocale = getDefaultSeoLocale();
-            const defaultLocaleHome = `${SITE_ORIGIN}/${defaultLocale.urlSegment}/`;
+            const defaultLocaleHome = canonicalLocaleUrl(defaultLocale);
+            const currentOrigin = currentSiteOrigin();
 
             // Language count and names derived from SEO_LOCALES so the prose
             // cannot drift when a locale is added. SeoLocale carries no display
@@ -70,12 +76,12 @@ export function llmsTxtPlugin(): Plugin {
             lines.push("## Core pages");
             lines.push("");
             lines.push(`- [Main app (English)](${defaultLocaleHome}): drop the SD-card folder into the browser to watch recordings as continuous trips with a GPS map and speed chart`);
-            lines.push(`- [Supported cameras](${SITE_ORIGIN}/${defaultLocale.urlSegment}/cameras/): list of supported dashcam brands with per-vendor format details`);
-            lines.push(`- [Alternatives](${SITE_ORIGIN}/${defaultLocale.urlSegment}/alternatives/): how dashcamigo compares to other dashcam tools (RegistratorViewer, Dashcam Viewer, VLC)`);
-            lines.push(`- [Privacy policy](${SITE_ORIGIN}/privacy): data handling, analytics opt-out, GDPR / CCPA stance`);
-            lines.push(`- [Terms of use](${SITE_ORIGIN}/terms): hosted-service terms - free, as-is / no warranty, recordings stay the user's`);
+            lines.push(`- [Supported cameras](${canonicalLocaleUrl(defaultLocale, "cameras/")}): list of supported dashcam brands with per-vendor format details`);
+            lines.push(`- [Alternatives](${canonicalLocaleUrl(defaultLocale, "alternatives/")}): how dashcamigo compares to other dashcam tools (RegistratorViewer, Dashcam Viewer, VLC)`);
+            lines.push(`- [Privacy policy](${PRIMARY_SITE_ORIGIN}/privacy): data handling, analytics opt-out, GDPR / CCPA stance`);
+            lines.push(`- [Terms of use](${PRIMARY_SITE_ORIGIN}/terms): hosted-service terms - free, as-is / no warranty, recordings stay the user's`);
             lines.push(
-                `- [Sitemap](${SITE_ORIGIN}/sitemap.xml): full URL list across all ${indexableLocales.length} locales`,
+                `- [Sitemap](${currentOrigin}/sitemap.xml): canonical URLs owned by this origin`,
             );
             lines.push("");
 
@@ -83,7 +89,7 @@ export function llmsTxtPlugin(): Plugin {
             lines.push("");
             for (const vendor of VENDOR_LIST) {
                 lines.push(
-                    `- [${vendor.displayName}](${SITE_ORIGIN}/${defaultLocale.urlSegment}/cameras/${vendor.slug}/): models, file format, FAQ for ${vendor.displayName} dashcams`,
+                    `- [${vendor.displayName}](${canonicalLocaleUrl(defaultLocale, `cameras/${vendor.slug}/`)}): models, file format, FAQ for ${vendor.displayName} dashcams`,
                 );
             }
             lines.push("");
@@ -96,7 +102,7 @@ export function llmsTxtPlugin(): Plugin {
             lines.push("");
             for (const alt of getAlternativeListings()) {
                 lines.push(
-                    `- [${alt.displayName} alternative](${SITE_ORIGIN}/${defaultLocale.urlSegment}/alternatives/${alt.slug}/): how dashcamigo compares to ${alt.displayName} for viewing dashcam footage`,
+                    `- [${alt.displayName} alternative](${canonicalLocaleUrl(defaultLocale, `alternatives/${alt.slug}/`)}): how dashcamigo compares to ${alt.displayName} for viewing dashcam footage`,
                 );
             }
             lines.push("");
@@ -108,7 +114,7 @@ export function llmsTxtPlugin(): Plugin {
             );
             lines.push("");
             for (const feature of getFeatureListings()) {
-                lines.push(`- [${feature.name}](${SITE_ORIGIN}/${defaultLocale.urlSegment}/${feature.slug}/)`);
+                lines.push(`- [${feature.name}](${canonicalLocaleUrl(defaultLocale, `${feature.slug}/`)})`);
             }
             lines.push("");
 
@@ -129,7 +135,7 @@ export function llmsTxtPlugin(): Plugin {
             lines.push("Each language has a localized version of the homepage and the vendor pages.");
             lines.push("");
             for (const loc of indexableLocales) {
-                const home = `${SITE_ORIGIN}/${loc.urlSegment}/`;
+                const home = canonicalLocaleUrl(loc);
                 lines.push(`- [${loc.hreflang}](${home}): ${loc.contentLanguage}`);
             }
             lines.push("");
@@ -151,7 +157,7 @@ export function llmsTxtPlugin(): Plugin {
             lines.push("- Export pipeline uses mediabunny for stream-copy MP4 muxing when re-encoding is not needed");
             lines.push("- Export overlays burn current speed, coordinates and a mini-map directly onto each frame (re-encode path)");
             lines.push("- Embedded GPS formats supported include GPMF, freeGPS, PNDM, LigoGPS, NMEA-in-MP4 and several others");
-            lines.push("- The root URL " + ROOT_URL + " is a language-neutral redirect; every locale (including English) lives under /<lang>/.");
+            lines.push("- The root URL " + currentOrigin + "/ is a language-neutral redirect; every locale (including English) lives under /<lang>/.");
             lines.push("");
 
             const defaultLang = defaultLocale.hreflang;

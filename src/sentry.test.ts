@@ -48,13 +48,15 @@ afterEach(() => {
 
 describe("resolveEnvironment", () => {
     it("classifies by hostname", () => {
-        expect(resolveEnvironment("localhost")).toBe("local");
-        expect(resolveEnvironment("127.0.0.1")).toBe("local");
-        expect(resolveEnvironment("192.168.1.5")).toBe("local");
-        expect(resolveEnvironment("dashcamigo.app")).toBe("production");
-        expect(resolveEnvironment("www.dashcamigo.app")).toBe("production");
-        expect(resolveEnvironment("beta.dashcamigo.app")).toBe("staging");
-        expect(resolveEnvironment("deploy-preview.pages.dev")).toBe("staging");
+        expect(resolveEnvironment("localhost", "primary")).toBe("local");
+        expect(resolveEnvironment("127.0.0.1", "primary")).toBe("local");
+        expect(resolveEnvironment("192.168.1.5", "primary")).toBe("local");
+        expect(resolveEnvironment("dashcamigo.app", "primary")).toBe("production");
+        expect(resolveEnvironment("www.dashcamigo.app", "primary")).toBe("production");
+        expect(resolveEnvironment("beta.dashcamigo.app", "primary")).toBe("staging");
+        expect(resolveEnvironment("deploy-preview.pages.dev", "primary")).toBe("staging");
+        expect(resolveEnvironment("mirror.example.test", "mirror")).toBe("production");
+        expect(resolveEnvironment("localhost", "mirror")).toBe("local");
     });
 });
 

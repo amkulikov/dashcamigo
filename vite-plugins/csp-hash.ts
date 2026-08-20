@@ -63,11 +63,27 @@ const CSP_HEADER_LINE_RE = /Content-Security-Policy: ([^\n]+)/;
 // Derives the meta-deliverable policy from the header policy: the identical
 // string minus the directives the CSP spec ignores in <meta> delivery
 // (of those, this project only uses frame-ancestors).
-export function metaCspFromHeaderPolicy(headerPolicy: string): string {
-    return headerPolicy
+export interface MetaCspOptions {
+    stripCloudflareAnalytics?: boolean;
+}
+
+export function metaCspFromHeaderPolicy(headerPolicy: string, options: MetaCspOptions = {}): string {
+    const policy = headerPolicy
         .split(/;\s*/)
         .filter((directive) => !directive.startsWith("frame-ancestors"))
-        .join("; ");
+        .map((directive) => {
+            if (!options.stripCloudflareAnalytics) return directive;
+            if (!directive.startsWith("script-src ") && !directive.startsWith("connect-src ")) return directive;
+            return directive
+                .split(/\s+/)
+                .filter(
+                    (token) =>
+                        token !== "https://static.cloudflareinsights.com" &&
+                        token !== "https://cloudflareinsights.com",
+                )
+                .join(" ");
+        });
+    return policy.join("; ");
 }
 
 // Injects the CSP <meta> right after <meta charset> - the charset
@@ -97,7 +113,11 @@ function findHtmlFiles(dir: string, out: string[] = []): string[] {
     return out;
 }
 
-export function cspHashPlugin(): Plugin {
+export interface CspHashPluginOptions extends MetaCspOptions {
+    metaCsp?: boolean;
+}
+
+export function cspHashPlugin(options: CspHashPluginOptions = {}): Plugin {
     return {
         name: "dashcamigo-csp-hash",
         apply: "build",
@@ -121,13 +141,13 @@ export function cspHashPlugin(): Plugin {
             const updated = headers.replace(CSP_SCRIPT_SRC_RE, `$1 ${directive}$2`);
             writeFileSync(headersPath, updated);
 
-            if (!process.env.META_CSP) return;
+            if (!(options.metaCsp ?? Boolean(process.env.META_CSP))) return;
 
             const headerLine = CSP_HEADER_LINE_RE.exec(updated);
             if (!headerLine?.[1]) {
                 throw new Error("csp-hash: Content-Security-Policy line not found in dist/_headers");
             }
-            const metaPolicy = metaCspFromHeaderPolicy(headerLine[1]);
+            const metaPolicy = metaCspFromHeaderPolicy(headerLine[1], options);
             for (const file of findHtmlFiles(distDir)) {
                 const pageHtml = readFileSync(file, "utf-8");
                 if (pageHtml.includes('http-equiv="Content-Security-Policy"')) {

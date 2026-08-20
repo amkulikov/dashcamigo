@@ -29,12 +29,16 @@ import type { Plugin } from "vite";
 import type { Lang } from "../src/i18n/index.js";
 import {
     REPO_URL,
-    SITE_ORIGIN,
     buildHreflangAlternatesMap,
     getDefaultSeoLocale,
     getIndexableSeoLocales,
     getSeoLocaleByLang,
 } from "../src/i18n/seo-config.js";
+import {
+    canonicalLocaleUrl,
+    canonicalOriginForLocale,
+    searchIndexingMeta,
+} from "./deployment-profile.js";
 import {
     COMMUNITY_ALT_CONTENT,
     COMMUNITY_ALT_INDEX,
@@ -48,7 +52,6 @@ import type { SeoBuildOptions } from "./seo-prerender.js";
 // duplicated (CLAUDE.md: abstractions against duplicates).
 import {
     BRAND_ICON_SVG,
-    NOINDEX_META,
     buildHreflangLinksHtml,
     buildOgLocaleAlternatesHtml,
     pathPrefixFor,
@@ -1619,15 +1622,15 @@ function renderAlternativePage(competitor: Competitor, lang: Lang, options: SeoB
     const name = competitor.displayName;
 
     const localHome = `${pathPrefix}/`;
-    const url = `${SITE_ORIGIN}${pathPrefix}/alternatives/${competitor.slug}/`;
-    const homeUrl = `${SITE_ORIGIN}${pathPrefix}/`;
-    const alternativesUrl = `${SITE_ORIGIN}${pathPrefix}/alternatives/`;
+    const url = canonicalLocaleUrl(seoLocale, `alternatives/${competitor.slug}/`);
+    const homeUrl = canonicalLocaleUrl(seoLocale);
+    const alternativesUrl = canonicalLocaleUrl(seoLocale, "alternatives/");
     const ctaHref = `${pathPrefix}/`;
     const otherTools = ALTERNATIVES.filter((c) => c.slug !== competitor.slug);
-    const ogImageUrl = `${SITE_ORIGIN}/${seoLocale.ogImage}`;
+    const ogImageUrl = `${canonicalOriginForLocale(seoLocale)}/${seoLocale.ogImage}`;
 
     const hreflangBlock = buildHreflangLinksHtml(
-        (loc) => `${SITE_ORIGIN}/${loc.urlSegment}/alternatives/${competitor.slug}/`,
+        (loc) => canonicalLocaleUrl(loc, `alternatives/${competitor.slug}/`),
     );
     const ogLocaleAlternatesBlock = buildOgLocaleAlternatesHtml(lang);
 
@@ -1671,7 +1674,7 @@ ${content.faq
     return `<!doctype html>
 <html lang="${lang}">
 <head>
-${options.noIndex ? NOINDEX_META : ""}
+${searchIndexingMeta(seoLocale, Boolean(options.noIndex))}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
@@ -1786,11 +1789,11 @@ function renderAlternativesIndexPage(lang: Lang, options: SeoBuildOptions): stri
     const labels = resolveLabels(lang);
     const pathPrefix = pathPrefixFor(lang);
     const localHome = `${pathPrefix}/`;
-    const url = `${SITE_ORIGIN}${pathPrefix}/alternatives/`;
-    const homeUrl = `${SITE_ORIGIN}${pathPrefix}/`;
-    const ogImageUrl = `${SITE_ORIGIN}/${seoLocale.ogImage}`;
+    const url = canonicalLocaleUrl(seoLocale, "alternatives/");
+    const homeUrl = canonicalLocaleUrl(seoLocale);
+    const ogImageUrl = `${canonicalOriginForLocale(seoLocale)}/${seoLocale.ogImage}`;
 
-    const hreflangBlock = buildHreflangLinksHtml((loc) => `${SITE_ORIGIN}/${loc.urlSegment}/alternatives/`);
+    const hreflangBlock = buildHreflangLinksHtml((loc) => canonicalLocaleUrl(loc, "alternatives/"));
     const ogLocaleAlternatesBlock = buildOgLocaleAlternatesHtml(lang);
 
     const breadcrumb = {
@@ -1814,7 +1817,7 @@ function renderAlternativesIndexPage(lang: Lang, options: SeoBuildOptions): stri
             itemListElement: ALTERNATIVES.map((c, idx) => ({
                 "@type": "ListItem",
                 position: idx + 1,
-                url: `${SITE_ORIGIN}${pathPrefix}/alternatives/${c.slug}/`,
+                url: canonicalLocaleUrl(seoLocale, `alternatives/${c.slug}/`),
                 name: c.displayName,
             })),
         },
@@ -1831,7 +1834,7 @@ function renderAlternativesIndexPage(lang: Lang, options: SeoBuildOptions): stri
     return `<!doctype html>
 <html lang="${lang}">
 <head>
-${options.noIndex ? NOINDEX_META : ""}
+${searchIndexingMeta(seoLocale, Boolean(options.noIndex))}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
@@ -2060,19 +2063,17 @@ export function getAlternativeSitemapEntries(): AltSitemapEntry[] {
     const entries: AltSitemapEntry[] = [];
     const indexable = getIndexableSeoLocales();
     const defaultLang = getDefaultSeoLocale().lang;
-    const defaultSegment = getDefaultSeoLocale().urlSegment;
+    const defaultLocale = getDefaultSeoLocale();
 
     // Locale and competitor content shares monolithic source files. Their
     // mtimes cannot identify which URL changed, so omit lastmod rather than
     // publish a site-wide false freshness signal.
 
-    const indexAlternates = buildHreflangAlternatesMap(
-        (loc) => `${SITE_ORIGIN}/${loc.urlSegment}/alternatives/`,
-    );
-    const indexXDefault = `${SITE_ORIGIN}/${defaultSegment}/alternatives/`;
+    const indexAlternates = buildHreflangAlternatesMap((loc) => canonicalLocaleUrl(loc, "alternatives/"));
+    const indexXDefault = canonicalLocaleUrl(defaultLocale, "alternatives/");
     for (const loc of indexable) {
         entries.push({
-            loc: `${SITE_ORIGIN}/${loc.urlSegment}/alternatives/`,
+            loc: canonicalLocaleUrl(loc, "alternatives/"),
             changefreq: "monthly",
             priority: loc.lang === defaultLang ? "0.8" : "0.7",
             alternates: indexAlternates,
@@ -2081,13 +2082,13 @@ export function getAlternativeSitemapEntries(): AltSitemapEntry[] {
     }
 
     for (const competitor of ALTERNATIVES) {
-        const compAlternates = buildHreflangAlternatesMap(
-            (loc) => `${SITE_ORIGIN}/${loc.urlSegment}/alternatives/${competitor.slug}/`,
+        const compAlternates = buildHreflangAlternatesMap((loc) =>
+            canonicalLocaleUrl(loc, `alternatives/${competitor.slug}/`),
         );
-        const compXDefault = `${SITE_ORIGIN}/${defaultSegment}/alternatives/${competitor.slug}/`;
+        const compXDefault = canonicalLocaleUrl(defaultLocale, `alternatives/${competitor.slug}/`);
         for (const loc of indexable) {
             entries.push({
-                loc: `${SITE_ORIGIN}/${loc.urlSegment}/alternatives/${competitor.slug}/`,
+                loc: canonicalLocaleUrl(loc, `alternatives/${competitor.slug}/`),
                 changefreq: "monthly",
                 priority: loc.lang === defaultLang ? "0.7" : "0.6",
                 alternates: compAlternates,

@@ -60,12 +60,14 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Plugin } from "vite";
+import { getDefaultSeoLocale } from "../src/i18n/seo-config.js";
 import {
-    SITE_ORIGIN,
-    getDefaultSeoLocale,
-} from "../src/i18n/seo-config.js";
-import { enDict } from "../src/i18n/en.js";
+    currentSiteOrigin,
+    mirrorRootLocaleSegment,
+    resolveSeoDeploymentContext,
+} from "./deployment-profile.js";
 import { escapeAttr, escapeText } from "./html-utils.js";
+import { getSeoLocales } from "./seo-prerender.js";
 
 // Staging-only noindex meta - same shape used by vendor-pages.ts
 // (noindex, nofollow: staging pages should not be indexed NOR have their
@@ -128,45 +130,52 @@ export function rootStubPlugin(options: RootStubOptions = {}): Plugin {
             const bootstrapScript = extractBootstrapScript(baseline);
             const loaderStyle = extractLoaderStyle(baseline);
 
-            const defaultLocale = getDefaultSeoLocale();
+            const context = resolveSeoDeploymentContext();
+            const rootSegment =
+                context.profile === "mirror" ? mirrorRootLocaleSegment(context) : getDefaultSeoLocale().urlSegment;
+            const rootLocale = getSeoLocales().find((locale) => locale.seo.urlSegment === rootSegment);
+            if (!rootLocale) throw new Error(`root-stub: no SEO locale for URL segment ${rootSegment}`);
+            const defaultLocale = rootLocale.seo;
+            const siteOrigin = currentSiteOrigin(context);
             // Absolute URL for canonical + og:url (per spec - search engines
             // and OG scrapers expect absolute). Relative URL for meta refresh
             // and the no-JS noscript link - this lets staging deploys
             // (*.pages.dev, localhost preview) bounce within the same host
             // instead of dragging crawlers off to the production domain.
-            const defaultHomeAbsolute = `${SITE_ORIGIN}/${defaultLocale.urlSegment}/`;
+            const defaultHomeAbsolute = `${siteOrigin}/${defaultLocale.urlSegment}/`;
             const defaultHomeRelative = `/${defaultLocale.urlSegment}/`;
-            const enTitle = enDict["page.title"];
-            const enDescription = enDict["meta.description"];
+            const dict = rootLocale.dict;
+            const title = dict["page.title"];
+            const description = dict["meta.description"];
 
             // OG title slightly shorter than dict["page.title"] for unfurl
             // cards - strip the " | dashcamigo" tail used for SERP.
-            const ogTitle = enTitle.replace(/ \| dashcamigo$/, "");
+            const ogTitle = rootLocale.ogTitle;
 
             const stub = `<!doctype html>
-<html lang="en">
+<html lang="${defaultLocale.lang}">
 <head>
 ${options.noIndex ? `${NOINDEX_META}\n` : ""}<meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>${escapeText(enTitle)}</title>
-<meta name="description" content="${escapeAttr(enDescription)}">
+<title>${escapeText(title)}</title>
+<meta name="description" content="${escapeAttr(description)}">
 <link rel="canonical" href="${defaultHomeAbsolute}">
 <meta http-equiv="refresh" content="0; url=${defaultHomeRelative}">
 <meta property="og:type" content="website">
 <meta property="og:url" content="${defaultHomeAbsolute}">
 <meta property="og:site_name" content="dashcamigo">
 <meta property="og:title" content="${escapeAttr(ogTitle)}">
-<meta property="og:description" content="${escapeAttr(enDescription)}">
-<meta property="og:image" content="${SITE_ORIGIN}/og-cover.png">
+<meta property="og:description" content="${escapeAttr(description)}">
+<meta property="og:image" content="${siteOrigin}/${defaultLocale.ogImage}">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:type" content="image/png">
-<meta property="og:locale" content="en_US">
+<meta property="og:locale" content="${defaultLocale.ogLocale}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${escapeAttr(ogTitle)}">
-<meta name="twitter:description" content="${escapeAttr(enDescription)}">
-<meta name="twitter:image" content="${SITE_ORIGIN}/og-cover.png">
+<meta name="twitter:description" content="${escapeAttr(description)}">
+<meta name="twitter:image" content="${siteOrigin}/${defaultLocale.ogImage}">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="alternate icon" href="/favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="/favicon-192.png">
@@ -177,7 +186,7 @@ ${bootstrapScript}
 </head>
 <body>
 <div id="dc-loader" role="status" aria-label="loading"></div>
-<noscript><p style="color:#fff;background:#000;font:14px system-ui;padding:1em;margin:0">JavaScript is disabled. <a href="${defaultHomeRelative}" style="color:#ff9000">Continue to dashcamigo</a>.</p></noscript>
+<noscript><p style="color:#fff;background:#000;font:14px system-ui;padding:1em;margin:0"><a href="${defaultHomeRelative}" style="color:#ff9000">dashcamigo</a></p></noscript>
 </body>
 </html>
 `;

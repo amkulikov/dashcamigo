@@ -42,6 +42,13 @@ const log = createLogger("sentry");
 type BreadcrumbLevel = "fatal" | "error" | "warning" | "log" | "info" | "debug";
 
 export type SentryEnvironment = "local" | "staging" | "production";
+export type DeploymentOriginTag = "primary" | "mirror";
+
+declare const __DEPLOYMENT_PROFILE__: DeploymentOriginTag | undefined;
+
+export function resolveOriginTag(): DeploymentOriginTag {
+    return typeof __DEPLOYMENT_PROFILE__ !== "undefined" && __DEPLOYMENT_PROFILE__ === "mirror" ? "mirror" : "primary";
+}
 
 // Opt-out flag. ABSENT means enabled (default ON). Only "off" disables. Wiped
 // by resetAllAppState() via localStorage.clear() (see ui/reset.ts).
@@ -105,9 +112,13 @@ export function crashReportingEnabled(): boolean {
  * projects via their own VITE_SENTRY_DSN, so this is mostly for *.pages.dev
  * preview deploys landing in the beta project.
  */
-export function resolveEnvironment(host: string): SentryEnvironment {
+export function resolveEnvironment(
+    host: string,
+    deploymentProfile: DeploymentOriginTag = resolveOriginTag(),
+): SentryEnvironment {
     if (host === "localhost" || host === "127.0.0.1" || host === "::1" || /^192\.168\./.test(host)) return "local";
     if (host === "dashcamigo.app" || host === "www.dashcamigo.app") return "production";
+    if (deploymentProfile === "mirror") return "production";
     return "staging";
 }
 
@@ -169,6 +180,8 @@ async function loadAndInit(): Promise<void> {
                 return breadcrumb;
             },
         });
+
+        sentryApi.setTag("origin", resolveOriginTag());
 
         // Apply any tags/contexts requested before load.
         if (pendingTags) {

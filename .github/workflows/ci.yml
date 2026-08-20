@@ -78,3 +78,30 @@ jobs:
           path: tests/playwright-report/
           retention-days: 7
           if-no-files-found: ignore
+
+  # The public build contract is origin-agnostic. A synthetic profile catches
+  # accidental dependencies on private host or locale values without exposing
+  # the real deployment configuration to this repository or PR logs.
+  deployment-profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DEPLOYMENT_PROFILE: mirror
+      SEO_MIRROR_CONFIG: '{"origin":"https://mirror.example.test","localeSegments":["de"],"rootLocaleSegment":"de"}'
+      META_CSP: "1"
+      DISABLE_CLOUDFLARE_ANALYTICS: "1"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - name: Build synthetic mirror profile
+        run: npm run build
+      - name: Test synthetic mirror artifact
+        run: npm test

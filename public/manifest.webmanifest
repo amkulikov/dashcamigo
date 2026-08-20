@@ -13,14 +13,6 @@
   "theme_color": "#ff9000",
   "orientation": "any",
   "categories": ["productivity", "utilities", "photo", "video"],
-  "related_applications": [
-    {
-      "platform": "webapp",
-      "url": "https://dashcamigo.app/manifest.webmanifest",
-      "id": "https://dashcamigo.app/"
-    }
-  ],
-  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/favicon.svg",

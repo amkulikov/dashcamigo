@@ -35,7 +35,6 @@ import type { Plugin } from "vite";
 import type { Lang } from "../src/i18n/index.js";
 import {
     REPO_URL,
-    SITE_ORIGIN,
     buildHreflangAlternatesMap,
     getDefaultSeoLocale,
     getHreflangCodes,
@@ -43,6 +42,11 @@ import {
     getSeoLocaleByLang,
     type SeoLocale,
 } from "../src/i18n/seo-config.js";
+import {
+    canonicalLocaleUrl,
+    canonicalOriginForLocale,
+    searchIndexingMeta,
+} from "./deployment-profile.js";
 import { escapeAttr, escapeText, stringifyJsonLd } from "./html-utils.js";
 import { renderHubCta } from "./hub-cta.js";
 import type { SeoBuildOptions } from "./seo-prerender.js";
@@ -1696,16 +1700,16 @@ function renderVendorPage(vendor: VendorContent, lang: Lang, options: SeoBuildOp
     const pathPrefix = pathPrefixFor(lang);
 
     const localHome = `${pathPrefix}/`;
-    const url = `${SITE_ORIGIN}${pathPrefix}/cameras/${vendor.slug}/`;
-    const homeUrl = `${SITE_ORIGIN}${pathPrefix}/`;
-    const camerasUrl = `${SITE_ORIGIN}${pathPrefix}/cameras/`;
+    const url = canonicalLocaleUrl(seoLocale, `cameras/${vendor.slug}/`);
+    const homeUrl = canonicalLocaleUrl(seoLocale);
+    const camerasUrl = canonicalLocaleUrl(seoLocale, "cameras/");
     const ctaHref = `${pathPrefix}/?vendor=${vendor.slug}`;
     const otherVendors = VENDORS.filter((v) => v.slug !== vendor.slug);
-    const ogImageUrl = `${SITE_ORIGIN}/${seoLocale.ogImage}`;
+    const ogImageUrl = `${canonicalOriginForLocale(seoLocale)}/${seoLocale.ogImage}`;
 
     const hreflangBlock = buildHreflangLinksHtml((loc) => {
         // Every locale has a non-empty urlSegment now - /en/, /de/, etc.
-        return `${SITE_ORIGIN}/${loc.urlSegment}/cameras/${vendor.slug}/`;
+        return canonicalLocaleUrl(loc, `cameras/${vendor.slug}/`);
     });
     const ogLocaleAlternatesBlock = buildOgLocaleAlternatesHtml(lang);
 
@@ -1754,7 +1758,7 @@ ${content.faq
     return `<!doctype html>
 <html lang="${lang}">
 <head>
-${options.noIndex ? NOINDEX_META : ""}
+${searchIndexingMeta(seoLocale, Boolean(options.noIndex))}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
@@ -1872,12 +1876,12 @@ function renderCamerasIndexPage(lang: Lang, options: SeoBuildOptions): string {
     const labels = SHARED_LABELS[lang];
     const pathPrefix = pathPrefixFor(lang);
     const localHome = `${pathPrefix}/`;
-    const url = `${SITE_ORIGIN}${pathPrefix}/cameras/`;
-    const homeUrl = `${SITE_ORIGIN}${pathPrefix}/`;
-    const ogImageUrl = `${SITE_ORIGIN}/${seoLocale.ogImage}`;
+    const url = canonicalLocaleUrl(seoLocale, "cameras/");
+    const homeUrl = canonicalLocaleUrl(seoLocale);
+    const ogImageUrl = `${canonicalOriginForLocale(seoLocale)}/${seoLocale.ogImage}`;
 
     const hreflangBlock = buildHreflangLinksHtml((loc) => {
-        return `${SITE_ORIGIN}/${loc.urlSegment}/cameras/`;
+        return canonicalLocaleUrl(loc, "cameras/");
     });
     const ogLocaleAlternatesBlock = buildOgLocaleAlternatesHtml(lang);
 
@@ -1904,7 +1908,7 @@ function renderCamerasIndexPage(lang: Lang, options: SeoBuildOptions): string {
             itemListElement: VENDORS.map((v, idx) => ({
                 "@type": "ListItem",
                 position: idx + 1,
-                url: `${SITE_ORIGIN}${pathPrefix}/cameras/${v.slug}/`,
+                url: canonicalLocaleUrl(seoLocale, `cameras/${v.slug}/`),
                 name: v.displayName,
             })),
         },
@@ -1913,7 +1917,7 @@ function renderCamerasIndexPage(lang: Lang, options: SeoBuildOptions): string {
     return `<!doctype html>
 <html lang="${lang}">
 <head>
-${options.noIndex ? NOINDEX_META : ""}
+${searchIndexingMeta(seoLocale, Boolean(options.noIndex))}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
@@ -2202,20 +2206,18 @@ export function getVendorSitemapEntries(): VendorSitemapEntry[] {
     const entries: VendorSitemapEntry[] = [];
     const indexable = getIndexableSeoLocales();
     const defaultLang = getDefaultSeoLocale().lang;
-    const defaultSegment = getDefaultSeoLocale().urlSegment;
+    const defaultLocale = getDefaultSeoLocale();
 
     // Locale and vendor content shares monolithic source files. Their mtimes
     // cannot identify which URL changed, so omit lastmod rather than publish
     // a site-wide false freshness signal.
 
     // /cameras/ section index alternates: every locale's /cameras/ page.
-    const indexAlternates = buildHreflangAlternatesMap(
-        (loc) => `${SITE_ORIGIN}/${loc.urlSegment}/cameras/`,
-    );
-    const indexXDefault = `${SITE_ORIGIN}/${defaultSegment}/cameras/`;
+    const indexAlternates = buildHreflangAlternatesMap((loc) => canonicalLocaleUrl(loc, "cameras/"));
+    const indexXDefault = canonicalLocaleUrl(defaultLocale, "cameras/");
     for (const loc of indexable) {
         entries.push({
-            loc: `${SITE_ORIGIN}/${loc.urlSegment}/cameras/`,
+            loc: canonicalLocaleUrl(loc, "cameras/"),
             changefreq: "monthly",
             priority: loc.lang === defaultLang ? "0.8" : "0.7",
             alternates: indexAlternates,
@@ -2227,13 +2229,13 @@ export function getVendorSitemapEntries(): VendorSitemapEntry[] {
     // (7 vendors × 10 locales = 70 today). Each vendor has its own alternates
     // map (different from /cameras/ siblings).
     for (const vendor of VENDORS) {
-        const vendorAlternates = buildHreflangAlternatesMap(
-            (loc) => `${SITE_ORIGIN}/${loc.urlSegment}/cameras/${vendor.slug}/`,
+        const vendorAlternates = buildHreflangAlternatesMap((loc) =>
+            canonicalLocaleUrl(loc, `cameras/${vendor.slug}/`),
         );
-        const vendorXDefault = `${SITE_ORIGIN}/${defaultSegment}/cameras/${vendor.slug}/`;
+        const vendorXDefault = canonicalLocaleUrl(defaultLocale, `cameras/${vendor.slug}/`);
         for (const loc of indexable) {
             entries.push({
-                loc: `${SITE_ORIGIN}/${loc.urlSegment}/cameras/${vendor.slug}/`,
+                loc: canonicalLocaleUrl(loc, `cameras/${vendor.slug}/`),
                 changefreq: "monthly",
                 priority: loc.lang === defaultLang ? "0.7" : "0.6",
                 alternates: vendorAlternates,

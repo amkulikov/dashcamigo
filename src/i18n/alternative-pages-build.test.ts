@@ -54,7 +54,7 @@ describe("alternative sitemap entries", () => {
     it("alternates for a competitor page target the SAME competitor across locales", () => {
         const enVlc = entries.find((e) => e.loc === "https://dashcamigo.app/en/alternatives/vlc/");
         expect(enVlc).toBeDefined();
-        expect(enVlc?.alternates.de).toBe("https://dashcamigo.app/de/alternatives/vlc/");
+        expect(enVlc?.alternates.de).toMatch(/\/de\/alternatives\/vlc\/$/);
         expect(enVlc?.alternates.ja).toBe("https://dashcamigo.app/ja/alternatives/vlc/");
         expect(enVlc?.xDefaultUrl).toBe("https://dashcamigo.app/en/alternatives/vlc/");
     });

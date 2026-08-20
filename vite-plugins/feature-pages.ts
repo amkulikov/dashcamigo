@@ -27,12 +27,16 @@ import type { Plugin } from "vite";
 import type { Lang } from "../src/i18n/index.js";
 import {
     REPO_URL,
-    SITE_ORIGIN,
     buildHreflangAlternatesMap,
     getDefaultSeoLocale,
     getIndexableSeoLocales,
     getSeoLocaleByLang,
 } from "../src/i18n/seo-config.js";
+import {
+    canonicalLocaleUrl,
+    canonicalOriginForLocale,
+    searchIndexingMeta,
+} from "./deployment-profile.js";
 import { COMMUNITY_FEATURE_CONTENT, COMMUNITY_FEATURE_LABELS } from "./feature-pages-content.js";
 import { escapeAttr, escapeText, stringifyJsonLd } from "./html-utils.js";
 import type { SeoBuildOptions } from "./seo-prerender.js";
@@ -40,7 +44,6 @@ import type { SeoBuildOptions } from "./seo-prerender.js";
 // (CLAUDE.md: abstractions against duplicates), exactly like alternative-pages.
 import {
     BRAND_ICON_SVG,
-    NOINDEX_META,
     buildHreflangLinksHtml,
     buildOgLocaleAlternatesHtml,
     pathPrefixFor,
@@ -620,10 +623,10 @@ function renderFeaturePage(page: FeaturePage, lang: Lang, options: SeoBuildOptio
     const pathPrefix = pathPrefixFor(lang);
 
     const localHome = `${pathPrefix}/`;
-    const url = `${SITE_ORIGIN}${pathPrefix}/${page.slug}/`;
-    const homeUrl = `${SITE_ORIGIN}${pathPrefix}/`;
+    const url = canonicalLocaleUrl(seoLocale, `${page.slug}/`);
+    const homeUrl = canonicalLocaleUrl(seoLocale);
     const ctaHref = `${pathPrefix}/`;
-    const ogImageUrl = `${SITE_ORIGIN}/${seoLocale.ogImage}`;
+    const ogImageUrl = `${canonicalOriginForLocale(seoLocale)}/${seoLocale.ogImage}`;
 
     // Cross-link to the OTHER feature page, labelled by its localized breadcrumbName.
     const otherPages = FEATURE_PAGES.filter((p) => p.slug !== page.slug).map((p) => ({
@@ -631,7 +634,7 @@ function renderFeaturePage(page: FeaturePage, lang: Lang, options: SeoBuildOptio
         name: resolveFeatureContent(p, lang).breadcrumbName,
     }));
 
-    const hreflangBlock = buildHreflangLinksHtml((loc) => `${SITE_ORIGIN}/${loc.urlSegment}/${page.slug}/`);
+    const hreflangBlock = buildHreflangLinksHtml((loc) => canonicalLocaleUrl(loc, `${page.slug}/`));
     const ogLocaleAlternatesBlock = buildOgLocaleAlternatesHtml(lang);
 
     const breadcrumb = {
@@ -687,7 +690,7 @@ ${content.faq
     return `<!doctype html>
 <html lang="${lang}">
 <head>
-${options.noIndex ? NOINDEX_META : ""}
+${searchIndexingMeta(seoLocale, Boolean(options.noIndex))}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
@@ -885,17 +888,17 @@ export function getFeatureSitemapEntries(): FeatureSitemapEntry[] {
     const entries: FeatureSitemapEntry[] = [];
     const indexable = getIndexableSeoLocales();
     const defaultLang = getDefaultSeoLocale().lang;
-    const defaultSegment = getDefaultSeoLocale().urlSegment;
+    const defaultLocale = getDefaultSeoLocale();
     // Locale and feature content shares monolithic source files. Their mtimes
     // cannot identify which URL changed, so omit lastmod rather than publish
     // a site-wide false freshness signal.
 
     for (const page of FEATURE_PAGES) {
-        const alternates = buildHreflangAlternatesMap((loc) => `${SITE_ORIGIN}/${loc.urlSegment}/${page.slug}/`);
-        const xDefault = `${SITE_ORIGIN}/${defaultSegment}/${page.slug}/`;
+        const alternates = buildHreflangAlternatesMap((loc) => canonicalLocaleUrl(loc, `${page.slug}/`));
+        const xDefault = canonicalLocaleUrl(defaultLocale, `${page.slug}/`);
         for (const loc of indexable) {
             entries.push({
-                loc: `${SITE_ORIGIN}/${loc.urlSegment}/${page.slug}/`,
+                loc: canonicalLocaleUrl(loc, `${page.slug}/`),
                 changefreq: "monthly",
                 priority: loc.lang === defaultLang ? "0.7" : "0.6",
                 alternates,

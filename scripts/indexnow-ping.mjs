@@ -31,8 +31,19 @@ if (KEY.length === 0) {
     console.error("indexnow: INDEXNOW_KEY env is not set - see docs/seo.md, IndexNow");
     process.exit(1);
 }
-const HOST = "dashcamigo.app";
-const ORIGIN = `https://${HOST}`;
+const ORIGIN = (process.env.INDEXNOW_ORIGIN ?? "https://dashcamigo.app").replace(/\/+$/, "");
+let originUrl;
+try {
+    originUrl = new URL(ORIGIN);
+} catch {
+    console.error("indexnow: INDEXNOW_ORIGIN must be an absolute HTTPS origin");
+    process.exit(1);
+}
+if (originUrl.protocol !== "https:" || originUrl.pathname !== "/" || originUrl.search || originUrl.hash) {
+    console.error("indexnow: INDEXNOW_ORIGIN must be an HTTPS origin without a path, query or fragment");
+    process.exit(1);
+}
+const HOST = originUrl.host;
 const KEY_LOCATION = `${ORIGIN}/${KEY}.txt`;
 
 // Direct per-engine endpoints. Order doesn't matter (we Promise.allSettled).

@@ -59,6 +59,8 @@ function findAllIndexHtml(dir: string, out: string[] = []): string[] {
 }
 
 const hasDist = existsSync(ROOT_HTML) && existsSync(HEADERS);
+const stripsCloudflareAnalytics =
+    process.env.DISABLE_CLOUDFLARE_ANALYTICS === "1" || process.env.DISABLE_CLOUDFLARE_ANALYTICS === "true";
 // Fail-loud in CI: dist/ absent there means the workflow ran the unit tests
 // before `npm run build` (see .github/workflows/ci.yml), and a silent skip
 // would hide that this gate never executed. Locally a missing dist/ is the
@@ -119,6 +121,14 @@ describe("meta CSP helpers", () => {
         );
     });
 
+    it("removes disabled Cloudflare analytics endpoints from a meta policy", () => {
+        const header =
+            "script-src 'self' https://static.cloudflareinsights.com; connect-src 'self' https://cloudflareinsights.com https://errors.example; frame-ancestors 'none'";
+        expect(metaCspFromHeaderPolicy(header, { stripCloudflareAnalytics: true })).toBe(
+            "script-src 'self'; connect-src 'self' https://errors.example",
+        );
+    });
+
     it("injects the meta tag right after <meta charset>, before any script", () => {
         const out = injectMetaCsp('<head><meta charset="UTF-8"><script>x()</script></head>', "default-src 'self'");
         expect(out).toBe(
@@ -173,7 +183,9 @@ describe("meta CSP in built HTML (META_CSP flavor)", () => {
             expect(tags.length, `${file}: exactly one meta CSP expected`).toBe(1);
             const policy = META_TAG_RE.exec(html)?.[1] ?? "";
             expect(policy, `${file}: meta policy derives from the header policy`).toBe(
-                metaCspFromHeaderPolicy(headerPolicy),
+                metaCspFromHeaderPolicy(headerPolicy, {
+                    stripCloudflareAnalytics: stripsCloudflareAnalytics,
+                }),
             );
             // The policy must be parsed before the first script executes.
             const firstScript = html.indexOf("<script");
