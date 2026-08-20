@@ -93,6 +93,12 @@
     min-width: 0;
 }
 
+/* Keep every pre-pick action available, but let the product lead the landing.
+   Hover and focus restore the regular accent border below. */
+body.no-trips .topbar-iconbtn {
+    border-color: transparent;
+}
+
 /* Notifications bell and the "What's new" button: same look as other topbar
    icon buttons, plus a red unread dot anchored to the top-right corner. */
 #notif-bell,
@@ -301,6 +307,10 @@
     .dc-mark {
         font-size: var(--dc-text-xl);
     }
+}
+
+body.no-trips .topbar-burger {
+    display: none;
 }
 
 /* Language list is a 12-item picker and a primary touch control; give its rows
