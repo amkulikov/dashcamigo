@@ -223,11 +223,8 @@ export function t(key: I18nKey, params?: Record<string, string | number | boolea
     if (!fmt) {
         const raw = dict[key];
         try {
-            // ignoreTag: disable IntlMessageFormat's XML-tag mode. We never use
-            // <tag>foo</tag> placeholders in templates, and some translations
-            // legitimately contain literal angle-bracket text (CSP annotations
-            // mention <embed>, <object>, <base>). Without this flag those keys
-            // throw UNCLOSED_TAG at parse time.
+            // Treat angle brackets in translated copy as text. Templates never
+            // use IntlMessageFormat's XML-tag placeholders.
             fmt = new IntlMessageFormat(raw, activeLang, undefined, { ignoreTag: true });
         } catch (err) {
             // Template is broken - warn ONCE, then cache a passthrough so later

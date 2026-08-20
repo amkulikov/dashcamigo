@@ -123,8 +123,8 @@
     /* ----- SHADOWS (minimal system) ----- */
     --dc-shadow-card: 0 1px 3px rgba(0, 0, 0, 0.2);
     --dc-shadow-popup: 0 4px 16px rgba(0, 0, 0, 0.4);
-    /* Deepest tier: full-page sheets / side drawers / the CSP report modal that
-       need more separation than a popup. Elevated panels were inventing ~15
+    /* Deepest tier: full-page sheets and side drawers that need more separation
+       than a popup. Elevated panels were inventing ~15
        bespoke shadows; this is the sanctioned floor for the heavy ones. */
     --dc-shadow-sheet: 0 12px 48px rgba(0, 0, 0, 0.5);
 

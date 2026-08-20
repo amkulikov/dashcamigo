@@ -884,11 +884,10 @@ function rewriteFeatureList(existing: unknown): unknown[] {
 // or flagged as misleading. We derive both from the dict to guarantee parity.
 //
 // Question is a single key (q1..q6). Answer is one or more fragments because
-// DOM splits some answers around inline anchor/button nodes (a2 has vendor
-// links, a3 has the CSP-modal trigger). The split has nothing to do with
-// translation - it is a purely structural artifact, so for the JSON-LD we
-// re-stitch the fragments back together and inject the same literal vendor
-// list + CSP-link text that the DOM shows.
+// DOM splits some answers around inline anchor nodes (a2 has vendor links).
+// The split has nothing to do with translation - it is a purely structural
+// artifact, so for the JSON-LD we re-stitch the fragments back together and
+// inject the same literal vendor list that the DOM shows.
 //
 // a2 ("which dashcams are supported?") lists only the top-N brands that have
 // dedicated landing pages - the dict["landing.faq.a2.after"] tail completes
@@ -898,15 +897,14 @@ function rewriteFeatureList(existing: unknown): unknown[] {
 
 function buildFaqJsonLd(dict: Record<I18nKey, string>): string {
     const a2 = `${getLandingBrandsCommaSeparated()}${dict["landing.faq.a2.after"] ?? ""}`;
-    const a3 = `${dict["landing.faq.a3.before"] ?? ""}${dict["landing.faq.a3.cspLink"] ?? ""}${dict["landing.faq.a3.after"] ?? ""}`;
     // a8 stitches the /alternatives/ link's anchor text between its fragments,
-    // same shape as a3 - the visible DOM weaves an <a> there.
+    // and the visible DOM weaves an <a> there.
     const a8 = `${dict["landing.faq.a8.before"] ?? ""}${dict["landing.faq.a8.link"] ?? ""}${dict["landing.faq.a8.after"] ?? ""}`;
     const items: Array<{ q: string; a: string }> = [
         { q: dict["landing.faq.q1"] ?? "", a: dict["landing.faq.a1"] ?? "" },
         { q: dict["landing.faq.q9"] ?? "", a: dict["landing.faq.a9"] ?? "" },
         { q: dict["landing.faq.q2"] ?? "", a: a2 },
-        { q: dict["landing.faq.q3"] ?? "", a: a3 },
+        { q: dict["landing.faq.q3"] ?? "", a: dict["landing.faq.a3"] ?? "" },
         { q: dict["landing.faq.q4"] ?? "", a: dict["landing.faq.a4"] ?? "" },
         { q: dict["landing.faq.q5"] ?? "", a: dict["landing.faq.a5"] ?? "" },
         { q: dict["landing.faq.q11"] ?? "", a: dict["landing.faq.a11"] ?? "" },

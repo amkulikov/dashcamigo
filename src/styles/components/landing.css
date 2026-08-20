@@ -65,7 +65,7 @@ body.no-trips .sidebar-cta {
 
 /* ============================================================
    HERO - two-column split. Left = copy + drop CTA + caps.
-   Right = always-dark safety wall + CSP card.
+   Right = always-dark privacy wall.
    ============================================================ */
 .landing-hero {
     display: grid;
@@ -252,9 +252,8 @@ body.no-trips .sidebar-cta {
 }
 /* Trust footer inside the drop card. Deliberately NOT the mono/--fg-mute
    styling of .landing-drop-t2 - that twinning is what made it read as fine
-   print. Body font + --fg-dim + a green check: green is the page's
-   "verified" idiom (the CSP pill), and pointedly not orange, so the CTA
-   button stays the only orange element in the card. */
+   print. Body font + --fg-dim + a green check make the reassurance visible
+   without competing with the orange CTA. */
 .landing-drop-foot {
     grid-area: foot;
     display: flex;
@@ -508,6 +507,8 @@ body.no-trips .sidebar-cta {
 }
 .landing-oss-link {
     color: var(--accent);
+    font-size: var(--dc-text-base);
+    font-weight: 600;
     text-decoration: none;
 }
 .landing-oss-link:hover,
@@ -594,142 +595,6 @@ body.no-trips .sidebar-cta {
 .landing-guarantee-ico svg {
     width: 16px;
     height: 16px;
-}
-
-/* ----- CSP card (inside safety) ----- */
-.landing-csp {
-    margin-top: var(--dc-space-1);
-    padding: var(--dc-space-3);
-    background: var(--dc-black);
-    border: 1px solid #1c1c1c;
-    border-radius: var(--dc-radius-md);
-    display: flex;
-    gap: var(--dc-space-3);
-    align-items: flex-start;
-}
-@media (max-width: 880px) {
-    .landing-csp {
-        padding: var(--dc-space-3);
-    }
-}
-.landing-csp-ico {
-    flex: none;
-    width: 28px;
-    height: 28px;
-    border-radius: var(--dc-radius-md);
-    background: var(--accent-dim);
-    color: var(--accent);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-.landing-csp-ico svg {
-    width: 15px;
-    height: 15px;
-}
-.landing-csp-body {
-    min-width: 0;
-}
-.landing-csp-title {
-    display: flex;
-    align-items: center;
-    gap: var(--dc-space-2);
-    flex-wrap: wrap;
-    font-size: var(--dc-text-md);
-    color: var(--dc-white);
-    margin-bottom: var(--dc-space-1);
-    line-height: 1.3;
-}
-@media (max-width: 560px) {
-    .landing-csp-title b {
-        font-size: var(--dc-text-sm);
-    }
-}
-.landing-csp-title b {
-    font-weight: 600;
-}
-.landing-csp-pill {
-    font-family: var(--dc-font-mono);
-    font-size: var(--dc-text-2xs);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--ok);
-    background: color-mix(in srgb, var(--ok) 12%, transparent);
-    padding: 1px var(--dc-space-1);
-    border-radius: var(--dc-radius-sm);
-}
-.landing-csp-info {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.06);
-    color: #8a8a8a;
-    font-family: var(--dc-font-mono);
-    font-weight: 600;
-    font-size: var(--dc-text-xs);
-    line-height: 1;
-    text-decoration: none;
-    flex: none;
-    transition:
-        background var(--dc-dur-base) var(--dc-ease),
-        color var(--dc-dur-base) var(--dc-ease);
-}
-/* Touch: keep the visible 18px disc but extend the tap area to the touch floor
-   via a centered transparent pseudo (the disc lives in a stacked mobile hero). */
-@media (pointer: coarse) {
-    .landing-csp-info::before {
-        content: "";
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: var(--dc-iconbtn-touch);
-        height: var(--dc-iconbtn-touch);
-        transform: translate(-50%, -50%);
-    }
-}
-.landing-csp-info:hover,
-.landing-csp-info:focus-visible {
-    background: var(--accent-dim);
-    color: var(--accent);
-    outline: none;
-}
-.landing-csp-code {
-    font-family: var(--dc-font-mono);
-    font-size: var(--dc-text-xs);
-    color: #8a8a8a;
-    line-height: 1.5;
-    word-break: break-all;
-}
-@media (max-width: 560px) {
-    .landing-csp-code {
-        font-size: var(--dc-text-2xs);
-    }
-}
-.landing-csp-k {
-    color: var(--dc-white);
-}
-.landing-csp-v {
-    color: var(--accent);
-}
-.landing-csp-link {
-    display: inline-block;
-    margin-top: var(--dc-space-2);
-    padding: 0 0 1px 0;
-    font-size: var(--dc-text-sm);
-    font-family: var(--dc-font-body);
-    color: var(--accent);
-    background: none;
-    border: none;
-    border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
-    cursor: pointer;
-    text-align: left;
-}
-.landing-csp-link:hover {
-    border-bottom-color: var(--accent);
 }
 
 /* ============================================================

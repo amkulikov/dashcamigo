@@ -5,9 +5,7 @@
    dialogs: the info/settings/reset/install modals here (.export-modal*),
    plus feedback and hotkeys (their files add only z-index + card sizing).
    Add both classes in index.html; per-modal files override only what truly
-   differs. The full-page CSP sheet (.landing-csp-modal-backdrop) is a
-   different pattern (block + scroll + .is-open) and does NOT use this
-   scaffold - it only mirrors the same backdrop look.
+   differs.
 
    Backdrop is unified at blur(8px)/rgba(0,0,0,.6) across all modals. */
 .modal-overlay {

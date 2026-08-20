@@ -48,6 +48,7 @@ describe("faq-jsonld baseline parity", () => {
     it.each([
         [0, "landing.faq.q1", "landing.faq.a1"],
         [1, "landing.faq.q9", "landing.faq.a9"],
+        [3, "landing.faq.q3", "landing.faq.a3"],
         [4, "landing.faq.q4", "landing.faq.a4"],
         [5, "landing.faq.q5", "landing.faq.a5"],
         [6, "landing.faq.q11", "landing.faq.a11"],
@@ -65,13 +66,6 @@ describe("faq-jsonld baseline parity", () => {
         const entry = baseline[2];
         const expected = `${VENDOR_BRANDS_TAIL}${enDict["landing.faq.a2.after"]}`;
         expect(entry?.name).toBe(enDict["landing.faq.q2"]);
-        expect(entry?.text).toBe(expected);
-    });
-
-    it("entry 3 (q3) stitches CSP-link label between dict fragments", () => {
-        const entry = baseline[3];
-        const expected = `${enDict["landing.faq.a3.before"]}${enDict["landing.faq.a3.cspLink"]}${enDict["landing.faq.a3.after"]}`;
-        expect(entry?.name).toBe(enDict["landing.faq.q3"]);
         expect(entry?.text).toBe(expected);
     });
 

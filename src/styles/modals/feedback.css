@@ -22,7 +22,7 @@
     color: var(--fg);
 }
 .feedback-modal-close {
-    /* Standard modal close square - same as the CSP / onboarding closes. */
+    /* Standard modal close square - same as the onboarding close. */
     width: var(--dc-iconbtn);
     height: var(--dc-iconbtn);
     padding: 0;

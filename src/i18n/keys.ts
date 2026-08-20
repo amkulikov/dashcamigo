@@ -33,10 +33,9 @@ export type I18nKey =
 
     // Landing (body.no-trips - empty state before first ingest).
     // Two-column hero: left = copy + drop CTA + capability bullets; right =
-    // privacy "safety wall" + CSP card. Sections under hero: works (OS +
-    // browsers chips), how (3-step strip), faq (sticky title + accordion),
-    // foot. CSP modal opens from .csp button and from the FAQ "are uploads"
-    // inline link. The h1/safety/lead values are split into .before / .hl /
+    // privacy "safety wall". Sections under hero: works (OS + browser chips),
+    // how (3-step strip), faq (sticky title + accordion), foot. The
+    // h1/safety/lead values are split into .before / .hl /
     // .after because applyStaticI18n uses textContent (no inline markup) -
     // the orange highlight span sits between siblings in DOM.
     | "landing.hero.h1.before"
@@ -154,51 +153,12 @@ export type I18nKey =
     | "landing.safety.h2.before"
     | "landing.safety.h2.hl"
     | "landing.safety.h2.after"
-    | "landing.safety.no.server.title"
-    | "landing.safety.no.server.body"
-    | "landing.safety.no.tracking.title"
-    | "landing.safety.no.tracking.body"
-    | "landing.safety.no.internet.title"
-    | "landing.safety.no.internet.body"
-    | "landing.csp.cardTitle"
-    | "landing.csp.pillLabel"
-    | "landing.csp.infoAria"
-    | "landing.csp.openCta"
-    | "landing.csp.modal.title"
-    | "landing.csp.modal.enforced"
-    | "landing.csp.modal.close"
-    | "landing.csp.modal.sec1.title"
-    | "landing.csp.modal.sec1.b1"
-    | "landing.csp.modal.sec1.b2"
-    | "landing.csp.modal.sec1.b3.intro"
-    | "landing.csp.modal.sec1.b3.tiles"
-    | "landing.csp.modal.sec1.b3.cf"
-    | "landing.csp.modal.sec1.b3.crash"
-    | "landing.csp.modal.sec1.b4"
-    | "landing.csp.modal.sec1.b5"
-    | "landing.csp.modal.sec2.title"
-    | "landing.csp.modal.sec3.title"
-    | "landing.csp.modal.sec3.s1"
-    | "landing.csp.modal.sec3.s2"
-    | "landing.csp.modal.sec3.s3"
-    | "landing.csp.modal.sec3.s4"
-    // Annotations rendered next to each CSP directive in the modal.
-    | "landing.csp.annot.default-src"
-    | "landing.csp.annot.script-src"
-    | "landing.csp.annot.style-src"
-    | "landing.csp.annot.font-src"
-    | "landing.csp.annot.img-src"
-    | "landing.csp.annot.connect-src"
-    | "landing.csp.annot.worker-src"
-    | "landing.csp.annot.media-src"
-    | "landing.csp.annot.manifest-src"
-    | "landing.csp.annot.object-src"
-    | "landing.csp.annot.frame-src"
-    | "landing.csp.annot.child-src"
-    | "landing.csp.annot.base-uri"
-    | "landing.csp.annot.form-action"
-    | "landing.csp.annot.frame-ancestors"
-    | "landing.csp.annot.upgrade-insecure-requests"
+    | "landing.safety.uploads.title"
+    | "landing.safety.uploads.body"
+    | "landing.safety.tracking.title"
+    | "landing.safety.tracking.body"
+    | "landing.safety.offline.title"
+    | "landing.safety.offline.body"
     | "landing.works.title"
     | "landing.works.sub"
     | "landing.works.osLabel"
@@ -226,9 +186,7 @@ export type I18nKey =
     | "landing.faq.q2"
     | "landing.faq.a2.after"
     | "landing.faq.q3"
-    | "landing.faq.a3.before"
-    | "landing.faq.a3.cspLink"
-    | "landing.faq.a3.after"
+    | "landing.faq.a3"
     | "landing.faq.q4"
     | "landing.faq.a4"
     | "landing.faq.q5"
@@ -243,8 +201,7 @@ export type I18nKey =
     | "landing.faq.a10"
     | "landing.faq.q7"
     | "landing.faq.a7"
-    // q8 answer is split around an inline link to /alternatives/ (same
-    // before/link/after shape as a3's CSP link). Links the landing FAQ to the
+    // q8 answer is split around an inline link to /alternatives/. It links the landing FAQ to the
     // competitor comparison pages so /alternatives/ is reachable from the home.
     | "landing.faq.q8"
     | "landing.faq.a8.before"

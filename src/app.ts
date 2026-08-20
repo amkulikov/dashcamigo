@@ -45,7 +45,6 @@ import { initCapabilityGate, surfaceDegradedCapabilities, surfaceMapUnavailable 
 import { initConnectivity } from "./ui/connectivity.js";
 import { initOfflineBanner } from "./ui/offline-banner.js";
 import { initLangSuggestionBanner } from "./ui/lang-suggestion-banner.js";
-import { initCspModal } from "./ui/csp-modal.js";
 import { initLandingDock } from "./ui/landing-dock.js";
 import { initLandingShot } from "./ui/landing-shot.js";
 import { dom } from "./ui/dom.js";
@@ -485,9 +484,6 @@ initPlayerBlur();
 // blur-regions-state) to keep that module out of blur-track's import graph.
 setDroppedRegionPassCanceller(cancelTrackPass);
 initFeedbackModal();
-// CSP modal opens from landing safety wall and from FAQ Q3. Init reads
-// #csp-source JSON and renders the pretty-printed header into #csp-full.
-initCspModal();
 // Hero-shot lightbox: landing right-column thumb -> full-size screenshot.
 initLandingShot();
 // Docked CTA: keeps the drop/open action reachable at any landing scroll depth.

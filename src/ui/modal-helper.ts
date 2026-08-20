@@ -110,7 +110,7 @@ export function activateModal(el: HTMLElement, opts: { onClose: () => void; init
     stack.push({ el, onClose: opts.onClose, savedFocus, home: adoptIntoFullscreen(el) });
 
     // preventScroll: several modals put initialFocus on a "Close" button in
-    // the card's footer (settings, CSP, unsupported-formats). A plain focus()
+    // the card's footer (settings, unsupported-formats). A plain focus()
     // scrolls the focused element into view, so a card taller than the
     // viewport opened scrolled to the bottom. Focus still lands on the
     // button for Escape/Enter; it just doesn't drag the scroll with it.
