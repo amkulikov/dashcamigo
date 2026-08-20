@@ -33,6 +33,26 @@ describe("deployment profile", () => {
         expect(() => resolveSeoDeploymentContext({ DEPLOYMENT_PROFILE: "mirror" })).toThrow(/SEO_MIRROR_CONFIG/);
     });
 
+    it("rejects malformed origins, unknown locales and ambiguous cutover values", () => {
+        expect(() =>
+            resolveSeoDeploymentContext({
+                DEPLOYMENT_PROFILE: "mirror",
+                SEO_MIRROR_CONFIG: JSON.stringify({ ...mirror, origin: "https://mirror.example.test/path" }),
+            }),
+        ).toThrow(/origin/);
+        expect(() =>
+            resolveSeoDeploymentContext({
+                DEPLOYMENT_PROFILE: "mirror",
+                SEO_MIRROR_CONFIG: JSON.stringify({
+                    ...mirror,
+                    localeSegments: ["not-a-shipped-locale"],
+                    rootLocaleSegment: "not-a-shipped-locale",
+                }),
+            }),
+        ).toThrow(/unknown URL segments/);
+        expect(() => resolveSeoDeploymentContext({ SEO_CUTOVER: "yes" })).toThrow(/SEO_CUTOVER/);
+    });
+
     it("keeps every canonical on primary until cutover", () => {
         expect(canonicalLocaleUrl(en, "", mirrorBefore)).toBe(`${PRIMARY_SITE_ORIGIN}/en/`);
         expect(canonicalLocaleUrl(mirrored, "cameras/70mai/", mirrorBefore)).toBe(`${PRIMARY_SITE_ORIGIN}/de/cameras/70mai/`);

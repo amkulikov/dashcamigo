@@ -5,7 +5,7 @@
 // SEO_MIRROR_CONFIG at build time. Runtime language selection deliberately
 // does not import this module and always stays on the current hostname.
 
-import type { SeoLocale } from "../src/i18n/seo-config.js";
+import { getIndexableSeoLocales, type SeoLocale } from "../src/i18n/seo-config.js";
 
 export const PRIMARY_SITE_ORIGIN = "https://dashcamigo.app";
 
@@ -25,8 +25,10 @@ export interface SeoDeploymentContext {
 
 type BuildEnv = Readonly<Record<string, string | undefined>>;
 
-function enabled(value: string | undefined): boolean {
-    return value === "1" || value === "true";
+function parseEnabled(name: string, value: string | undefined): boolean {
+    if (value === undefined || value === "" || value === "0" || value === "false") return false;
+    if (value === "1" || value === "true") return true;
+    throw new Error(`${name} must be 0, 1, false or true, got ${JSON.stringify(value)}`);
 }
 
 export function parseDeploymentProfile(value: string | undefined): DeploymentProfile {
@@ -45,12 +47,29 @@ function parseMirrorConfig(raw: string | undefined): SeoMirrorConfig | null {
     }
     if (!value || typeof value !== "object") throw new Error("SEO_MIRROR_CONFIG must be a JSON object");
     const candidate = value as Record<string, unknown>;
-    const origin = typeof candidate.origin === "string" ? candidate.origin.replace(/\/+$/, "") : "";
-    const localeSegments = candidate.localeSegments;
-    const rootLocaleSegment = candidate.rootLocaleSegment;
-    if (!/^https:\/\/[^/]+$/.test(origin)) {
+    const rawOrigin = typeof candidate.origin === "string" ? candidate.origin.trim() : "";
+    let parsedOrigin: URL;
+    try {
+        parsedOrigin = new URL(rawOrigin);
+    } catch {
         throw new Error("SEO_MIRROR_CONFIG.origin must be an HTTPS origin without a path");
     }
+    if (
+        parsedOrigin.protocol !== "https:" ||
+        parsedOrigin.pathname !== "/" ||
+        parsedOrigin.search ||
+        parsedOrigin.hash ||
+        parsedOrigin.username ||
+        parsedOrigin.password
+    ) {
+        throw new Error("SEO_MIRROR_CONFIG.origin must be an HTTPS origin without a path");
+    }
+    const origin = parsedOrigin.origin;
+    if (origin === PRIMARY_SITE_ORIGIN) {
+        throw new Error("SEO_MIRROR_CONFIG.origin must differ from the primary origin");
+    }
+    const localeSegments = candidate.localeSegments;
+    const rootLocaleSegment = candidate.rootLocaleSegment;
     if (
         !Array.isArray(localeSegments) ||
         localeSegments.length === 0 ||
@@ -61,12 +80,20 @@ function parseMirrorConfig(raw: string | undefined): SeoMirrorConfig | null {
     if (typeof rootLocaleSegment !== "string" || !localeSegments.includes(rootLocaleSegment)) {
         throw new Error("SEO_MIRROR_CONFIG.rootLocaleSegment must belong to localeSegments");
     }
-    return { origin, localeSegments: [...new Set(localeSegments)], rootLocaleSegment };
+    const uniqueLocaleSegments = [...new Set(localeSegments)];
+    const knownLocaleSegments = new Set(getIndexableSeoLocales().map((locale) => locale.urlSegment));
+    const unknownLocaleSegments = uniqueLocaleSegments.filter((segment) => !knownLocaleSegments.has(segment));
+    if (unknownLocaleSegments.length > 0) {
+        throw new Error(
+            `SEO_MIRROR_CONFIG.localeSegments contains unknown URL segments: ${unknownLocaleSegments.join(", ")}`,
+        );
+    }
+    return { origin, localeSegments: uniqueLocaleSegments, rootLocaleSegment };
 }
 
 export function resolveSeoDeploymentContext(env: BuildEnv = process.env): SeoDeploymentContext {
     const profile = parseDeploymentProfile(env.DEPLOYMENT_PROFILE);
-    const seoCutover = enabled(env.SEO_CUTOVER);
+    const seoCutover = parseEnabled("SEO_CUTOVER", env.SEO_CUTOVER);
     const mirror = parseMirrorConfig(env.SEO_MIRROR_CONFIG);
     if ((profile === "mirror" || seoCutover) && !mirror) {
         throw new Error("SEO_MIRROR_CONFIG is required for a mirror build or SEO cutover");
