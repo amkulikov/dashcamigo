@@ -25,7 +25,7 @@ export interface FileSegment {
      */
     tripStart: number;
     /**
-     * Average frame rate of the whole source file, or null when the indexer
+     * Estimated frame rate of the whole source file, or null when the indexer
      * could not determine it. Carried on the segment so the encode budget and
      * the frame count can be derived from the files a range actually touches
      * (see rangeSourceFps) instead of assuming a fixed rate.

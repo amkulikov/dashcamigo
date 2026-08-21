@@ -21,7 +21,7 @@ const FIXTURES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "parsers/_
 // indexing logic itself is environment-agnostic and that is what we want
 // to lock down (the wire layer is covered by worker-client.test.ts).
 describe("indexer: MPEG-TS branch", () => {
-    it("extracts durationSec + HEVC codec from a generated .TS fixture", async () => {
+    it("extracts duration, codec and intended frame rate from a generated .TS fixture", async () => {
         const buf = readFileSync(resolve(FIXTURES_DIR, "20260511134011_073648A.TS"));
         const file = new File([buf], "20260511134011_073648A.TS");
         const { indexed } = await indexOneFile(file, false);
@@ -36,6 +36,7 @@ describe("indexer: MPEG-TS branch", () => {
         expect(indexed!.durationSec).toBeGreaterThan(4.5);
         expect(indexed!.durationSec).toBeLessThan(7.5);
         expect(indexed!.codec).toBe("hevc");
+        expect(indexed!.fps).toBe(30);
         // Full RFC 6381 string from mediabunny.getCodecParameterString - feeds
         // the config-aware canPlay check. mediabunny emits the "hev1." prefix
         // for HEVC regardless of the in-band/out-of-band parameter-set storage.
@@ -50,7 +51,7 @@ describe("indexer: MPEG-TS branch", () => {
 });
 
 describe("indexer: Matroska branch", () => {
-    it("extracts durationSec + H.264 codec from a generated .mkv fixture", async () => {
+    it("extracts duration, codec and intended frame rate from a generated .mkv fixture", async () => {
         const buf = readFileSync(resolve(FIXTURES_DIR, "clip-h264.mkv"));
         const file = new File([buf], "clip-h264.mkv");
         const { indexed, moovBytes } = await indexOneFile(file, true);
@@ -61,6 +62,9 @@ describe("indexer: Matroska branch", () => {
         expect(indexed!.durationSec).toBeGreaterThan(1.5);
         expect(indexed!.durationSec).toBeLessThan(3.0);
         expect(indexed!.codec).toBe("avc");
+        // The Matroska timebase makes packetCount/duration come out as 29.995;
+        // timestamp-lattice inference recovers the camera's intended 30 fps.
+        expect(indexed!.fps).toBe(30);
         // Full RFC 6381 string feeds the config-aware canPlay check.
         expect(indexed!.videoCodecString).toMatch(/^avc1\./);
         // Matroska has no moov, so the wall-clock/rotation fields are null/0 and

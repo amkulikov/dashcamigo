@@ -153,12 +153,9 @@ export interface VideoCandidate {
     // MP4 display-matrix rotation. Passed to export so the output MP4
     // opens in the correct orientation.
     rotation: Mp4Rotation;
-    // Display-only technical metadata for the sidebar's per-clip details panel
-    // (see ui/file-details.ts). Coded frame size + average fps of the primary
-    // video track, and the primary audio track's codec 4cc/name + channels/rate.
-    // null while filename-first provisional (before the moov read) or when the
-    // container carries no such track. Never drives playback/export decisions -
-    // those use codec/videoCodecString/rotation above.
+    // Technical metadata for the sidebar's per-clip details panel (see
+    // ui/file-details.ts). fps also drives frame stepping and re-encode timing;
+    // null while filename-first provisional or when no video track is measurable.
     width: number | null;
     height: number | null;
     fps: number | null;

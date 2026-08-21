@@ -53,9 +53,10 @@ export interface IndexedMp4 {
     width: number | null;
     height: number | null;
     /**
-     * Average frame rate of the primary video track (frames per second). null
-     * when undeterminable. Display-only. MP4: sampleCount/duration from stts;
-     * TS/MKV: mediabunny computePacketStats().averagePacketRate.
+     * Estimated frame rate of the primary video track (frames per second). null
+     * when undeterminable. MP4 uses sampleCount/duration from stts; TS/MKV infer
+     * the intended rate from packet timestamps. Also drives frame stepping and
+     * re-encode timing/bitrate.
      */
     fps: number | null;
     /**

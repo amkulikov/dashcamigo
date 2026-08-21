@@ -35,11 +35,10 @@ import {
 
 const log = createLogger("mp4-indexing");
 
-// Packet budget for the TS/MKV fps estimate. computePacketStats does a prefix
-// scan; ~120 frames (a few seconds at 25-60 fps) gives a stable average packet
-// rate without walking the whole container on a cold SD card. Display-only, so
-// a rough value is fine.
-const FPS_PROBE_PACKETS = 120;
+// Mediabunny recommends at least 256 packets for reliable CFR/VFR detection.
+// This bounded prefix scan follows the container duration scan, while its result
+// drives frame stepping and re-encode timing as well as the details panel.
+const FPS_PROBE_PACKETS = 256;
 
 /** Index result + optional moov bytes (only when the caller asked for them). */
 export interface IndexedWithMoov {
@@ -223,12 +222,18 @@ export async function indexNonIsobmffFile(file: File, signal?: AbortSignal): Pro
                     width = vt.displayWidth;
                     height = vt.displayHeight;
                 }
-                // fps needs a bounded packet scan; best-effort so a scan failure
-                // (or an ingest-cancel dispose) never voids the codec above.
+                // Infer the intended frame rate from timestamp spacing rather
+                // than averaging observed packets: a dropped frame must not turn
+                // a 30 fps camera into a 29.x fps export. Best-effort so a scan
+                // failure (or an ingest-cancel dispose) never voids the codec.
                 try {
-                    const stats = await vt.computePacketStats(FPS_PROBE_PACKETS);
-                    if (Number.isFinite(stats.averagePacketRate) && stats.averagePacketRate > 0) {
-                        fps = stats.averagePacketRate;
+                    const metrics = await vt.computeFrameRateMetrics({ targetPacketCount: FPS_PROBE_PACKETS });
+                    if (
+                        metrics.probedPacketCount >= 2 &&
+                        Number.isFinite(metrics.bestGuessFrameRate) &&
+                        metrics.bestGuessFrameRate > 0
+                    ) {
+                        fps = metrics.bestGuessFrameRate;
                     }
                 } catch {
                     // fps stays null - packet scan unavailable / aborted.
