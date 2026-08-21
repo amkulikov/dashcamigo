@@ -58,7 +58,7 @@
     "chart.js": "4.5.1",
     "chartjs-plugin-zoom": "2.2.0",
     "idb": "^8.0.3",
-    "intl-messageformat": "^11.2.12",
+    "intl-messageformat": "^11.2.14",
     "maplibre-gl": "6.5.0",
     "mediabunny": "1.55.1",
     "native-file-system-adapter": "3.0.1",
