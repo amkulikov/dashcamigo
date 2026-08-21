@@ -1,6 +1,6 @@
 ---
 name: changelog
-description: Maintain the user-facing changelog - the "What's new" panel, CHANGELOG.md and the GitHub release notes all read from one source (src/changelog/entries.ts). Triggers when the user says "update the changelog", "обнови changelog", or as the pre-tag step of release prep (docs/deploy.md). Reads git history since the newest entry, drafts coarse user-facing entries in every locale, appends them, bumps the badge id and regenerates CHANGELOG.md.
+description: Maintain the factual user-facing changelog - the "What's new" panel, CHANGELOG.md and the GitHub release notes all read from one source (src/changelog/entries.ts). Triggers when the user says "update the changelog", "обнови changelog", or as the pre-tag step of release prep (docs/deploy.md). Reads git history since the newest entry, drafts coarse user-visible behavior changes in every locale, appends them, bumps the badge id and regenerates CHANGELOG.md.
 ---
 
 # Changelog
@@ -33,14 +33,20 @@ If `entries.ts` has never been touched in the window you were asked about, fall 
 
 ### 2. Filter to what a driver notices
 
-Keep only changes that alter what the user sees or can do: new camera/format support, new features and settings, visible UX changes, fixes of bugs a user could have hit. Drop refactors, internal renames, test/CI/docs work, and perf work with no visible effect.
+Keep only changes to product behavior that a driver can notice: new camera/format support, new capabilities and settings, concrete workflow changes, and fixes of bugs a user could have hit. Drop refactors, internal renames, test/CI/docs work, and perf work with no observable effect.
+
+Visibility alone does not clear the bar. Do not add entries for copy rewrites, visual polish, layout tuning, landing/marketing changes, or SEO content unless they fix a concrete usability failure or change how the user completes a task. Do not turn internal work into an inferred benefit just to fill the release. An empty changelog is correct when behavior did not change.
 
 Coarse strokes are the point: merge related commits into ONE entry ("Improved trip cards", not three bullets about corner buttons). A typical release yields 0-5 entries, one sentence each. When unsure whether something clears the bar, it does not.
 
 ### 3. Draft and categorize
 
 - Categories: `support` (new cameras/formats), `feature` (new capability or setting), `improvement` (existing flow got better), `fix`.
-- Write English and Russian first - `.claude/rules/voice.md` governs tone (outcome, not implementation; informal register; em-dash is brand voice). English is the source of truth for meaning.
+- Write English and Russian first. English is the source of truth for meaning.
+- Treat the changelog as a release ledger, not a marketing surface. State the changed behavior literally and stop. Do not add reassurance, benefit framing, product promises, or adjectives such as "cleaner", "clearer", "smoother", "better", or "more reliable". Use "faster" only when the entry can name the concrete operation that became faster and the change is supported by evidence.
+- Do not re-announce an unchanged product property (privacy, local processing, offline use, and so on) merely because landing copy now emphasizes it.
+- `.claude/rules/voice.md` still governs plain vocabulary, product terms, locale register, and typography. Its outcome-first rule does not require promotional wording: include enough mechanics to identify the changed behavior precisely.
+- Prefer a factual condition and result. For example: "The map now switches to a backup source when the primary source is unavailable." Do not inflate it to "The map keeps working through outages" or add a landing-copy entry saying privacy is now explained more clearly.
 - Translate to the remaining locales. Reuse each locale's established product vocabulary - check how `src/i18n/<lang>.ts` names trips, recordings, cameras before inventing a term.
 - Naming a camera brand requires a real sample behind the support claim, same bar as the landing copy.
 
