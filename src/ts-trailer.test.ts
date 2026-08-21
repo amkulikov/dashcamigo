@@ -10,6 +10,7 @@ const FIXTURES = resolve(dirname(fileURLToPath(import.meta.url)), "parsers/__fix
 const happy = readFileSync(resolve(FIXTURES, "synthetic-happy.TS"));
 const wrongFormat = readFileSync(resolve(FIXTURES, "synthetic-wrong-format.TS"));
 const realAnonymized = readFileSync(resolve(FIXTURES, "real-anonymized.TS"));
+const realAmpersand = readFileSync(resolve(FIXTURES, "real-anonymized-ampersand.TS"));
 
 // happy = 2 null TS packets + trailer (see build-synthetic.mjs).
 const HAPPY_CLEAN = 2 * 188;
@@ -26,18 +27,49 @@ describe("findTsGpsTrailer", () => {
         expect(t!.trailerLength).toBe(happy.length - HAPPY_CLEAN);
     });
 
-    it("accepts the classic LIGO magic spelling", async () => {
+    it("accepts the classic LIGO magic spelling with the length-header dialect", async () => {
         const patched = Buffer.from(happy);
         patched.write("SKIPLIGOGPSINFO", HAPPY_CLEAN + 4, "latin1");
         expect(await findTsGpsTrailer(blobOf(patched))).not.toBeNull();
+    });
+
+    it("rejects the ampersand terminator paired with LCAI magic", async () => {
+        const lcaiWithAmpersands = Buffer.from(happy);
+        lcaiWithAmpersands.write("&&&&", lcaiWithAmpersands.length - 8, "latin1");
+        expect(await findTsGpsTrailer(blobOf(lcaiWithAmpersands))).toBeNull();
+    });
+
+    it("rejects invalid dialect header values", async () => {
+        const lcaiWithSlotCount = Buffer.from(happy);
+        lcaiWithSlotCount.writeUInt32LE(3, HAPPY_CLEAN + 24);
+        expect(await findTsGpsTrailer(blobOf(lcaiWithSlotCount))).toBeNull();
+
+        const ligoWithUndersizedCapacity = Buffer.from(realAmpersand);
+        const ligoTrailerLength = ligoWithUndersizedCapacity.readUInt32BE(ligoWithUndersizedCapacity.length - 4);
+        ligoWithUndersizedCapacity.writeUInt32LE(59, ligoWithUndersizedCapacity.length - ligoTrailerLength + 24);
+        expect(await findTsGpsTrailer(blobOf(ligoWithUndersizedCapacity))).toBeNull();
     });
 
     it("rejects a foreign magic even with valid structure", async () => {
         expect(await findTsGpsTrailer(blobOf(wrongFormat))).toBeNull();
     });
 
-    it("rejects a file with no '####' terminator", async () => {
+    it("rejects a foreign terminator even with valid lengths and magic", async () => {
+        const patched = Buffer.from(happy);
+        patched.write("!!!!", patched.length - 8, "latin1");
+        expect(await findTsGpsTrailer(blobOf(patched))).toBeNull();
+    });
+
+    it("rejects a file with no known terminator", async () => {
         expect(await findTsGpsTrailer(blobOf(happy.subarray(0, HAPPY_CLEAN)))).toBeNull();
+    });
+
+    it("rejects a trailer whose slot region is not 132-byte aligned", async () => {
+        const patched = Buffer.concat([happy.subarray(0, -8), Buffer.alloc(1), happy.subarray(-8)]);
+        const trailerLength = patched.length - HAPPY_CLEAN;
+        patched.writeUInt32BE(trailerLength, HAPPY_CLEAN);
+        patched.writeUInt32BE(trailerLength, patched.length - 4);
+        expect(await findTsGpsTrailer(blobOf(patched))).toBeNull();
     });
 
     it("rejects when the clean prefix falls off the 188 grid", async () => {
@@ -66,6 +98,20 @@ describe("findTsGpsTrailer", () => {
         expect(t).not.toBeNull();
         expect(t!.cleanLength % 188).toBe(0);
         expect(t!.trailerLength).toBe(7956);
+    });
+
+    it("detects the ampersand dialect on its real-anonymized fixture", async () => {
+        const t = await findTsGpsTrailer(blobOf(realAmpersand));
+        expect(t).not.toBeNull();
+        expect(t!.cleanLength % 188).toBe(0);
+        expect(t!.trailerLength).toBe(7956);
+    });
+
+    it("accepts an ampersand trailer whose capacity exceeds its written slots", async () => {
+        const patched = Buffer.from(realAmpersand);
+        const trailerLength = patched.readUInt32BE(patched.length - 4);
+        patched.writeUInt32LE(61, patched.length - trailerLength + 24);
+        expect(await findTsGpsTrailer(blobOf(patched))).not.toBeNull();
     });
 });
 

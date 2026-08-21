@@ -24,6 +24,7 @@ import {
     RX_GENERIC_DATETIME,
     RX_IBOX,
     RX_JUSCAR,
+    RX_LIGOGPS_TRAILER_TS,
     RX_MIVUE,
     RX_NAVITEL,
     RX_NEOLINE,
@@ -232,6 +233,16 @@ const fitcamxTime: FilenameTimeTechnique = {
     },
 };
 
+const ligoGpsTrailerTsTime: FilenameTimeTechnique = {
+    id: "ligogps-trailer-ts-time",
+    extract(file: VendorFile): Date | null {
+        const m = file.file.name.match(RX_LIGOGPS_TRAILER_TS);
+        if (!m) return null;
+        const ts = m[1]!;
+        return ymdHmsFromSplit(ts.slice(0, 8), ts.slice(8, 14));
+    },
+};
+
 const iboxTime: FilenameTimeTechnique = {
     id: "ibox-time",
     extract(file: VendorFile): Date | null {
@@ -381,6 +392,7 @@ export const FILENAME_TIME: readonly FilenameTimeTechnique[] = [
     eaceTime,
     escortTime,
     fitcamxTime,
+    ligoGpsTrailerTsTime,
     iboxTime,
     juscarTime,
     mivueTime,

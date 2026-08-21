@@ -1,8 +1,8 @@
-// LigoGPS trailer extractor for MPEG-TS files. An unknown-vendor 2-channel
-// camera (LCAI magic spelling) appends the plaintext twin of its in-stream
-// encrypted LigoGPS to the end of each .ts; only the plaintext table is
-// claimed. Detection is shared with the AV-side clamp in src/ts-trailer.ts;
-// parsing lives in internal/ligogps.ts.
+// LigoGPS trailer extractor for MPEG-TS files. Known firmwares use a
+// length-header/`####` dialect (LCAI or classic-LIGO magic) or a
+// capacity-header/classic-LIGO/`&&&&` dialect and append a plaintext GPS table
+// to the end of each .ts; only that table is claimed. Detection is shared with
+// the AV-side clamp in src/ts-trailer.ts; parsing lives in internal/ligogps.ts.
 //
 // No cloneAcrossGroup, unlike juscar-ts: front and rear carry near-identical
 // tables but not always the same record COUNT, and their name stamps can

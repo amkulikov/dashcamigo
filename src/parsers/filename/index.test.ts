@@ -13,6 +13,7 @@ import {
     RX_FITCAMX_MP4,
     RX_FORD,
     RX_HPIM,
+    RX_LIGOGPS_TRAILER_TS,
     RX_MIVUE,
     RX_MOV_SEQ_FRI,
     RX_NAVITEL,
@@ -1002,6 +1003,43 @@ describe("mov-seq-fri techniques", () => {
         // The neighbouring stamp+counter families keep their own techniques.
         expect(matchFilenameTime(vf("20260811083704_082606F.ts")).matchedId).toBe("fitcamx-time");
         expect(matchFilenameTime(vf("20260811083704_0000826.mp4")).matchedId).toBe("ddpai-time");
+    });
+});
+
+describe("ligogps-trailer-ts suffix techniques", () => {
+    it("extracts the local timestamp and channel but leaves the opaque token unclaimed", () => {
+        const file = vf("2026081822373512_f.ts", "VIDEO_F/2026081822373512_f.ts");
+        const time = matchFilenameTime(file);
+        expect(time.matchedId).toBe("ligogps-trailer-ts-time");
+        expect(time.value?.toISOString()).toBe("2026-08-18T22:37:35.000Z");
+
+        const channel = matchFilenameChannel(file);
+        expect(channel.matchedId).toBe("ligogps-trailer-ts-channel");
+        expect(channel.value).toEqual({ channel: "front", confident: true });
+        expect(classifyFilenameChannel(vf("2026081822373512_r.ts"))).toEqual({
+            channel: "rear",
+            confident: true,
+        });
+        expect(classifyFilenameChannel(vf("2026081822373512_i.ts"))).toEqual({
+            channel: "interior",
+            confident: true,
+        });
+        expect(matchFilenameSequence(file).value).toBeNull();
+        expect(matchFilenameMode(file).value).toBeNull();
+    });
+
+    it("converges channel suffixes and VIDEO_<channel> folders on one camera key", () => {
+        const front = cameraFingerprint(vf("2026081822373512_f.ts", "card/VIDEO_F/2026081822373512_f.ts"));
+        expect(front).toBe(cameraFingerprint(vf("2026081822373512_r.ts", "card/VIDEO_R/2026081822373512_r.ts")));
+        expect(front).toBe(cameraFingerprint(vf("2026081822373512_i.ts", "card/VIDEO_I/2026081822373512_i.ts")));
+        expect(front).not.toBe(cameraFingerprint(vf("2026081822373512_f.ts", "other/VIDEO_F/2026081822373512_f.ts")));
+    });
+
+    it("stays disjoint from neighbouring TS timestamp families", () => {
+        expect(RX_LIGOGPS_TRAILER_TS.test("2026081822373512_f.ts")).toBe(true);
+        expect(RX_LIGOGPS_TRAILER_TS.test("20260818223735_0000002F.ts")).toBe(false);
+        expect(RX_LIGOGPS_TRAILER_TS.test("20260818223735_123456F.ts")).toBe(false);
+        expect(RX_LIGOGPS_TRAILER_TS.test("2026081822373512_f.mp4")).toBe(false);
     });
 });
 

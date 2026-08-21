@@ -37,6 +37,7 @@ import {
     RX_JUSCAR,
     RX_JUSCAR_PATH_FRONT,
     RX_JUSCAR_PATH_REAR,
+    RX_LIGOGPS_TRAILER_TS,
     RX_MOV_SEQ_FRI,
     RX_NAVITEL,
     RX_NEOLINE,
@@ -238,6 +239,19 @@ const fitcamxChannel: FilenameChannelTechnique = {
         const path = file.relativePath;
         if (RX_FITCAMX_PATH_REAR.test(path)) return sure("rear");
         if (RX_FITCAMX_PATH_FRONT.test(path)) return sure("front");
+        return null;
+    },
+};
+
+const ligoGpsTrailerTsChannel: FilenameChannelTechnique = {
+    id: "ligogps-trailer-ts-channel",
+    extract(file: VendorFile): ChannelMatch | null {
+        const m = file.file.name.match(RX_LIGOGPS_TRAILER_TS);
+        if (!m) return null;
+        const ch = m[3]!.toUpperCase();
+        if (ch === "F") return sure("front");
+        if (ch === "R") return sure("rear");
+        if (ch === "I") return sure("interior");
         return null;
     },
 };
@@ -534,6 +548,7 @@ export const FILENAME_CHANNEL: readonly FilenameChannelTechnique[] = [
     novatekSingleChannel,
     eaceChannel,
     fitcamxChannel,
+    ligoGpsTrailerTsChannel,
     fordChannel,
     hpimChannel,
     iboxChannel,

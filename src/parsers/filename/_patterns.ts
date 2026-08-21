@@ -218,6 +218,13 @@ export const RX_NAVITEL = /^FILE(\d{2})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-(\d{
 // unknown, the default embedded probe stays on.
 export const RX_MOV_SEQ_FRI = /^(\d{14})_(\d{7})([FRI])\.(?:mov|ts)$/i;
 
+// LigoGPS-trailer MPEG-TS family: 14-digit local timestamp, an opaque
+// two-digit token, then an underscored F/R/I channel mnemonic. The front
+// spelling and VIDEO_F folder are real-sample validated; R/I keep the
+// standard mnemonic language for sibling firmwares without assigning meaning
+// to the opaque token.
+export const RX_LIGOGPS_TRAILER_TS = /^(\d{14})(\d{2})_([FRI])\.ts$/i;
+
 // Nextbase (322GW family): yyMMdd_HHmmss_NNN_<channel><quality>.MP4.
 // Channel B/F/R; quality H/L = parallel high/low-bitrate streams of the same
 // lens recorded simultaneously. Upstream accepts the identical language as a

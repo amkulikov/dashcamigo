@@ -87,6 +87,11 @@ describe("classifyGpsSource", () => {
         expect(classifyGpsSource(vf("20260811083704_0000826F.mov"))).toBe("unknown");
     });
 
+    it("ligogps trailer TS suffix family classifies embedded", () => {
+        expect(classifyGpsSource(vf("2026081822373512_f.ts", "VIDEO_F/2026081822373512_f.ts"))).toBe("embedded");
+        expect(classifyGpsSource(vf("2026081822373512_r.TS", "VIDEO_R/2026081822373512_r.TS"))).toBe("embedded");
+    });
+
     it("viofo names with no sequence counter keep the novatek embedded hint", () => {
         // T130 parking clips and some OEM firmwares drop the counter
         // (`..._F.mp4` / `..._PR.mp4`); freeGPS is real-sample-validated in

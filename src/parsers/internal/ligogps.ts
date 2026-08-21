@@ -23,7 +23,7 @@
 // Alternative plaintext format (Redtiger F9 4K) - not encrypted, same
 // regex after `^.{4}\d{4}/\d{2}/\d{2}` without decryption. Both branches supported.
 
-import { findTsGpsTrailer, TS_TRAILER_SLOTS_OFFSET } from "../../ts-trailer.js";
+import { findTsGpsTrailer, isTsGpsTrailerTerminator, TS_TRAILER_SLOTS_OFFSET } from "../../ts-trailer.js";
 import type { GpsRecord, ParsedRecords, SkippedLine, VendorFile } from "../types.js";
 import { KNOTS_TO_MS, WrongFormatError } from "../types.js";
 import { loadSamples, readSampleTable } from "./mp4-walker.js";
@@ -523,7 +523,7 @@ export async function parseLigoGpsTrailer(file: VendorFile, index: Mp4Index): Pr
 }
 
 // ---------------------------------------------------------------------------
-// MPEG-TS file-trailer carrier (LCAI magic variant).
+// MPEG-TS file-trailer carrier.
 //
 // The firmware writes the encrypted LigoGPS stream in-file (private PES on
 // its own PID, 1 Hz, classic LIGOGPSINFO + '####' chunks - unclaimed, the
@@ -554,7 +554,7 @@ export async function parseLigoGpsTsTrailer(file: VendorFile): Promise<ParsedRec
     const records: GpsRecord[] = [];
     const skipped: SkippedLine[] = [];
     for (let off = TS_TRAILER_SLOTS_OFFSET; off + LIGO_SLOT_SIZE <= buf.length; off += LIGO_SLOT_SIZE) {
-        if (isHashMarker(buf, off)) break; // '####' + length copy terminates the table
+        if (isTsGpsTrailerTerminator(buf, off)) break; // known marker + length copy terminates the table
         const slot = buf.subarray(off, off + LIGO_SLOT_SIZE);
         // Blank (all-zero) slots are a normal firmware gap, not an error.
         if (slot.every((b) => b === 0)) continue;

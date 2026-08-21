@@ -253,7 +253,7 @@ export interface Mp4Index {
 
     /**
      * GPS trailer appended past the last whole TS packet of a .ts recording
-     * (src/ts-trailer.ts). Detected eagerly - two reads under 32 bytes, only
+     * (src/ts-trailer.ts). Detected eagerly with two tiny reads, only
      * for transport-stream filenames - so the synchronous embedded-GPS kind
      * gate sees this carrier without IO of its own. null for every other
      * container and for TS files with no trailer.

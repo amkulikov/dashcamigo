@@ -30,6 +30,7 @@ import {
     RX_HPIM,
     RX_IBOX,
     RX_JUSCAR,
+    RX_LIGOGPS_TRAILER_TS,
     RX_MIVUE,
     RX_MOV_SEQ_FRI,
     RX_NAVITEL,
@@ -222,6 +223,13 @@ const GPS_SOURCE_HINTS: readonly GpsSourceHint[] = [
     {
         id: "seq-fri-ts",
         matches: (f) => RX_MOV_SEQ_FRI.test(f.file.name) && /\.ts$/i.test(f.file.name),
+        source: "embedded",
+    },
+    // LigoGPS plaintext table after the last whole TS packet. The two-digit
+    // token before the underscored channel is opaque and is not a sequence.
+    {
+        id: "ligogps-trailer-ts-suffix",
+        matches: (f) => RX_LIGOGPS_TRAILER_TS.test(f.file.name),
         source: "embedded",
     },
     // Navitel R-series: GPS in tail atoms after moov (`gps0` + `IDIT`).

@@ -1,9 +1,7 @@
-// Regression test on the real-anonymized LigoGPS-TS-trailer fixture
-// (unknown-vendor 2-channel camera, filename family
-// YYYYMMDDHHMMSS_NNNNNNN<F|R>.ts, SKIPLCAIGPSINFO trailer magic). The video
-// body is generated from scratch (testsrc2 HEVC + sine AAC); the trailer is
-// the original camera bytes with coordinate fractions zeroed - whole-degree
-// 45 N / 9 E, timestamps and cadence untouched.
+// Regression tests on real-anonymized LigoGPS-TS-trailer fixtures. The video
+// bodies are generated from scratch (testsrc2 HEVC + sine AAC); each trailer
+// retains its original structure, timestamps, speed and cadence while
+// coordinate fractions are zeroed to whole degrees.
 //
 // Source: scripts/anonymize-ligogps-trailer-ts.mjs.
 
@@ -16,7 +14,9 @@ import { buildMp4Index } from "../../internal/mp4-index.js";
 import { ligoGpsTrailerTsPrimitive } from "../../primitives/ligogps-trailer-ts.js";
 import { expectPlausibleGpsTrack } from "../helpers.ts";
 
-const FIXTURE = resolve(dirname(fileURLToPath(import.meta.url)), "real-anonymized.TS");
+const HERE = dirname(fileURLToPath(import.meta.url));
+const FIXTURE = resolve(HERE, "real-anonymized.TS");
+const AMPERSAND_FIXTURE = resolve(HERE, "real-anonymized-ampersand.TS");
 // The real camera's filename shape; the trailer clock is the camera-LOCAL
 // 2026-08-13 21:11:xx and tracks the filename stamp to the second.
 const NAME = "20260813211138_0000002F.ts";
@@ -51,6 +51,33 @@ describe("real-anonymized LigoGPS-TS-trailer fixture", () => {
         }
 
         // Strict 1 Hz cadence from the real trailer.
+        const last = result.records[59]!;
+        expect(last.unixSeconds - first.unixSeconds).toBe(59);
+    });
+
+    it("parses the classic LIGO magic with an ampersand terminator", async () => {
+        const name = "2026081822373512_f.ts";
+        const file = new File([Uint8Array.from(readFileSync(AMPERSAND_FIXTURE))], name);
+        const vf = { file, relativePath: `VIDEO_F/${name}` };
+        const index = await buildMp4Index(file);
+
+        expect(await ligoGpsTrailerTsPrimitive.marker(vf, index)).toBe(true);
+
+        const result = await ligoGpsTrailerTsPrimitive.parse(vf, index);
+        expect(result.records).toHaveLength(60);
+        expect(result.skipped).toHaveLength(0);
+        expectPlausibleGpsTrack(result.records, { minCount: 60, monotonicTime: true });
+
+        const first = result.records[0]!;
+        expect(first.unixSeconds).toBe(Date.UTC(2026, 7, 18, 22, 37, 36) / 1000);
+        expect(first.speedMs).toBeCloseTo(11 / 3.6, 6);
+        for (const record of result.records) {
+            expect(record.lat).toBeCloseTo(49, 6);
+            expect(record.lon).toBeCloseTo(24, 6);
+            expect(record.active).toBe(true);
+            expect(record.mp4Filename).toBe(name);
+        }
+
         const last = result.records[59]!;
         expect(last.unixSeconds - first.unixSeconds).toBe(59);
     });

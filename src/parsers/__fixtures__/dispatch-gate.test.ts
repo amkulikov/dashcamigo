@@ -108,6 +108,14 @@ const CASES = [
         extractor: "ligogps-trailer-ts",
     },
     {
+        // The classic LIGO spelling can pair with `&&&&` instead of `####`;
+        // that terminator must reach the same index field and primitive.
+        label: "LigoGPS ampersand trailer at EOF of a MPEG-TS -> ligogps-trailer-ts",
+        rel: "ligogps-trailer-ts/real-anonymized-ampersand.TS",
+        name: "2026081822373512_f.ts",
+        extractor: "ligogps-trailer-ts",
+    },
+    {
         // Same no-moov container class: the kind-gate keys off the
         // findNovatekTsGpsPid headerBytes scan.
         label: "Novatek GPS struct in MPEG-TS private PES -> novatek-ts",

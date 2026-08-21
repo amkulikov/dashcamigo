@@ -15,6 +15,10 @@ import { fileURLToPath } from "node:url";
 import { indexOneFile } from "./parsers/internal/mp4-indexing.js";
 
 const FIXTURES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "parsers/__fixtures__/generic");
+const LIGOGPS_TS_FIXTURES_DIR = resolve(
+    dirname(fileURLToPath(import.meta.url)),
+    "parsers/__fixtures__/ligogps-trailer-ts",
+);
 
 // Tests the indexing logic directly (mp4-indexing.ts) rather than going
 // through indexer.ts → Worker - Worker is undefined in node, but the
@@ -47,6 +51,15 @@ describe("indexer: MPEG-TS branch", () => {
         // needsHevcRemux is left false on the TS path - the player forces MSE
         // via the orthogonal isTransportStream flag, not this one.
         expect(indexed!.needsHevcRemux).toBe(false);
+    });
+
+    it("clamps the ampersand LigoGPS trailer before mediabunny scans the stream", async () => {
+        const buf = readFileSync(resolve(LIGOGPS_TS_FIXTURES_DIR, "real-anonymized-ampersand.TS"));
+        const file = new File([buf], "2026081822373512_f.ts");
+        const { indexed } = await indexOneFile(file, false);
+        expect(indexed).not.toBeNull();
+        expect(indexed!.durationSec).toBeGreaterThan(0);
+        expect(indexed!.codec).toBe("hevc");
     });
 });
 

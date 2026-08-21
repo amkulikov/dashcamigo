@@ -39,6 +39,7 @@ import {
     RX_HPIM,
     RX_IBOX,
     RX_JUSCAR,
+    RX_LIGOGPS_TRAILER_TS,
     RX_MOV_SEQ_FRI,
     RX_NAVITEL,
     RX_NEOLINE,
@@ -399,6 +400,27 @@ const movSeqFriCameraKey: FilenameCameraKeyTechnique = {
     },
 };
 
+const ligoGpsTrailerTsCameraKey: FilenameCameraKeyTechnique = {
+    id: "ligogps-trailer-ts-camera-key",
+    extract(file: VendorFile): string | null {
+        const m = file.file.name.match(RX_LIGOGPS_TRAILER_TS);
+        if (!m) return null;
+        const masked = maskNameWithTrailingLetterStripped(file.file.name, m[3]!);
+        const dir = strippedParentDir(file.relativePath, [
+            "video_f",
+            "video_r",
+            "video_i",
+            "front",
+            "rear",
+            "interior",
+            "f",
+            "r",
+            "i",
+        ]);
+        return `ligogps-trailer-ts|${dir}|${masked}`;
+    },
+};
+
 const NAVITEL_STRIP_FOLDERS = ["front", "rear", "f", "r", "normal", "event", "parking", "manual"];
 
 const navitelCameraKey: FilenameCameraKeyTechnique = {
@@ -640,6 +662,7 @@ export const FILENAME_CAMERA_KEY: readonly FilenameCameraKeyTechnique[] = [
     hpimCameraKey,
     iboxCameraKey,
     juscarCameraKey,
+    ligoGpsTrailerTsCameraKey,
     movSeqFriCameraKey,
     navitelCameraKey,
     neolineCameraKey,
