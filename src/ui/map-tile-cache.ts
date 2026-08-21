@@ -1,12 +1,12 @@
-// One page-scoped raw-tile cache in front of every MapLibre instance. MapLibre's
-// own tile caches are per Map, so the large map, mini-map and export snapshotter
-// would otherwise fetch and decode the same URL independently. A custom protocol
-// gives all three one request path while the browser HTTP cache remains the
-// persistent second level across reloads.
+// One page-scoped raw-resource cache in front of every MapLibre instance.
+// MapLibre's own caches are per Map, so the large map, mini-map and export
+// snapshotter would otherwise fetch the same URL independently. The custom
+// protocol also gives every provider request a real deadline: blocked hosts
+// often leave browser fetch pending for tens of seconds instead of rejecting.
 
 import type { AddProtocolAction, RequestTransformFunction } from "maplibre-gl";
 
-import { mapProviderForTileUrl } from "./map-provider.js";
+import { MAP_PROVIDER_REQUEST_TIMEOUT_MS, mapProviderForTileUrl } from "./map-provider.js";
 
 const TILE_PROTOCOL = "dashcamigo-tile";
 const TILE_PROTOCOL_PREFIX = `${TILE_PROTOCOL}://`;
@@ -51,14 +51,23 @@ function abortError(reason: unknown): DOMException {
 }
 
 function tileRequestError(url: string, status: number, statusText: string, cause?: unknown): Error {
-    const prefix = status > 0 ? `tile request failed (${status} ${statusText})` : "failed to fetch tile";
+    const prefix =
+        status > 0
+            ? `map request failed (${status} ${statusText})`
+            : statusText
+              ? `map request failed (${statusText})`
+              : "failed to fetch map resource";
     const error = new Error(`${prefix}: ${url}`, cause === undefined ? undefined : { cause });
     return Object.assign(error, { status, statusText, url });
 }
 
 async function fetchTile(url: string, signal: AbortSignal): Promise<TilePayload> {
+    const requestController = new AbortController();
+    const forwardAbort = () => requestController.abort(signal.reason);
+    signal.addEventListener("abort", forwardAbort, { once: true });
+    const timeoutId = setTimeout(() => requestController.abort("timeout"), MAP_PROVIDER_REQUEST_TIMEOUT_MS);
     try {
-        const response = await fetch(url, { signal });
+        const response = await fetch(url, { signal: requestController.signal });
         if (!response.ok) throw tileRequestError(url, response.status, response.statusText);
         return {
             data: await response.arrayBuffer(),
@@ -68,8 +77,14 @@ async function fetchTile(url: string, signal: AbortSignal): Promise<TilePayload>
         };
     } catch (err) {
         if (signal.aborted) throw abortError(signal.reason);
+        if (requestController.signal.aborted && requestController.signal.reason === "timeout") {
+            throw tileRequestError(url, 0, "timeout", err);
+        }
         if (err instanceof Error && "url" in err) throw err;
         throw tileRequestError(url, 0, "", err);
+    } finally {
+        clearTimeout(timeoutId);
+        signal.removeEventListener("abort", forwardAbort);
     }
 }
 
@@ -188,11 +203,15 @@ function unwrapTileUrl(protocolUrl: string): string {
 }
 
 const loadSharedTile: AddProtocolAction = async (request, abortController) => {
-    return sharedTileCache.load(unwrapTileUrl(request.url), abortController.signal);
+    const payload = await sharedTileCache.load(unwrapTileUrl(request.url), abortController.signal);
+    let data: unknown = payload.data;
+    if (request.type === "json") data = JSON.parse(new TextDecoder().decode(payload.data));
+    else if (request.type === "string") data = new TextDecoder().decode(payload.data);
+    return { ...payload, data };
 };
 
-export const transformMapTileRequest = ((url: string, resourceType?: string) => {
-    if (resourceType !== "Tile" || mapProviderForTileUrl(url) === null) return undefined;
+export const transformMapTileRequest = ((url: string, _resourceType?: string) => {
+    if (mapProviderForTileUrl(url) === null) return undefined;
     return { url: `${TILE_PROTOCOL_PREFIX}${encodeURIComponent(url)}` };
 }) satisfies RequestTransformFunction;
 

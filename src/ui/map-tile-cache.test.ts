@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AddProtocolAction } from "maplibre-gl";
 
@@ -8,6 +8,7 @@ import {
     registerSharedMapTileCache,
     transformMapTileRequest,
 } from "./map-tile-cache.js";
+import { MAP_PROVIDER_REQUEST_TIMEOUT_MS } from "./map-provider.js";
 
 function bytes(...values: number[]): ArrayBuffer {
     return new Uint8Array(values).buffer;
@@ -18,20 +19,28 @@ describe("shared map tile cache", () => {
         _resetForTests();
     });
 
-    it("routes only known provider tile requests through the shared protocol", () => {
+    afterEach(() => {
+        vi.useRealTimers();
+        vi.unstubAllGlobals();
+    });
+
+    it("routes every known provider resource through the shared protocol", () => {
         const tile = "https://tile.openstreetmap.org/12/2200/1400.png";
         const transformed = transformMapTileRequest(tile, "Tile");
 
         expect(transformed?.url).toContain(encodeURIComponent(tile));
-        expect(transformMapTileRequest(tile, "SpriteImage")).toBeUndefined();
+        expect(
+            transformMapTileRequest("https://tiles.openfreemap.org/sprites/ofm/sprite.png", "SpriteImage")?.url,
+        ).toContain(encodeURIComponent("https://tiles.openfreemap.org/sprites/ofm/sprite.png"));
         expect(transformMapTileRequest("https://example.com/12/2200/1400.png", "Tile")).toBeUndefined();
     });
 
-    it("shares OpenFreeMap raster tiles but leaves its TileJSON request alone", () => {
+    it("routes OpenFreeMap raster tiles and its TileJSON bootstrap", () => {
         const raster = "https://tiles.openfreemap.org/natural_earth/ne2sr/2/1/1.png";
+        const tileJson = "https://tiles.openfreemap.org/planet";
 
         expect(transformMapTileRequest(raster, "Tile")?.url).toContain(encodeURIComponent(raster));
-        expect(transformMapTileRequest("https://tiles.openfreemap.org/planet", "Source")).toBeUndefined();
+        expect(transformMapTileRequest(tileJson, "Source")?.url).toContain(encodeURIComponent(tileJson));
     });
 
     it("shares one in-flight fetch and returns independent transferable buffers", async () => {
@@ -142,5 +151,51 @@ describe("shared map tile cache", () => {
         await expect(loader({ url: transformed?.url ?? "" }, controller)).rejects.toMatchObject({
             name: "AbortError",
         });
+    });
+
+    it("decodes JSON provider resources for MapLibre", async () => {
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async () => new Response(JSON.stringify({ tiles: ["https://example.test/{z}/{x}/{y}.pbf"] }))),
+        );
+        let loader: AddProtocolAction = async () => ({ data: {} });
+        registerSharedMapTileCache((_protocol, registered) => {
+            loader = registered;
+        });
+        const source = "https://tiles.openfreemap.org/planet";
+        const transformed = transformMapTileRequest(source, "Source");
+
+        const response = await loader({ url: transformed?.url ?? "", type: "json" }, new AbortController());
+
+        expect(response.data).toEqual({ tiles: ["https://example.test/{z}/{x}/{y}.pbf"] });
+    });
+
+    it("times out a provider request instead of waiting for the browser", async () => {
+        vi.useFakeTimers();
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(
+                (_url: string, init?: RequestInit) =>
+                    new Promise<Response>((_resolve, reject) => {
+                        init?.signal?.addEventListener(
+                            "abort",
+                            () => reject(new DOMException("timed out", "AbortError")),
+                            { once: true },
+                        );
+                    }),
+            ),
+        );
+        let loader: AddProtocolAction = async () => ({ data: {} });
+        registerSharedMapTileCache((_protocol, registered) => {
+            loader = registered;
+        });
+        const source = "https://tiles.openfreemap.org/planet";
+        const transformed = transformMapTileRequest(source, "Source");
+        const request = loader({ url: transformed?.url ?? "", type: "json" }, new AbortController());
+        const rejection = expect(request).rejects.toMatchObject({ status: 0, statusText: "timeout", url: source });
+
+        await vi.advanceTimersByTimeAsync(MAP_PROVIDER_REQUEST_TIMEOUT_MS);
+
+        await rejection;
     });
 });

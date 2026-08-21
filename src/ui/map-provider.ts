@@ -10,7 +10,10 @@ export type MapProvider = "openfreemap" | "osm-vector" | "osm-raster";
 
 const FAILURE_WINDOW_MS = 5_000;
 const FAILURE_THRESHOLD = 2;
-const PROBE_TIMEOUT_MS = 5_000;
+// A blocked map host often leaves fetch pending instead of rejecting it. Keep
+// the deadline short: choosing a lower-detail provider for this page session is
+// cheaper than leaving the map blank behind the browser's network timeout.
+export const MAP_PROVIDER_REQUEST_TIMEOUT_MS = 3_000;
 
 const PROBE_URLS: Record<Exclude<MapProvider, "openfreemap">, string> = {
     "osm-vector": "https://vector.openstreetmap.org/shortbread_v1/0/0/0.mvt",
@@ -28,7 +31,7 @@ let providerRevision = 0;
 
 async function fetchProbe(provider: Exclude<MapProvider, "openfreemap">): Promise<boolean> {
     const ctrl = new AbortController();
-    const timeoutId = setTimeout(() => ctrl.abort("timeout"), PROBE_TIMEOUT_MS);
+    const timeoutId = setTimeout(() => ctrl.abort("timeout"), MAP_PROVIDER_REQUEST_TIMEOUT_MS);
     try {
         const response = await fetch(PROBE_URLS[provider], { signal: ctrl.signal });
         return response.ok;
