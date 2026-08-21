@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-08-21.1",
+        category: "improvement",
+        text: {
+            en: "The map now switches to a backup source when the primary source is unavailable.",
+            ru: "Если основной источник карты недоступен, карта теперь переключается на запасной.",
+            de: "Die Karte wechselt jetzt auf eine Ersatzquelle, wenn die Hauptquelle nicht verfügbar ist.",
+            es: "El mapa ahora cambia a una fuente alternativa cuando la principal no está disponible.",
+            fr: "La carte passe désormais à une source de secours lorsque la source principale est indisponible.",
+            pl: "Mapa przełącza się teraz na zapasowe źródło, gdy główne źródło jest niedostępne.",
+            pt: "O mapa agora muda para uma fonte alternativa quando a principal está indisponível.",
+            zh: "主要地图来源不可用时，现在会切换到备用来源。",
+            ja: "メインの地図を利用できない場合、予備の地図に切り替わるようになりました。",
+            ko: "기본 지도 서비스를 사용할 수 없으면 이제 대체 서비스로 전환합니다.",
+        },
+    },
+    {
         id: "2026-08-19.1",
         category: "improvement",
         text: {

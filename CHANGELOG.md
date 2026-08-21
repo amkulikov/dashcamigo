@@ -7,6 +7,10 @@ User-facing changes, newest first. Dates are when the change landed on
 [beta](https://beta.dashcamigo.app); production picks it up with the next
 release tag. Localized texts ship inside the app (the "What's new" panel).
 
+## 2026-08-21
+
+- **Improved:** The map now switches to a backup source when the primary source is unavailable.
+
 ## 2026-08-19
 
 - **Improved:** Localization has been improved.
