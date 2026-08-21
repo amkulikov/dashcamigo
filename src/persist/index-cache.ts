@@ -106,7 +106,7 @@ export async function touchIndexCacheEntries(keys: string[]): Promise<void> {
 /** Strips the live File off a candidate for storage. Pure; the stored copy is
  *  a structured-clone snapshot, so later in-session mutations don't leak in. */
 export function toCachedCandidate(candidate: VideoCandidate): CachedCandidateFields {
-    const { file: _file, ...fields } = candidate;
+    const { file: _file, sourceKey: _sourceKey, ...fields } = candidate;
     return fields;
 }
 
@@ -137,6 +137,7 @@ export function buildCacheEntry(
     identityKey: string,
     candidate: VideoCandidate,
     repair: IndexerRepair | undefined,
+    dependencyKey: string,
 ): CachedFileIndex {
     const cachedCandidate = toCachedCandidate(candidate);
     const entry: CachedFileIndex = {
@@ -144,6 +145,7 @@ export function buildCacheEntry(
         version: INDEX_CACHE_VERSION,
         savedAt: Date.now(),
         bytes: approxEntryBytes(cachedCandidate, repair),
+        dependencyKey,
         candidate: cachedCandidate,
     };
     if (repair) entry.repair = repair;

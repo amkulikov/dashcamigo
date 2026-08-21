@@ -57,9 +57,9 @@ export function splitVideosByExtension(
 const WINDOW_SEC = 0.5;
 
 /**
- * Combines the two places accel can come from - a basename-paired sidecar file
- * and the video container itself - into the single map mergeAccelSamples
- * consumes. Both are keyed by MP4 basename, matching GpsRecord.mp4Filename.
+ * Combines the two places accel can come from - a paired sidecar file and the
+ * video container itself - into the single file-identity map mergeAccelSamples
+ * consumes.
  *
  * A sidecar wins a collision. It is the path validated against a real
  * recording, and a camera that writes a separate accel file is writing it as
@@ -93,25 +93,26 @@ export function combineAccelSources(
  */
 export function mergeAccelSamples(
     records: GpsRecord[],
-    accelByMp4: Map<string, AccelSample[]>,
-    videoStartUtcByMp4: Map<string, number>,
+    accelByFileKey: Map<string, AccelSample[]>,
+    videoStartUtcByFileKey: Map<string, number>,
 ): number {
-    if (accelByMp4.size === 0) return 0;
+    if (accelByFileKey.size === 0) return 0;
     let mutated = 0;
-    const recsByMp4 = new Map<string, GpsRecord[]>();
+    const recordsByFileKey = new Map<string, GpsRecord[]>();
     for (const r of records) {
-        let arr = recsByMp4.get(r.mp4Filename);
+        const key = r.videoKey ?? r.mp4Filename;
+        let arr = recordsByFileKey.get(key);
         if (!arr) {
             arr = [];
-            recsByMp4.set(r.mp4Filename, arr);
+            recordsByFileKey.set(key, arr);
         }
         arr.push(r);
     }
 
-    for (const [mp4Name, samples] of accelByMp4.entries()) {
-        const recs = recsByMp4.get(mp4Name);
+    for (const [fileKey, samples] of accelByFileKey.entries()) {
+        const recs = recordsByFileKey.get(fileKey);
         if (!recs || recs.length === 0) continue;
-        const startUtc = videoStartUtcByMp4.get(mp4Name);
+        const startUtc = videoStartUtcByFileKey.get(fileKey);
         if (startUtc === undefined) continue;
 
         // Per-file gravity removal: mean values of each drift axis are

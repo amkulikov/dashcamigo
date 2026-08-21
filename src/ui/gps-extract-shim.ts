@@ -17,9 +17,10 @@ import { createLogger } from "../log.js";
 // clone-groups, NOT primitives/index: the full primitive registry pulls every
 // extractor implementation into this eager module; the shard planner only
 // needs the filename groupers (see clone-groups.ts).
-import { VIDEO_CLONE_GROUPERS } from "../parsers/primitives/clone-groups.js";
+import { VIDEO_CLONE_GROUPERS, videoCloneAffinityKey } from "../parsers/primitives/clone-groups.js";
 import type { ClassifiedFile, DispatchedEmbeddedGpsResult } from "../parsers/registry.js";
 import type { AccelSample, GpsRecord, SkippedLine, VendorFile } from "../parsers/types.js";
+import { vendorFileKey } from "../vendor-file-key.js";
 
 import {
     GPS_NOTIFY_PROGRESS,
@@ -105,7 +106,7 @@ function shardByCloneAffinity(classified: ClassifiedFile[], n: number): Classifi
         for (const ex of VIDEO_CLONE_GROUPERS) {
             const k = ex.cloneAcrossGroup(v.file);
             if (k !== null) {
-                key = `${ex.id}:${k}`;
+                key = videoCloneAffinityKey(ex.id, v.file, k);
                 break;
             }
         }
@@ -146,7 +147,7 @@ export function dispatchParseVideoEmbeddedGpsViaWorker(
     _concurrency = 4,
     signal?: AbortSignal,
     mode: EmbeddedGpsExtractionMode = "all",
-    // Keyed by relativePath (vendorFileKey), not basename - see protocol note.
+    // Keyed by the full vendorFileKey identity - see protocol note.
     prebuiltMoovByPath?: Map<string, Uint8Array>,
 ): Promise<DispatchedEmbeddedGpsResult> {
     const cap = poolCapacity();
@@ -159,17 +160,17 @@ export function dispatchParseVideoEmbeddedGpsViaWorker(
             records: [],
             skipped: [],
             errors: [],
-            winningExtractorByFilename: new Map(),
-            videoStartUtcHintByFilename: new Map(),
-            localClockOffsetHintByFilename: new Map(),
-            accelByFilename: new Map(),
+            winningExtractorByFileKey: new Map(),
+            videoStartUtcHintByFileKey: new Map(),
+            localClockOffsetHintByFileKey: new Map(),
+            accelByFileKey: new Map(),
             heavyFiles: [],
         });
     }
 
     const total = chunks.reduce((s, c) => s + c.length, 0);
     let doneFiles = 0;
-    // Keyed by basename (NOT relativePath, unlike prebuiltMoovByPath): the worker's
+    // Keyed by basename (unlike prebuiltMoovByPath): the worker's
     // ProgressNotificationData.fileName is file.file.name, so the lookup must match
     // that. Only feeds the progress label's "current file" - a same-basename
     // collision here is cosmetic (which name to show), never GPS mis-attribution.
@@ -190,16 +191,16 @@ export function dispatchParseVideoEmbeddedGpsViaWorker(
 
     const subResults = chunks.map((chunk, shardIdx) => {
         // Build a per-shard sub-map of prebuilt moov bytes - only the files
-        // that are actually in THIS shard, keyed by relativePath. Each
+        // that are actually in THIS shard, keyed by vendorFileKey. Each
         // Uint8Array is transferred (zero-copy) to its worker; we list every
-        // buffer in `transfer`. Keying by relativePath (not basename) is what
+        // buffer in `transfer`. Keying by concrete file identity is what
         // keeps a buffer from being listed in two shards' transfer arrays.
         let shardMoov: Map<string, Uint8Array> | undefined;
         const transfer: Transferable[] = [];
         if (prebuiltMoovByPath && prebuiltMoovByPath.size > 0) {
             shardMoov = new Map();
             for (const cf of chunk) {
-                const key = cf.file.relativePath || cf.file.file.name;
+                const key = vendorFileKey(cf.file);
                 const bytes = prebuiltMoovByPath.get(key);
                 if (bytes) {
                     shardMoov.set(key, bytes);
@@ -285,10 +286,10 @@ function mergeResults(results: DispatchedEmbeddedGpsResult[]): DispatchedEmbedde
     const records: GpsRecord[] = [];
     const skipped: SkippedLine[] = [];
     const errors: DispatchedEmbeddedGpsResult["errors"] = [];
-    const winningExtractorByFilename = new Map<string, string>();
-    const videoStartUtcHintByFilename = new Map<string, number>();
-    const localClockOffsetHintByFilename = new Map<string, number>();
-    const accelByFilename = new Map<string, AccelSample[]>();
+    const winningExtractorByFileKey = new Map<string, string>();
+    const videoStartUtcHintByFileKey = new Map<string, number>();
+    const localClockOffsetHintByFileKey = new Map<string, number>();
+    const accelByFileKey = new Map<string, AccelSample[]>();
     const heavyFiles: ClassifiedFile[] = [];
     for (const r of results) {
         for (const ex of r.appliedExtractors) appliedSet.add(ex);
@@ -298,10 +299,10 @@ function mergeResults(results: DispatchedEmbeddedGpsResult[]): DispatchedEmbedde
         extendArray(records, r.records);
         extendArray(skipped, r.skipped);
         extendArray(errors, r.errors);
-        for (const [k, v] of r.winningExtractorByFilename) winningExtractorByFilename.set(k, v);
-        for (const [k, v] of r.videoStartUtcHintByFilename) videoStartUtcHintByFilename.set(k, v);
-        for (const [k, v] of r.localClockOffsetHintByFilename) localClockOffsetHintByFilename.set(k, v);
-        for (const [k, v] of r.accelByFilename) accelByFilename.set(k, v);
+        for (const [k, v] of r.winningExtractorByFileKey) winningExtractorByFileKey.set(k, v);
+        for (const [k, v] of r.videoStartUtcHintByFileKey) videoStartUtcHintByFileKey.set(k, v);
+        for (const [k, v] of r.localClockOffsetHintByFileKey) localClockOffsetHintByFileKey.set(k, v);
+        for (const [k, v] of r.accelByFileKey) accelByFileKey.set(k, v);
         extendArray(heavyFiles, r.heavyFiles);
     }
     return {
@@ -309,10 +310,10 @@ function mergeResults(results: DispatchedEmbeddedGpsResult[]): DispatchedEmbedde
         records,
         skipped,
         errors,
-        winningExtractorByFilename,
-        videoStartUtcHintByFilename,
-        localClockOffsetHintByFilename,
-        accelByFilename,
+        winningExtractorByFileKey,
+        videoStartUtcHintByFileKey,
+        localClockOffsetHintByFileKey,
+        accelByFileKey,
         heavyFiles,
     };
 }

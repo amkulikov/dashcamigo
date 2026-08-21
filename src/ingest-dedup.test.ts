@@ -16,9 +16,17 @@ function makeContent(size: number, fill: number, patches: Record<number, number>
     return buf;
 }
 
-function vf(relativePath: string, content: Uint8Array<ArrayBuffer> | string): VendorFile {
+function vf(
+    relativePath: string,
+    content: Uint8Array<ArrayBuffer> | string,
+    options: { lastModified?: number; sourceKey?: string } = {},
+): VendorFile {
     const name = relativePath.split("/").pop()!;
-    return { file: new File([content], name), relativePath };
+    return {
+        file: new File([content], name, { lastModified: options.lastModified ?? 1 }),
+        relativePath,
+        sourceKey: options.sourceKey,
+    };
 }
 
 describe("dropDuplicateFiles", () => {
@@ -167,19 +175,40 @@ describe("dropDuplicateFiles", () => {
         expect(cameraFingerprint(keptFront!)).toBe(cameraFingerprint(keptRear!));
     });
 
-    it("drops a same-relativePath re-drop of an already-loaded file with zero content probes (B4)", async () => {
-        // Re-dropping the same folder: every incoming file shares both (name,
-        // size) AND relativePath with its loaded twin - path identity alone
-        // proves it, so no slice() (head/tail probe) should ever run.
+    it("drops the same source/path/metadata identity with zero content probes (B4)", async () => {
+        // Re-reading the same scoped folder: source, path, size, and mtime all
+        // agree, so no slice() (head/tail probe) should run.
         const content = makeContent(LARGE_SIZE, 3);
-        const loaded = [vf("Normal/Front/Y.MP4", content)];
-        const incoming = [vf("Normal/Front/Y.MP4", content)];
+        const loaded = [vf("Normal/Front/Y.MP4", content, { sourceKey: "card" })];
+        const incoming = [vf("Normal/Front/Y.MP4", content, { sourceKey: "card" })];
         const sliceSpy = vi.spyOn(File.prototype, "slice");
         try {
             const { kept, dropped } = await dropDuplicateFiles(incoming, loaded);
             expect(kept).toEqual([]);
             expect(dropped).toEqual([{ droppedPath: "Normal/Front/Y.MP4", keptPath: "Normal/Front/Y.MP4" }]);
             expect(sliceSpy).not.toHaveBeenCalled();
+        } finally {
+            sliceSpy.mockRestore();
+        }
+    });
+
+    it("keeps an overwritten same-path file when its metadata and content changed", async () => {
+        const loaded = [vf("Normal/Front/Y.MP4", makeContent(LARGE_SIZE, 3), { lastModified: 1, sourceKey: "card" })];
+        const incoming = [vf("Normal/Front/Y.MP4", makeContent(LARGE_SIZE, 4), { lastModified: 2, sourceKey: "card" })];
+        const { kept, dropped } = await dropDuplicateFiles(incoming, loaded);
+        expect(kept).toEqual(incoming);
+        expect(dropped).toEqual([]);
+    });
+
+    it("does not treat an equal path on another source as path identity", async () => {
+        const loaded = [vf("DCIM/Y.MP4", makeContent(LARGE_SIZE, 3), { sourceKey: "card-a" })];
+        const incoming = [vf("DCIM/Y.MP4", makeContent(LARGE_SIZE, 4), { sourceKey: "card-b" })];
+        const sliceSpy = vi.spyOn(File.prototype, "slice");
+        try {
+            const { kept, dropped } = await dropDuplicateFiles(incoming, loaded);
+            expect(kept).toEqual(incoming);
+            expect(dropped).toEqual([]);
+            expect(sliceSpy).toHaveBeenCalled();
         } finally {
             sliceSpy.mockRestore();
         }

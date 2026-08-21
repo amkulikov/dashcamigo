@@ -16,14 +16,15 @@ import type { VideoCandidate } from "../trips.js";
  * hints + extractors + sidecars) that is easy to get wrong, and a silently
  * stale cache is worse than one extra re-index.
  */
-export const INDEX_CACHE_VERSION = 12;
+export const INDEX_CACHE_VERSION = 13;
 
 /**
  * Cheap cross-session identity of a file inside a picked folder, matchable
  * from directory enumeration alone (no byte reads). No content hash on
  * purpose: dashcams loop-record onto reused filenames, and (size,
  * lastModified) catches an overwrite at the same path. Mirrors the in-session
- * vendorFileKey and the ingest dedup (name, size) grouping.
+ * This intentionally omits vendorFileKey's session-only source scope so the
+ * same remembered folder can reuse entries after a reload.
  */
 export interface FileIdentity {
     /** Path relative to the remembered folder root, filename included. */
@@ -59,7 +60,7 @@ export interface RememberedFolder {
  * the cache automatically; whether its SEMANTICS require an
  * INDEX_CACHE_VERSION bump stays a review-time decision.
  */
-export type CachedCandidateFields = Omit<VideoCandidate, "file">;
+export type CachedCandidateFields = Omit<VideoCandidate, "file" | "sourceKey">;
 
 /** One cached indexing result, keyed by the file identity. */
 export interface CachedFileIndex {
@@ -74,6 +75,8 @@ export interface CachedFileIndex {
      *  volume-based prune. Absent on entries written before it existed;
      *  those are evicted first when the prune runs. */
     bytes?: number;
+    /** Identity of every parsed log/GPS/accel sidecar present with the video. */
+    dependencyKey: string;
     candidate: CachedCandidateFields;
     /**
      * Container-repair descriptor when the indexer patched this file's moov.

@@ -4,7 +4,10 @@
 // unit-tested directly in ingest-core.test.ts.
 
 import type { DispatchedEmbeddedGpsResult } from "../parsers/registry.js";
-import type { VendorFile } from "../parsers/types.js";
+import { mergeAccelSamples } from "../parsers/registry-light.js";
+import type { AccelSample, GpsRecord, VendorFile } from "../parsers/types.js";
+import type { VideoCandidate } from "../trips.js";
+import { vendorFileKey } from "../vendor-file-key.js";
 
 /**
  * Rejects with an AbortError as soon as `signal` fires, otherwise settles with
@@ -76,5 +79,16 @@ export function countByField<T>(items: T[], key: (item: T) => string): Record<st
  * silently regress phantom-track anchoring.
  */
 export function embeddedResultHasEffect(result: DispatchedEmbeddedGpsResult): boolean {
-    return result.records.length > 0 || result.videoStartUtcHintByFilename.size > 0;
+    return result.records.length > 0 || result.videoStartUtcHintByFileKey.size > 0;
+}
+
+/** Merges file-keyed accel after candidates have their final startUtc anchors. */
+export function mergeAccelIntoCandidates(
+    records: GpsRecord[],
+    accelByFileKey: Map<string, AccelSample[]>,
+    candidates: readonly VideoCandidate[],
+): number {
+    const startUtcByFileKey = new Map<string, number>();
+    for (const candidate of candidates) startUtcByFileKey.set(vendorFileKey(candidate), candidate.startUtc);
+    return mergeAccelSamples(records, accelByFileKey, startUtcByFileKey);
 }

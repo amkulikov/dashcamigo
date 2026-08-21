@@ -99,7 +99,7 @@ describe("real-anonymized Thinkware F200 PRO rear", () => {
         const result = await dispatchParseVideoEmbeddedGps(classified);
         expect(result.records).toHaveLength(0);
         expect(result.errors).toHaveLength(0);
-        expect(result.winningExtractorByFilename.size).toBe(0);
+        expect(result.winningExtractorByFileKey.size).toBe(0);
     });
 });
 

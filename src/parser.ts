@@ -8,8 +8,10 @@
 
 export type { GpsRecord, ParsedLog, SkippedLine } from "./parsers/types.js";
 
-import { blackvueChannelGroupKey, mai70NameCore } from "./parsers/filename/_patterns.js";
-import type { GpsRecord, InterpolatedPosition, ParsedLog, SkippedLine } from "./parsers/types.js";
+import { mai70NameCore } from "./parsers/filename/_patterns.js";
+import { blackvueChannelCloneGroup } from "./parsers/primitives/clone-groups.js";
+import type { GpsRecord, InterpolatedPosition, ParsedLog, SkippedLine, VendorFile } from "./parsers/types.js";
+import { vendorFileKey } from "./vendor-file-key.js";
 
 /**
  * Dynamic-acceleration magnitude from a gravity-removed accel triple. Single
@@ -27,13 +29,12 @@ export function accelMagnitude(xg: number, yg: number, zg: number): number {
 }
 
 /**
- * Deduplicates records by composite key (unixSeconds, lat, lon, mp4Filename).
+ * Deduplicates records by composite key (unixSeconds, lat, lon, video owner).
  * Needed on merge from multiple sources / repeated drag-drops: a re-dropped
  * GPSData file would double brake events, distance, and chart density.
  *
- * Including lat, lon, mp4Filename in the key allows two different files with
- * the same timestamp to coexist (valid on multi-channel models where each
- * channel may carry its own GPS).
+ * Including position and concrete owner allows two files with the same raw
+ * basename and timestamp to coexist (equal trees or multi-channel models).
  *
  * On a key collision the first-seen record wins its identity, but the stronger
  * accel triple is transplanted onto it (max-|G| wins). Reason: a parking-mode /
@@ -53,9 +54,8 @@ export function dedupRecords(records: GpsRecord[]): GpsRecord[] {
         // video window, so a re-drop of the same log would otherwise compare a
         // reanchored copy (real time) against a fresh placeholder (~1970) and
         // fail to dedup. Position + filename identify them uniquely enough.
-        const key = r.timeUnsynced
-            ? `u|${r.lat}|${r.lon}|${r.mp4Filename}`
-            : `${r.unixSeconds}|${r.lat}|${r.lon}|${r.mp4Filename}`;
+        const owner = r.videoKey ?? r.mp4Filename;
+        const key = r.timeUnsynced ? `u|${r.lat}|${r.lon}|${owner}` : `${r.unixSeconds}|${r.lat}|${r.lon}|${owner}`;
         const existingIdx = indexByKey.get(key);
         if (existingIdx === undefined) {
             indexByKey.set(key, out.length);
@@ -120,7 +120,7 @@ export function thinDenseRecords(records: GpsRecord[]): GpsRecord[] {
         } else {
             bucketKey = String(Math.floor(r.unixSeconds * GPS_THIN_HZ));
         }
-        const key = `${bucketKey}|${r.mp4Filename}`;
+        const key = `${bucketKey}|${r.videoKey ?? r.mp4Filename}`;
         const existingIdx = indexByKey.get(key);
         if (existingIdx === undefined) {
             indexByKey.set(key, out.length);
@@ -332,6 +332,32 @@ export function freezeStationaryBearings(records: GpsRecord[]): void {
             lastValid = r.bearingDeg;
         }
     }
+}
+
+/** Applies bearing stabilization independently to each concrete video owner. */
+function freezeStationaryBearingsByOwner(records: GpsRecord[]): void {
+    if (records.length < 2) {
+        freezeStationaryBearings(records);
+        return;
+    }
+    const firstOwner = records[0]!.videoKey;
+    if (records.every((record) => record.videoKey === firstOwner)) {
+        freezeStationaryBearings(records);
+        return;
+    }
+    const recordsByOwner = new Map<string, GpsRecord[]>();
+    for (const record of records) {
+        // All records in this caller already share mp4Filename. Unowned rows
+        // therefore form one safe legacy bucket; concrete owners stay isolated.
+        const owner = record.videoKey ?? "";
+        let owned = recordsByOwner.get(owner);
+        if (!owned) {
+            owned = [];
+            recordsByOwner.set(owner, owned);
+        }
+        owned.push(record);
+    }
+    for (const owned of recordsByOwner.values()) freezeStationaryBearings(owned);
 }
 
 /**
@@ -717,25 +743,29 @@ export function rebindOrphanLogRecords(log: ParsedLog, loadedVideoNames: Iterabl
  * duplicate track is collapsed later by Trip.records' (unixSeconds, lat, lon)
  * dedup, which keeps the max-|G| accel copy.
  *
- * Channels sharing a recording are keyed by blackvueChannelGroupKey
- * (`date_time_mode`, channel dropped). Only clones onto siblings that carry NO
+ * Channels sharing a recording are keyed by source-local path plus
+ * `date_time_mode` (channel dropped). Only clones onto siblings that carry NO
  * records, so it never overwrites a channel with its own embedded GPS and is
  * idempotent across re-ingest. Mutates `log.records`; the caller must rebuild
  * the byFilename buckets (they are now stale). Returns the number of cloned
  * records.
  */
-export function cloneRecordsAcrossChannels(log: ParsedLog, loadedVideoNames: Iterable<string>): number {
-    // group key -> loaded video names sharing it (the channels of one recording).
-    const groups = new Map<string, string[]>();
-    for (const name of loadedVideoNames) {
-        const key = blackvueChannelGroupKey(name);
-        if (key === null) continue;
+export function cloneRecordsAcrossChannels(log: ParsedLog, loadedVideos: Iterable<VendorFile>): number {
+    // Source + normalized parent path isolate equal BlackVue names from another
+    // folder/card; the channel-group key then joins only one recording's F/R/I.
+    const groups = new Map<string, VendorFile[]>();
+    const nameCounts = new Map<string, number>();
+    for (const video of loadedVideos) {
+        nameCounts.set(video.file.name, (nameCounts.get(video.file.name) ?? 0) + 1);
+        const recordingKey = blackvueChannelCloneGroup(video);
+        if (recordingKey === null) continue;
+        const key = `${video.sourceKey ?? ""}\0${recordingKey}`;
         let arr = groups.get(key);
         if (!arr) {
             arr = [];
             groups.set(key, arr);
         }
-        arr.push(name);
+        arr.push(video);
     }
 
     let cloned = 0;
@@ -744,14 +774,25 @@ export function cloneRecordsAcrossChannels(log: ParsedLog, loadedVideoNames: Ite
         // Source: the first channel that actually carries records (the clip the
         // sidecar classified against). A recording with no GPS on any channel
         // has no source and is skipped.
-        const source = siblings.find((n) => (log.byFilename.get(n)?.length ?? 0) > 0);
+        const source = siblings.find((video) => {
+            const owned = log.byVideoKey.get(vendorFileKey(video));
+            if (owned && owned.length > 0) return true;
+            return nameCounts.get(video.file.name) === 1 && (log.byFilename.get(video.file.name)?.length ?? 0) > 0;
+        });
         if (source === undefined) continue;
-        const sourceRecords = log.byFilename.get(source)!;
+        const sourceRecords =
+            log.byVideoKey.get(vendorFileKey(source)) ??
+            (nameCounts.get(source.file.name) === 1 ? log.byFilename.get(source.file.name) : undefined);
+        if (!sourceRecords) continue;
         for (const sibling of siblings) {
             if (sibling === source) continue;
-            if ((log.byFilename.get(sibling)?.length ?? 0) > 0) continue; // keeps its own GPS
+            const siblingKey = vendorFileKey(sibling);
+            const hasOwnRecords =
+                (log.byVideoKey.get(siblingKey)?.length ?? 0) > 0 ||
+                (nameCounts.get(sibling.file.name) === 1 && (log.byFilename.get(sibling.file.name)?.length ?? 0) > 0);
+            if (hasOwnRecords) continue;
             for (const rec of sourceRecords) {
-                log.records.push({ ...rec, mp4Filename: sibling });
+                log.records.push({ ...rec, mp4Filename: sibling.file.name, videoKey: siblingKey });
                 cloned++;
             }
         }
@@ -769,6 +810,7 @@ export function cloneRecordsAcrossChannels(log: ParsedLog, loadedVideoNames: Ite
  */
 export function rebuildLog(appliedExtractors: string[], records: GpsRecord[], skipped: SkippedLine[]): ParsedLog {
     const byFilename = new Map<string, GpsRecord[]>();
+    const byVideoKey = new Map<string, GpsRecord[]>();
     for (const rec of records) {
         let bucket = byFilename.get(rec.mp4Filename);
         if (!bucket) {
@@ -781,9 +823,18 @@ export function rebuildLog(appliedExtractors: string[], records: GpsRecord[], sk
         arr.sort((a, b) => a.unixSeconds - b.unixSeconds);
         // Per-bucket so the freeze never leaks bearing across recording gaps
         // or between channels of a multi-channel camera.
-        freezeStationaryBearings(arr);
+        freezeStationaryBearingsByOwner(arr);
+        for (const rec of arr) {
+            if (rec.videoKey === undefined) continue;
+            let owned = byVideoKey.get(rec.videoKey);
+            if (!owned) {
+                owned = [];
+                byVideoKey.set(rec.videoKey, owned);
+            }
+            owned.push(rec);
+        }
     }
-    return { appliedExtractors, records, byFilename, skipped };
+    return { appliedExtractors, records, byFilename, byVideoKey, skipped };
 }
 
 /**
@@ -825,8 +876,9 @@ export function mergeIntoGpsLog(
         return rebuildLog(batch.appliedExtractors, thinDenseRecords(dedupRecords(batch.records)), batch.skipped);
     }
 
-    // Incremental merge. The dedup key always carries mp4Filename, so records of
-    // different files never collide - dedup is effectively per-bucket. That lets
+    // Incremental merge. The dedup key carries videoKey when known (and the raw
+    // filename otherwise), so concrete files never collide. Dedup is effectively
+    // per basename bucket, with ownership isolation inside it. That lets
     // us re-dedup/sort/freeze ONLY the byFilename buckets this batch touches and
     // reuse every untouched bucket by reference. The old path re-deduped and
     // re-sorted the WHOLE accumulated log on every call (O(total)); on the lazy
@@ -847,8 +899,8 @@ export function mergeIntoGpsLog(
         // dedupRecords over just this file's existing + incoming records yields
         // the same survivors (first-seen identity + max-|G| transplant) the
         // global dedup would, since no cross-file key can collide. Sort + freeze
-        // only this one bucket. freezeStationaryBearings is per-bucket idempotent,
-        // so an untouched bucket keeps a state identical to a fresh freeze.
+        // only this one bucket. Bearing stabilization is applied independently
+        // per concrete video owner, so equal basenames cannot leak headings.
         // Thin AFTER dedup: dedup keys on exact (time, position), thinning on
         // coarser time buckets - the wider net must see the deduped survivors so
         // its max-|G| transplant compounds instead of racing. Existing bucket
@@ -858,7 +910,7 @@ export function mergeIntoGpsLog(
             existingBucket ? dedupRecords(existingBucket.concat(batchRecs)) : dedupRecords(batchRecs),
         );
         mergedBucket.sort((a, b) => a.unixSeconds - b.unixSeconds);
-        freezeStationaryBearings(mergedBucket);
+        freezeStationaryBearingsByOwner(mergedBucket);
         byFilename.set(filename, mergedBucket);
     }
 
@@ -867,14 +919,25 @@ export function mergeIntoGpsLog(
     // equivalent to the old global dedup order and keeps record identity shared
     // with the buckets - mergeAccelSamples mutates these same objects in place.
     const records: GpsRecord[] = [];
+    const byVideoKey = new Map<string, GpsRecord[]>();
     for (const bucket of byFilename.values()) {
-        for (const rec of bucket) records.push(rec);
+        for (const rec of bucket) {
+            records.push(rec);
+            if (rec.videoKey === undefined) continue;
+            let owned = byVideoKey.get(rec.videoKey);
+            if (!owned) {
+                owned = [];
+                byVideoKey.set(rec.videoKey, owned);
+            }
+            owned.push(rec);
+        }
     }
 
     return {
         appliedExtractors: unionStringArrays(existing.appliedExtractors, batch.appliedExtractors),
         records,
         byFilename,
+        byVideoKey,
         skipped: existing.skipped.concat(batch.skipped),
     };
 }

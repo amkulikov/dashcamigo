@@ -17,6 +17,7 @@
 // the playing user). Limited to recomputing trip.records / distanceKm / events
 // in-place via finalizeTripFromFrames over the same frames.
 
+import { attachRecordsToCandidates } from "../gps-association.js";
 import { mergeIntoGpsLog } from "../parser.js";
 import type { ClassifiedFile } from "../parsers/registry.js";
 import { createLogger } from "../log.js";
@@ -24,6 +25,7 @@ import { finalizeTripFromFrames, tripAllCandidates } from "../trips.js";
 
 import { dispatchParseVideoEmbeddedGpsViaWorker as dispatchParseVideoEmbeddedGps } from "./gps-extract-shim.js";
 import { scheduleIndexCacheWrite } from "./ingest-cache.js";
+import { embeddedResultHasEffect } from "./ingest-core.js";
 import { vendorFileKey } from "./ingest-candidate.js";
 import { closeLazyGpsLoadModal, showLazyGpsLoadModal, updateLazyGpsLoadModalProgress } from "./lazy-gps-load-modal.js";
 import { rebuildChartFromTrip } from "./chart.js";
@@ -59,13 +61,18 @@ export function isCurrentTripOpen(token: number): boolean {
     return token === lazyClickSeq;
 }
 
+/** Supersedes and aborts on-click GPS work before an ingest can regroup trips. */
+export function cancelLazyEmbeddedGps(): void {
+    lazyClickSeq++;
+    currentLazySession?.controller.abort();
+}
+
 /**
  * Starts (or joins) a blocking heavy-embedded-GPS load for all trip files in
  * state.pendingHeavyEmbeddedGps. Resolves:
  *  - immediately if the trip has no pending files (player starts without delay);
  *  - after parsing completes and the Trip is updated;
- *  - after user Cancel in the modal (files that were already parsed are merged,
- *    the rest are returned to pending for a retry).
+ *  - after user Cancel in the modal (all files return to pending for a clean retry).
  *
  * Returns whether the caller should PROCEED with playback: false when a newer
  * trip click superseded this one while the load ran.
@@ -101,7 +108,7 @@ export async function awaitLazyEmbeddedGpsForTrip(tripIdx: number): Promise<bool
 
     const targets: ClassifiedFile[] = [];
     for (const cand of tripAllCandidates(trip)) {
-        // vendorFileKey (path-qualified), not basename: a candidate is a VendorFile
+        // vendorFileKey (source/path/metadata-qualified), not basename: a candidate is a VendorFile
         // structurally, and the deferred map was set under the same key at ingest.
         const key = vendorFileKey(cand);
         const cf = state.pendingHeavyEmbeddedGps.get(key);
@@ -162,21 +169,13 @@ async function runLazyLoad(session: LazySession, targets: ClassifiedFile[], trip
         for (const cf of targets) {
             state.inflightHeavyEmbeddedGps.delete(vendorFileKey(cf.file));
         }
+        aborted ||= controller.signal.aborted;
         if (aborted || failed) {
-            // Return not-yet-parsed files to pending so the user can retry.
-            // Covers both cancel and non-abort failure. Already parsed files (a
-            // partial batch before abort) stay in state.gpsLog below; we do not
-            // return them to pending (winningExtractorByFilename = the success
-            // set). On a non-abort failure result is null, so every target
-            // returns to pending.
-            // winningExtractorByFilename is keyed by basename (GpsRecord.mp4Filename)
-            // - the parser contract - so the "already parsed?" check reads basename;
-            // the pending map is re-keyed by vendorFileKey (path-qualified).
-            const winning = result?.winningExtractorByFilename ?? new Map<string, string>();
+            // Nothing from a cancelled/failed dispatch is applied below, so all
+            // targets must return to pending. This also keeps a new ingest from
+            // losing files when it aborts a session that just finished parsing.
             for (const cf of targets) {
-                if (!winning.has(cf.file.file.name)) {
-                    state.pendingHeavyEmbeddedGps.set(vendorFileKey(cf.file), cf);
-                }
+                state.pendingHeavyEmbeddedGps.set(vendorFileKey(cf.file), cf);
             }
         }
         if (currentLazySession === session) {
@@ -185,7 +184,14 @@ async function runLazyLoad(session: LazySession, targets: ClassifiedFile[], trip
         }
     }
 
-    if (result && result.records.length > 0) {
+    // An ingest may already have regrouped state.trips. Never apply a result or
+    // refresh the old tripIdx after its session was explicitly superseded.
+    if (aborted || failed) {
+        renderTrips();
+        return;
+    }
+
+    if (result && embeddedResultHasEffect(result)) {
         log.info("lazy embedded gps done", {
             tripIdx,
             files: targets.length,
@@ -262,8 +268,12 @@ export function applyLazyResultToState(
     state.gpsLog = mergeIntoGpsLog(state.gpsLog, result);
     const trip = state.trips[tripIdx];
     if (!trip) return;
-    for (const cand of tripAllCandidates(trip)) {
-        const winning = result.winningExtractorByFilename.get(cand.file.name);
+    const candidates = tripAllCandidates(trip);
+    const loaded = state.trips.flatMap(tripAllCandidates);
+    attachRecordsToCandidates(state.gpsLog, candidates, loaded);
+    for (const cand of candidates) {
+        const key = vendorFileKey(cand);
+        const winning = result.winningExtractorByFileKey.get(key);
         if (winning && !cand.appliedExtractors.includes(winning)) {
             cand.appliedExtractors.push(winning);
         }
@@ -271,7 +281,7 @@ export function applyLazyResultToState(
         // hydrate path rederiveStartUtcForCandidates runs right after and
         // consumes it; on the heavy trip-click path it takes effect on the
         // next regroup (refreshTrip deliberately keeps trip boundaries).
-        const hint = result.videoStartUtcHintByFilename.get(cand.file.name);
+        const hint = result.videoStartUtcHintByFileKey.get(key);
         if (hint !== undefined) cand.embeddedStartUtcHint = hint;
         // Local-as-UTC clock evidence, deferred the same way - and it must
         // stay deferred: applyLocalClockCorrections moves records only, so
@@ -280,14 +290,14 @@ export function applyLazyResultToState(
         // self-consistent on the camera's local clock (anchor and records both
         // carry the zone) and renders in the viewer's zone like any trip with
         // no zone estimate.
-        const clockHint = result.localClockOffsetHintByFilename.get(cand.file.name);
+        const clockHint = result.localClockOffsetHintByFileKey.get(key);
         if (clockHint !== undefined) cand.localClockOffsetHintSec = clockHint;
     }
 }
 
 /**
  * Recomputes state.trips[tripIdx] from the updated state.gpsLog. Iterates
- * over candidates, assigns new records from byFilename, calls finalizeTrip
+ * over candidates, assigns records through their concrete owners, calls finalizeTrip
  * with the same frames - yields a new Trip with recomputed records/distanceKm/
  * events. startUtc/endUtc/durationSec are unchanged (taken from first/last
  * frame.startUtc, which we do not modify to avoid shifting trip boundaries).
@@ -299,10 +309,8 @@ export function refreshTrip(tripIdx: number): void {
     const old = state.trips[tripIdx];
     if (!old) return;
     if (state.gpsLog) {
-        for (const cand of tripAllCandidates(old)) {
-            const recs = state.gpsLog.byFilename.get(cand.file.name);
-            if (recs && recs.length > 0) cand.records = recs;
-        }
+        const loaded = state.trips.flatMap(tripAllCandidates);
+        attachRecordsToCandidates(state.gpsLog, tripAllCandidates(old), loaded);
     }
     const refreshed = finalizeTripFromFrames(old.frames);
     // Carry the preview to the freshly built Trip - finalizeTripFromFrames

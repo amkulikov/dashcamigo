@@ -88,7 +88,7 @@ describe("real-anonymized BlackVue DR550DW .gps sidecar", () => {
         expect(log.byFilename.get(FRONT)?.length ?? 0).toBe(frontCount);
         expect(log.byFilename.get(REAR)?.length ?? 0).toBe(0); // rear is empty pre-clone
 
-        const cloned = cloneRecordsAcrossChannels(log, [FRONT, REAR]);
+        const cloned = cloneRecordsAcrossChannels(log, [makeVendorFile(FRONT, ""), makeVendorFile(REAR, "")]);
         expect(cloned).toBe(frontCount);
 
         const rebuilt = rebuildLog([], log.records, []);

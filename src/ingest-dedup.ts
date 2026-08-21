@@ -6,29 +6,28 @@
 //
 // Two-tier check, designed to cost zero IO on a clean drop:
 //   1. Group by (basename, size) - pure metadata, free.
-//   2. Inside a colliding group, an exact relativePath match against an
-//      already-kept unique is path identity - free proof, no probe (a
-//      re-drop of an already-loaded folder, or a duplicate File instance for
-//      the same path within one drop). Otherwise read PROBE_BYTES of head and
-//      tail and compare. Distinct recordings that happen to share a name and
-//      size (channel-in-folder layouts: Front/x.mp4 vs Back/x.mp4) diverge in
-//      the first mdat kilobytes, so a false drop is practically impossible.
+//   2. Inside a colliding group, an exact session identity (source + path +
+//      size + mtime) is free proof, no probe. Otherwise read PROBE_BYTES of
+//      head and tail and compare. Distinct recordings that happen to share a
+//      name and size (channel-in-folder layouts: Front/x.mp4 vs Back/x.mp4)
+//      diverge in the first mdat kilobytes, so a false drop is practically
+//      impossible.
 //
 // Runs at the ingest chokepoint (ui/ingest.ts) BEFORE classify/indexing, so a
 // duplicate never costs an SD seek. The comparison set includes files already
 // loaded into trips, so a later "drop the Backup folder too" is deduped as
-// well - and since the paths are byte-identical on such a re-drop, the
-// relativePath short-circuit above is what makes that case free (rather than
-// content-probing 500 files that state.addedKeys would drop anyway further
-// downstream in ui/ingest.ts). Known limitation: a candidate already repaired
-// in-memory (hvcC / phantom-track byte patches) no longer matches its on-disk
-// original in the patched region - a re-dropped copy of such a file can slip
-// through; rare (broken-firmware files only) and same-path re-drops are still
-// caught by state.addedKeys.
+// well. A re-read through the same remembered-folder/handle source is metadata-
+// only; an ad-hoc second drop deliberately pays the probe because the browser
+// exposes no trustworthy physical-source identity. Known limitation: a
+// candidate already repaired in-memory (hvcC / phantom-track byte patches) no
+// longer matches its on-disk original in the patched region, so a re-dropped
+// copy can slip through; rare (broken-firmware files only) and same-source,
+// same-metadata re-drops are still caught by state.addedKeys.
 
 import { cameraFingerprint } from "./parsers/camera-fingerprint.js";
 import { matchFilenameChannel } from "./parsers/filename/index.js";
 import type { VendorFile } from "./parsers/types.js";
+import { vendorFileKey } from "./vendor-file-key.js";
 
 // 64 KiB is enough to reach real mdat payload past any shared ftyp/moov
 // prefix, while staying a single cheap read even on a slow SD card.
@@ -189,11 +188,10 @@ export async function dropDuplicateFiles(
             if (signal?.aborted) throw new DOMException("ingest aborted", "AbortError");
             let duplicateOf: VendorFile | null = null;
             for (const unique of uniques) {
-                // Exact relativePath match is path identity, not just a (name,
-                // size) collision - free to prove (B4). state.addedKeys would
-                // drop this file anyway on the same-path re-drop path (see
-                // module header), so skip the head+tail probe entirely.
-                let equal = unique.relativePath === vf.relativePath;
+                // A path is only identity inside one source, and dashcams reuse
+                // paths. The full session key also carries source + size + mtime;
+                // only that metadata identity may skip the content probe.
+                let equal = vendorFileKey(unique) === vendorFileKey(vf);
                 if (!equal) {
                     try {
                         equal = await sameContent(unique.file, vf.file);

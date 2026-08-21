@@ -18,22 +18,15 @@ import {
 } from "../parsers/filename/index.js";
 import { isMatroskaName, isTransportStreamName } from "../video-format-names.js";
 import type { StartSource, VideoCandidate } from "../trips.js";
+import { vendorFileKey } from "../vendor-file-key.js";
 
 const log = createLogger("ingest-candidate");
 
 /**
- * Unique key for a file in the drag-drop pool. relativePath includes the SD
- * subdirectory ("Normal/Front/NO20260101-120000-000001F.MP4"), distinguishing
- * files with the same basename from different folders (multi-channel SD: F/B/I
- * in separate folders, backup folders, two dashcams in one drop). Falls back to
- * name if path is empty.
- *
- * Note: GPS attachment to video still uses basename (GpsRecord.mp4Filename) -
- * that is the parser contract and what real log formats write.
+ * Session file identity shared by eager/lazy ingest and deferred work maps.
+ * Defined in a UI-free root module so parser workers can use the same key.
  */
-export function vendorFileKey(vf: VendorFile): string {
-    return vf.relativePath || vf.file.name;
-}
+export { vendorFileKey };
 
 /**
  * Builds a zero-copy patched File from the indexer worker's container-repair
@@ -148,6 +141,7 @@ export function buildProvisionalCandidate(params: ProvisionalCandidateParams): V
     return {
         file: file.file,
         relativePath: file.relativePath,
+        sourceKey: file.sourceKey,
         fingerprint: params.fingerprint,
         appliedExtractors: params.appliedExtractors,
         ...filenameClassifierFields(file),

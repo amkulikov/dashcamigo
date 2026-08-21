@@ -18,6 +18,7 @@ import {
 import { combineAccelSources } from "./registry-light.js";
 import type { AccelSample, AccelSidecarHandler, GpsRecord, SidecarHandler, VendorFile } from "./types.js";
 import { detectEvents } from "../events.js";
+import { vendorFileKey } from "../vendor-file-key.js";
 
 function makeVendorFile(name: string, content: string): VendorFile {
     return {
@@ -478,9 +479,10 @@ describe("dispatchParseVideoEmbeddedGps: quality-gated parse is a positive claim
             logExtractorId: null,
         };
         const result = await dispatchParseVideoEmbeddedGps([video], undefined, 4, undefined, "all");
+        const key = vendorFileKey(video.file);
         expect(result.records).toHaveLength(0);
-        expect(result.winningExtractorByFilename.get(name)).toBe("sstar-ssmd");
-        expect(result.videoStartUtcHintByFilename.get(name)).toBe(Date.UTC(2026, 4, 20, 18, 45, 27) / 1000);
+        expect(result.winningExtractorByFileKey.get(key)).toBe("sstar-ssmd");
+        expect(result.videoStartUtcHintByFileKey.get(key)).toBe(Date.UTC(2026, 4, 20, 18, 45, 27) / 1000);
         expect(result.skipped.length).toBeGreaterThan(0);
         for (const s of result.skipped) expect(s.reason).toContain("phantom-track quality gate");
     });
@@ -544,7 +546,7 @@ describe("mergeAccelSamples: windowed max-|G| over 1 Hz GPS", () => {
 // Both ends of the embedded-accel path are covered elsewhere - the producer
 // (ParsedRecords.accelSamples, __fixtures__/blackvue/real-anonymized.test.ts)
 // and the consumer (mergeAccelSamples, above). The segment between them is the
-// dispatcher's accelByFilename map, and without a test here the whole feature
+// dispatcher's accelByFileKey map, and without a test here the whole feature
 // can be deleted with every suite still green. Carrier: the BlackVue X-series
 // container (`gps ` + `3gf ` inside the top-level free box) built around the
 // real anonymized sidecar payloads.
@@ -570,9 +572,9 @@ function buildEmbeddedBlackVueFile(name: string, with3gf: boolean): File {
     return new File(parts as BlobPart[], name);
 }
 
-function classifiedRealFile(file: File): ClassifiedFile {
+function classifiedRealFile(file: File, sourceKey?: string, relativePath = file.name): ClassifiedFile {
     return {
-        file: { file, relativePath: file.name },
+        file: { file, relativePath, sourceKey },
         role: "video",
         sidecarId: null,
         sidecarMp4: null,
@@ -580,16 +582,18 @@ function classifiedRealFile(file: File): ClassifiedFile {
     };
 }
 
-describe("dispatchParseVideoEmbeddedGps: embedded accel lands in accelByFilename", () => {
+describe("dispatchParseVideoEmbeddedGps: embedded accel lands in accelByFileKey", () => {
     const NAME = "20260718_070333_XF.mp4";
 
     it("keys the winning extractor's accel stream by MP4 name, ready for the merge", async () => {
         const file = buildEmbeddedBlackVueFile(NAME, true);
-        const result = await dispatchParseVideoEmbeddedGps([classifiedRealFile(file)], undefined, 4, undefined, "all");
+        const classified = classifiedRealFile(file);
+        const result = await dispatchParseVideoEmbeddedGps([classified], undefined, 4, undefined, "all");
         expect(result.appliedExtractors).toContain("free-gps-box");
         expect(result.records.length).toBeGreaterThan(0);
 
-        const accel = result.accelByFilename.get(NAME);
+        const key = vendorFileKey(classified.file);
+        const accel = result.accelByFileKey.get(key);
         expect(accel).toBeDefined();
         // The same 50 samples the extractor returns, unscaled on the way through
         // (gravity-included here - the merge removes the per-file bias).
@@ -597,10 +601,10 @@ describe("dispatchParseVideoEmbeddedGps: embedded accel lands in accelByFilename
         const meanZ = accel!.reduce((sum, s) => sum + s.accelZg, 0) / accel!.length;
         expect(meanZ).toBeGreaterThan(0.8);
 
-        // The map is keyed exactly the way mergeAccelSamples reads it
-        // (GpsRecord.mp4Filename), so the two halves actually meet.
+        // The map and GPS rows share the concrete video key, so the two halves
+        // meet without falling back to a collision-prone basename.
         const startUtc = result.records[0]!.unixSeconds;
-        const mutated = mergeAccelSamples(result.records, result.accelByFilename, new Map([[NAME, startUtc]]));
+        const mutated = mergeAccelSamples(result.records, result.accelByFileKey, new Map([[key, startUtc]]));
         expect(mutated).toBeGreaterThan(0);
     });
 
@@ -608,7 +612,22 @@ describe("dispatchParseVideoEmbeddedGps: embedded accel lands in accelByFilename
         const file = buildEmbeddedBlackVueFile("20260718_070334_XF.mp4", false);
         const result = await dispatchParseVideoEmbeddedGps([classifiedRealFile(file)], undefined, 4, undefined, "all");
         expect(result.records.length).toBeGreaterThan(0);
-        expect(result.accelByFilename.size).toBe(0);
+        expect(result.accelByFileKey.size).toBe(0);
+    });
+
+    it("keeps equal paths from separate sources independently addressable", async () => {
+        const a = classifiedRealFile(buildEmbeddedBlackVueFile(NAME, true), "card-a", `BlackVue/Record/${NAME}`);
+        const b = classifiedRealFile(buildEmbeddedBlackVueFile(NAME, true), "card-b", `BlackVue/Record/${NAME}`);
+
+        const result = await dispatchParseVideoEmbeddedGps([a, b], undefined, 2, undefined, "all");
+        const aKey = vendorFileKey(a.file);
+        const bKey = vendorFileKey(b.file);
+
+        expect(aKey).not.toBe(bKey);
+        expect(result.winningExtractorByFileKey.get(aKey)).toBe("free-gps-box");
+        expect(result.winningExtractorByFileKey.get(bKey)).toBe("free-gps-box");
+        expect(result.records.filter((record) => record.videoKey === aKey)).not.toHaveLength(0);
+        expect(result.records.filter((record) => record.videoKey === bKey)).not.toHaveLength(0);
     });
 });
 

@@ -628,7 +628,7 @@ function computeTripLazyState(trip: Trip, tripIdx: number): TripLazyHeavyState {
     }
     let hasPending = false;
     for (const cand of tripAllCandidates(trip)) {
-        // vendorFileKey (path-qualified), matching how ingest / lazy-embedded key
+        // vendorFileKey (source/path/metadata-qualified), matching how ingest / lazy-embedded key
         // these sets: a bare-basename lookup would paint a stale spinner on a
         // different card that happens to share a filename (FILE0001.MP4 reuse).
         const key = vendorFileKey(cand);

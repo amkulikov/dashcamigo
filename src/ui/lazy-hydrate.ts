@@ -21,6 +21,7 @@
 // even with the feature on, a fast backend probes eager.
 
 import { indexAllMp4Files } from "../indexer.js";
+import { attachRecordsToCandidates, recordsForVideo, type VideoAssociationIndex } from "../gps-association.js";
 import { createLogger } from "../log.js";
 import { SLICE_COST_STREAM_ABOVE } from "../parsers/internal/mp4-walker.js";
 import { cameraFingerprint } from "../parsers/camera-fingerprint.js";
@@ -164,13 +165,15 @@ export interface LazyHydrationContext {
     /** Carried-over candidates from existing state.trips (already hydrated). The
      *  provisional candidates are appended to this list before grouping. */
     allCandidates: VideoCandidate[];
-    /** logsResult.extractorByMp4 - attribution for files whose GPS came from a log. */
-    logExtractorByMp4: Map<string, string>;
-    /** sidecarResult.extractorByMp4 - attribution for files whose GPS came from a sidecar. */
-    sidecarExtractorByMp4: Map<string, string>;
-    /** BlackVue-style accel-only sidecar (.3gf) samples per mp4 basename, merged
+    /** logsResult attribution keyed by vendorFileKey. */
+    logExtractorByFileKey: Map<string, string>;
+    /** sidecarResult attribution keyed by vendorFileKey. */
+    sidecarExtractorByFileKey: Map<string, string>;
+    /** BlackVue-style accel-only sidecar (.3gf) samples per video identity, merged
      *  into GpsRecords once a trip has a real startUtc (mirrors the eager tail). */
-    accelByMp4: Map<string, AccelSample[]>;
+    accelByFileKey: Map<string, AccelSample[]>;
+    /** All loaded + current videos, indexed once for O(1) basename lookup. */
+    videoAssociation: VideoAssociationIndex;
     /** Log/sidecar parse errors known at the branch point, for the analytics event. */
     parseErrorsCount: number;
     tzByFingerprint: ReturnType<typeof estimateTzByFingerprint>;
@@ -190,11 +193,11 @@ let lazyAllCandidates: VideoCandidate[] | null = null;
 // This drop's accel-only sidecar (.3gf) samples, merged into GpsRecords per trip
 // once startUtc is real (mirrors the eager tail's mergeAccelSamples). null/empty
 // when the drop carries no accel sidecar.
-let lazyAccelByMp4: Map<string, AccelSample[]> | null = null;
+let lazyAccelByFileKey: Map<string, AccelSample[]> | null = null;
 // Accel the lazy embedded-GPS extraction found inside the videos themselves.
 // Accumulated across per-trip hydrations (each pass covers one trip's files),
 // unlike the sidecar map which is known in full at drop time.
-let lazyEmbeddedAccelByMp4 = new Map<string, AccelSample[]>();
+let lazyEmbeddedAccelByFileKey = new Map<string, AccelSample[]>();
 
 /**
  * Renders the trip sidebar from filenames alone (zero file-byte reads), then
@@ -205,7 +208,7 @@ let lazyEmbeddedAccelByMp4 = new Map<string, AccelSample[]>();
 export async function runLazyHydration(ctx: LazyHydrationContext): Promise<void> {
     // Background fill from a previous drop was already superseded by
     // cancelLazyHydration in ingestFilesInternal; here we adopt this drop's state.
-    lazyAccelByMp4 = ctx.accelByMp4;
+    lazyAccelByFileKey = ctx.accelByFileKey;
 
     // Derive a filename-only startUtc per new file (createdUtc/records may exist
     // from logs/sidecars; mvhd does not - that needs a moov read). Pass a nominal
@@ -219,7 +222,7 @@ export async function runLazyHydration(ctx: LazyHydrationContext): Promise<void>
     }> = [];
     for (const cf of ctx.newVideos) {
         const fingerprint = cameraFingerprint(cf.file);
-        const records = state.gpsLog?.byFilename.get(cf.file.file.name) ?? [];
+        const records = state.gpsLog ? recordsForVideo(state.gpsLog, cf.file, ctx.videoAssociation) : [];
         const { startUtc, source } = deriveStartUtc({
             file: cf.file,
             fingerprint,
@@ -255,9 +258,10 @@ export async function runLazyHydration(ctx: LazyHydrationContext): Promise<void>
 
     for (const d of derived) {
         const appliedExtractors: string[] = [];
-        const fromLog = ctx.logExtractorByMp4.get(d.cf.file.file.name);
+        const fileKey = vendorFileKey(d.cf.file);
+        const fromLog = ctx.logExtractorByFileKey.get(fileKey);
         if (fromLog) appliedExtractors.push(fromLog);
-        const fromSidecar = ctx.sidecarExtractorByMp4.get(d.cf.file.file.name);
+        const fromSidecar = ctx.sidecarExtractorByFileKey.get(fileKey);
         if (fromSidecar) appliedExtractors.push(fromSidecar);
         ctx.allCandidates.push(
             buildProvisionalCandidate({
@@ -286,10 +290,7 @@ export async function runLazyHydration(ctx: LazyHydrationContext): Promise<void>
     // now). Mirror the eager applyPartial: pull records for EVERY candidate, not
     // just the new ones, so an old fully-hydrated trip picks up its track (#11).
     if (state.gpsLog) {
-        for (const cand of ctx.allCandidates) {
-            const recs = state.gpsLog.byFilename.get(cand.file.name);
-            if (recs && recs.length > 0) cand.records = recs;
-        }
+        attachRecordsToCandidates(state.gpsLog, ctx.allCandidates, ctx.videoAssociation);
     }
 
     // Wall spans for time-lapse runs, from filename cadence alone - the
@@ -311,7 +312,7 @@ export async function runLazyHydration(ctx: LazyHydrationContext): Promise<void>
     // never rendered (A3). "added" means "filename-known", not "fully indexed";
     // a reload loses un-hydrated state and the user re-drops. Mirrors eager.
     for (const c of ctx.allCandidates) {
-        state.addedKeys.add(vendorFileKey({ file: c.file, relativePath: c.relativePath }));
+        state.addedKeys.add(vendorFileKey(c));
     }
 
     renderTrips();
@@ -369,8 +370,8 @@ export function cancelLazyHydration(): void {
     // pin them for the rest of the session (runLazyHydration re-adopts on a new
     // lazy drop). The fillGeneration bump already neutralizes any stale closure.
     lazyAllCandidates = null;
-    lazyAccelByMp4 = null;
-    lazyEmbeddedAccelByMp4 = new Map();
+    lazyAccelByFileKey = null;
+    lazyEmbeddedAccelByFileKey = new Map();
 }
 
 /**
@@ -515,7 +516,7 @@ async function runHydrateData(tripIdx: number, pending: VideoCandidate[], sessio
     const t0 = performance.now();
     // Match index results back to candidates by File identity (the indexer echoes
     // the same File object); capture the key BEFORE hydrate replaces the repaired
-    // file so moov bytes are keyed by the stable relativePath.
+    // file so moov bytes keep the original source/path/metadata identity.
     const byFile = new Map<File, VideoCandidate>(pending.map((c) => [c.file, c]));
     const moovByKey = new Map<string, Uint8Array>();
 
@@ -537,17 +538,13 @@ async function runHydrateData(tripIdx: number, pending: VideoCandidate[], sessio
                     log.warn("hydrate moov read failed", { file: cand.file.name, tripIdx });
                     return;
                 }
-                const key = vendorFileKey({ file: cand.file, relativePath: cand.relativePath });
+                const key = vendorFileKey(cand);
                 // Cache moov bytes only for files that will actually be extracted,
                 // gated by the same helper the eager path uses: basename-sidecar /
                 // already-has-records / hint=none files never dispatch, so pinning
                 // their ~100KB-2MB moov buffers for the whole trip's hydration is
                 // pure heap waste on a long single trip (#12).
-                const plan = planEmbeddedGpsQueue(
-                    { file: cand.file, relativePath: cand.relativePath },
-                    cand.records.length > 0,
-                    moovBytes != null,
-                );
+                const plan = planEmbeddedGpsQueue(cand, cand.records.length > 0, moovBytes != null);
                 if (plan.cacheMoov && moovBytes) moovByKey.set(key, moovBytes);
                 // The cache entry re-applies the repair on restore (the on-disk
                 // bytes stay broken forever) - record it for the write below.
@@ -586,7 +583,7 @@ async function runHydrateData(tripIdx: number, pending: VideoCandidate[], sessio
     // drop is not silently skipped for embedded-GPS extraction.
     const gpsTargets: ClassifiedFile[] = [];
     for (const cand of pending) {
-        const vf: VendorFile = { file: cand.file, relativePath: cand.relativePath };
+        const vf: VendorFile = cand;
         if (!shouldTryEmbeddedGps(vf, cand.records.length > 0)) continue;
         gpsTargets.push({ file: vf, role: "video", sidecarId: null, sidecarMp4: null, logExtractorId: null });
     }
@@ -611,7 +608,7 @@ async function runHydrateData(tripIdx: number, pending: VideoCandidate[], sessio
             // (sstar-ssmd phantom-track gate) contributes only the frame-0
             // clock anchor + extractor attribution, consumed by the
             // rederiveStartUtcForCandidates call below.
-            if (result.records.length > 0 || result.videoStartUtcHintByFilename.size > 0) {
+            if (result.records.length > 0 || result.videoStartUtcHintByFileKey.size > 0) {
                 applyLazyResultToState(result, tripIdx);
             }
             // Accel only ever rides a winning claim (the dispatcher records it
@@ -619,8 +616,8 @@ async function runHydrateData(tripIdx: number, pending: VideoCandidate[], sessio
             // hint), so this loop always runs when there is anything to collect.
             // Kept separate from the guard above so the accel merge does not
             // silently inherit applyLazyResultToState's condition.
-            for (const [mp4Name, samples] of result.accelByFilename) {
-                lazyEmbeddedAccelByMp4.set(mp4Name, samples);
+            for (const [fileKey, samples] of result.accelByFileKey) {
+                lazyEmbeddedAccelByFileKey.set(fileKey, samples);
             }
             for (const err of result.errors) gpsErrorNames.add(err.file);
         } catch (err) {
@@ -642,10 +639,8 @@ async function runHydrateData(tripIdx: number, pending: VideoCandidate[], sessio
     if (trip) {
         const cands = tripAllCandidates(trip);
         if (state.gpsLog) {
-            for (const cand of cands) {
-                const recs = state.gpsLog.byFilename.get(cand.file.name);
-                if (recs && recs.length > 0) cand.records = recs;
-            }
+            const loaded = state.trips.flatMap(tripAllCandidates);
+            attachRecordsToCandidates(state.gpsLog, cands, loaded);
         }
         rederiveStartUtcForCandidates(cands, classifyFilenameTime);
         mergeLazyAccel(cands);
@@ -673,7 +668,7 @@ async function runHydrateData(tripIdx: number, pending: VideoCandidate[], sessio
     const gpsTargetKeys = new Set(gpsTargets.map((cf) => vendorFileKey(cf.file)));
     const skipKeys = new Set<string>();
     for (const cand of hydratedNow) {
-        const key = vendorFileKey({ file: cand.file, relativePath: cand.relativePath });
+        const key = vendorFileKey(cand);
         if (!gpsTargetKeys.has(key)) continue;
         // A whole-dispatch failure took every target down with it. A per-file
         // error also needs the empty result: the errors carry a basename, and
@@ -702,17 +697,17 @@ async function runHydrateData(tripIdx: number, pending: VideoCandidate[], sessio
  * pass-invariant and the case does not arise on a real camera.
  */
 function mergeLazyAccel(cands: readonly VideoCandidate[]): void {
-    const accelByMp4 = combineAccelSources(lazyAccelByMp4 ?? new Map(), lazyEmbeddedAccelByMp4);
-    if (accelByMp4.size === 0 || !state.gpsLog) return;
-    const startUtcByMp4 = new Map<string, number>();
+    const accelByFileKey = combineAccelSources(lazyAccelByFileKey ?? new Map(), lazyEmbeddedAccelByFileKey);
+    if (accelByFileKey.size === 0 || !state.gpsLog) return;
+    const startUtcByFileKey = new Map<string, number>();
     const tripRecords: GpsRecord[] = [];
     for (const cand of cands) {
-        startUtcByMp4.set(cand.file.name, cand.startUtc);
+        startUtcByFileKey.set(vendorFileKey(cand), cand.startUtc);
         // candidate.records are the SAME GpsRecord objects state.gpsLog holds, so
         // mutating them here is what the chart/map later read.
         for (const rec of cand.records) tripRecords.push(rec);
     }
-    mergeAccelSamples(tripRecords, accelByMp4, startUtcByMp4);
+    mergeAccelSamples(tripRecords, accelByFileKey, startUtcByFileKey);
 }
 
 // === Low-priority background fill ===

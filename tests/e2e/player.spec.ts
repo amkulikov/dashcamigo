@@ -58,9 +58,9 @@ test.describe("player", () => {
         // The fixture is 30 fps, so a step is 1/30s. Each step is an async seek;
         // fire them one-settled-at-a-time rather than hammering three at once. A
         // slow software decoder (Linux CI's H.264) coalesces back-to-back seeks
-        // into fewer frames, so unsynchronized clicks flake. The product itself
-        // paces held stepping (REPEAT_MS in player-frame-step) so a step lands
-        // before the next - mirror that here.
+        // into fewer frames, so unsynchronized clicks flake. A held gesture uses
+        // one elapsed-time-derived absolute target; separate clicks intentionally
+        // retain one-relative-step semantics, so settle each before sending next.
         const t0 = await time();
         const fwd = page.locator("#player-step-fwd");
         let prev = t0;

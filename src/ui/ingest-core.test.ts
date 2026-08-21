@@ -9,11 +9,14 @@ import {
     countByExtension,
     countByField,
     embeddedResultHasEffect,
+    mergeAccelIntoCandidates,
     raceWithAbort,
     toVendorFiles,
 } from "./ingest-core.js";
 import type { DispatchedEmbeddedGpsResult } from "../parsers/registry.js";
-import type { VendorFile } from "../parsers/types.js";
+import type { GpsRecord, VendorFile } from "../parsers/types.js";
+import type { VideoCandidate } from "../trips.js";
+import { vendorFileKey } from "../vendor-file-key.js";
 
 const fakeFile = (name: string, webkitRelativePath = ""): File => ({ name, webkitRelativePath }) as unknown as File;
 const vf = (name: string): VendorFile => ({ file: { name } }) as unknown as VendorFile;
@@ -45,7 +48,7 @@ describe("countByField", () => {
 
 describe("embeddedResultHasEffect", () => {
     const result = (over: Partial<DispatchedEmbeddedGpsResult>): DispatchedEmbeddedGpsResult =>
-        ({ records: [], videoStartUtcHintByFilename: new Map(), ...over }) as unknown as DispatchedEmbeddedGpsResult;
+        ({ records: [], videoStartUtcHintByFileKey: new Map(), ...over }) as unknown as DispatchedEmbeddedGpsResult;
 
     it("is true when there are records", () => {
         expect(embeddedResultHasEffect(result({ records: [{} as never] }))).toBe(true);
@@ -53,12 +56,54 @@ describe("embeddedResultHasEffect", () => {
 
     it("is true for a hint-only result (phantom-track gate: 0 records + start-UTC hint)", () => {
         expect(
-            embeddedResultHasEffect(result({ videoStartUtcHintByFilename: new Map([["f.mp4", 1_700_000_000]]) })),
+            embeddedResultHasEffect(result({ videoStartUtcHintByFileKey: new Map([["f.mp4", 1_700_000_000]]) })),
         ).toBe(true);
     });
 
     it("is false only when there are neither records nor hints", () => {
         expect(embeddedResultHasEffect(result({}))).toBe(false);
+    });
+});
+
+describe("mergeAccelIntoCandidates", () => {
+    it("updates only the concrete same-basename video targeted by the sidecar", () => {
+        const candidate = (sourceKey: string): VideoCandidate =>
+            ({
+                file: new File([sourceKey], "clip.mp4", { lastModified: 1 }),
+                relativePath: "CARD/clip.mp4",
+                sourceKey,
+                startUtc: 100,
+            }) as VideoCandidate;
+        const a = candidate("card-a");
+        const b = candidate("card-b");
+        const record = (video: VideoCandidate): GpsRecord => ({
+            unixSeconds: 100.2,
+            active: true,
+            lat: 1,
+            lon: 2,
+            bearingDeg: 0,
+            speedMs: 0,
+            accelXg: 0,
+            accelYg: 0,
+            accelZg: 0,
+            mp4Filename: "clip.mp4",
+            videoKey: vendorFileKey(video),
+        });
+        const aRecord = record(a);
+        const bRecord = record(b);
+        const accel = new Map([
+            [
+                vendorFileKey(a),
+                [
+                    { msSinceStart: 200, accelXg: 2, accelYg: 0, accelZg: 1 },
+                    { msSinceStart: 400, accelXg: 0, accelYg: 0, accelZg: 1 },
+                ],
+            ],
+        ]);
+
+        expect(mergeAccelIntoCandidates([aRecord, bRecord], accel, [a, b])).toBe(1);
+        expect(Math.abs(aRecord.accelXg)).toBeGreaterThan(0);
+        expect(bRecord.accelXg).toBe(0);
     });
 });
 

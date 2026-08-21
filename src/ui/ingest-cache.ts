@@ -9,6 +9,7 @@
 // every picker path produces the same root-prefixed relativePath.
 
 import type { IndexerRepair } from "../indexer.js";
+import { buildVideoAssociationIndex, resolveVideoKey, type VideoAssociationIndex } from "../gps-association.js";
 import { createLogger } from "../log.js";
 import type { ClassifiedFile } from "../parsers/registry.js";
 import { fileIdentityKey, fileIdentityOf } from "../persist/identity.js";
@@ -24,6 +25,8 @@ import { applyMoovRepair, vendorFileKey } from "./ingest-candidate.js";
 
 const log = createLogger("ingest-cache");
 
+const DEPENDENCY_SEPARATOR = String.fromCharCode(1);
+
 // Container-repair descriptors of THIS session's indexed files, keyed by the
 // same file IDENTITY the cache entries are (path + size + mtime), not by path
 // alone: two cards with the same folder layout produce identical paths, and a
@@ -35,6 +38,8 @@ const log = createLogger("ingest-cache");
 // repair would describe bytes the file on disk does not have. Rare entries
 // (repairs are the exception), session lifetime.
 const repairByIdentity = new Map<string, IndexerRepair>();
+const dependencyByIdentity = new Map<string, string>();
+const writeBlockedIdentities = new Set<string>();
 
 /**
  * Records a file's container repair for later cache writes. Call wherever the
@@ -60,13 +65,88 @@ function cacheKeyOf(cf: ClassifiedFile): string {
     return fileIdentityKey(fileIdentityOf(cf.file.file, cf.file.relativePath));
 }
 
+/** Whether two distinct session files collapse onto one cheap persistent key. */
+export function hasIndexCacheIdentityCollision(video: ClassifiedFile, videos: VideoAssociationIndex): boolean {
+    const persistentKey = cacheKeyOf(video);
+    const sessionKey = vendorFileKey(video.file);
+    return (videos.videosByFilename.get(video.file.file.name) ?? []).some(
+        (peer) =>
+            vendorFileKey(peer) !== sessionKey &&
+            fileIdentityKey(fileIdentityOf(peer.file, peer.relativePath)) === persistentKey,
+    );
+}
+
+/**
+ * Dependency identity for one cached candidate. Card-wide GPS logs affect all
+ * videos; paired GPS/accel sidecars affect only the concrete video they resolve
+ * to. An edit or removal therefore invalidates every dependent cache entry,
+ * without turning a one-file sidecar change into a full-card reindex.
+ */
+export function indexCacheDependencyKey(
+    video: ClassifiedFile,
+    classified: readonly ClassifiedFile[],
+    videos: VideoAssociationIndex = buildVideoAssociationIndex(
+        classified.filter((file) => file.role === "video").map((file) => file.file),
+    ),
+): string {
+    const videoKey = vendorFileKey(video.file);
+    const dependencies: string[] = [];
+
+    // A second loaded file with the same basename can turn a formerly unique
+    // log association into a path-resolved or ambiguous one. Include those
+    // peers so a snapshot cannot retain ownership decided under old topology.
+    for (const peer of videos.videosByFilename.get(video.file.file.name) ?? []) {
+        if (vendorFileKey(peer) === videoKey) continue;
+        dependencies.push(
+            ["video-peer", fileIdentityKey(fileIdentityOf(peer.file, peer.relativePath))].join(DEPENDENCY_SEPARATOR),
+        );
+    }
+
+    for (const file of classified) {
+        let affectsVideo = file.role === "gps-log";
+        if ((file.role === "sidecar" || file.role === "accel-sidecar") && file.sidecarMp4) {
+            affectsVideo = resolveVideoKey(file.file, file.sidecarMp4, videos) === videoKey;
+        }
+        if (!affectsVideo) continue;
+        dependencies.push(
+            [
+                file.role,
+                file.logExtractorId ?? "",
+                file.sidecarId ?? "",
+                fileIdentityKey(fileIdentityOf(file.file.file, file.file.relativePath)),
+            ].join(DEPENDENCY_SEPARATOR),
+        );
+    }
+    return dependencies.sort().join(DEPENDENCY_SEPARATOR);
+}
+
 /**
  * Splits the new videos of a drop by index-cache state. Cache unavailability
  * (private mode, storage off) degrades to "everything is a miss" - the
  * pipeline must never fail because the cache did.
  */
-export async function partitionByIndexCache(videos: ClassifiedFile[]): Promise<IndexCachePartition> {
+export async function partitionByIndexCache(
+    videos: ClassifiedFile[],
+    classified: readonly ClassifiedFile[],
+    videoAssociation: VideoAssociationIndex,
+    externalInputsValid: boolean,
+): Promise<IndexCachePartition> {
     if (videos.length === 0) return { cachedCandidates: [], misses: videos, cacheAvailable: true };
+    const dependencyByVideoKey = new Map<string, string>();
+    const collisionKeys = new Set<string>();
+    for (const video of videos) {
+        const key = cacheKeyOf(video);
+        const dependencyKey = indexCacheDependencyKey(video, classified, videoAssociation);
+        dependencyByIdentity.set(key, dependencyKey);
+        dependencyByVideoKey.set(key, dependencyKey);
+        if (hasIndexCacheIdentityCollision(video, videoAssociation)) collisionKeys.add(key);
+        if (externalInputsValid && !collisionKeys.has(key)) writeBlockedIdentities.delete(key);
+        else writeBlockedIdentities.add(key);
+    }
+    // A failed log/sidecar read makes a previous snapshot unsafe even when its
+    // metadata dependency is unchanged. Reindex for this run and do not replace
+    // the last known-good entry with a partial result.
+    if (!externalInputsValid) return { cachedCandidates: [], misses: videos, cacheAvailable: false };
     let entries: Map<string, CachedFileIndex>;
     try {
         entries = await getIndexCacheEntries(videos.map(cacheKeyOf));
@@ -82,18 +162,21 @@ export async function partitionByIndexCache(videos: ClassifiedFile[]): Promise<I
     for (const cf of videos) {
         const key = cacheKeyOf(cf);
         const entry = entries.get(key);
-        if (!entry) {
+        if (collisionKeys.has(key) || !entry || entry.dependencyKey !== dependencyByVideoKey.get(key)) {
             misses.push(cf);
             continue;
         }
         hitKeys.push(key);
         const freshFile = cf.file.file;
+        const freshVideoKey = vendorFileKey(cf.file);
         cachedCandidates.push({
             ...entry.candidate,
             // The on-disk bytes still carry the broken moov - re-apply the
             // repair recorded at index time, or the cached codec metadata
             // would describe a file it no longer matches.
             file: entry.repair ? applyMoovRepair(freshFile, entry.repair) : freshFile,
+            sourceKey: cf.file.sourceKey,
+            records: entry.candidate.records.map((record) => ({ ...record, videoKey: freshVideoKey })),
             // Recomputed for THIS machine by the pipeline's checkCanPlay - a
             // verdict cached on another browser/GPU must not stick.
             canPlay: true,
@@ -119,7 +202,7 @@ export async function partitionByIndexCache(videos: ClassifiedFile[]): Promise<I
 export function scheduleIndexCacheWrite(candidates: VideoCandidate[], skipKeys: ReadonlySet<string>): void {
     const entries: CachedFileIndex[] = [];
     for (const candidate of candidates) {
-        const key = vendorFileKey({ file: candidate.file, relativePath: candidate.relativePath });
+        const key = vendorFileKey(candidate);
         if (skipKeys.has(key)) continue;
         // applyMoovRepair is constant-size and preserves name/lastModified, so
         // the patched candidate.file still carries the ORIGINAL file identity.
@@ -128,7 +211,15 @@ export function scheduleIndexCacheWrite(candidates: VideoCandidate[], skipKeys: 
             size: candidate.file.size,
             lastModified: candidate.file.lastModified,
         });
-        entries.push(buildCacheEntry(identityKey, candidate, repairByIdentity.get(identityKey)));
+        if (writeBlockedIdentities.has(identityKey)) continue;
+        entries.push(
+            buildCacheEntry(
+                identityKey,
+                candidate,
+                repairByIdentity.get(identityKey),
+                dependencyByIdentity.get(identityKey) ?? "",
+            ),
+        );
     }
     if (entries.length === 0) return;
     void putIndexCacheEntries(entries)

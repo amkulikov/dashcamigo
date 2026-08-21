@@ -18,8 +18,8 @@ export interface ExtractRequestData {
     concurrency: number;
     mode: EmbeddedGpsExtractionMode;
     /**
-     * Pre-loaded moov bytes keyed by relativePath (vendorFileKey), NOT
-     * basename: two files with the same basename in different folders would
+     * Pre-loaded moov bytes keyed by vendorFileKey, NOT basename: two files
+     * with the same basename, path, or metadata in different sources would
      * otherwise share one buffer, and since the buffer is transferred the
      * second postMessage would hit a detached ArrayBuffer. Forwarded by the
      * ingest pipeline from indexer-worker so buildMp4Index inside the worker

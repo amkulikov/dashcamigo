@@ -7,6 +7,7 @@
 // and started after the current ingest's finally{}.
 
 import { t } from "../i18n/index.js";
+import { attachRecordsToCandidates, buildVideoAssociationIndex, recordsForVideo } from "../gps-association.js";
 import { dropDuplicateFiles } from "../ingest-dedup.js";
 import { ignoredRootSegments, isIgnoredPath } from "../ingest-filter.js";
 import { indexAllMp4Files } from "../indexer.js";
@@ -16,7 +17,7 @@ import { createLogger } from "../log.js";
 import { captureSentryException, captureSentryMessage } from "../sentry.js";
 import { emitLifecycle, markStage } from "../perf.js";
 import { cloneRecordsAcrossChannels, firstSyncedRecord, mergeIntoGpsLog, rebindOrphanLogRecords } from "../parser.js";
-import { combineAccelSources, mergeAccelSamples } from "../parsers/registry-light.js";
+import { combineAccelSources } from "../parsers/registry-light.js";
 import type { DispatchedEmbeddedGpsResult } from "../parsers/registry.js";
 import {
     classifyFilesViaPool as dispatchClassifyFiles,
@@ -75,8 +76,15 @@ import {
     runLazyHydration,
 } from "./lazy-hydrate.js";
 import { applyRegroup } from "./apply-regroup.js";
-import { refreshTrip } from "./lazy-embedded-gps.js";
-import { countByExtension, countByField, embeddedResultHasEffect, raceWithAbort } from "./ingest-core.js";
+import { cancelLazyEmbeddedGps, refreshTrip } from "./lazy-embedded-gps.js";
+import {
+    countByExtension,
+    countByField,
+    embeddedResultHasEffect,
+    mergeAccelIntoCandidates,
+    raceWithAbort,
+} from "./ingest-core.js";
+import { scopeIngestFiles } from "./ingest-source-key.js";
 
 const log = createLogger("ingest");
 
@@ -126,6 +134,10 @@ export async function ingestFiles(vfiles: VendorFile[], origin: IngestOrigin | n
         notify({ severity: "warn", messageKey: "status.filesNotSelected" });
         return;
     }
+
+    // Scope before queueing: a queued ad-hoc drop must keep the identity it
+    // received when the user supplied it, not become part of the later batch.
+    vfiles = scopeIngestFiles(vfiles, origin);
 
     if (state.ingestInProgress) {
         // Queue the raw (unfiltered) list - it is filtered when this wrapper
@@ -200,12 +212,10 @@ async function ingestFilesInternal(
     // Stop any background hydration still running from a previous drop before this
     // one rebuilds state.trips - a stale fill would write onto the wrong trips.
     cancelLazyHydration();
-    // Drop the previous drop's deferred heavy-embedded-GPS entries. The map is
-    // basename-keyed, so a leftover entry from an un-opened trip would (a)
-    // permanently paint a new drop's same-basename card as "pending" and (b) on
-    // click parse the OLD file's bytes and hang its GPS on the new video (G4).
-    // The eager path re-populates it from this drop's own heavy files below.
-    state.pendingHeavyEmbeddedGps.clear();
+    // On-click heavy GPS also owns trip indices. Abort it before regrouping;
+    // its finally block returns unfinished files to the identity-keyed pending
+    // map, which must survive because the old trips are carried into this ingest.
+    cancelLazyEmbeddedGps();
     // Let the just-shown overlay paint before any O(n) main-thread pass. On a
     // clean all-video drop nothing below hits a real async barrier until MP4
     // indexing, so the path filter + dedup fingerprinting + classify + the
@@ -287,7 +297,7 @@ async function ingestFilesInternal(
     const alreadyLoaded: VendorFile[] = [];
     for (const trip of state.trips) {
         for (const c of tripAllCandidates(trip)) {
-            alreadyLoaded.push({ file: c.file, relativePath: c.relativePath });
+            alreadyLoaded.push({ file: c.file, relativePath: c.relativePath, sourceKey: c.sourceKey });
         }
     }
 
@@ -326,6 +336,8 @@ async function ingestFilesInternal(
 
     // Extract video candidates with their role/relativePath - used from here on instead of the raw File[].
     const videos = classified.filter((c) => c.role === "video");
+    const knownVideoFiles = [...alreadyLoaded, ...videos.map((candidate) => candidate.file)];
+    const videoAssociation = buildVideoAssociationIndex(knownVideoFiles);
     const totalGpsLogs = classified.filter((c) => c.role === "gps-log").length;
 
     // If the drop contains unplayable containers (.avi/.mts/.wmv/.flv/.3gp/.jdr/.mdt/.insv/.360/...),
@@ -358,7 +370,7 @@ async function ingestFilesInternal(
     setIngestStage(t("ingestOverlay.stage.parsingLogs"));
 
     // Parse logs before indexing so byFilename indices are ready when records are attached to files.
-    const logsResult = await mark("parseLogs", () => dispatchParseLogs(classified, signal));
+    const logsResult = await mark("parseLogs", () => dispatchParseLogs(classified, videoAssociation, signal));
     if (logsResult.records.length > 0) {
         // Merge if a log already exists (new file may be a rotated version of the old one, or the same file dropped twice).
         // Dedup by (unixSeconds, lat, lon, mp4Filename) is required: re-dropping the same log doubles brake events, distance, and point density.
@@ -389,7 +401,9 @@ async function ingestFilesInternal(
     setIngestStage(t("ingestOverlay.stage.parsingSidecars"));
 
     // GPX sidecars: dispatched through the registry. Attachment by basename was done at classify (sidecarMp4 in ClassifiedFile). Same dedup reason as logsResult.
-    const sidecarResult = await mark("parseSidecars", () => dispatchParseSidecars(classified, signal));
+    const sidecarResult = await mark("parseSidecars", () =>
+        dispatchParseSidecars(classified, videoAssociation, signal),
+    );
     if (sidecarResult.records.length > 0) {
         // Sidecars (GPX, .map, .gps) carry only records - no extractor labels or
         // skipped-line diagnostics - so the other two batch fields are empty.
@@ -411,9 +425,7 @@ async function ingestFilesInternal(
     // merged log with the cumulative video set, so a channel dropped in a later
     // ingest still picks up its sibling's track.
     if (state.gpsLog) {
-        const allVideoNames = new Set<string>(existingVideoNames);
-        for (const c of videos) allVideoNames.add(c.file.file.name);
-        const clonedAcrossChannels = cloneRecordsAcrossChannels(state.gpsLog, allVideoNames);
+        const clonedAcrossChannels = cloneRecordsAcrossChannels(state.gpsLog, knownVideoFiles);
         if (clonedAcrossChannels > 0) {
             state.gpsLog = mergeIntoGpsLog(null, {
                 records: state.gpsLog.records,
@@ -425,7 +437,9 @@ async function ingestFilesInternal(
     }
 
     // Accel-only sidecars (BlackVue .3gf): accelerometer only, no GPS. Merged into GpsRecord via mergeAccelSamples after indexAllMp4Files.
-    const accelSidecarResult = await mark("parseAccelSidecars", () => dispatchParseAccelSidecars(classified, signal));
+    const accelSidecarResult = await mark("parseAccelSidecars", () =>
+        dispatchParseAccelSidecars(classified, videoAssociation, signal),
+    );
     if (accelSidecarResult.errors.length > 0) {
         log.warn("accel-sidecar parse errors", {
             count: accelSidecarResult.errors.length,
@@ -434,11 +448,21 @@ async function ingestFilesInternal(
     }
     reportParseErrorsToSentry("accel", accelSidecarResult.errors);
 
-    // Skip already-added videos (repeated drop). Key = full relativePath (see vendorFileKey): the same basename from a different SD subdirectory is a separate file.
+    // Skip already-added video versions (repeated drop). vendorFileKey includes
+    // source, relative path, size, and mtime, so overwrites and equal trees from
+    // separate inputs remain distinct.
     const newVideos = videos.filter((c) => !state.addedKeys.has(vendorFileKey(c.file)));
     if (newVideos.length === 0 && state.trips.length > 0) {
         // Only the log changed - re-render existing trips so GPS attachment is updated.
         rebuildTripsFromCurrentFiles();
+        const carriedCandidates = state.trips.flatMap(tripAllCandidates);
+        const accelMutations = state.gpsLog
+            ? mergeAccelIntoCandidates(state.gpsLog.records, accelSidecarResult.accelByFileKey, carriedCandidates)
+            : 0;
+        if (accelMutations > 0) {
+            for (let i = 0; i < state.trips.length; i++) refreshTrip(i);
+            log.info("merged late accel sidecar samples", { mutatedRecords: accelMutations });
+        }
         renderTrips();
         // This path bypasses runLazyHydration, so a previous lazy drop's fill
         // (torn down at entry) must be restarted or its still-provisional trips
@@ -459,7 +483,16 @@ async function ingestFilesInternal(
         cachedCandidates,
         misses: videosToIndex,
         cacheAvailable,
-    } = await mark("cacheLookup", () => partitionByIndexCache(newVideos));
+    } = await mark("cacheLookup", () =>
+        partitionByIndexCache(
+            newVideos,
+            classified,
+            videoAssociation,
+            logsResult.errors.length === 0 &&
+                sidecarResult.errors.length === 0 &&
+                accelSidecarResult.errors.length === 0,
+        ),
+    );
     if (cachedCandidates.length > 0) {
         const cachedRecords = cachedCandidates.flatMap((c) => c.records);
         if (cachedRecords.length > 0) {
@@ -496,12 +529,12 @@ async function ingestFilesInternal(
         // Dedup by File identity, not basename: two distinct files that share a
         // basename in different folders (a read-only backup copy + its Movie/
         // sibling) must each contribute a TZ sample - a basename key would drop
-        // one. The byFilename lookup below stays basename (parser contract).
+        // one. The association lookup below retains that concrete identity.
         const seen = new Set<File>();
         // Misses only: cache hits already sit in allCandidates (loop below)
         // with their mvhd, so sampling them here too would double-count.
         for (const cf of videosToIndex) {
-            const recs = state.gpsLog.byFilename.get(cf.file.file.name);
+            const recs = recordsForVideo(state.gpsLog, cf.file, videoAssociation);
             // firstSyncedRecord, not recs[0]: a cold-start (timeUnsynced) first
             // record carries a ~1970 placeholder that would poison the TZ delta.
             const firstSynced = firstSyncedRecord(recs);
@@ -546,11 +579,12 @@ async function ingestFilesInternal(
             // Misses only - cache hits are already full candidates in the pool.
             newVideos: videosToIndex,
             allCandidates,
-            logExtractorByMp4: logsResult.extractorByMp4,
-            sidecarExtractorByMp4: sidecarResult.extractorByMp4,
+            logExtractorByFileKey: logsResult.extractorByFileKey,
+            sidecarExtractorByFileKey: sidecarResult.extractorByFileKey,
             // Accel-only sidecars (.3gf G-force) are merged into GpsRecords once a
             // trip has a real startUtc - mirrors the eager tail (mergeAccelSamples).
-            accelByMp4: accelSidecarResult.accelByMp4,
+            accelByFileKey: accelSidecarResult.accelByFileKey,
+            videoAssociation,
             // Log/sidecar parse errors are already known at the branch point (they
             // are parsed before this) - report them instead of a hardcoded 0.
             parseErrorsCount: logsResult.errors.length + sidecarResult.errors.length + accelSidecarResult.errors.length,
@@ -609,15 +643,12 @@ async function ingestFilesInternal(
         // out of every future re-drop until page reload. Set.add is
         // idempotent; re-adding carried-over keys is free.
         for (const c of allCandidates) {
-            state.addedKeys.add(vendorFileKey({ file: c.file, relativePath: c.relativePath }));
+            state.addedKeys.add(vendorFileKey(c));
         }
         // Pull in records: the GPS log is already parsed, but new files may have had empty records if the log arrived later.
         // recomputeAllStartUtc then estimates TZ from collected mvhd pairs and updates startUtc via deriveStartUtc.
         if (state.gpsLog) {
-            for (const c of allCandidates) {
-                const newRecords = state.gpsLog.byFilename.get(c.file.name);
-                if (newRecords && newRecords.length > 0) c.records = newRecords;
-            }
+            attachRecordsToCandidates(state.gpsLog, allCandidates, videoAssociation);
         }
         recomputeAllStartUtc(allCandidates);
         // No auto-select of the first trip - the user picks. Empty-state stays visible until state.active !== null.
@@ -749,7 +780,7 @@ async function ingestFilesInternal(
                     }
                     // NOTE: addedKeys is deliberately NOT updated here - it
                     // commits in applyPartial together with state.trips.
-                    const records = state.gpsLog?.byFilename.get(file.name) ?? [];
+                    const records = state.gpsLog ? recordsForVideo(state.gpsLog, cf.file, videoAssociation) : [];
                     // Whether to extract embedded GPS is decided by the file's
                     // source hint alone (planEmbeddedGpsQueue), NOT by whether
                     // we have moov bytes to cache. MPEG-TS has no moov, so
@@ -761,7 +792,7 @@ async function ingestFilesInternal(
                     if (gpsPlan.queue) {
                         pendingBatch.push(cf);
                         // Cache moov bytes only when present (MP4/MOV). Key by
-                        // relativePath (vendorFileKey), not basename: two files
+                        // vendorFileKey, not basename: two files
                         // with the same basename in different folders
                         // (channel-in-folder cameras, 70mai .s_* proxies before
                         // they are filtered) would otherwise share one moov
@@ -817,15 +848,17 @@ async function ingestFilesInternal(
                     // from the sidecar. Embedded extraction adds its own
                     // attribution later via applyEmbeddedResultToState.
                     const initialApplied: string[] = [];
-                    const fromLog = logsResult.extractorByMp4.get(file.name);
+                    const fileKey = vendorFileKey(cf.file);
+                    const fromLog = logsResult.extractorByFileKey.get(fileKey);
                     if (fromLog) initialApplied.push(fromLog);
-                    const fromSidecar = sidecarResult.extractorByMp4.get(file.name);
+                    const fromSidecar = sidecarResult.extractorByFileKey.get(fileKey);
                     if (fromSidecar) initialApplied.push(fromSidecar);
                     const builtCandidate: VideoCandidate = {
                         // Patched file when the worker repaired this file's moov,
                         // else the original. Playback/preview/export use this one.
                         file: candidateFile,
                         relativePath: cf.file.relativePath,
+                        sourceKey: cf.file.sourceKey,
                         fingerprint,
                         appliedExtractors: initialApplied,
                         // Filename-derived fields - shared with the provisional
@@ -963,10 +996,10 @@ async function ingestFilesInternal(
         records: [],
         skipped: [],
         errors: [],
-        winningExtractorByFilename: new Map(),
-        videoStartUtcHintByFilename: new Map(),
-        localClockOffsetHintByFilename: new Map(),
-        accelByFilename: new Map(),
+        winningExtractorByFileKey: new Map(),
+        videoStartUtcHintByFileKey: new Map(),
+        localClockOffsetHintByFileKey: new Map(),
+        accelByFileKey: new Map(),
         heavyFiles: [],
     };
     // Skip-reason audit: log the breakdown of why some videos did not
@@ -975,7 +1008,7 @@ async function ingestFilesInternal(
     const skipBySource = new Map<string, number>();
     let skippedCount = 0;
     for (const cf of newVideos) {
-        const existing = state.gpsLog?.byFilename.get(cf.file.file.name);
+        const existing = state.gpsLog ? recordsForVideo(state.gpsLog, cf.file, videoAssociation) : [];
         const hasRecords = !!(existing && existing.length > 0);
         if (shouldTryEmbeddedGps(cf.file, hasRecords)) continue;
         const reason = hasRecords ? "already-has-records" : `source:${classifyGpsSource(cf.file)}`;
@@ -1055,7 +1088,7 @@ async function ingestFilesInternal(
     // rare in practice.
     if (heavyPending.length > 0) {
         for (const cf of heavyPending) {
-            // vendorFileKey (path-qualified), not basename: the lazy on-trip-click
+            // vendorFileKey (source/path/metadata-qualified), not basename: the lazy on-trip-click
             // reader keys by the same, so two same-named files across drops cannot alias.
             state.pendingHeavyEmbeddedGps.set(vendorFileKey(cf.file), cf);
         }
@@ -1069,25 +1102,15 @@ async function ingestFilesInternal(
     // inside the containers themselves.
     // At this point all files have startUtc (recomputeAllStartUtc ran) and records (from gpsLog or embedded).
     // Without startUtc, relative msSinceStart cannot be converted to absolute unix.
-    const accelByMp4 = combineAccelSources(accelSidecarResult.accelByMp4, embeddedResult.accelByFilename);
-    if (accelByMp4.size > 0 && state.gpsLog) {
-        const startUtcByMp4 = new Map<string, number>();
-        for (const c of allCandidates) {
-            // Basename key (NOT vendorFileKey) on purpose: mergeAccelSamples joins
-            // accelByMp4 <-> records <-> startUtc all by basename (GpsRecord.mp4Filename,
-            // the parser contract), and the .3gf sidecar itself pairs only by basename,
-            // so a same-basename collision is inherent to the format and a path-qualified
-            // key here would just desync this map from the other two. startUtc is unix
-            // seconds (number, see trips.ts VideoCandidate).
-            startUtcByMp4.set(c.file.name, c.startUtc);
-        }
-        const mutated = mergeAccelSamples(state.gpsLog.records, accelByMp4, startUtcByMp4);
+    const accelByFileKey = combineAccelSources(accelSidecarResult.accelByFileKey, embeddedResult.accelByFileKey);
+    if (accelByFileKey.size > 0 && state.gpsLog) {
+        const mutated = mergeAccelIntoCandidates(state.gpsLog.records, accelByFileKey, allCandidates);
         if (mutated > 0) {
             // GpsRecords were mutated in-place; byFilename Map still points to the same objects as records[], so no rebuild is needed.
             log.info("merged accel samples", {
                 mutatedRecords: mutated,
-                sidecarFiles: accelSidecarResult.accelByMp4.size,
-                embeddedFiles: embeddedResult.accelByFilename.size,
+                sidecarFiles: accelSidecarResult.accelByFileKey.size,
+                embeddedFiles: embeddedResult.accelByFileKey.size,
             });
             // Trips were finalized (and their events detected) before the accel
             // arrived, so without this rebuild a .3gf camera shows no braking
@@ -1200,7 +1223,7 @@ async function ingestFilesInternal(
     const gpsErrorNames = new Set(embeddedResult.errors.map((e) => e.file));
     const gpsErrorKeys = indexedThisRun
         .filter((c) => c.records.length === 0 && gpsErrorNames.has(c.file.name))
-        .map((c) => vendorFileKey({ file: c.file, relativePath: c.relativePath }));
+        .map((c) => vendorFileKey(c));
     scheduleIndexCacheWrite(
         indexedThisRun,
         new Set([...state.pendingHeavyEmbeddedGps.keys(), ...crashedBatchFileKeys, ...gpsErrorKeys]),
@@ -1303,9 +1326,7 @@ registerRecomputeSweep(recomputeAllStartUtc);
 function rebuildTripsFromCurrentFiles(): void {
     const candidates = state.trips.flatMap(tripAllCandidates);
     if (state.gpsLog) {
-        for (const c of candidates) {
-            c.records = state.gpsLog.byFilename.get(c.file.name) ?? [];
-        }
+        attachRecordsToCandidates(state.gpsLog, candidates, candidates);
     }
     // GPS just arrived for these files (the "drop a GPX later" flow): re-anchor
     // startUtc/startSource from the now-present records, exactly like every
@@ -1321,7 +1342,7 @@ function rebuildTripsFromCurrentFiles(): void {
 /**
  * Applies a dispatchParseVideoEmbeddedGps result (light-only or heavy) to global state and the local candidate pool:
  *   - merges records into state.gpsLog with dedup (re-dropping the same file must not double the track);
- *   - pulls records from byFilename into each candidate;
+ *   - pulls records through the concrete-video association into each candidate;
  *   - calls recomputeAllStartUtc - GPS appearing for a file may change the TZ estimate or shift startUtc across the 30-second trip-gap boundary.
  *
  * Note: there is no vendorId in this architecture, so no "vendor upgrade"
@@ -1334,23 +1355,23 @@ function rebuildTripsFromCurrentFiles(): void {
 function applyEmbeddedResultToState(result: DispatchedEmbeddedGpsResult, allCandidates: VideoCandidate[]): void {
     if (!embeddedResultHasEffect(result)) return;
     state.gpsLog = mergeIntoGpsLog(state.gpsLog, result);
+    attachRecordsToCandidates(state.gpsLog, allCandidates, allCandidates);
     for (const c of allCandidates) {
-        const recs = state.gpsLog.byFilename.get(c.file.name);
-        if (recs && recs.length > 0) c.records = recs;
         // Record the extractor that produced GPS for this file - for diagnostics.
-        const winningExtractor = result.winningExtractorByFilename.get(c.file.name);
+        const fileKey = vendorFileKey(c);
+        const winningExtractor = result.winningExtractorByFileKey.get(fileKey);
         if (winningExtractor && !c.appliedExtractors.includes(winningExtractor)) {
             c.appliedExtractors.push(winningExtractor);
         }
         // Authoritative video frame-0 wall-clock from the extractor (RVMI tReV).
         // Picked up by deriveStartUtc to skip mvhd/firstGps inference. Only set
         // here - it survives later recomputes via the candidate field itself.
-        const hint = result.videoStartUtcHintByFilename.get(c.file.name);
+        const hint = result.videoStartUtcHintByFileKey.get(fileKey);
         if (hint !== undefined) c.embeddedStartUtcHint = hint;
         // Local-as-UTC clock evidence (cold-start jump). Parse-time constant;
         // recomputeAllStartUtc below aggregates it per fingerprint and
         // restores true UTC on the record axis.
-        const clockHint = result.localClockOffsetHintByFilename.get(c.file.name);
+        const clockHint = result.localClockOffsetHintByFileKey.get(fileKey);
         if (clockHint !== undefined) c.localClockOffsetHintSec = clockHint;
     }
     // Diagnostic: confirm which files actually received embedded GPS. The

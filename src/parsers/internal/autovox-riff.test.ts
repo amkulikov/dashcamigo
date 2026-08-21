@@ -8,6 +8,7 @@ import { hasAutoVoxTrailerSignature, parseAutoVoxTrailer } from "./autovox-riff.
 import { autoVoxRiffPrimitive } from "../primitives/autovox-riff.js";
 import { type ClassifiedFile, dispatchParseVideoEmbeddedGps } from "../registry.js";
 import { KNOTS_TO_MS, type VendorFile } from "../types.js";
+import { vendorFileKey } from "../../vendor-file-key.js";
 
 // Verbatim ExifTool hexdumps (QuickTimeStream.pl:2933-2934 and 2969, v13.55).
 const AITG_RECORD = [
@@ -214,12 +215,13 @@ describe("Auto-Vox trailer through the dispatch path", () => {
         // classifies the file "none", is dead while its own tests stay green
         // (the regression class __fixtures__/dispatch-gate.test.ts exists for).
         const { vf } = await loadFile(true);
-        const result = await dispatchParseVideoEmbeddedGps([classifiedVideo(vf.file)]);
+        const classified = classifiedVideo(vf.file);
+        const result = await dispatchParseVideoEmbeddedGps([classified]);
 
         expect(result.appliedExtractors).toContain("autovox-riff");
         expect(result.records).toHaveLength(1);
         expect(result.errors).toHaveLength(0);
-        expect(result.accelByFilename.get(vf.file.name)).toHaveLength(1);
+        expect(result.accelByFileKey.get(vendorFileKey(classified.file))).toHaveLength(1);
     });
 
     it("a file with no trailing region never claims", async () => {

@@ -34,7 +34,8 @@ import {
     unionStringArrays,
 } from "./parser.js";
 import { detectEvents } from "./events.js";
-import type { GpsRecord, ParsedLog, SkippedLine } from "./parsers/types.js";
+import type { GpsRecord, ParsedLog, SkippedLine, VendorFile } from "./parsers/types.js";
+import { vendorFileKey } from "./vendor-file-key.js";
 
 function rec(unixSeconds: number, lat: number, lon: number, overrides: Partial<GpsRecord> = {}): GpsRecord {
     return {
@@ -1122,24 +1123,38 @@ describe("cloneRecordsAcrossChannels (BlackVue shared .gps sidecar)", () => {
         return rebuildLog([], recs, []);
     }
 
+    function loaded(...names: string[]): VendorFile[] {
+        return loadedFrom("card", ...names);
+    }
+
+    function loadedFrom(sourceKey: string, ...names: string[]): VendorFile[] {
+        return names.map((name) => ({
+            file: new File([name], name, { lastModified: 1 }),
+            relativePath: `BLACKVUE/Record/${name}`,
+            sourceKey,
+        }));
+    }
+
     it("clones the front-bound records onto the rear clip (identical but for mp4Filename)", () => {
         const log = logWith(
             rec(100, 52, 0, { mp4Filename: NF, speedMs: 24, bearingDeg: 145 }),
             rec(101, 52, 0, { mp4Filename: NF, speedMs: 25, bearingDeg: 146 }),
         );
-        const cloned = cloneRecordsAcrossChannels(log, [NF, NR]);
+        const cloned = cloneRecordsAcrossChannels(log, loaded(NF, NR));
         expect(cloned).toBe(2);
 
         const rebuilt = rebuildLog([], log.records, []);
         const rearBucket = rebuilt.byFilename.get(NR);
         expect(rearBucket).toHaveLength(2);
         // Every field carries over verbatim except the bound filename.
-        expect(rearBucket!.map((r) => ({ ...r, mp4Filename: NF }))).toEqual(rebuilt.byFilename.get(NF));
+        expect(rearBucket!.map((r) => [r.unixSeconds, r.lat, r.lon, r.speedMs, r.bearingDeg])).toEqual(
+            rebuilt.byFilename.get(NF)!.map((r) => [r.unixSeconds, r.lat, r.lon, r.speedMs, r.bearingDeg]),
+        );
     });
 
     it("clones onto every sibling channel (front -> rear + interior)", () => {
         const log = logWith(rec(100, 52, 0, { mp4Filename: NF }));
-        const cloned = cloneRecordsAcrossChannels(log, [NF, NR, NI]);
+        const cloned = cloneRecordsAcrossChannels(log, loaded(NF, NR, NI));
         expect(cloned).toBe(2);
         const rebuilt = rebuildLog([], log.records, []);
         expect(rebuilt.byFilename.get(NR)).toHaveLength(1);
@@ -1148,23 +1163,35 @@ describe("cloneRecordsAcrossChannels (BlackVue shared .gps sidecar)", () => {
 
     it("is idempotent: a second pass adds nothing (a sibling that already has GPS is left alone)", () => {
         const log = logWith(rec(100, 52, 0, { mp4Filename: NF }));
-        expect(cloneRecordsAcrossChannels(log, [NF, NR])).toBe(1);
+        expect(cloneRecordsAcrossChannels(log, loaded(NF, NR))).toBe(1);
         const afterFirst = rebuildLog([], log.records, []);
-        expect(cloneRecordsAcrossChannels(afterFirst, [NF, NR])).toBe(0);
+        expect(cloneRecordsAcrossChannels(afterFirst, loaded(NF, NR))).toBe(0);
     });
 
     it("never overwrites a channel that carries its own GPS (both embedded)", () => {
         const log = logWith(rec(100, 52, 0, { mp4Filename: NF }), rec(100, 52, 0, { mp4Filename: NR, speedMs: 99 }));
-        expect(cloneRecordsAcrossChannels(log, [NF, NR])).toBe(0);
+        expect(cloneRecordsAcrossChannels(log, loaded(NF, NR))).toBe(0);
     });
 
     it("does nothing when only one channel of the recording is loaded", () => {
         const log = logWith(rec(100, 52, 0, { mp4Filename: NF }));
-        expect(cloneRecordsAcrossChannels(log, [NF])).toBe(0);
+        expect(cloneRecordsAcrossChannels(log, loaded(NF))).toBe(0);
     });
 
     it("ignores non-BlackVue names (no channel-group key)", () => {
         const log = logWith(rec(100, 52, 0, { mp4Filename: "MOV_0581.mp4" }));
-        expect(cloneRecordsAcrossChannels(log, ["MOV_0581.mp4", "MOV_0582.mp4"])).toBe(0);
+        expect(cloneRecordsAcrossChannels(log, loaded("MOV_0581.mp4", "MOV_0582.mp4"))).toBe(0);
+    });
+
+    it("does not clone a shared sidecar across equal trees from two sources", () => {
+        const [aFront, aRear] = loadedFrom("card-a", NF, NR);
+        const [bFront, bRear] = loadedFrom("card-b", NF, NR);
+        const log = logWith(rec(100, 52, 0, { mp4Filename: NF, videoKey: vendorFileKey(aFront!) }));
+
+        expect(cloneRecordsAcrossChannels(log, [aFront!, aRear!, bFront!, bRear!])).toBe(1);
+        const rebuilt = rebuildLog([], log.records, []);
+        expect(rebuilt.byVideoKey.get(vendorFileKey(aRear!))).toHaveLength(1);
+        expect(rebuilt.byVideoKey.get(vendorFileKey(bFront!))).toBeUndefined();
+        expect(rebuilt.byVideoKey.get(vendorFileKey(bRear!))).toBeUndefined();
     });
 });

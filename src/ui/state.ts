@@ -114,11 +114,9 @@ export interface CompositionState {
 
 export interface AppState {
     gpsLog: ParsedLog | null;
-    // Key is relativePath || file.name (see addedKey below). GPS-to-video
-    // matching still uses basename (plugins write it that way; compatible with
-    // real log formats), but file identity in the drag-drop pool uses the full
-    // path so two files with the same basename in different subdirectories both
-    // make it into ingest.
+    // Session file identities (source + relativePath + size + mtime). The
+    // metadata component lets a loop-recording overwrite at the same path join
+    // the session instead of being mistaken for a repeated drop.
     addedKeys: Set<string>;
     trips: Trip[];
     unindexed: File[];
@@ -203,10 +201,10 @@ export interface AppState {
     transcodeInProgress: boolean;
     // === Heavy embedded-GPS lazy state ===
     // After ingest, if the user declined bulk heavy embedded-GPS loading, the
-    // files land here. Key is vendorFileKey (relativePath || file.name), value
+    // files land here. Key is vendorFileKey, value
     // is a ClassifiedFile (from the dispatcher - carries role + sidecar binding;
     // the video fingerprint is computed on demand via cameraFingerprint(file)).
-    // The path-qualified key (not bare basename) keeps two same-named files -
+    // The source/path/metadata key (not bare basename) keeps two same-named files -
     // e.g. FILE0001.MP4 reused across two SD cards in one/consecutive drops -
     // from aliasing: a basename key would resolve drop-2's trip click to drop-1's
     // deferred bytes. On trip click the lazy parser extracts the trip's files
@@ -214,7 +212,7 @@ export interface AppState {
     pendingHeavyEmbeddedGps: Map<string, ClassifiedFile>;
     // Files for which lazy embedded-GPS parsing is currently in flight. Used
     // by the sidebar to show a spinner on the trip card. Key is vendorFileKey
-    // (same path-qualified key as pendingHeavyEmbeddedGps, so the sidebar's
+    // (same file-identity key as pendingHeavyEmbeddedGps, so the sidebar's
     // per-card lookup never confuses two same-basename files).
     inflightHeavyEmbeddedGps: Set<string>;
     // Trip indices whose filename-first hydration (moov/codec/GPS read) is in

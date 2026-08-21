@@ -7,6 +7,7 @@ function makeCandidate(): VideoCandidate {
     return {
         file: new File([new Uint8Array(16)], "NO20260730-143756-000001F.MP4", { lastModified: 1_753_900_000_000 }),
         relativePath: "DASHCAM_SD/Normal/NO20260730-143756-000001F.MP4",
+        sourceKey: "session-source",
         fingerprint: "novatek-ts:cam1",
         appliedExtractors: ["novatek-gps"],
         classifierMatches: { time: "novatek", channel: "novatek", mode: "novatek", sequence: "novatek" },
@@ -55,11 +56,12 @@ function makeCandidate(): VideoCandidate {
 }
 
 describe("toCachedCandidate", () => {
-    it("strips the live File and keeps every other field", () => {
+    it("strips the live File and session source while keeping persistent fields", () => {
         const candidate = makeCandidate();
         const cached = toCachedCandidate(candidate);
         expect("file" in cached, "file must not be stored").toBe(false);
-        const { file: _file, ...rest } = candidate;
+        expect("sourceKey" in cached, "session source must not be stored").toBe(false);
+        const { file: _file, sourceKey: _sourceKey, ...rest } = candidate;
         expect(cached).toEqual(rest);
     });
 
@@ -69,7 +71,7 @@ describe("toCachedCandidate", () => {
         const freshFile = new File([new Uint8Array(16)], candidate.file.name, {
             lastModified: candidate.file.lastModified,
         });
-        const rebuilt: VideoCandidate = { ...cached, file: freshFile };
+        const rebuilt: VideoCandidate = { ...cached, file: freshFile, sourceKey: candidate.sourceKey };
         expect(rebuilt).toEqual({ ...candidate, file: freshFile });
         expect(rebuilt.records[0]!.lat, "records survive").toBeCloseTo(52.1);
         expect(rebuilt.createdUtc?.getTime(), "Date survives").toBe(1_753_900_000_000);
@@ -78,9 +80,10 @@ describe("toCachedCandidate", () => {
 
 describe("buildCacheEntry", () => {
     it("stamps the current cache version and omits repair when absent", () => {
-        const entry = buildCacheEntry("some-key", makeCandidate(), undefined);
+        const entry = buildCacheEntry("some-key", makeCandidate(), undefined, "deps");
         expect(entry.version).toBe(INDEX_CACHE_VERSION);
         expect(entry.identityKey).toBe("some-key");
+        expect(entry.dependencyKey).toBe("deps");
         expect("repair" in entry).toBe(false);
     });
 
@@ -92,12 +95,12 @@ describe("buildCacheEntry", () => {
             phantomNeutralized: ["soun"],
             hvcc: null,
         };
-        const entry = buildCacheEntry("some-key", makeCandidate(), repair);
+        const entry = buildCacheEntry("some-key", makeCandidate(), repair, "deps");
         expect(entry.repair).toEqual(repair);
     });
 
     it("stamps an approximate size so the volume prune can weigh the entry", () => {
-        const entry = buildCacheEntry("some-key", makeCandidate(), undefined);
+        const entry = buildCacheEntry("some-key", makeCandidate(), undefined, "deps");
         expect(entry.bytes).toBe(approxEntryBytes(entry.candidate, undefined));
         expect(entry.bytes ?? 0, "an entry with records weighs something real").toBeGreaterThan(300);
     });

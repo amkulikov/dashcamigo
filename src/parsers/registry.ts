@@ -20,6 +20,8 @@
 import { extendArray } from "../array-extend.js";
 import { createLogger } from "../log.js";
 import { forwardFillBearingsIfAllZero } from "../parser.js";
+import { vendorFileKey } from "../vendor-file-key.js";
+import { videoCloneAffinityKey } from "./primitives/clone-groups.js";
 // The light, main-thread-safe classification helpers live in registry-light.ts
 // (see the rationale there); re-exported for the worker-side callers that
 // already import everything from this module.
@@ -175,32 +177,32 @@ export interface DispatchedEmbeddedGpsResult {
     skipped: SkippedLine[];
     errors: Array<{ file: string; extractor: string; message: string }>;
     /**
-     * mp4 filename -> winning extractor id. Used by ingest.ts/lazy to stash
+     * vendorFileKey -> winning extractor id. Used by ingest.ts/lazy to stash
      * appliedExtractors into diagnostics; UI does not look at this.
      */
-    winningExtractorByFilename: Map<string, string>;
+    winningExtractorByFileKey: Map<string, string>;
     /**
-     * mp4 filename -> wall-clock UTC of video frame 0 if the extractor could
+     * vendorFileKey -> wall-clock UTC of video frame 0 if the extractor could
      * tie it (RVMI tReV baseline). Authoritative startUtc input - consumed by
      * deriveStartUtc via VideoCandidate.embeddedStartUtcHint. Absent when the
      * winning extractor has no such anchor (most formats).
      */
-    videoStartUtcHintByFilename: Map<string, number>;
+    videoStartUtcHintByFileKey: Map<string, number>;
     /**
-     * mp4 filename -> local-as-UTC clock offset evidence from the winning
+     * vendorFileKey -> local-as-UTC clock offset evidence from the winning
      * extractor (ParsedRecords.localClockOffsetHintSec). Aggregated per
      * fingerprint and subtracted from the record axis by
      * applyLocalClockCorrections in trips.ts. Absent for honest-UTC files.
      */
-    localClockOffsetHintByFilename: Map<string, number>;
+    localClockOffsetHintByFileKey: Map<string, number>;
     /**
-     * mp4 filename -> accelerometer samples the winning extractor found inside
+     * vendorFileKey -> accelerometer samples the winning extractor found inside
      * the container (embedded `3gf `, `gsen`, binary preambles). Same shape and
      * meaning as the accel-sidecar map, so both feed one mergeAccelSamples call
      * via combineAccelSources. Empty for the formats that carry accel directly
      * on GpsRecord, which is most of them.
      */
-    accelByFilename: Map<string, AccelSample[]>;
+    accelByFileKey: Map<string, AccelSample[]>;
     /**
      * Files classified as "heavy" and deferred under mode="light-only".
      * Empty under mode="all". Each file is a ClassifiedFile (with role="video").
@@ -392,7 +394,7 @@ function buildWorkItems(videos: ClassifiedFile[]): WorkItem[] {
             items.push({ primary: c, followers: [] });
             continue;
         }
-        const fullKey = `${owningExtractorId}:${groupKey}`;
+        const fullKey = videoCloneAffinityKey(owningExtractorId, c.file, groupKey);
         let arr = groups.get(fullKey);
         if (!arr) {
             arr = [];
@@ -430,10 +432,10 @@ export async function dispatchParseVideoEmbeddedGps(
     signal?: AbortSignal,
     mode: EmbeddedGpsExtractionMode = "all",
     /**
-     * Optional map of relativePath -> raw moov bytes (full moov box, 8-byte
+     * Optional map of vendorFileKey -> raw moov bytes (full moov box, 8-byte
      * header included), supplied by the ingest pipeline so buildMp4Index
-     * skips its own moov read on cold SD. Keys are relativePath (vendorFileKey),
-     * not basename, so same-basename files in different folders do not collide.
+     * skips its own moov read on cold SD. The key includes source, relative
+     * path, size, and mtime, so different file versions do not collide.
      * Missing entries fall back to the normal file.slice read.
      */
     prebuiltMoovByPath?: Map<string, Uint8Array>,
@@ -443,10 +445,10 @@ export async function dispatchParseVideoEmbeddedGps(
     const allSkipped: SkippedLine[] = [];
     const errors: Array<{ file: string; extractor: string; message: string }> = [];
     const used = new Set<string>();
-    const winningExtractorByFilename = new Map<string, string>();
-    const videoStartUtcHintByFilename = new Map<string, number>();
-    const localClockOffsetHintByFilename = new Map<string, number>();
-    const accelByFilename = new Map<string, AccelSample[]>();
+    const winningExtractorByFileKey = new Map<string, string>();
+    const videoStartUtcHintByFileKey = new Map<string, number>();
+    const localClockOffsetHintByFileKey = new Map<string, number>();
+    const accelByFileKey = new Map<string, AccelSample[]>();
     const heavyFiles: ClassifiedFile[] = [];
 
     const workItems = buildWorkItems(videos);
@@ -548,7 +550,7 @@ export async function dispatchParseVideoEmbeddedGps(
     const tryParseOne = async (vf: VendorFile): Promise<ParseResult | "heavy-deferred" | null> => {
         let index: Mp4Index;
         try {
-            const prebuiltMoov = prebuiltMoovByPath?.get(vf.relativePath || vf.file.name);
+            const prebuiltMoov = prebuiltMoovByPath?.get(vendorFileKey(vf));
             // Build WITHOUT the marker probe first. For files whose GPS lives in a
             // moov atom or a media track (most formats), the 4 MB freeGPS/LigoGPS
             // literal scan is pure wasted IO - dominant cost on mobile SD/UFS.
@@ -617,41 +619,44 @@ export async function dispatchParseVideoEmbeddedGps(
             }
 
             if (!deferred && result && usedCandidate) {
+                const usedKey = vendorFileKey(usedCandidate.file);
+                for (const record of result.records) record.videoKey = usedKey;
                 // extendArray, not push(...): one long embedded GPS stream can
                 // exceed the call-argument limit the spread form would hit.
                 extendArray(allRecords, result.records);
                 extendArray(allSkipped, result.skipped);
                 used.add(result.extractorId);
-                winningExtractorByFilename.set(usedCandidate.file.file.name, result.extractorId);
+                winningExtractorByFileKey.set(usedKey, result.extractorId);
                 if (result.videoStartUtcHint !== undefined) {
-                    videoStartUtcHintByFilename.set(usedCandidate.file.file.name, result.videoStartUtcHint);
+                    videoStartUtcHintByFileKey.set(usedKey, result.videoStartUtcHint);
                 }
                 if (result.localClockOffsetHintSec !== undefined) {
-                    localClockOffsetHintByFilename.set(usedCandidate.file.file.name, result.localClockOffsetHintSec);
+                    localClockOffsetHintByFileKey.set(usedKey, result.localClockOffsetHintSec);
                 }
                 if (result.accelSamples && result.accelSamples.length > 0) {
-                    accelByFilename.set(usedCandidate.file.file.name, result.accelSamples);
+                    accelByFileKey.set(usedKey, result.accelSamples);
                 }
                 for (const cand of candidates) {
                     if (cand === usedCandidate) continue;
                     const followerName = cand.file.file.name;
+                    const followerKey = vendorFileKey(cand.file);
                     for (const rec of result.records) {
-                        allRecords.push({ ...rec, mp4Filename: followerName });
+                        allRecords.push({ ...rec, mp4Filename: followerName, videoKey: followerKey });
                     }
-                    winningExtractorByFilename.set(followerName, result.extractorId);
+                    winningExtractorByFileKey.set(followerKey, result.extractorId);
                     // cloneAcrossGroup means followers are byte-synchronized
                     // with the primary, so they share media-time 0 wall-clock -
                     // and, for the same reason, the same accel stream.
                     if (result.videoStartUtcHint !== undefined) {
-                        videoStartUtcHintByFilename.set(followerName, result.videoStartUtcHint);
+                        videoStartUtcHintByFileKey.set(followerKey, result.videoStartUtcHint);
                     }
                     // Byte-synchronized followers share the primary's clock,
                     // so the local-stamp evidence transfers verbatim.
                     if (result.localClockOffsetHintSec !== undefined) {
-                        localClockOffsetHintByFilename.set(followerName, result.localClockOffsetHintSec);
+                        localClockOffsetHintByFileKey.set(followerKey, result.localClockOffsetHintSec);
                     }
                     if (result.accelSamples && result.accelSamples.length > 0) {
-                        accelByFilename.set(followerName, result.accelSamples);
+                        accelByFileKey.set(followerKey, result.accelSamples);
                     }
                 }
             }
@@ -674,10 +679,10 @@ export async function dispatchParseVideoEmbeddedGps(
         records: allRecords,
         skipped: allSkipped,
         errors,
-        winningExtractorByFilename,
-        videoStartUtcHintByFilename,
-        localClockOffsetHintByFilename,
-        accelByFilename,
+        winningExtractorByFileKey,
+        videoStartUtcHintByFileKey,
+        localClockOffsetHintByFileKey,
+        accelByFileKey,
         heavyFiles,
     };
 }

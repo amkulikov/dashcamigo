@@ -65,6 +65,9 @@ export interface VideoCandidate {
     // Path from the selected folder root. Empty string if file was picked without
     // directory structure. Used by classifiers for path-based heuristics.
     relativePath: string;
+    // Source scope copied from VendorFile. Together with path + metadata it
+    // distinguishes reused paths and equal directory trees inside a session.
+    sourceKey?: string;
     // Stable camera key (see camera-fingerprint.ts). Used for trip-grouping
     // and per-fingerprint TZ heuristics. Replaces the old vendorId.
     fingerprint: string;

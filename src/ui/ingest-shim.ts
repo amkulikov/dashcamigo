@@ -16,6 +16,12 @@
 //    sequentially on main; everything else goes through the pool.
 
 import { extendArray } from "../array-extend.js";
+import {
+    associateRecordsWithVideos,
+    buildVideoAssociationIndex,
+    resolveVideoKey,
+    type VideoAssociationIndex,
+} from "../gps-association.js";
 import { createLogger } from "../log.js";
 import { splitVideosByExtension, type ClassifiedFile } from "../parsers/registry-light.js";
 import type { AccelSample, GpsRecord, SkippedLine, VendorFile } from "../parsers/types.js";
@@ -192,7 +198,7 @@ async function dispatchViaPool<Target, Result>(
 
 interface DispatchedLogsResult {
     appliedExtractors: string[];
-    extractorByMp4: Map<string, string>;
+    extractorByFileKey: Map<string, string>;
     records: GpsRecord[];
     skipped: SkippedLine[];
     errors: Array<{ file: string; extractor: string; message: string }>;
@@ -201,18 +207,20 @@ interface DispatchedLogsResult {
 /** One request per gps-log file, pool least-inflight distributes. */
 export async function dispatchParseLogsViaPool(
     classified: ClassifiedFile[],
+    knownVideos: readonly VendorFile[] | VideoAssociationIndex,
     signal?: AbortSignal,
 ): Promise<DispatchedLogsResult> {
     const targets = classified.filter((c) => c.role === "gps-log" && c.logExtractorId);
+    const videoIndex = "videosByFilename" in knownVideos ? knownVideos : buildVideoAssociationIndex(knownVideos);
 
     const allRecords: GpsRecord[] = [];
     const allSkipped: SkippedLine[] = [];
     const errors: DispatchedLogsResult["errors"] = [];
     const used = new Set<string>();
-    const extractorByMp4 = new Map<string, string>();
+    const extractorByFileKey = new Map<string, string>();
 
     if (targets.length === 0) {
-        return { appliedExtractors: [], extractorByMp4, records: [], skipped: [], errors };
+        return { appliedExtractors: [], extractorByFileKey, records: [], skipped: [], errors };
     }
 
     const { successes, failures } = await dispatchViaPool(targets, (c) => {
@@ -229,24 +237,25 @@ export async function dispatchParseLogsViaPool(
         // 130k+ records and the spread overflows the call-argument limit.
         extendArray(allSkipped, r.skipped);
         if (r.records.length > 0) {
+            associateRecordsWithVideos(r.records, c.file, videoIndex);
             extendArray(allRecords, r.records);
             used.add(extractorId);
             for (const rec of r.records) {
-                if (!extractorByMp4.has(rec.mp4Filename)) {
-                    extractorByMp4.set(rec.mp4Filename, extractorId);
+                if (rec.videoKey !== undefined && !extractorByFileKey.has(rec.videoKey)) {
+                    extractorByFileKey.set(rec.videoKey, extractorId);
                 }
             }
         }
     }
 
-    return { appliedExtractors: [...used], extractorByMp4, records: allRecords, skipped: allSkipped, errors };
+    return { appliedExtractors: [...used], extractorByFileKey, records: allRecords, skipped: allSkipped, errors };
 }
 
 // ===== parse sidecars =====
 
 interface DispatchedSidecarsResult {
     records: GpsRecord[];
-    extractorByMp4: Map<string, string>;
+    extractorByFileKey: Map<string, string>;
     errors: Array<{ file: string; sidecarId: string; message: string }>;
 }
 
@@ -254,11 +263,22 @@ interface DispatchedSidecarsResult {
  *  the pool. Errors are aggregated, AbortError propagates. */
 export async function dispatchParseSidecarsViaPool(
     classified: ClassifiedFile[],
+    knownVideos: readonly VendorFile[] | VideoAssociationIndex,
     signal?: AbortSignal,
 ): Promise<DispatchedSidecarsResult> {
     const records: GpsRecord[] = [];
+    const videoIndex = "videosByFilename" in knownVideos ? knownVideos : buildVideoAssociationIndex(knownVideos);
     const errors: DispatchedSidecarsResult["errors"] = [];
-    const extractorByMp4 = new Map<string, string>();
+    const extractorByFileKey = new Map<string, string>();
+
+    const collect = (target: ClassifiedFile, recs: GpsRecord[], extractorId: string): void => {
+        associateRecordsWithVideos(recs, target.file, videoIndex);
+        extendArray(records, recs);
+        const key = resolveVideoKey(target.file, target.sidecarMp4!, videoIndex);
+        if (recs.length > 0 && key !== null && !extractorByFileKey.has(key)) {
+            extractorByFileKey.set(key, extractorId);
+        }
+    };
 
     const gpxTargets: ClassifiedFile[] = [];
     const workerTargets: ClassifiedFile[] = [];
@@ -278,10 +298,7 @@ export async function dispatchParseSidecarsViaPool(
         if (signal?.aborted) throw new DOMException("aborted", "AbortError");
         try {
             const recs = await gpxSidecar.parse(c.file, c.sidecarMp4!, signal);
-            extendArray(records, recs);
-            if (recs.length > 0 && !extractorByMp4.has(c.sidecarMp4!)) {
-                extractorByMp4.set(c.sidecarMp4!, gpxSidecar.id);
-            }
+            collect(c, recs, gpxSidecar.id);
         } catch (err) {
             // AbortError bubbles up - propagate so ingest.ts handles cancel
             // instead of recording the cancellation as a corrupt sidecar.
@@ -318,10 +335,7 @@ export async function dispatchParseSidecarsViaPool(
                     if (signal?.aborted) throw new DOMException("aborted", "AbortError");
                     try {
                         const recs = await gpxSidecar.parse(c.file, c.sidecarMp4!, signal);
-                        extendArray(records, recs);
-                        if (recs.length > 0 && !extractorByMp4.has(c.sidecarMp4!)) {
-                            extractorByMp4.set(c.sidecarMp4!, gpxSidecar.id);
-                        }
+                        collect(c, recs, gpxSidecar.id);
                     } catch (err) {
                         // Same AbortError propagation as the primary gpx loop.
                         if (err instanceof DOMException && err.name === "AbortError") throw err;
@@ -334,33 +348,32 @@ export async function dispatchParseSidecarsViaPool(
                 }
                 continue;
             }
-            extendArray(records, r.records);
-            if (r.records.length > 0 && !extractorByMp4.has(c.sidecarMp4!)) {
-                extractorByMp4.set(c.sidecarMp4!, c.sidecarId!);
-            }
+            collect(c, r.records, c.sidecarId!);
         }
     }
 
-    return { records, extractorByMp4, errors };
+    return { records, extractorByFileKey, errors };
 }
 
 // ===== parse accel sidecars =====
 
 interface DispatchedAccelSidecarsResult {
-    accelByMp4: Map<string, AccelSample[]>;
+    accelByFileKey: Map<string, AccelSample[]>;
     errors: Array<{ file: string; sidecarId: string; message: string }>;
 }
 
 export async function dispatchParseAccelSidecarsViaPool(
     classified: ClassifiedFile[],
+    knownVideos: readonly VendorFile[] | VideoAssociationIndex,
     signal?: AbortSignal,
 ): Promise<DispatchedAccelSidecarsResult> {
     const targets = classified.filter((c) => c.role === "accel-sidecar" && c.sidecarId && c.sidecarMp4);
+    const videoIndex = "videosByFilename" in knownVideos ? knownVideos : buildVideoAssociationIndex(knownVideos);
 
-    const accelByMp4 = new Map<string, AccelSample[]>();
+    const accelByFileKey = new Map<string, AccelSample[]>();
     const errors: DispatchedAccelSidecarsResult["errors"] = [];
 
-    if (targets.length === 0) return { accelByMp4, errors };
+    if (targets.length === 0) return { accelByFileKey, errors };
 
     const { successes, failures } = await dispatchViaPool(targets, (c) => {
         const req: ParseAccelSidecarRequestData = { file: c.file, sidecarId: c.sidecarId! };
@@ -371,8 +384,9 @@ export async function dispatchParseAccelSidecarsViaPool(
         errors.push({ file: c.file.file.name, sidecarId: c.sidecarId ?? "", message });
     }
     for (const { target: c, result: r } of successes) {
-        if (r.samples.length > 0) accelByMp4.set(c.sidecarMp4!, r.samples);
+        const key = resolveVideoKey(c.file, c.sidecarMp4!, videoIndex);
+        if (r.samples.length > 0 && key !== null) accelByFileKey.set(key, r.samples);
     }
 
-    return { accelByMp4, errors };
+    return { accelByFileKey, errors };
 }

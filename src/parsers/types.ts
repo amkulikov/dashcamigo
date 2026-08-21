@@ -25,6 +25,10 @@ export interface GpsRecord {
     // log field (70mai $V02 field[9]), matched MP4 for GPX sidecars, or
     // File.name when GPS is embedded in the video.
     mp4Filename: string;
+    // Internal identity of the concrete video file this record belongs to.
+    // Parsers leave it absent because most formats only store a basename; the
+    // ingest dispatcher fills it while it still knows the source/path.
+    videoKey?: string;
     // The position fix is valid but the GPS *clock* was not yet synced when
     // this record was written (cold start after a power-up: the chip delivers
     // coordinates before it decodes satellite time, so the firmware stamps a
@@ -82,6 +86,9 @@ export interface ParsedLog {
     // Records grouped by mp4Filename and sorted by unixSeconds.
     // Primary index used by the player to look up records for the current file.
     byFilename: Map<string, GpsRecord[]>;
+    // Records with an unambiguous ingest-time owner, grouped by vendorFileKey.
+    // byFilename remains the raw-format index and includes these records too.
+    byVideoKey: Map<string, GpsRecord[]>;
     skipped: SkippedLine[];
 }
 
@@ -100,6 +107,10 @@ export interface InterpolatedPosition {
 export interface VendorFile {
     file: File;
     relativePath: string;
+    // Opaque per-source session scope assigned at the ingest entry point.
+    // Optional because parser fixtures and standalone parser callers do not
+    // participate in a UI ingest session.
+    sourceKey?: string;
 }
 
 // Camera channel for multi-camera recorders.
