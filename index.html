@@ -261,12 +261,10 @@
          was removed 2024-11-21, so that field is dead; a bare name+url node is
          the current correct shape, not a degraded one. url is the bare domain
          root (Site Names operate at the domain level, never a /<lang>/
-         subdirectory), so this node is identical on every locale page and is
-         NOT rewritten per locale - same as Organization below. @id makes it a
-         graph anchor that WebApplication.isPartOf and Organization (publisher)
-         reference; every referenced node lives on this same page, no dangling
-         @id refs. Caveat: bare "/" is a noindex redirect stub, so this signal
-         lands via the /<lang>/ home pages, not "/". -->
+         subdirectory). The build rewrites url and @id to the locale's canonical
+         owner and links WebApplication.isPartOf to that node. The root redirect
+         stub emits the same site's WebSite node because Google reads site-name
+         markup from the domain or subdomain root. -->
     <script id="website-jsonld" type="application/ld+json">
     {
         "@context": "https://schema.org",

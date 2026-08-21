@@ -66,7 +66,7 @@ import {
     mirrorRootLocaleSegment,
     resolveSeoDeploymentContext,
 } from "./deployment-profile.js";
-import { escapeAttr, escapeText } from "./html-utils.js";
+import { escapeAttr, escapeText, stringifyJsonLd } from "./html-utils.js";
 import { getSeoLocales } from "./seo-prerender.js";
 
 // Staging-only noindex meta - same shape used by vendor-pages.ts
@@ -147,6 +147,13 @@ export function rootStubPlugin(options: RootStubOptions = {}): Plugin {
             const dict = rootLocale.dict;
             const title = dict["page.title"];
             const description = dict["meta.description"];
+            const websiteJsonLd = stringifyJsonLd({
+                "@context": "https://schema.org",
+                "@type": "WebSite",
+                "@id": `${siteOrigin}/#website`,
+                name: "dashcamigo",
+                url: `${siteOrigin}/`,
+            });
 
             // OG title slightly shorter than dict["page.title"] for unfurl
             // cards - strip the " | dashcamigo" tail used for SERP.
@@ -181,6 +188,7 @@ ${options.noIndex ? `${NOINDEX_META}\n` : ""}<meta charset="utf-8">
 <link rel="apple-touch-icon" href="/favicon-192.png">
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#ff9000">
+<script id="website-jsonld" type="application/ld+json">${websiteJsonLd}</script>
 ${loaderStyle}
 ${bootstrapScript}
 </head>

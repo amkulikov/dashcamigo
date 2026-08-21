@@ -2,7 +2,7 @@
 // by directly invoking the helpers exported from seo-prerender.ts on a
 // representative source HTML fragment.
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { dynamicBaselinePlugin } from "../../vite-plugins/dynamic-baseline.js";
 import { stringifyJsonLd } from "../../vite-plugins/html-utils.js";
@@ -10,6 +10,10 @@ import { applyLocale, getPrerenderLocales, getSeoLocales } from "../../vite-plug
 import { SUPPORTED_BRANDS, getAllBrandsCommaSeparated } from "../../vite-plugins/supported-brands.js";
 import { assertCommunityFaqParity, getVendorSitemapEntries, matchVendorRoute } from "../../vite-plugins/vendor-pages.js";
 import { SEO_LOCALES, getHreflangCodes, getIndexableSeoLocales } from "./seo-config.js";
+
+afterEach(() => {
+    vi.unstubAllEnvs();
+});
 
 describe("getPrerenderLocales", () => {
     it("returns one entry per indexable locale", () => {
@@ -166,6 +170,7 @@ function buildMinimalBaseline(): string {
         '<meta name="twitter:image" content="https://dashcamigo.app/og-cover.png">',
         // WebApplication JSON-LD with explicit id
         '<script id="webapp-jsonld" type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","description":"OLD EN","url":"https://dashcamigo.app/","inLanguage":["en","ru"],"featureList":["x"]}</script>',
+        '<script id="website-jsonld" type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","@id":"https://dashcamigo.app/#website","name":"dashcamigo","url":"https://dashcamigo.app/"}</script>',
         // FAQ JSON-LD (different id, should not be confused with WebApp)
         '<script id="faq-jsonld" type="application/ld+json">{"@type":"FAQPage","mainEntity":[]}</script>',
         "</head><body>",
@@ -242,6 +247,8 @@ describe("applyLocale", () => {
         const payload = JSON.parse(match![1]!);
         expect(payload.description).toBe(ru.dict["meta.description"]);
         expect(payload.url).toBe("https://dashcamigo.app/ru/");
+        expect(payload["@id"]).toBe("https://dashcamigo.app/#webapp");
+        expect(payload.isPartOf).toEqual({ "@id": "https://dashcamigo.app/#website" });
         expect(payload.inLanguage).toEqual(getIndexableSeoLocales().map((l) => l.hreflang));
         // featureList: existing capability entries are preserved verbatim, a
         // single "vendor support" entry is appended/rewritten from SUPPORTED_BRANDS.
@@ -250,6 +257,14 @@ describe("applyLocale", () => {
         expect(vendorLine).toBeDefined();
         // Vendor line must include the full SUPPORTED_BRANDS list (13 names).
         expect(vendorLine).toMatch(/70mai.*Viofo.*BlackVue.*Vantrue.*Thinkware.*RVMI/);
+    });
+
+    it("keeps WebSite JSON-LD on the locale's canonical origin", () => {
+        const match = /<script[^>]*id="website-jsonld"[^>]*>([\s\S]*?)<\/script>/.exec(out);
+        expect(match).not.toBeNull();
+        const payload = JSON.parse(match![1]!);
+        expect(payload["@id"]).toBe("https://dashcamigo.app/#website");
+        expect(payload.url).toBe("https://dashcamigo.app/");
     });
 
     it("does not touch FAQ JSON-LD's @type (only id=webapp-jsonld is rewritten)", () => {
@@ -329,6 +344,37 @@ describe("applyLocale on default (en) locale", () => {
     });
 });
 
+describe("mirror JSON-LD ownership", () => {
+    const de = getPrerenderLocales().find((locale) => locale.seo.lang === "de");
+    if (!de) throw new Error("test setup: de locale missing");
+
+    it("moves linked WebApplication and WebSite identifiers to the canonical origin", () => {
+        vi.stubEnv("DEPLOYMENT_PROFILE", "mirror");
+        vi.stubEnv("SEO_CUTOVER", "1");
+        vi.stubEnv(
+            "SEO_MIRROR_CONFIG",
+            JSON.stringify({
+                origin: "https://mirror.example.test",
+                localeSegments: ["de"],
+                rootLocaleSegment: "de",
+            }),
+        );
+
+        const out = applyLocale(buildMinimalBaseline(), de, {});
+        const webappMatch = /<script[^>]*id="webapp-jsonld"[^>]*>([\s\S]*?)<\/script>/.exec(out);
+        const websiteMatch = /<script[^>]*id="website-jsonld"[^>]*>([\s\S]*?)<\/script>/.exec(out);
+        expect(webappMatch).not.toBeNull();
+        expect(websiteMatch).not.toBeNull();
+        const webapp = JSON.parse(webappMatch![1]!);
+        const website = JSON.parse(websiteMatch![1]!);
+        expect(webapp["@id"]).toBe("https://mirror.example.test/#webapp");
+        expect(webapp.url).toBe("https://mirror.example.test/de/");
+        expect(webapp.isPartOf).toEqual({ "@id": "https://mirror.example.test/#website" });
+        expect(website["@id"]).toBe("https://mirror.example.test/#website");
+        expect(website.url).toBe("https://mirror.example.test/");
+    });
+});
+
 // Throw-on-missing-anchor guards. Each rewrite function in seo-prerender uses
 // a specific anchor in the baseline HTML; if the anchor disappears the rewrite
 // would silently degrade SEO. Plugins throw instead - these tests pin that
@@ -359,6 +405,11 @@ describe("applyLocale throws when baseline is missing required anchors", () => {
     it('throws when <script id="webapp-jsonld"> is absent', () => {
         const html = buildMinimalBaseline().replace(/<script[^>]*id="webapp-jsonld"[^>]*>[\s\S]*?<\/script>/, "");
         expect(() => applyLocale(html, ru, {})).toThrow(/webapp-jsonld/);
+    });
+
+    it('throws when <script id="website-jsonld"> is absent', () => {
+        const html = buildMinimalBaseline().replace(/<script[^>]*id="website-jsonld"[^>]*>[\s\S]*?<\/script>/, "");
+        expect(() => applyLocale(html, ru, {})).toThrow(/website-jsonld/);
     });
 
     it('throws when the <script id="dc-i18n"> data island is absent', () => {

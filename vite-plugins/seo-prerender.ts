@@ -557,6 +557,7 @@ export function applyLocale(html: string, locale: LocalePrerenderConfig, options
     let out = html;
     const indexable = getIndexableSeoLocales();
     const selfUrl = localeHomeUrl(locale.seo);
+    const canonicalOrigin = canonicalOriginForLocale(locale.seo);
     // hreflang x-default points at the default locale's home (/en/), not at
     // the root stub. Rationale: x-default is the content-fallback URL for
     // unmatched languages; our root "/" is a redirect-only stub with no
@@ -631,7 +632,7 @@ export function applyLocale(html: string, locale: LocalePrerenderConfig, options
     // og:image / twitter:image - per-locale 1200x630 cover. Source HTML ships
     // with EN cover; we have hand-designed Russian cover at og-cover-ru.png;
     // other 10 locales fall back to EN cover (seo-config.ts decides per locale).
-    const ogImage = `${canonicalOriginForLocale(locale.seo)}/${locale.seo.ogImage}`;
+    const ogImage = `${canonicalOrigin}/${locale.seo.ogImage}`;
     out = replaceAttr(out, /<meta\b[^>]*\bproperty="og:image"/i, "content", ogImage);
     out = replaceAttr(out, /<meta\b[^>]*\bname="twitter:image"/i, "content", ogImage);
 
@@ -702,7 +703,8 @@ export function applyLocale(html: string, locale: LocalePrerenderConfig, options
     // WebApplication JSON-LD - the description field carries the locale
     // meta.description; URL is the self-referencing locale homepage. inLanguage
     // is unchanged (lists all supported locales, not the page's language).
-    out = rewriteWebApplicationJsonLd(out, locale, selfUrl);
+    out = rewriteWebApplicationJsonLd(out, locale, selfUrl, canonicalOrigin);
+    out = rewriteWebsiteJsonLd(out, canonicalOrigin);
 
     // Vendor-chip hrefs and any internal /cameras/<slug>/ links must point
     // at the locale-prefixed vendor pages. Rewrite href="/cameras/..." to
@@ -830,8 +832,8 @@ function rewriteHreflangBlock(html: string, indexable: ReadonlyArray<SeoLocale>,
 }
 
 // Rewrite the WebApplication JSON-LD block (anchored on id="webapp-jsonld") to
-// carry the locale's description, the self-referencing URL, the current list
-// of supported languages and the current list of supported brands. All four
+// carry the canonical application/site identifiers, locale description, the
+// self-referencing URL, supported languages and supported brands. These values
 // are derived from single sources of truth at build time so adding a locale
 // or brand does not require touching the static JSON-LD literal in
 // index.html separately:
@@ -848,7 +850,12 @@ function rewriteHreflangBlock(html: string, indexable: ReadonlyArray<SeoLocale>,
 // sortAttributes - if the minifier ever ordered `id` before `type` on the FAQ
 // script, the lookahead-based filter would have silently picked the wrong
 // block. Anchoring on a unique id makes the match deterministic.
-function rewriteWebApplicationJsonLd(html: string, locale: LocalePrerenderConfig, selfUrl: string): string {
+function rewriteWebApplicationJsonLd(
+    html: string,
+    locale: LocalePrerenderConfig,
+    selfUrl: string,
+    canonicalOrigin: string,
+): string {
     const re = /<script\b[^>]*\bid="webapp-jsonld"[^>]*>([\s\S]*?)<\/script>/i;
     if (!re.test(html)) {
         throw new Error(
@@ -860,8 +867,10 @@ function rewriteWebApplicationJsonLd(html: string, locale: LocalePrerenderConfig
         try {
             const parsed: Record<string, unknown> = JSON.parse(body);
             if (parsed["@type"] !== "WebApplication") return match;
+            parsed["@id"] = `${canonicalOrigin}/#webapp`;
             parsed.description = locale.dict["meta.description"];
             parsed.url = selfUrl;
+            parsed.isPartOf = { "@id": `${canonicalOrigin}/#website` };
             parsed.inLanguage = getIndexableSeoLocales().map((l) => l.hreflang);
             parsed.featureList = rewriteFeatureList(parsed.featureList);
             const openMatch = /^(<script\b[^>]*>)/.exec(match);
@@ -872,6 +881,34 @@ function rewriteWebApplicationJsonLd(html: string, locale: LocalePrerenderConfig
             // JSON-LD malformed (e.g. someone added a comment inside the
             // script block during edit). Leave it as-is rather than
             // corrupt the page.
+            return match;
+        }
+    });
+}
+
+// WebSite identifies the canonical domain or subdomain, not the locale path.
+// Keep duplicate pages byte-consistent with their canonical counterpart by
+// deriving this node from the locale's canonical owner rather than the host
+// that happens to serve the build.
+function rewriteWebsiteJsonLd(html: string, canonicalOrigin: string): string {
+    const re = /<script\b[^>]*\bid="website-jsonld"[^>]*>([\s\S]*?)<\/script>/i;
+    if (!re.test(html)) {
+        throw new Error(
+            'seo-prerender: <script id="website-jsonld"> not found in baseline HTML - ' +
+                "WebSite JSON-LD is required for canonical origin ownership",
+        );
+    }
+    return html.replace(re, (match, body: string) => {
+        try {
+            const parsed: Record<string, unknown> = JSON.parse(body);
+            if (parsed["@type"] !== "WebSite") return match;
+            parsed["@id"] = `${canonicalOrigin}/#website`;
+            parsed.url = `${canonicalOrigin}/`;
+            const openMatch = /^(<script\b[^>]*>)/.exec(match);
+            const closeMatch = /(<\/script>)$/.exec(match);
+            if (!openMatch || !closeMatch) return match;
+            return `${openMatch[1]}${stringifyJsonLd(parsed)}${closeMatch[1]}`;
+        } catch {
             return match;
         }
     });
