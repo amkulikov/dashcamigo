@@ -174,10 +174,12 @@ test.describe("onboarding", () => {
 
     test("a seeded-done flag suppresses the tour entirely", async ({ page }) => {
         // No clearOnboarding: presetLocalStorage left all four marked done.
+        await page.clock.install();
         await gotoApp(page, "en");
         await loadTrip(page, SAMPLE_70MAI);
-        // Give the deferred start timer ample time to (not) fire.
-        await page.waitForTimeout(1_200);
+        // Cross the player's 450ms deferred-start window without sleeping. If
+        // the persisted flag were ignored, the timer would create the overlay.
+        await page.clock.fastForward(500);
         await expect(page.locator(".dc-onb")).toHaveCount(0);
     });
 

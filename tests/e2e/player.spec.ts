@@ -600,11 +600,6 @@ test.describe("player", () => {
         if ((await play.getAttribute("data-paused")) !== "true") await play.click();
         await expect(play).toHaveAttribute("data-paused", "true");
 
-        // Seek well past the start so a frozen playhead is clearly off.
-        const bar = await boxOf(page, "#player-mini-progress");
-        await page.mouse.click(bar.x + bar.width * 0.7, bar.y + bar.height / 2);
-        await page.waitForTimeout(800); // let the (possibly async cross-file) seek LAND
-
         const playhead = page.locator("#player-chart-playhead");
         // playerChartEl.clientWidth is exactly the basis setPlayerCursorRelSec
         // multiplies by, so left/clientWidth recovers the trip-time fraction.
@@ -616,6 +611,14 @@ test.describe("player", () => {
             expect(width, "chart must have a width").toBeGreaterThan(0);
             return left / width;
         };
+
+        // Seek well past the start so a frozen playhead is clearly off. Gate on
+        // the observable result instead of sleeping for a guessed decoder time:
+        // cross-file MSE seeks vary most on software-decoding CI runners.
+        const bar = await boxOf(page, "#player-mini-progress");
+        await page.mouse.click(bar.x + bar.width * 0.7, bar.y + bar.height / 2);
+        await expect.poll(playheadFraction, { message: "the seek must land before the resize" }).toBeGreaterThan(0.4);
+
         const before = await playheadFraction();
         expect(before, "playhead must sit away from the left edge to expose drift").toBeGreaterThan(0.4);
 

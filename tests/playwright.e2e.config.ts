@@ -5,9 +5,9 @@
 //  - playwright.perf.config.ts   -> perf timings (tests/perf/)
 //
 // Design choices baked in here:
-//  - workers: 1 / fullyParallel: false - one preview server, heavy multichannel
-//    ingest (WebCodecs + MSE), and a shared 4173 port. Sequential keeps runs
-//    deterministic; the suite is small enough that wall-clock is fine.
+//  - workers: 2 / fullyParallel: false - spec files share one preview server,
+//    while tests inside each file remain sequential. This overlaps independent
+//    browser contexts without making one export/player spec compete with itself.
 //  - channel "chromium" (full, not headless-shell) - WebGL (MapLibre) and
 //    WebCodecs (decode/transcode) need the real pipeline.
 //  - --autoplay-policy=no-user-gesture-required - headless Chrome blocks
@@ -43,7 +43,7 @@ const withFirefox = !!process.env.PW_FIREFOX;
 export default defineConfig({
     testDir: "./e2e",
     outputDir: resolve(ARTIFACT_ROOT, "test-results"),
-    workers: 1,
+    workers: 2,
     fullyParallel: false,
     forbidOnly: isCI,
     retries: isCI ? 2 : 0,

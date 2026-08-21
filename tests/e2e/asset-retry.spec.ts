@@ -14,6 +14,7 @@ test.use({ tolerateConsole: [/Failed to load resource/] });
 const HASHED_JS = /\/assets\/[^/?]+\.js$/;
 
 test("dead shell reloads itself and boots once the assets come back", async ({ page }) => {
+    await page.clock.install();
     let blockedRequests = 0;
     await page.route(HASHED_JS, (route) => {
         blockedRequests += 1;
@@ -35,25 +36,31 @@ test("dead shell reloads itself and boots once the assets come back", async ({ p
 
     await page.unroute(HASHED_JS);
 
-    // The first retry fires ~4s in; after the reload the entry executes and
-    // initFileSources() drops the shipped .is-pending off the landing CTA -
-    // the signal that real app code ran, not just static HTML. 30s covers a
-    // second-attempt run (15s backoff) on a slow runner.
-    await expect(page.locator(".landing-cta").first()).not.toHaveClass(/is-pending/, { timeout: 30_000 });
+    // Cross the first 4s rung with the browser's clock. Waiting four real
+    // seconds here only tested Playwright's patience; the marker below proves
+    // that the timer did reload the document.
+    const reload = page.waitForNavigation();
+    await page.clock.fastForward(4000);
+    await reload;
+    await expect(page.locator(".landing-cta").first()).not.toHaveClass(/is-pending/);
 
     // A successful boot takes the updating note down immediately, but returns
     // the budget only after 30s of stable uptime - a boot that succeeds right
     // before a lazy chunk 404s must not reset the counter (the infinite-loop
-    // guard), hence the generous poll timeout.
+    // guard). Advance that stability window without adding 30 seconds to every
+    // suite run.
     await expect(page.locator("#dc-retry-note")).toHaveCount(0);
-    await expect
-        .poll(() => page.evaluate(() => sessionStorage.getItem("dc-asset-retry")), { timeout: 45_000 })
-        .toBe(null);
+    await page.clock.fastForward(30_000);
+    expect(await page.evaluate(() => sessionStorage.getItem("dc-asset-retry"))).toBeNull();
 });
 
 test("a lazy-chunk failure after boot reloads on the ladder, not instantly", async ({ page }) => {
+    await page.clock.install();
     await page.goto("/en/");
     await expect(page.locator(".landing-cta").first()).not.toHaveClass(/is-pending/);
+    // pauseAt must target the future; leave headroom between reading the page's
+    // clock and sending the protocol command on a saturated CI host.
+    await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
 
     // The listener reacts to the event itself, so a synthetic dispatch stands
     // in for a real chunk 404 - no fault injection needed after boot.
@@ -66,24 +73,25 @@ test("a lazy-chunk failure after boot reloads on the ladder, not instantly", asy
     await expect(page.locator("#dc-retry-note")).toHaveText("Updating the app…");
     expect(await page.evaluate(() => sessionStorage.getItem("dc-asset-retry"))).toBe("1");
 
-    // ...but does NOT fire immediately: the first ladder rung is 4s, so 2s in
-    // this must still be the same document. An instant reload here is the
-    // flicker-loop regression this test pins down.
-    await page.waitForTimeout(2000);
+    // ...but does NOT fire before the first 4s ladder rung. An instant reload
+    // here is the flicker-loop regression this test pins down.
+    await page.clock.fastForward(3999);
     expect(
         await page.evaluate(() => (window as unknown as { __dcSameDocument?: boolean }).__dcSameDocument),
         "no reload before the ladder delay",
     ).toBe(true);
 
     // The scheduled reload then lands: the marker dies with the old document.
-    await page.waitForFunction(
-        () => (window as unknown as { __dcSameDocument?: boolean }).__dcSameDocument === undefined,
-        undefined,
-        { timeout: 10_000 },
-    );
+    const reload = page.waitForNavigation();
+    await page.clock.fastForward(1);
+    await reload;
+    expect(
+        await page.evaluate(() => (window as unknown as { __dcSameDocument?: boolean }).__dcSameDocument),
+    ).toBeUndefined();
 });
 
 test("a spent budget stops the post-boot reload entirely", async ({ page }) => {
+    await page.clock.install();
     // Seed the budget as exhausted before the app boots; the boot itself is
     // healthy, and dc:ready only returns the budget after 30s - well past
     // this test's window.
@@ -97,7 +105,7 @@ test("a spent budget stops the post-boot reload entirely", async ({ page }) => {
     });
 
     // Past the first ladder rung (4s): no note, no reload, budget untouched.
-    await page.waitForTimeout(5000);
+    await page.clock.fastForward(5000);
     await expect(page.locator("#dc-retry-note")).toHaveCount(0);
     expect(
         await page.evaluate(() => (window as unknown as { __dcSameDocument?: boolean }).__dcSameDocument),
