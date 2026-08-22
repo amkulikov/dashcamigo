@@ -11,9 +11,10 @@
 import { type ParsedRecords, type VendorFile, WrongFormatError } from "../types.js";
 import type { Mp4Index } from "../internal/mp4-index.js";
 import { extractJuscarTsGps } from "../internal/juscar-ts-extract.js";
+import { looksLikeMpegTs } from "../internal/ts-walk.js";
 // Name regex + group key live in clone-groups.ts so the main-thread shard
 // planner shares them without importing this (worker-weight) module.
-import { juscarTsCloneGroup, RX_JUSCAR_TS_NAME as RX_NAME } from "./clone-groups.js";
+import { juscarTsCloneGroup } from "./clone-groups.js";
 import type { Primitive } from "./types.js";
 
 export const juscarTsPrimitive: Primitive = {
@@ -21,13 +22,12 @@ export const juscarTsPrimitive: Primitive = {
     displayName: "Juscar MPEG-TS (LigoGPS plaintext)",
     kind: "video-embedded",
 
-    async marker(file: VendorFile, index?: Mp4Index): Promise<boolean> {
-        // Name - fast cutoff. If the name doesn't match, definitely not ours.
-        if (!RX_NAME.test(file.file.name)) return false;
+    async marker(_file: VendorFile, index?: Mp4Index): Promise<boolean> {
         // hasLigoGpsMarker in Mp4Index searches "LIGOGPSINFO" in the first
-        // 16 MB - final confirmation that our payload is inside.
-        if (!index) return false;
-        return index.hasLigoGpsMarker === true;
+        // 16 MB. Paired MPEG-TS sync bytes replace the old filename gate: a
+        // renamed recording remains importable, while MP4 LigoGPS carriers do
+        // not enter a full-file TS scan.
+        return index?.hasLigoGpsMarker === true && !!index.headerBytes && looksLikeMpegTs(index.headerBytes);
     },
 
     async parse(file: VendorFile, index?: Mp4Index): Promise<ParsedRecords> {

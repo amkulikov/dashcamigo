@@ -61,20 +61,18 @@ describe("parseMapText: edge cases (synthetic)", () => {
     it("segregates malformed lines into skipped, parses valid ones", () => {
         const text = readFileSync(resolve(FIXTURES_DIR, "synthetic-edge.map"), "utf8");
         const { records, skipped } = parseMapText(text, "20260511_0016_CAM.MP4");
-        // The fixture has 9 lines. Parsed into records (5):
+        // The fixture has 9 lines. Parsed into records (4):
         //   line 1: active fix; line 2: void fix (active=false, parsed, not
-        //   skipped); line 3: S/W hemisphere variant; line 5: lat "9999.9999"
-        //   - parseNmeaCoord does NOT range-check, so this decodes to ~100.67
-        //   deg and is currently accepted (pinned here so adding a range check
-        //   is forced to update this test); line 9: trailing active fix.
-        // Skipped (4):
-        //   line 4: junk text (signature mismatch); line 6: time 25:60:60;
-        //   line 7: negative speed; line 8: "nan" accel (fails the strict
+        //   skipped); line 3: S/W hemisphere variant; line 9: trailing fix.
+        // Skipped (5):
+        //   line 4: junk text; line 5: impossible latitude; line 6: time
+        //   25:60:60; line 7: negative speed; line 8: "nan" accel (fails the strict
         //   numeric signature, so it is a signature mismatch, not a NaN check).
-        expect(records).toHaveLength(5);
-        expect(skipped).toHaveLength(4);
+        expect(records).toHaveLength(4);
+        expect(skipped).toHaveLength(5);
         const reasons = skipped.map((s) => s.reason).sort();
         expect(reasons).toEqual([
+            "invalid coordinates",
             "invalid date or time",
             "invalid speed",
             "line did not match escort .map signature",

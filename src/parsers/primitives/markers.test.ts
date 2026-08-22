@@ -16,6 +16,7 @@ import { describe, expect, it } from "vitest";
 import type { Mp4Index } from "../internal/mp4-index.js";
 import type { VendorFile } from "../types.js";
 import { freeGpsBoxPrimitive } from "./free-gps-box.js";
+import { freegps70maiPrimitive } from "./freegps-70mai.js";
 import { freegpsPrimitive } from "./freegps.js";
 import { gpmfPrimitive } from "./gpmf.js";
 import { gpsBox70maiPrimitive } from "./gps-box-70mai.js";
@@ -314,5 +315,37 @@ describe("freegpsPrimitive.marker", () => {
 
     it("does not fire when neither flag is set", async () => {
         expect(await freegpsPrimitive.marker(vf(), makeIndex())).toBe(false);
+    });
+});
+
+describe("freegps70maiPrimitive.marker", () => {
+    function dialectBlock(): Uint8Array {
+        const bytes = new Uint8Array(64);
+        bytes.set(new TextEncoder().encode("freeGPS "));
+        const view = new DataView(bytes.buffer);
+        view.setUint16(8, 0x01ed, true);
+        view.setUint16(14, 0x01ed, true);
+        view.setUint8(26, 0x41);
+        view.setInt32(27, 500_000_000, true);
+        view.setInt32(31, 300_000_000, true);
+        return bytes;
+    }
+
+    it("uses the canonical filename as a fast hint", async () => {
+        const index = makeIndex({ hasFreeGpsMarker: true });
+        expect(await freegps70maiPrimitive.marker(vf("VL20260428-192844-000413F.MP4"), index)).toBe(true);
+    });
+
+    it("accepts a renamed file when a probe block has the 70mai dialect", async () => {
+        const headerBytes = dialectBlock();
+        const index = makeIndex({ headerBytes, hasFreeGpsMarker: true, freeGpsSeedOffsets: [0] });
+        expect(await freegps70maiPrimitive.marker(vf("renamed.mp4"), index)).toBe(true);
+    });
+
+    it("does not claim a renamed generic freeGPS file from magic alone", async () => {
+        const headerBytes = new Uint8Array(64);
+        headerBytes.set(new TextEncoder().encode("freeGPS "));
+        const index = makeIndex({ headerBytes, hasFreeGpsMarker: true, freeGpsSeedOffsets: [0] });
+        expect(await freegps70maiPrimitive.marker(vf("renamed.mp4"), index)).toBe(false);
     });
 });

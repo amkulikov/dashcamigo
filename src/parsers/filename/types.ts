@@ -3,7 +3,8 @@
 // Each "process" (time / channel / mode / sequence) is a flat library of
 // techniques. A technique has a stable id (so diagnostics can report which
 // regex actually matched) and an extract function that returns the value or
-// null. The pipeline walks each list and the first non-null wins.
+// null. The pipeline returns the first specific match; unscoped path
+// heuristics remain fallbacks when no format-shaped technique matches.
 //
 // A new camera typically reuses existing techniques. When it does not, only
 // the missing technique is added to the relevant list - we never grow files
@@ -16,6 +17,14 @@ export interface FilenameTechnique<T> {
     id: string;
     /** Returns the extracted value, or null when the technique does not apply. */
     extract(file: VendorFile): T | null;
+    /**
+     * Classifies the evidence behind a non-null result. Specific evidence is a
+     * format-shaped filename or a path that was gated by one. Heuristic evidence
+     * is an unscoped folder convention such as `Event/` or `Front/` that remains
+     * useful for renamed files but must not override a later format-shaped name.
+     * Omitted means specific.
+     */
+    evidence?(file: VendorFile, value: T): "specific" | "heuristic";
 }
 
 export type FilenameTimeTechnique = FilenameTechnique<Date>;

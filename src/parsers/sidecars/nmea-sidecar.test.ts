@@ -148,6 +148,12 @@ describe("ddpaiGpxSidecar.matches", () => {
         expect(ddpaiGpxSidecar.matches(file, known)).toBe("20240101120000_0030.mp4");
     });
 
+    it("matches a selected `103gps/` folder even when it is the import root", () => {
+        const file = makeVendorFile("103gps/20190719161640_0060.gpx", "", "20190719161640_0060.gpx");
+        const known = new Set(["20190719161640_0060.mp4"]);
+        expect(ddpaiGpxSidecar.matches(file, known)).toBe("20190719161640_0060.mp4");
+    });
+
     it("strips the `_D` suffix on the sidecar and `_A` on the MP4 (2-channel pairing)", () => {
         const file = makeVendorFile("DCIM/103gps/20190719161640_0060_D.gpx", "", "20190719161640_0060_D.gpx");
         const known = new Set(["20190719161640_0060_A.mp4"]);

@@ -12,10 +12,13 @@
 import type { GpsRecord, SidecarHandler, VendorFile } from "../types.js";
 import { escapeXml } from "../../escape.js";
 import { forwardFillBearingsIfAllZero } from "../../parser.js";
+import { utcMillisecondsFromParts } from "../internal/calendar.js";
+import { isCoordinateInRange } from "../internal/ddmm.js";
 import { matchByBasename } from "./_basename.js";
 import { readSidecarText } from "./_read.js";
 
 const RX_GPX = /\.gpx$/i;
+const RX_GPX_TIME = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$/i;
 
 export const gpxSidecar: SidecarHandler = {
     id: "gpx",
@@ -65,22 +68,17 @@ function parseGpx(text: string, mp4Filename: string): GpsRecord[] {
 
     const records: GpsRecord[] = [];
 
-    // Points may be in trk/trkseg/trkpt or in top-level wpt elements.
-    // Dashcam software usually writes trk/trkseg, but wpt is also seen -
-    // collect both to handle non-standard exports.
-    const points = doc.getElementsByTagName("trkpt");
-    for (let i = 0; i < points.length; i++) {
-        const rec = trkptToRecord(points[i]!, mp4Filename);
-        if (rec) records.push(rec);
-    }
-    const waypoints = doc.getElementsByTagName("wpt");
-    for (let i = 0; i < waypoints.length; i++) {
-        const rec = trkptToRecord(waypoints[i]!, mp4Filename);
-        if (rec) records.push(rec);
+    // Namespace prefixes are legal in GPX, so match local names rather than
+    // only unprefixed qualified names. Route points share the same point shape.
+    for (const pointName of ["trkpt", "wpt", "rtept"]) {
+        for (const point of elementsByLocalName(doc, pointName)) {
+            const rec = trkptToRecord(point, mp4Filename);
+            if (rec) records.push(rec);
+        }
     }
 
     if (records.length === 0) {
-        throw new Error("gpx contains no usable trkpt/wpt with time");
+        throw new Error("gpx contains no usable trkpt/wpt/rtept with time");
     }
 
     records.sort((a, b) => a.unixSeconds - b.unixSeconds);
@@ -103,15 +101,39 @@ function parseGpx(text: string, mp4Filename: string): GpsRecord[] {
  * Returns unix milliseconds, or null if the string is unparseable.
  */
 function parseGpxTime(raw: string): number | null {
-    let ms = Date.parse(raw);
-    if (Number.isFinite(ms)) return ms;
+    const trimmed = raw.trim();
+    if (trimmed === "") return null;
     // 70mai-style trailing Z after an offset.
-    const fixed = raw.replace(/([+-]\d{2}:?\d{2})Z$/, "$1");
-    if (fixed !== raw) {
-        ms = Date.parse(fixed);
-        if (Number.isFinite(ms)) return ms;
+    const fixed = trimmed.replace(/([+-]\d{2}:?\d{2})Z$/i, "$1");
+    const m = RX_GPX_TIME.exec(fixed);
+    if (!m) return null;
+
+    const [, y, mo, d, h, mi, s, fraction = "", zone] = m;
+    const baseMs = utcMillisecondsFromParts(Number(y), Number(mo), Number(d), Number(h), Number(mi), Number(s), true);
+    if (baseMs === null) return null;
+
+    const fractionMs = fraction === "" ? 0 : Number(fraction) * 1000;
+    if (!Number.isFinite(fractionMs)) return null;
+    let ms = baseMs + fractionMs;
+
+    // GPX requires a zone, but some exports omit it. Treat that wall-clock as
+    // UTC deterministically; interpreting it in the browser's host zone makes
+    // the same file move when opened on another computer.
+    if (zone && zone.toUpperCase() !== "Z") {
+        const digits = zone.slice(1).replace(":", "");
+        const offsetHours = Number(digits.slice(0, 2));
+        const offsetMinutes = Number(digits.slice(2));
+        if (offsetHours > 23 || offsetMinutes > 59) return null;
+        const direction = zone.startsWith("-") ? -1 : 1;
+        ms -= direction * (offsetHours * 60 + offsetMinutes) * 60_000;
     }
-    return null;
+    return Number.isFinite(ms) ? ms : null;
+}
+
+function elementsByLocalName(root: Document | Element, name: string): Element[] {
+    const namespaced = root.getElementsByTagNameNS("*", name);
+    if (namespaced.length > 0) return Array.from(namespaced);
+    return Array.from(root.getElementsByTagName(name));
 }
 
 /**
@@ -120,31 +142,34 @@ function parseGpxTime(raw: string): number | null {
  * element does not abort the whole file.
  */
 function trkptToRecord(el: Element, mp4Filename: string): GpsRecord | null {
-    const lat = Number(el.getAttribute("lat"));
-    const lon = Number(el.getAttribute("lon"));
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    const latRaw = el.getAttribute("lat");
+    const lonRaw = el.getAttribute("lon");
+    if (latRaw === null || lonRaw === null || latRaw.trim() === "" || lonRaw.trim() === "") return null;
+    const lat = Number(latRaw);
+    const lon = Number(lonRaw);
+    if (!isCoordinateInRange(lat, "lat") || !isCoordinateInRange(lon, "lon")) return null;
 
-    const timeEl = el.getElementsByTagName("time")[0];
+    const timeEl = elementsByLocalName(el, "time")[0];
     if (!timeEl) return null;
     const ms = parseGpxTime((timeEl.textContent ?? "").trim());
     if (ms === null) return null;
 
-    // speed/course are not in the GPX 1.1 schema but are commonly written
-    // as child elements in the gpx namespace or without a namespace.
-    // getElementsByTagName matches without namespace - sufficient for common
-    // exports (Dashcam Viewer / OsmAnd / our own serializer).
-    const speedEl = el.getElementsByTagName("speed")[0];
-    const courseEl = el.getElementsByTagName("course")[0];
-    const speedMs = speedEl ? Number(speedEl.textContent) : 0;
-    const bearingDeg = courseEl ? Number(courseEl.textContent) : 0;
+    // speed/course are common extensions. A bad optional field must not discard
+    // an otherwise valid point; normalize it to the contract's neutral value.
+    const speedEl = elementsByLocalName(el, "speed")[0];
+    const courseEl = elementsByLocalName(el, "course")[0];
+    const speedValue = speedEl ? Number(speedEl.textContent) : 0;
+    const courseValue = courseEl ? Number(courseEl.textContent) : 0;
+    const speedMs = Number.isFinite(speedValue) && speedValue >= 0 ? speedValue : 0;
+    const bearingDeg = Number.isFinite(courseValue) ? ((courseValue % 360) + 360) % 360 : 0;
 
     return {
         unixSeconds: ms / 1000,
         active: true, // GPX normally contains only valid points
         lat,
         lon,
-        bearingDeg: Number.isFinite(bearingDeg) ? bearingDeg : 0,
-        speedMs: Number.isFinite(speedMs) ? speedMs : 0,
+        bearingDeg,
+        speedMs,
         // GPX has no accelerometer data - brake events will not be detected
         // on these tracks (gMagnitude = 0).
         accelXg: 0,

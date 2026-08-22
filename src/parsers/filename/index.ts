@@ -1,9 +1,9 @@
 // Filename / path metadata techniques - aggregate walk API.
 //
 // Each process (time / channel / mode / sequence) is a flat list of
-// FilenameTechnique entries (see types.ts). The walk takes the first non-null
-// extract and reports both the value and the matching technique id (for
-// diagnostics).
+// FilenameTechnique entries (see types.ts). The walk takes the first specific
+// match, falling back to the first heuristic only when no specific technique
+// recognizes the file, and reports the matching technique id for diagnostics.
 //
 // Adding support for a new camera typically means adding one or two entries
 // to the relevant per-field file - never a new "vendor file". When a
@@ -22,11 +22,15 @@ import type { ChannelMatch, FilenameMatch, FilenameTechnique } from "./types.js"
 export type { FilenameMatch } from "./types.js";
 
 function walk<T>(techniques: readonly FilenameTechnique<T>[], file: VendorFile): FilenameMatch<T> {
+    let heuristic: FilenameMatch<T> | null = null;
     for (const t of techniques) {
         const value = t.extract(file);
-        if (value !== null) return { value, matchedId: t.id };
+        if (value === null) continue;
+        const match = { value, matchedId: t.id };
+        if ((t.evidence?.(file, value) ?? "specific") === "specific") return match;
+        heuristic ??= match;
     }
-    return { value: null, matchedId: null };
+    return heuristic ?? { value: null, matchedId: null };
 }
 
 // Walk results with the matched technique id - for diagnostics.

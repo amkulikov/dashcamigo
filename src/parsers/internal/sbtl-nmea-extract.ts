@@ -42,6 +42,7 @@
 
 import type { GpsRecord, ParsedRecords, SkippedLine, VendorFile } from "../types.js";
 import { subtractAxisMean, type Vec3 } from "./accel-baseline.js";
+import { utcMillisecondsFromParts } from "./calendar.js";
 import { applyGsensor, dedupByUnixSeconds, parseNmeaCoord, parseRmc } from "./nmea.js";
 import { getFirstSampleOfTrack, loadTrackSampleBuffers, type Mp4Index, type TrackInfo } from "./mp4-index.js";
 
@@ -304,19 +305,18 @@ function parseMini0806(segment: string, mp4Filename: string): Mini0806Result {
     const ss = Number(parts[2]!.slice(4, 6));
     const fracStr = parts[2]!.slice(6); // "" or ".sss" (shape enforced by the signature)
     const frac = fracStr === "" ? 0 : Number(fracStr);
-    // Range validation: without it a corrupt line (month 13, hour 31) rolls
-    // over into a wrong-but-plausible date instead of being skipped - same
-    // contract as parseNmeaTimestamp in nmea.ts.
     if (mo < 1 || mo > 12 || dd < 1 || dd > 31) return { error: "mini0806: bad date" };
     if (hh > 23 || mi > 59 || ss > 60 || !Number.isFinite(frac)) return { error: "mini0806: bad time" };
-    const unixSeconds = Date.UTC(2000 + yy, mo - 1, dd, hh, mi, ss) / 1000 + frac;
+    const timestampMs = utcMillisecondsFromParts(2000 + yy, mo, dd, hh, mi, ss, true);
+    // The broad ranges above preserve precise diagnostics; a remaining
+    // failure is a calendar error such as 31 February.
+    if (timestampMs === null) return { error: "mini0806: bad date" };
+    const unixSeconds = timestampMs / 1000 + frac;
 
-    // ExifTool requires [NS] for lat and [EW] for lon (lines 1236-1241); check
-    // the pairing explicitly because parseNmeaCoord accepts any of N/S/E/W.
     if (parts[4] !== "N" && parts[4] !== "S") return { error: "mini0806: bad latitude hemisphere" };
     if (parts[6] !== "E" && parts[6] !== "W") return { error: "mini0806: bad longitude hemisphere" };
-    const lat = parseNmeaCoord(parts[3]!, parts[4]);
-    const lon = parseNmeaCoord(parts[5]!, parts[6]);
+    const lat = parseNmeaCoord(parts[3]!, parts[4]!, "lat");
+    const lon = parseNmeaCoord(parts[5]!, parts[6]!, "lon");
     if (lat === null || lon === null) return { error: "mini0806: bad coordinates" };
 
     // Digits-only like ExifTool's /^\d+\.\d+$/ guard (line 1244), with the

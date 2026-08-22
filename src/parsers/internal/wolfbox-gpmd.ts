@@ -38,6 +38,7 @@
 // observation), so stts durations must not be trusted here.
 
 import { type GpsRecord, KNOTS_TO_MS, type ParsedRecords, type SkippedLine, type VendorFile } from "../types.js";
+import { utcMillisecondsFromParts } from "./calendar.js";
 import { ddmmToDegrees } from "./ddmm.js";
 import { findTrackBySampleFormat, loadTrackSampleBuffers, type Mp4Index, type TrackInfo } from "./mp4-index.js";
 
@@ -159,9 +160,11 @@ function decodeVariantB(dv: DataView, mp4Filename: string): GpsRecord | null {
 
     const speedKnots = rational(dv, B_OFF_SPEED, 1);
     const dir = rational(dv, B_OFF_DIR, 1);
+    const timestampMs = utcMillisecondsFromParts(year, month, day, hour, minute, second);
+    if (timestampMs === null) return null;
 
     return {
-        unixSeconds: Date.UTC(year, month - 1, day, hour, minute, second) / 1000,
+        unixSeconds: timestampMs / 1000,
         active: true,
         lat,
         lon,

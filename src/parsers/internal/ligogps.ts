@@ -26,6 +26,7 @@
 import { findTsGpsTrailer, isTsGpsTrailerTerminator, TS_TRAILER_SLOTS_OFFSET } from "../../ts-trailer.js";
 import type { GpsRecord, ParsedRecords, SkippedLine, VendorFile } from "../types.js";
 import { KNOTS_TO_MS, WrongFormatError } from "../types.js";
+import { utcMillisecondsFromParts } from "./calendar.js";
 import { loadSamples, readSampleTable } from "./mp4-walker.js";
 import type { Mp4Index } from "./mp4-index.js";
 
@@ -195,8 +196,8 @@ function parseLigoGpsRecord(text: string, mp4Filename: string, speedUnit: LigoSp
     const second = Number(dtMatch[6]);
     if (![year, month, day, hour, minute, second].every(Number.isFinite)) return null;
     if (year < 2000 || year > 2099) return null;
-    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-    if (hour > 23 || minute > 59 || second > 59) return null;
+    const timestampMs = utcMillisecondsFromParts(year, month, day, hour, minute, second);
+    if (timestampMs === null) return null;
 
     let lat = Number(latStr);
     let lon = Number(lonStr);
@@ -225,7 +226,7 @@ function parseLigoGpsRecord(text: string, mp4Filename: string, speedUnit: LigoSp
         }
     }
 
-    const unixSeconds = Date.UTC(year, month - 1, day, hour, minute, second) / 1000;
+    const unixSeconds = timestampMs / 1000;
     return {
         unixSeconds,
         active: true,

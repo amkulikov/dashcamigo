@@ -1556,19 +1556,15 @@ describe("Rexing affine deobfuscation (Type 17b, KodakVersion-gated)", () => {
         expect(records[0]!.speedMs).toBeCloseTo(10 * KNOTS_TO_MS, 6);
     });
 
-    it("flag off: the same block decodes as plain DDmm (documented silent garbage)", () => {
+    it("flag off: rejects the obfuscated values when they are not valid DDmm", () => {
         const parse = createFreeGpsBlockParser();
         const records = parse(buildRexingBlock(), "rexing.mp4");
-        expect(records).toHaveLength(1);
-        // ddmmToDegrees(288.99...) = 3.4832, ddmmToDegrees(2423.39...) = 24.3899 W.
-        expect(records[0]!.lat).toBeCloseTo(3.4832, 3);
-        expect(records[0]!.lon).toBeCloseTo(-24.3899, 3);
+        expect(records).toEqual([]);
     });
 
     it("stateless registry default (parseFreeGpsBlock) never applies the transform", () => {
         const records = parseFreeGpsBlock(buildRexingBlock(), "rexing.mp4");
-        expect(records).toHaveLength(1);
-        expect(records[0]!.lat).toBeCloseTo(3.4832, 3);
+        expect(records).toEqual([]);
     });
 
     it("flag on does not disturb non-DEFAULT layouts (LAYOUT_LEGACY keeps ddmm)", () => {
@@ -1604,8 +1600,8 @@ describe("Rexing affine deobfuscation (Type 17b, KodakVersion-gated)", () => {
         // gate is exact-match by design (obfuscated raws overlap valid DDmm).
         for (const version of ["3.01.055", null]) {
             const plain = await freegpsPrimitive.parse(vf(), makeIndex(version));
-            expect(plain.records).toHaveLength(2);
-            expect(plain.records[0]!.lat).toBeCloseTo(3.4832, 3);
+            expect(plain.records).toEqual([]);
+            expect(plain.skipped).toHaveLength(2);
         }
     });
 });
@@ -1776,6 +1772,22 @@ describe("ATC self-keying XOR records (Type 11)", () => {
         expect(parsed).not.toBeNull();
         expect(parsed!.records).toHaveLength(30);
         expect(parsed!.records[29]!.unixSeconds).toBe(Date.UTC(2015, 4, 15, 19, 30, 29) / 1000);
+    });
+
+    it("structural path reads the whole atom when only one valid ring record fits in the probe", async () => {
+        const ring = Array.from({ length: 30 }, (_, i) => ({ ...REC_A, second: i }));
+        const block = buildAtcBlock(ring);
+        // Leave record 0 valid, corrupt every other complete record in the
+        // first 1 KiB, then leave the tail valid. A record-count heuristic
+        // sees exactly one fix and would incorrectly skip the second read.
+        for (let i = 1; i <= 17; i++) setAscii(block, 44 + i * 52 + 0x1d, "XXX");
+        const table = canonicalGpsTable([[0x1000, 0x4000]]);
+        const file = new SparseFile(0x10000, [{ offset: 0x1000, data: blockAtomBytes(block) }]) as unknown as File;
+
+        const parsed = await tryStructuralPath(file, indexStub(table), parseFreeGpsBlock);
+        expect(parsed).not.toBeNull();
+        expect(parsed!.records).toHaveLength(13);
+        expect(parsed!.records.at(-1)!.unixSeconds).toBe(Date.UTC(2015, 4, 15, 19, 30, 29) / 1000);
     });
 
     it("reads the whole ring buffer through a literal-pointing (legacy) table too", async () => {
@@ -2113,12 +2125,30 @@ describe("structural gps-table candidates", () => {
         expect(parsed).toBeNull();
     });
 
-    it("a table pointing at non-freeGPS bytes is rejected by the first-entry magic check", async () => {
+    it("a table pointing at non-freeGPS bytes is rejected by the bounded preflight", async () => {
         const junk = new Uint8Array(64).fill(0x42);
         const table = canonicalGpsTable([[0x1000, 0x4000]]);
         const file = new SparseFile(0x10000, [{ offset: 0x1000, data: junk }]) as unknown as File;
         const parsed = await tryStructuralPath(file, indexStub(table), parseFreeGpsBlock);
         expect(parsed).toBeNull();
+    });
+
+    it("keeps a valid table when its first descriptor is corrupt", async () => {
+        const junk = new Uint8Array(64).fill(0x42);
+        const atom = blockAtomBytes(buildCanonicalType3Block({ anchor: 68 }));
+        const table = canonicalGpsTable([
+            [0x1000, 0x4000],
+            [0x2000, 0x4000],
+        ]);
+        const file = new SparseFile(0x10000, [
+            { offset: 0x1000, data: junk },
+            { offset: 0x2000, data: atom },
+        ]) as unknown as File;
+
+        const parsed = await tryStructuralPath(file, indexStub(table), parseFreeGpsBlock);
+        expect(parsed).not.toBeNull();
+        expect(parsed!.records).toHaveLength(1);
+        expect(parsed!.skipped[0]?.line).toBe(1);
     });
 });
 

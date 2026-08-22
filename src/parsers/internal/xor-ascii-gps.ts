@@ -18,7 +18,7 @@
 // below are into the DECRYPTED text.
 
 import { type GpsRecord, KMH_TO_MS } from "../types.js";
-import { ddmmToDegrees } from "./ddmm.js";
+import { ddmmToDegrees, isCoordinateInRange } from "./ddmm.js";
 import { utcSecondsFromYmdhms } from "./freegps.js";
 
 /** Encrypted "XKZD\xfe\xfe" - present in every carrier at its own offset. */
@@ -88,7 +88,7 @@ export function decodeXorAsciiGpsText(text: string, mp4Filename: string): GpsRec
 
     const lat = ddmmToDegrees(Number(m[8]) / 1e4) * (m[7] === "N" ? 1 : -1);
     const lon = ddmmToDegrees(Number(m[10]) / 1e4) * (m[9] === "E" ? 1 : -1);
-    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+    if (!isCoordinateInRange(lat, "lat") || !isCoordinateInRange(lon, "lon")) return null;
 
     // km/h per ExifTool's GPSSpeed convention for this branch. The [-+]\d{4}
     // group at 57 looks like altitude, but upstream explicitly distrusts it

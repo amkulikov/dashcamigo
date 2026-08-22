@@ -31,6 +31,8 @@
 //         ├ GPS5 (int32×5 - lat/lon/alt/speed2d/speed3d, up to HERO10)
 //         └ GPS9 (mixed - lat/lon/alt/speed2d/speed3d/days/ms/dop/fix, HERO11+)
 
+import { utcMillisecondsFromParts } from "./calendar.js";
+
 export interface GpmfToken {
     /** FourCC key: 'DEVC', 'STRM', 'GPS5', 'GPSU', 'SCAL', etc. */
     fourCC: string;
@@ -183,7 +185,7 @@ export function parseGpsuTimestamp(s: string): number | null {
     if (![yy, mm, dd, hh, mi, ss, frac].every(Number.isFinite)) return null;
     // GPMF timestamps are 21st century (GoPro started in 2010).
     const year = 2000 + yy;
-    const ms = Date.UTC(year, mm - 1, dd, hh, mi, ss);
-    if (!Number.isFinite(ms)) return null;
+    const ms = utcMillisecondsFromParts(year, mm, dd, hh, mi, ss);
+    if (ms === null) return null;
     return ms / 1000 + frac;
 }

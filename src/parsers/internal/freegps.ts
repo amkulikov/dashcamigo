@@ -31,7 +31,8 @@
 import { extendArray } from "../../array-extend.js";
 import { concat } from "../../bytes.js";
 import { type GpsRecord, KMH_TO_MS, KNOTS_TO_MS, type ParsedRecords, type SkippedLine } from "../types.js";
-import { ddmmToDegrees } from "./ddmm.js";
+import { utcMillisecondsFromParts } from "./calendar.js";
+import { ddmmToDegrees, isCoordinateInRange } from "./ddmm.js";
 import { decodeXorAsciiGpsText, decryptXorAscii } from "./xor-ascii-gps.js";
 import type { Mp4Index } from "./mp4-index.js";
 import { parseNmeaText } from "./nmea.js";
@@ -48,6 +49,8 @@ const BLOCK_PAYLOAD_SIZE = 0x8000; // 32 KB
 interface FreeGpsVariant {
     /** Variant name for logs (e.g. "VIOFO Type 3"). */
     name: string;
+    /** The parser scans beyond the structural path's 1 KiB probe. */
+    needsWholeAtom?: boolean;
     /**
      * Returns true if this variant can parse the payload. Payload starts
      * with FREE_GPS_MAGIC (8 bytes).
@@ -357,7 +360,7 @@ function parseIqsFields(
     // top of a signed value would double-negate the hemisphere.
     const lat = (Math.abs(payload.getInt32(72, true)) / 1e7) * ns;
     const lon = (Math.abs(payload.getInt32(76, true)) / 1e7) * ew;
-    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+    if (!isCoordinateInRange(lat, "lat") || !isCoordinateInRange(lon, "lon")) return null;
     const speedMs = payload.getInt32(80, true) / 100;
     // A negative "speed" means these bytes are not the IQS layout after all.
     if (speedMs < 0) return null;
@@ -425,9 +428,8 @@ export function utcSecondsFromYmdhms(
     if (![yearRaw, month, day, hour, minute, second].every(Number.isFinite)) return null;
     const year = yearRaw < 100 ? 2000 + yearRaw : yearRaw;
     if (year < 2000 || year > 2099) return null;
-    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-    if (hour > 23 || minute > 59 || second > 59) return null;
-    return Date.UTC(year, month - 1, day, hour, minute, second) / 1000;
+    const ms = utcMillisecondsFromParts(year, month, day, hour, minute, second);
+    return ms === null ? null : ms / 1000;
 }
 
 // ===== Rexing V1-4K affine deobfuscation (ExifTool GPSType 17b) =====
@@ -614,7 +616,7 @@ function parseType3Block(
 
     const lat = (alreadyDegrees ? latValue : ddmmToDegrees(latValue)) * ns;
     const lon = (alreadyDegrees ? lonValue : ddmmToDegrees(lonValue)) * ew;
-    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+    if (!isCoordinateInRange(lat, "lat") || !isCoordinateInRange(lon, "lon")) return null;
 
     let accelXg = 0;
     let accelYg = 0;
@@ -1003,7 +1005,7 @@ const variantHorsontech: FreeGpsVariant = {
         if (![lonRaw, latRaw, speedKnots, heading].every(Number.isFinite)) return [];
         const lat = ddmmToDegrees(latRaw) * ns;
         const lon = ddmmToDegrees(lonRaw) * ew;
-        if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return [];
+        if (!isCoordinateInRange(lat, "lat") || !isCoordinateInRange(lon, "lon")) return [];
         // Literal 104 is altitude - no GpsRecord field, dropped. Accel triple
         // at literal 108/112/116 (unpack x68V6x20V3 = atom 112, NOT "after
         // the V6"); /1000 scale is marked "(NC)" upstream - unconfirmed.
@@ -1304,8 +1306,7 @@ const variantEaceRc4: FreeGpsVariant = {
         }
         const lat = ddmmToDegrees(Number(latStr)) * ns;
         const lon = ddmmToDegrees(Number(lonStr)) * ew;
-        if (![lat, lon].every(Number.isFinite)) return [];
-        if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return [];
+        if (!isCoordinateInRange(lat, "lat") || !isCoordinateInRange(lon, "lon")) return [];
         const speedKnots = payload.getFloat32(80, true);
         const heading = payload.getFloat32(84, true);
         if (![speedKnots, heading].every(Number.isFinite)) return [];
@@ -1384,7 +1385,7 @@ const variantAkasoType6: FreeGpsVariant = {
         if (![latRaw, lonRaw, speedKmh, heading].every(Number.isFinite)) return [];
         const lat = ddmmToDegrees(latRaw) * ns;
         const lon = ddmmToDegrees(lonRaw) * ew;
-        if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return [];
+        if (!isCoordinateInRange(lat, "lat") || !isCoordinateInRange(lon, "lon")) return [];
         // /1000 scale is "(NC)" upstream and the only known sample shows
         // near-zero values - benign, but unverified.
         let accelXg = payload.getInt32(96, true) / 1000;
@@ -1468,7 +1469,7 @@ const variantNovatekDoubles: FreeGpsVariant = {
         if (![latRaw, lonRaw, speedKnots, heading].every(Number.isFinite)) return [];
         const lat = ddmmToDegrees(latRaw) * ns;
         const lon = ddmmToDegrees(lonRaw) * ew;
-        if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return [];
+        if (!isCoordinateInRange(lat, "lat") || !isCoordinateInRange(lon, "lon")) return [];
         return [
             {
                 unixSeconds,
@@ -1542,6 +1543,7 @@ function isPlausibleNextbaseDate(
  */
 const variantNextbase512gBE: FreeGpsVariant = {
     name: "Nextbase 512G $S (Type 20)",
+    needsWholeAtom: true,
     matches(payload) {
         if (!startsWithMagic(payload)) return false;
         if (payload.byteLength < NEXTBASE_RECORD_START + NEXTBASE_RECORD_MIN_BYTES) return false;
@@ -1583,8 +1585,9 @@ const variantNextbase512gBE: FreeGpsVariant = {
             if (heading < 0) heading += 360;
             // Seconds are stored * 10 - carry the 0.1 s fraction into
             // unixSeconds (Date.UTC alone would truncate it).
-            const unixSeconds =
-                Date.UTC(year, mon - 1, day, hr, min, Math.floor(secX10 / 10)) / 1000 + (secX10 % 10) / 10;
+            const timestampMs = utcMillisecondsFromParts(year, mon, day, hr, min, Math.floor(secX10 / 10));
+            if (timestampMs === null) break;
+            const unixSeconds = timestampMs / 1000 + (secX10 % 10) / 10;
             records.push({
                 unixSeconds,
                 active: true,
@@ -1699,7 +1702,7 @@ export function parseInnovvRecord(payload: DataView, at: number, mp4Filename: st
 
     const lat = ddmmToDegrees(latRaw) * ns;
     const lon = ddmmToDegrees(lonRaw) * ew;
-    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+    if (!isCoordinateInRange(lat, "lat") || !isCoordinateInRange(lon, "lon")) return null;
     if (speedKnots < 0 || heading < 0 || heading >= 360) return null;
 
     return {
@@ -1721,6 +1724,7 @@ export function parseInnovvRecord(payload: DataView, at: number, mp4Filename: st
 
 const variantInnovv: FreeGpsVariant = {
     name: "INNOVV Type 13",
+    needsWholeAtom: true,
     matches(payload) {
         if (!startsWithMagic(payload)) return false;
         return hasInnovvRecordSignature(payload, INNOVV_MARKER_OFFSET);
@@ -1820,7 +1824,7 @@ function parseAtcRecord(payload: DataView, at: number, mp4Filename: string): Gps
 
     const lat = rec.getInt32(0x10, true) / 1e7;
     const lon = rec.getInt32(0x18, true) / 1e7;
-    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+    if (!isCoordinateInRange(lat, "lat") || !isCoordinateInRange(lon, "lon")) return null;
 
     // Speed is already m/s (upstream converts for display only).
     const speedMs = rec.getInt32(0x20, true) / 100;
@@ -1848,6 +1852,7 @@ function parseAtcRecord(payload: DataView, at: number, mp4Filename: string): Gps
 
 const variantAtc: FreeGpsVariant = {
     name: "ATC Type 11",
+    needsWholeAtom: true,
     matches(payload) {
         if (!startsWithMagic(payload)) return false;
         return hasAsciiAt(payload, ATC_MARKER_OFFSET, "ATC");
@@ -1915,7 +1920,7 @@ function parseXbhtRecord(payload: DataView, at: number, mp4Filename: string): Gp
     const ew = payload.getUint8(at + 10) === 0x57 ? -1 : 1;
     const lat = ddmmToDegrees(payload.getUint32(at + 16, true) / 1e4) * ns;
     const lon = ddmmToDegrees(payload.getUint32(at + 20, true) / 1e4) * ew;
-    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+    if (!isCoordinateInRange(lat, "lat") || !isCoordinateInRange(lon, "lon")) return null;
 
     return {
         unixSeconds,
@@ -1933,6 +1938,7 @@ function parseXbhtRecord(payload: DataView, at: number, mp4Filename: string): Gp
 
 const variantXbht: FreeGpsVariant = {
     name: "XBHT XB702 Type 14",
+    needsWholeAtom: true,
     matches(payload) {
         if (!startsWithMagic(payload)) return false;
         // Upstream anchors the block on the FIRST record sitting at literal 12.
@@ -1988,7 +1994,7 @@ function startsWithMagic(dv: DataView): boolean {
  * is the stateless registry-only parser; createFreeGpsBlockParser wraps it
  * with the stateful anchor-scan fallback for unknown layouts.
  */
-export function parseFreeGpsBlock(payload: DataView, mp4Filename: string, boxSizeDword?: number): GpsRecord[] {
+function parseRegisteredFreeGpsBlock(payload: DataView, mp4Filename: string, boxSizeDword?: number): GpsRecord[] {
     for (const variant of FREE_GPS_VARIANTS) {
         if (variant.matches(payload)) {
             return variant.parse(payload, mp4Filename, undefined, boxSizeDword);
@@ -1996,6 +2002,17 @@ export function parseFreeGpsBlock(payload: DataView, mp4Filename: string, boxSiz
     }
     return [];
 }
+
+function registeredVariantNeedsWholeAtom(payload: DataView): boolean {
+    for (const variant of FREE_GPS_VARIANTS) {
+        if (variant.matches(payload)) return variant.needsWholeAtom === true;
+    }
+    return false;
+}
+
+export const parseFreeGpsBlock: ParseFreeGpsBlock = Object.assign(parseRegisteredFreeGpsBlock, {
+    needsWholeAtom: registeredVariantNeedsWholeAtom,
+});
 
 // ===== Backward anchor-scan fallback (dynamic Type-3 offsets) =====
 //
@@ -2258,6 +2275,7 @@ export function createFreeGpsBlockParser(options: CreateFreeGpsBlockParserOption
     };
 
     return Object.assign(parseOneBlock, {
+        needsWholeAtom: registeredVariantNeedsWholeAtom,
         claimedVariantName: (): string | null => (mixedClaims || fallbackEmitted ? null : claimedName),
         coldStartClockJumpSec: (): number | null => {
             if (rawClockJumpSec === null) return null;
@@ -2365,7 +2383,11 @@ export async function streamScanFreeGps(
  * decoded from the block (empty array = void/invalid/unclaimed block, the
  * caller records a skipped entry).
  */
-export type ParseFreeGpsBlock = (payload: DataView, mp4Filename: string, boxSizeDword?: number) => GpsRecord[];
+export interface ParseFreeGpsBlock {
+    (payload: DataView, mp4Filename: string, boxSizeDword?: number): GpsRecord[];
+    /** True when a structural probe identifies a layout whose records may continue past it. */
+    needsWholeAtom?(payload: DataView, boxSizeDword?: number): boolean;
+}
 
 /**
  * Reads the MP4 box-size dword that sits immediately before the `freeGPS `
@@ -2828,8 +2850,8 @@ export async function tryStructuralPath(
 }
 
 // `gps ` atom payload candidates, tried in order. A wrong candidate is
-// rejected by parseEntries' first-entry "freeGPS " magic check before any
-// bulk IO, so each extra candidate costs at most one ~1 KB read.
+// rejected by parseEntries' bounded preflight before any bulk IO, so each
+// extra candidate costs at most eight ~1 KB reads.
 //
 //  1. CANONICAL (ExifTool QuickTimeStream.pl:2546-2553 (v13.59) Get32u
 //     count@4 / entries@8 under big-endian QuickTime byte order; same layout
@@ -2922,6 +2944,11 @@ const STRUCTURAL_READ_MAX = BLOCK_PAYLOAD_SIZE;
 // cap concurrent file reads anyway (~6-12); going higher rarely helps.
 const STRUCTURAL_PARALLEL_DEPTH = 8;
 
+// A corrupt first descriptor is common after an interrupted recording. Probe
+// one IO batch so a valid later entry can still establish the table without
+// risking thousands of reads for a wholly bogus candidate.
+const STRUCTURAL_PREFLIGHT_ENTRIES = STRUCTURAL_PARALLEL_DEPTH;
+
 async function parseEntries(
     file: File,
     entries: GpsAtomEntry[],
@@ -2930,38 +2957,50 @@ async function parseEntries(
 ): Promise<ParsedRecords | null> {
     if (entries.length === 0) return null;
 
-    // First-entry magic check up front: abort on broken tables before issuing
-    // 3600 parallel reads. A missing literal in entry 0 bails the entire
-    // structural path (same contract as the old sequential code).
-    const first = await readEntryBytes(file, entries[0]!, STRUCTURAL_PROBE_READ);
-    if (!first) return null;
-    const firstLiteralOffset = findFreeGpsLiteralOffset(first);
-    if (firstLiteralOffset === null) return null;
+    const preflightCount = Math.min(STRUCTURAL_PREFLIGHT_ENTRIES, entries.length);
+    const preflightBuffers = await Promise.all(
+        entries
+            .slice(0, preflightCount)
+            .map((entry) => readEntryBytes(file, entry, STRUCTURAL_PROBE_READ).catch(() => null)),
+    );
+    if (!preflightBuffers.some((buf) => buf !== null && findFreeGpsLiteralOffset(buf) !== null)) return null;
 
     const records: GpsRecord[] = [];
     const skipped: SkippedLine[] = [];
-    let validBlocks = 0;
+    let magicBlocks = 0;
 
-    // Parse the first entry from the already-read buffer to avoid a second
-    // slice() for it.
-    const firstRecords = await parseBlockFromProbe(file, entries[0]!, first, firstLiteralOffset, parseBlock);
-    if (firstRecords.length > 0) {
-        extendArray(records, firstRecords);
-        validBlocks++;
-    } else {
-        skipped.push({
-            line: 1,
-            raw: `<entry @${entries[0]!.offset}, ${entries[0]!.size} bytes>`,
-            reason: "no matching variant or void/invalid record",
-        });
-    }
+    const processEntry = async (i: number, buf: Uint8Array | null): Promise<void> => {
+        const entry = entries[i]!;
+        const literalOffset = buf ? findFreeGpsLiteralOffset(buf) : null;
+        if (!buf || literalOffset === null) {
+            skipped.push({
+                line: i + 1,
+                raw: `<entry @${entry.offset}, ${entry.size} bytes>`,
+                reason: !buf ? "read failed" : "no freeGPS magic",
+            });
+            return;
+        }
+        magicBlocks++;
+        const blockRecords = await parseBlockFromProbe(file, entry, buf, literalOffset, parseBlock);
+        if (blockRecords.length > 0) {
+            extendArray(records, blockRecords);
+        } else {
+            skipped.push({
+                line: i + 1,
+                raw: `<entry @${entry.offset}, ${entry.size} bytes>`,
+                reason: "no matching variant or void/invalid record",
+            });
+        }
+    };
+
+    for (let i = 0; i < preflightBuffers.length; i++) await processEntry(i, preflightBuffers[i] ?? null);
 
     // Process the rest in pipelined batches. Within a batch we issue reads
     // in parallel via Promise.all - this is where the wall-clock win comes
     // from (8 outstanding random seeks on SD instead of one-at-a-time).
     // Between batches we sequentially parse and push results to keep
     // skipped[].line in deterministic order.
-    for (let batchStart = 1; batchStart < entries.length; batchStart += STRUCTURAL_PARALLEL_DEPTH) {
+    for (let batchStart = preflightCount; batchStart < entries.length; batchStart += STRUCTURAL_PARALLEL_DEPTH) {
         if (signal?.aborted) throw new DOMException("freegps structural scan aborted", "AbortError");
         const batchEnd = Math.min(batchStart + STRUCTURAL_PARALLEL_DEPTH, entries.length);
         const batchBuffers = await Promise.all(
@@ -2972,31 +3011,11 @@ async function parseEntries(
         for (let j = 0; j < batchBuffers.length; j++) {
             const i = batchStart + j;
             const buf = batchBuffers[j];
-            const entry = entries[i]!;
-            const literalOffset = buf ? findFreeGpsLiteralOffset(buf) : null;
-            if (!buf || literalOffset === null) {
-                skipped.push({
-                    line: i + 1,
-                    raw: `<entry @${entry.offset}, ${entry.size} bytes>`,
-                    reason: !buf ? "read failed" : "no freeGPS magic",
-                });
-                continue;
-            }
-            validBlocks++;
-            const blockRecords = await parseBlockFromProbe(file, entry, buf, literalOffset, parseBlock);
-            if (blockRecords.length > 0) {
-                extendArray(records, blockRecords);
-            } else {
-                skipped.push({
-                    line: i + 1,
-                    raw: `<entry @${entry.offset}, ${entry.size} bytes>`,
-                    reason: "no matching variant or void/invalid record",
-                });
-            }
+            await processEntry(i, buf ?? null);
         }
     }
 
-    if (validBlocks === 0) return null;
+    if (magicBlocks === 0) return null;
     return { records, skipped };
 }
 
@@ -3011,18 +3030,14 @@ async function readEntryBytes(file: File, entry: GpsAtomEntry, length: number): 
 }
 
 /**
- * Parses one block out of its probe read, re-reading the block to its atom
- * bound first when the probe turned out to hold a multi-record layout.
+ * Parses one block out of its probe read, re-reading it before parsing when
+ * the registry identifies a layout whose records can extend beyond the probe.
  *
- * Two records in the first KB is the signal: every one-fix-per-block layout
- * yields exactly one, while the multi-record variants pack a ring buffer that
- * outruns the probe. Sizing the re-read from the atom's own box size (not the
- * table entry, which is padded to 32 KB) keeps the common single-record file
- * on one small read.
+ * Layout metadata avoids a lossy record-count heuristic: a valid first record
+ * followed by corrupt slots may be the only record visible in the first KB,
+ * while later valid ring-buffer records still need the atom-sized read.
  *
- * Re-parsing the same block through the same closure is safe: a block that
- * emitted 2+ records was claimed by a strict variant, so it never touches the
- * anchor-scan lock, and repeating the claim of the same variant is a no-op.
+ * Custom injected parsers without metadata retain the old 2+-record fallback.
  */
 async function parseBlockFromProbe(
     file: File,
@@ -3031,11 +3046,20 @@ async function parseBlockFromProbe(
     literalOffset: 0 | 4,
     parseBlock: ParseFreeGpsBlock,
 ): Promise<GpsRecord[]> {
-    const probeRecords = parseBlock(
-        toDataViewAtLiteral(probe, literalOffset),
-        file.name,
-        readBoxSizeDword(probe, literalOffset),
-    );
+    const probeView = toDataViewAtLiteral(probe, literalOffset);
+    const boxSizeDword = readBoxSizeDword(probe, literalOffset);
+    if (parseBlock.needsWholeAtom?.(probeView, boxSizeDword)) {
+        const whole = await readWholeAtom(file, entry, probe, literalOffset);
+        if (whole) {
+            return parseBlock(
+                toDataViewAtLiteral(whole, literalOffset),
+                file.name,
+                readBoxSizeDword(whole, literalOffset),
+            );
+        }
+    }
+
+    const probeRecords = parseBlock(probeView, file.name, boxSizeDword);
     if (probeRecords.length < 2) return probeRecords;
 
     const whole = await readWholeAtom(file, entry, probe, literalOffset);

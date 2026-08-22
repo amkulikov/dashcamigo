@@ -18,17 +18,9 @@
 import { RX_NOVATEK_TS } from "../filename/_patterns.js";
 import { extractNovatekTsGps, findNovatekTsGpsPid } from "../internal/novatek-ts-extract.js";
 import type { Mp4Index } from "../internal/mp4-index.js";
+import { looksLikeMpegTs, TS_SIZE } from "../internal/ts-walk.js";
 import type { ParsedRecords, VendorFile } from "../types.js";
 import type { Primitive } from "./types.js";
-
-const TS_SYNC = 0x47;
-const TS_SIZE = 188;
-
-/** True when the buffer starts with two aligned TS sync bytes - the cheap
- *  "is this MPEG-TS at all" gate for the filename fallback. */
-function looksLikeMpegTs(head: Uint8Array): boolean {
-    return head.length >= 2 * TS_SIZE && head[0] === TS_SYNC && head[TS_SIZE] === TS_SYNC;
-}
 
 export const novatekTsPrimitive: Primitive = {
     id: "novatek-ts",

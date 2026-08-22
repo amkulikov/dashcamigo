@@ -7,16 +7,27 @@
 // another FreeGpsVariant) because the semantics differ enough to warrant it:
 // no per-record clock (records are emitted `timeUnsynced` and re-anchored),
 // ddmm*1e5 int32 coordinates and a km/h speed field. Keeping it apart leaves
-// the VIOFO per-block-UTC path untouched. The marker is gated on the 70mai
-// filename so it never shadows VIOFO/Vantrue files - those fall through to
-// `freegps`.
+// the VIOFO per-block-UTC path untouched. Canonical names are a fast hint;
+// renamed clips are claimed by the dialect's structural block signature, so
+// VIOFO/Vantrue files still fall through to `freegps`.
 
 import { type ParsedRecords, type VendorFile, WrongFormatError } from "../types.js";
 import { RX_70MAI } from "../filename/_patterns.js";
 import type { Mp4Index } from "../internal/mp4-index.js";
 import { streamScanFreeGps, tryStructuralPath } from "../internal/freegps.js";
-import { finalize70maiRecords, parse70maiFreeGpsBlock } from "../internal/freegps-70mai.js";
+import { finalize70maiRecords, is70maiFreeGpsBlock, parse70maiFreeGpsBlock } from "../internal/freegps-70mai.js";
 import type { Primitive } from "./types.js";
+
+function probeCarries70maiDialect(index: Mp4Index): boolean {
+    const bytes = index.headerBytes;
+    if (!bytes) return false;
+    for (const offset of index.freeGpsSeedOffsets) {
+        if (offset < 0 || offset >= bytes.byteLength) continue;
+        const view = new DataView(bytes.buffer, bytes.byteOffset + offset, bytes.byteLength - offset);
+        if (is70maiFreeGpsBlock(view)) return true;
+    }
+    return false;
+}
 
 export const freegps70maiPrimitive: Primitive = {
     id: "freegps-70mai",
@@ -25,14 +36,17 @@ export const freegps70maiPrimitive: Primitive = {
 
     async marker(file: VendorFile, index?: Mp4Index): Promise<boolean> {
         if (!index) return false;
-        // 70mai filename is required so this never competes with a VIOFO/Vantrue
-        // file that also carries a freeGPS marker. Older 70mai (CSV) files
+        if (index.hasFreeGpsMarker !== true) return false;
+        // Canonical names stay the zero-CPU fast path. Renamed/exported clips
+        // are claimed only when an already-probed block satisfies the strong
+        // 70mai dialect signature; generic VIOFO/Vantrue blocks fail it.
+        if (RX_70MAI.test(file.file.name)) return true;
+        // Older 70mai (CSV) files
         // normally do not reach here: when their sidecar is present its records
         // already exist, so shouldTryEmbeddedGps skips the embedded probe; a
         // sidecar-less CSV-model file does reach here but has no freeGPS marker,
-        // so hasFreeGpsMarker is false and the marker returns false.
-        if (!RX_70MAI.test(file.file.name)) return false;
-        return index.hasFreeGpsMarker === true;
+        // so the marker returns false.
+        return probeCarries70maiDialect(index);
     },
 
     async parse(file: VendorFile, index?: Mp4Index, signal?: AbortSignal): Promise<ParsedRecords> {

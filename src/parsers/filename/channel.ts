@@ -1,5 +1,6 @@
 // Filename channel techniques. One entry = one way to map filename/path to a
-// ChannelMatch ({ channel, confident }). Walk picks first non-null.
+// ChannelMatch ({ channel, confident }). Format-shaped matches outrank
+// unscoped folder heuristics.
 //
 // Many techniques look at a single capital letter just before the extension;
 // the mapping (F=front, B=rear vs F=front, R=rear) differs per family, so
@@ -68,6 +69,7 @@ const guess = (channel: Channel): ChannelMatch => ({ channel, confident: false }
 
 const mai70Channel: FilenameChannelTechnique = {
     id: "70mai-channel",
+    evidence: (file) => (RX_70MAI.test(file.file.name) ? "specific" : "heuristic"),
     extract(file: VendorFile): ChannelMatch | null {
         const m = file.file.name.match(RX_70MAI);
         if (m) {
@@ -137,6 +139,7 @@ const blackvueChannel: FilenameChannelTechnique = {
 
 const carcamChannel: FilenameChannelTechnique = {
     id: "carcam-channel",
+    evidence: (file) => (RX_CARCAM.test(file.file.name) ? "specific" : "heuristic"),
     extract(file: VendorFile): ChannelMatch | null {
         const m = file.file.name.match(RX_CARCAM);
         if (m) {
@@ -190,6 +193,12 @@ const sstarChnChannel: FilenameChannelTechnique = {
 
 const ddpaiChannel: FilenameChannelTechnique = {
     id: "ddpai-channel",
+    evidence: (file) =>
+        RX_DDPAI_NORMAL.test(file.file.name) ||
+        RX_DDPAI_TIMELAPSE.test(file.file.name) ||
+        RX_DDPAI_EVENT.test(file.file.name)
+            ? "specific"
+            : "heuristic",
     extract(file: VendorFile): ChannelMatch | null {
         // A=rear is a DDPai convention (not a mnemonic), and RX_DDPAI_NORMAL is
         // a generic timestamp pattern, so the mount is a guess. Same for the
@@ -324,6 +333,7 @@ const iboxChannel: FilenameChannelTechnique = {
 
 const juscarChannel: FilenameChannelTechnique = {
     id: "juscar-channel",
+    evidence: (file) => (RX_JUSCAR.test(file.file.name) ? "specific" : "heuristic"),
     extract(file: VendorFile): ChannelMatch | null {
         const m = file.file.name.match(RX_JUSCAR);
         if (m) {
@@ -511,6 +521,7 @@ const thinkwareChannel: FilenameChannelTechnique = {
 
 const wolfboxChannel: FilenameChannelTechnique = {
     id: "wolfbox-channel",
+    evidence: (file) => (RX_WOLFBOX.test(file.file.name) ? "specific" : "heuristic"),
     extract(file: VendorFile): ChannelMatch | null {
         const m = file.file.name.match(RX_WOLFBOX);
         if (m) {
@@ -530,11 +541,9 @@ const wolfboxChannel: FilenameChannelTechnique = {
 };
 
 export const FILENAME_CHANNEL: readonly FilenameChannelTechnique[] = [
-    // neoline/vueroid are name-gated exact shapes and must precede the
-    // techniques with un-gated path fallbacks (70mai's Front|Back|Interior,
-    // ddpai's /front|rear|inside/): a user who splits channels into folders
-    // must still get the letter from the name, not a foreign path claim.
-    // Safe at the front: both return null for any other name.
+    // Exact name-gated families stay first for stable diagnostics. The
+    // unscoped path fallbacks are marked heuristic, so a user-created folder
+    // cannot override a later camera-specific channel suffix.
     neolineChannel,
     vueroidChannel,
     mai70Channel,

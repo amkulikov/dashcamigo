@@ -8,6 +8,7 @@
 // the orchestrator converts to true UTC via per-fingerprint TZ estimation.
 
 import type { VendorFile } from "../types.js";
+import { utcMillisecondsFromParts } from "../internal/calendar.js";
 import {
     RX_70MAI,
     RX_BEFERICH,
@@ -46,9 +47,8 @@ import type { FilenameTimeTechnique } from "./types.js";
 
 function ymdhms(y: number, mo: number, d: number, h: number, mi: number, s: number): Date | null {
     if (y < 2000 || y > 2099) return null;
-    if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
-    if (h > 23 || mi > 59 || s > 59) return null;
-    return new Date(Date.UTC(y, mo - 1, d, h, mi, s));
+    const ms = utcMillisecondsFromParts(y, mo, d, h, mi, s);
+    return ms === null ? null : new Date(ms);
 }
 
 // Most filename formats encode the timestamp as an "YYYYMMDD" run plus an
@@ -217,9 +217,8 @@ const escortTime: FilenameTimeTechnique = {
         const h = Number(hhmm.slice(0, 2));
         const mi = Number(hhmm.slice(2, 4));
         if (y < 2000 || y > 2099) return null;
-        if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
-        if (h > 23 || mi > 59) return null;
-        return new Date(Date.UTC(y, mo - 1, d, h, mi, 0));
+        const ms = utcMillisecondsFromParts(y, mo, d, h, mi, 0);
+        return ms === null ? null : new Date(ms);
     },
 };
 
@@ -257,9 +256,8 @@ const iboxTime: FilenameTimeTechnique = {
         const hour = Number(hms!.slice(0, 2));
         const minute = Number(hms!.slice(2, 4));
         const second = Number(hms!.slice(4, 6));
-        if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-        if (hour > 23 || minute > 59 || second > 59) return null;
-        return new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+        const ms = utcMillisecondsFromParts(year, month, day, hour, minute, second);
+        return ms === null ? null : new Date(ms);
     },
 };
 

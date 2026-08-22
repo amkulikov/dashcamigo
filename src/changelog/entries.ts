@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-08-22.1",
+        category: "fix",
+        text: {
+            en: "Renamed 70mai and Juscar recordings now keep their GPS tracks; invalid dates or coordinates are skipped instead of shifting the route.",
+            ru: "Переименованные записи 70mai и Juscar теперь не теряют GPS-треки; некорректные даты и координаты пропускаются и больше не сдвигают маршрут.",
+            de: "Umbenannte Aufnahmen von 70mai und Juscar behalten jetzt ihre GPS-Tracks; ungültige Datums- oder Koordinatenwerte werden übersprungen, statt die Route zu verschieben.",
+            es: "Las grabaciones renombradas de 70mai y Juscar ahora conservan sus tracks GPS; las fechas o coordenadas no válidas se omiten en lugar de desplazar la ruta.",
+            fr: "Les enregistrements 70mai et Juscar renommés conservent désormais leurs traces GPS ; les dates ou coordonnées invalides sont ignorées au lieu de décaler l’itinéraire.",
+            pl: "Nagrania 70mai i Juscar po zmianie nazwy zachowują teraz ślad GPS; nieprawidłowe daty lub współrzędne są pomijane zamiast przesuwać trasę.",
+            pt: "As gravações renomeadas da 70mai e Juscar agora mantêm o trajeto GPS; datas ou coordenadas inválidas são ignoradas em vez de deslocar a rota.",
+            zh: "重命名后的 70mai 和 Juscar 录像现在仍会保留 GPS 轨迹；无效的日期或坐标会被跳过，不再导致路线偏移。",
+            ja: "名前を変更した 70mai と Juscar の録画でも GPS 軌跡が維持され、無効な日時や座標はルートをずらさずにスキップされるようになりました。",
+            ko: "이름을 바꾼 70mai 및 Juscar 녹화도 이제 GPS 트랙을 유지하며, 잘못된 날짜나 좌표는 경로를 어긋나게 하지 않고 건너뜁니다.",
+        },
+    },
+    {
         id: "2026-08-21.1",
         category: "improvement",
         text: {

@@ -136,7 +136,7 @@ const mai70CameraKey: FilenameCameraKeyTechnique = {
         // grammar, one owner) and is self-gating - no channel letter, no-op.
         const stripped = file.file.name.replace(RX_70MAI_CHANNEL_STRIP, "$1");
         let masked = maskName(stripped);
-        // Canonicalize the EV/LA/PA prefixes to NO (normal): the prefix is a
+        // Canonicalize the EV/VL/LA/PA prefixes to NO (normal): the prefix is a
         // per-clip recording mode, not camera identity. The A810 lite
         // interleaves EV clips inside the normal loop (an event fires and it
         // writes the EV clip INSTEAD of the normal segment), and the A510 does
@@ -145,7 +145,7 @@ const mai70CameraKey: FilenameCameraKeyTechnique = {
         // Masking only touches digits, so the leading prefix survives it; fold
         // it here, keeping the "NO#-#.MP#" shape so diagnostics stay
         // recognizable.
-        masked = masked.replace(/^(?:EV|LA|PA)/i, "NO");
+        masked = masked.replace(/^(?:EV|VL|LA|PA)/i, "NO");
         // Strip both "back" and "rear" (multi-channel drops rear in Back/, the
         // A810 lite in Rear/) plus the recording-mode folder above the channel
         // one, so Normal/Front, Normal/Rear, Event/Front, Event/Rear all yield

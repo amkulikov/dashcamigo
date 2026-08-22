@@ -53,7 +53,7 @@
 
 import type { GpsRecord, ParsedRecords, SkippedLine, VendorFile } from "../types.js";
 import { KNOTS_TO_MS, WrongFormatError } from "../types.js";
-import { ddmmToDegrees } from "./ddmm.js";
+import { ddmmToDegrees, isCoordinateInRange } from "./ddmm.js";
 import { utcSecondsFromYmdhms } from "./freegps.js";
 import type { Mp4Index } from "./mp4-index.js";
 import { collectPesBody, pesBodyOffset, TS_SIZE, TS_SYNC } from "./ts-walk.js";
@@ -214,7 +214,9 @@ function decodeRecord(bytes: Uint8Array, off: number, mp4Filename: string): Deco
     }
     const lat = ddmmToDegrees(latRaw) * ns;
     const lon = ddmmToDegrees(lonRaw) * ew;
-    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return { skipReason: "coordinate out of range" };
+    if (!isCoordinateInRange(lat, "lat") || !isCoordinateInRange(lon, "lon")) {
+        return { skipReason: "coordinate out of range" };
+    }
     if (speedKnots < 0) return { skipReason: "negative speed" };
 
     return {

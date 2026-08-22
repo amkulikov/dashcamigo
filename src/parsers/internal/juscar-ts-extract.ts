@@ -31,6 +31,7 @@
 
 import type { GpsRecord, ParsedRecords, SkippedLine, VendorFile } from "../types.js";
 import { KMH_TO_MS, WrongFormatError } from "../types.js";
+import { utcMillisecondsFromParts } from "./calendar.js";
 import type { Mp4Index } from "./mp4-index.js";
 import { pesBodyExtent, pesBodyOffset, TS_SIZE, TS_SYNC } from "./ts-walk.js";
 
@@ -268,8 +269,8 @@ function parsePlaintextLine(text: string, mp4Filename: string): GpsRecord | null
     const minute = Number(m[6]);
     const second = Number(m[7]);
     if (year < 2000 || year > 2099) return null;
-    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-    if (hour > 23 || minute > 59 || second > 59) return null;
+    const timestampMs = utcMillisecondsFromParts(year, month, day, hour, minute, second);
+    if (timestampMs === null) return null;
 
     const nsRef = m[8]!;
     let lat = Number(m[9]);
@@ -296,7 +297,7 @@ function parsePlaintextLine(text: string, mp4Filename: string): GpsRecord | null
     const bearingDeg = ((bearing % 360) + 360) % 360;
 
     return {
-        unixSeconds: Date.UTC(year, month - 1, day, hour, minute, second) / 1000,
+        unixSeconds: timestampMs / 1000,
         active: true,
         lat,
         lon,

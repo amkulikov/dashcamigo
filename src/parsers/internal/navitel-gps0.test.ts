@@ -29,6 +29,10 @@ describe("parseIditDate", () => {
         expect(parseIditDate(new TextEncoder().encode("2100-01-01 00:00:00"))).toBeNull();
     });
 
+    it("rejects an impossible calendar date", () => {
+        expect(parseIditDate(new TextEncoder().encode("2026-02-31 12:00:00"))).toBeNull();
+    });
+
     it("rejects too-short payload", () => {
         expect(parseIditDate(new Uint8Array(5))).toBeNull();
     });
@@ -117,6 +121,7 @@ describe("decodeGps0Record", () => {
 
     it("returns null for invalid date components", () => {
         expect(decodeGps0Record(makeRecord({ day: 0 }), 0, 2020, 11, "x")).toBeNull();
+        expect(decodeGps0Record(makeRecord({ month: 2, day: 31 }), 0, 2020, 11, "x")).toBeNull();
         expect(decodeGps0Record(makeRecord({ hour: 24 }), 0, 2020, 11, "x")).toBeNull();
         expect(decodeGps0Record(makeRecord({ min: 60 }), 0, 2020, 11, "x")).toBeNull();
         expect(decodeGps0Record(makeRecord({ sec: 60 }), 0, 2020, 11, "x")).toBeNull();
@@ -399,7 +404,7 @@ describe("parseNavitelTail", () => {
                 { ...base, sec: 15 },
                 { ...base, lat: 5000.01, sec: 16 },
                 // stale: one minute back, position 0.5' (~925 m) behind
-                { ...base, lat: 4999.5, min: 29, sec: 17 },
+                { ...base, lat: 4959.5, min: 29, sec: 17 },
                 { ...base, lat: 5000.02, sec: 17 },
             ]);
             const parsed = parseNavitelTail(idit, gps0, "x.MOV");
@@ -413,7 +418,7 @@ describe("parseNavitelTail", () => {
                 { ...base, sec: 15 },
                 { ...base, lat: 5000.01, sec: 16 },
                 // fresh second, position teleports ~925 m back: implied ~925 m/s
-                { ...base, lat: 4999.5, sec: 17 },
+                { ...base, lat: 4959.5, sec: 17 },
                 { ...base, lat: 5000.02, sec: 18 },
             ]);
             const parsed = parseNavitelTail(idit, gps0, "x.MOV");
@@ -430,8 +435,8 @@ describe("parseNavitelTail", () => {
             const gps0 = makeGps0Bytes([
                 { ...base, sec: 15 },
                 { ...base, lat: 5000.01, sec: 16 },
-                { ...base, lat: 4999.5, min: 29, sec: 17 }, // stale burst, 1 min back
-                { ...base, lat: 4999.5, min: 29, sec: 18 },
+                { ...base, lat: 4959.5, min: 29, sec: 17 }, // stale burst, 1 min back
+                { ...base, lat: 4959.5, min: 29, sec: 18 },
                 { ...base, lat: 5000.02, sec: 17 },
                 { ...base, lat: 5000.03, sec: 18 },
             ]);

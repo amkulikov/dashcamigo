@@ -25,6 +25,7 @@
 // makes this signature strict.
 
 import { type GpsRecord, KMH_TO_MS, type ParsedRecords, type SkippedLine } from "../types.js";
+import { utcMillisecondsFromParts } from "./calendar.js";
 
 /**
  * The upstream record regex, transliterated with one deliberate change: its
@@ -147,8 +148,6 @@ function toUnixSeconds(yy: string, mo: string, dd: string, hh: string, mi: strin
     const hour = Number(hh);
     const minute = Number(mi);
     const second = Number(ss);
-    if (month < 1 || month > 12) return null;
-    if (day < 1 || day > 31) return null;
-    if (hour > 23 || minute > 59 || second > 59) return null;
-    return Date.UTC(year, month - 1, day, hour, minute, second) / 1000;
+    const ms = utcMillisecondsFromParts(year, month, day, hour, minute, second);
+    return ms === null ? null : ms / 1000;
 }

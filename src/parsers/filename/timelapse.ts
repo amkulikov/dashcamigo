@@ -24,7 +24,9 @@ const mai70Timelapse: FilenameTechnique<boolean> = {
     id: "70mai-timelapse",
     extract(file: VendorFile): boolean | null {
         const pm = file.relativePath.match(RX_70MAI_PATH_MODE);
-        if (pm && pm[1]!.toLowerCase() === "lapse") return true;
+        // Time-lapse has no exact foreign technique that can override a weak
+        // folder guess, so require the distinctive clip shape here.
+        if (pm && pm[1]!.toLowerCase() === "lapse" && RX_70MAI.test(file.file.name)) return true;
         if (!RX_70MAI.test(file.file.name)) return null;
         const prefix = file.file.name.match(RX_70MAI_PREFIX_MODE);
         return prefix && prefix[1]!.toUpperCase() === "LA" ? true : null;

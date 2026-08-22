@@ -1,6 +1,6 @@
 // Filename recording-mode techniques. One entry = one way to recognise the
 // recording mode (normal / event / parking / manual) from filename or path.
-// Walk picks first non-null.
+// Format-shaped matches outrank unscoped folder heuristics.
 
 import type { RecordingMode, VendorFile } from "../types.js";
 import {
@@ -51,6 +51,7 @@ import type { FilenameModeTechnique } from "./types.js";
 
 const mai70Mode: FilenameModeTechnique = {
     id: "70mai-mode",
+    evidence: (file) => (RX_70MAI.test(file.file.name) ? "specific" : "heuristic"),
     extract(file: VendorFile): RecordingMode | null {
         // Path wins over the filename prefix: the folder layout carries manual,
         // which no filename prefix does. A foldered drop keeps that granularity,
@@ -81,6 +82,7 @@ const mai70Mode: FilenameModeTechnique = {
         if (!prefix) return null;
         switch (prefix[1]!.toUpperCase()) {
             case "EV":
+            case "VL":
                 return "event";
             case "LA":
                 // A510 parking timelapse - the same slot the Lapse/ folder maps
@@ -120,6 +122,7 @@ const blackvueMode: FilenameModeTechnique = {
 
 const carcamMode: FilenameModeTechnique = {
     id: "carcam-mode",
+    evidence: (file) => (RX_CARCAM.test(file.file.name) ? "specific" : "heuristic"),
     extract(file: VendorFile): RecordingMode | null {
         const lower = file.relativePath.toLowerCase();
         if (RX_CARCAM_PATH_EVENT.test(lower)) return "event";
@@ -149,6 +152,7 @@ const eaceMode: FilenameModeTechnique = {
 
 const escortMode: FilenameModeTechnique = {
     id: "escort-mode",
+    evidence: () => "heuristic",
     extract(file: VendorFile): RecordingMode | null {
         const path = file.relativePath;
         if (RX_ESCORT_PATH_EVENT.test(path)) return "event";
@@ -185,6 +189,7 @@ const fordMode: FilenameModeTechnique = {
 
 const iboxMode: FilenameModeTechnique = {
     id: "ibox-mode",
+    evidence: (file) => (RX_IBOX.test(file.file.name) ? "specific" : "heuristic"),
     extract(file: VendorFile): RecordingMode | null {
         const lower = file.relativePath.toLowerCase();
         if (RX_IBOX_PATH_EVENT.test(lower)) return "event";
@@ -195,6 +200,7 @@ const iboxMode: FilenameModeTechnique = {
 
 const juscarMode: FilenameModeTechnique = {
     id: "juscar-mode",
+    evidence: () => "heuristic",
     extract(file: VendorFile): RecordingMode | null {
         const path = file.relativePath;
         if (RX_JUSCAR_PATH_EVENT.test(path)) return "event";
@@ -374,6 +380,10 @@ const thinkwareMode: FilenameModeTechnique = {
 
 const wolfboxMode: FilenameModeTechnique = {
     id: "wolfbox-mode",
+    evidence(file) {
+        const m = file.file.name.match(RX_WOLFBOX);
+        return m && (m[5] === "00" || m[5] === "02") ? "specific" : "heuristic";
+    },
     extract(file: VendorFile): RecordingMode | null {
         const m = file.file.name.match(RX_WOLFBOX);
         if (m) {
@@ -392,11 +402,9 @@ const wolfboxMode: FilenameModeTechnique = {
 };
 
 export const FILENAME_MODE: readonly FilenameModeTechnique[] = [
-    // mivue-mode, vueroid-mode and hpim-mode are filename-gated and must
-    // precede the path-only techniques (70mai-mode, escort-mode) whose
-    // Normal/Event/Parking folder regexes would otherwise greedily claim their
-    // clips and mislabel the technique. Safe at the front: all return null for
-    // any foreign name.
+    // Keep exact filename families first for stable diagnostics. The unscoped
+    // path branches below are marked heuristic, so they remain useful for
+    // renamed files without shadowing a later exact filename.
     mivueMode,
     vueroidMode,
     hpimMode,

@@ -106,7 +106,8 @@ import { csv70maiPrimitive } from "./csv-70mai.js";
 //      lose the sample-validated track path - with it the accel stream, which
 //      no text log carries. Cost of the late position is zero: a file without a
 //      subtitle track fails those markers on the sample table alone.
-//   8. juscar-ts        - name regex + hasLigoGpsMarker; handles MPEG-TS.
+//   8. juscar-ts        - hasLigoGpsMarker + MPEG-TS sync; its PES extractor
+//      supplies the stronger dialect check, so renamed clips remain importable.
 //   8a. ligogps-trailer-ts - sync index.tsGpsTrailer check for the
 //      LigoGPS/LCAI plaintext trailer at EOF (.ts files). Sits with the other
 //      TS primitives; among them the order is cost only - each rejects the
@@ -119,10 +120,9 @@ import { csv70maiPrimitive } from "./csv-70mai.js";
 //      binary record signature - each rejects the other); juscar goes first
 //      only because its marker is a precomputed boolean while this one scans
 //      headerBytes at 188-byte stride.
-//   9. freegps-70mai    - 70mai filename + hasFreeGpsMarker. Before the generic
-//      freegps so a 70mai file is parsed with the 70mai ddmm*1e5 dialect, not
-//      misread by the VIOFO Type-3 variant. Gated on the 70mai name so it never
-//      touches VIOFO/Vantrue files.
+//   9. freegps-70mai    - hasFreeGpsMarker plus a canonical name or the strong
+//      70mai block signature. Before generic freegps so the ddmm*1e5 dialect is
+//      not misread as VIOFO Type 3; renamed VIOFO/Vantrue blocks still reject.
 //  10. freegps          - structural is cheap, streaming is the most expensive.
 export const VIDEO_EMBEDDED_PRIMITIVES: readonly Primitive[] = [
     rvmiPrimitive,

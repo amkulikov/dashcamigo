@@ -12,6 +12,7 @@
 // signatures, and the scan is the expensive part.
 
 import { type GpsRecord, type ParsedRecords, type SkippedLine, type VendorFile, WrongFormatError } from "../types.js";
+import { utcMillisecondsFromParts } from "./calendar.js";
 import { hasInnovvRecordSignature, parseInnovvRecord } from "./freegps.js";
 import { collectPesBody, pesBodyExtent, TS_SIZE, TS_SYNC } from "./ts-walk.js";
 
@@ -118,8 +119,14 @@ function decodeDodBody(body: Uint8Array, mp4Filename: string, skipped: SkippedLi
         const rawTrack = u16be(body, at + 4);
         const track = (rawTrack >= 0x8000 ? rawTrack - (65536 - 36000) : rawTrack) / 100;
 
+        const timestampMs = utcMillisecondsFromParts(year, month, day, hour, minute, second);
+        if (timestampMs === null) {
+            skipped.push({ line: records.length + 1, raw: `${year}-${month}-${day}`, reason: "date out of range" });
+            continue;
+        }
+
         records.push({
-            unixSeconds: Date.UTC(year, month - 1, day, hour, minute, second) / 1000,
+            unixSeconds: timestampMs / 1000,
             active: true,
             lat,
             lon,

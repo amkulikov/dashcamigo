@@ -88,10 +88,10 @@ describe("parseNextbaseGdat", () => {
 
     it("honors an explicit zone but never the host timezone", () => {
         const zoned = {
-            gpsData: [{ ...TRACK.gpsData[0], datetime: "2023-12-28T23:10:22+02:00" }],
+            gpsData: [{ ...TRACK.gpsData[0], datetime: "2023-12-28T23:10:22.5+02:00" }],
         };
         const parsed = parseNextbaseGdat(base64Payload(zoned), "nextbase.mp4");
-        expect(parsed!.records[0]!.unixSeconds).toBe(Date.UTC(2023, 11, 28, 21, 10, 22) / 1000);
+        expect(parsed!.records[0]!.unixSeconds).toBe(Date.UTC(2023, 11, 28, 21, 10, 22) / 1000 + 0.5);
 
         const zulu = { gpsData: [{ ...TRACK.gpsData[0], datetime: "2023-12-28T23:10:22Z" }] };
         expect(parseNextbaseGdat(base64Payload(zulu), "nextbase.mp4")!.records[0]!.unixSeconds).toBe(
@@ -101,11 +101,20 @@ describe("parseNextbaseGdat", () => {
 
     it("drops a row with an unparseable datetime but keeps the rest", () => {
         const mixed = {
-            gpsData: [{ ...TRACK.gpsData[0], datetime: "28/12/2023 23:10:22" }, TRACK.gpsData[1]],
+            gpsData: [
+                { ...TRACK.gpsData[0], datetime: "28/12/2023 23:10:22" },
+                { ...TRACK.gpsData[0], datetime: "2023-02-31T23:10:22Z" },
+                { ...TRACK.gpsData[0], datetime: "2023-12-28T23:10:22+02:99" },
+                TRACK.gpsData[1],
+            ],
         };
         const parsed = parseNextbaseGdat(base64Payload(mixed), "nextbase.mp4");
         expect(parsed!.records).toHaveLength(1);
-        expect(parsed!.skipped[0]!.reason).toBe("unparseable datetime");
+        expect(parsed!.skipped.map((entry) => entry.reason)).toEqual([
+            "unparseable datetime",
+            "unparseable datetime",
+            "unparseable datetime",
+        ]);
     });
 
     it("drops out-of-range and null-island coordinates", () => {

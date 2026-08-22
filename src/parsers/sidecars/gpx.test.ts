@@ -166,6 +166,23 @@ describe("gpxSidecar.parse", () => {
         expect(records).toHaveLength(2);
     });
 
+    it("also picks up route points", async () => {
+        const text = gpxDoc(`<rte><rtept lat="55" lon="37"><time>2024-01-15T12:34:56Z</time></rtept></rte>`);
+        const records = await gpxSidecar.parse!(makeVendorFile("a.gpx", text), "a.mp4");
+        expect(records).toHaveLength(1);
+    });
+
+    it("parses prefix-qualified GPX elements", async () => {
+        const text = `<?xml version="1.0"?>
+            <gpx:gpx version="1.1" creator="test" xmlns:gpx="http://www.topografix.com/GPX/1/1">
+                <gpx:trk><gpx:trkseg><gpx:trkpt lat="55" lon="37">
+                    <gpx:time>2024-01-15T12:34:56Z</gpx:time>
+                </gpx:trkpt></gpx:trkseg></gpx:trk>
+            </gpx:gpx>`;
+        const records = await gpxSidecar.parse!(makeVendorFile("a.gpx", text), "a.mp4");
+        expect(records).toHaveLength(1);
+    });
+
     it("sorts records by unixSeconds even if input out-of-order", async () => {
         const text = gpxDoc(`
             <trk><trkseg>
@@ -194,12 +211,47 @@ describe("gpxSidecar.parse", () => {
         const text = gpxDoc(`
             <trk><trkseg>
                 <trkpt lat="abc" lon="37"><time>2024-01-15T12:34:56Z</time></trkpt>
+                <trkpt lon="37"><time>2024-01-15T12:34:56Z</time></trkpt>
+                <trkpt lat="91" lon="37"><time>2024-01-15T12:34:56Z</time></trkpt>
+                <trkpt lat="55" lon="181"><time>2024-01-15T12:34:56Z</time></trkpt>
                 <trkpt lat="55" lon="37"><time>2024-01-15T12:34:57Z</time></trkpt>
             </trkseg></trk>
         `);
         const records = await gpxSidecar.parse!(makeVendorFile("a.gpx", text), "a.mp4");
         expect(records).toHaveLength(1);
         expect(records[0]!.lat).toBe(55);
+    });
+
+    it("interprets a zone-less timestamp as UTC rather than host-local time", async () => {
+        const text = gpxDoc(
+            `<trk><trkseg><trkpt lat="55" lon="37"><time>2024-01-15T12:34:56</time></trkpt></trkseg></trk>`,
+        );
+        const records = await gpxSidecar.parse!(makeVendorFile("a.gpx", text), "a.mp4");
+        expect(records[0]!.unixSeconds).toBe(Date.UTC(2024, 0, 15, 12, 34, 56) / 1000);
+    });
+
+    it("skips impossible calendar dates and timezone offsets", async () => {
+        const text = gpxDoc(`
+            <trk><trkseg>
+                <trkpt lat="55" lon="37"><time>2024-02-31T12:34:56Z</time></trkpt>
+                <trkpt lat="55" lon="37"><time>2024-02-29T12:34:56+03:99</time></trkpt>
+                <trkpt lat="55" lon="37"><time>2024-02-29T12:34:57Z</time></trkpt>
+            </trkseg></trk>
+        `);
+        const records = await gpxSidecar.parse!(makeVendorFile("a.gpx", text), "a.mp4");
+        expect(records).toHaveLength(1);
+        expect(records[0]!.unixSeconds).toBe(Date.UTC(2024, 1, 29, 12, 34, 57) / 1000);
+    });
+
+    it("normalizes invalid optional motion fields without dropping the point", async () => {
+        const text = gpxDoc(`
+            <trk><trkseg><trkpt lat="55" lon="37">
+                <time>2024-01-15T12:34:56Z</time><speed>-1</speed><course>450</course>
+            </trkpt></trkseg></trk>
+        `);
+        const records = await gpxSidecar.parse!(makeVendorFile("a.gpx", text), "a.mp4");
+        expect(records[0]!.speedMs).toBe(0);
+        expect(records[0]!.bearingDeg).toBe(90);
     });
 
     it("throws on non-gpx root", async () => {

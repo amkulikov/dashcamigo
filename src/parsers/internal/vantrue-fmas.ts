@@ -41,6 +41,7 @@
 // for a whole second - records are deduped to the first per unixSeconds.
 
 import { type GpsRecord, MPH_TO_MS, type ParsedRecords, type VendorFile } from "../types.js";
+import { utcMillisecondsFromParts } from "./calendar.js";
 import { loadTrackSampleBuffers, type Mp4Index, type TrackInfo } from "./mp4-index.js";
 
 // Decoder anchor; in every known record it sits at sample offset 0x48.
@@ -137,9 +138,11 @@ export function decodeFmasSample(dv: DataView, mp4Filename: string): GpsRecord |
 
     const speedMph = dv.getUint16(magic + 60, true);
     const track = dv.getUint16(magic + 62, true);
+    const timestampMs = utcMillisecondsFromParts(year, month, day, hour, minute, second);
+    if (timestampMs === null) return null;
 
     return {
-        unixSeconds: Date.UTC(year, month - 1, day, hour, minute, second) / 1000,
+        unixSeconds: timestampMs / 1000,
         active: true,
         lat,
         lon,

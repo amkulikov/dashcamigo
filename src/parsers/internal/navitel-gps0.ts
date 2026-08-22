@@ -65,7 +65,8 @@
 import { fillForwardBearings, haversineKm } from "../../parser.js";
 import { KMH_TO_MS, KNOTS_TO_MS } from "../types.js";
 import type { AccelSample, GpsRecord, ParsedRecords, SkippedLine } from "../types.js";
-import { ddmmToDegrees } from "./ddmm.js";
+import { utcMillisecondsFromParts } from "./calendar.js";
+import { ddmmToDegrees, isCoordinateInRange } from "./ddmm.js";
 import { removeGravityBaselineOrZero } from "./accel-baseline.js";
 import { decodeXorAsciiGpsText, decryptXorAscii } from "./xor-ascii-gps.js";
 
@@ -217,8 +218,7 @@ export function parseIditDate(payload: Uint8Array): IditDate | null {
     const second = Number(m[6]);
     if (![year, month, day, hour, minute, second].every(Number.isFinite)) return null;
     if (year < 2000 || year > 2099) return null;
-    if (month < 1 || month > 12) return null;
-    if (day < 1 || day > 31 || hour > 23 || minute > 59 || second > 59) return null;
+    if (utcMillisecondsFromParts(year, month, day, hour, minute, second) === null) return null;
     return { year, month, day, hour, minute, second };
 }
 
@@ -248,7 +248,7 @@ export function decodeGps0Record(
 
     const lat = ddmmToDegrees(latRaw);
     const lon = ddmmToDegrees(lonRaw);
-    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+    if (!isCoordinateInRange(lat, "lat") || !isCoordinateInRange(lon, "lon")) return null;
 
     // bytes 16..19 = altitude i32 (metres) - GpsRecord has no altitude field,
     // intentionally not extracted.
@@ -274,8 +274,8 @@ export function decodeGps0Record(
 
     // UTC: date/time fields are real UTC (verified on sample: IDIT=16:30:14
     // local MSK, first record = 13:30:15 UTC).
-    const baseMs = Date.UTC(year, month - 1, day, hour, minute, second);
-    if (!Number.isFinite(baseMs)) return null;
+    const baseMs = utcMillisecondsFromParts(year, month, day, hour, minute, second);
+    if (baseMs === null) return null;
 
     // Provisional course/2 reading. >= 180 raw would mean >= 360 deg under
     // this encoding - treat as "no course"; the calibration pass in
@@ -400,7 +400,15 @@ export function parseNavitelTail(
             // because the in-record date is valid and always wins.
         } else if (prevDay === null) {
             // First valid record - calibrate month against IDIT.
-            const iditMs = Date.UTC(idit.year, idit.month - 1, idit.day, idit.hour, idit.minute, idit.second);
+            const iditMs = utcMillisecondsFromParts(
+                idit.year,
+                idit.month,
+                idit.day,
+                idit.hour,
+                idit.minute,
+                idit.second,
+            );
+            if (iditMs === null) return null;
             const hour = view.getUint8(i * GPS0_RECORD_SIZE + 25);
             const minute = view.getUint8(i * GPS0_RECORD_SIZE + 26);
             const second = view.getUint8(i * GPS0_RECORD_SIZE + 27);
@@ -416,8 +424,8 @@ export function parseNavitelTail(
                     m = 1;
                     y++;
                 }
-                const ms = Date.UTC(y, m - 1, day, hour, minute, second);
-                if (!Number.isFinite(ms)) continue;
+                const ms = utcMillisecondsFromParts(y, m, day, hour, minute, second);
+                if (ms === null) continue;
                 const dist = Math.abs(ms - iditMs);
                 if (dist < bestDist) {
                     bestDist = dist;

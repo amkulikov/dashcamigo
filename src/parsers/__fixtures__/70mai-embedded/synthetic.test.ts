@@ -41,4 +41,15 @@ describe("70mai embedded freeGPS - synthetic fixture", () => {
         expect(result.records[1]!.speedMs).toBeCloseTo(45 / 3.6, 5);
         expect(result.records[2]!.speedMs).toBeCloseTo(47 / 3.6, 5);
     });
+
+    it("dispatches the dialect after the video is renamed", async () => {
+        const buf = readFileSync(resolve(HERE, "synthetic-70mai.mp4"));
+        const file = new File([buf], "renamed.mp4");
+        const index = await buildMp4Index(file);
+        await probeMarkers(file, index, 16 << 20);
+        const vf = { file, relativePath: file.name };
+
+        expect(await freegps70maiPrimitive.marker(vf, index)).toBe(true);
+        expect((await freegps70maiPrimitive.parse(vf, index)).records).toHaveLength(3);
+    });
 });

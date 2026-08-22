@@ -230,82 +230,86 @@ type EmbeddedGpsExtractionMode = "all" | "light-only";
  * called with the index, not a specific extractor (one Mp4Index covers all
  * markers).
  */
-function classifyEmbeddedGpsKind(index: Mp4Index): EmbeddedGpsKind {
-    if (index.freeGpsBoxInsideFree !== null) return "light";
-    if (index.novatekGpsAtom !== null) return "light";
-    if (index.hasLigoGpsMarker) return "light";
-    if (index.navitelGps0Atom !== null) return "light";
-    // Novatek GPS struct in a private PES inside MPEG-TS (novatek-ts
-    // primitive): no moov, no atom markers - detect by scanning the header
-    // probe bytes for the GPS PID. Self-rejects non-TS buffers in O(1)
-    // (first byte is not the 0x47 sync byte), so MP4 files pay nothing.
-    // "light" mirrors the juscar/hasLigoGpsMarker precedent (parse is the
-    // same linear full-file PES scan).
-    if (index.headerBytes && findNovatekTsGpsPid(index.headerBytes) !== null) return "light";
-    // Same no-moov container class: INNOVV / DOD LS600W private PES.
-    if (index.headerBytes && findTsPesGpsStream(index.headerBytes) !== null) return "light";
-    // TS files whose GPS table sits in the EOF trailer (ligogps-trailer-ts).
-    // Detected during indexing precisely so this gate stays synchronous.
-    if (index.tsGpsTrailer !== null) return "light";
-    // Older 70mai Pro: a top-level `GPS ` box decoded by gps-box-70mai. Cheap -
-    // one bounded slice of the box - so "light". Without this the kind gate
-    // returns "none" and tryParseOne short-circuits before the primitive runs.
-    if (index.maiGpsBox !== null) return "light";
-    // Top-level udta carriers: Kenwood VIDEOUUU records and LigoJSON/GKU
-    // plaintext JSON (kenwood / ligo-json primitives). Sync head checks over
-    // the already-read udta heads - without this wiring those primitives are
-    // dead in production (the maiGpsBox regression class, see
-    // __fixtures__/dispatch-gate.test.ts).
-    for (const udta of index.topLevelUdtaAtoms) {
-        if (!udta.head) continue;
-        if (hasKenwoodUdtaMarker(udta.head) || hasLigoJsonMarker(udta.head) || hasGkuMarker(udta.head)) {
-            return "light";
-        }
+interface EmbeddedGpsInspection {
+    kind: EmbeddedGpsKind;
+    probeNeeded: boolean;
+}
+
+interface EmbeddedGpsLightSignal {
+    /** Probe-free ownership: one positive signal is enough to skip the probe. */
+    exclusive: boolean;
+    matches(index: Mp4Index): boolean;
+}
+
+function hasExclusiveUdtaCarrier(index: Mp4Index): boolean {
+    return index.topLevelUdtaAtoms.some(
+        (udta) =>
+            !!udta.head && (hasKenwoodUdtaMarker(udta.head) || hasLigoJsonMarker(udta.head) || hasGkuMarker(udta.head)),
+    );
+}
+
+function hasExclusiveTrackCarrier(index: Mp4Index): boolean {
+    return index.tracks.some(
+        (track) =>
+            track.sampleFormat === "RVMI" ||
+            track.sampleFormat === "gpmd" ||
+            track.handlerType === "sbtl" ||
+            track.handlerType === "text" ||
+            track.handlerType === "tvxt",
+    );
+}
+
+const EMBEDDED_GPS_LIGHT_SIGNALS: readonly EmbeddedGpsLightSignal[] = [
+    { exclusive: true, matches: (index) => index.freeGpsBoxInsideFree !== null },
+    // The generic and 70mai freeGPS primitives compete for this table and use
+    // probe seeds/signatures, so the atom is light but not probe-exclusive.
+    { exclusive: false, matches: (index) => index.novatekGpsAtom !== null },
+    { exclusive: false, matches: (index) => index.hasLigoGpsMarker === true },
+    { exclusive: true, matches: (index) => index.navitelGps0Atom !== null },
+    { exclusive: false, matches: (index) => !!index.headerBytes && findNovatekTsGpsPid(index.headerBytes) !== null },
+    { exclusive: false, matches: (index) => !!index.headerBytes && findTsPesGpsStream(index.headerBytes) !== null },
+    { exclusive: false, matches: (index) => index.tsGpsTrailer !== null },
+    { exclusive: true, matches: (index) => index.maiGpsBox !== null },
+    { exclusive: true, matches: hasExclusiveTrackCarrier },
+    { exclusive: true, matches: hasExclusiveUdtaCarrier },
+    { exclusive: true, matches: hasTextGpsLogAtom },
+    {
+        exclusive: true,
+        matches: (index) => !!index.topLevelGdatAtom?.head && hasNextbaseGdatHead(index.topLevelGdatAtom.head),
+    },
+    { exclusive: true, matches: (index) => findKenwoodMoovUdta(index) !== null },
+    { exclusive: true, matches: (index) => findGarminUuidBox(index) !== null },
+    {
+        exclusive: true,
+        matches: (index) => !!index.trailerHead && hasAutoVoxTrailerSignature(index.trailerHead),
+    },
+    // `meta` is shared by direct sample formats and probe-gated LigoGPS.
+    { exclusive: false, matches: (index) => index.tracks.some((track) => track.handlerType === "meta") },
+];
+
+/** Single source of truth for both cost classification and lazy-probe policy. */
+function inspectEmbeddedGps(index: Mp4Index): EmbeddedGpsInspection {
+    let hasLightSignal = false;
+    for (const signal of EMBEDDED_GPS_LIGHT_SIGNALS) {
+        if (!signal.matches(index)) continue;
+        hasLightSignal = true;
+        if (signal.exclusive) return { kind: "light", probeNeeded: false };
     }
-    // Top-level text GPS logs (gpslog-atom) and Nextbase `gdat` (nextbase-gdat)
-    // - head checks over the bytes read during indexing, like the udta carriers.
-    if (hasTextGpsLogAtom(index)) return "light";
-    if (index.topLevelGdatAtom?.head && hasNextbaseGdatHead(index.topLevelGdatAtom.head)) return "light";
-    // Kenwood moov/udta carrier - sync scan over the in-memory moov bytes.
-    if (findKenwoodMoovUdta(index) !== null) return "light";
-    // Garmin DriveAssist 51 moov/uuid carrier - sync scan, zero IO.
-    if (findGarminUuidBox(index) !== null) return "light";
-    // Auto-Vox RIFF trailer - the head of the trailing region was read during
-    // indexing precisely so this check stays synchronous.
-    if (index.trailerHead && hasAutoVoxTrailerSignature(index.trailerHead)) return "light";
-    for (const t of index.tracks) {
-        if (t.sampleFormat === "RVMI") return "light";
-        // gpmd is an stsd sample format, not an hdlr handler type: GoPro pairs
-        // it with handler "meta" (caught below), but a gpmd sample entry under
-        // any other handler must still pass the gate - otherwise the file
-        // classifies "none" and tryParseOne short-circuits before the gpmf
-        // primitive's marker (which keys on sampleFormat) ever runs.
-        if (t.sampleFormat === "gpmd") return "light";
-        if (!t.handlerType) continue;
-        // tvxt: Vueroid GPS+accel track (vueroid-txet primitive).
-        if (
-            t.handlerType === "sbtl" ||
-            t.handlerType === "text" ||
-            t.handlerType === "meta" ||
-            t.handlerType === "tvxt"
-        ) {
-            return "light";
-        }
-    }
+    if (hasLightSignal) return { kind: "light", probeNeeded: true };
     if (index.hasFreeGpsMarker) {
-        return index.freeGpsSeedOffsets.length >= 2 ? "mid" : "heavy";
+        return { kind: index.freeGpsSeedOffsets.length >= 2 ? "mid" : "heavy", probeNeeded: true };
     }
-    // Kenwood CCCC trailer: the actual marker needs a file read, which this
-    // sync zero-IO gate cannot do - gate on "trailing non-box bytes big
-    // enough to hold the trailer probe" instead. Deliberately LAST: any
-    // junk-tailed file classifies "light" through this, which is acceptable
-    // (light only means a cheap primitive marker walk runs, and the kenwood
-    // marker's ~40-byte probe then rejects non-Kenwood tails), but it must
-    // never pre-empt the mid/heavy Novatek streaming classification above.
+    // Kenwood CCCC trailer is only a size/position hint until its marker does
+    // a file read. Keep it behind freeGPS so junk tails cannot downgrade a
+    // real mid/heavy streaming scan to light.
     if (index.lastTopLevelBoxEnd !== null && index.lastTopLevelBoxEnd + KENWOOD_TRAILER_PROBE_BYTES <= index.fileSize) {
-        return "light";
+        return { kind: "light", probeNeeded: true };
     }
-    return "none";
+    return { kind: "none", probeNeeded: true };
+}
+
+function classifyEmbeddedGpsKind(index: Mp4Index): EmbeddedGpsKind {
+    return inspectEmbeddedGps(index).kind;
 }
 
 /**
@@ -324,45 +328,17 @@ function classifyEmbeddedGpsKind(index: Mp4Index): EmbeddedGpsKind {
  *    NOT shared (pndm/nmea/nextbase read the first SAMPLE, not the probe), so
  *    they stay probe-free.
  *  - novatekGpsAtom: freegps owns it, but its streaming fallback needs
- *    freeGpsSeedOffsets, and freegps-70mai - earlier in the walk for 70mai files
- *    - keys on hasFreeGpsMarker; both require the probe to be present so the
- *    extractor walk picks the right primitive.
+ *    freeGpsSeedOffsets, and freegps-70mai - earlier in the walk - uses both
+ *    hasFreeGpsMarker and the sampled block signature for renamed files; both
+ *    require the probe so the extractor walk picks the right primitive.
  *  - no structural signal at all (pure-streaming Novatek, Juscar TS LigoGPS,
  *    70mai 4K): classification itself depends on the probe markers.
  *
- * MUST stay in sync with classifyEmbeddedGpsKind's structural branches above:
- * every "light" trigger here that is exclusive-structural returns false, and the
- * probe-derived/shared triggers (hasLigoGpsMarker, hasFreeGpsMarker, meta,
- * novatekGpsAtom, the kenwood trailer-anchor fallback) fall through to true.
+ * Both answers come from inspectEmbeddedGps, so adding a new dispatch signal
+ * cannot accidentally wire the cost gate while leaving the probe gate stale.
  */
 function embeddedGpsProbeNeeded(index: Mp4Index): boolean {
-    if (index.freeGpsBoxInsideFree !== null) return false; // BlackVue X-series (free-gps-box)
-    if (index.navitelGps0Atom !== null) return false; // Navitel R-series / iBox (navitel-tail)
-    if (index.maiGpsBox !== null) return false; // older 70mai Pro (gps-box-70mai)
-    for (const t of index.tracks) {
-        // gpmd (gpmf/wolfbox/vantrue) and RVMI (rvmi) own their sample formats;
-        // sbtl/text (pndm/nmea/nextbase) and tvxt (vueroid-txet) read the
-        // first sample, not the probe.
-        // `meta` is deliberately excluded - ligogps shares it and needs the probe.
-        if (t.sampleFormat === "RVMI" || t.sampleFormat === "gpmd") return false;
-        if (t.handlerType === "sbtl" || t.handlerType === "text" || t.handlerType === "tvxt") return false;
-    }
-    for (const udta of index.topLevelUdtaAtoms) {
-        if (!udta.head) continue;
-        if (hasKenwoodUdtaMarker(udta.head) || hasLigoJsonMarker(udta.head) || hasGkuMarker(udta.head)) return false;
-    }
-    // Content-gated, not presence-gated: an unrelated udat/nbmt/gdat is not a
-    // structural GPS signal, and skipping the probe for it only defers the work
-    // to the no-winner retry below.
-    if (hasTextGpsLogAtom(index)) return false;
-    if (index.topLevelGdatAtom?.head && hasNextbaseGdatHead(index.topLevelGdatAtom.head)) return false;
-    if (findKenwoodMoovUdta(index) !== null) return false; // Kenwood moov/udta carrier
-    if (findGarminUuidBox(index) !== null) return false; // Garmin DriveAssist 51
-    // Auto-Vox RIFF trailer (autovox-riff): content-gated on the AITG/AITS
-    // record magic behind the chunk name, and the extractor reads the trailer
-    // itself - the probe window at the head of the file is pure waste.
-    if (index.trailerHead && hasAutoVoxTrailerSignature(index.trailerHead)) return false;
-    return true;
+    return inspectEmbeddedGps(index).probeNeeded;
 }
 
 interface WorkItem {

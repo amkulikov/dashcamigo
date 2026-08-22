@@ -46,7 +46,7 @@ const RX_GPX = /\.gpx$/i;
 // DDPai SD layouts: `DCIM/100video/` + `DCIM/103gps/` (M-series); `DCIM/200video/`
 // + `DCIM/203gps/` (N-series). Lowercased because firmware writes uppercase but
 // the user may have renamed.
-const RX_DDPAI_GPS_DIR = /\/(?:103|203)gps\//i;
+const RX_DDPAI_GPS_DIR = /(?:^|\/)(?:103|203)gps\//i;
 
 /**
  * BlackVue legacy `.gps` sidecar. The `[unix_ms]` prefix is expected on every

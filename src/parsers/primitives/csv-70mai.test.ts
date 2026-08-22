@@ -21,12 +21,17 @@ describe("csv70maiPrimitive.marker", () => {
         expect(await csv70maiPrimitive.marker(vf)).toBe(true);
     });
 
-    it("negative when name is not GPSData*.txt", async () => {
+    it("accepts a renamed text log when the content signature survives", async () => {
         const vf = makeVf("random.txt", "$V02\n");
+        expect(await csv70maiPrimitive.marker(vf)).toBe(true);
+    });
+
+    it("does not probe a non-text file even when its bytes start with $V", async () => {
+        const vf = makeVf("random.bin", "$V02\n");
         expect(await csv70maiPrimitive.marker(vf)).toBe(false);
     });
 
-    it("negative when name matched but signature is missing (foreign content)", async () => {
+    it("rejects a text file whose signature is missing", async () => {
         const vf = makeVf("GPSData0.txt", "header,fields,here\n");
         expect(await csv70maiPrimitive.marker(vf)).toBe(false);
     });
@@ -135,6 +140,30 @@ describe("csv70maiPrimitive.parse", () => {
         expect(result.records).toHaveLength(1);
         expect(result.skipped).toHaveLength(1);
         expect(result.skipped[0]!.reason).toContain("expected 13 fields");
+    });
+
+    it("skips out-of-range coordinates, bearing and speed", async () => {
+        const badLat = "1700000000,A,91,37,0,0,0,0,0,clip.mp4,,,";
+        const badLon = "1700000001,A,55,181,0,0,0,0,0,clip.mp4,,,";
+        const badBearing = "1700000002,A,55,37,36001,0,0,0,0,clip.mp4,,,";
+        const badSpeed = "1700000003,A,55,37,0,-1,0,0,0,clip.mp4,,,";
+        const result = await csv70maiPrimitive.parse(
+            makeVf("GPSData.txt", `$V02\n${badLat}\n${badLon}\n${badBearing}\n${badSpeed}\n${exampleRow}\n`),
+        );
+
+        expect(result.records).toHaveLength(1);
+        expect(result.skipped.map((entry) => entry.reason)).toEqual([
+            "bad coordinates",
+            "bad coordinates",
+            "bad bearing",
+            "bad speed",
+        ]);
+    });
+
+    it("normalizes a 360-degree bearing to zero", async () => {
+        const row = "1700000000,A,55,37,36000,0,0,0,0,clip.mp4,,,";
+        const result = await csv70maiPrimitive.parse(makeVf("renamed.txt", `$V02\n${row}\n`));
+        expect(result.records[0]!.bearingDeg).toBe(0);
     });
 
     it("no $V?? signature - WrongFormatError", async () => {

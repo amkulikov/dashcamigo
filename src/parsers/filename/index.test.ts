@@ -59,6 +59,12 @@ describe("matchFilenameTime", () => {
         expect(r.matchedId).toBe("generic-datetime");
     });
 
+    it("rejects impossible calendar dates instead of rolling them into March", () => {
+        const r = matchFilenameTime(vf("20260231_120000_NF.mp4"));
+        expect(r.value).toBeNull();
+        expect(r.matchedId).toBeNull();
+    });
+
     it("null + null matchedId for unrecognised name", () => {
         const r = matchFilenameTime(vf("random.bin"));
         expect(r.value).toBeNull();
@@ -671,6 +677,41 @@ describe("70mai A510 LA/PA prefixes + channel-before-stamp", () => {
     it("negative: LA/PA lookalike words are not claimed by 70mai-mode", () => {
         expect(matchFilenameMode(vf("LAPSE-VIDEO.mp4")).matchedId).toBeNull();
         expect(matchFilenameMode(vf("PANORAMA.mp4")).matchedId).toBeNull();
+    });
+});
+
+describe("specific filename evidence outranks generic folder heuristics", () => {
+    it("keeps BlackVue normal mode under a foreign Event folder", () => {
+        const result = matchFilenameMode(vf("20260822_120000_NF.mp4", "Event/20260822_120000_NF.mp4"));
+        expect(result.matchedId).toBe("blackvue-mode");
+        expect(result.value).toBe("normal");
+    });
+
+    it("keeps the BlackVue rear suffix under a foreign Front folder", () => {
+        const result = matchFilenameChannel(vf("20260822_120000_NR.mp4", "Front/20260822_120000_NR.mp4"));
+        expect(result.matchedId).toBe("blackvue-channel");
+        expect(result.value).toEqual({ channel: "rear", confident: true });
+    });
+
+    it("retains a path heuristic for an otherwise unrecognized renamed file", () => {
+        const result = matchFilenameMode(vf("renamed.mp4", "Event/renamed.mp4"));
+        expect(result.matchedId).toBe("70mai-mode");
+        expect(result.value).toBe("event");
+    });
+
+    it("does not infer 70mai time-lapse from a foreign Lapse folder alone", () => {
+        expect(classifyFilenameTimelapse(vf("20260822_120000_NF.mp4", "Lapse/20260822_120000_NF.mp4"))).toBe(false);
+    });
+});
+
+describe("70mai VL protected clips", () => {
+    const name = "VL20260428-192844-000413F.MP4";
+
+    it("uses the same time, channel, sequence and event classifiers as EV clips", () => {
+        expect(matchFilenameTime(vf(name)).matchedId).toBe("70mai-time");
+        expect(matchFilenameChannel(vf(name)).value).toEqual({ channel: "front", confident: true });
+        expect(matchFilenameSequence(vf(name)).value).toBe(413);
+        expect(matchFilenameMode(vf(name)).value).toBe("event");
     });
 });
 

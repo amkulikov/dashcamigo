@@ -4,16 +4,20 @@ import { parseNmeaText, dedupByUnixSeconds, applyGsensor, _internal } from "./nm
 
 describe("parseNmeaCoord", () => {
     const { parseNmeaCoord } = _internal;
-    it.each<[string, string, number | null]>([
-        ["5228.16177", "N", 52 + 28.16177 / 60],
-        ["5228.16177", "S", -(52 + 28.16177 / 60)],
-        ["02110.10000", "E", 21 + 10.1 / 60],
-        ["12345.67890", "W", -(123 + 45.6789 / 60)],
-        ["", "N", null],
-        ["foo", "N", null],
-        ["1234.5", "X", null],
-    ])("parseNmeaCoord(%s, %s)", (value, dir, expected) => {
-        const result = parseNmeaCoord(value, dir);
+    it.each<[string, string, "lat" | "lon", number | null]>([
+        ["5228.16177", "N", "lat", 52 + 28.16177 / 60],
+        ["5228.16177", "S", "lat", -(52 + 28.16177 / 60)],
+        ["02110.10000", "E", "lon", 21 + 10.1 / 60],
+        ["12345.67890", "W", "lon", -(123 + 45.6789 / 60)],
+        ["", "N", "lat", null],
+        ["foo", "N", "lat", null],
+        ["1234.5", "X", "lat", null],
+        ["1260.0000", "N", "lat", null],
+        ["9999.9999", "N", "lat", null],
+        ["5228.16177", "E", "lat", null],
+        ["02110.10000", "N", "lon", null],
+    ])("parseNmeaCoord(%s, %s, %s)", (value, dir, axis, expected) => {
+        const result = parseNmeaCoord(value, dir, axis);
         if (expected === null) expect(result).toBeNull();
         else expect(result).toBeCloseTo(expected, 6);
     });
@@ -39,6 +43,7 @@ describe("parseNmeaTimestamp", () => {
     it("returns null on invalid input", () => {
         expect(parseNmeaTimestamp("xx", "300119")).toBeNull();
         expect(parseNmeaTimestamp("162458", "")).toBeNull();
+        expect(parseNmeaTimestamp("162458", "310226")).toBeNull();
     });
 });
 

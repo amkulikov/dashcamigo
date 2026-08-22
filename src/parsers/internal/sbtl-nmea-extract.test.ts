@@ -400,6 +400,7 @@ describe("parseMini0806", () => {
         };
         expect(err("A,271319,201555.000,3356.8925,N,08420.2071,W,000.0")).toBe("mini0806: bad date"); // month 13
         expect(err("A,320519,201555.000,3356.8925,N,08420.2071,W,000.0")).toBe("mini0806: bad date"); // day 32
+        expect(err("A,310219,201555.000,3356.8925,N,08420.2071,W,000.0")).toBe("mini0806: bad date"); // 31 February
         expect(err("A,270519,241555.000,3356.8925,N,08420.2071,W,000.0")).toBe("mini0806: bad time"); // hour 24
         expect(err("A,270519,201555.000,3356.8925,X,08420.2071,W,000.0")).toBe("mini0806: bad latitude hemisphere");
         expect(err("A,270519,201555.000,3356.8925,N,08420.2071,Q,000.0")).toBe("mini0806: bad longitude hemisphere");

@@ -26,6 +26,8 @@
 
 import { createLogger } from "../../log.js";
 import { type GpsRecord, KNOTS_TO_MS, type ParsedRecords, type SkippedLine } from "../types.js";
+import { utcMillisecondsFromParts } from "./calendar.js";
+import { type CoordinateAxis, ddmmToDegrees, isCoordinateInRange } from "./ddmm.js";
 
 const log = createLogger("nmea");
 
@@ -290,8 +292,8 @@ export function parseRmc(body: string, mp4Filename: string, prefixUnixMs: number
     if (status === "V") return { record: null }; // void - no GPS fix, skip silently
     if (status !== "A") return { error: `rmc: bad status ${JSON.stringify(status)}` };
 
-    const lat = parseNmeaCoord(parts[3]!, parts[4]!);
-    const lon = parseNmeaCoord(parts[5]!, parts[6]!);
+    const lat = parseNmeaCoord(parts[3]!, parts[4]!, "lat");
+    const lon = parseNmeaCoord(parts[5]!, parts[6]!, "lon");
     if (lat === null || lon === null) return { error: "rmc: bad coordinates" };
 
     const speedKnots = Number(parts[7]!);
@@ -333,15 +335,15 @@ export function parseRmc(body: string, mp4Filename: string, prefixUnixMs: number
  * Exported for reuse in vendor plugins whose format is not NMEA as a whole
  * but whose coordinates use the same DDMM.MMMM notation (e.g. Escort).
  */
-export function parseNmeaCoord(value: string, dir: string): number | null {
+export function parseNmeaCoord(value: string, dir: string, axis: CoordinateAxis): number | null {
     if (value === "") return null;
     const num = Number(value);
     if (!Number.isFinite(num)) return null;
-    const deg = Math.floor(num / 100);
-    const minutes = num - deg * 100;
-    let result = deg + minutes / 60;
+    if (axis === "lat" && dir !== "N" && dir !== "S") return null;
+    if (axis === "lon" && dir !== "E" && dir !== "W") return null;
+    let result = ddmmToDegrees(num);
+    if (!isCoordinateInRange(result, axis)) return null;
     if (dir === "S" || dir === "W") result = -result;
-    else if (dir !== "N" && dir !== "E") return null;
     return result;
 }
 
@@ -365,14 +367,8 @@ function parseNmeaTimestamp(timeStr: string, dateStr: string): number | null {
 
     if (![hh, mm, ss, dd, mo, yy].every(Number.isFinite)) return null;
     if (!Number.isFinite(frac)) return null;
-    // Range validation: without it a corrupt sentence (month "99", hour "31")
-    // silently rolls over into a wrong-but-plausible date instead of being
-    // skipped - same contract as the filename-time techniques.
-    if (mo < 1 || mo > 12 || dd < 1 || dd > 31) return null;
-    if (hh > 23 || mm > 59 || ss > 60) return null; // ss=60: leap second
-
-    const ms = Date.UTC(year, mo - 1, dd, hh, mm, ss);
-    if (!Number.isFinite(ms)) return null;
+    const ms = utcMillisecondsFromParts(year, mo, dd, hh, mm, ss, true);
+    if (ms === null) return null;
     return ms / 1000 + frac;
 }
 

@@ -31,7 +31,8 @@
 
 import type { AccelSample, GpsRecord, ParsedRecords, SkippedLine } from "../types.js";
 import { KNOTS_TO_MS } from "../types.js";
-import { ddmmToDegrees } from "./ddmm.js";
+import { utcMillisecondsFromParts } from "./calendar.js";
+import { ddmmToDegrees, isCoordinateInRange } from "./ddmm.js";
 
 const CHUNK_HEADER_SIZE = 8;
 /** Upstream's sanity bound on a chunk length; also caps our read. */
@@ -99,7 +100,7 @@ function parseGpsRecord(view: DataView, at: number, mp4Filename: string): GpsRec
     const ew = view.getUint8(at + 0x22) === 2 ? -1 : 1;
     const lat = ddmmToDegrees(latRaw) * ns;
     const lon = ddmmToDegrees(lonRaw) * ew;
-    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return "fields-invalid";
+    if (!isCoordinateInRange(lat, "lat") || !isCoordinateInRange(lon, "lon")) return "fields-invalid";
 
     const year = view.getUint8(at + 0x1a) + 1900;
     const month = view.getUint8(at + 0x1b);
@@ -108,14 +109,14 @@ function parseGpsRecord(view: DataView, at: number, mp4Filename: string): GpsRec
     const minute = view.getUint8(at + 0x1e);
     const second = view.getUint8(at + 0x1f);
     if (year < 2000 || year > 2099) return "fields-invalid";
-    if (month < 1 || month > 12 || day < 1 || day > 31) return "fields-invalid";
-    if (hour > 23 || minute > 59 || second > 59) return "fields-invalid";
+    const timestampMs = utcMillisecondsFromParts(year, month, day, hour, minute, second);
+    if (timestampMs === null) return "fields-invalid";
 
     const bearingDeg = view.getUint8(at + 0x20) * 2;
     if (bearingDeg >= 360) return "fields-invalid";
 
     return {
-        unixSeconds: Date.UTC(year, month - 1, day, hour, minute, second) / 1000,
+        unixSeconds: timestampMs / 1000,
         active: true,
         lat,
         lon,

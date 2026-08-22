@@ -38,7 +38,8 @@
 //     sample before trusting trip timestamps.
 
 import { type GpsRecord, KNOTS_TO_MS, type ParsedRecords, type SkippedLine, type VendorFile } from "../types.js";
-import { ddmmToDegrees } from "./ddmm.js";
+import { utcMillisecondsFromParts } from "./calendar.js";
+import { ddmmToDegrees, isCoordinateInRange } from "./ddmm.js";
 import type { Mp4Index, TrackInfo } from "./mp4-index.js";
 import { loadSamples, readSampleTable } from "./mp4-walker.js";
 
@@ -142,7 +143,7 @@ export function decodeRoveSsmdSample(dv: DataView, mp4Filename: string): GpsReco
 
     const lat = ddmmToDegrees(latRaw);
     const lon = ddmmToDegrees(lonRaw);
-    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+    if (!isCoordinateInRange(lat, "lat") || !isCoordinateInRange(lon, "lon")) return null;
 
     const yearByte = dv.getUint8(OFF_DATE);
     const month = dv.getUint8(OFF_DATE + 1);
@@ -153,8 +154,8 @@ export function decodeRoveSsmdSample(dv: DataView, mp4Filename: string): GpsReco
     if (!dateBytesValid(yearByte, month, day, hour, minute, second)) return null;
 
     // Assumed UTC - UNVERIFIED, see the header.
-    const baseMs = Date.UTC(2000 + yearByte, month - 1, day, hour, minute, second);
-    if (!Number.isFinite(baseMs)) return null;
+    const baseMs = utcMillisecondsFromParts(2000 + yearByte, month, day, hour, minute, second);
+    if (baseMs === null) return null;
 
     const speedKnots = dv.getUint16(OFF_SPEED, true);
 

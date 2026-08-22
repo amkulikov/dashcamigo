@@ -12,9 +12,12 @@ function makeVf(name: string): VendorFile {
 // parse() test: that goes through extractJuscarTsGps which needs a real TS
 // bytestream; the real case is covered via the real-anonymized fixture suite.
 function makeIndex(hasLigoGpsMarker: boolean): Mp4Index {
+    const headerBytes = new Uint8Array(2 * 188);
+    headerBytes[0] = 0x47;
+    headerBytes[188] = 0x47;
     return {
-        headerBytes: new Uint8Array(0),
-        headerView: new DataView(new ArrayBuffer(0)),
+        headerBytes,
+        headerView: new DataView(headerBytes.buffer),
         tracks: [],
         moov: null,
         moovView: null,
@@ -34,14 +37,20 @@ describe("juscarTsPrimitive.marker", () => {
         expect(await juscarTsPrimitive.marker(vf, makeIndex(true))).toBe(true);
     });
 
-    it("negative when name does not match even with marker present", async () => {
+    it("accepts a renamed TS when the content marker is present", async () => {
         const vf = makeVf("random.ts");
-        expect(await juscarTsPrimitive.marker(vf, makeIndex(true))).toBe(false);
+        expect(await juscarTsPrimitive.marker(vf, makeIndex(true))).toBe(true);
     });
 
     it("negative when name matches but hasLigoGpsMarker=false", async () => {
         const vf = makeVf("20260429_182640F.ts");
         expect(await juscarTsPrimitive.marker(vf, makeIndex(false))).toBe(false);
+    });
+
+    it("rejects a non-TS carrier that merely contains the shared LigoGPS literal", async () => {
+        const index = makeIndex(true);
+        index.headerBytes![0] = 0;
+        expect(await juscarTsPrimitive.marker(makeVf("renamed.mp4"), index)).toBe(false);
     });
 
     it("negative without index", async () => {

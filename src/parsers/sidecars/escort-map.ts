@@ -38,6 +38,7 @@
 // (forward-azimuth). Endpoint records get the bearing of their only neighbour.
 
 import type { GpsRecord, SidecarHandler, SkippedLine, VendorFile } from "../types.js";
+import { utcMillisecondsFromParts } from "../internal/calendar.js";
 import { parseNmeaCoord } from "../internal/nmea.js";
 import { matchByBasename } from "./_basename.js";
 import { readSidecarText } from "./_read.js";
@@ -119,14 +120,22 @@ export function parseMapText(text: string, mp4Filename: string): { records: GpsR
             skipped.push({ line: i + 1, raw, reason: "invalid date or time" });
             continue;
         }
-        const unixSeconds = Date.UTC(date.year, date.month - 1, date.day, time.hour, time.minute, time.second) / 1000;
-        if (!Number.isFinite(unixSeconds)) {
+        const timestampMs = utcMillisecondsFromParts(
+            date.year,
+            date.month,
+            date.day,
+            time.hour,
+            time.minute,
+            time.second,
+        );
+        if (timestampMs === null) {
             skipped.push({ line: i + 1, raw, reason: "timestamp out of range" });
             continue;
         }
+        const unixSeconds = timestampMs / 1000;
 
-        const lat = parseNmeaCoord(latStr!, latDir!);
-        const lon = parseNmeaCoord(lonStr!, lonDir!);
+        const lat = parseNmeaCoord(latStr!, latDir!, "lat");
+        const lon = parseNmeaCoord(lonStr!, lonDir!, "lon");
         if (lat === null || lon === null) {
             skipped.push({ line: i + 1, raw, reason: "invalid coordinates" });
             continue;

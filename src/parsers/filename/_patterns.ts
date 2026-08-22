@@ -17,7 +17,7 @@
 // for every consumer (time / channel / sequence / camera-key all key off
 // this one regex): m[1..6] datetime, m[7] counter, m[8]/m[9] channel.
 export const RX_70MAI =
-    /^(?:NO|EV|LA|PA)(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(?:-(\d+))?([FBIR])?(?:-\d{14})?([FBIR])?\.mp4$/i;
+    /^(?:NO|EV|VL|LA|PA)(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(?:-(\d+))?([FBIR])?(?:-\d{14})?([FBIR])?\.mp4$/i;
 export const RX_70MAI_PATH_CHANNEL = /(?:^|\/)(Front|Back|Interior)\//i;
 // Recording-mode folders on a 70mai card. Single source for both the path-mode
 // regex and camera-key's parent-dir strip list - a mode folder added here
@@ -25,11 +25,11 @@ export const RX_70MAI_PATH_CHANNEL = /(?:^|\/)(Front|Back|Interior)\//i;
 export const MAI70_MODE_FOLDERS = ["normal", "event", "lapse", "manual", "parking"] as const;
 export const RX_70MAI_PATH_MODE = new RegExp(`(?:^|/)(${MAI70_MODE_FOLDERS.join("|")})/`, "i");
 // 70mai filename prefix carries the recording mode when the folder layout is
-// absent (flat drop): NO = normal loop, EV = g-sensor/impact event, LA =
-// parking timelapse, PA = parking g-sensor/motion event (A510 parking mode).
+// absent (flat drop): NO = normal loop, EV/VL = protected event, LA = parking
+// timelapse, PA = parking g-sensor/motion event.
 // Read only after RX_70MAI has matched, so the two-letter prefix cannot claim
 // a foreign name (e.g. "NOTES.mp4").
-export const RX_70MAI_PREFIX_MODE = /^(NO|EV|LA|PA)/i;
+export const RX_70MAI_PREFIX_MODE = /^(NO|EV|VL|LA|PA)/i;
 // Invariant core of a 70mai clip name: datetime + optional counter + optional
 // channel letter, WITHOUT the 2-letter mode prefix and WITHOUT anything after
 // ".MP4". The GPSData CSV log references clips by name, but the firmware's

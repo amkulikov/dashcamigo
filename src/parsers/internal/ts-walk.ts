@@ -13,6 +13,12 @@
 export const TS_SIZE = 188;
 export const TS_SYNC = 0x47;
 
+/** Cheap container gate: two aligned sync bytes reject non-TS carriers while
+ * keeping detection independent of the filename and extension. */
+export function looksLikeMpegTs(bytes: Uint8Array): boolean {
+    return bytes.length >= 2 * TS_SIZE && bytes[0] === TS_SYNC && bytes[TS_SIZE] === TS_SYNC;
+}
+
 /** Where the PES body of one packet starts and how many bytes of it the PES promises. */
 export type PesBodyExtent = { bodyOff: number; bodyLen: number };
 

@@ -80,6 +80,7 @@
 
 import { haversineKm } from "../../parser.js";
 import { KMH_TO_MS, type GpsRecord, type ParsedRecords, type SkippedLine, type VendorFile } from "../types.js";
+import { utcMillisecondsFromParts } from "./calendar.js";
 import type { Mp4Index, TrackInfo } from "./mp4-index.js";
 import { loadSamples, readMediaTimescale, readSampleStartsInTicks, readSampleTable } from "./mp4-walker.js";
 
@@ -255,8 +256,7 @@ export function localDateAnchorMsFromFilename(name: string): number | null {
     const month = Number(m[2]);
     const day = Number(m[3]);
     if (year < 2000 || year > 2099) return null;
-    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-    return Date.UTC(year, month - 1, day);
+    return utcMillisecondsFromParts(year, month, day, 0, 0, 0);
 }
 
 /**
@@ -280,7 +280,14 @@ export function utcMsFromAnchoredDayTime(
     for (const shift of [-1, 0, 1]) {
         const candidate = new Date(anchorDayMs + shift * DAY_MS);
         if (candidate.getUTCDate() !== day) continue;
-        return Date.UTC(candidate.getUTCFullYear(), candidate.getUTCMonth(), day, hour, minute, second);
+        return utcMillisecondsFromParts(
+            candidate.getUTCFullYear(),
+            candidate.getUTCMonth() + 1,
+            day,
+            hour,
+            minute,
+            second,
+        );
     }
     return null;
 }
@@ -303,9 +310,8 @@ export function localNaiveSecondsFromNeolineFilename(name: string): number | nul
     const minute = Number(mi);
     const second = Number(s);
     if (year < 2000 || year > 2099) return null;
-    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-    if (hour > 23 || minute > 59 || second > 59) return null;
-    return Date.UTC(year, month - 1, day, hour, minute, second) / 1000;
+    const timestampMs = utcMillisecondsFromParts(year, month, day, hour, minute, second);
+    return timestampMs === null ? null : timestampMs / 1000;
 }
 
 /** Distance from a seconds value to the nearest 15-min TZ grid point. */
