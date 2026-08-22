@@ -23,6 +23,8 @@
 //     instead of deleting them, and cacheFirst falls back to that copy when the
 //     network 404s a stale hash - together these keep an old-build tab alive
 //     across a deploy (the version-skew crash).
+//   - current immutable tracker assets are cache-first, while dev/unknown URLs
+//     retain stale-while-revalidate for source edits and old-SW deploy skew.
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -220,6 +222,27 @@ function loadSw(opts: LoadOptions) {
         pre,
         rt,
         tr,
+        // Dispatch a same-origin subresource request through the captured fetch
+        // listener and await both respondWith plus any background cache write.
+        async dispatchFetch(url: string): Promise<FakeResponse> {
+            const listener = listeners.get("fetch");
+            if (!listener) throw new Error("no fetch listener registered");
+            let response: Promise<FakeResponse> | undefined;
+            const background: Promise<unknown>[] = [];
+            listener({
+                request: { method: "GET", url: abs(url), mode: "same-origin" },
+                respondWith(value: Promise<FakeResponse>) {
+                    response = Promise.resolve(value);
+                },
+                waitUntil(value: Promise<unknown>) {
+                    background.push(value);
+                },
+            });
+            if (!response) throw new Error("fetch listener did not respond");
+            const out = await response;
+            await Promise.all(background);
+            return out;
+        },
         // Dispatch a captured lifecycle event and await its waitUntil payload -
         // exactly what the browser does with install/activate.
         async fire(type: "install" | "activate"): Promise<void> {
@@ -445,13 +468,13 @@ describe("sw activate", () => {
             fetch: async () => res("network"),
             trackerUrls: [
                 "/ort/1.27.0/ort-wasm-simd-threaded.wasm",
-                "/models/plate/yolo-v9-t-512-license-plates-end2end.abc12345.onnx",
+                "/models/plate/yolo-v9-s-608-license-plates-end2end-fp16.abc12345.onnx",
             ],
             tr: {
                 "/ort/1.27.0/ort-wasm-simd-threaded.wasm": res("current-wasm"),
                 "/ort/1.26.0/ort-wasm-simd-threaded.wasm": res("stale-wasm"),
-                "/models/plate/yolo-v9-t-512-license-plates-end2end.abc12345.onnx": res("current-model"),
-                "/models/plate/yolo-v9-t-512-license-plates-end2end.old00000.onnx": res("stale-model"),
+                "/models/plate/yolo-v9-s-608-license-plates-end2end-fp16.abc12345.onnx": res("current-model"),
+                "/models/plate/yolo-v9-s-608-license-plates-end2end-fp16.old00000.onnx": res("stale-model"),
             },
         });
 
@@ -461,11 +484,11 @@ describe("sw activate", () => {
         // model hash are dropped from the non-FIFO cache (the ABI-skew /
         // stale-weights guard).
         expect((await tr.match("/ort/1.27.0/ort-wasm-simd-threaded.wasm"))?._tag).toBe("current-wasm");
-        expect((await tr.match("/models/plate/yolo-v9-t-512-license-plates-end2end.abc12345.onnx"))?._tag).toBe(
+        expect((await tr.match("/models/plate/yolo-v9-s-608-license-plates-end2end-fp16.abc12345.onnx"))?._tag).toBe(
             "current-model",
         );
         expect(await tr.match("/ort/1.26.0/ort-wasm-simd-threaded.wasm")).toBeUndefined();
-        expect(await tr.match("/models/plate/yolo-v9-t-512-license-plates-end2end.old00000.onnx")).toBeUndefined();
+        expect(await tr.match("/models/plate/yolo-v9-s-608-license-plates-end2end-fp16.old00000.onnx")).toBeUndefined();
     });
 
     it("leaves the tracker cache untouched when no asset set is injected (dev)", async () => {
@@ -507,5 +530,53 @@ describe("sw cacheFirst", () => {
         const out = await cacheFirst(assetRequest("/assets/never-seen.js"), navEvent());
 
         expect(out._tag).toBe("net-404");
+    });
+});
+
+describe("sw tracker assets", () => {
+    const currentUrl = "/ort/1.27.0/ort-wasm-simd-threaded.wasm";
+
+    it("serves a current immutable asset without revalidating the cache hit", async () => {
+        const { dispatchFetch, fetchSpy } = loadSw({
+            onLine: true,
+            trackerUrls: [currentUrl],
+            fetch: async () => res("network"),
+            tr: { [currentUrl]: res("cached-current") },
+        });
+
+        const out = await dispatchFetch(currentUrl);
+
+        expect(out._tag).toBe("cached-current");
+        expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("fetches and stores a current immutable asset on its first request", async () => {
+        const { dispatchFetch, fetchSpy, tr } = loadSw({
+            onLine: true,
+            trackerUrls: [currentUrl],
+            fetch: async () => res("network"),
+        });
+
+        const out = await dispatchFetch(currentUrl);
+
+        expect(out._tag).toBe("network");
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+        expect((await tr.match(currentUrl))?._tag).toBe("network");
+    });
+
+    it("revalidates an unknown stable URL used by dev or a newer build", async () => {
+        const unknownUrl = "/ort/ort-wasm-simd-threaded.wasm";
+        const { dispatchFetch, fetchSpy, tr } = loadSw({
+            onLine: true,
+            trackerUrls: [currentUrl],
+            fetch: async () => res("network-refresh"),
+            tr: { [unknownUrl]: res("cached-dev") },
+        });
+
+        const out = await dispatchFetch(unknownUrl);
+
+        expect(out._tag).toBe("cached-dev");
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+        expect((await tr.match(unknownUrl))?._tag).toBe("network-refresh");
     });
 });

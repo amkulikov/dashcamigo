@@ -101,6 +101,10 @@ const toAbs = (u) => new URL(u, self.location.origin).toString();
 
 // Absolute URLs of every precached entry - O(1) membership test for routing.
 const PRECACHE_URLS = new Set(PRECACHE_MANIFEST.map((e) => toAbs(e.url)));
+// The build's immutable tracker assets. Unlike dev's stable /ort/ + /models/
+// paths, every URL here carries the ORT version or model content hash, so a
+// cache hit is final and must not trigger a multi-megabyte revalidation/write.
+const TRACKER_URLS = new Set(TRACKER_ASSET_URLS.map((u) => toAbs(u)));
 
 // Per-locale shells ("/en/", "/ru/", ...) for the offline navigation fallback:
 // an offline navigation to an uncached /<lang>/<page>/ degrades to that
@@ -239,11 +243,10 @@ self.addEventListener("activate", (event) => {
             // worst. Keep only the current build's asset URLs. Skipped when empty
             // (dev: no injection) so a dev session keeps its warmed cache.
             if (TRACKER_ASSET_URLS.length > 0) {
-                const keepTracker = new Set(TRACKER_ASSET_URLS.map(toAbs));
                 const tracker = await caches.open(TRACKER);
                 const trackerKeys = await tracker.keys();
                 await Promise.all(
-                    trackerKeys.filter((req) => !keepTracker.has(req.url)).map((req) => tracker.delete(req)),
+                    trackerKeys.filter((req) => !TRACKER_URLS.has(req.url)).map((req) => tracker.delete(req)),
                 );
             }
             // claim() is for the FIRST install: it puts the just-activated SW
@@ -307,14 +310,19 @@ self.addEventListener("fetch", (evt) => {
         return;
     }
 
-    // 5) Blur-zone tracker assets (/ort/ wasm, /models/ onnx) - stale-while-
-    // revalidate into the DEDICATED, non-FIFO TRACKER cache so the lazy download
-    // survives a long browsing session and the tracker runs offline after one
-    // online use. The URLs are cache-busted (versioned /ort/ dir, content-hashed
-    // models - see vite-plugins/tracker-assets.ts), so a dependency upgrade lands
-    // fresh URLs; the activate handler drops the superseded entries.
+    // 5) Blur-zone tracker assets (/ort/ wasm, /models/ onnx) use the DEDICATED,
+    // non-FIFO TRACKER cache so the lazy download survives a long browsing
+    // session and runs offline after one online use. Current production URLs are
+    // immutable (versioned /ort/ dir, content-hashed models), so cache-first
+    // avoids re-fetching and rewriting up to tens of MB on every warm. Unknown
+    // URLs retain stale-while-revalidate: that keeps dev's stable paths fresh and
+    // lets a waiting old SW cache a newer build's as-yet-unknown asset URLs.
     if (url.pathname.startsWith("/ort/") || url.pathname.startsWith("/models/")) {
-        evt.respondWith(staleWhileRevalidate(req, evt, TRACKER, false));
+        evt.respondWith(
+            TRACKER_URLS.has(url.href)
+                ? trackerCacheFirst(req, evt)
+                : staleWhileRevalidate(req, evt, TRACKER, false),
+        );
         return;
     }
 
@@ -427,6 +435,22 @@ async function cacheFirst(req, evt) {
         const rt = await runtime.match(req);
         if (rt) return rt;
         throw err;
+    }
+}
+
+// Cache-first for the build's immutable ORT/model URLs. This deliberately does
+// not consult PRECACHE or RUNTIME: tracker assets live only in their dedicated
+// non-FIFO cache and are downloaded only after feature consent.
+async function trackerCacheFirst(req, evt) {
+    const tracker = await caches.open(TRACKER);
+    const hit = await tracker.match(req);
+    if (hit) return hit;
+    try {
+        const res = await fetch(req);
+        cacheAndTrim(tracker, req, res, evt, false);
+        return res;
+    } catch {
+        return Response.error();
     }
 }
 

@@ -11,17 +11,17 @@
 // sha256 of the shipped fp16 file:
 // e3c117a93584f7d3cf595f97df7391c3ad4c4a7e88b8e38149e1b18014e4005d
 //
-// Why this model and why 960: bake-off on real 4K dashcam frames
-// (private/research/face-detector-spike/). The previous
-// 232 KB YuNet false-fired on car fronts, wheels, tree crowns and building
-// facades - persistent FPs that survived temporal corroboration and needed
-// geometry-filter crutches. yolov9s produced ZERO detections on all those
-// sites; at 640 input its small-face recall trailed YuNet (a 30 px face lands
-// below the P3 stride floor after the ~0.5x tile letterbox), at an effective
-// ~960 scale it beat YuNet outright (10 verified real faces vs 3, including
-// drivers behind windshields). Known residual FP class: traffic-light lenses /
-// red-man pictograms (small, mid-frame, persistent) - accepted as the cheap
-// failure; nothing geometric separates them from a face.
+// Why this model and why 960: an exploratory bake-off on 22 real dashcam stills
+// (private/research/face-detector-spike/) found substantially fewer obvious
+// static false positives than the old 2023 YuNet and more permissive-threshold
+// small-face hits at an effective ~960 scale. This was NOT a validation set: it
+// has no ground-truth boxes, little scene diversity and originally no night
+// coverage. The old "10 verified faces" count was manual review at the raw
+// research floor; after the production width + seed gates, only one of those
+// stored snapshots can seed a new face track. Treat the model and thresholds as
+// provisional until they are measured on labeled dashcam sequences. Known
+// residual FP classes include traffic-light lenses, red-man pictograms and
+// printed faces; temporal corroboration cannot reject a persistent static FP.
 //
 // Output decode: ultralytics export, [1, 5, N] channels-first (cx, cy, w, h,
 // score) in input pixels, no in-graph NMS - suppressOverlaps handles both
@@ -43,8 +43,9 @@ import { loadOrt, type OrtModule, type OrtRuntime } from "./ort-runtime.js";
 const INPUT_SIZE = 960;
 /** YOLO letterbox convention the model was trained with: centered, 114-gray. */
 const LETTERBOX_FILL = "rgb(114,114,114)";
-/** Raw score floor - junk cut only. Bake-off band: real faces sit at 0.2-0.66
- *  at this scale, the residual FP class (traffic-light lenses) tops out at
+/** Raw score floor - junk cut only. In the small exploratory bake-off, manually
+ *  reviewed face candidates sat at 0.2-0.66 at this scale and the residual FP
+ *  class (traffic-light lenses) topped out at
  *  0.59; the 0.2-0.25 sliver is flicker junk plus tiny/far faces below the
  *  identifiability bar (FACE_MIN_WIDTH_PX). The PRODUCT floor - what may seed
  *  a track or count as confirmation evidence - is DETECT_SEED_SCORE_MIN in

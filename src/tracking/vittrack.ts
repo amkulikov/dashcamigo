@@ -12,10 +12,12 @@
 // modules/video/src/tracking/tracker_vit.cpp (Apache-2.0); the model is
 // opencv_zoo's object_tracking_vittrack (Apache-2.0, 715 KB fp32,
 // sha256 2990f0b7cd44d92afa48cd97db6de7be113fc1d9594fddb74e2725c10478e91d,
-// from huggingface.co/opencv/object_tracking_vittrack). Validated
-// against a synthetic scale-growth + occlusion scene: ~3 px mean center error,
-// score drops below the 0.20 threshold under occlusion and recovers after
-// (see private/research/vittrack-spike/).
+// from huggingface.co/opencv/object_tracking_vittrack). The port was sanity-
+// checked against a synthetic scale-growth + occlusion scene: ~3 px mean center
+// error, score drops below the 0.20 threshold under occlusion and recovers after
+// (see private/research/vittrack-spike/). That verifies plumbing, not real-world
+// tracking quality. OpenCV Zoo reports LaSOT AUC 48.6 for this model, but the
+// product still has no labeled dashcam tracking benchmark.
 //
 // Contract: init() crops a 128x128 template around the seed box (factor 2),
 // update() crops a 256x256 search window around the last box (factor 4), runs

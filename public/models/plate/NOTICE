@@ -1,9 +1,14 @@
-yolo-v9-t-512-license-plates-end2end.onnx
+yolo-v9-s-608-license-plates-end2end-fp16.onnx
 
 License-plate detection model, MIT (see LICENSE; (c) ankandrew).
 
 Provenance:
 - ankandrew/open-image-models, release asset
-  yolo-v9-t-512-license-plates-end2end.onnx
+  yolo-v9-s-608-license-plates-end2end.onnx
   (https://github.com/ankandrew/open-image-models).
-- sha256: 746fdd358ec110418775d7c9d8d07910d48b1a21471f92bf4421f6510d6daade
+- upstream FP32 sha256:
+  2b878b38d9aa07b6ddc3ea75c4ffcb39869bc5c218e0a14002f60ab2f7b0be9a
+- converted with onnxconverter-common 1.16.0: FP16 compute, FP32 input,
+  /end2end/ postprocess and output.
+- shipped sha256:
+  0b6dda70cf33df6a404e267fd96a8a4bb7682e4ad7a185a2e9f8124658fae189

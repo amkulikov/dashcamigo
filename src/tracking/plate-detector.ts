@@ -1,16 +1,17 @@
 // License-plate detector on onnxruntime-web. WebGPU-only by product decision
-// (shared with the face detector - see blur-detect.ts): the wasm path costs
-// ~140 ms per 512 inference single-thread, ~6x realtime at pass cadence -
-// machines without an adapter do not get the plates checkbox at all.
+// (shared with the face detector - see blur-detect.ts): the wasm path misses the
+// detection-pass budget, so machines without an adapter do not get the plates
+// checkbox at all.
 //
-// Model: ankandrew/open-image-models yolo-v9-t-512-license-plates-end2end.onnx
-// (MIT, 7.8 MB fp32, sha256
-// 746fdd358ec110418775d7c9d8d07910d48b1a21471f92bf4421f6510d6daade, from the
-// repo's GitHub release assets). "end2end" = NMS is inside the graph via the
-// standard NonMaxSuppression op, so the output is already a short list of
-// boxes - no candidate decoding here. Validated against real dashcam frames in
-// private/research/plate-detector-spike/ (detection floor, tiling,
-// latency; ~20 ms per 512 inference on webgpu).
+// Model: ankandrew/open-image-models yolo-v9-s-608-license-plates-end2end.onnx
+// (MIT), converted to FP16 compute with FP32 input, postprocess and output; exact
+// source/conversion hashes are in public/models/plate/NOTICE. "end2end" means NMS
+// is inside the graph via the standard NonMaxSuppression op, so the output is
+// already a short list of boxes. On 31 local day/night dashcam stills at the 0.6
+// product seed floor, this variant added seven boxes over t512 and all seven were
+// manually labeled as plates; no additional false positive appeared. Median
+// WebGPU inference was 36.5 ms over 184 tiles. This is a small targeted
+// regression sample, not an exhaustive precision/recall benchmark.
 //
 // Contract: detect() runs the model over (a subset of) an overlapping tile
 // grid (small plates vanish in a whole-frame letterbox - see detect-common.ts),
@@ -29,15 +30,14 @@ import {
 import { loadOrt, type OrtModule, type OrtRuntime } from "./ort-runtime.js";
 
 /** The model variant's static input side. */
-const INPUT_SIZE = 512;
+const INPUT_SIZE = 608;
 /** YOLO letterbox convention the model was trained with: centered, 114-gray. */
 const LETTERBOX_FILL = "rgb(114,114,114)";
-/** Raw score floor - junk cut only. Spike bands: angled-but-readable plates
- *  ~0.13, frontal readable 0.4-0.85; below 0.25 the field is dominated by
- *  flicker junk (windows, bollards, fences). The PRODUCT floor - what may seed
- *  a track or count as confirmation evidence - is DETECT_SEED_SCORE_MIN in
- *  tracker-worker.ts; the band between the two floors is returned on purpose,
- *  it re-anchors already-live tracks (see the seed-floor note there). */
+/** Raw score floor - junk cut only. The PRODUCT floor - what may seed a track or
+ *  count as confirmation evidence - is DETECT_SEED_SCORE_MIN in
+ *  tracker-worker.ts. The band between the two floors is returned on purpose:
+ *  it may re-anchor an already-live track but cannot create one. Only the 0.6+
+ *  delta was manually labeled; this lower band remains exploratory. */
 export const PLATE_SCORE_MIN = 0.25;
 /** Cross-tile duplicate suppression. */
 const DEDUPE_IOU = 0.5;

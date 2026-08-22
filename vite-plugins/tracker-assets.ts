@@ -47,7 +47,7 @@ const ORT_FILES = [
 // copy is silent-wrong-output rather than a crash - hence the content hash.
 const MODELS = [
     { key: "tracker", rel: "models/vittrack/object_tracking_vittrack_2023sep.onnx" },
-    { key: "plate", rel: "models/plate/yolo-v9-t-512-license-plates-end2end.onnx" },
+    { key: "plate", rel: "models/plate/yolo-v9-s-608-license-plates-end2end-fp16.onnx" },
     { key: "face", rel: "models/face/yolov9s-face-960-fp16.onnx" },
 ] as const;
 

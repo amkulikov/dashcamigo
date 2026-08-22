@@ -306,10 +306,11 @@ async function runTrackPass(
 
 /** Discovery scan cadence, per kind - flat, no ROI/boost scheduler. One hit is
  *  enough to seed a bidirectional cover (backward hold + forward track), so
- *  discovery only has to catch an object once. 1 fps suffices: a plate stays in
- *  detectable range ~1-2 s; a genuinely brief oncoming plate a scan misses is
- *  the accepted gap (fixed with a manual zone) - the privacy asymmetry makes a
- *  miss the cheap failure to leave open, an over-dense scan the one to avoid. */
+ *  discovery only has to catch an object once. 1 fps is the current product
+ *  budget, not a labeled-corpus result: the exploratory footage suggested a
+ *  plate often stays detectable for ~1-2 s, but brief oncoming plates can be
+ *  missed. That is an accepted gap (closed with a manual zone), not established
+ *  recall performance. */
 const DETECT_SCAN_FPS: Record<DetectKind, number> = { plate: 1, face: 1 };
 
 /** IoU gate for a detection continuing a live track. The tracker box is advanced
@@ -323,10 +324,11 @@ const DETECT_MATCH_MIN_IOU = 0.2;
  *  billboards and road signs: no confirmation step can cut a
  *  static false positive (hit count and tracker-sustain both reward static
  *  objects, which track better than real plates), so this floor is the only
- *  gate. Plate 0.6 knowingly drops real readable plates in the lower half of
- *  the frontal band (0.4-0.85 in the spike; a miss is closed with a manual
- *  zone) - a product call favoring FP silence. Face 0.45 keeps the clear
- *  close-range band of the 0.2-0.66 real-face range; higher runs out of model.
+ *  gate. Plate 0.6 is deliberately conservative: all seven s608-only boxes
+ *  above it in the small local comparison were plates, but the corpus has no
+ *  exhaustive ground truth, so this is not a measured precision/recall optimum.
+ *  Face 0.45 keeps the clear close-range band seen in the exploratory sample;
+ *  it is likewise not derived from a labeled validation set.
  *
  *  Detections BELOW this floor (down to the detectors' raw junk floors) have
  *  exactly one power: RE-ANCHORING an IoU-matched live track. A live track is

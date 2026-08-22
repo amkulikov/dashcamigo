@@ -41,7 +41,7 @@ const TRACKER_ASSETS =
               ortDir: "/ort/",
               models: {
                   tracker: "/models/vittrack/object_tracking_vittrack_2023sep.onnx",
-                  plate: "/models/plate/yolo-v9-t-512-license-plates-end2end.onnx",
+                  plate: "/models/plate/yolo-v9-s-608-license-plates-end2end-fp16.onnx",
                   face: "/models/face/yolov9s-face-960-fp16.onnx",
               },
           };
@@ -89,7 +89,7 @@ function groupAssets(group: BlurAssetGroupId): readonly AssetSpec[] {
             return [
                 ...ORT_WEBGPU_ASSETS,
                 { url: TRACKER_MODEL_URL, approxMb: 0.7 },
-                { url: PLATE_MODEL_URL, approxMb: 7.8 },
+                { url: PLATE_MODEL_URL, approxMb: 14.4 },
             ];
         case "detect-face":
             return [
