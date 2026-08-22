@@ -150,7 +150,7 @@ export function tripPreviewFailed(trip: Trip): boolean {
  * Ensures ONE trip has a first-frame preview, extracting it if missing. Unlike
  * schedulePopulateTripPreviews this does NOT abort any in-flight run - it just
  * queues one extraction on the shared worker pool. So opening a trip mid-fill
- * (or the background fill hydrating trips) can request previews without
+ * (or progressive recording analysis) can request previews without
  * cancelling each other, which is what left a preview "never loaded" when the
  * trip was opened early. No-op if the trip already has a preview or already
  * failed. onUpdate fires with (trip, dataUrl) on success.

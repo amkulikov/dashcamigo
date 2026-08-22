@@ -290,7 +290,7 @@ describe("dispatchParseVideoEmbeddedGps: Novatek probe escalation", () => {
     });
 });
 
-// ===== Structural GPS skips the marker probe (P2 lazy-probe) =====
+// ===== Structural GPS skips the marker probe =====
 //
 // When the moov already carries an EXCLUSIVE structural GPS signal (here: a
 // top-level `GPS ` box, the older 70mai Pro / gps-box-70mai format), tryParseOne
@@ -634,7 +634,7 @@ describe("dispatchParseVideoEmbeddedGps: embedded accel lands in accelByFileKey"
 // ===== combineAccelSources: sidecar precedence =====
 //
 // The one merge point of the two accel origins (basename-paired sidecar file,
-// video container). Called from ingest.ts and lazy-hydrate.ts; the precedence
+// video container). Called by the progressive ingest pipeline; the precedence
 // rule is a decision, not an accident, so it is pinned here.
 
 describe("combineAccelSources", () => {

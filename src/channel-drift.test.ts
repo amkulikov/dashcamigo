@@ -136,29 +136,29 @@ describe("applyChannelDriftLead", () => {
         // the pair, gets its own case - they are separate guards in the code.
         const cases: Array<[string, (frame: TripFrame) => void]> = [
             [
-                "rear not hydrated yet",
+                "rear metadata is not ready yet",
                 (tail) => {
-                    tail.channels.rear!.hydrated = false;
+                    tail.channels.rear!.metadataReady = false;
                 },
             ],
             [
                 "rear moov read failed",
                 (tail) => {
-                    tail.channels.rear!.hydrated = false;
-                    tail.channels.rear!.indexFailed = true;
+                    tail.channels.rear!.metadataReady = false;
+                    tail.channels.rear!.metadataFailed = true;
                 },
             ],
             [
-                "front not hydrated yet",
+                "front metadata is not ready yet",
                 (tail) => {
-                    tail.channels.front!.hydrated = false;
+                    tail.channels.front!.metadataReady = false;
                 },
             ],
             [
                 "front moov read failed",
                 (tail) => {
-                    tail.channels.front!.hydrated = false;
-                    tail.channels.front!.indexFailed = true;
+                    tail.channels.front!.metadataReady = false;
+                    tail.channels.front!.metadataFailed = true;
                 },
             ],
         ];
@@ -170,14 +170,14 @@ describe("applyChannelDriftLead", () => {
         }
     });
 
-    it("still measures a session whose tail pair is fully hydrated", () => {
+    it("still measures a session whose tail pair has ready metadata", () => {
         // The counterpart of the guard above: the flags being PRESENT and
         // terminal must not itself suppress the correction.
         const frames = makeSession(1000, 180, { frontDur: 23.0, rearDur: 19.7 });
         for (const channel of ["front", "rear"] as const) {
             const cand = frames[180]!.channels[channel]!;
-            cand.hydrated = true;
-            cand.indexFailed = false;
+            cand.metadataReady = true;
+            cand.metadataFailed = false;
         }
         applyChannelDriftLead(frames);
         expect(frames[180]!.channels.rear!.driftLeadSec).toBeCloseTo(3.3, 5);

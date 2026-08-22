@@ -179,6 +179,7 @@ export const frDict = {
     "status.audioDamaged": "{n, plural, one {# fichier au son endommagé — vidéo seule} other {# fichiers au son endommagé — vidéo seule}}",
     "status.dropReadFailed": "impossible de lire certains fichiers déposés",
     "status.nothingLoaded": "aucun enregistrement lisible trouvé",
+    "status.tripOpenFailed": "Impossible d’ouvrir ce trajet. Le fichier est peut-être endommagé ou n’est plus disponible.",
     "status.onlyHiddenFiles": "Il n'y avait que des fichiers cachés ou système — choisis le dossier avec tes enregistrements.",
     "status.offline.label": "Hors ligne",
     "status.offline.info": "Ce que ça veut dire",
@@ -311,10 +312,13 @@ export const frDict = {
     "noRecordings.howItWorks": "Voir comment ça marche",
     "noRecordings.notNow": "Pas maintenant",
 
-    "lazyGpsLoad.title": "Chargement du GPS de {n, plural, one {# vidéo} other {# vidéos}}",
-    "lazyGpsLoad.progress": "{done} sur {total}",
-    "lazyGpsLoad.cancel": "Passer",
-    "hydrateLoad.title": "Lecture des enregistrements",
+    "gpsLoad.title": "Chargement du GPS de {n, plural, one {# vidéo} other {# vidéos}}",
+    "gpsLoad.progress": "{done} sur {total}",
+    "gpsLoad.cancel": "Passer",
+    "gpsLoad.pending": "GPS chargé à l’ouverture",
+    "gpsLoad.reading": "Lecture du GPS",
+    "recordingLoad.title": "Lecture des enregistrements",
+    "recordingLoad.cancel": "Annuler",
 
     "resize.videoMap": "Régler la largeur de la carte",
 
@@ -524,16 +528,11 @@ export const frDict = {
 
     "ingestOverlay.title": "Tri des fichiers",
     "ingestOverlay.cancel": "Annuler",
-    "ingestOverlay.continueWithoutGps": "Continuer sans GPS",
     "ingestOverlay.queued": "{n, plural, one {# dossier de plus en file} other {# dossiers de plus en file}}",
-    "ingestOverlay.firstLoadHint": "La première ouverture est la plus longue — la prochaine fois, ces enregistrements se chargeront en quelques secondes.",
     "ingestOverlay.stage.preparing": "Ouverture de ton dossier...",
     "ingestOverlay.stage.classifying": "Tri des fichiers...",
     "ingestOverlay.stage.parsingLogs": "Lecture des journaux GPS...",
     "ingestOverlay.stage.parsingSidecars": "Lecture des fichiers GPS...",
-    "ingestOverlay.stage.indexing": "Lecture des vidéos : {done} / {total}",
-    "ingestOverlay.stage.embeddedGps": "GPS dans la vidéo : {done} / {total}",
-    "ingestOverlay.stage.previews": "Préparation des aperçus des trajets...",
     "ingestOverlay.stage.canceling": "Arrêt...",
     "ingest.error.loadFailed": "Impossible de lire ces fichiers. Choisis le dossier de la carte SD de ta dashcam et réessaie.",
 

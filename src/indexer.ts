@@ -1,13 +1,10 @@
-// Indexer shim. The actual indexMp4FileWithMoov / indexNonIsobmffFile logic lives in
-// workers/indexer-worker.ts; this file owns the singleton WorkerClient and
-// preserves the legacy indexAllMp4Files signature so ingest.ts only needs
-// to change for the new optional `withMoovBytes` path.
+// Main-thread facade for recording indexing. The MP4/TS work lives in
+// workers/indexer-worker.ts; this module owns its singleton client and routes
+// progress for concurrent background and foreground batches.
 //
-// Why moved to worker: indexer.ts used to run on main as a mediabunny-free
-// moov walk. Bounded but on 240-file drops it summed to 1-3 sec of main
-// thread CPU, freezing the UI during the most user-facing phase of ingest.
-// Worker offload also lets the indexer hand the moov bytes straight to
-// gps-extract via main, eliminating the 2× moov read on cold SD.
+// Keeping the bounded moov walk off the main thread avoids accumulated CPU
+// stalls on large cards. The worker also hands moov bytes straight through to
+// GPS extraction, avoiding a second cold-storage read.
 
 import { createLogger } from "./log.js";
 import {
@@ -22,7 +19,7 @@ import { createWorkerClient, type WorkerClient } from "./workers/_protocol/worke
 
 const log = createLogger("indexer");
 
-// Re-exports for back-compat with existing imports across the codebase.
+// Public worker result types used by candidate construction and repair.
 export type { IndexerRepair } from "./workers/indexer-protocol.js";
 export type { Mp4Rotation } from "./parsers/internal/mp4-walker.js";
 
@@ -75,8 +72,8 @@ function getClient(): WorkerClient {
         onNotification: (msg) => {
             if (msg.type !== INDEXER_NOTIFY_PROGRESS) return;
             const data = msg.data as IndexProgressNotificationData;
-            // Route by batchId so concurrent batches (ingest + a future lazy
-            // re-index) do not cross-fire onProgress with foreign files.
+            // Route by batchId so concurrent background and foreground reads do
+            // not cross-fire onProgress with foreign files.
             const ctx = activeBatches.get(data.batchId);
             if (!ctx) return;
             const file = ctx.files[data.fileIndex];

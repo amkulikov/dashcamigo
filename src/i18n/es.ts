@@ -178,6 +178,7 @@ export const esDict = {
     "status.audioDamaged": "{n, plural, one {# archivo con audio dañado — solo vídeo} other {# archivos con audio dañado — solo vídeo}}",
     "status.dropReadFailed": "no se pudieron leer algunos archivos soltados",
     "status.nothingLoaded": "no se encontraron grabaciones reproducibles",
+    "status.tripOpenFailed": "No se pudo abrir este viaje. Es posible que el archivo esté dañado o ya no esté disponible.",
     "status.onlyHiddenFiles": "Ahí solo había archivos ocultos o del sistema — elige la carpeta con tus grabaciones.",
     "status.offline.label": "Sin conexión",
     "status.offline.info": "Qué significa esto",
@@ -310,10 +311,13 @@ export const esDict = {
     "noRecordings.howItWorks": "Ver cómo funciona",
     "noRecordings.notNow": "Ahora no",
 
-    "lazyGpsLoad.title": "Cargando GPS de {n, plural, one {# vídeo} other {# vídeos}}",
-    "lazyGpsLoad.progress": "{done} de {total}",
-    "lazyGpsLoad.cancel": "Saltar",
-    "hydrateLoad.title": "Leyendo grabaciones",
+    "gpsLoad.title": "Cargando GPS de {n, plural, one {# vídeo} other {# vídeos}}",
+    "gpsLoad.progress": "{done} de {total}",
+    "gpsLoad.cancel": "Saltar",
+    "gpsLoad.pending": "El GPS se carga al abrir",
+    "gpsLoad.reading": "Leyendo GPS",
+    "recordingLoad.title": "Leyendo grabaciones",
+    "recordingLoad.cancel": "Cancelar",
 
     "resize.videoMap": "Ajustar ancho del mapa",
 
@@ -523,16 +527,11 @@ export const esDict = {
 
     "ingestOverlay.title": "Ordenando archivos",
     "ingestOverlay.cancel": "Cancelar",
-    "ingestOverlay.continueWithoutGps": "Continuar sin GPS",
     "ingestOverlay.queued": "{n, plural, one {# carpeta más en cola} other {# carpetas más en cola}}",
-    "ingestOverlay.firstLoadHint": "La primera vez es la más lenta — la próxima, estas grabaciones cargarán en segundos.",
     "ingestOverlay.stage.preparing": "Abriendo tu carpeta...",
     "ingestOverlay.stage.classifying": "Organizando archivos...",
     "ingestOverlay.stage.parsingLogs": "Leyendo logs GPS...",
     "ingestOverlay.stage.parsingSidecars": "Leyendo archivos GPS...",
-    "ingestOverlay.stage.indexing": "Leyendo vídeos: {done} / {total}",
-    "ingestOverlay.stage.embeddedGps": "GPS en el vídeo: {done} / {total}",
-    "ingestOverlay.stage.previews": "Preparando vistas previas de los trayectos...",
     "ingestOverlay.stage.canceling": "Parando...",
     "ingest.error.loadFailed": "No se pudieron leer estos archivos. Elige la carpeta de la tarjeta SD de tu dashcam e inténtalo de nuevo.",
 

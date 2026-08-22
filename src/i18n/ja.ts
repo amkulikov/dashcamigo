@@ -187,6 +187,7 @@ export const jaDict = {
     "status.audioDamaged": "{n, plural, other {音声が壊れたファイル # 件、映像のみ再生します}}",
     "status.dropReadFailed": "ドロップした一部のファイルを読み込めませんでした",
     "status.nothingLoaded": "再生できる記録が見つかりませんでした",
+    "status.tripOpenFailed": "この走行を開けませんでした。ファイルが破損しているか、利用できなくなっている可能性があります。",
     "status.onlyHiddenFiles": "隠しファイルやシステムファイルばかりでした — 録画が入っているフォルダーを選んでください。",
     "status.offline.label": "オフライン",
     "status.offline.info": "これはどういうこと？",
@@ -319,10 +320,13 @@ export const jaDict = {
     "noRecordings.howItWorks": "やり方を見る",
     "noRecordings.notNow": "今はしない",
 
-    "lazyGpsLoad.title": "{n} 件の動画から GPS を読み込み中",
-    "lazyGpsLoad.progress": "{done} / {total}",
-    "lazyGpsLoad.cancel": "スキップ",
-    "hydrateLoad.title": "録画を読み込み中",
+    "gpsLoad.title": "{n} 件の動画から GPS を読み込み中",
+    "gpsLoad.progress": "{done} / {total}",
+    "gpsLoad.cancel": "スキップ",
+    "gpsLoad.pending": "開くと GPS を読み込みます",
+    "gpsLoad.reading": "GPS を読み込み中",
+    "recordingLoad.title": "録画を読み込み中",
+    "recordingLoad.cancel": "キャンセル",
 
     "resize.videoMap": "地図の幅を変更",
 
@@ -532,16 +536,11 @@ export const jaDict = {
 
     "ingestOverlay.title": "ファイルを整理しています",
     "ingestOverlay.cancel": "キャンセル",
-    "ingestOverlay.continueWithoutGps": "GPS なしで続行",
     "ingestOverlay.queued": "あと {n} 件のフォルダーが待機中",
-    "ingestOverlay.firstLoadHint": "最初の読み込みがいちばん時間がかかります。次回からは数秒で開きます。",
     "ingestOverlay.stage.preparing": "フォルダーを開いています…",
     "ingestOverlay.stage.classifying": "ファイルを整理中…",
     "ingestOverlay.stage.parsingLogs": "GPS ログを読み込み中…",
     "ingestOverlay.stage.parsingSidecars": "GPS ファイルを読み込み中…",
-    "ingestOverlay.stage.indexing": "動画を読み込み中：{done} / {total}",
-    "ingestOverlay.stage.embeddedGps": "動画内の GPS：{done} / {total}",
-    "ingestOverlay.stage.previews": "走行のプレビューを準備中…",
     "ingestOverlay.stage.canceling": "停止中…",
     "ingest.error.loadFailed": "これらのファイルを読み込めませんでした。ドラレコの SD カードのフォルダーを選んで、もう一度お試しください。",
 

@@ -24,13 +24,15 @@
  * Names dispatched via emitLifecycle. Strongly typed so test harness and app
  * code stay in sync. Each event fires exactly once per scenario:
  *
- *  - ingest-done            after ingestFiles finishes (success path only)
+ *  - ingest-list-ready      after the provisional trip list is visible
+ *  - ingest-done            after recording metadata and previews are complete
  *  - trip-activated         after playFrame attaches a candidate and the player begins loading
  *  - player-first-frame     after the first video frame is actually painted (requestVideoFrameCallback)
  *  - map-tracks-rendered    after the active trip polyline is drawn on the map
  *  - chart-rendered         after the chart strip finishes rebuild for the active trip
  */
 export type LifecycleEvent =
+    | "ingest-list-ready"
     | "ingest-done"
     | "trip-activated"
     | "player-first-frame"

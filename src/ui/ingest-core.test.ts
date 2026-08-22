@@ -10,7 +10,6 @@ import {
     countByField,
     embeddedResultHasEffect,
     mergeAccelIntoCandidates,
-    raceWithAbort,
     toVendorFiles,
 } from "./ingest-core.js";
 import type { DispatchedEmbeddedGpsResult } from "../parsers/registry.js";
@@ -48,7 +47,14 @@ describe("countByField", () => {
 
 describe("embeddedResultHasEffect", () => {
     const result = (over: Partial<DispatchedEmbeddedGpsResult>): DispatchedEmbeddedGpsResult =>
-        ({ records: [], videoStartUtcHintByFileKey: new Map(), ...over }) as unknown as DispatchedEmbeddedGpsResult;
+        ({
+            records: [],
+            videoStartUtcHintByFileKey: new Map(),
+            localClockOffsetHintByFileKey: new Map(),
+            accelByFileKey: new Map(),
+            winningExtractorByFileKey: new Map(),
+            ...over,
+        }) as unknown as DispatchedEmbeddedGpsResult;
 
     it("is true when there are records", () => {
         expect(embeddedResultHasEffect(result({ records: [{} as never] }))).toBe(true);
@@ -60,7 +66,20 @@ describe("embeddedResultHasEffect", () => {
         ).toBe(true);
     });
 
-    it("is false only when there are neither records nor hints", () => {
+    it("is true for local-clock or accelerometer evidence without GPS points", () => {
+        expect(embeddedResultHasEffect(result({ localClockOffsetHintByFileKey: new Map([["f.mp4", 3600]]) }))).toBe(
+            true,
+        );
+        expect(embeddedResultHasEffect(result({ accelByFileKey: new Map([["f.mp4", [{} as never]]]) }))).toBe(true);
+    });
+
+    it("is true when a parser claimed a file without producing telemetry", () => {
+        expect(embeddedResultHasEffect(result({ winningExtractorByFileKey: new Map([["f.mp4", "novatek"]]) }))).toBe(
+            true,
+        );
+    });
+
+    it("is false only when there are no records, evidence or attribution", () => {
         expect(embeddedResultHasEffect(result({}))).toBe(false);
     });
 });
@@ -104,30 +123,5 @@ describe("mergeAccelIntoCandidates", () => {
         expect(mergeAccelIntoCandidates([aRecord, bRecord], accel, [a, b])).toBe(1);
         expect(Math.abs(aRecord.accelXg)).toBeGreaterThan(0);
         expect(bRecord.accelXg).toBe(0);
-    });
-});
-
-describe("raceWithAbort", () => {
-    it("resolves with the wrapped promise when the signal never fires", async () => {
-        const ac = new AbortController();
-        await expect(raceWithAbort(Promise.resolve(42), ac.signal)).resolves.toBe(42);
-    });
-
-    it("propagates the wrapped promise's rejection unchanged", async () => {
-        const ac = new AbortController();
-        await expect(raceWithAbort(Promise.reject(new Error("boom")), ac.signal)).rejects.toThrow("boom");
-    });
-
-    it("rejects immediately with an AbortError when the signal is already aborted", async () => {
-        const ac = new AbortController();
-        ac.abort();
-        await expect(raceWithAbort(new Promise(() => {}), ac.signal)).rejects.toMatchObject({ name: "AbortError" });
-    });
-
-    it("rejects with an AbortError when the signal fires while the promise is pending", async () => {
-        const ac = new AbortController();
-        const pending = raceWithAbort(new Promise(() => {}), ac.signal);
-        ac.abort();
-        await expect(pending).rejects.toMatchObject({ name: "AbortError" });
     });
 });

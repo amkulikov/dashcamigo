@@ -9,7 +9,8 @@ import { annotationContentEqual, loadAllAnnotations, saveAnnotation, saveAnnotat
 import { fileIdentityKey } from "../persist/identity.js";
 import type { AnnotationRecord, MarkerAnnotation, TripMetaAnnotation } from "../persist/types.js";
 import type { Trip, VideoCandidate } from "../trips.js";
-import { contentToWallUtc, isHydrationPending, tripAllCandidates, wallToContentSec } from "../trips.js";
+import { contentToWallUtc, needsRecordingMetadata, tripAllCandidates, wallToContentSec } from "../trips.js";
+import { vendorFileKey } from "../vendor-file-key.js";
 import { folderIdForFileKey } from "./folder-sources.js";
 import { state } from "./state.js";
 
@@ -92,6 +93,15 @@ function candidateIdentityKey(candidate: VideoCandidate): string {
         size: candidate.file.size,
         lastModified: candidate.file.lastModified,
     });
+}
+
+function candidateClockPending(candidate: VideoCandidate): boolean {
+    const key = vendorFileKey(candidate);
+    return (
+        needsRecordingMetadata(candidate) ||
+        state.pendingHeavyEmbeddedGps.has(key) ||
+        state.inflightEmbeddedGps.has(key)
+    );
 }
 
 /**
@@ -237,12 +247,11 @@ export function addMarker(trip: Trip, utcMs: number, text: string): MarkerAnnota
     return record;
 }
 
-// === Re-stamping markers placed on a provisional timeline (lazy ingest) ===
+// === Re-stamping markers placed on a provisional timeline ===
 //
-// A marker is pure UTC, computed from the trip's startUtc - which, on the lazy
-// path, is a filename-derived guess until hydration reads the real
-// mvhd/GPS (a Skip in the hydration modal starts playback exactly there). The
-// re-derive then moves the trip out from under the marker: the stored UTC
+// A marker is pure UTC, computed from a trip start that may still rely on
+// filename evidence. Metadata or GPS can refine that clock and move the trip
+// out from under the marker: the stored UTC
 // lands at the wrong moment, on the wrong trip, or outside every trip, and
 // the broken value flows into the notes file. So a marker placed while its
 // trip still has pending candidates also records a SESSION anchor - the clip
@@ -256,7 +265,7 @@ interface ProvisionalMarkerAnchor {
     offsetSec: number;
 }
 
-// marker id -> anchor, only for markers created on a not-yet-hydrated trip.
+// marker id -> anchor for markers created before all clock evidence is available.
 const provisionalMarkerAnchors = new Map<string, ProvisionalMarkerAnchor>();
 
 // Repaints the timeline pins after a re-stamp. Registered from app.ts -
@@ -268,10 +277,10 @@ export function registerMarkersRestampedHook(callback: () => void): void {
     markersRestampedHook = callback;
 }
 
-/** Records the clip-relative position of a marker placed on a trip that still
- *  has un-hydrated candidates - the input for the later re-stamp. */
+/** Records the clip-relative position of a marker placed on a trip whose
+ * absolute clock can still be refined. */
 function captureProvisionalAnchor(trip: Trip, record: MarkerAnnotation, utcMs: number): void {
-    if (!tripAllCandidates(trip).some(isHydrationPending)) return;
+    if (!tripAllCandidates(trip).some(candidateClockPending)) return;
     const contentSec = wallToContentSec(trip.timeline, utcMs / 1000);
     const segment = trip.timeline.segments.find(
         (seg) => contentSec >= seg.contentStart && contentSec <= seg.contentEnd,
@@ -289,20 +298,24 @@ function captureProvisionalAnchor(trip: Trip, record: MarkerAnnotation, utcMs: n
 /**
  * Recomputes the UTC of provisionally-placed markers from their clip anchors
  * against the CURRENT trip timelines, re-saving the ones that moved. Call
- * after a lazy re-derive has rebuilt the affected trips, and once more with
+ * after progressive clock refinement rebuilds affected trips, and once more with
  * `final` after the closing regroup sweep - that sweep reconciles trip
  * boundaries with the real durations and can shift startUtc again, so an
- * anchor consumed at per-trip hydration would leave the marker on the
+ * anchor consumed at per-trip metadata read would leave the marker on the
  * intermediate timeline. An anchor whose clip left the session is dropped as
- * unfixable; one whose clip is still pending waits for the next pass; `final`
- * clears whatever is left. Returns how many markers moved.
+ * unfixable; one whose clip still has pending metadata or telemetry waits for
+ * the next pass. `final` releases every settled anchor. Returns how many moved.
  */
-export function restampProvisionalMarkers(opts?: { final?: boolean }): number {
+export function restampProvisionalMarkers(opts?: {
+    final?: boolean;
+    finalCandidates?: readonly VideoCandidate[];
+}): number {
     if (provisionalMarkerAnchors.size === 0) return 0;
     // One index for the whole pass: anchors are held until the closing sweep,
     // so a per-anchor walk of every trip's every frame would repeat that scan
-    // on each of the per-trip hydration passes.
+    // on each of the per-trip metadata read passes.
     const byIdentity = indexCandidatesByIdentity();
+    const pending = new Set<string>();
     let moved = 0;
     for (const [markerId, anchor] of [...provisionalMarkerAnchors]) {
         const marker = markersById.get(markerId);
@@ -316,7 +329,10 @@ export function restampProvisionalMarkers(opts?: { final?: boolean }): number {
             provisionalMarkerAnchors.delete(markerId);
             continue;
         }
-        if (isHydrationPending(located.candidate)) continue;
+        if (candidateClockPending(located.candidate)) {
+            pending.add(markerId);
+            continue;
+        }
         const segment = located.trip.timeline.segments.find((seg) => seg.frameIndex === located.frameIndex);
         if (!segment) continue;
         const contentSec = Math.min(segment.contentStart + anchor.offsetSec, segment.contentEnd);
@@ -329,9 +345,16 @@ export function restampProvisionalMarkers(opts?: { final?: boolean }): number {
         persistRecord({ ...marker, utc: utcMs, updatedAt: Date.now() });
         moved++;
     }
-    // Nothing can move a marker after the closing sweep, so holding anchors
-    // past it would only keep them (and their clip lookups) alive forever.
-    if (opts?.final) provisionalMarkerAnchors.clear();
+    if (opts?.final) {
+        const finalKeys = opts.finalCandidates
+            ? new Set(opts.finalCandidates.map((candidate) => candidateIdentityKey(candidate)))
+            : null;
+        for (const [markerId, anchor] of provisionalMarkerAnchors) {
+            if (!pending.has(markerId) && (!finalKeys || finalKeys.has(anchor.fileKey))) {
+                provisionalMarkerAnchors.delete(markerId);
+            }
+        }
+    }
     if (moved > 0) markersRestampedHook?.();
     return moved;
 }
@@ -351,8 +374,7 @@ interface LocatedCandidate {
     candidate: VideoCandidate;
 }
 
-/** Identity key -> the trip and frame currently holding that clip, for every
- *  loaded clip. First writer wins, matching the old first-match walk. */
+/** Identity key -> the trip and frame currently holding that clip. */
 function indexCandidatesByIdentity(): Map<string, LocatedCandidate> {
     const out = new Map<string, LocatedCandidate>();
     for (const trip of state.trips) {

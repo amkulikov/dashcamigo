@@ -161,7 +161,7 @@ body.no-trips .sidebar-cta {
    are meaningless when the primary pointer can't drag a folder onto the page;
    each such string ships in two variants in the static HTML (each with its
    own data-i18n key, so the prerender translates both) and this media toggle
-   picks one - no JS, no flash of wrong copy before hydration. */
+   picks one - no JS, no flash of wrong copy during initialization. */
 .landing-copy-touch {
     display: none;
 }

@@ -177,6 +177,7 @@ export const ptDict = {
     "status.audioDamaged": "{n, plural, one {# arquivo com áudio danificado — só vídeo} other {# arquivos com áudio danificado — só vídeo}}",
     "status.dropReadFailed": "não foi possível ler alguns arquivos soltados",
     "status.nothingLoaded": "nenhuma gravação reproduzível encontrada",
+    "status.tripOpenFailed": "Não foi possível abrir esta viagem. O arquivo pode estar corrompido ou não estar mais disponível.",
     "status.onlyHiddenFiles": "Ali só tinha arquivos ocultos ou de sistema — escolha a pasta com suas gravações.",
     "status.offline.label": "Offline",
     "status.offline.info": "O que isto significa",
@@ -309,10 +310,13 @@ export const ptDict = {
     "noRecordings.howItWorks": "Veja como funciona",
     "noRecordings.notNow": "Agora não",
 
-    "lazyGpsLoad.title": "Carregando GPS de {n, plural, one {# vídeo} other {# vídeos}}",
-    "lazyGpsLoad.progress": "{done} de {total}",
-    "lazyGpsLoad.cancel": "Pular",
-    "hydrateLoad.title": "Lendo gravações",
+    "gpsLoad.title": "Carregando GPS de {n, plural, one {# vídeo} other {# vídeos}}",
+    "gpsLoad.progress": "{done} de {total}",
+    "gpsLoad.cancel": "Pular",
+    "gpsLoad.pending": "O GPS carrega ao abrir",
+    "gpsLoad.reading": "Lendo GPS",
+    "recordingLoad.title": "Lendo gravações",
+    "recordingLoad.cancel": "Cancelar",
 
     "resize.videoMap": "Mudar largura do mapa",
 
@@ -522,16 +526,11 @@ export const ptDict = {
 
     "ingestOverlay.title": "Separando os arquivos",
     "ingestOverlay.cancel": "Cancelar",
-    "ingestOverlay.continueWithoutGps": "Continuar sem GPS",
     "ingestOverlay.queued": "{n, plural, one {mais # pasta na fila} other {mais # pastas na fila}}",
-    "ingestOverlay.firstLoadHint": "A primeira abertura é a mais demorada — na próxima, essas gravações carregam em segundos.",
     "ingestOverlay.stage.preparing": "Abrindo sua pasta...",
     "ingestOverlay.stage.classifying": "Organizando arquivos...",
     "ingestOverlay.stage.parsingLogs": "Lendo logs GPS...",
     "ingestOverlay.stage.parsingSidecars": "Lendo arquivos de GPS...",
-    "ingestOverlay.stage.indexing": "Lendo vídeos: {done} / {total}",
-    "ingestOverlay.stage.embeddedGps": "GPS dentro do vídeo: {done} / {total}",
-    "ingestOverlay.stage.previews": "Preparando prévias das viagens...",
     "ingestOverlay.stage.canceling": "Parando...",
     "ingest.error.loadFailed": "Não foi possível ler estes arquivos. Selecione a pasta do cartão SD da sua câmera e tente novamente.",
 

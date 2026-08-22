@@ -1891,6 +1891,18 @@ describe("estimateProvisionalDurationByFingerprint", () => {
         expect(estimateProvisionalDurationByFingerprint(cands).get("cam")).toBe(60);
     });
 
+    it("uses channel and sequence evidence to preserve adjacent short moments", () => {
+        const cands = [0, 2].flatMap((startUtc, sequence) =>
+            (["front", "rear", "interior"] as const).map((channel) => ({
+                fingerprint: "cam",
+                startUtc,
+                channel,
+                sequence,
+            })),
+        );
+        expect(estimateProvisionalDurationByFingerprint(cands).get("cam")).toBe(2);
+    });
+
     it("non-30-multiple segment is NOT quantized to the 30s grid", () => {
         // 100s segments must estimate ~100, not snap to 90/120 (overshoot would
         // spuriously overlap-split a contiguous run).
@@ -1935,7 +1947,7 @@ describe("estimateProvisionalDurationByFingerprint", () => {
         expect(out.get("camB")).toBe(120);
     });
 
-    it("clamps into [3, 600]; an all-pause fingerprint falls back to default", () => {
+    it("clamps into [1, 600]; an all-pause fingerprint falls back to default", () => {
         // Two clips 2h apart: the single delta exceeds MAX, so no delta votes →
         // default 60 (inside the band).
         const cands = [0, 7200].map((t) => fp("cam", 1000 + t));
@@ -2123,7 +2135,7 @@ describe("applyLocalClockCorrections (via rederiveStartUtcForCandidates)", () =>
     });
 
     it("keeps an applied offset when a later sweep sees no evidence", () => {
-        // The per-trip lazy sweep passes one trip's candidates; the clip that
+        // Per-trip refinement sees only one trip's candidates; the clip that
         // measured the offset routinely sits in another trip. Reverting there
         // would undo a correct axis - permanently if the fill is cancelled
         // before the final full sweep.

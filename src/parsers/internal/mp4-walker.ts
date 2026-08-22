@@ -1125,7 +1125,7 @@ type LoadStrategy = "random" | "stream";
 /**
  * Per-slice latency (ms) above which a File backend counts as "slow" (mobile
  * SAF / slow SD), where sequential streaming beats random reads. Exported so the
- * filename-first ingest probe (lazy-hydrate.ts) gates on the SAME threshold
+ * progressive ingest storage probe gates on the same threshold
  * loadSamples uses here.
  */
 export const SLICE_COST_STREAM_ABOVE = 5;

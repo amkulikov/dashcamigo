@@ -236,7 +236,7 @@ describe("t() basic substitution", () => {
     it("substitutes placeholders", async () => {
         localStorage.setItem("dashcamigo:lang", "ru");
         const { t } = await loadI18n();
-        expect(t("ingestOverlay.stage.indexing", { done: 5, total: 12 })).toBe("Читаю видео: 5 / 12");
+        expect(t("gpsLoad.progress", { done: 5, total: 12 })).toBe("5 из 12");
     });
 });
 
@@ -250,16 +250,16 @@ describe("t() format-failure fallback", () => {
         const { ruDict } = await import("./ru.js");
         let out = "";
         expect(() => {
-            out = t("ingestOverlay.stage.indexing");
+            out = t("gpsLoad.progress");
         }).not.toThrow();
-        expect(out).toBe(ruDict["ingestOverlay.stage.indexing"]);
+        expect(out).toBe(ruDict["gpsLoad.progress"]);
     });
 
     it("does not poison the cached formatter - a later call with correct params still formats", async () => {
         localStorage.setItem("dashcamigo:lang", "ru");
         const { t } = await loadI18n();
-        t("ingestOverlay.stage.indexing"); // missing params - falls back to raw
-        expect(t("ingestOverlay.stage.indexing", { done: 5, total: 12 })).toBe("Читаю видео: 5 / 12");
+        t("gpsLoad.progress"); // missing params - falls back to raw
+        expect(t("gpsLoad.progress", { done: 5, total: 12 })).toBe("5 из 12");
     });
 });
 

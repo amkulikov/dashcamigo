@@ -269,7 +269,7 @@
     --dc-z-scrim: 200; /* full-viewport scrims: drop-zone overlay, notifications root */
     --dc-z-toast: 210; /* notification toasts (above the scrim) */
     --dc-z-ingest: 250; /* ingest progress overlay (its progress bar sits at +10 locally) */
-    --dc-z-ingest-modal: 300; /* modals raised over the ingest overlay (unsupported, lazy-gps, chromium) */
+    --dc-z-ingest-modal: 300; /* modals raised over the ingest overlay (unsupported, recording load, chromium) */
     --dc-z-splash: 9999; /* splash loader + fullscreen player takeover */
     --dc-z-gate: 10000; /* capability gate / onboarding spotlight - the ceiling */
 }

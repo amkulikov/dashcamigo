@@ -176,6 +176,7 @@ export const zhDict = {
     "status.audioDamaged": "{n, plural, other {# 个文件音频损坏，仅播放视频}}",
     "status.dropReadFailed": "无法读取部分拖入的文件",
     "status.nothingLoaded": "未找到可播放的记录",
+    "status.tripOpenFailed": "无法打开这段行程。文件可能已损坏或不再可用。",
     "status.onlyHiddenFiles": "这里全是隐藏文件或系统文件——请选择存放记录的文件夹。",
     "status.offline.label": "离线",
     "status.offline.info": "这是什么意思",
@@ -308,10 +309,13 @@ export const zhDict = {
     "noRecordings.howItWorks": "看看具体怎么做",
     "noRecordings.notNow": "以后再说",
 
-    "lazyGpsLoad.title": "正在从 {n, plural, other {# 个视频}}里加载 GPS",
-    "lazyGpsLoad.progress": "{done} / {total}",
-    "lazyGpsLoad.cancel": "跳过",
-    "hydrateLoad.title": "正在读取录像",
+    "gpsLoad.title": "正在从 {n, plural, other {# 个视频}}里加载 GPS",
+    "gpsLoad.progress": "{done} / {total}",
+    "gpsLoad.cancel": "跳过",
+    "gpsLoad.pending": "打开时加载 GPS",
+    "gpsLoad.reading": "正在读取 GPS",
+    "recordingLoad.title": "正在读取录像",
+    "recordingLoad.cancel": "取消",
 
     "resize.videoMap": "调整地图宽度",
 
@@ -519,16 +523,11 @@ export const zhDict = {
 
     "ingestOverlay.title": "正在整理文件",
     "ingestOverlay.cancel": "取消",
-    "ingestOverlay.continueWithoutGps": "不读 GPS 继续",
     "ingestOverlay.queued": "{n, plural, other {队列中还有 # 个文件夹}}",
-    "ingestOverlay.firstLoadHint": "第一次打开最慢——下次这些录像几秒就能加载完。",
     "ingestOverlay.stage.preparing": "正在打开文件夹...",
     "ingestOverlay.stage.classifying": "正在整理文件...",
     "ingestOverlay.stage.parsingLogs": "读取 GPS 日志...",
     "ingestOverlay.stage.parsingSidecars": "正在读取 GPS 文件...",
-    "ingestOverlay.stage.indexing": "正在读取视频：{done} / {total}",
-    "ingestOverlay.stage.embeddedGps": "视频内 GPS：{done} / {total}",
-    "ingestOverlay.stage.previews": "正在准备行程预览...",
     "ingestOverlay.stage.canceling": "正在停止...",
     "ingest.error.loadFailed": "无法读取这些文件。请选择行车记录仪的 SD 卡文件夹后重试。",
 

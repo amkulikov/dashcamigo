@@ -1,5 +1,5 @@
 // Dependency-light subset of registry.ts, safe to import from EAGER main-thread
-// modules (ingest plumbing, lazy-hydrate). registry.ts itself imports every
+// modules (ingest plumbing, progressive recording reads). registry.ts itself imports every
 // primitive and internal extractor (~90 KB min), so a value import of it from
 // the eager UI drags that whole graph into the landing entry chunk; the heavy
 // dispatchers stay there and load with the ingest/GPS workers. Guarded by

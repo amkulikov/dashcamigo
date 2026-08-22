@@ -25,7 +25,7 @@ import {
 import { t } from "../i18n/index.js";
 import { createLogger, downloadLogBuffer } from "../log.js";
 import { crashReportingEnabled, isCrashReportingBuilt, setCrashReportingEnabled } from "../sentry.js";
-import { groupTrips, setTripGapSec, tripAllCandidates, getTripGapSec, projectEventsOntoTimeline } from "../trips.js";
+import { setTripGapSec, tripAllCandidates, getTripGapSec, projectEventsOntoTimeline } from "../trips.js";
 import {
     DEFAULT_INDEX_CACHE_LIMIT_BYTES,
     getIndexCacheLimitBytes,
@@ -37,6 +37,7 @@ import { clearIndexCache, getIndexCacheStats, pruneIndexCacheToLimit } from "../
 import { getUnits, setUnits, type Units } from "../units-pref.js";
 import { APP_VERSION } from "../version.js";
 import { rebuildChartFromTrip } from "./chart.js";
+import { commitRecordingTripsWhilePreservingIngest } from "./ingest-regroup.js";
 import { formatBytes } from "./format.js";
 import { reapplyMapLabelPrefs, refreshMap } from "./map.js";
 import {
@@ -61,11 +62,9 @@ import {
     setSeekStepSec,
     setSeekStepShiftSec,
 } from "./seek-step-pref.js";
-import { cancelLazyHydration, hasActiveLazySessions, resumeLazyHydrationIfPending } from "./lazy-hydrate.js";
-import { clearTripEventCycle, renderTrips, updateTripPreview } from "./sidebar.js";
-import { activeCandidate, state } from "./state.js";
-import { carryBlurRegions } from "./blur-regions-state.js";
-import { carryOverTripPreviews, schedulePopulateTripPreviews } from "./trip-preview.js";
+import { renderTrips, updateTripPreview } from "./sidebar.js";
+import { state } from "./state.js";
+import { schedulePopulateTripPreviews } from "./trip-preview.js";
 
 const log = createLogger("settings-modal");
 
@@ -247,66 +246,21 @@ function syncAboutInfo(): void {
 }
 
 /**
- * Re-groups the loaded trips with the new gap threshold. Tries to keep the
- * viewer pointed at the same file: captures the active candidate's File
- * reference, re-groups, then re-locates that File in the new trip/frame
- * indices. If the file is gone (or there was no active selection), resets
- * state.active to null. Re-renders the sidebar.
+ * Re-groups loaded trips with the new gap threshold while preserving positional
+ * UI state through the shared regroup commit.
  *
  * No-op when no trips are loaded yet (the next ingest will use the new value).
  */
 function regroupLoadedTrips(): void {
     if (state.trips.length === 0) return;
 
-    // A lazy background fill keys its per-trip sessions by positional trip index
-    // and relies on those indices staying stable until its final sweep. Regrouping
-    // here renumbers state.trips out from under it (wrong-trip refresh + duplicate
-    // hydration). Tear the fill down before the regroup, then resume it for any
-    // trip still provisional. Conservative: hasActiveLazySessions can stay true
-    // after a fill completes, in which case resume is a cheap no-op.
-    const hadLazyFill = hasActiveLazySessions();
-    if (hadLazyFill) cancelLazyHydration();
-
-    // Capture identity of the active file BEFORE we mutate state.trips -
-    // File references are stable per session (the browser keeps the same
-    // File object across our pipeline), so they're a reliable key.
-    const pinnedFile = activeCandidate()?.file ?? null;
-
     const allCandidates = state.trips.flatMap((trip) => tripAllCandidates(trip));
-    const oldTrips = state.trips;
-    const newTrips = groupTrips(allCandidates);
-    // Preserve previews across the regroup. Trips that split inherit the
-    // preview only on the half that kept the original first file; the other
-    // half re-extracts via schedulePopulateTripPreviews below. No SD content-
-    // ion concern here - no ingest/indexer is running.
-    carryOverTripPreviews(oldTrips, newTrips);
-    // The event-cycle cursor is keyed by positional trip index; this regroup
-    // renumbers trips, so a surviving cursor would start cycling from a stale
-    // event (G8). Same clear the shared applyRegroup does.
-    clearTripEventCycle();
-    state.trips = newTrips;
-    // After the swap, same rationale as applyRegroup: the carry's notify must
-    // read a consistent state.trips/state.active pair.
-    carryBlurRegions(oldTrips, newTrips);
-
-    state.active = pinnedFile ? findActiveIndices(pinnedFile) : null;
-    // The viewer surfaces hold the OLD Trip object while playback math now reads
-    // the new grouping - if the active trip merged/split (exactly what a gap
-    // change does), chart/map/timeline desync from the scrubber until re-clicked.
-    // Rebuild against the re-resolved trip (same as recomputeEventsForLoadedTrips).
-    refreshActiveTripSurfaces();
+    commitRecordingTripsWhilePreservingIngest(allCandidates);
+    renderTrips();
     schedulePopulateTripPreviews(state.trips, updateTripPreview);
-
-    // Resume the fill on the freshly regrouped (renumbered) trips: it rebuilds
-    // its session indices against the new state.trips, so it can no longer write
-    // to a stale slot. No-op if nothing is still provisional.
-    if (hadLazyFill) resumeLazyHydrationIfPending();
 }
 
-/** Re-renders the sidebar and rebuilds the chart + map for the active trip, if
- *  any. Shared by the regroup and event-recompute paths, whose surfaces would
- *  otherwise stay pinned to the previous Trip object and desync from the
- *  scrubber. */
+/** Re-renders event-dependent surfaces after an in-place event update. */
 function refreshActiveTripSurfaces(): void {
     renderTrips();
     if (state.active) {
@@ -332,26 +286,6 @@ function recomputeEventsForLoadedTrips(): void {
         trip.events = projectEventsOntoTimeline(detectEvents(trip.records, trip.startUtc), trip.timeline);
     }
     refreshActiveTripSurfaces();
-}
-
-/**
- * Linear scan over the freshly grouped trips to find the trip/frame indices
- * that contain `file`. Returns null if no frame holds it. Used after a
- * re-group to keep the viewer pinned to the user's current clip.
- */
-function findActiveIndices(file: File): { trip: number; frame: number } | null {
-    for (let ti = 0; ti < state.trips.length; ti++) {
-        const trip = state.trips[ti]!;
-        for (let fi = 0; fi < trip.frames.length; fi++) {
-            const frame = trip.frames[fi]!;
-            for (const c of Object.values(frame.channels)) {
-                if (c && c.file === file) {
-                    return { trip: ti, frame: fi };
-                }
-            }
-        }
-    }
-    return null;
 }
 
 function closeSettings(): void {

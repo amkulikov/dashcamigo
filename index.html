@@ -460,12 +460,8 @@
         </div>
     </noscript>
 
-    <!-- UX-02: a thin ingest progress bar along the very top of the window.
-         position: fixed top:0, height 2px, above everything. States:
-         - hidden: invisible (opacity 0, width 0).
-         - indeterminate: a runner (classify phase, totalFiles not known yet).
-         - determinate: width = (done/total)%.
-         JS controls it via setIngestProgress(...) in ui/ingest-overlay.ts. -->
+    <!-- Thin ingest progress strip above the header. It stays indeterminate:
+         classification and sidecar parsing have no honest shared percentage. -->
     <div id="ingest-progress-bar" class="ingest-progress-bar" data-state="hidden" aria-hidden="true">
         <div class="ingest-progress-bar-fill"></div>
     </div>
@@ -1983,16 +1979,15 @@
         </div>
     </div>
 
-    <!-- Lazy-load GPS progress modal. Shown when clicking a trip that has
-         files in state.pendingHeavyEmbeddedGps. Blocks
-         playFrame until the load finishes or the user hits Cancel. -->
-    <div id="lazy-gps-load-modal" class="export-modal modal-overlay" style="z-index: var(--dc-z-ingest-modal)" hidden role="dialog" aria-modal="true" aria-labelledby="lazy-gps-load-modal-title">
+    <!-- Recording progress modal. A slow trip-open uses it for mandatory
+         video metadata; event navigation also uses it for deferred GPS. -->
+    <div id="recording-load-modal" class="export-modal modal-overlay" style="z-index: var(--dc-z-ingest-modal)" hidden role="dialog" aria-modal="true" aria-labelledby="recording-load-modal-title">
         <div class="export-modal-card modal-card">
-            <div class="export-modal-title" id="lazy-gps-load-modal-title">Loading GPS data…</div>
+            <div class="export-modal-title" id="recording-load-modal-title">Loading GPS data…</div>
             <div class="export-modal-section">
-                <p class="export-modal-warn" id="lazy-gps-load-modal-progress">0 / 0</p>
+                <p class="export-modal-summary" id="recording-load-modal-progress" role="status" aria-live="polite">0 / 0</p>
                 <div class="export-modal-actions">
-                    <button id="lazy-gps-load-modal-cancel" class="dc-btn dc-btn--ghost" type="button" data-i18n="lazyGpsLoad.cancel">Skip</button>
+                    <button id="recording-load-modal-cancel" class="dc-btn dc-btn--ghost" type="button" data-i18n="gpsLoad.cancel">Skip</button>
                 </div>
             </div>
         </div>
@@ -2267,9 +2262,6 @@
             <div class="ingest-overlay-title" id="ingest-overlay-title"
                  data-i18n="ingestOverlay.title">Sorting through files</div>
             <div class="ingest-overlay-status" id="ingest-overlay-status" aria-live="polite"></div>
-            <!-- First-open reassurance: shown only on a large uncached batch,
-                 set from ingest.ts once the cache lookup comes back empty. -->
-            <div class="ingest-overlay-hint" id="ingest-overlay-hint" hidden></div>
             <div class="ingest-overlay-queue" id="ingest-overlay-queue" hidden></div>
             <div class="ingest-overlay-actions">
                 <button id="ingest-overlay-cancel" class="dc-btn dc-btn--secondary" type="button"

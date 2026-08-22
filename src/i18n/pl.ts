@@ -177,6 +177,7 @@ export const plDict = {
     "status.audioDamaged": "{n, plural, one {# plik z uszkodzonym dźwiękiem — tylko obraz} few {# pliki z uszkodzonym dźwiękiem — tylko obraz} many {# plików z uszkodzonym dźwiękiem — tylko obraz} other {# pliku z uszkodzonym dźwiękiem — tylko obraz}}",
     "status.dropReadFailed": "nie udało się odczytać części upuszczonych plików",
     "status.nothingLoaded": "nie znaleziono żadnych odtwarzalnych nagrań",
+    "status.tripOpenFailed": "Nie udało się otworzyć tego przejazdu. Plik może być uszkodzony lub już niedostępny.",
     "status.onlyHiddenFiles": "To były same pliki ukryte lub systemowe — wybierz folder z nagraniami.",
     "status.offline.label": "Offline",
     "status.offline.info": "Co to znaczy",
@@ -309,10 +310,13 @@ export const plDict = {
     "noRecordings.howItWorks": "Zobacz, jak to działa",
     "noRecordings.notNow": "Nie teraz",
 
-    "lazyGpsLoad.title": "Wczytuję GPS z {n, plural, one {# wideo} few {# wideo} many {# wideo} other {# wideo}}",
-    "lazyGpsLoad.progress": "{done} z {total}",
-    "lazyGpsLoad.cancel": "Pomiń",
-    "hydrateLoad.title": "Wczytuję nagrania",
+    "gpsLoad.title": "Wczytuję GPS z {n, plural, one {# wideo} few {# wideo} many {# wideo} other {# wideo}}",
+    "gpsLoad.progress": "{done} z {total}",
+    "gpsLoad.cancel": "Pomiń",
+    "gpsLoad.pending": "GPS wczyta się po otwarciu",
+    "gpsLoad.reading": "Odczytuję GPS",
+    "recordingLoad.title": "Wczytuję nagrania",
+    "recordingLoad.cancel": "Anuluj",
 
     "resize.videoMap": "Zmień szerokość mapy",
 
@@ -522,16 +526,11 @@ export const plDict = {
 
     "ingestOverlay.title": "Porządkuję pliki",
     "ingestOverlay.cancel": "Anuluj",
-    "ingestOverlay.continueWithoutGps": "Kontynuuj bez GPS",
     "ingestOverlay.queued": "{n, plural, one {jeszcze # folder w kolejce} few {jeszcze # foldery w kolejce} many {jeszcze # folderów w kolejce} other {jeszcze # folderu w kolejce}}",
-    "ingestOverlay.firstLoadHint": "Pierwsze otwarcie trwa najdłużej — następnym razem te nagrania wczytają się w kilka sekund.",
     "ingestOverlay.stage.preparing": "Otwieram twój folder...",
     "ingestOverlay.stage.classifying": "Porządkuję pliki...",
     "ingestOverlay.stage.parsingLogs": "Czytam logi GPS...",
     "ingestOverlay.stage.parsingSidecars": "Czytam pliki GPS...",
-    "ingestOverlay.stage.indexing": "Odczytuję wideo: {done} / {total}",
-    "ingestOverlay.stage.embeddedGps": "GPS w wideo: {done} / {total}",
-    "ingestOverlay.stage.previews": "Przygotowuję podglądy przejazdów...",
     "ingestOverlay.stage.canceling": "Zatrzymuję...",
     "ingest.error.loadFailed": "Nie udało się odczytać tych plików. Wskaż folder z karty SD wideorejestratora i spróbuj ponownie.",
 

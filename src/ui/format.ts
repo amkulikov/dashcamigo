@@ -5,7 +5,14 @@ import type { EventKind, TripEvent } from "../events.js";
 import { getDateLocale, t } from "../i18n/index.js";
 import { totalDistanceKm } from "../parser.js";
 import type { Channel, RecordingMode } from "../parsers/types.js";
-import { displayClockDate, tripChannels, contentToWallUtc, type Trip, type VideoCandidate } from "../trips.js";
+import {
+    displayClockDate,
+    tripAllCandidates,
+    tripChannels,
+    contentToWallUtc,
+    type Trip,
+    type VideoCandidate,
+} from "../trips.js";
 import { formatDistanceFromKm } from "../units-pref.js";
 
 import type { TripSortKey } from "./state.js";
@@ -29,9 +36,30 @@ function isSameDisplayDay(a: Date, b: Date): boolean {
  * branch is deterministically testable (and mockable) without freezing time.
  */
 export function formatTripTitle(trip: Trip, now: Date = new Date()): string {
+    const { start, end, dateFmt, timeFmt } = tripTitleClock(trip, now);
+    if (isSameDisplayDay(start, end)) {
+        return `${dateFmt.format(start)}, ${timeFmt.format(start)} → ${timeFmt.format(end)}`;
+    }
+    return `${dateFmt.format(start)} ${timeFmt.format(start)} → ${dateFmt.format(end)} ${timeFmt.format(end)}`;
+}
+
+/** Formats only the known start while the trip's end is still being read. */
+export function formatTripStartTitle(trip: Trip, now: Date = new Date()): string {
+    const { start, dateFmt, timeFmt } = tripTitleClock(trip, now);
+    return `${dateFmt.format(start)}, ${timeFmt.format(start)}`;
+}
+
+function tripTitleClock(
+    trip: Trip,
+    now: Date,
+): {
+    start: Date;
+    end: Date;
+    dateFmt: Intl.DateTimeFormat;
+    timeFmt: Intl.DateTimeFormat;
+} {
     const start = displayClockDate(trip.startUtc, trip.cameraTzSec);
     const end = displayClockDate(trip.endUtc, trip.cameraTzSec);
-    const sameDay = isSameDisplayDay(start, end);
     // hour12:false forces 24-hour format regardless of system locale (en-US otherwise gives "04:43 PM").
     // Explicit locale from i18n (ru-RU or en-US) keeps date language in sync with UI language.
     const locale = getDateLocale();
@@ -52,10 +80,7 @@ export function formatTripTitle(trip: Trip, now: Date = new Date()): string {
         hour12: false,
         timeZone: "UTC",
     });
-    if (sameDay) {
-        return `${dateFmt.format(start)}, ${timeFmt.format(start)} → ${timeFmt.format(end)}`;
-    }
-    return `${dateFmt.format(start)} ${timeFmt.format(start)} → ${dateFmt.format(end)} ${timeFmt.format(end)}`;
+    return { start, end, dateFmt, timeFmt };
 }
 
 /**
@@ -84,52 +109,52 @@ export function dateBucketLabel(unixTs: number, cameraTzSec: number | null, now:
     return t("buckets.earlier");
 }
 
-/**
- * State of the heavy embedded-GPS loading tracker for a trip.
- *  - "loaded": all files loaded or the trip has no heavy files.
- *  - "pending": at least one file is waiting for a click trigger.
- *  - "inflight": at least one file is being parsed in the background.
- *
- * "pending" and "inflight" render differently: pending shows a solid skeleton placeholder,
- * inflight adds a unicode spinner to the same placeholder.
- */
-export type TripLazyHeavyState = "loaded" | "pending" | "inflight";
+/** Which recording fact is still being resolved for a trip card. */
+export type TripLoadingState = "loaded" | "recordings-pending" | "recordings-inflight" | "gps-pending" | "gps-inflight";
 
-export function formatTripMeta(trip: Trip, lazy: TripLazyHeavyState = "loaded"): string {
+export function formatTripMeta(trip: Trip, loading: TripLoadingState = "loaded"): string {
     // Footage duration (recording pauses removed) - the wall-clock span would
     // inflate a parking-stitched trip's apparent length. Pauses are surfaced
     // separately below so a stitched trip is recognizable.
     const dur = formatDuration(trip.timeline.contentDurationSec);
     const sizeMb = (trip.totalBytes / (1024 * 1024)).toFixed(0);
-    // Distance is pre-computed by finalizeTrip. When lazy is "pending"/"inflight" we substitute "…" because
-    // the actual distance is unknown until those files are parsed. Showing 0 or a partial value
-    // that jumps after the click is more confusing than a visible placeholder.
+    const sizePart = `${sizeMb} ${t("units.mb")}`;
+    if (loading === "recordings-pending" || loading === "recordings-inflight") {
+        const sourceFilesPart = t("plurals.file", { n: tripAllCandidates(trip).length });
+        return `${t("recordingLoad.title")} · ${sourceFilesPart} · ${sizePart}`;
+    }
+
     let distStr = "";
-    if (lazy === "loaded") {
+    if (loading === "loaded") {
         if (trip.distanceKm > 0) {
             const d = formatDistanceFromKm(trip.distanceKm);
             distStr = ` · ${Math.round(d.value)} ${t(d.unitKey)}`;
         }
-    } else if (lazy === "pending") {
-        distStr = ` · …`;
+    } else if (loading === "gps-pending") {
+        distStr = ` · ${t("gpsLoad.pending")}`;
     } else {
-        // inflight spinner via ASCII glyph - avoids depending on a CSS keyframe animation.
-        distStr = ` · ⟳`;
+        distStr = ` · ${t("gpsLoad.reading")}`;
     }
-    // On multi-channel models one frame = a synchronized F/B/I set; the user sees this as one clip. Count frames, not individual files.
-    const filesPart = t("plurals.file", { n: trip.frames.length });
     // A stitched trip (recording paused below the gap threshold) shows its pause
     // count so the user knows the footage is not one continuous run.
     const pausesPart =
         trip.timeline.gaps.length > 0 ? ` · ${t("plurals.pause", { n: trip.timeline.gaps.length })}` : "";
-    return `${dur} · ${filesPart}${pausesPart} · ${sizeMb} ${t("units.mb")}${distStr}`;
+    // One synchronized multi-camera frame is one clip in the expanded list.
+    const filesPart = t("plurals.file", { n: trip.frames.length });
+    return `${dur} · ${filesPart}${pausesPart} · ${sizePart}${distStr}`;
 }
 
-export function formatFileMeta(video: VideoCandidate, tripStartUtc: number): string {
+export function formatFileMeta(video: VideoCandidate, tripStartUtc: number, gpsPending = false): string {
+    const sizeMb = (video.file.size / (1024 * 1024)).toFixed(1);
+    if (video.metadataFailed === true) {
+        return `${t("trip.chip.readFailed")} · ${sizeMb} ${t("units.mb")}`;
+    }
+    if (video.metadataReady === false) {
+        return `${t("recordingLoad.title")} · ${sizeMb} ${t("units.mb")}`;
+    }
     const offsetSec = Math.max(0, video.startUtc - tripStartUtc);
     const offsetStr = formatTime(offsetSec); // mm:ss or h:mm:ss - same format as the player scrubber
     const dur = formatDuration(video.durationSec);
-    const sizeMb = (video.file.size / (1024 * 1024)).toFixed(1);
     const distKm = totalDistanceKm(video.records);
     let distStr = "";
     if (distKm > 0) {
@@ -137,7 +162,7 @@ export function formatFileMeta(video: VideoCandidate, tripStartUtc: number): str
         distStr = ` · ${d.value.toFixed(1)} ${t(d.unitKey)}`;
     }
     // "GPS: N" is not useful - omit. Explicitly signal when there are no records at all (video without a track).
-    const noGps = video.records.length === 0 ? t("trip.fileMeta.noGps") : "";
+    const noGps = video.records.length === 0 && !gpsPending ? t("trip.fileMeta.noGps") : "";
     return `+${offsetStr} · ${dur} · ${sizeMb} ${t("units.mb")}${distStr}${noGps}`;
 }
 

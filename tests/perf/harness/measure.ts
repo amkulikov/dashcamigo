@@ -82,7 +82,7 @@ export const RESET_INIT_SCRIPT = `
                 detail: (e instanceof CustomEvent) ? e.detail : undefined,
             });
         };
-        for (const ev of ['ingest-done', 'trip-activated', 'player-first-frame', 'player-failed', 'map-tracks-rendered', 'chart-rendered']) {
+        for (const ev of ['ingest-list-ready', 'ingest-done', 'trip-activated', 'player-first-frame', 'player-failed', 'map-tracks-rendered', 'chart-rendered']) {
             window.addEventListener('dashcamigo:' + ev, onEvent);
         }
     }

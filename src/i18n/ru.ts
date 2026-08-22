@@ -182,6 +182,7 @@ export const ruDict = {
     "status.audioDamaged": "{n, plural, one {в # файле повреждён звук — только видео} few {в # файлах повреждён звук — только видео} other {в # файлах повреждён звук — только видео}}",
     "status.dropReadFailed": "не удалось прочитать часть файлов",
     "status.nothingLoaded": "не нашлось ни одной записи для воспроизведения",
+    "status.tripOpenFailed": "Не удалось открыть поездку. Возможно, файл повреждён или больше недоступен.",
     "status.onlyHiddenFiles": "Тут одни скрытые и системные файлы — выбери папку, где лежат записи.",
     "status.offline.label": "Офлайн",
     "status.offline.info": "Что это значит",
@@ -314,10 +315,13 @@ export const ruDict = {
     "noRecordings.howItWorks": "Посмотреть, как это работает",
     "noRecordings.notNow": "Не сейчас",
 
-    "lazyGpsLoad.title": "Гружу GPS из {n, plural, one {# видео} few {# видео} other {# видео}}",
-    "lazyGpsLoad.progress": "{done} из {total}",
-    "lazyGpsLoad.cancel": "Пропустить",
-    "hydrateLoad.title": "Читаю записи",
+    "gpsLoad.title": "Гружу GPS из {n, plural, one {# видео} few {# видео} other {# видео}}",
+    "gpsLoad.progress": "{done} из {total}",
+    "gpsLoad.cancel": "Пропустить",
+    "gpsLoad.pending": "GPS загрузится при открытии",
+    "gpsLoad.reading": "Читаю GPS",
+    "recordingLoad.title": "Читаю записи",
+    "recordingLoad.cancel": "Отмена",
 
     "resize.videoMap": "Изменить ширину карты",
 
@@ -527,16 +531,11 @@ export const ruDict = {
 
     "ingestOverlay.title": "Разбираю файлы",
     "ingestOverlay.cancel": "Отмена",
-    "ingestOverlay.continueWithoutGps": "Продолжить без GPS",
     "ingestOverlay.queued": "{n, plural, one {в очереди ещё # папка} few {в очереди ещё # папки} other {в очереди ещё # папок}}",
-    "ingestOverlay.firstLoadHint": "Первое открытие — самое долгое, в следующий раз эти записи загрузятся за секунды.",
     "ingestOverlay.stage.preparing": "Открываю папку...",
     "ingestOverlay.stage.classifying": "Разбираю файлы...",
     "ingestOverlay.stage.parsingLogs": "Читаю GPS-логи...",
     "ingestOverlay.stage.parsingSidecars": "Читаю GPS-файлы...",
-    "ingestOverlay.stage.indexing": "Читаю видео: {done} / {total}",
-    "ingestOverlay.stage.embeddedGps": "Ищу GPS в видео: {done} / {total}",
-    "ingestOverlay.stage.previews": "Готовлю обложки поездок...",
     "ingestOverlay.stage.canceling": "Останавливаю...",
     "ingest.error.loadFailed": "Не удалось прочитать эти файлы. Выбери папку с SD-карты регистратора и попробуй снова.",
 

@@ -47,13 +47,10 @@ if (vendors.length === 0) {
 
 for (const vendor of vendors) {
     test(`cold ingest: ${vendor.name}`, async ({ browser }, testInfo) => {
-        // Budgets scale with vendor weight. Novatek-class vendors
-        // (SilverStone, Juscar) auto-accept the heavy-embedded-GPS prompt
-        // and run a streaming scan that can read the entire file - that's
-        // the metric we want to capture, but it does take time. Heuristic:
-        // 60 s base + ~250 ms per MB per replay (pessimistic ceiling). The
-        // per-replay budget bounds the ingest-done wait inside the scenario;
-        // the test timeout covers every warmup + replay pass at that ceiling.
+        // Budgets scale with vendor weight. Mandatory metadata and bounded GPS
+        // probes can still be expensive on large removable-media samples; full
+        // scans stay outside cold ingest because they never block initial trip
+        // access. The conservative ceiling also covers slow CI disks.
         const mbTotal = Math.ceil(vendor.totalBytes / (1024 * 1024));
         const replayBudgetMs = 60_000 + mbTotal * 250;
         test.setTimeout(Math.max(replayBudgetMs * (WARMUP + REPLAYS), 180_000));
@@ -214,6 +211,13 @@ function publishMetrics(
     if (samples.length === 0) return;
     const prefix = `cold-ingest/${vendor.name}/`;
     const wall = aggregate(samples.map((s) => s.wallMs));
+    const listReadyDurations = samples.map((sample) => {
+        const event = sample.lifecycleEvents.find((entry) => entry.type === "dashcamigo:ingest-list-ready");
+        const duration = Number(event?.detail?.durationMs);
+        if (!Number.isFinite(duration)) throw new Error(`missing ingest-list-ready metric for ${vendor.name}`);
+        return duration;
+    });
+    const listReady = aggregate(listReadyDurations);
     const heap = aggregate(samples.map((s) => s.peakUsedJSHeap));
     const bytes = aggregate(samples.map((s) => s.bytesRead));
     const scriptCpu = aggregate(samples.map((s) => s.cdpScriptDurationSecDelta * 1000));
@@ -229,6 +233,8 @@ function publishMetrics(
     for (const s of samples) for (const k of Object.keys(s.stageMs)) stageNames.add(k);
 
     const entries: PerfAnnotationPayload["entries"] = [
+        { name: `${prefix}list-ready-ms (median)`, value: listReady.median, unit: "ms" },
+        { name: `${prefix}list-ready-ms (max)`, value: listReady.max, unit: "ms" },
         { name: `${prefix}wall-ms (median)`, value: wall.median, unit: "ms" },
         { name: `${prefix}wall-ms (max)`, value: wall.max, unit: "ms" },
         { name: `${prefix}peak-heap-bytes (median)`, value: heap.median, unit: "B" },

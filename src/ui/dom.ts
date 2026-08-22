@@ -291,7 +291,6 @@ export const dom = {
     dropOverlay: $id<HTMLElement>("drop-overlay"),
     ingestOverlay: $id<HTMLElement>("ingest-overlay"),
     ingestOverlayStatus: $id<HTMLElement>("ingest-overlay-status"),
-    ingestOverlayHint: $id<HTMLElement>("ingest-overlay-hint"),
     ingestOverlayQueue: $id<HTMLElement>("ingest-overlay-queue"),
     ingestOverlayCancel: $id<HTMLButtonElement>("ingest-overlay-cancel"),
     // dom.player - always the currently active <video> (effectiveMasterChannel:
@@ -389,10 +388,10 @@ export const dom = {
     switchLangModal: $id<HTMLElement>("switch-lang-modal"),
     switchLangModalConfirm: $id<HTMLButtonElement>("switch-lang-modal-confirm"),
     switchLangModalCancel: $id<HTMLButtonElement>("switch-lang-modal-cancel"),
-    lazyGpsLoadModal: $id<HTMLElement>("lazy-gps-load-modal"),
-    lazyGpsLoadModalTitle: $id<HTMLElement>("lazy-gps-load-modal-title"),
-    lazyGpsLoadModalProgress: $id<HTMLElement>("lazy-gps-load-modal-progress"),
-    lazyGpsLoadModalCancel: $id<HTMLButtonElement>("lazy-gps-load-modal-cancel"),
+    recordingLoadModal: $id<HTMLElement>("recording-load-modal"),
+    recordingLoadModalTitle: $id<HTMLElement>("recording-load-modal-title"),
+    recordingLoadModalProgress: $id<HTMLElement>("recording-load-modal-progress"),
+    recordingLoadModalCancel: $id<HTMLButtonElement>("recording-load-modal-cancel"),
     // GPS readouts for the playhead. `speed`/`unit`/`speedToggle` live in the
     // readout row; `barSpeed`/`barUnit`/`barSpeedToggle` are the speed-only
     // copy the player bar keeps for phones, where the row is not shown. Both

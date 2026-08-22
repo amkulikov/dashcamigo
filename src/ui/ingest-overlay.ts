@@ -1,19 +1,11 @@
 // Blocking overlay over the full viewport during ingest. Shows the current
-// stage (classify/parsing/indexing/embeddedGps), queue of additional drops,
+// stage (folder walk/classification/sidecar parsing), queue of additional drops,
 // and a Cancel button that aborts state.ingestController.
 
-import type { I18nKey } from "../i18n/keys.js";
 import { t } from "../i18n/index.js";
 
 import { dom } from "./dom.js";
 import { state } from "./state.js";
-
-// Tracked label key for the cancel button. Switches to "continueWithoutGps"
-// during the embedded-GPS stage (where the user-visible behaviour really is
-// "skip GPS, keep already-loaded videos" - state.trips was committed
-// progressively during the prior indexing stage). Resets to "cancel" on
-// every showIngestOverlay() so a fresh ingest does not inherit stale label.
-let cancelLabelKey: I18nKey = "ingestOverlay.cancel";
 
 // Pre-ingest "reading" phase ownership, as a REFCOUNT (not a bool). The overlay
 // is raised the instant the user commits to a folder (picker click / folder
@@ -39,11 +31,7 @@ export function showIngestOverlay(): void {
     preIngestOwners = 0;
     dom.ingestOverlay.hidden = false;
     dom.ingestOverlayCancel.disabled = false;
-    // The hint belongs to one ingest's cache verdict - a queued follow-up drop
-    // decides for itself.
-    setIngestFirstLoadHint(false);
-    cancelLabelKey = "ingestOverlay.cancel";
-    dom.ingestOverlayCancel.textContent = t(cancelLabelKey);
+    dom.ingestOverlayCancel.textContent = t("ingestOverlay.cancel");
 }
 
 /**
@@ -68,11 +56,9 @@ export function beginPreIngestReading(): boolean {
     preIngestOwners++;
     dom.ingestOverlay.hidden = false;
     dom.ingestOverlayCancel.disabled = false;
-    cancelLabelKey = "ingestOverlay.cancel";
-    dom.ingestOverlayCancel.textContent = t(cancelLabelKey);
+    dom.ingestOverlayCancel.textContent = t("ingestOverlay.cancel");
     setIngestStage(t("ingestOverlay.stage.preparing"));
-    // Indeterminate: the file count is unknown until classify/indexing.
-    setIngestProgress({ mode: "indeterminate" });
+    showIngestProgress();
     // A queue may carry over from a previous run - keep the indicator honest.
     syncIngestQueueIndicator();
     return true;
@@ -94,107 +80,33 @@ export function endPreIngestReading(): void {
     hideIngestProgress();
 }
 
-/**
- * Switches the cancel button label between "Cancel" (default) and
- * "Continue without GPS" (used during the embedded-GPS stage where
- * cancelling just stops GPS extraction; loaded videos stay).
- */
-export function setIngestCancelLabel(continueWithoutGps: boolean): void {
-    cancelLabelKey = continueWithoutGps ? "ingestOverlay.continueWithoutGps" : "ingestOverlay.cancel";
-    if (!dom.ingestOverlay.hidden && !dom.ingestOverlayCancel.disabled) {
-        dom.ingestOverlayCancel.textContent = t(cancelLabelKey);
-    }
-}
-
 export function hideIngestOverlay(): void {
     dom.ingestOverlay.hidden = true;
     dom.ingestOverlayStatus.textContent = "";
-    dom.ingestOverlayHint.hidden = true;
     dom.ingestOverlayQueue.hidden = true;
-}
-
-/**
- * Shows/hides the "first open is the slowest" reassurance under the stage
- * line. Shown by ingest.ts only for a large batch the index cache had nothing
- * for - the one case where the wait is real and the promise of a faster next
- * time is true.
- */
-export function setIngestFirstLoadHint(visible: boolean): void {
-    dom.ingestOverlayHint.hidden = !visible;
-    dom.ingestOverlayHint.textContent = visible ? t("ingestOverlay.firstLoadHint") : "";
 }
 
 // === UX-02: progress bar above the header =============================
 // A thin 2px strip at the top of the viewport. Shows "not hung" even when
 // the user has scrolled past the ingest overlay.
 //
-// States:
-//  - hidden:        strip invisible (opacity 0).
-//  - indeterminate: running cursor (classify phase, before totalFiles is known).
-//  - determinate:   width = (done / total) * 100%.
-//
-// API: setIngestProgress({mode: "indeterminate"} | {done, total}) and
-//      hideIngestProgress() (instant hide). showIngestOverlay/hideIngestOverlay
-//      do not touch the strip - they are independent UI entities (overlay is
-//      blocking, strip is not; the strip remains visible when the overlay is
-//      hidden before the embedded-GPS prompt).
+// States: hidden or an indeterminate running cursor. Recording-byte progress is
+// shown per trip after this blocking phase, so this strip never fabricates one
+// aggregate percentage across unrelated classification and sidecar work.
+// showIngestOverlay/hideIngestOverlay do not touch the strip - they are
+// independent UI entities.
 
 const ingestProgressBar = (): HTMLElement | null => document.getElementById("ingest-progress-bar");
-const ingestProgressFill = (): HTMLElement | null =>
-    ingestProgressBar()?.querySelector<HTMLElement>(".ingest-progress-bar-fill") ?? null;
 
-type IngestProgressInput = { mode: "indeterminate" } | { done: number; total: number };
-
-// Handle for the deferred hide in hideIngestProgress(activeFinish). Kept so a
-// subsequent ingest (a queued drop starts synchronously after the previous one
-// finishes) can cancel a pending blank before it overwrites the new ingest's bar.
-let hideTimer: ReturnType<typeof setTimeout> | undefined;
-
-export function setIngestProgress(input: IngestProgressInput): void {
+export function showIngestProgress(): void {
     const bar = ingestProgressBar();
-    const fill = ingestProgressFill();
-    if (!bar || !fill) return;
-    // Any new progress update cancels a pending hide from a previous ingest.
-    clearTimeout(hideTimer);
-    hideTimer = undefined;
-    if ("mode" in input) {
-        bar.dataset.state = "indeterminate";
-        // Width is controlled by CSS animation for the running cursor - clear inline style.
-        fill.style.width = "";
-        return;
-    }
-    const { done, total } = input;
-    if (!Number.isFinite(total) || total <= 0) {
-        bar.dataset.state = "indeterminate";
-        fill.style.width = "";
-        return;
-    }
-    bar.dataset.state = "determinate";
-    const pct = Math.max(0, Math.min(100, (done / total) * 100));
-    fill.style.width = `${pct}%`;
+    if (bar) bar.dataset.state = "indeterminate";
 }
 
-/**
- * Hides the progress bar. If activeFinish=true, first smoothly advances to 100%
- * (200ms easing), then hides; on cancel it hides immediately.
- */
-export function hideIngestProgress(activeFinish = false): void {
+/** Hides the progress strip when the blocking discovery phase ends. */
+export function hideIngestProgress(): void {
     const bar = ingestProgressBar();
-    const fill = ingestProgressFill();
-    if (!bar || !fill) return;
-    clearTimeout(hideTimer);
-    hideTimer = undefined;
-    if (activeFinish && bar.dataset.state === "determinate") {
-        fill.style.width = "100%";
-        hideTimer = setTimeout(() => {
-            bar.dataset.state = "hidden";
-            fill.style.width = "";
-            hideTimer = undefined;
-        }, 240);
-        return;
-    }
-    bar.dataset.state = "hidden";
-    fill.style.width = "";
+    if (bar) bar.dataset.state = "hidden";
 }
 
 export function setIngestStage(text: string): void {
@@ -233,9 +145,8 @@ export function initIngestOverlay(): void {
             return;
         }
         state.ingestController.abort();
-        // Guard against double-click and give "stopping" feedback. The ingestFiles
-        // wrapper will hide the overlay in its finally{} block within 0-N ms (at most
-        // 1 ms, depending on which stage was aborted).
+        // Guard against double-click and give "stopping" feedback. ingestFiles
+        // hides the overlay as soon as the active parser observes the abort.
         dom.ingestOverlayCancel.disabled = true;
         setIngestStage(t("ingestOverlay.stage.canceling"));
     });

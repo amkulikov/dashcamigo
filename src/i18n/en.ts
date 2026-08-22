@@ -178,6 +178,7 @@ export const enDict = {
     "status.audioDamaged": "{n, plural, one {# file has broken audio — video only} other {# files have broken audio — video only}}",
     "status.dropReadFailed": "couldn't read some of the dropped files",
     "status.nothingLoaded": "no playable recordings found",
+    "status.tripOpenFailed": "Couldn't open this trip. The file may be damaged or no longer available.",
     "status.onlyHiddenFiles": "That was all hidden or system files — pick the folder with your recordings.",
     "status.offline.label": "Offline",
     "status.offline.info": "What this means",
@@ -310,10 +311,13 @@ export const enDict = {
     "noRecordings.howItWorks": "See how it works",
     "noRecordings.notNow": "Not now",
 
-    "lazyGpsLoad.title": "Loading GPS from {n, plural, one {# video} other {# videos}}",
-    "lazyGpsLoad.progress": "{done} of {total}",
-    "lazyGpsLoad.cancel": "Skip",
-    "hydrateLoad.title": "Reading recordings",
+    "gpsLoad.title": "Loading GPS from {n, plural, one {# video} other {# videos}}",
+    "gpsLoad.progress": "{done} of {total}",
+    "gpsLoad.cancel": "Skip",
+    "gpsLoad.pending": "GPS loads when opened",
+    "gpsLoad.reading": "Reading GPS",
+    "recordingLoad.title": "Reading recordings",
+    "recordingLoad.cancel": "Cancel",
 
     "resize.videoMap": "Resize map width",
 
@@ -522,16 +526,11 @@ export const enDict = {
 
     "ingestOverlay.title": "Sorting through files",
     "ingestOverlay.cancel": "Cancel",
-    "ingestOverlay.continueWithoutGps": "Continue without GPS",
     "ingestOverlay.queued": "{n, plural, one {# more folder queued} other {# more folders queued}}",
-    "ingestOverlay.firstLoadHint": "The first time takes longest — these recordings will open in seconds next time.",
     "ingestOverlay.stage.preparing": "Opening your folder...",
     "ingestOverlay.stage.classifying": "Sorting through files...",
     "ingestOverlay.stage.parsingLogs": "Reading GPS logs...",
     "ingestOverlay.stage.parsingSidecars": "Reading GPS files...",
-    "ingestOverlay.stage.indexing": "Reading video: {done} / {total}",
-    "ingestOverlay.stage.embeddedGps": "Embedded GPS: {done} / {total}",
-    "ingestOverlay.stage.previews": "Preparing trip previews...",
     "ingestOverlay.stage.canceling": "Stopping...",
     "ingest.error.loadFailed": "Couldn't read these files. Pick your dashcam's SD-card folder and try again.",
 

@@ -1,7 +1,7 @@
-// Cross-session index-cache glue for the eager ingest pipeline: partition
+// Cross-session index-cache glue for progressive ingest: partition
 // classified videos into cache hits (candidate rebuilt from IndexedDB, byte
 // stages skipped) and misses (full pipeline), and write freshly indexed
-// candidates back at the end of an ingest.
+// candidates back after their recording analysis completes.
 //
 // The cache is keyed by file identity (relativePath, size, lastModified)
 // alone - not by folder or picker path - so the FSA restore, a classic
@@ -32,11 +32,10 @@ const DEPENDENCY_SEPARATOR = String.fromCharCode(1);
 // alone: two cards with the same folder layout produce identical paths, and a
 // repair descriptor applied to the wrong file's moov would hand playback a
 // patched header that does not match its bytes. A session registry (not a
-// per-ingest map) because cache writes no longer happen only in the eager
-// ingest tail: the lazy hydration path and the on-click heavy-GPS load write
-// entries long after their ingest returned, and a cached entry without its
-// repair would describe bytes the file on disk does not have. Rare entries
-// (repairs are the exception), session lifetime.
+// per-ingest map) because progressive and deferred cache writes can complete
+// after the initial list render. A cached entry without its repair would
+// describe bytes the file on disk does not have. Repairs are rare, so retaining
+// these descriptors for the session is bounded in practice.
 const repairByIdentity = new Map<string, IndexerRepair>();
 const dependencyByIdentity = new Map<string, string>();
 const writeBlockedIdentities = new Set<string>();

@@ -1,14 +1,14 @@
 // Trip sidebar: aggregate stats, sorting, date-bucket separators, trip headers with chevron, and expanded frame list.
 //
 // The only reverse dependency is click-to-play. To avoid a sidebar→player→sidebar cycle,
-// the playback function arrives as a callback in initSidebar({onPlayFrame}).
+// trip and exact-clip playback arrive as callbacks in initSidebar().
 
 import { t } from "../i18n/index.js";
 import { recordsHaveGps } from "../parser.js";
 import { subscribeUnitsChange } from "../units-pref.js";
 import type { Channel } from "../parsers/types.js";
 import type { Trip } from "../trips.js";
-import { isHydrationPending, pickFrameChannel, tripAllCandidates } from "../trips.js";
+import { needsRecordingMetadata, pickFrameChannel, tripAllCandidates } from "../trips.js";
 import { formatDistanceFromKm } from "../units-pref.js";
 
 import { dom } from "./dom.js";
@@ -25,16 +25,20 @@ import {
     formatDuration,
     formatFileMeta,
     formatTripMeta,
+    formatTripStartTitle,
     formatTripTitle,
     recordingModeLabel,
 } from "./format.js";
-import type { TripLazyHeavyState } from "./format.js";
+import type { TripLoadingState } from "./format.js";
 import { setTripMeta, tripMetaFor } from "./annotations.js";
 import { isTripSortKey, state } from "./state.js";
 import { tripPreviewFailed } from "./trip-preview.js";
 
 interface SidebarCallbacks {
-    onPlayFrame: (tripIdx: number, frameIdx: number) => void;
+    /** Opens the first playable frame, tolerating a damaged leading clip. */
+    onPlayTrip: (tripIdx: number) => void | Promise<void>;
+    /** Opens the exact clip row the user selected. */
+    onPlayFrame: (tripIdx: number, frameIdx: number) => void | Promise<void>;
     /** Opens the trip name/note editor (trip-meta-modal, wired in app.ts -
      *  a direct import here would cycle: saving re-renders this sidebar). */
     // The Trip object, not its index - the modal outlives regroups that
@@ -44,7 +48,7 @@ interface SidebarCallbacks {
      * UX-08: clicked the event chip in the trip header. Implementation (frame selection, seek to event-5s, pause)
      * lives in the player so the sidebar does not depend on the player API.
      */
-    onPlayTripEvent?: (tripIdx: number, eventIndex: number) => void;
+    onPlayTripEvent?: (tripIdx: number, eventIndex: number) => void | Promise<void>;
 }
 
 /** UX-08: current "next" event index per trip. In-memory, resets on reload. Keyed by tripIdx (not trip object) because groupTrips can recreate the object; the index stays stable within one state.trips snapshot. */
@@ -86,19 +90,19 @@ export function renderTrips(): void {
     // The physical order of state.trips is NOT changed - state.active.trip and state.expandedTrips indices depend on it.
     let displayed = state.trips.map((trip, idx) => ({ trip, idx }));
     const cmp = comparatorFor(state.tripSortKey);
-    // Duration/distance are PROVISIONAL on an un-hydrated card (a per-fingerprint
+    // Duration/distance are provisional while metadata is pending (a per-fingerprint
     // estimate / 0 distance), so ranking by them makes cards jump as the
     // background fill lands real values. Park provisional trips in stable
-    // chronological (startUtc) order AFTER the hydrated ones, in both directions;
-    // a card re-ranks exactly once - when its real value arrives. Date sort needs
-    // none of this: the filename startUtc is accurate from first paint.
+    // chronological (startUtc) order after the measured trips, in both directions;
+    // a card re-ranks exactly once when its measured value arrives. Date sort
+    // stays useful from the first paint without provisional-value ranking.
     const sortsByValue = state.tripSortKey === "duration" || state.tripSortKey === "distance";
     if (sortsByValue) {
         const dir = state.tripSortDir === "desc" ? -1 : 1;
         displayed.sort((a, b) => {
-            const aReal = !tripHasPending(a.trip);
-            const bReal = !tripHasPending(b.trip);
-            if (aReal !== bReal) return aReal ? -1 : 1; // hydrated first, provisional parked last
+            const aReal = !tripHasProvisionalFacts(a.trip);
+            const bReal = !tripHasProvisionalFacts(b.trip);
+            if (aReal !== bReal) return aReal ? -1 : 1; // measured first, provisional parked last
             if (!aReal) return a.trip.startUtc - b.trip.startUtc; // provisional: chronological, stable
             return dir * cmp(a.trip, b.trip);
         });
@@ -203,9 +207,8 @@ function buildTripActions(tripIdx: number, isFavorite: boolean): HTMLElement {
 /**
  * Builds one trip card <li> (header, hero/loading state, chips, meta, clip list).
  * Extracted from renderTrips so a single card can be rebuilt in place
- * (refreshTripCard) without tearing down the whole list - the lazy background
- * fill hydrates trips one at a time, and a full re-render per trip made the
- * list flicker.
+ * (refreshTripCard) without tearing down the whole list while recording data
+ * arrives in the background.
  */
 function buildTripCard(trip: Trip, tripIdx: number): HTMLLIElement {
     const li = document.createElement("li");
@@ -223,17 +226,23 @@ function buildTripCard(trip: Trip, tripIdx: number): HTMLLIElement {
 
     // Card visual state, split into two orthogonal signals:
     //  - DATA: provisional = a clip's moov is not read yet, so duration/distance
-    //    are estimates (meta dims via computeTripLazyState); readFailed = a clip
+    //    are estimates (meta dims via computeTripLoadingState); readFailed = a clip
     //    could not be read at all.
     //  - THUMBNAIL: loading = no preview image yet and one is still expected, so
     //    the hero shows an animated skeleton; noThumb = no preview will come
     //    (read failed, or the frame could not be decoded) -> static placeholder.
-    // The thumbnail signal is driven by preview presence, NOT hydration, so the
-    // loading indication runs continuously from filename-first render through
-    // hydration until the actual preview lands - no gap where it vanishes early.
+    // The thumbnail signal is driven by preview presence, NOT metadata read, so the
+    // loading indication runs continuously from provisional render through
+    // metadata read until the actual preview lands - no gap where it vanishes early.
     const cands = tripAllCandidates(trip);
-    const provisional = cands.some(isHydrationPending);
-    const readFailed = cands.some((c) => c.indexFailed === true);
+    const focusKey = tripFocusKey(trip);
+    if (focusKey) recordingFocusKeys.set(li, focusKey);
+    const provisional = cands.some((candidate) => candidate.metadataReady === false);
+    const gpsPending = cands.some((candidate) => {
+        const key = vendorFileKey(candidate);
+        return state.pendingHeavyEmbeddedGps.has(key) || state.inflightEmbeddedGps.has(key);
+    });
+    const readFailed = cands.some((c) => c.metadataFailed === true);
     const hasPreview = !!trip.previewDataUrl;
     const previewFailed = tripPreviewFailed(trip);
     const loading = !hasPreview && !readFailed && !previewFailed;
@@ -253,8 +262,9 @@ function buildTripCard(trip: Trip, tripIdx: number): HTMLLIElement {
     title.className = "trip-title";
     // Custom name replaces the generated title; the generated one (date/time)
     // moves to the tooltip so it stays discoverable.
-    title.textContent = tripMeta?.name || formatTripTitle(trip);
-    if (tripMeta?.name) title.title = formatTripTitle(trip);
+    const generatedTitle = provisional ? formatTripStartTitle(trip) : formatTripTitle(trip);
+    title.textContent = tripMeta?.name || generatedTitle;
+    if (tripMeta?.name) title.title = generatedTitle;
     // Keyboard / screen-reader affordance: the title IS the trip's open/play
     // control. role=button + tabindex makes it focusable and Enter/Space
     // activatable (the header div carries the same data-action for broad
@@ -315,7 +325,7 @@ function buildTripCard(trip: Trip, tripIdx: number): HTMLLIElement {
         failChip.className = "trip-vendor-badge warn";
         failChip.textContent = t("trip.chip.readFailed");
         badgeChips.push(failChip);
-    } else if (!recordsHaveGps(trip.records)) {
+    } else if (!provisional && !gpsPending && !recordsHaveGps(trip.records)) {
         const noGpsChip = document.createElement("span");
         noGpsChip.className = "trip-vendor-badge warn";
         noGpsChip.textContent = t("trip.chip.noGps");
@@ -346,9 +356,9 @@ function buildTripCard(trip: Trip, tripIdx: number): HTMLLIElement {
     meta.className = "trip-meta";
     const metaText = document.createElement("span");
     metaText.className = "trip-meta-text";
-    const lazyState = computeTripLazyState(trip, tripIdx);
-    metaText.textContent = formatTripMeta(trip, lazyState);
-    if (lazyState !== "loaded") metaText.classList.add(`lazy-${lazyState}`);
+    const loadingState = computeTripLoadingState(trip, tripIdx);
+    metaText.textContent = formatTripMeta(trip, loadingState);
+    if (loadingState !== "loaded") metaText.classList.add(`load-${loadingState}`);
     meta.appendChild(metaText);
     header.appendChild(meta);
 
@@ -378,9 +388,17 @@ function buildTripCard(trip: Trip, tripIdx: number): HTMLLIElement {
         const primary = picked.candidate;
 
         const fli = document.createElement("li");
+        recordingFocusKeys.set(fli, vendorFileKey(primary));
         // data-frame-index is used by updateActiveFrameHighlight to find the <li> without a full re-render.
         fli.dataset.frameIndex = String(frameIdx);
-        const hasNoRecords = Object.values(frame.channels).every((c) => c.records.length === 0);
+        const frameCandidates = Object.values(frame.channels);
+        const metadataUnresolvedForFrame = frameCandidates.some((candidate) => candidate.metadataReady === false);
+        const gpsPendingForFrame = frameCandidates.some((candidate) => {
+            const key = vendorFileKey(candidate);
+            return state.pendingHeavyEmbeddedGps.has(key) || state.inflightEmbeddedGps.has(key);
+        });
+        const hasNoRecords =
+            !metadataUnresolvedForFrame && !gpsPendingForFrame && frameCandidates.every((c) => c.records.length === 0);
         if (hasNoRecords) fli.classList.add("no-gps");
         if (state.active && state.active.trip === tripIdx && state.active.frame === frameIdx) {
             fli.classList.add("active");
@@ -414,7 +432,10 @@ function buildTripCard(trip: Trip, tripIdx: number): HTMLLIElement {
         fmeta.className = "file-meta";
         const fmetaText = document.createElement("span");
         fmetaText.className = "file-meta-text";
-        fmetaText.textContent = formatFileMeta(primary, trip.startUtc);
+        const primaryKey = vendorFileKey(primary);
+        const primaryGpsPending =
+            state.pendingHeavyEmbeddedGps.has(primaryKey) || state.inflightEmbeddedGps.has(primaryKey);
+        fmetaText.textContent = formatFileMeta(primary, trip.startUtc, primaryGpsPending);
         fmeta.appendChild(fmetaText);
         // Right-side chips, grouped in one wrapper so a frame carrying both keeps
         // them together instead of .file-meta's space-between spreading them apart.
@@ -488,15 +509,17 @@ function buildTripCard(trip: Trip, tripIdx: number): HTMLLIElement {
     li.appendChild(filesList);
 
     // Keep the click "opening" spinner across a rebuild (refreshTripCard during
-    // hydration) until playback clears it via clearOpeningTrip (from playFrame).
-    if (openingTripIdx === tripIdx) appendOpeningSpinner(li);
+    // metadata read) until playback clears it via clearOpeningTrip (from playFrame).
+    if (openingKeys && cands.some((candidate) => openingKeys?.has(vendorFileKey(candidate)))) {
+        appendOpeningSpinner(li);
+    }
 
     return li;
 }
 
 /**
  * Rebuilds ONE trip card in place (no full-list teardown), used when a single
- * trip's metadata hydrates so the rest of the list does not flicker. Preserves
+ * trip's metadata completes so the rest of the list does not flicker. Preserves
  * keyboard focus if it was inside this card.
  */
 export function refreshTripCard(tripIdx: number): void {
@@ -510,15 +533,17 @@ export function refreshTripCard(tripIdx: number): void {
     dom.list.setAttribute("aria-busy", state.trips.some(tripHasPending) ? "true" : "false");
 }
 
-// The trip the user just clicked, shown with an "opening" spinner from the click
+// The recordings the user just clicked, shown with an "opening" spinner on their trip
 // until playback takes over - instant acknowledgement that the click registered,
-// independent of how long hydration takes (the modal only escalates past a
-// threshold, and on a fast backend that never fires).
-let openingTripIdx: number | null = null;
+// independent of how long metadata read takes (the modal only escalates past a
+// threshold, and on a fast backend that never fires). Source-qualified keys
+// survive both regrouping and the File replacement used by container repair.
+let openingKeys: Set<string> | null = null;
 
 /** Adds the click-feedback spinner overlay to a card (idempotent per card). */
 function appendOpeningSpinner(li: Element): void {
     li.classList.add("trip--opening");
+    li.setAttribute("aria-busy", "true");
     const header = li.querySelector(".trip-header");
     if (header && !header.querySelector(".trip-opening-spinner")) {
         const spinner = document.createElement("div");
@@ -529,9 +554,14 @@ function appendOpeningSpinner(li: Element): void {
 }
 
 /** Marks a trip as "opening" and paints the spinner immediately (synchronous on
- *  click, before any async hydration), so the click is never silent. */
-function markOpening(tripIdx: number): void {
-    openingTripIdx = tripIdx;
+ *  click, before any async metadata read), so the click is never silent. */
+function markOpening(tripIdx: number, frameIdx?: number): void {
+    const trip = state.trips[tripIdx];
+    const frame = frameIdx === undefined ? null : trip?.frames[frameIdx];
+    const candidates = trip ? (frame ? Object.values(frame.channels) : tripAllCandidates(trip)) : [];
+    clearOpeningTrip();
+    if (candidates.length === 0) return;
+    openingKeys = new Set(candidates.map((candidate) => vendorFileKey(candidate)));
     const li = dom.list.querySelector(`li.trip[data-trip-index="${tripIdx}"]`);
     if (li) appendOpeningSpinner(li);
 }
@@ -539,10 +569,17 @@ function markOpening(tripIdx: number): void {
 /** Clears the "opening" spinner once playback takes over (or supersedes). Called
  *  by playFrame just before its renderTrips so the rebuilt card has no spinner. */
 export function clearOpeningTrip(): void {
-    openingTripIdx = null;
+    openingKeys = null;
     for (const el of dom.list.querySelectorAll(".trip--opening")) {
         el.classList.remove("trip--opening");
         el.querySelector(".trip-opening-spinner")?.remove();
+        const tripIdx = Number((el as HTMLElement).dataset.tripIndex);
+        const trip = Number.isInteger(tripIdx) ? state.trips[tripIdx] : undefined;
+        if (trip && (tripHasProvisionalFacts(trip) || state.readingTrips.has(tripIdx))) {
+            el.setAttribute("aria-busy", "true");
+        } else {
+            el.removeAttribute("aria-busy");
+        }
     }
 }
 
@@ -551,97 +588,102 @@ export function clearOpeningTrip(): void {
 // title (play-trip) and clip rows (play-file) are focusable; the header div that
 // shares data-action="play-trip" is NOT, so restore must target the .trip-title.
 //
-// Keyed by the trip's first-candidate File object identity, not the volatile
-// array index: the final regroup sweep renumbers trips, and restoring by the old
-// index would land focus on a different trip. File identity (not basename) is the
-// same key carryOverTripPreviews / remapActiveAndExpanded use to follow a trip
-// across a regroup - a basename key collapses duplicate names (TeslaCam's
-// front.mp4 in every event folder), landing focus on the wrong trip.
+// Keyed by source-qualified recording identity, not a volatile array index or
+// File object: regrouping renumbers trips, and container repair can replace the
+// File while keeping the same recording. Keys live in a WeakMap instead of DOM
+// attributes because the canonical separator is a NUL character.
 type ListFocus =
-    | { kind: "title"; key: File }
-    | { kind: "frame"; key: File; frameIndex: string }
+    | { kind: "title"; key: string }
+    | { kind: "frame-action"; key: string; action: string }
     // Any trip-level control: toggling the star re-renders the list AND can
     // move the card into the favorites group, the chevron and the event chip
     // rebuild it outright - without this every keyboard press on one of them
     // drops focus to <body>. Not a fixed union: naming the controls one by one
     // is what left the chevron broken while the star next to it was fixed.
-    | { kind: "action"; key: File; action: string };
+    | { kind: "action"; key: string; action: string };
 
-/** Stable identity of a trip across a regroup: its first candidate's File object
- *  (groupTrips reuses the same File, so identity survives the renumber). */
-function tripFocusKey(trip: Trip): File | null {
-    return tripAllCandidates(trip)[0]?.file ?? null;
+const recordingFocusKeys = new WeakMap<Element, string>();
+
+/** Stable identity of a trip across regrouping and constant-size repair. */
+function tripFocusKey(trip: Trip): string | null {
+    const candidate = tripAllCandidates(trip)[0];
+    return candidate ? vendorFileKey(candidate) : null;
 }
 
 function captureListFocus(scope: Element): ListFocus | null {
     const el = document.activeElement;
     if (!(el instanceof HTMLElement) || !scope.contains(el)) return null;
-    const tripIndex = el.dataset.tripIndex;
-    if (!tripIndex) return null;
-    const trip = state.trips[Number(tripIndex)];
-    if (!trip) return null;
-    const key = tripFocusKey(trip);
+    const card = el.closest("li.trip");
+    if (!card || !scope.contains(card)) return null;
+    const key = recordingFocusKeys.get(card);
     if (!key) return null;
     if (el.classList.contains("trip-title")) return { kind: "title", key };
-    if (el.dataset.action === "play-file" && el.dataset.frameIndex != null) {
-        return { kind: "frame", key, frameIndex: el.dataset.frameIndex };
+    const action = el.dataset.action;
+    if (action && el.dataset.frameIndex != null) {
+        const row = el.closest(".trip-files > li");
+        const frameKey = row ? recordingFocusKeys.get(row) : null;
+        if (frameKey) return { kind: "frame-action", key: frameKey, action };
     }
     // Every remaining trip-level control, by construction rather than by list.
     // Frame-scoped ones are excluded: they repeat per clip, so `action` alone
     // would restore focus onto the first row instead of the one it left - the
-    // branch above carries the frame index that gets it right.
-    const action = el.dataset.action;
+    // branch above carries the recording key that gets it right.
     if (action && el.dataset.frameIndex == null) return { kind: "action", key, action };
     return null;
 }
 
 function restoreListFocus(focus: ListFocus | null, root: Element): void {
     if (!focus) return;
-    const idx = state.trips.findIndex((trip) => tripFocusKey(trip) === focus.key);
-    if (idx < 0) return;
-    const sel =
-        focus.kind === "title"
-            ? `li.trip[data-trip-index="${idx}"] .trip-title`
-            : focus.kind === "action"
-              ? `li.trip[data-trip-index="${idx}"] [data-action="${focus.action}"]`
-              : // The focusable clip control is the inner .file-name (role=button),
-                // not the li itself (which is now a plain mouse-click container).
-                `li.trip[data-trip-index="${idx}"] li[data-frame-index="${focus.frameIndex}"] .file-name`;
-    root.querySelector<HTMLElement>(sel)?.focus();
+    const candidates =
+        focus.kind === "frame-action"
+            ? root.querySelectorAll<HTMLElement>(".trip-files > li")
+            : root.querySelectorAll<HTMLElement>("li.trip");
+    const owner = Array.from(candidates).find((candidate) => recordingFocusKeys.get(candidate) === focus.key);
+    if (!owner) return;
+    if (focus.kind === "title") {
+        owner.querySelector<HTMLElement>(".trip-title")?.focus();
+        return;
+    }
+    Array.from(owner.querySelectorAll<HTMLElement>("[data-action]"))
+        .find((candidate) => candidate.dataset.action === focus.action)
+        ?.focus();
 }
 
 /**
- * Returns the heavy embedded-GPS load state for the trip: some files still await a click (pending),
- * are being parsed right now (inflight), or are all done (loaded).
- * inflight takes priority over pending: one inflight file is enough to show the spinner.
+ * Returns the most important unresolved state for the trip card. Mandatory
+ * recording metadata takes precedence over optional embedded GPS; active work
+ * takes precedence over queued work within each stage.
  */
-function computeTripLazyState(trip: Trip, tripIdx: number): TripLazyHeavyState {
-    // Filename-first hydration takes precedence over heavy-GPS lazy loading:
+function computeTripLoadingState(trip: Trip, tripIdx: number): TripLoadingState {
+    // Mandatory recording metadata takes precedence over deferred GPS:
     // until the moov is read the duration/distance shown are estimates, so the
-    // meta must read as not-final regardless of the GPS state. inflight (active
-    // read) pulses + "⟳"; pending (queued) dims + "…".
-    if (state.hydratingTrips.has(tripIdx)) return "inflight";
-    if (tripHasPending(trip)) return "pending";
-    // Heavy embedded-GPS (eager "Later, on click" deferral) - unchanged.
-    if (state.inflightHeavyEmbeddedGps.size === 0 && state.pendingHeavyEmbeddedGps.size === 0) {
+    // meta must read as not-final regardless of the GPS state.
+    if (state.readingTrips.has(tripIdx)) return "recordings-inflight";
+    if (tripHasProvisionalFacts(trip)) return "recordings-pending";
+    // Heavy embedded GPS may remain pending until the trip is opened.
+    if (state.inflightEmbeddedGps.size === 0 && state.pendingHeavyEmbeddedGps.size === 0) {
         return "loaded";
     }
     let hasPending = false;
     for (const cand of tripAllCandidates(trip)) {
-        // vendorFileKey (source/path/metadata-qualified), matching how ingest / lazy-embedded key
+        // vendorFileKey is source/path/metadata-qualified, matching both ingest and deferred GPS
         // these sets: a bare-basename lookup would paint a stale spinner on a
         // different card that happens to share a filename (FILE0001.MP4 reuse).
         const key = vendorFileKey(cand);
-        if (state.inflightHeavyEmbeddedGps.has(key)) return "inflight";
+        if (state.inflightEmbeddedGps.has(key)) return "gps-inflight";
         if (state.pendingHeavyEmbeddedGps.has(key)) hasPending = true;
     }
-    return hasPending ? "pending" : "loaded";
+    return hasPending ? "gps-pending" : "loaded";
 }
 
-/** Whether any of the trip's clips still need a moov read (filename-first lazy
- *  ingest). True = the card's duration/distance are provisional estimates. */
+/** Whether any clip still has provisional byte-derived metadata. */
 function tripHasPending(trip: Trip): boolean {
-    return tripAllCandidates(trip).some(isHydrationPending);
+    return tripAllCandidates(trip).some(needsRecordingMetadata);
+}
+
+/** Whether any displayed duration/end/GPS fact is still provisional. */
+function tripHasProvisionalFacts(trip: Trip): boolean {
+    return tripAllCandidates(trip).some((candidate) => candidate.metadataReady === false);
 }
 
 function toggleExpanded(tripIdx: number): void {
@@ -654,7 +696,7 @@ function toggleExpanded(tripIdx: number): void {
  * Lazily builds (on first open) and toggles the per-clip technical-details panel.
  * No re-render: the panel is a child of the clip <li>, shown/hidden by the
  * .file-details-open class, so the list's scroll position is undisturbed. The
- * panel is a snapshot at open time; a card rebuild on hydration (refreshTripCard)
+ * panel is a snapshot at open time; a card rebuild after metadata arrives
  * discards it, so a subsequent open reflects the now-real metadata.
  */
 function toggleFileDetails(tripIdx: number, frameIdx: number, btn: HTMLElement): void {
@@ -675,6 +717,12 @@ function toggleFileDetails(tripIdx: number, frameIdx: number, btn: HTMLElement):
 
 /** Returns a <li> with aggregate stats across all trips: "8 trips · 3h 47m · 142 km". */
 function buildSummaryItem(trips: Trip[]): HTMLLIElement {
+    const li = document.createElement("li");
+    li.className = "trip-summary";
+    if (trips.some(tripHasProvisionalFacts)) {
+        li.textContent = `${t("plurals.trip", { n: trips.length })} · ${t("recordingLoad.title")}`;
+        return li;
+    }
     let totalDuration = 0;
     let totalDistance = 0;
     for (const trip of trips) {
@@ -682,8 +730,6 @@ function buildSummaryItem(trips: Trip[]): HTMLLIElement {
         totalDuration += trip.timeline.contentDurationSec;
         totalDistance += trip.distanceKm;
     }
-    const li = document.createElement("li");
-    li.className = "trip-summary";
     // ICU plurals handle Russian/English rules automatically.
     const parts = [t("plurals.trip", { n: trips.length }), formatDuration(totalDuration)];
     if (totalDistance > 0) {
@@ -802,24 +848,25 @@ export function initSidebar(cb: SidebarCallbacks): void {
             toggleExpanded(tripIdx);
         } else if (action === "play-trip") {
             markOpening(tripIdx);
-            cb.onPlayFrame(tripIdx, 0);
+            void cb.onPlayTrip(tripIdx);
         } else if (action === "play-file") {
             const frameIdxStr = actionEl.dataset.frameIndex;
             if (!frameIdxStr) return;
             const frameIdx = Number(frameIdxStr);
             if (Number.isFinite(frameIdx)) {
-                markOpening(tripIdx);
-                cb.onPlayFrame(tripIdx, frameIdx);
+                markOpening(tripIdx, frameIdx);
+                void cb.onPlayFrame(tripIdx, frameIdx);
             }
         } else if (action === "trip-events") {
             // UX-08: cycle through trip event markers. Stop propagation - the chip is inside trip-meta
             // (which has no data-action play-trip), but the header above could intercept via closest.
             ev.stopPropagation();
             const trip = state.trips[tripIdx];
-            if (!trip || trip.events.length === 0) return;
+            if (!trip || trip.events.length === 0 || !cb.onPlayTripEvent) return;
             const next = ((tripEventCycleIdx.get(tripIdx) ?? -1) + 1) % trip.events.length;
             tripEventCycleIdx.set(tripIdx, next);
-            cb.onPlayTripEvent?.(tripIdx, next);
+            markOpening(tripIdx);
+            void cb.onPlayTripEvent(tripIdx, next);
         } else if (action === "trip-fav") {
             // Stop propagation - the button sits inside the header, which
             // carries data-action="play-trip".
@@ -846,7 +893,7 @@ export function initSidebar(cb: SidebarCallbacks): void {
 
     // Keyboard activation for the focusable trip title / clip rows (role=button).
     // Enter/Space on the focused element replays the click path above (busy state
-    // + onPlayFrame), so there is one source of truth for "open this trip/clip".
+    // + playback callbacks), so there is one source of truth for opening footage.
     dom.list.addEventListener("keydown", (ev) => {
         if (ev.key !== "Enter" && ev.key !== " " && ev.key !== "Spacebar") return;
         const target = ev.target;

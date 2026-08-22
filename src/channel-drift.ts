@@ -142,13 +142,13 @@ function correctChain(chain: TripFrame[]): void {
 
 /**
  * Whether this candidate's durationSec came from its own container rather than
- * from the per-fingerprint estimate a filename-only candidate carries. The
+ * from the per-fingerprint estimate a provisional candidate carries. The
  * whole measurement is a duration DIFFERENCE of a few seconds, so one estimated
  * side turns a healthy pair into a fabricated lead - and the estimate is what a
- * not-yet-hydrated file and a file whose moov read failed both hold.
+ * file whose metadata is still pending and a file whose moov read failed both hold.
  */
 function hasMeasuredDuration(candidate: VideoCandidate): boolean {
-    return candidate.hydrated !== false && candidate.indexFailed !== true;
+    return candidate.metadataReady !== false && candidate.metadataFailed !== true;
 }
 
 function nonFrontCandidates(frame: TripFrame): VideoCandidate[] {

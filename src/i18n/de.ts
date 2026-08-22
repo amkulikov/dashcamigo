@@ -177,6 +177,7 @@ export const deDict = {
     "status.audioDamaged": "{n, plural, one {# Datei mit defektem Ton — nur Video} other {# Dateien mit defektem Ton — nur Video}}",
     "status.dropReadFailed": "einige abgelegte Dateien konnten nicht gelesen werden",
     "status.nothingLoaded": "keine abspielbaren Aufnahmen gefunden",
+    "status.tripOpenFailed": "Diese Fahrt konnte nicht geöffnet werden. Die Datei ist möglicherweise beschädigt oder nicht mehr verfügbar.",
     "status.onlyHiddenFiles": "Das waren nur versteckte oder Systemdateien — wähl den Ordner mit deinen Aufnahmen.",
     "status.offline.label": "Offline",
     "status.offline.info": "Was das bedeutet",
@@ -309,10 +310,13 @@ export const deDict = {
     "noRecordings.howItWorks": "So funktioniert's",
     "noRecordings.notNow": "Nicht jetzt",
 
-    "lazyGpsLoad.title": "Lade GPS aus {n, plural, one {# Video} other {# Videos}}",
-    "lazyGpsLoad.progress": "{done} von {total}",
-    "lazyGpsLoad.cancel": "Überspringen",
-    "hydrateLoad.title": "Lese Aufnahmen",
+    "gpsLoad.title": "Lade GPS aus {n, plural, one {# Video} other {# Videos}}",
+    "gpsLoad.progress": "{done} von {total}",
+    "gpsLoad.cancel": "Überspringen",
+    "gpsLoad.pending": "GPS wird beim Öffnen geladen",
+    "gpsLoad.reading": "GPS wird gelesen",
+    "recordingLoad.title": "Lese Aufnahmen",
+    "recordingLoad.cancel": "Abbrechen",
 
     "resize.videoMap": "Kartenbreite ändern",
 
@@ -522,16 +526,11 @@ export const deDict = {
 
     "ingestOverlay.title": "Sortiere Dateien",
     "ingestOverlay.cancel": "Abbrechen",
-    "ingestOverlay.continueWithoutGps": "Ohne GPS fortfahren",
     "ingestOverlay.queued": "{n, plural, one {# weiterer Ordner in der Warteschlange} other {# weitere Ordner in der Warteschlange}}",
-    "ingestOverlay.firstLoadHint": "Das erste Öffnen dauert am längsten — beim nächsten Mal laden diese Aufnahmen in Sekunden.",
     "ingestOverlay.stage.preparing": "Öffne deinen Ordner...",
     "ingestOverlay.stage.classifying": "Dateien werden sortiert...",
     "ingestOverlay.stage.parsingLogs": "Lese GPS-Logs...",
     "ingestOverlay.stage.parsingSidecars": "Lese GPS-Dateien...",
-    "ingestOverlay.stage.indexing": "Videos werden gelesen: {done} / {total}",
-    "ingestOverlay.stage.embeddedGps": "GPS im Video: {done} / {total}",
-    "ingestOverlay.stage.previews": "Fahrtvorschauen werden vorbereitet...",
     "ingestOverlay.stage.canceling": "Stoppe...",
     "ingest.error.loadFailed": "Diese Dateien konnten nicht gelesen werden. Wähle den SD-Karten-Ordner deiner Dashcam und versuche es erneut.",
 

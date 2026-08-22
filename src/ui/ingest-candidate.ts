@@ -1,7 +1,4 @@
-// Shared VideoCandidate helpers used by BOTH the eager ingest pipeline
-// (ingest.ts) and the lazy filename-first hydration path (lazy-hydrate.ts).
-// Lives in its own module so neither imports the other - the dependency graph
-// stays tree-shaped.
+// VideoCandidate construction and metadata application for progressive ingest.
 
 import type { VideoCodec } from "mediabunny";
 
@@ -23,7 +20,7 @@ import { vendorFileKey } from "../vendor-file-key.js";
 const log = createLogger("ingest-candidate");
 
 /**
- * Session file identity shared by eager/lazy ingest and deferred work maps.
+ * Session file identity shared by ingest and deferred work maps.
  * Defined in a UI-free root module so parser workers can use the same key.
  */
 export { vendorFileKey };
@@ -59,8 +56,7 @@ export interface RepairApplication {
 /**
  * Applies the indexer's container-repair descriptor (or passes the file through
  * untouched when there is none). Single source of truth for "patched file +
- * post-repair needsHevcRemux + repair counters", shared by the eager index
- * callback and lazy hydration so they cannot diverge.
+ * post-repair needsHevcRemux + repair counters.
  */
 export function applyIndexRepair(
     file: File,
@@ -80,9 +76,7 @@ export function applyIndexRepair(
     };
 }
 
-/** The filename-derived candidate fields (channel/sequence/mode/classifier ids).
- *  Identical for the eager and the provisional builders - one definition so the
- *  two paths cannot drift on the confidence default or the matchedId mapping. */
+/** Filename-derived channel, sequence, mode and classifier attribution. */
 export interface FilenameClassifierFields {
     classifierMatches: VideoCandidate["classifierMatches"];
     channel: VideoCandidate["channel"];
@@ -92,9 +86,7 @@ export interface FilenameClassifierFields {
     isTimelapse: boolean;
 }
 
-/** Walks the per-field filename technique libraries and maps the matches onto the
- *  VideoCandidate's filename-derived fields. Shared by the eager pipeline and the
- *  filename-first provisional builder. */
+/** Maps the per-field filename classifiers onto a candidate. */
 export function filenameClassifierFields(file: VendorFile): FilenameClassifierFields {
     const timeMatch = matchFilenameTime(file);
     const channelMatch = matchFilenameChannel(file);
@@ -127,14 +119,13 @@ export interface ProvisionalCandidateParams {
     durationSec: number;
     records: GpsRecord[];
     appliedExtractors: string[];
+    /** Already-computed filename fields from the discovery pass. */
+    classifierFields?: FilenameClassifierFields;
 }
 
 /**
- * Builds a VideoCandidate from the filename alone - zero file-byte reads. Used
- * by the filename-first ingest path to render the trip list before any moov is
- * read. Byte-derived fields (codec/createdUtc/rotation/...) carry safe
- * optimistic placeholders and hydrated=false; hydrateCandidateFromIndex fills
- * the real values later. The mapping mirrors the eager builder in ingest.ts.
+ * Builds a provisional candidate without reading file bytes. Byte-derived fields
+ * carry safe placeholders until applyIndexedMetadata fills them in place.
  */
 export function buildProvisionalCandidate(params: ProvisionalCandidateParams): VideoCandidate {
     const { file } = params;
@@ -144,11 +135,11 @@ export function buildProvisionalCandidate(params: ProvisionalCandidateParams): V
         sourceKey: file.sourceKey,
         fingerprint: params.fingerprint,
         appliedExtractors: params.appliedExtractors,
-        ...filenameClassifierFields(file),
+        ...(params.classifierFields ?? filenameClassifierFields(file)),
         startUtc: params.startUtc,
         durationSec: params.durationSec,
         // Provisional: no moov/GPS read yet, so no wall-span evidence; the
-        // post-hydration rederive sweep fills the real value.
+        // post-metadata read rederive sweep fills the real value.
         wallDurationSec: null,
         // Computed at regroup time (applyChannelDriftLead), never at construction.
         driftLeadSec: null,
@@ -157,12 +148,12 @@ export function buildProvisionalCandidate(params: ProvisionalCandidateParams): V
         records: params.records,
         createdUtc: null,
         codec: null,
-        // Optimistic until hydration's canPlay check; null codec stays true (let <video> try).
+        // Optimistic until metadata read's canPlay check; null codec stays true (let <video> try).
         canPlay: true,
         codecParam: null,
         videoCodecString: null,
         rotation: 0,
-        // Byte-derived display metadata - unknown until the moov read (hydrate).
+        // Byte-derived display metadata is unknown until the moov read.
         width: null,
         height: null,
         fps: null,
@@ -173,7 +164,7 @@ export function buildProvisionalCandidate(params: ProvisionalCandidateParams): V
         audioNeedsTranscode: false,
         embeddedStartUtcHint: null,
         localClockOffsetHintSec: null,
-        hydrated: false,
+        metadataReady: false,
     };
 }
 
@@ -181,10 +172,10 @@ export function buildProvisionalCandidate(params: ProvisionalCandidateParams): V
  * Fills a provisional candidate's byte-derived fields from a fresh index result,
  * in place (the same object is referenced by the trip's frames, so mutation is
  * what makes the rendered card update). Applies any container repair via
- * applyIndexRepair and flips hydrated=true. Returns which repairs fired so the
+ * applyIndexRepair and marks the metadata ready. Returns which repairs fired so the
  * caller can count them for the post-ingest toast.
  */
-export function hydrateCandidateFromIndex(
+export function applyIndexedMetadata(
     candidate: VideoCandidate,
     indexed: IndexedMp4,
     repair: IndexerRepair | undefined,
@@ -203,7 +194,7 @@ export function hydrateCandidateFromIndex(
     candidate.audio = indexed.audio;
     candidate.needsHevcRemux = applied.needsHevcRemux;
     candidate.audioNeedsTranscode = indexed.audioNeedsTranscode;
-    candidate.hydrated = true;
+    candidate.metadataReady = true;
     if (repair) {
         log.info("applied container repair", {
             file: candidate.file.name,
@@ -216,9 +207,8 @@ export function hydrateCandidateFromIndex(
 
 /**
  * Sets each candidate's canPlay by probing codec decodability (mediabunny
- * canDecodeVideo, deduped by codec string). Extracted from the eager pipeline so
- * the lazy path can run the same check over just one trip's candidates. A
- * codec=null candidate stays optimistically playable; a thrown probe also
+ * canDecodeVideo, deduped by codec string). A codec=null candidate stays
+ * optimistically playable; a thrown probe also
  * defaults to playable (a black frame beats a false "unsupported" overlay).
  */
 export async function checkCanPlay(candidates: VideoCandidate[]): Promise<void> {
@@ -230,9 +220,9 @@ export async function checkCanPlay(candidates: VideoCandidate[]): Promise<void> 
         if (!checks.has(key)) checks.set(key, { codec: c.codec, codecString: c.videoCodecString });
     }
     const decodableByKey = new Map<string, boolean>();
-    // Dynamic import: this module is eager (app.ts -> lazy-embedded-gps), and a
-    // static value import of mediabunny here would drag its whole ~300 KB graph
-    // into the landing entry chunk (guarded by scripts/check-lazy-chunks.mjs).
+    // Dynamic import: this module is in the landing startup graph, and a static
+    // value import of mediabunny here would add its whole ~300 KB graph to the
+    // entry chunk (guarded by scripts/check-lazy-chunks.mjs).
     // The probe already awaits per-codec checks, so one more await is free.
     const { canDecodeVideo } = await import("mediabunny");
     await Promise.all(

@@ -14,7 +14,7 @@
 //   ui/mobile-drawer.ts - mobile sidebar drawer
 //   ui/sidebar-resize.ts / ui/player-resize.ts - drag-handle resizers
 //   ui/sidebar.ts      - trip sidebar renderer
-//   ui/ingest.ts       - main ingest flow (classify → parse → index → group)
+//   ui/ingest.ts       - discovery/sidecars plus progressive recording ingest
 //   ui/file-sources.ts - <input webkitdirectory> + DnD
 //   ui/map.ts          - map, mini-map, markers, popup, expand/collapse, marker rAF
 //   ui/chart.ts        - chart.js strip, cursor plugin, no-gps tooltip
@@ -61,7 +61,7 @@ import { initAnnotationsSidecar } from "./ui/annotations-sidecar.js";
 import { initNotesNudge } from "./ui/notes-nudge.js";
 import { registerTimelineOverlaySync } from "./ui/chart.js";
 import { initIngestOverlay } from "./ui/ingest-overlay.js";
-import { initNotifications } from "./ui/notifications.js";
+import { initNotifications, notify } from "./ui/notifications.js";
 import { initPwaInstall } from "./ui/pwa-install.js";
 import { initMapSettingsPopover } from "./ui/map-settings-popover.js";
 import { initSettingsModal } from "./ui/settings-modal.js";
@@ -72,9 +72,9 @@ import { initUnsupportedFormatsModal } from "./ui/unsupported-formats-modal.js";
 import { initIosFolderWarningModal } from "./ui/ios-folder-warning-modal.js";
 import { initUploadWarningModal } from "./ui/upload-warning-modal.js";
 import { initWebglEnableModal } from "./ui/webgl-enable-modal.js";
-import { awaitLazyEmbeddedGpsForTrip, isCurrentTripOpen, takeTripOpenToken } from "./ui/lazy-embedded-gps.js";
-import { hydrateTrip } from "./ui/lazy-hydrate.js";
-import { initLazyGpsLoadModal } from "./ui/lazy-gps-load-modal.js";
+import { loadDeferredGpsForTrip, isCurrentTripOpen, takeTripOpenToken } from "./ui/deferred-gps.js";
+import { getDeferredGpsConcurrency, prepareTripForPlayback } from "./ui/progressive-ingest.js";
+import { initRecordingLoadModal } from "./ui/recording-load-modal.js";
 import { initHotkeysModal } from "./ui/hotkeys-modal.js";
 import { initWhatsNewModal } from "./ui/whats-new-modal.js";
 import { initExportMode } from "./ui/export-mode.js";
@@ -101,18 +101,27 @@ import { getSharedMapTileCacheStats, type SharedTileCacheStats } from "./ui/map-
 import { prewarmPreview } from "./ui/trip-preview.js";
 import { initThemeToggle } from "./ui/theme-toggle.js";
 import { initMobileDrawer } from "./ui/mobile-drawer.js";
+import { registerRegroupAppliedListener } from "./ui/apply-regroup.js";
 import {
     applyComposition,
     getTripCurrentTime,
     playFrame,
     playTripEvent,
+    reconcileActiveTripAfterRegroup,
     seekThenPlay,
     seekTripTime,
 } from "./ui/player.js";
 import { initTripUi } from "./ui/trip-ui-init.js";
+import {
+    captureTripOpenTarget,
+    closestEventIndex,
+    resolveTripOpenTarget,
+    type ResolvedTripOpen,
+    type TripOpenTarget,
+} from "./ui/trip-open-target.js";
 import { initOnboarding, pickTripOpenTour, runTripOpenTour } from "./ui/onboarding.js";
 import { resetVideoZoom } from "./ui/player-zoom.js";
-import { initSidebar, renderTrips, syncSortControls } from "./ui/sidebar.js";
+import { clearOpeningTrip, initSidebar, renderTrips, syncSortControls } from "./ui/sidebar.js";
 import { initSidebarResize } from "./ui/sidebar-resize.js";
 import { state } from "./ui/state.js";
 import type { AppState } from "./ui/state.js";
@@ -126,6 +135,11 @@ import { getThemeChoice, refreshThemeColors } from "./ui/theme.js";
 // search crawlers and social unfurl bots, see CLAUDE.md Localization).
 applyStaticI18n();
 document.documentElement.lang = getCurrentLang();
+
+// groupTrips replaces Trip objects even when the selected file survives. Keep
+// the already-open viewer on that file while refreshing every trip-scoped
+// timeline consumer after the positional active index has been remapped.
+registerRegroupAppliedListener(reconcileActiveTripAfterRegroup);
 
 // --- crash reporting bootstrap ---
 //
@@ -441,7 +455,7 @@ initNoRecordingsModal();
 initUploadWarningModal();
 initIosFolderWarningModal();
 initSwitchLangModal();
-initLazyGpsLoadModal();
+initRecordingLoadModal();
 initHotkeysModal();
 initWhatsNewModal();
 // "View" dropdown - toggle chart/strip/mini-map. Reads visibility from localStorage
@@ -519,72 +533,158 @@ initTimelineMarkers();
 initMarkerModal({ onChanged: refreshTimelineMarkers });
 initMarkerListModal({ onChanged: refreshTimelineMarkers });
 registerTimelineOverlaySync(refreshTimelineMarkers);
-// Lazy hydration can move a marker's UTC after the fact (see
-// restampProvisionalMarkers) - repaint the pins when it does.
+// Progressive clock refinement can move a provisional marker's UTC; repaint
+// timeline pins after it is re-stamped.
 registerMarkersRestampedHook(refreshTimelineMarkers);
 // Notes-file replica of the annotations inside the user's folder (Chromium):
 // connected from the folder row, then auto-synced.
 initAnnotationsSidecar();
 // One-shot offer of that notes file at the user's first annotation.
 initNotesNudge();
-initSidebar({
-    onEditTripMeta: openTripMetaModal,
-    onPlayFrame: async (tripIdx, frameIdx) => {
-        // Viewer init (map/chart/player) is lazy and async since T9 - it
-        // lazy-loads maplibre-gl. exitLanding fired it already; awaiting the
-        // memoized promise here guarantees the viewer is ready before playFrame
-        // (resolves instantly if init already finished).
-        await initTripUi();
-        // If the trip has pending heavy-embedded-GPS, block with a
-        // progress modal (+Cancel). playFrame starts only after it
-        // resolves or the user cancels. Trips without pending GPS
-        // resolve immediately, no delay. proceed=false means a NEWER
-        // trip click superseded this one mid-load - starting playback
-        // here would fire behind the newer session and restart the trip
-        // under the user.
-        // Mint the trip-open token BEFORE the awaited hydrateTrip: on a slow
-        // backend hydration can take tens of seconds, during which the user may
-        // click a different trip. A later click mints a newer token, so we bail
-        // after hydrateTrip resolves instead of yanking the player to this
-        // (superseded) trip.
-        const openToken = takeTripOpenToken();
-        // Filename-first path: read this trip's bytes (duration/codec/GPS) before
-        // playback. No-op on the eager path, where every candidate is indexed.
-        await hydrateTrip(tripIdx);
-        if (!isCurrentTripOpen(openToken)) return;
-        const proceed = await awaitLazyEmbeddedGpsForTrip(tripIdx);
-        if (!proceed) return;
-        // First-run onboarding: the player tour (and later the multichannel
-        // tour) introduce the controls BEFORE the clip rolls. pickTripOpenTour
-        // returns the tour to run, or null. When non-null we start playback
-        // PAUSED (autoPlay=false) and resume on any tour exit (done/skip/later).
-        const trip = state.trips[tripIdx];
+
+function reportTripOpenFailure(openToken: number, tripIdx: number, err?: unknown): void {
+    if (err !== undefined) appLog.error(`trip open failed (trip ${tripIdx})`, err);
+    if (!isCurrentTripOpen(openToken)) return;
+    clearOpeningTrip();
+    notify({ severity: "error", messageKey: "status.tripOpenFailed" });
+}
+
+/**
+ * Completes the shared asynchronous front half of every trip-open action.
+ * The token is minted before the first await, so a newer click always wins.
+ */
+async function prepareTripOpen(
+    target: TripOpenTarget,
+    originalTripIdx: number,
+    openToken: number,
+): Promise<ResolvedTripOpen | null> {
+    const initialLocation = resolveTripOpenTarget(state.trips, target);
+    if (!initialLocation) {
+        reportTripOpenFailure(openToken, originalTripIdx);
+        return null;
+    }
+
+    // Viewer chunks and mandatory recording metadata are independent. Starting
+    // both now lets the selected file preempt background storage immediately,
+    // instead of waiting for map/chart/player code to download first.
+    const [, preparation] = await Promise.all([
+        initTripUi(),
+        prepareTripForPlayback(initialLocation.tripIdx, target.exactFrame ? initialLocation.frameIdx : undefined),
+    ]);
+    if (!isCurrentTripOpen(openToken)) return null;
+    if (preparation.status === "ready") {
+        // The read gate may skip a damaged leading clip, replace a repaired File
+        // object and finish before viewer initialization. Resolve its stable keys
+        // against the latest trip list instead of trusting the original indices.
+        const readyLocation = resolveTripOpenTarget(state.trips, {
+            ...target,
+            keys: preparation.recordingKeys,
+            exactFrame: true,
+            eventUtc: null,
+        });
+        if (readyLocation) return readyLocation;
+        reportTripOpenFailure(openToken, originalTripIdx);
+        return null;
+    }
+
+    clearOpeningTrip();
+    if (preparation.status === "unreadable") {
+        notify({ severity: "error", messageKey: "status.tripOpenFailed" });
+    }
+    return null;
+}
+
+// Optional full-file GPS work starts after video has produced data, so a slow
+// SD card services the user's picture before a background telemetry scan.
+let optionalGpsStartController: AbortController | null = null;
+
+function scheduleOptionalGpsAfterPlayback(target: TripOpenTarget, openToken: number): void {
+    optionalGpsStartController?.abort();
+    const controller = new AbortController();
+    optionalGpsStartController = controller;
+    const start = (): void => {
+        if (controller.signal.aborted || !isCurrentTripOpen(openToken)) return;
+        if (optionalGpsStartController === controller) optionalGpsStartController = null;
+        const location = resolveTripOpenTarget(state.trips, target);
+        if (!location) return;
+        void loadDeferredGpsForTrip(location.tripIdx, { showProgress: false, concurrency: 1 }).catch((err) => {
+            appLog.warn("optional trip GPS load failed", err);
+        });
+    };
+    const player = dom.player;
+    if (player.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) queueMicrotask(start);
+    else player.addEventListener("loadeddata", start, { once: true, signal: controller.signal });
+}
+
+async function openTripFrame(tripIdx: number, requestedFrameIdx?: number): Promise<void> {
+    const target = captureTripOpenTarget(state.trips, tripIdx, requestedFrameIdx);
+    const openToken = takeTripOpenToken(target?.tripKeys);
+    optionalGpsStartController?.abort();
+    if (!target) {
+        reportTripOpenFailure(openToken, tripIdx);
+        return;
+    }
+    try {
+        const prepared = await prepareTripOpen(target, tripIdx, openToken);
+        if (!prepared) return;
+
+        // First-run onboarding introduces the controls before the clip rolls.
+        // With a tour, playback starts paused and resumes on any tour exit.
+        const trip = state.trips[prepared.tripIdx];
         const tour = trip ? pickTripOpenTour(trip) : null;
-        playFrame(tripIdx, frameIdx, undefined, /*autoPlay=*/ tour === null);
+        playFrame(prepared.tripIdx, prepared.frameIdx, undefined, /* autoPlay */ tour === null);
+        scheduleOptionalGpsAfterPlayback(target, openToken);
         if (tour) {
             runTripOpenTour(tour, () => void dom.player.play().catch(() => {}));
         } else if (!isMapAvailable()) {
-            // The user just opened a trip and the map can't render (no WebGL).
-            // Surface the WebGL guide now - contextual, not over the bare landing.
-            // Skipped while a first-run tour is up (don't stack a modal on it); a
-            // later trip-open with no tour catches it. Idempotent per page load.
+            // Contextual WebGL guidance is intentionally delayed until the user
+            // opens footage, and never stacked over first-run onboarding.
             void surfaceMapUnavailable();
         }
-    },
-    onPlayTripEvent: async (tripIdx, eventIndex) => {
-        // Same viewer-readiness await as onPlayFrame (lazy maplibre, T9).
-        await initTripUi();
-        // UX-08: lazy GPS load is needed here too - the event is not
-        // accessible until the trip has records. Same supersession check
-        // as onPlayFrame above: mint the token before hydrateTrip, bail if a
-        // newer click superseded this one during hydration.
-        const openToken = takeTripOpenToken();
-        await hydrateTrip(tripIdx);
+    } catch (err) {
+        reportTripOpenFailure(openToken, tripIdx, err);
+    }
+}
+
+async function openTripEvent(tripIdx: number, eventIndex: number): Promise<void> {
+    const target = captureTripOpenTarget(state.trips, tripIdx, undefined, eventIndex);
+    const openToken = takeTripOpenToken(target?.tripKeys);
+    optionalGpsStartController?.abort();
+    if (!target) {
+        reportTripOpenFailure(openToken, tripIdx);
+        return;
+    }
+    try {
+        const prepared = await prepareTripOpen(target, tripIdx, openToken);
+        if (!prepared) return;
+
+        // Event navigation needs telemetry, so unlike normal playback it joins
+        // deferred GPS extraction before resolving the event's timeline offset.
+        const proceed = await loadDeferredGpsForTrip(prepared.tripIdx, {
+            concurrency: getDeferredGpsConcurrency(),
+        });
         if (!isCurrentTripOpen(openToken)) return;
-        const proceed = await awaitLazyEmbeddedGpsForTrip(tripIdx);
-        if (!proceed) return;
-        playTripEvent(tripIdx, eventIndex);
-    },
+        const resolved = resolveTripOpenTarget(state.trips, target);
+        const trip = resolved ? state.trips[resolved.tripIdx] : null;
+        const nextEventIndex = trip && target.eventUtc !== null ? closestEventIndex(trip.events, target.eventUtc) : -1;
+        if (!proceed || !resolved || nextEventIndex < 0) {
+            reportTripOpenFailure(openToken, tripIdx);
+            return;
+        }
+        playTripEvent(resolved.tripIdx, nextEventIndex);
+        // Seeking inside the already-active trip does not call playFrame, so it
+        // needs to release the click-feedback spinner explicitly.
+        clearOpeningTrip();
+    } catch (err) {
+        reportTripOpenFailure(openToken, tripIdx, err);
+    }
+}
+
+initSidebar({
+    onEditTripMeta: openTripMetaModal,
+    onPlayTrip: openTripFrame,
+    onPlayFrame: openTripFrame,
+    onPlayTripEvent: openTripEvent,
 });
 
 // Sort-controls and empty-state sync on sidebar DOM nodes (visible in

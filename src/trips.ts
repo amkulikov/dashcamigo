@@ -135,7 +135,7 @@ export interface VideoCandidate {
     localClockOffsetHintSec: number | null;
     // mvhd.creation_time as Date (interpreted as UTC directly). Stored in the
     // candidate so startUtc can be recalculated after camera TZ is refined
-    // from all indexed files' mvhd pairs (see TZ finalization in app.ts:ingestFiles).
+    // from the complete set of indexed recordings.
     createdUtc: Date | null;
     // GPS points for this MP4 (may be empty)
     records: GpsRecord[];
@@ -158,7 +158,7 @@ export interface VideoCandidate {
     rotation: Mp4Rotation;
     // Technical metadata for the sidebar's per-clip details panel (see
     // ui/file-details.ts). fps also drives frame stepping and re-encode timing;
-    // null while filename-first provisional or when no video track is measurable.
+    // null while metadata is pending or when no video track is measurable.
     width: number | null;
     height: number | null;
     fps: number | null;
@@ -195,33 +195,23 @@ export interface VideoCandidate {
     // (e.g. RVMI tReV baseline). null when unknown - deriveStartUtc then falls
     // back to mvhd/firstGps/etc. See ParsedRecords.videoStartUtcHint.
     embeddedStartUtcHint: number | null;
-    // False ONLY for a provisional candidate built from the filename alone
-    // (filename-first ingest on a slow backend) before its moov has been read:
-    // durationSec is a per-fingerprint estimate, codec/createdUtc/records are
-    // placeholders. Undefined or true means fully indexed (the eager path never
-    // sets it). hydrateTrip flips it true once the real metadata lands. See
-    // isHydrationPending and estimateProvisionalDurationByFingerprint.
-    hydrated?: boolean;
-    // True ONLY when a provisional candidate's moov read FAILED (unreadable /
-    // non-MP4 / broken moov) - the lazy hydration was attempted and gave up. The
-    // candidate keeps its filename-only provisional values forever (there is no
-    // better data). This is TERMINAL: isHydrationPending returns false so the
-    // background pump stops re-selecting it and the final regroup sweep can run.
-    // Set in lazy-hydrate runHydrateData; surfaced as a "read failed" affordance.
-    indexFailed?: boolean;
+    // False while byte-derived recording metadata is pending: durationSec is an
+    // estimate and codec/container fields are placeholders. Undefined or true
+    // means ready, preserving compatibility with cached candidates that predate
+    // this explicit state. See needsRecordingMetadata.
+    metadataReady?: boolean;
+    // Terminal failure of the mandatory metadata read. The scheduler must not
+    // retry it within the same ingest run; the closing commit removes it from the
+    // playable trip list and reports the file as unreadable.
+    metadataFailed?: boolean;
 }
 
 /**
- * Whether a candidate still NEEDS a byte read - its moov has neither been read
- * (hydrated) nor permanently failed (indexFailed). This is the predicate the
- * lazy hydration scheduler uses for "is there work left": a successfully
- * hydrated candidate and a read-failed one are BOTH terminal, so neither is
- * pending. The eager path never sets hydrated, so its candidates are never
- * pending. The card visual reads the raw hydrated / indexFailed flags directly
- * to tell "loading" apart from "read failed".
+ * Whether mandatory byte-derived metadata is still pending. Ready and terminally
+ * failed candidates are both complete from the scheduler's perspective.
  */
-export function isHydrationPending(candidate: VideoCandidate): boolean {
-    return candidate.hydrated === false && candidate.indexFailed !== true;
+export function needsRecordingMetadata(candidate: VideoCandidate): boolean {
+    return candidate.metadataReady === false && candidate.metadataFailed !== true;
 }
 
 /**
@@ -549,25 +539,24 @@ const DEFAULT_CHANNEL: Channel = "front";
 const OVERLAP_SPLIT_TOLERANCE_SEC = 15;
 
 /**
- * Provisional clip duration used by the filename-first trip list, which is
- * rendered BEFORE any moov read so the real durationSec is unknown. groupTrips
+ * Provisional clip duration used before the moov is read. groupTrips
  * splits trips on `gap = next.startUtc - (prev.startUtc + prev.durationSec)`, so
  * a missing duration makes the gap walk meaningless. We feed a synthetic
  * durationSec = the camera's own modal inter-clip spacing; contiguous segments
  * then give gap ~= 0 and a real engine-off pause still stands out. Replaced by
- * the true durationSec on hydration, which triggers a regroup.
+ * the true durationSec on metadata read, which triggers a regroup.
  */
 const PROVISIONAL_DEFAULT_SEC = 60;
 // Clamp band for the estimate. A too-small value only UNDERshoots (gap stays a
 // small positive < threshold, clips stay merged - safe); a too-large value can
 // OVERshoot into a spurious overlap-split. So the band is tight on the high end
 // and the mode tie-break below leans small.
-const PROVISIONAL_MIN_SEC = 3;
+const PROVISIONAL_MIN_SEC = 1;
 const PROVISIONAL_MAX_SEC = 600;
 
 /**
  * Estimates a provisional clip duration per camera fingerprint from filename
- * start times alone (zero file-byte reads), for the filename-first trip list.
+ * start times alone, without reading file bytes.
  *
  * Per fingerprint: sort the candidates' startUtc, collapse clips recorded at the
  * same instant into one "moment" (multi-channel F+R+I share a startUtc within a
@@ -583,37 +572,84 @@ const PROVISIONAL_MAX_SEC = 600;
  * Returns fingerprint -> provisional durationSec (clamped to [MIN, MAX]). A
  * fingerprint with a single distinct moment has no delta and gets the default.
  */
+interface ProvisionalTimingCandidate {
+    fingerprint: string;
+    startUtc: number;
+    /** Optional classifier evidence. Supplying it lets the estimator tell two
+     *  adjacent short clips on one camera apart from simultaneous cameras. */
+    channel?: Channel | null;
+    sequence?: number | null;
+}
+
 export function estimateProvisionalDurationByFingerprint(
-    candidates: ReadonlyArray<{ fingerprint: string; startUtc: number }>,
+    candidates: ReadonlyArray<ProvisionalTimingCandidate>,
 ): Map<string, number> {
-    const startsByFingerprint = new Map<string, number[]>();
+    const startsByFingerprint = new Map<string, ProvisionalTimingCandidate[]>();
     for (const candidate of candidates) {
         let starts = startsByFingerprint.get(candidate.fingerprint);
         if (!starts) {
             starts = [];
             startsByFingerprint.set(candidate.fingerprint, starts);
         }
-        starts.push(candidate.startUtc);
+        starts.push(candidate);
     }
 
     const sameMomentSec = FRAME_TIMESTAMP_SNAP_SEC / 2;
     const result = new Map<string, number>();
     for (const [fingerprint, starts] of startsByFingerprint) {
-        starts.sort((a, b) => a - b);
+        starts.sort((a, b) => a.startUtc - b.startUtc);
         // Distinct moments: a clip more than sameMomentSec after the previous
         // moment starts a new one. Within the window it is another channel of the
         // same instant (real adjacent single-channel clips are 60s+ apart).
-        const moments: number[] = [];
-        for (const start of starts) {
+        const moments: Array<{
+            startUtc: number;
+            channels: Set<Channel>;
+            sequences: Set<number>;
+            hasIdentity: boolean;
+        }> = [];
+        for (const candidate of starts) {
             const last = moments[moments.length - 1];
-            if (last === undefined || start - last > sameMomentSec) moments.push(start);
+            const channel = candidate.channel ?? DEFAULT_CHANNEL;
+            const hasIdentity = candidate.channel !== undefined || candidate.sequence !== undefined;
+            const withinWindow = last !== undefined && candidate.startUtc - last.startUtc <= sameMomentSec;
+            // Filename classifiers distinguish the ambiguous short-clip case:
+            // another file on an already-occupied channel is the NEXT moment even
+            // when it starts inside the broad cross-channel snap window. Distinct
+            // channels (or an explicitly shared sequence) are simultaneous.
+            const canJoinByIdentity =
+                last !== undefined &&
+                (candidate.sequence !== null &&
+                candidate.sequence !== undefined &&
+                last.sequences.has(candidate.sequence)
+                    ? true
+                    : !last.channels.has(channel));
+            // Time-only callers collapse every candidate inside the snap window;
+            // progressive ingest supplies classifier fields for finer grouping.
+            const sameMoment = withinWindow && (canJoinByIdentity || (!hasIdentity && !last!.hasIdentity));
+            if (!sameMoment) {
+                moments.push({
+                    startUtc: candidate.startUtc,
+                    channels: new Set([channel]),
+                    sequences:
+                        candidate.sequence !== null && candidate.sequence !== undefined
+                            ? new Set([candidate.sequence])
+                            : new Set(),
+                    hasIdentity,
+                });
+                continue;
+            }
+            last!.channels.add(channel);
+            if (candidate.sequence !== null && candidate.sequence !== undefined) {
+                last!.sequences.add(candidate.sequence);
+            }
+            last!.hasIdentity ||= hasIdentity;
         }
         // Mode of inter-moment deltas, rounded to whole seconds (collapses sub-
         // second timescale jitter). Sorted distinct moments are strictly
         // increasing, so deltas are positive - no negative-jitter poisoning.
         const deltaCounts = new Map<number, number>();
         for (let i = 1; i < moments.length; i++) {
-            const delta = Math.round(moments[i]! - moments[i - 1]!);
+            const delta = Math.round(moments[i]!.startUtc - moments[i - 1]!.startUtc);
             if (delta < PROVISIONAL_MIN_SEC || delta > PROVISIONAL_MAX_SEC) continue;
             deltaCounts.set(delta, (deltaCounts.get(delta) ?? 0) + 1);
         }
@@ -1059,10 +1095,8 @@ export function contentToFrame(timeline: TripTimeline, contentSec: number): { in
 }
 
 /**
- * Turns a frame array into a Trip with aggregates. Exported as
- * finalizeTripFromFrames for lazy-embedded-gps: after background GPS loading
- * records/distanceKm/events need to be recomputed on the same frames
- * without regrouping trip boundaries.
+ * Turns a frame array into a Trip with aggregates. Exported for incremental
+ * refreshes where records, timing or events changed but membership did not.
  */
 export { finalizeTrip as finalizeTripFromFrames };
 
@@ -1702,7 +1736,7 @@ export function estimateTimelapseCadenceFactors(
  * Fills wallDurationSec from the cadence factor for every time-lapse candidate
  * that still has none - per-file evidence (deriveWallDurationSec) always wins,
  * so run this AFTER it. Mutates candidates in place. Shared by the rederive
- * sweep and the filename-first provisional build, so the instant list and the
+ * sweep and the provisional build, so the initial list and the
  * final regroup bundle lapse runs identically.
  */
 export function applyTimelapseCadenceWallSpans(
@@ -2151,16 +2185,13 @@ export function reanchorUnsyncedTimes(records: GpsRecord[], startUtc: number, du
  * subtracted (GpsRecord.localClockOffsetAppliedSec), so re-running the sweep
  * - or visiting a record twice through candidates and gpsLog buckets that
  * share the objects - applies only the delta. Late evidence (a cold-start
- * clip hydrated after its siblings) shifts everything by the difference on
+ * clip becoming ready after its siblings shifts everything by the difference on
  * the next sweep.
  *
- * A fingerprint with no evidence IN THIS CALL is left untouched rather than
- * reset to zero: the per-trip lazy hydration sweep passes one trip's
- * candidates, and the cold-start clip that measured the offset routinely sits
- * in a different trip. Driving to zero there would revert an already-correct
- * axis until the final full sweep - and permanently if the fill is cancelled
- * first. Consequence of the same rule: a shift can only ever be replaced by
- * new evidence, never withdrawn.
+ * A fingerprint with no evidence in this call is left untouched. Progressive
+ * per-trip refinement may not include the sibling that measured the offset;
+ * resetting to zero would temporarily corrupt an already-correct record axis.
+ * A shift can therefore only be replaced by new evidence, never withdrawn.
  *
  * Scoped to candidates whose GPS came from the extractor family that
  * produces the hints ("freegps"): the offset describes THAT firmware's clock,
@@ -2230,12 +2261,9 @@ function applyLocalClockCorrections(candidates: readonly VideoCandidate[]): void
  * candidates in place; does NOT regroup - the caller decides whether to rebuild
  * trips.
  *
- * Single source of truth for the anchoring step, shared by the eager global
- * regroup (recomputeAllStartUtc, over all candidates) and the lazy per-trip
- * hydration (over one trip's candidates), so both anchor identically. The lazy
- * filename-first path builds candidates with a provisional filename-only startUtc
- * (often off by the camera TZ/clock for embedded-GPS cameras); calling this once
- * the moov/GPS are read replaces it with the real anchor before the global sweep.
+ * Single source of truth for both per-trip refinement and the closing global
+ * sweep. Calling it after metadata or GPS arrives replaces provisional clock
+ * evidence before trip boundaries are reconciled.
  */
 export function rederiveStartUtcForCandidates(
     candidates: readonly VideoCandidate[],

@@ -186,6 +186,7 @@ export const koDict = {
     "status.audioDamaged": "오디오가 손상된 파일 {n, plural, other {# 개}}, 영상만 재생해요",
     "status.dropReadFailed": "끌어다 놓은 일부 파일을 읽지 못했어요",
     "status.nothingLoaded": "재생할 수 있는 녹화를 찾지 못했어요",
+    "status.tripOpenFailed": "이 주행을 열 수 없습니다. 파일이 손상되었거나 더 이상 사용할 수 없을 수 있습니다.",
     "status.onlyHiddenFiles": "숨김 파일이나 시스템 파일뿐이었어요 — 녹화가 들어 있는 폴더를 선택해요.",
     "status.offline.label": "오프라인",
     "status.offline.info": "무슨 뜻인가요",
@@ -318,10 +319,13 @@ export const koDict = {
     "noRecordings.howItWorks": "어떻게 하는지 보기",
     "noRecordings.notNow": "나중에",
 
-    "lazyGpsLoad.title": "{n} 개 영상에서 GPS 불러오는 중",
-    "lazyGpsLoad.progress": "{done} / {total}",
-    "lazyGpsLoad.cancel": "건너뛰기",
-    "hydrateLoad.title": "녹화 영상 불러오는 중",
+    "gpsLoad.title": "{n} 개 영상에서 GPS 불러오는 중",
+    "gpsLoad.progress": "{done} / {total}",
+    "gpsLoad.cancel": "건너뛰기",
+    "gpsLoad.pending": "열 때 GPS 불러오기",
+    "gpsLoad.reading": "GPS 읽는 중",
+    "recordingLoad.title": "녹화 영상 불러오는 중",
+    "recordingLoad.cancel": "취소",
 
     "resize.videoMap": "지도 너비 조절",
 
@@ -529,16 +533,11 @@ export const koDict = {
 
     "ingestOverlay.title": "파일을 정리 중",
     "ingestOverlay.cancel": "취소",
-    "ingestOverlay.continueWithoutGps": "GPS 없이 계속",
     "ingestOverlay.queued": "{n} 개 폴더 더 대기 중",
-    "ingestOverlay.firstLoadHint": "처음 열 때가 가장 오래 걸립니다 — 다음번에는 이 녹화들이 몇 초 만에 열립니다.",
     "ingestOverlay.stage.preparing": "폴더 여는 중…",
     "ingestOverlay.stage.classifying": "파일 정리 중…",
     "ingestOverlay.stage.parsingLogs": "GPS 로그 읽는 중…",
     "ingestOverlay.stage.parsingSidecars": "GPS 파일 읽는 중…",
-    "ingestOverlay.stage.indexing": "영상 읽는 중: {done} / {total}",
-    "ingestOverlay.stage.embeddedGps": "영상 내 GPS: {done} / {total}",
-    "ingestOverlay.stage.previews": "주행 미리보기 준비 중…",
     "ingestOverlay.stage.canceling": "중지 중…",
     "ingest.error.loadFailed": "이 파일들을 읽지 못했어요. 블랙박스 SD 카드 폴더를 골라 다시 시도해 주세요.",
 

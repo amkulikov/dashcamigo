@@ -1,6 +1,5 @@
-// Main-thread shim over a pool of gps-extract workers. Preserves the
-// dispatchParseVideoEmbeddedGps() signature so callers (ingest.ts,
-// lazy-embedded-gps.ts) need only swap the import.
+// Main-thread facade over a pool of GPS extraction workers, shared by
+// progressive ingest and deferred full-file scans.
 //
 // Pool size: min(navigator.hardwareConcurrency - 1, 4), minimum 1. Reserves
 // one core for the main thread and other workers (per-file MSE, transcode,
@@ -178,7 +177,7 @@ export function dispatchParseVideoEmbeddedGpsViaWorker(
     for (const c of classified) fileByName.set(c.file.file.name, c.file);
 
     // One token per dispatch call - lets multiple parallel ingests (rare but
-    // possible: bulk ingest + lazy-extra-extract on trip click) keep their
+    // possible: progressive ingest + a deferred trip scan) keep their
     // progress streams separate.
     const token = String(activeToken++);
     if (onProgress) {
@@ -273,9 +272,8 @@ export function dispatchParseVideoEmbeddedGpsViaWorker(
 
 /**
  * Concatenates several DispatchedEmbeddedGpsResult into one. Exposed so the
- * streaming-batch caller (ingest.ts: per-batch flush) can merge results from
- * multiple sequential dispatches into a single shape compatible with the
- * downstream `applyEmbeddedResultToState` call.
+ * progressive batch caller can merge independently dispatched shards before
+ * applying their records and attribution.
  */
 export function mergeEmbeddedResults(results: DispatchedEmbeddedGpsResult[]): DispatchedEmbeddedGpsResult {
     return mergeResults(results);

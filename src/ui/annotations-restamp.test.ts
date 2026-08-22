@@ -1,12 +1,13 @@
-// A marker placed on a lazily-ingested trip BEFORE hydration (the Skip path)
-// stores a UTC computed from a filename-guessed startUtc. Once the real
+// A marker placed before recording metadata is ready stores a UTC computed
+// from a filename-derived startUtc. Once the measured
 // timeline lands, restampProvisionalMarkers must move the marker with the
 // trip - otherwise the wrong absolute time is permanent and flows into the
 // notes file.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Trip, TripTimeline, VideoCandidate } from "../trips.js";
+import { tripAllCandidates, type Trip, type TripTimeline, type VideoCandidate } from "../trips.js";
+import { vendorFileKey } from "../vendor-file-key.js";
 
 // annotations.ts reaches folder-sources (-> icons/notifications, which want a
 // DOM). Only the file->folder lookup is touched here, so stub the module out
@@ -16,17 +17,17 @@ vi.mock("./folder-sources.js", () => ({ folderIdForFileKey: () => "" }));
 import { _resetForTests, addMarker, markerById, restampProvisionalMarkers } from "./annotations.js";
 import { state } from "./state.js";
 
-// One-frame trip whose single candidate carries the hydration flag. The same
-// File object is reused across the provisional and hydrated builds - identity
+// One-frame trip whose single candidate carries the metadata read flag. The same
+// File object is reused across the provisional and metadata-ready builds - identity
 // (relativePath, size, lastModified) is what anchors the marker.
-function buildTrip(file: File, startUtc: number, hydrated: boolean): Trip {
+function buildTrip(file: File, startUtc: number, metadataReady: boolean): Trip {
     const durationSec = 60;
     const candidate = {
         file,
         relativePath: file.name,
         startUtc,
         durationSec,
-        hydrated,
+        metadataReady,
     } as unknown as VideoCandidate;
     const timeline: TripTimeline = {
         contentDurationSec: durationSec,
@@ -53,15 +54,17 @@ function buildTrip(file: File, startUtc: number, hydrated: boolean): Trip {
 
 const PROVISIONAL_START = 1_700_000_000;
 // The camera-TZ-sized error the filename guess is off by.
-const HYDRATION_SHIFT_SEC = 3600;
+const CLOCK_REFINEMENT_SHIFT_SEC = 3600;
 
 describe("restampProvisionalMarkers", () => {
     beforeEach(() => {
         _resetForTests();
         state.trips = [];
+        state.pendingHeavyEmbeddedGps.clear();
+        state.inflightEmbeddedGps.clear();
     });
 
-    it("moves a marker placed before hydration onto the re-derived timeline", () => {
+    it("moves a marker placed before metadata read onto the re-derived timeline", () => {
         const file = new File(["x"], "REC0001.MP4", { lastModified: 42 });
         const provisional = buildTrip(file, PROVISIONAL_START, false);
         state.trips = [provisional];
@@ -70,12 +73,12 @@ describe("restampProvisionalMarkers", () => {
         const marker = addMarker(provisional, (PROVISIONAL_START + 30) * 1000, "brake");
         expect(marker.utc, "stored with the provisional UTC").toBe((PROVISIONAL_START + 30) * 1000);
 
-        // Hydration: same file, real startUtc an hour later.
-        state.trips = [buildTrip(file, PROVISIONAL_START + HYDRATION_SHIFT_SEC, true)];
+        // Metadata read: same file, real startUtc an hour later.
+        state.trips = [buildTrip(file, PROVISIONAL_START + CLOCK_REFINEMENT_SHIFT_SEC, true)];
 
         expect(restampProvisionalMarkers()).toBe(1);
         expect(markerById(marker.id)?.utc, "follows the clip to its real time").toBe(
-            (PROVISIONAL_START + HYDRATION_SHIFT_SEC + 30) * 1000,
+            (PROVISIONAL_START + CLOCK_REFINEMENT_SHIFT_SEC + 30) * 1000,
         );
     });
 
@@ -85,7 +88,7 @@ describe("restampProvisionalMarkers", () => {
         const marker = addMarker(state.trips[0]!, (PROVISIONAL_START + 10) * 1000, "");
         const originalUpdatedAt = marker.updatedAt;
 
-        state.trips = [buildTrip(file, PROVISIONAL_START + HYDRATION_SHIFT_SEC, true)];
+        state.trips = [buildTrip(file, PROVISIONAL_START + CLOCK_REFINEMENT_SHIFT_SEC, true)];
         restampProvisionalMarkers();
 
         expect(markerById(marker.id)?.updatedAt).toBeGreaterThanOrEqual(originalUpdatedAt);
@@ -97,12 +100,12 @@ describe("restampProvisionalMarkers", () => {
         state.trips = [buildTrip(file, PROVISIONAL_START, false)];
         const marker = addMarker(state.trips[0]!, (PROVISIONAL_START + 5) * 1000, "");
 
-        // Still not hydrated: nothing moves yet, the anchor survives.
+        // Metadata is still pending: nothing moves yet, the anchor survives.
         expect(restampProvisionalMarkers()).toBe(0);
 
-        state.trips = [buildTrip(file, PROVISIONAL_START + HYDRATION_SHIFT_SEC, true)];
+        state.trips = [buildTrip(file, PROVISIONAL_START + CLOCK_REFINEMENT_SHIFT_SEC, true)];
         expect(restampProvisionalMarkers(), "the kept anchor applies once terminal").toBe(1);
-        expect(markerById(marker.id)?.utc).toBe((PROVISIONAL_START + HYDRATION_SHIFT_SEC + 5) * 1000);
+        expect(markerById(marker.id)?.utc).toBe((PROVISIONAL_START + CLOCK_REFINEMENT_SHIFT_SEC + 5) * 1000);
     });
 
     it("keeps the anchor after a per-trip pass so the closing sweep can move the marker again", () => {
@@ -110,14 +113,14 @@ describe("restampProvisionalMarkers", () => {
         state.trips = [buildTrip(file, PROVISIONAL_START, false)];
         const marker = addMarker(state.trips[0]!, (PROVISIONAL_START + 15) * 1000, "");
 
-        // Per-trip hydration: the clip is terminal, the marker follows it.
-        state.trips = [buildTrip(file, PROVISIONAL_START + HYDRATION_SHIFT_SEC, true)];
+        // Per-trip metadata read: the clip is terminal, the marker follows it.
+        state.trips = [buildTrip(file, PROVISIONAL_START + CLOCK_REFINEMENT_SHIFT_SEC, true)];
         expect(restampProvisionalMarkers(), "per-trip pass moves it").toBe(1);
 
         // The closing regroup reconciles boundaries and shifts the trip again.
-        state.trips = [buildTrip(file, PROVISIONAL_START + HYDRATION_SHIFT_SEC + 120, true)];
+        state.trips = [buildTrip(file, PROVISIONAL_START + CLOCK_REFINEMENT_SHIFT_SEC + 120, true)];
         expect(restampProvisionalMarkers({ final: true }), "final sweep moves it again").toBe(1);
-        expect(markerById(marker.id)?.utc).toBe((PROVISIONAL_START + HYDRATION_SHIFT_SEC + 120 + 15) * 1000);
+        expect(markerById(marker.id)?.utc).toBe((PROVISIONAL_START + CLOCK_REFINEMENT_SHIFT_SEC + 120 + 15) * 1000);
     });
 
     it("releases the anchors on the final sweep", () => {
@@ -125,11 +128,11 @@ describe("restampProvisionalMarkers", () => {
         state.trips = [buildTrip(file, PROVISIONAL_START, false)];
         addMarker(state.trips[0]!, (PROVISIONAL_START + 15) * 1000, "");
 
-        state.trips = [buildTrip(file, PROVISIONAL_START + HYDRATION_SHIFT_SEC, true)];
+        state.trips = [buildTrip(file, PROVISIONAL_START + CLOCK_REFINEMENT_SHIFT_SEC, true)];
         expect(restampProvisionalMarkers({ final: true })).toBe(1);
 
         // A regroup after the sweep must not drag the marker along anymore.
-        state.trips = [buildTrip(file, PROVISIONAL_START + HYDRATION_SHIFT_SEC + 600, true)];
+        state.trips = [buildTrip(file, PROVISIONAL_START + CLOCK_REFINEMENT_SHIFT_SEC + 600, true)];
         expect(restampProvisionalMarkers({ final: true })).toBe(0);
     });
 
@@ -143,15 +146,30 @@ describe("restampProvisionalMarkers", () => {
         expect(markerById(marker.id)?.utc, "sub-threshold drift keeps the stored value").toBe(marker.utc);
     });
 
-    it("does not touch a marker placed on an eager (never-pending) trip", () => {
+    it("does not touch a marker placed on a fully ready trip", () => {
         const file = new File(["x"], "REC0005.MP4", { lastModified: 42 });
         state.trips = [buildTrip(file, PROVISIONAL_START, true)];
         const marker = addMarker(state.trips[0]!, (PROVISIONAL_START + 30) * 1000, "");
 
         // Even if the trip is later rebuilt elsewhere, no anchor was captured.
-        state.trips = [buildTrip(file, PROVISIONAL_START + HYDRATION_SHIFT_SEC, true)];
+        state.trips = [buildTrip(file, PROVISIONAL_START + CLOCK_REFINEMENT_SHIFT_SEC, true)];
         expect(restampProvisionalMarkers()).toBe(0);
         expect(markerById(marker.id)?.utc).toBe((PROVISIONAL_START + 30) * 1000);
+    });
+
+    it("keeps a clip anchor until deferred GPS clock evidence settles", () => {
+        const file = new File(["x"], "REC0009.MP4", { lastModified: 42 });
+        const initial = buildTrip(file, PROVISIONAL_START, true);
+        const candidate = tripAllCandidates(initial)[0]!;
+        state.trips = [initial];
+        state.pendingHeavyEmbeddedGps.set(vendorFileKey(candidate), {} as never);
+        const marker = addMarker(initial, (PROVISIONAL_START + 12) * 1000, "");
+
+        state.pendingHeavyEmbeddedGps.clear();
+        const refined = buildTrip(file, PROVISIONAL_START + CLOCK_REFINEMENT_SHIFT_SEC, true);
+        state.trips = [refined];
+        expect(restampProvisionalMarkers({ final: true, finalCandidates: tripAllCandidates(refined) })).toBe(1);
+        expect(markerById(marker.id)?.utc).toBe((PROVISIONAL_START + CLOCK_REFINEMENT_SHIFT_SEC + 12) * 1000);
     });
 
     it("drops the anchor when the clip left the session", () => {

@@ -130,6 +130,32 @@ export {
 };
 
 /**
+ * Reconciles trip-scoped viewer surfaces after groupTrips replaced every Trip
+ * object and remapped state.active onto the selected file's new location.
+ *
+ * The media element keeps playing the same File, so re-running playFrame would
+ * needlessly reload it. The surrounding timeline can still have merged, split,
+ * or changed duration, though; refresh the consumers that snapshot a Trip on
+ * activation and rebuild the preload target against the new frame sequence.
+ */
+export function reconcileActiveTripAfterRegroup(): void {
+    if (!state.active) return;
+    const trip = state.trips[state.active.trip];
+    if (!trip) return;
+
+    dom.playerBar.total.textContent = formatTime(trip.timeline.contentDurationSec);
+    rebuildChartFromTrip(trip);
+    refreshMap(trip);
+    syncTopPanel();
+    resyncMetricsForTrip();
+    updatePlayerProgressUi();
+
+    const masterChannel = effectiveMasterChannel();
+    clearPreloadSlot(masterChannel);
+    schedulePreloadNext();
+}
+
+/**
  * Adapter: capture wants (tripStartUtcSec, tripCurrentSec); the playback core
  * exports getTripCurrentTime() and holds the trip list. Encapsulated here so
  * call sites in player.ts (hotkey, button click, etc.) read as one line.
@@ -1650,7 +1676,7 @@ function chronologicalNextTripIndex(curTripIdx: number): number {
     let bestStart = Number.POSITIVE_INFINITY;
     // Order by (startUtc, index): a trip with the SAME startUtc but a higher index
     // still counts as "after", so two cameras sharing an identical startUtc
-    // (fingerprint-partitioned trips, or filename-only lazy dates) are reachable
+    // (fingerprint-partitioned trips or provisional filename dates) are reachable
     // instead of being skipped by a strict > comparison.
     state.trips.forEach((other, i) => {
         if (i === curTripIdx) return;

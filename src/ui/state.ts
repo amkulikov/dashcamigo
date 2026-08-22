@@ -199,29 +199,23 @@ export interface AppState {
     // during export, otherwise the worker stalls waiting for FSA-write acks
     // (bridge is sequential, see src/ui/writable-bridge.ts).
     transcodeInProgress: boolean;
-    // === Heavy embedded-GPS lazy state ===
-    // After ingest, if the user declined bulk heavy embedded-GPS loading, the
-    // files land here. Key is vendorFileKey, value
+    // === Deferred embedded-GPS state ===
+    // Files whose telemetry needs an expensive full scan land here until their
+    // trip is opened. Key is vendorFileKey; value
     // is a ClassifiedFile (from the dispatcher - carries role + sidecar binding;
     // the video fingerprint is computed on demand via cameraFingerprint(file)).
     // The source/path/metadata key (not bare basename) keeps two same-named files -
     // e.g. FILE0001.MP4 reused across two SD cards in one/consecutive drops -
-    // from aliasing: a basename key would resolve drop-2's trip click to drop-1's
-    // deferred bytes. On trip click the lazy parser extracts the trip's files
-    // from this Map, parses them, and removes them.
+    // from aliasing. A trip-open scan removes completed files from this map.
     pendingHeavyEmbeddedGps: Map<string, ClassifiedFile>;
-    // Files for which lazy embedded-GPS parsing is currently in flight. Used
-    // by the sidebar to show a spinner on the trip card. Key is vendorFileKey
+    // Files whose embedded GPS is currently being parsed, whether by the
+    // progressive light pass or a deferred heavy scan. Key is vendorFileKey
     // (same file-identity key as pendingHeavyEmbeddedGps, so the sidebar's
     // per-card lookup never confuses two same-basename files).
-    inflightHeavyEmbeddedGps: Set<string>;
-    // Trip indices whose filename-first hydration (moov/codec/GPS read) is in
-    // flight right now (foreground open or background fill). The sidebar reads
-    // this to animate the spinner on the actively-loading card. Maintained by
-    // lazy-hydrate ensureHydrateSession; valid only between drops (cleared on
-    // cancelLazyHydration). Indices are stable during a fill - the list only
-    // regroups at the final sweep, by which point this set is empty.
-    hydratingTrips: Set<number>;
+    inflightEmbeddedGps: Map<string, number>;
+    // Trip indices whose mandatory metadata read is in flight. Indices stay
+    // stable until the closing regroup and are cleared on cancellation.
+    readingTrips: Set<number>;
     // === Per-channel MSE backends (see src/per-file-mse.ts) ===
     // Active per-file MSE backend per channel. Created when the current file
     // has cand.needsHevcRemux=true (BlackVue ELITE 9 / Vantrue N2X); disposed
@@ -477,7 +471,7 @@ export const state: AppState = {
     lastIngestFiles: null,
     transcodeInProgress: false,
     pendingHeavyEmbeddedGps: new Map(),
-    inflightHeavyEmbeddedGps: new Set(),
-    hydratingTrips: new Set(),
+    inflightEmbeddedGps: new Map(),
+    readingTrips: new Set(),
     channelBackends: {},
 };

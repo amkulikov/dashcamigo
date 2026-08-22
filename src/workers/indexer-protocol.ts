@@ -114,9 +114,8 @@ export interface IndexerRepair {
 export interface IndexRequestData {
     /**
      * Batch identifier - echoed back in every progress notification so the
-     * main-side shim can route results to the right batch when more than one
-     * is in flight at the same time (today: ingest only; future: a parallel
-     * lazy re-index could collide otherwise).
+     * main-side facade can route results when background and foreground
+     * recording reads overlap.
      */
     batchId: string;
     /** Files to index. Order is preserved in progress notifications. */

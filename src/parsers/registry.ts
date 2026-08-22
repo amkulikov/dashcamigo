@@ -177,7 +177,7 @@ export interface DispatchedEmbeddedGpsResult {
     skipped: SkippedLine[];
     errors: Array<{ file: string; extractor: string; message: string }>;
     /**
-     * vendorFileKey -> winning extractor id. Used by ingest.ts/lazy to stash
+     * vendorFileKey -> winning extractor id. Used by ingest to stash
      * appliedExtractors into diagnostics; UI does not look at this.
      */
     winningExtractorByFileKey: Map<string, string>;
@@ -223,7 +223,7 @@ type EmbeddedGpsExtractionMode = "all" | "light-only";
  *    Cost ~30 MB IO per file - safe to auto-parse without user prompt.
  *  - heavy: Novatek streaming with no seed offsets - the predicted-offset
  *    jump scan cannot bootstrap, only the linear 500 MB-1 GB fallback
- *    works. Deferred to lazy on-trip-click.
+ *    works. Deferred until the trip is opened.
  *  - none: no GPS markers detected.
  *
  * Decision is made AFTER selecting an extractor - classifyEmbeddedGpsKind is
@@ -287,7 +287,7 @@ const EMBEDDED_GPS_LIGHT_SIGNALS: readonly EmbeddedGpsLightSignal[] = [
     { exclusive: false, matches: (index) => index.tracks.some((track) => track.handlerType === "meta") },
 ];
 
-/** Single source of truth for both cost classification and lazy-probe policy. */
+/** Single source of truth for cost classification and conditional marker probes. */
 function inspectEmbeddedGps(index: Mp4Index): EmbeddedGpsInspection {
     let hasLightSignal = false;
     for (const signal of EMBEDDED_GPS_LIGHT_SIGNALS) {
@@ -398,7 +398,7 @@ function buildWorkItems(videos: ClassifiedFile[]): WorkItem[] {
  *  3. cloneAcrossGroup (Juscar): for a group we parse one file, records are
  *     cloned onto the rest with mp4Filename rewritten.
  *  4. mode="light-only" defers files classified as "heavy" (Novatek streaming
- *     with no jump-scan seeds) to heavyFiles for lazy on-trip-click parsing.
+ *     with no jump-scan seeds) to heavyFiles for a deferred full scan.
  *     "mid" files (jump-scan-able streaming, ~30 MB IO/file) still parse here.
  */
 export async function dispatchParseVideoEmbeddedGps(
@@ -444,7 +444,7 @@ export async function dispatchParseVideoEmbeddedGps(
     // walks the extractors. Returns the winning ParseResult, "heavy-deferred"
     // when a heavy file is skipped under light-only, or null when no extractor
     // claims the file. Split out from tryParseOne so the no-winner probe retry
-    // can re-run it on the same index after a lazy probe.
+    // can re-run it on the same index after an escalated marker probe.
     const classifyAndWalk = async (vf: VendorFile, index: Mp4Index): Promise<ParseResult | "heavy-deferred" | null> => {
         let kind = classifyEmbeddedGpsKind(index);
         if (kind === "none" && needsGpsProbeEscalation(vf.file.name)) {
@@ -460,9 +460,8 @@ export async function dispatchParseVideoEmbeddedGps(
             // files. The premise is bitrate arithmetic, not an observed
             // failing sample; ExifTool's equivalent scan cap is 20e6 bytes
             // (QuickTimeStream.pl ScanMediaData, sub at :3681, cap at :3715).
-            // Known inefficiency, accepted: a file that escalates to "heavy"
-            // here re-pays this 16 MB probe on the lazy on-trip-click
-            // re-parse, because each pass builds a fresh Mp4Index.
+            // A deferred full scan may repeat this bounded 16 MB probe when it
+            // rebuilds the index; that cost is small next to its 500 MB-1 GB scan.
             await probeMarkers(vf.file, index, MAX_PROBE_BYTES);
             kind = classifyEmbeddedGpsKind(index);
         }

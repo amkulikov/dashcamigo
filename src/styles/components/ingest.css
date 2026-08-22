@@ -4,13 +4,13 @@
    A thin 2px strip along the top of the viewport. The main "not hung"
    signal while parsing a 200+ file folder. Does not take layout space
    (position: fixed, z-index above the header and the ingest overlay).
-   Three states via data-state.
+   Two states via data-state: hidden and indeterminate.
 
    z-index stack around ingest (tokens in tokens.css): --dc-z-ingest (overlay) <
    the strip (+10). Base modals (--dc-z-modal..modal-top) are below the
    overlay - they do not open during parsing (the header is under the
    overlay, buttons are unavailable). Exception - unsupported-modal and
-   lazy-gps-load-modal: they get an inline --dc-z-ingest-modal in
+   recording-load-modal: they get an inline --dc-z-ingest-modal in
    index.html, since they show up during/after ingest and must be ABOVE
    the overlay.
    ========================================================================= */
@@ -30,24 +30,17 @@
     transition: opacity var(--dc-dur-base) var(--dc-ease);
     overflow: hidden;
 }
-.ingest-progress-bar[data-state="indeterminate"],
-.ingest-progress-bar[data-state="determinate"] {
+.ingest-progress-bar[data-state="indeterminate"] {
     opacity: 1;
 }
 .ingest-progress-bar-fill {
     height: 100%;
-    width: 0;
+    width: 30%;
     background: var(--accent);
-    transition: width var(--dc-dur-slow) var(--dc-ease);
-}
-.ingest-progress-bar[data-state="determinate"] .ingest-progress-bar-fill {
-    /* width is set inline via JS: setIngestProgress({done, total}). */
 }
 /* Indeterminate: the slider bounces back and forth, same as in ingest-overlay below. */
 .ingest-progress-bar[data-state="indeterminate"] .ingest-progress-bar-fill {
-    width: 30%;
     animation: ingest-progress-indef 1.4s linear infinite;
-    transition: none;
 }
 @keyframes ingest-progress-indef {
     0% {
@@ -140,16 +133,6 @@
        actual line box height. */
     min-height: calc(1em * var(--dc-leading-snug));
     line-height: var(--dc-leading-snug);
-}
-
-.ingest-overlay-hint {
-    font-size: var(--dc-text-xs);
-    color: var(--fg-mute);
-    max-width: 34ch;
-    margin: 0 auto var(--dc-space-3);
-}
-.ingest-overlay-hint[hidden] {
-    display: none;
 }
 
 .ingest-overlay-queue {

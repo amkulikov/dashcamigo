@@ -11,7 +11,7 @@ export interface ExtractRequestData {
     /**
      * Dispatch correlation token - echoed in every progress notification so the
      * shim routes it to exactly one dispatch when several are in flight (bulk
-     * ingest fans into multiple concurrent batches; a lazy-extract can overlap).
+     * ingest fans into multiple concurrent batches and a deferred scan can overlap).
      */
     token: string;
     classified: ClassifiedFile[];

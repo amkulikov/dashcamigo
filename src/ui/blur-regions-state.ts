@@ -73,9 +73,9 @@ export function setDroppedRegionPassCanceller(fn: (regionId: string) => void): v
 
 /**
  * Carries blur regions from replaced Trip objects onto their rebuilt
- * successors. Trip objects are rebuilt in-session by every regroup
- * (applyRegroup, the settings-modal gap change) and by the lazy embedded-GPS
- * refresh - without this the user's marking silently vanishes on those paths.
+ * successors. Trip objects are rebuilt through the shared regroup boundary and
+ * by incremental aggregate refreshes; without this the user's marking silently
+ * vanishes on those paths.
  * Matching mirrors carryOverTripPreviews: the first candidate's File identity
  * names a trip across a rebuild. Regions transfer ONLY when the successor has
  * the exact same file set: same files = identical timeline = keyframe times

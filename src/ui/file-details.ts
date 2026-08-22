@@ -140,6 +140,13 @@ function rowsForCandidate(candidate: VideoCandidate): DetailRow[] {
     const folder = folderOf(candidate.relativePath);
     if (folder) rows.push({ labelKey: "fileDetails.path", value: escapeHtml(folder), mono: true });
 
+    // Until the mandatory read settles, only the path and byte size are facts.
+    // Estimated duration would also fabricate bitrate, clock source and no-GPS.
+    if (candidate.metadataReady === false) {
+        rows.push({ labelKey: "fileDetails.size", value: formatBytes(candidate.file.size), mono: true });
+        return rows;
+    }
+
     if (candidate.width && candidate.height) {
         let res = `${candidate.width}×${candidate.height}`;
         // Rotation belongs with the frame geometry; only when the display matrix
@@ -169,8 +176,8 @@ function rowsForCandidate(candidate: VideoCandidate): DetailRow[] {
         if (candidate.audio.channels > 0) parts.push(`${candidate.audio.channels}ch`);
         if (candidate.audio.sampleRate > 0) parts.push(formatSampleRate(candidate.audio.sampleRate));
         rows.push({ labelKey: "fileDetails.audio", value: parts.length ? parts.join(" · ") : "—", mono: true });
-    } else if (candidate.hydrated !== false) {
-        // hydrated (or eager) with no audio track - state it. A still-provisional
+    } else {
+        // Ready metadata with no audio track is definitive. A still-provisional
         // clip has not been read yet, so we say nothing rather than "no audio".
         rows.push({ labelKey: "fileDetails.audio", value: t("fileDetails.none.audio"), mono: false });
     }

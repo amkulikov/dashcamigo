@@ -43,8 +43,7 @@ if (vendors.length === 0) {
 
 for (const vendor of vendors) {
     test(`trip activation: ${vendor.name}`, async ({ browser }, testInfo) => {
-        // One heavy ingest in setup (not per-replay) - smaller multiplier
-        // than cold-ingest. See cold-ingest.spec.ts for the rationale.
+        // One progressive ingest in setup (not per-replay).
         // ingestBudgetMs bounds the ingest-done wait below; the test timeout
         // adds headroom for the activation replays (each capped at 10 s plus
         // CDP metric reads) on top of it.
@@ -59,8 +58,8 @@ for (const vendor of vendors) {
             await setupPage(page);
 
             // One ingest for the whole test. Not measured, but bounded by the
-            // vendor-scaled budget - a fixed timeout would spuriously fail
-            // heavy vendors (Juscar 2.2 GB needs minutes for its streaming scan).
+            // vendor-scaled budget - a fixed timeout would spuriously fail on
+            // large cards or slow CI storage.
             await deliverFiles(page, vendor.absPath);
             await page.waitForFunction(
                 () => {

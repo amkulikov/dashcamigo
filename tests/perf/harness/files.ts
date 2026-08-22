@@ -28,47 +28,9 @@ export async function deliverFiles(page: Page, vendorAbsPath: string): Promise<v
     await input.setInputFiles(vendorAbsPath);
 }
 
-/**
- * Init script: auto-accepts the heavy-embedded-GPS prompt. ingest.ts shows
- * askEmbeddedGpsPrompt() for Novatek-class vendors (SilverStone, Juscar,
- * BlackVue ELITE 9, etc) where embedded-GPS extraction requires a streaming
- * scan of the full file. In a perf test no one answers - the ingest hangs
- * forever waiting on the dialog. Auto-clicking 'Yes' makes us actually
- * measure the heavy extraction (stageMs.embeddedGpsHeavy in the report);
- * auto-clicking 'No' would skip it and give misleading numbers (vendor
- * would look free, but real users would either see the prompt or suffer
- * the cost later).
- *
- * addInitScript runs BEFORE document.documentElement exists - the DOM
- * tree isn't built yet. Defer install to DOMContentLoaded; observe the
- * modal element directly once it's parsed.
- */
+/** Initializes the browser-side measurement bag before application code runs. */
 export const HARNESS_INIT_SCRIPT = `
 (() => {
     window.__dashcamigoPerf ||= {};
-    const installAutoYes = () => {
-        const modal = document.getElementById('embedded-gps-prompt-modal');
-        const yesBtn = document.getElementById('embedded-gps-prompt-yes');
-        if (!modal || !yesBtn) return false;
-        const tryClick = () => {
-            if (!modal.hidden) yesBtn.click();
-        };
-        tryClick();  // in case it was already visible
-        const obs = new MutationObserver(tryClick);
-        obs.observe(modal, { attributes: true, attributeFilter: ['hidden'] });
-        return true;
-    };
-    const start = () => {
-        if (installAutoYes()) return;
-        // Modal not in DOM yet - watch for it. document.body is guaranteed
-        // here (we ran after DOMContentLoaded).
-        const mo = new MutationObserver(() => { if (installAutoYes()) mo.disconnect(); });
-        mo.observe(document.body, { childList: true, subtree: true });
-    };
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', start, { once: true });
-    } else {
-        start();
-    }
 })();
 `;

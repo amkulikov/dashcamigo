@@ -863,7 +863,7 @@ export function unionStringArrays(a: string[], b: string[]): string[] {
 /**
  * Merges a freshly parsed batch of GPS records into an existing ParsedLog, or
  * builds the first one when `existing` is null. Centralizes the merge every
- * ingest stage did by hand (logs, sidecars, embedded, lazy-embedded): dedupe
+ * ingest source uses (logs, sidecars and embedded tracks): dedupe
  * the combined records, union the applied-extractor labels, and concatenate
  * skipped-line diagnostics. Callers without extractor labels or skipped lines
  * (sidecars) pass empty arrays.
@@ -880,9 +880,8 @@ export function mergeIntoGpsLog(
     // filename otherwise), so concrete files never collide. Dedup is effectively
     // per basename bucket, with ownership isolation inside it. That lets
     // us re-dedup/sort/freeze ONLY the byFilename buckets this batch touches and
-    // reuse every untouched bucket by reference. The old path re-deduped and
-    // re-sorted the WHOLE accumulated log on every call (O(total)); on the lazy
-    // path that runs once per trip, i.e. O(T^2 * r) over a background fill.
+    // reuse every untouched bucket by reference. This keeps each progressive
+    // batch proportional to the files it changed instead of the full log.
     const batchByFile = new Map<string, GpsRecord[]>();
     for (const rec of batch.records) {
         let arr = batchByFile.get(rec.mp4Filename);
@@ -916,7 +915,7 @@ export function mergeIntoGpsLog(
 
     // Flat records[] view. Order is not part of the contract (consumers read it
     // by length or through byFilename), so concatenating the buckets is
-    // equivalent to the old global dedup order and keeps record identity shared
+    // stable for consumers and keeps record identity shared
     // with the buckets - mergeAccelSamples mutates these same objects in place.
     const records: GpsRecord[] = [];
     const byVideoKey = new Map<string, GpsRecord[]>();

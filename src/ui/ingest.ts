@@ -1,24 +1,19 @@
-// Main processing pipeline for an SD card folder or drag-and-drop drop:
-// classify → parse logs/sidecars → indexAllMp4Files → embedded GPS →
-// canPlay check → recomputeAllStartUtc → groupTrips → renderTrips.
+// Entry point for an SD card folder or drag-and-drop batch. It discovers files,
+// merges external data and hands recording candidates to the progressive reader.
 //
 // Supports cancellation via AbortController (state.ingestController).
 // On a second drop during an active ingest, the set is queued in state.ingestQueue
 // and started after the current ingest's finally{}.
 
 import { t } from "../i18n/index.js";
-import { attachRecordsToCandidates, buildVideoAssociationIndex, recordsForVideo } from "../gps-association.js";
+import { buildVideoAssociationIndex, recordsForVideo } from "../gps-association.js";
 import { dropDuplicateFiles } from "../ingest-dedup.js";
 import { ignoredRootSegments, isIgnoredPath } from "../ingest-filter.js";
-import { indexAllMp4Files } from "../indexer.js";
-import { partitionByIndexCache, registerCandidateRepair, scheduleIndexCacheWrite } from "./ingest-cache.js";
-import { fileIdentityOf } from "../persist/identity.js";
+import { partitionByIndexCache } from "./ingest-cache.js";
 import { createLogger } from "../log.js";
-import { captureSentryException, captureSentryMessage } from "../sentry.js";
-import { emitLifecycle, markStage } from "../perf.js";
+import { captureSentryException } from "../sentry.js";
+import { markStage } from "../perf.js";
 import { cloneRecordsAcrossChannels, firstSyncedRecord, mergeIntoGpsLog, rebindOrphanLogRecords } from "../parser.js";
-import { combineAccelSources } from "../parsers/registry-light.js";
-import type { DispatchedEmbeddedGpsResult } from "../parsers/registry.js";
 import {
     classifyFilesViaPool as dispatchClassifyFiles,
     dispatchParseAccelSidecarsViaPool as dispatchParseAccelSidecars,
@@ -28,72 +23,31 @@ import {
 import type { VendorFile } from "../parsers/types.js";
 import { cameraFingerprint } from "../parsers/camera-fingerprint.js";
 import { classifyFilenameTime } from "../parsers/filename/index.js";
-import { classifyGpsSource, shouldTryEmbeddedGps } from "../parsers/gps-source-hints.js";
-import { planEmbeddedGpsQueue } from "./embedded-gps-queue.js";
-import {
-    dispatchParseVideoEmbeddedGpsViaWorker as dispatchParseVideoEmbeddedGps,
-    mergeEmbeddedResults,
-} from "./gps-extract-shim.js";
-import {
-    deriveStartUtc,
-    deriveWallDurationSec,
-    estimatePreciseClockOffsetByFingerprint,
-    estimateTzByFingerprint,
-    rederiveStartUtcForCandidates,
-    resolvePreciseClockOffsetForFile,
-    tripAllCandidates,
-} from "../trips.js";
+import { estimatePreciseClockOffsetByFingerprint, estimateTzByFingerprint, tripAllCandidates } from "../trips.js";
 import type { TzSample, VideoCandidate } from "../trips.js";
-import { isMatroskaName, isTransportStreamName } from "../video-format-names.js";
 
 import { registerIngestSource } from "./folder-sources.js";
 import { mergeNotesFilesFromBatch } from "./annotations-sidecar.js";
-import { maybeRunIngestTour, maybeRunSourcesTour } from "./onboarding.js";
-import { maybeShowPostIngestToast } from "./pwa-install.js";
 import {
     hideIngestOverlay,
     hideIngestProgress,
-    setIngestCancelLabel,
-    setIngestFirstLoadHint,
-    setIngestProgress,
     setIngestStage,
+    showIngestProgress,
     showIngestOverlay,
     syncIngestQueueIndicator,
 } from "./ingest-overlay.js";
-import { renderTrips, updateTripPreview } from "./sidebar.js";
 import { type IngestOrigin, state } from "./state.js";
 import { notify } from "./notifications.js";
-import { schedulePopulateTripPreviews } from "./trip-preview.js";
-import { looksLikeRecordings } from "../report-structure.js";
-import { showNoRecordingsModal } from "./no-recordings-modal.js";
 import { countUnplayableByExtension, showUnsupportedFormatsModal } from "./unsupported-formats-modal.js";
-import { applyIndexRepair, checkCanPlay, filenameClassifierFields, vendorFileKey } from "./ingest-candidate.js";
-import {
-    cancelLazyHydration,
-    pickIngestScheduler,
-    registerRecomputeSweep,
-    resumeLazyHydrationIfPending,
-    runLazyHydration,
-} from "./lazy-hydrate.js";
-import { applyRegroup } from "./apply-regroup.js";
-import { cancelLazyEmbeddedGps, refreshTrip } from "./lazy-embedded-gps.js";
-import {
-    countByExtension,
-    countByField,
-    embeddedResultHasEffect,
-    mergeAccelIntoCandidates,
-    raceWithAbort,
-} from "./ingest-core.js";
+import { vendorFileKey } from "./ingest-candidate.js";
+import { cancelProgressiveIngest, resumeProgressiveIngest, startProgressiveIngest } from "./progressive-ingest.js";
+import { cancelDeferredGpsLoad } from "./deferred-gps.js";
+import { countByExtension, countByField } from "./ingest-core.js";
+import { reportParseErrors } from "./ingest-diagnostics.js";
 import { scopeIngestFiles } from "./ingest-source-key.js";
 
 const log = createLogger("ingest");
 
-/**
- * Awaits the given promise, but rejects with AbortError as soon as the signal
- * aborts. The promise's underlying work keeps running - this only releases the
- * awaiter so the ingest finally{} can hide the overlay without waiting on
- * background tasks (preview generation) that have their own signal.
- */
 /**
  * Resolves after the browser has painted at least once. Double requestAnimationFrame:
  * the first callback fires before a paint, the second after it. Lets a just-shown
@@ -151,7 +105,7 @@ export async function ingestFiles(vfiles: VendorFile[], origin: IngestOrigin | n
     state.ingestController = new AbortController();
     showIngestOverlay();
     setIngestStage(t("ingestOverlay.stage.classifying"));
-    setIngestProgress({ mode: "indeterminate" });
+    showIngestProgress();
     syncIngestQueueIndicator();
 
     let cancelled = false;
@@ -180,15 +134,10 @@ export async function ingestFiles(vfiles: VendorFile[], origin: IngestOrigin | n
         state.ingestController = null;
         state.ingestInProgress = false;
         hideIngestOverlay();
-        // UX-02: on success/error - smoothly advance to 100%; on cancel - instantly hide so the user does not think progress is still running.
-        hideIngestProgress(/*activeFinish=*/ !cancelled);
-        // Cancel/error paths: ingestFilesInternal tore down any prior lazy fill
-        // at entry (cancelLazyHydration) and then threw before reaching the
-        // eager tail's resume, so the previous drop's trips would stay
-        // provisional forever. Restart the fill for anything still pending.
-        // NOT on success: those paths already own their fill lifecycle, and a
-        // double-resume there would reset the analytics elapsed baseline (A2).
-        if (cancelled || failed) resumeLazyHydrationIfPending();
+        hideIngestProgress();
+        // An interrupted ingest may have carried pending trips from an earlier
+        // batch. Resume them here; successful runs already own their scheduler.
+        if (cancelled || failed) resumeProgressiveIngest();
     }
 
     // Start the next queued item after the current ingest fully finishes (ingestInProgress = false above,
@@ -209,13 +158,16 @@ async function ingestFilesInternal(
     signal: AbortSignal,
     origin: IngestOrigin | null,
 ): Promise<void> {
-    // Stop any background hydration still running from a previous drop before this
-    // one rebuilds state.trips - a stale fill would write onto the wrong trips.
-    cancelLazyHydration();
-    // On-click heavy GPS also owns trip indices. Abort it before regrouping;
-    // its finally block returns unfinished files to the identity-keyed pending
-    // map, which must survive because the old trips are carried into this ingest.
-    cancelLazyEmbeddedGps();
+    // Wall-clock origin for both list-ready and full-completion diagnostics.
+    // Start before the paint yield so the UX metric includes every delay the
+    // user experiences after committing the folder.
+    const ingestStart = performance.now();
+    // Stop progressive work before this drop can replace positional trip state;
+    // stale sessions must never write through indices owned by the next run.
+    cancelProgressiveIngest();
+    // Stop optional full-file GPS reads so a new drop gets storage priority.
+    // Unfinished files return to the identity-keyed pending map.
+    cancelDeferredGpsLoad();
     // Let the just-shown overlay paint before any O(n) main-thread pass. On a
     // clean all-video drop nothing below hits a real async barrier until MP4
     // indexing, so the path filter + dedup fingerprinting + classify + the
@@ -258,10 +210,8 @@ async function ingestFilesInternal(
             junkRoots: ignoredRootSegments(vfiles.map((vf) => vf.relativePath)),
         });
         notify({ severity: "warn", messageKey: "status.onlyHiddenFiles" });
-        // cancelLazyHydration at entry tore down any prior lazy fill; this path
-        // never reaches runLazyHydration, so restart it or the previous drop's
-        // trips stay provisional forever (A2).
-        resumeLazyHydrationIfPending();
+        // This early return still has to resume any carried pending recordings.
+        resumeProgressiveIngest();
         return;
     }
 
@@ -272,14 +222,13 @@ async function ingestFilesInternal(
     void mergeNotesFilesFromBatch(kept, origin?.folderId ?? "");
     vfiles = kept;
 
-    // Reset the bad-MP4 counter - it is per-ingest. Without resetting, repeated drops would keep growing
-    // "N files could not be indexed" even on perfectly valid batches (see formatIngestStatus).
+    // Read failures belong to this batch; a later clean drop must not inherit
+    // an earlier batch's recovery note.
     state.unindexed = [];
 
     // Per-ingest stage timings for the final "ingest done" log. Each heavy stage is wrapped via mark().
     // Rounded to 1 ms - sub-millisecond precision is noise here. Same mark() also calls markStage()
     // so each stage produces a performance.measure entry visible in DevTools and read by the perf-test harness.
-    const ingestStart = performance.now();
     // Baseline for the end-of-ingest "gps records skipped" summary: gpsLog
     // persists across ingests and mergeIntoGpsLog concatenates skipped[], so
     // without the snapshot the 2nd+ drop re-reports prior ingests' rows.
@@ -395,7 +344,7 @@ async function ingestFilesInternal(
     if (logsResult.errors.length > 0) {
         log.warn("gps log parse errors", { count: logsResult.errors.length, errors: logsResult.errors });
     }
-    reportParseErrorsToSentry("log", logsResult.errors);
+    reportParseErrors("log", logsResult.errors);
 
     if (signal.aborted) throw new DOMException("ingest aborted", "AbortError");
     setIngestStage(t("ingestOverlay.stage.parsingSidecars"));
@@ -416,7 +365,7 @@ async function ingestFilesInternal(
     if (sidecarResult.errors.length > 0) {
         log.warn("sidecar parse errors", { count: sidecarResult.errors.length, errors: sidecarResult.errors });
     }
-    reportParseErrorsToSentry("sidecar", sidecarResult.errors);
+    reportParseErrors("sidecar", sidecarResult.errors);
 
     // A shared sidecar (BlackVue `.gps`) classifies against one channel only;
     // clone its records onto the recording's other channels so every channel
@@ -436,7 +385,8 @@ async function ingestFilesInternal(
         }
     }
 
-    // Accel-only sidecars (BlackVue .3gf): accelerometer only, no GPS. Merged into GpsRecord via mergeAccelSamples after indexAllMp4Files.
+    // Accel-only sidecars (BlackVue .3gf): accelerometer only, no GPS. They are
+    // merged once recording clocks are ready.
     const accelSidecarResult = await mark("parseAccelSidecars", () =>
         dispatchParseAccelSidecars(classified, videoAssociation, signal),
     );
@@ -446,32 +396,12 @@ async function ingestFilesInternal(
             errors: accelSidecarResult.errors,
         });
     }
-    reportParseErrorsToSentry("accel", accelSidecarResult.errors);
+    reportParseErrors("accel", accelSidecarResult.errors);
 
     // Skip already-added video versions (repeated drop). vendorFileKey includes
     // source, relative path, size, and mtime, so overwrites and equal trees from
     // separate inputs remain distinct.
     const newVideos = videos.filter((c) => !state.addedKeys.has(vendorFileKey(c.file)));
-    if (newVideos.length === 0 && state.trips.length > 0) {
-        // Only the log changed - re-render existing trips so GPS attachment is updated.
-        rebuildTripsFromCurrentFiles();
-        const carriedCandidates = state.trips.flatMap(tripAllCandidates);
-        const accelMutations = state.gpsLog
-            ? mergeAccelIntoCandidates(state.gpsLog.records, accelSidecarResult.accelByFileKey, carriedCandidates)
-            : 0;
-        if (accelMutations > 0) {
-            for (let i = 0; i < state.trips.length; i++) refreshTrip(i);
-            log.info("merged late accel sidecar samples", { mutatedRecords: accelMutations });
-        }
-        renderTrips();
-        // This path bypasses runLazyHydration, so a previous lazy drop's fill
-        // (torn down at entry) must be restarted or its still-provisional trips
-        // never hydrate (A2).
-        resumeLazyHydrationIfPending();
-        // Nothing exceptional to report - no status line here; an empty
-        // "0 broken, 0 repaired" line would just be noise.
-        return;
-    }
 
     // Cross-session index cache: files whose (relativePath, size, mtime)
     // identity matches a stored entry at the current INDEX_CACHE_VERSION skip
@@ -479,11 +409,7 @@ async function ingestFilesInternal(
     // rebuilt from IndexedDB and only genuine misses go through indexing
     // below. Identity-keyed, so the FSA folder restore, a classic re-pick
     // (Firefox/Safari) and DnD all reuse the same entries.
-    const {
-        cachedCandidates,
-        misses: videosToIndex,
-        cacheAvailable,
-    } = await mark("cacheLookup", () =>
+    const { cachedCandidates, misses: videosToIndex } = await mark("cacheLookup", () =>
         partitionByIndexCache(
             newVideos,
             classified,
@@ -516,9 +442,8 @@ async function ingestFilesInternal(
             allCandidates.push(f);
         }
     }
-    // Cache hits join the pool up front: the TZ estimation below then sees
-    // their mvhd/records like any carried-over candidate, and the explicit
-    // applyPartial after its definition commits them to trips + addedKeys.
+    // Cache hits join the pool up front so clock estimation and the provisional
+    // list commit treat them exactly like carried-over ready candidates.
     allCandidates.push(...cachedCandidates);
 
     // Estimate camera TZ before indexing - needed for files without GPS where the filename is the only time source.
@@ -539,7 +464,8 @@ async function ingestFilesInternal(
             // record carries a ~1970 placeholder that would poison the TZ delta.
             const firstSynced = firstSyncedRecord(recs);
             if (firstSynced && !seen.has(cf.file.file)) {
-                // mvhd not yet read (this is before indexing). Final TZ re-estimation with mvhd pairs happens in recomputeAllStartUtc after indexAllMp4Files.
+                // mvhd is not available yet. The closing accuracy sweep repeats
+                // clock estimation after mandatory metadata is ready.
                 // durationSec unknown for the same reason - run chaining uses the
                 // fallback gap until the post-index sweep re-estimates.
                 tzSamples.push({
@@ -569,825 +495,28 @@ async function ingestFilesInternal(
     const tzByFingerprint = estimateTzByFingerprint(tzSamples, classifyFilenameTime);
     const preciseOffsetRuns = estimatePreciseClockOffsetByFingerprint(tzSamples, classifyFilenameTime);
 
-    // Filename-first path for slow random-access backends (Android SD-over-OTG):
-    // render the trip list from filenames now and hydrate each trip's bytes on
-    // open. The probe forces "eager" until LAZY_ENABLED flips after device
-    // validation, so this branch is dormant today (zero behavior change).
-    const ingestScheduler = await pickIngestScheduler(videosToIndex.map((cf) => cf.file));
-    if (ingestScheduler === "lazy") {
-        await runLazyHydration({
-            // Misses only - cache hits are already full candidates in the pool.
-            newVideos: videosToIndex,
-            allCandidates,
-            logExtractorByFileKey: logsResult.extractorByFileKey,
-            sidecarExtractorByFileKey: sidecarResult.extractorByFileKey,
-            // Accel-only sidecars (.3gf G-force) are merged into GpsRecords once a
-            // trip has a real startUtc - mirrors the eager tail (mergeAccelSamples).
-            accelByFileKey: accelSidecarResult.accelByFileKey,
-            videoAssociation,
-            // Log/sidecar parse errors are already known at the branch point (they
-            // are parsed before this) - report them instead of a hardcoded 0.
-            parseErrorsCount: logsResult.errors.length + sidecarResult.errors.length + accelSidecarResult.errors.length,
-            tzByFingerprint,
-            preciseOffsetRuns,
-            ingestStart,
-            signal,
-        });
-        // If the user cancelled inside the scheduler-probe window, runLazyHydration
-        // returned WITHOUT starting a fill (and without committing anything), while
-        // the previous drop's fill was already torn down at entry. Restart it so
-        // those trips do not stay provisional forever (A2/A3 edge). In the normal
-        // case the signal is not aborted and runLazyHydration owns its own fill.
-        if (signal.aborted) resumeLazyHydrationIfPending();
-        return;
-    }
-
-    // First-open reassurance: a big batch the cache had NOTHING for is the one
-    // wait that feels broken - say it is normal and that the cache makes the
-    // next open fast. Any hit at all means the user has seen a fast open (or
-    // is about to); an unavailable cache would make the promise a lie; a small
-    // batch is over before the line is worth reading.
-    const FIRST_LOAD_HINT_MIN_FILES = 30;
-    if (cacheAvailable && cachedCandidates.length === 0 && videosToIndex.length >= FIRST_LOAD_HINT_MIN_FILES) {
-        setIngestFirstLoadHint(true);
-    }
-
-    // Progressive indexing: add VideoCandidate to the pool on the fly and rebuild trips every PARTIAL_BATCH_SIZE files.
-    // The user sees trips appearing and can start watching before all indexing finishes (on 500 files this saves ~1 minute of perceived wait).
-    let indexFailed = 0;
-    let batchCount = 0;
-    const PARTIAL_BATCH_SIZE = 20;
-    // Wall-clock throttle for the progressive regroup. applyPartial is O(all
-    // candidates + all GPS records + full sidebar DOM), so on a large card the
-    // every-20-files cadence stalls the main thread and delays Cancel handling.
-    // Skip an intermediate pass that lands within PARTIAL_MIN_INTERVAL_MS of the
-    // previous one; the FINAL pass (done===total) always runs, and the
-    // unconditional recomputeAllStartUtc after indexing guarantees the end state
-    // is correct regardless of which intermediate passes were dropped (B1).
-    const PARTIAL_MIN_INTERVAL_MS = 700;
-    let lastPartialMs = 0;
-    // Container repairs are now detected inside the indexer worker (it already
-    // holds the moov bytes) and applied per-file in the index callback below,
-    // overlapped with the rest of indexing. These counters drive the post-ingest
-    // toasts + the "ingest done" summary; they used to be filled by two separate
-    // post-index stages that each re-read the moov on the main thread.
-    let repairedCount = 0; // broken hvcC fixed (HEVC firmware quirks)
-    let phantomRepairedCount = 0; // phantom no-data tracks neutralized
-
-    const applyPartial = () => {
-        // addedKeys commits HERE (the point where candidates actually reach
-        // state.trips via recomputeAllStartUtc), NOT in the per-file indexer
-        // callback. The re-drop filter consults addedKeys, so marking a file
-        // "added" before its commit point meant a cancel mid-batch stranded
-        // up to PARTIAL_BATCH_SIZE-1 indexed-but-uncommitted files - filtered
-        // out of every future re-drop until page reload. Set.add is
-        // idempotent; re-adding carried-over keys is free.
-        for (const c of allCandidates) {
-            state.addedKeys.add(vendorFileKey(c));
-        }
-        // Pull in records: the GPS log is already parsed, but new files may have had empty records if the log arrived later.
-        // recomputeAllStartUtc then estimates TZ from collected mvhd pairs and updates startUtc via deriveStartUtc.
-        if (state.gpsLog) {
-            attachRecordsToCandidates(state.gpsLog, allCandidates, videoAssociation);
-        }
-        recomputeAllStartUtc(allCandidates);
-        // No auto-select of the first trip - the user picks. Empty-state stays visible until state.active !== null.
-    };
-
-    // Commit cache hits immediately (trips + addedKeys in lock-step): the
-    // sidebar fills with restored trips before any byte is read; misses then
-    // stream in through the progressive applyPartial below.
-    if (cachedCandidates.length > 0) applyPartial();
-
-    // Freshly indexed candidates of THIS run - the input for the
-    // end-of-ingest cache write (cache hits are not rewritten). Repairs go to
-    // the session registry in ingest-cache, shared with the lazy write sites.
-    const indexedThisRun: VideoCandidate[] = [];
-
-    // indexAllMp4Files runs in a worker. MP4 path: single moov walk yields
-    // duration/codec/rotation/hvcC. TS path: mediabunny.computeDuration.
-    // We also request moov bytes (withMoovBytes: true) and forward them to
-    // gps-extract in batches as files are indexed (per-batch flush, see
-    // EMBEDDED_BATCH_SIZE below) - the gps-extract worker reuses them via
-    // its prebuiltMoovByPath path, eliminating the duplicate moov read
-    // on cold SD AND avoiding the heap spike that accumulating moov bytes
-    // for all 240 files would cause before transfer.
-    const newRawFiles = videosToIndex.map((c) => c.file.file);
-    const byFile = new WeakMap<File, (typeof videosToIndex)[number]>();
-    for (const cf of videosToIndex) byFile.set(cf.file.file, cf);
-
-    // Streaming embedded-GPS dispatch. Each batch of ~EMBEDDED_BATCH_SIZE
-    // freshly indexed files is shipped to gps-extract immediately, in
-    // parallel with the rest of the indexer. The transferable moov bytes
-    // leave main heap as soon as the batch postMessage fires. cloneAcrossGroup
-    // affinity (Juscar F/R/I) is preserved as long as all members of a group
-    // land in the same batch - with batch size 16 and indexer concurrency 4
-    // this holds for the common 2-4 member groups (members arrive close
-    // together because they are adjacent in newRawFiles).
-    const EMBEDDED_BATCH_SIZE = 16;
-    let pendingBatch: (typeof newVideos)[number][] = [];
-    let pendingBatchMoov: Map<string, Uint8Array> = new Map();
-    const embeddedBatchPromises: Promise<DispatchedEmbeddedGpsResult>[] = [];
-    const embeddedBatchFileKeys: string[][] = [];
-    // vendorFileKeys of files whose gps-extract batch rejected this run.
-    const crashedBatchFileKeys = new Set<string>();
-    let embeddedTotal = 0;
-    let embeddedDone = 0;
-    // While the indexer is still running, the overlay shows "Indexing X/Y".
-    // Per-batch progress increments embeddedDone silently in that window; only
-    // after the indexer finishes (and the tail batch is dispatched) does the
-    // overlay flip to "Embedded GPS X/Y" with the current cumulative counter.
-    // Without this, the label flickers between the two stages on every batch
-    // flush mid-indexing.
-    let indexingFinished = false;
-
-    const dispatchPendingBatch = (): void => {
-        if (pendingBatch.length === 0) return;
-        const batch = pendingBatch;
-        const batchMoov = pendingBatchMoov;
-        pendingBatch = [];
-        pendingBatchMoov = new Map();
-        const batchPromise = dispatchParseVideoEmbeddedGps(
-            batch,
-            (_done, _total, _file) => {
-                embeddedDone++;
-                if (!indexingFinished) return;
-                setIngestStage(
-                    t("ingestOverlay.stage.embeddedGps", {
-                        done: embeddedDone,
-                        total: embeddedTotal,
-                    }),
-                );
-                setIngestProgress({ done: embeddedDone, total: embeddedTotal });
-            },
-            /* concurrency */ 4,
-            signal,
-            "light-only",
-            batchMoov,
-        );
-        // These batches start running during indexMp4 but are only awaited
-        // (Promise.all) much later. If the user cancels mid-index, repair, or
-        // codec-check, ingestFilesInternal throws AbortError before that await
-        // is reached - orphaning these promises, whose own AbortError would then
-        // surface as an unhandledrejection (ring-buffer noise + a false
-        // app_uncaught_error in analytics). A synchronous no-op rejection
-        // handler marks them handled; the Promise.all join still observes the
-        // real result/rejection.
-        batchPromise.catch(() => {});
-        embeddedBatchPromises.push(batchPromise);
-        // Index-aligned with embeddedBatchPromises: when a batch rejects, its
-        // files must be excluded from the index-cache write below - caching
-        // their empty records would freeze "no GPS" across sessions for a
-        // failure (worker OOM, bad read) that a plain retry may not repeat.
-        embeddedBatchFileKeys.push(batch.map((cf) => vendorFileKey(cf.file)));
-    };
-
-    if (signal.aborted) throw new DOMException("ingest aborted", "AbortError");
-    setIngestStage(t("ingestOverlay.stage.indexing", { done: 0, total: newRawFiles.length }));
-    // UX-02: indexing is the first stage with a known total - switch the progress bar to determinate mode. Embedded GPS loads below.
-    setIngestProgress({ done: 0, total: newRawFiles.length });
-    await mark("indexMp4", () =>
-        indexAllMp4Files(
-            newRawFiles,
-            (done, total, file, idx, moovBytes, repair) => {
-                setIngestStage(t("ingestOverlay.stage.indexing", { done, total }));
-                setIngestProgress({ done, total });
-
-                if (!idx) {
-                    indexFailed++;
-                    state.unindexed.push(file);
-                } else {
-                    const cf = byFile.get(file)!;
-                    // Apply container repair the indexer worker detected from the
-                    // moov bytes it already read (phantom no-data track / broken
-                    // hvcC). The patched moov is spliced back zero-copy on main;
-                    // the GPS-extract batch still uses the original cf.file (the
-                    // edits never touch GPS atoms/tracks). null = clean moov.
-                    const repairApplied = applyIndexRepair(file, idx.needsHevcRemux, repair);
-                    const candidateFile = repairApplied.file;
-                    const candidateNeedsHevcRemux = repairApplied.needsHevcRemux;
-                    if (repair) {
-                        if (repairApplied.phantomRepaired) phantomRepairedCount++;
-                        if (repairApplied.hvccRepaired) repairedCount++;
-                        // The cache entry re-applies this on restore - the
-                        // on-disk bytes stay broken forever.
-                        registerCandidateRepair(fileIdentityOf(cf.file.file, cf.file.relativePath), repair);
-                        log.info("applied container repair", {
-                            file: file.name,
-                            phantom: repair.phantomNeutralized,
-                            hvcc: repair.hvcc?.reason ?? null,
-                        });
-                    }
-                    // NOTE: addedKeys is deliberately NOT updated here - it
-                    // commits in applyPartial together with state.trips.
-                    const records = state.gpsLog ? recordsForVideo(state.gpsLog, cf.file, videoAssociation) : [];
-                    // Whether to extract embedded GPS is decided by the file's
-                    // source hint alone (planEmbeddedGpsQueue), NOT by whether
-                    // we have moov bytes to cache. MPEG-TS has no moov, so
-                    // moovBytes is undefined for it; gating the queue on
-                    // moovBytes silently dropped every TS file (Juscar) from
-                    // extraction, so their embedded GPS never loaded. The moov
-                    // cache is a pure read-saving optimization on top.
-                    const gpsPlan = planEmbeddedGpsQueue(cf.file, records.length > 0, moovBytes != null);
-                    if (gpsPlan.queue) {
-                        pendingBatch.push(cf);
-                        // Cache moov bytes only when present (MP4/MOV). Key by
-                        // vendorFileKey, not basename: two files
-                        // with the same basename in different folders
-                        // (channel-in-folder cameras, 70mai .s_* proxies before
-                        // they are filtered) would otherwise share one moov
-                        // buffer - and the buffer is transferred to the worker,
-                        // so the second send hits a detached ArrayBuffer.
-                        // Holding moov bytes (~100KB-2MB each) only for files
-                        // that will be extracted keeps heap bounded on 240-file
-                        // mobile drops; unkept bytes are detached-transferable
-                        // and GC immediately.
-                        if (gpsPlan.cacheMoov && moovBytes) {
-                            pendingBatchMoov.set(vendorFileKey(cf.file), moovBytes);
-                        }
-                        embeddedTotal++;
-                        if (pendingBatch.length >= EMBEDDED_BATCH_SIZE) {
-                            dispatchPendingBatch();
-                        }
-                    }
-                    const fingerprint = cameraFingerprint(cf.file);
-                    // Hoisted: isTimelapse feeds the wall-span/anchor derivation
-                    // below AND the candidate literal.
-                    const classifierFields = filenameClassifierFields(cf.file);
-                    const filenameLocal = classifyFilenameTime(cf.file);
-                    const wallDurationSec = deriveWallDurationSec({
-                        isTimelapse: classifierFields.isTimelapse,
-                        durationSec: idx.durationSec,
-                        createdUtc: idx.createdUtc,
-                        records,
-                        filenameNaiveSec: filenameLocal !== null ? filenameLocal.getTime() / 1000 : null,
-                    });
-                    // Initial build runs before embedded GPS extraction returns,
-                    // so no hint yet. applyEmbeddedResultToState fills the field
-                    // later and recomputeAllStartUtc re-derives with the hint.
-                    const { startUtc, source } = deriveStartUtc({
-                        file: cf.file,
-                        fingerprint,
-                        createdUtc: idx.createdUtc,
-                        durationSec: idx.durationSec,
-                        records,
-                        fingerprintTz: tzByFingerprint.get(fingerprint) ?? null,
-                        parseFilenameLocalTime: classifyFilenameTime,
-                        preciseFilenameOffsetSec: resolvePreciseClockOffsetForFile(
-                            preciseOffsetRuns,
-                            fingerprint,
-                            cf.file,
-                            classifyFilenameTime,
-                        ),
-                        embeddedStartUtcHint: null,
-                        isTimelapse: classifierFields.isTimelapse,
-                        wallDurationSec,
-                    });
-                    // Carry forward attribution from the log/sidecar stages so
-                    // diagnostics show e.g. csv-70mai for files whose GPS came
-                    // from the sidecar. Embedded extraction adds its own
-                    // attribution later via applyEmbeddedResultToState.
-                    const initialApplied: string[] = [];
-                    const fileKey = vendorFileKey(cf.file);
-                    const fromLog = logsResult.extractorByFileKey.get(fileKey);
-                    if (fromLog) initialApplied.push(fromLog);
-                    const fromSidecar = sidecarResult.extractorByFileKey.get(fileKey);
-                    if (fromSidecar) initialApplied.push(fromSidecar);
-                    const builtCandidate: VideoCandidate = {
-                        // Patched file when the worker repaired this file's moov,
-                        // else the original. Playback/preview/export use this one.
-                        file: candidateFile,
-                        relativePath: cf.file.relativePath,
-                        sourceKey: cf.file.sourceKey,
-                        fingerprint,
-                        appliedExtractors: initialApplied,
-                        // Filename-derived fields - shared with the provisional
-                        // builder so the two paths cannot drift.
-                        ...classifierFields,
-                        startUtc,
-                        durationSec: idx.durationSec,
-                        wallDurationSec,
-                        // Computed at regroup time (applyChannelDriftLead), never at construction.
-                        driftLeadSec: null,
-                        startSource: source,
-                        // Pre-index estimate (no mvhd yet); the unconditional
-                        // recomputeAllStartUtc sweep refreshes it after indexing.
-                        cameraTzSec: tzByFingerprint.get(fingerprint)?.filenameTzSec ?? null,
-                        records,
-                        createdUtc: idx.createdUtc,
-                        codec: idx.codec,
-                        rotation: idx.rotation,
-                        width: idx.width,
-                        height: idx.height,
-                        fps: idx.fps,
-                        audio: idx.audio,
-                        // Optimistically true until the canPlay-batch check below. If codec=null it stays true (let <video> try).
-                        canPlay: true,
-                        codecParam: idx.codecParam,
-                        videoCodecString: idx.videoCodecString,
-                        // hvcC repair flips this to false (native path) when it
-                        // rebuilt a previously-broken descriptor.
-                        needsHevcRemux: candidateNeedsHevcRemux,
-                        isTransportStream: isTransportStreamName(file.name),
-                        isMatroska: isMatroskaName(file.name),
-                        audioNeedsTranscode: idx.audioNeedsTranscode,
-                        embeddedStartUtcHint: null,
-                        // Filled by applyEmbeddedResultToState when the
-                        // extractor measured a cold-start clock jump.
-                        localClockOffsetHintSec: null,
-                    };
-                    allCandidates.push(builtCandidate);
-                    indexedThisRun.push(builtCandidate);
-                }
-
-                batchCount++;
-                const finalBatch = done === total;
-                if (batchCount >= PARTIAL_BATCH_SIZE || finalBatch) {
-                    batchCount = 0;
-                    // Reset the batch counter even when the time throttle skips
-                    // this pass, so the next attempt is another PARTIAL_BATCH_SIZE
-                    // files out. Skipping applyPartial wholesale keeps addedKeys
-                    // and state.trips in lock-step (both defer together), so the
-                    // cancel-mid-batch invariant the commit-timing comment guards
-                    // still holds.
-                    const now = performance.now();
-                    if (finalBatch || now - lastPartialMs >= PARTIAL_MIN_INTERVAL_MS) {
-                        lastPartialMs = now;
-                        applyPartial();
-                    }
-                }
-            },
-            /* concurrency */ 4,
-            signal,
-            { withMoovBytes: true },
-        ),
-    );
-    // Tail flush: any files indexed in the trailing < EMBEDDED_BATCH_SIZE
-    // window go out as one final batch. This must happen before HVCC repair
-    // (so embedded GPS for the tail runs in parallel with repair) and before
-    // the join at the embedded-GPS stage.
-    dispatchPendingBatch();
-    // Flip the stage label gate. From here on, in-flight batch callbacks
-    // update the overlay; before this point they only increment counters.
-    indexingFinished = true;
-    if (embeddedTotal > 0) {
-        setIngestStage(t("ingestOverlay.stage.embeddedGps", { done: embeddedDone, total: embeddedTotal }));
-        setIngestProgress({ done: embeddedDone, total: embeddedTotal });
-    }
-
-    // TZ finalization via mvhd pairs: before indexing we only had filename-time (for NMEA sidecars that is nothing - filenames have no timestamp).
-    // Now we have mvhd.creation_time for all indexed files, so TZ estimation can be more accurate.
-    // See StartSource comments in trips.ts for why mvhd+TZ is preferred over GPS-first.
-    recomputeAllStartUtc(allCandidates);
-
-    // Start preview extraction now that indexing is done and trips are in
-    // their near-final shape. Earlier (during indexing) would have made
-    // preview workers contend with the SD reader; later (end of ingest)
-    // would have meant "Continue without GPS" cancels embedded GPS via
-    // AbortError -> the end-of-ingest schedule never fires -> placeholder
-    // cards on already-loaded videos. This spot survives that cancel path.
-    // applyEmbeddedResultToState may re-schedule below if embedded results
-    // shift trip boundaries so a split adds previewless trips - we keep
-    // the latest promise so the post-ingest await sits on the right session.
-    let lastPreviewPromise: Promise<void> = schedulePopulateTripPreviews(state.trips, updateTripPreview);
-
-    // Container repairs (broken hvcC, phantom no-data tracks) were already
-    // detected by the indexer worker from the moov bytes it read for indexing,
-    // and applied per-file in the index callback above (repairedCount /
-    // phantomRepairedCount were incremented there). This replaced two
-    // post-index stages that each re-read the moov via findMoovInFile on the
-    // main thread - 1-2 redundant moov reads per file on cold SD. The hvcC fix
-    // already flipped VideoCandidate.needsHevcRemux to false where it applied,
-    // so the canPlay check below sees the corrected playback path. See
-    // src/repair/moov-repair.ts + src/repair/{hvcc,phantom-track}.ts.
-
-    // canPlay check: query mediabunny canDecodeVideo for each distinct codec config
-    // from the new files (mediabunny memoizes per config - duplicates are free). We
-    // key on the full RFC 6381 string when present (videoCodecString), so HEVC
-    // Main10 / a too-high level the browser cannot decode is rejected; otherwise we
-    // fall back to the bare codec enum (mediabunny then assumes a generic, decodable
-    // Main profile). not-decodable -> canPlay=false on every file with that config;
-    // playFrame shows an overlay instead of a black <video>.
-    // canPlay (codec decodability) - extracted to checkCanPlay so the lazy
-    // hydration path runs the same probe over a single trip's candidates.
-    await mark("codecCheck", () => checkCanPlay(allCandidates));
-
-    // Embedded GPS from MP4 - two-stage scheme:
-    //   1) Always run the "light-only" stage: parse what is available from the first 16 MB already read into Mp4Index (BlackVue X-series free->gps).
-    //      Near-zero cost, no user prompt.
-    //   2) If heavy files remain (Novatek streaming / GoPro GPMF / Garmin PNDM / Thinkware subtitle-NMEA / LigoGPS),
-    //      show the prompt modal. "Yes" = bulk load under the same overlay; "No" = defer to state.pendingHeavyEmbeddedGps,
-    //      lazy on-trip-click loads the selected trip's files (see lazy-embedded-gps.ts).
-    //
-    // Dispatch already ran in parallel with indexAllMp4Files via
-    // dispatchPendingBatch above - moov bytes were shipped as soon as each
-    // EMBEDDED_BATCH_SIZE-sized batch filled, plus a tail flush right after
-    // indexing finished. embeddedBatchPromises now holds N in-flight
-    // dispatches; here we join them.
-    //
-    // The pre-flight skip-reason audit (sourceHints) happens inline in the
-    // indexer onProgress: planEmbeddedGpsQueue controls whether a file enters
-    // pendingBatch. Files that fail the gate are silently dropped here (any
-    // moov bytes they had are GC'd since the indexer-side ntf already detached
-    // them on transfer; only queued files held a reference past that point).
-    let heavyPending: DispatchedEmbeddedGpsResult["heavyFiles"] = [];
-    let embeddedResult: DispatchedEmbeddedGpsResult = {
-        appliedExtractors: [],
-        records: [],
-        skipped: [],
-        errors: [],
-        winningExtractorByFileKey: new Map(),
-        videoStartUtcHintByFileKey: new Map(),
-        localClockOffsetHintByFileKey: new Map(),
-        accelByFileKey: new Map(),
-        heavyFiles: [],
-    };
-    // Skip-reason audit: log the breakdown of why some videos did not
-    // contribute to embedded GPS. Kept for parity with the previous behavior
-    // (one log line per ingest for debugging GPS source-hint regressions).
-    const skipBySource = new Map<string, number>();
-    let skippedCount = 0;
-    for (const cf of newVideos) {
-        const existing = state.gpsLog ? recordsForVideo(state.gpsLog, cf.file, videoAssociation) : [];
-        const hasRecords = !!(existing && existing.length > 0);
-        if (shouldTryEmbeddedGps(cf.file, hasRecords)) continue;
-        const reason = hasRecords ? "already-has-records" : `source:${classifyGpsSource(cf.file)}`;
-        skipBySource.set(reason, (skipBySource.get(reason) ?? 0) + 1);
-        skippedCount++;
-    }
-    if (skippedCount > 0) {
-        log.info("skipping embedded GPS pre-flight", {
-            skipped: skippedCount,
-            total: newVideos.length,
-            byReason: Object.fromEntries(skipBySource),
-        });
-    }
-    if (embeddedBatchPromises.length > 0) {
-        if (signal.aborted) throw new DOMException("ingest aborted", "AbortError");
-        // Indexing already committed VideoCandidates progressively, so cancel
-        // here means "stop parsing GPS, keep loaded videos". Surface that as
-        // a friendlier label instead of the generic "Cancel".
-        setIngestCancelLabel(true);
-        try {
-            // Per-batch settle, NOT Promise.all: a worker crash (one
-            // pathological file OOMing the gps-extract worker) rejects only
-            // its own batch. Promise.all turned that into a whole-ingest
-            // failure, discarding every other batch's GPS even though the
-            // trips themselves loaded fine - violating the "one bad file must
-            // not abort ingest" invariant. AbortError still propagates: that
-            // is the user cancelling the stage, not a batch failing.
-            const settled = await mark("embeddedGps", () => Promise.allSettled(embeddedBatchPromises));
-            const fulfilled: DispatchedEmbeddedGpsResult[] = [];
-            const crashed: string[] = [];
-            for (const [batchIdx, s] of settled.entries()) {
-                if (s.status === "fulfilled") {
-                    fulfilled.push(s.value);
-                } else if (s.reason instanceof DOMException && s.reason.name === "AbortError") {
-                    throw s.reason;
-                } else {
-                    crashed.push(String(s.reason));
-                    for (const key of embeddedBatchFileKeys[batchIdx] ?? []) crashedBatchFileKeys.add(key);
-                }
-            }
-            embeddedResult = mergeEmbeddedResults(fulfilled);
-            if (crashed.length > 0) {
-                // Surfaced through the same channel as per-file parse errors
-                // (warn log + Sentry report below), so a crash class is still
-                // visible in diagnostics.
-                embeddedResult.errors.push(
-                    ...crashed.map((message) => ({ file: "<batch>", extractor: "gps-extract-worker", message })),
-                );
-            }
-        } finally {
-            setIngestCancelLabel(false);
-        }
-        heavyPending = embeddedResult.heavyFiles;
-        applyEmbeddedResultToState(embeddedResult, allCandidates);
-        if (embeddedResult.records.length > 0) {
-            // Embedded records caused a regroup (see applyEmbeddedResultToState);
-            // a trip may have split across TRIP_GAP and the new half has no
-            // preview. Re-schedule. Aborts the in-flight session - carryOver
-            // already moved existing previews onto the new Trip objects, so
-            // the only real work the new session does is the orphan halves.
-            lastPreviewPromise = schedulePopulateTripPreviews(state.trips, updateTripPreview);
-        }
-        if (embeddedResult.errors.length > 0) {
-            log.warn("embedded gps parse errors", {
-                count: embeddedResult.errors.length,
-                errors: embeddedResult.errors,
-            });
-            reportParseErrorsToSentry("embedded", embeddedResult.errors);
-        }
-    }
-
-    // Heavy files (Novatek streaming where the predicted-offset jump scan
-    // could not bootstrap - no seeds in the probe window) are deferred to
-    // lazy on-trip-click. No modal prompt: jump-scan-eligible "mid" files
-    // are already auto-parsed in the light-only stage above (~30 MB IO each),
-    // so what reaches here is exclusively the no-seeds edge case which is
-    // rare in practice.
-    if (heavyPending.length > 0) {
-        for (const cf of heavyPending) {
-            // vendorFileKey (source/path/metadata-qualified), not basename: the lazy on-trip-click
-            // reader keys by the same, so two same-named files across drops cannot alias.
-            state.pendingHeavyEmbeddedGps.set(vendorFileKey(cf.file), cf);
-        }
-        log.info("heavy embedded gps deferred to lazy on-trip-click", {
-            pending: heavyPending.length,
-        });
-    }
-
-    // Merge accel into existing GpsRecord by nearest unixSeconds - from the
-    // accel-only sidecars (.3gf) and from whatever the embedded extraction found
-    // inside the containers themselves.
-    // At this point all files have startUtc (recomputeAllStartUtc ran) and records (from gpsLog or embedded).
-    // Without startUtc, relative msSinceStart cannot be converted to absolute unix.
-    const accelByFileKey = combineAccelSources(accelSidecarResult.accelByFileKey, embeddedResult.accelByFileKey);
-    if (accelByFileKey.size > 0 && state.gpsLog) {
-        const mutated = mergeAccelIntoCandidates(state.gpsLog.records, accelByFileKey, allCandidates);
-        if (mutated > 0) {
-            // GpsRecords were mutated in-place; byFilename Map still points to the same objects as records[], so no rebuild is needed.
-            log.info("merged accel samples", {
-                mutatedRecords: mutated,
-                sidecarFiles: accelSidecarResult.accelByFileKey.size,
-                embeddedFiles: embeddedResult.accelByFileKey.size,
-            });
-            // Trips were finalized (and their events detected) before the accel
-            // arrived, so without this rebuild a .3gf camera shows no braking
-            // events at all on this path - the lazy path merges before its
-            // per-trip refresh and did surface them.
-            for (let i = 0; i < state.trips.length; i++) refreshTrip(i);
-            renderTrips();
-        }
-    }
-
-    // Surface exceptional outcomes as individual notification toasts so each
-    // one is acknowledged separately and stays in the bell drawer history.
-    // Silent on clean ingest - the trip list is the visible feedback.
-    if (indexFailed > 0) {
-        notify({ severity: "warn", messageKey: "status.badFilesSkipped", messageParams: { n: indexFailed } });
-    }
-    if (repairedCount > 0) {
-        notify({ severity: "info", messageKey: "status.hvccRepaired", messageParams: { n: repairedCount } });
-    }
-    if (phantomRepairedCount > 0) {
-        notify({ severity: "info", messageKey: "status.audioDamaged", messageParams: { n: phantomRepairedCount } });
-    }
-
-    // Nothing playable came out of the drop (all junk, all MP4s failed to
-    // index, or only sidecars with no video). Reaching here with zero trips
-    // means there were no pre-existing trips either (the re-render path above
-    // returns early when trips already exist), so without this toast the
-    // overlay just vanishes and the landing screen stays with no explanation.
-    // Skip when the unsupported-formats modal already explained the outcome
-    // (it covers the .avi/.wmv/.3gp/... unplayable-container case).
-    if (state.trips.length === 0 && unplayableByExt.size === 0) {
-        // "Dropped a card, nothing opened" - the clearest new-camera demand
-        // signal. Send only the extension histogram (pure format signal, no
-        // PII); NOT filenames or the fallback fingerprint (which can leak a
-        // user folder name).
-        captureSentryMessage("ingest produced no playable trips", {
-            level: "warning",
-            fingerprint: ["ingest_nothing_loaded"],
-            extra: { byExtension: countByExtension(vfiles), fileCount: vfiles.length },
-        });
-        if (looksLikeRecordings(vfiles)) {
-            // Recordings were present but nothing was recognised - almost always
-            // an unsupported camera. Offer the "we couldn't read this card" flow
-            // (routes into the feedback form) instead of a dead-end toast.
-            showNoRecordingsModal();
-        } else {
-            // No video-like files at all - the user dropped the wrong folder.
-            // A bare toast is the right amount of noise; no offer to "help add".
-            notify({ severity: "warn", messageKey: "status.nothingLoaded" });
-        }
-    }
-
-    // Keep the overlay up until previews are ready so the user does not see
-    // the sidebar in placeholder state right after the modal disappears.
-    // The preview worker pool runs independently of the ingest signal -
-    // raceWithAbort lets the user dismiss via Cancel without waiting for
-    // every preview to finish, while still letting the workers complete in
-    // the background and fill cards reactively via updateTripPreview.
-    setIngestStage(t("ingestOverlay.stage.previews"));
-    setIngestProgress({ mode: "indeterminate" });
-    await raceWithAbort(lastPreviewPromise, signal);
-
-    // Per-record skip summary. Parsers aggregate malformed GPS rows (bad
-    // hemisphere byte, out-of-range coords, NaN, ...) into gpsLog.skipped instead
-    // of logging per-iteration (hot path). Surface the aggregate once so a "half
-    // my track is missing / chart has holes" report shows how many rows were
-    // dropped and why. Log only - a few cold-start rows are normal; not a toast.
-    // Only THIS ingest's rows (delta vs the baseline snapshot taken at ingest
-    // start): gpsLog accumulates across ingests, and a cumulative total here
-    // misleads exactly the "half my track is missing" reports it exists for.
-    const skippedLines = (state.gpsLog?.skipped ?? []).slice(skippedLinesBaseline);
-    if (skippedLines.length > 0) {
-        const byReason = new Map<string, number>();
-        for (const s of skippedLines) byReason.set(s.reason, (byReason.get(s.reason) ?? 0) + 1);
-        log.warn("gps records skipped", {
-            total: skippedLines.length,
-            byReason: Object.fromEntries(byReason),
-        });
-    }
-
-    // Final info log: outcome + where time was spent. Source of truth for "why is ingest slow" / "how many trips" / "how many GPS records" in bug reports.
-    log.info("ingest done", {
-        durationMs: Math.round(performance.now() - ingestStart),
-        stageMs,
-        tripsCount: state.trips.length,
-        videosTotal: allCandidates.length,
-        videosNew: newVideos.length,
-        gpsRecordsTotal: state.gpsLog?.records.length ?? 0,
-        indexFailedCount: indexFailed,
-        repairedHvccCount: repairedCount,
-        repairedPhantomCount: phantomRepairedCount,
+    await startProgressiveIngest({
+        newVideos: videosToIndex,
+        allCandidates,
+        logExtractorByFileKey: logsResult.extractorByFileKey,
+        sidecarExtractorByFileKey: sidecarResult.extractorByFileKey,
+        accelByFileKey: accelSidecarResult.accelByFileKey,
+        videoAssociation,
         errorCounts: {
             logs: logsResult.errors.length,
             sidecars: sidecarResult.errors.length,
             accelSidecars: accelSidecarResult.errors.length,
         },
+        stageMs,
+        skippedLinesBaseline,
+        tzByFingerprint,
+        preciseOffsetRuns,
+        ingestStart,
+        sourceFiles: vfiles,
+        videosNewCount: newVideos.length,
+        hasUnsupportedFormats: unplayableByExt.size > 0,
+        signal,
+        schedulingFiles: videosToIndex.map((cf) => cf.file),
     });
-
-    // Persist this run's indexing results for the next session. After every
-    // records/anchor sweep above, so the snapshot is final-state. Excluded:
-    // heavy-deferred files (records not extracted yet), files whose
-    // gps-extract batch crashed, and files an extractor failed on inside an
-    // otherwise fulfilled batch - all three end up with empty records for a
-    // reason a plain retry may not repeat, and caching that would freeze
-    // "no GPS" for them across every future session.
-    // Errors carry a basename, so an empty result is required as well: another
-    // extractor may have claimed the same file afterwards (the dispatcher keeps
-    // walking past a failure), and a same-named file on a second card would
-    // otherwise be excluded for a failure that was never its own.
-    const gpsErrorNames = new Set(embeddedResult.errors.map((e) => e.file));
-    const gpsErrorKeys = indexedThisRun
-        .filter((c) => c.records.length === 0 && gpsErrorNames.has(c.file.name))
-        .map((c) => vendorFileKey(c));
-    scheduleIndexCacheWrite(
-        indexedThisRun,
-        new Set([...state.pendingHeavyEmbeddedGps.keys(), ...crashedBatchFileKeys, ...gpsErrorKeys]),
-    );
-
-    // Onboarding tour after the first successful ingest - the peak-value moment,
-    // right after the user has just seen their trip. maybeRunIngestTour is
-    // self-guarded (localStorage flag + single-run). The sources tour queues
-    // behind it: it fires only once the ingest tour is done AND an
-    // unremembered folder row is on screen (both checked inside).
-    if (state.trips.length > 0) {
-        maybeRunIngestTour();
-        maybeRunSourcesTour();
-    }
-
-    // Install toast - one-shot after the first successful ingest (peak-value
-    // moment: the user has just seen their trip and is most receptive to
-    // "pin it to your dock"). The module decides whether to actually show
-    // it (strategy + cooldown).
-    if (state.trips.length > 0) void maybeShowPostIngestToast();
-
-    // Lifecycle signal for external observers (perf harness, future
-    // integrations). Fires only on the success path - cancellation and
-    // failure go through the catch in ingestFiles and skip this.
-    emitLifecycle("ingest-done", {
-        tripsCount: state.trips.length,
-        videosTotal: allCandidates.length,
-        gpsRecordsTotal: state.gpsLog?.records.length ?? 0,
-        durationMs: Math.round(performance.now() - ingestStart),
-    });
-
-    // An eager drop indexes only its own new files; candidates carried over from
-    // a previous LAZY drop that are still un-hydrated were never re-read here.
-    // cancelLazyHydration killed their fill at entry, so restart it now (A2) -
-    // no-op when nothing is pending (a pure eager session).
-    resumeLazyHydrationIfPending();
-}
-
-/**
- * Forwards per-stage GPS parse FAILURES to crash reporting, grouped by extractor
- * id (one event per extractor, not per file - a 200-file drop with one bad
- * format is a single event). The signal answers "which format crashes on real
- * samples" - the demand list for new-format work. PII discipline: only the
- * extractor id + count cross the network; the file name and raw message (which
- * can embed a filename) stay in the local ring buffer. WrongFormatError is a
- * marker false-positive (control flow), not collected here - it never reaches
- * the *.errors arrays.
- */
-function reportParseErrorsToSentry(
-    stage: string,
-    errors: ReadonlyArray<{ extractor?: string; sidecarId?: string }>,
-): void {
-    if (errors.length === 0) return;
-    // log/embedded errors carry `extractor`, sidecar/accel carry `sidecarId`.
-    const byParser = new Map<string, number>();
-    for (const e of errors) {
-        const parser = e.extractor ?? e.sidecarId ?? "unknown";
-        byParser.set(parser, (byParser.get(parser) ?? 0) + 1);
-    }
-    for (const [parser, count] of byParser) {
-        captureSentryMessage("gps parse failed", {
-            level: "warning",
-            fingerprint: ["gps_parse_failed", stage, parser],
-            tags: { stage, parser },
-            extra: { count },
-        });
-    }
-}
-
-/**
- * Re-estimates camera TZ from (filename + mvhd, GPS first) pairs, re-derives
- * startUtc/source on every candidate, then regroups into trips and rebuilds the
- * sidebar. Idempotent. Fires repeatedly during ingest:
- *   - once per PARTIAL_BATCH_SIZE files during indexing (progressive UX),
- *   - after the full index pass (mvhd now complete, TZ estimate refined),
- *   - after embedded-GPS merge (records may appear for previously empty files).
- * Trip preview generation is NOT scheduled here - the caller decides when to do
- * it (deferred to end-of-ingest so preview workers do not contend with the SD
- * reader during indexing). carryOverTripPreviews keeps the existing previews
- * visible across the regroup.
- */
-export function recomputeAllStartUtc(candidates: VideoCandidate[]): void {
-    // Re-derive every candidate's anchor from its current createdUtc/records
-    // (TZ + clock-offset estimated from the same set). Shared with the lazy
-    // per-trip hydration so both paths anchor identically.
-    rederiveStartUtcForCandidates(candidates, classifyFilenameTime);
-    // Carry previewDataUrl across the regroup so the sidebar does not flash to
-    // placeholders mid-ingest (groupTrips builds fresh Trip objects) - see
-    // applyRegroup / carryOverTripPreviews.
-    applyRegroup(candidates);
-    renderTrips();
-}
-
-// Wire recomputeAllStartUtc as the lazy path's final regroup sweep. It lives here
-// (lazy-hydrate cannot import ingest without a cycle - ingest imports lazy-hydrate
-// for the seam), so ingest pushes it across at module load via the init callback.
-registerRecomputeSweep(recomputeAllStartUtc);
-
-/** Rebuilds state.trips from the current file set when the log or add order changed but re-indexing is not needed. */
-function rebuildTripsFromCurrentFiles(): void {
-    const candidates = state.trips.flatMap(tripAllCandidates);
-    if (state.gpsLog) {
-        attachRecordsToCandidates(state.gpsLog, candidates, candidates);
-    }
-    // GPS just arrived for these files (the "drop a GPX later" flow): re-anchor
-    // startUtc/startSource from the now-present records, exactly like every
-    // other records-arrival path (recomputeAllStartUtc, applyEmbeddedResultToState).
-    // Without it the anchor stays name-in-local-TZ or mtime, so the marker/chart
-    // stay offset from the video, the mtime warning lingers, and cold-start
-    // ~1970 rows never get reanchored (A6).
-    rederiveStartUtcForCandidates(candidates, classifyFilenameTime);
-    applyRegroup(candidates);
-    schedulePopulateTripPreviews(state.trips, updateTripPreview);
-}
-
-/**
- * Applies a dispatchParseVideoEmbeddedGps result (light-only or heavy) to global state and the local candidate pool:
- *   - merges records into state.gpsLog with dedup (re-dropping the same file must not double the track);
- *   - pulls records through the concrete-video association into each candidate;
- *   - calls recomputeAllStartUtc - GPS appearing for a file may change the TZ estimate or shift startUtc across the 30-second trip-gap boundary.
- *
- * Note: there is no vendorId in this architecture, so no "vendor upgrade"
- * step is needed - channel/sequence/mode come from filename classifiers and
- * do not change based on which extractor produced the GPS.
- *
- * Returns silently only when the result carries NEITHER records NOR frame-0
- * hints (see embeddedResultHasEffect).
- */
-function applyEmbeddedResultToState(result: DispatchedEmbeddedGpsResult, allCandidates: VideoCandidate[]): void {
-    if (!embeddedResultHasEffect(result)) return;
-    state.gpsLog = mergeIntoGpsLog(state.gpsLog, result);
-    attachRecordsToCandidates(state.gpsLog, allCandidates, allCandidates);
-    for (const c of allCandidates) {
-        // Record the extractor that produced GPS for this file - for diagnostics.
-        const fileKey = vendorFileKey(c);
-        const winningExtractor = result.winningExtractorByFileKey.get(fileKey);
-        if (winningExtractor && !c.appliedExtractors.includes(winningExtractor)) {
-            c.appliedExtractors.push(winningExtractor);
-        }
-        // Authoritative video frame-0 wall-clock from the extractor (RVMI tReV).
-        // Picked up by deriveStartUtc to skip mvhd/firstGps inference. Only set
-        // here - it survives later recomputes via the candidate field itself.
-        const hint = result.videoStartUtcHintByFileKey.get(fileKey);
-        if (hint !== undefined) c.embeddedStartUtcHint = hint;
-        // Local-as-UTC clock evidence (cold-start jump). Parse-time constant;
-        // recomputeAllStartUtc below aggregates it per fingerprint and
-        // restores true UTC on the record axis.
-        const clockHint = result.localClockOffsetHintByFileKey.get(fileKey);
-        if (clockHint !== undefined) c.localClockOffsetHintSec = clockHint;
-    }
-    // Diagnostic: confirm which files actually received embedded GPS. The
-    // transport-stream breakdown is the one to watch - MPEG-TS (Juscar) was the
-    // container that silently got no GPS when the queue was gated on moov bytes.
-    log.debug("embedded gps applied", {
-        recordsInBatch: result.records.length,
-        extractors: result.appliedExtractors,
-        withRecords: allCandidates.filter((c) => c.records.length > 0).length,
-        total: allCandidates.length,
-        transportStream: allCandidates
-            .filter((c) => c.isTransportStream)
-            .map((c) => ({ file: c.file.name, recs: c.records.length })),
-    });
-    recomputeAllStartUtc(allCandidates);
-    // Caller (ingestFilesInternal) re-schedules previews after this since
-    // the regroup may split trips and add previewless halves. Doing it here
-    // would hide the latest preview promise from the ingest awaiter.
+    if (signal.aborted) resumeProgressiveIngest();
 }

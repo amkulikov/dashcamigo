@@ -208,10 +208,8 @@ export type I18nKey =
     | "landing.faq.a8.link"
     | "landing.faq.a8.after"
 
-    // Ingest result messages. Now surfaced via the notifications system
-    // (toast + bell drawer) - see src/ui/notifications.ts. Progress messages
-    // (indexing, embeddedGps) were removed - the same info is shown in the
-    // ingest overlay's progress bar, no need to mirror in another channel.
+    // Ingest results surface through notifications (toast + bell drawer); live
+    // progress stays in the relevant overlay instead of duplicating channels.
     | "status.filesNotSelected"
     | "status.badFilesSkipped"
     | "status.duplicatesSkipped"
@@ -219,6 +217,7 @@ export type I18nKey =
     | "status.audioDamaged"
     | "status.dropReadFailed"
     | "status.nothingLoaded"
+    | "status.tripOpenFailed"
     // Shown when the whole picked/dropped selection was hidden or system files
     // (a card copied into a ".backup"/".stversions" folder, a chkdsk FOUND.000
     // recovery folder) - so the junk filter emptied it. Distinct from
@@ -416,15 +415,17 @@ export type I18nKey =
     | "noRecordings.howItWorks"
     | "noRecordings.notNow"
 
-    // Lazy-load modal: blocking progress dialog for on-trip-click parsing of
-    // heavy embedded GPS. User clicked a trip with pending files - shown with
-    // a progress indicator and Cancel; playFrame waits for completion.
-    | "lazyGpsLoad.title"
-    | "lazyGpsLoad.progress"
-    | "lazyGpsLoad.cancel"
-    // Filename-first hydration modal (slow backend): the trip-open path reads the
-    // recordings' metadata before playback. Reuses lazyGpsLoad.progress/.cancel.
-    | "hydrateLoad.title"
+    // Deferred-load modal for full embedded-GPS scans. Ordinary video playback
+    // continues; event navigation waits because its target depends on telemetry.
+    | "gpsLoad.title"
+    | "gpsLoad.progress"
+    | "gpsLoad.cancel"
+    | "gpsLoad.pending"
+    | "gpsLoad.reading"
+    // Recording-read modal (slow backend): the trip-open path reads the
+    // recordings' metadata before playback. Reuses gpsLoad.progress/.cancel.
+    | "recordingLoad.title"
+    | "recordingLoad.cancel"
 
     // Resize separators
     | "resize.videoMap"
@@ -715,23 +716,14 @@ export type I18nKey =
     // Ingest overlay (blocks the UI while processing a folder)
     | "ingestOverlay.title"
     | "ingestOverlay.cancel"
-    // Variant of cancel shown during the embedded-GPS stage: indexing already
-    // committed VideoCandidates, so the click does not throw away loaded
-    // videos - it just stops GPS extraction. "Continue without GPS" is more
-    // honest than "Cancel" at that point.
-    | "ingestOverlay.continueWithoutGps"
     | "ingestOverlay.queued"
     // Pre-ingest umbrella: shown the instant the user commits to a folder
     // (picker click / folder drop) and held while the browser enumerates the
     // directory - before the real ingest stages below begin.
-    | "ingestOverlay.firstLoadHint"
     | "ingestOverlay.stage.preparing"
     | "ingestOverlay.stage.classifying"
     | "ingestOverlay.stage.parsingLogs"
     | "ingestOverlay.stage.parsingSidecars"
-    | "ingestOverlay.stage.indexing"
-    | "ingestOverlay.stage.embeddedGps"
-    | "ingestOverlay.stage.previews"
     | "ingestOverlay.stage.canceling"
     // Shown when reading the picked files fails.
     | "ingest.error.loadFailed"

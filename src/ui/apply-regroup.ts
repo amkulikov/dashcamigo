@@ -2,10 +2,8 @@
 // preserving everything keyed to the OLD positional trip indices - the active
 // selection, the expanded cards, the carried-over previews, and the event-cycle
 // cursor. groupTrips builds fresh Trip objects and renumbers indices on every
-// call, so any regroup site that skips this sequence leaves the player pointing
-// at a different trip than the one on screen and loses previews (the second
-// lazy-drop bug). One module, one source of truth: both the eager ingest and
-// the lazy path call applyRegroup instead of a bare `state.trips = groupTrips`.
+// call, so every regroup uses this single commit boundary instead of assigning
+// state.trips directly.
 
 import { groupTrips } from "../trips.js";
 import type { Trip, VideoCandidate } from "../trips.js";
@@ -14,6 +12,19 @@ import { clearTripEventCycle } from "./sidebar.js";
 import { state } from "./state.js";
 import { carryBlurRegions } from "./blur-regions-state.js";
 import { carryOverTripPreviews } from "./trip-preview.js";
+
+type RegroupAppliedListener = () => void;
+
+let regroupAppliedListener: RegroupAppliedListener | null = null;
+
+/**
+ * Registers the viewer-side reconciliation that must run after positional trip
+ * indices have been remapped. Kept as an init callback so this data-layer seam
+ * does not import the player and turn the UI dependency graph into a cycle.
+ */
+export function registerRegroupAppliedListener(listener: RegroupAppliedListener): void {
+    regroupAppliedListener = listener;
+}
 
 /**
  * Maps each File object to (tripIdx, frameIdx) for the new trips array. Used to
@@ -107,4 +118,5 @@ export function applyRegroup(candidates: VideoCandidate[]): void {
     // - a notify before the swap would resolve activeTrip() against the OLD
     // array with a NEW index (wrong trip or undefined).
     carryBlurRegions(oldTrips, newTrips);
+    regroupAppliedListener?.();
 }

@@ -431,22 +431,20 @@
     background: var(--err);
     color: var(--dc-white);
 }
-/* Highlight of the metadata strip when part of the trip's GPS data is still
-   waiting to be parsed (the user declined the bulk-load prompt). The trip
-   text is legible, but "…" in the distance position means "not a final number". */
-.trip-meta .trip-meta-text.lazy-pending {
+/* Dim the metadata strip while recording facts or deferred GPS are pending.
+   The explicit text remains legible and explains what will happen next. */
+.trip-meta .trip-meta-text.load-recordings-pending,
+.trip-meta .trip-meta-text.load-gps-pending {
     color: var(--fg-dim);
     font-style: italic;
 }
-/* Active background load of this trip's heavy embedded GPS. The ⟳ symbol
-   is already part of the text from formatTripMeta; spinning it as a
-   separate glyph via ::after fights transform-origin, so instead we give
-   the whole span an opacity-pulse, for a sense of "in progress". */
-.trip-meta .trip-meta-text.lazy-inflight {
+/* Active recording/GPS reads get a gentle opacity pulse. */
+.trip-meta .trip-meta-text.load-recordings-inflight,
+.trip-meta .trip-meta-text.load-gps-inflight {
     color: var(--fg-dim);
-    animation: lazy-pulse 1.4s ease-in-out infinite;
+    animation: loading-pulse 1.4s ease-in-out infinite;
 }
-@keyframes lazy-pulse {
+@keyframes loading-pulse {
     0%,
     100% {
         opacity: 1;
@@ -455,19 +453,19 @@
         opacity: 0.55;
     }
 }
-/* The dimmed color + ⟳ glyph already mark the inflight state statically, so
-   killing the infinite pulse for reduced-motion users loses no information. */
+/* Text still names the active read when reduced motion disables the pulse. */
 @media (prefers-reduced-motion: reduce) {
-    .trip-meta .trip-meta-text.lazy-inflight {
+    .trip-meta .trip-meta-text.load-recordings-inflight,
+    .trip-meta .trip-meta-text.load-gps-inflight {
         animation: none;
     }
 }
 
-/* Filename-first lazy ingest: a card without a thumbnail yet (and one is still
+/* Progressive ingest: a card without a thumbnail yet (and one is still
    coming) shows an animated skeleton sweep over the placeholder hero, so it reads
    as "still loading" rather than a finished card with a black thumbnail. Driven
-   by PREVIEW absence, not hydration, so the indication runs continuously from the
-   filename-first render through hydration until the real preview lands - no gap.
+   by preview absence, not metadata state, so the indication runs continuously
+   until the real preview lands.
    The reserved ::after (see the .trip-header comment) sits under the title/meta
    (z-index 0). :not(.has-preview) because a real first-frame preview replaces it. */
 .trip--loading .trip-header:not(.has-preview)::after {
@@ -499,7 +497,7 @@
 /* Click "opening" feedback: the moment a trip is clicked, a centered spinner +
    dim appears on its card - instant acknowledgement that the click registered,
    held until playback takes over (clearOpeningTrip, from playFrame). Independent
-   of how long hydration takes, so a fast backend (where the progress modal never
+   of how long recording analysis takes, so a fast backend (where the progress modal never
    crosses its threshold) still gives visible feedback. */
 .trip--opening .trip-header {
     filter: brightness(0.82);

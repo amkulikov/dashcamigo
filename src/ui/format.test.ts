@@ -1,9 +1,16 @@
-// Formatter tests. Currently only clipBasename; the logic is pure and cheap to cover without DOM/i18n deps.
+// Pure formatter coverage without DOM dependencies.
 
 import { describe, it, expect } from "vitest";
-import { clipBasename, dateBucketLabel, formatBytes, formatRateBytes, formatTripTitle } from "./format.js";
+import {
+    clipBasename,
+    dateBucketLabel,
+    formatBytes,
+    formatFileMeta,
+    formatRateBytes,
+    formatTripTitle,
+} from "./format.js";
 import { t } from "../i18n/index.js";
-import { buildTripTimeline, type Trip, type TripFrame } from "../trips.js";
+import { buildTripTimeline, type Trip, type TripFrame, type VideoCandidate } from "../trips.js";
 
 /**
  * Minimal fake Trip - clipBasename needs startUtc and a timeline. A single
@@ -174,5 +181,27 @@ describe("formatRateBytes", () => {
 
     it("switches to gigabytes at the top of the scale", () => {
         expect(formatRateBytes(3 * 1024 ** 3)).toBe(`3.00 ${t("units.gb")}`);
+    });
+});
+
+describe("formatFileMeta", () => {
+    const video = {
+        file: { size: 10 * 1024 * 1024 },
+        metadataReady: true,
+        metadataFailed: false,
+        startUtc: 100,
+        durationSec: 60,
+        records: [],
+    } as unknown as VideoCandidate;
+
+    it("does not claim that GPS is absent while telemetry is still being read", () => {
+        expect(formatFileMeta(video, 100, true)).not.toContain(t("trip.fileMeta.noGps"));
+        expect(formatFileMeta(video, 100, false)).toContain(t("trip.fileMeta.noGps"));
+    });
+
+    it("does not show estimated duration or no-GPS as facts after a metadata failure", () => {
+        const failed = { ...video, metadataReady: false, metadataFailed: true } as VideoCandidate;
+        const meta = formatFileMeta(failed, 100, false);
+        expect(meta).toBe(`${t("trip.chip.readFailed")} · 10.0 ${t("units.mb")}`);
     });
 });

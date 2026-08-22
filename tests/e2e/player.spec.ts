@@ -55,6 +55,14 @@ test.describe("player", () => {
         // during playback and the first step re-syncs them down below the drift.
         const time = () => masterVideoTime(page);
 
+        // This fixture is only four seconds long and can reach its end while a
+        // busy browser finishes viewer setup. Put the paused playhead at a known
+        // frame with the scrubber's public keyboard control; forward stepping at
+        // the clamped trip end is correctly a no-op.
+        await page.locator("#player-mini-progress").focus();
+        await page.keyboard.press("Home");
+        await expect.poll(time, { message: "Home must settle at the first frame" }).toBeLessThan(0.1);
+
         // The fixture is 30 fps, so a step is 1/30s. Each step is an async seek;
         // fire them one-settled-at-a-time rather than hammering three at once. A
         // slow software decoder (Linux CI's H.264) coalesces back-to-back seeks
