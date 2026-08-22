@@ -167,15 +167,27 @@ test.describe("progressive ingest", () => {
         await page.evaluate(() => {
             localStorage.removeItem("dashcamigo:ingest-policy");
             const original = Blob.prototype.arrayBuffer;
+            let releaseFirstProbeRead = (): void => {};
+            const firstProbeReadGate = new Promise<void>((resolve) => {
+                releaseFirstProbeRead = resolve;
+            });
+            const target = window as typeof window & {
+                __slowProbeReads?: number;
+                __releaseFirstProbeRead?: () => void;
+                __analysisProgressSeen?: string[];
+            };
+            target.__releaseFirstProbeRead = releaseFirstProbeRead;
             Blob.prototype.arrayBuffer = function () {
                 if (this.size !== 4096) return original.call(this);
-                const target = window as typeof window & { __slowProbeReads?: number };
                 target.__slowProbeReads = (target.__slowProbeReads ?? 0) + 1;
-                return new Promise<void>((resolve) => setTimeout(resolve, 600)).then(() => original.call(this));
+                const delay =
+                    target.__slowProbeReads === 1
+                        ? firstProbeReadGate
+                        : new Promise<void>((resolve) => setTimeout(resolve, 600));
+                return delay.then(() => original.call(this));
             };
             const status = document.getElementById("trip-analysis-status");
             const percent = document.getElementById("trip-analysis-percent");
-            const target = window as typeof window & { __analysisProgressSeen?: string[] };
             target.__analysisProgressSeen = [];
             if (status && percent) {
                 new MutationObserver(() => {
@@ -205,6 +217,13 @@ test.describe("progressive ingest", () => {
             await page.evaluate(() => (window as typeof window & { __slowProbeReads?: number }).__slowProbeReads ?? 0),
             "the list must render after starting only the first of three delayed probe reads",
         ).toBe(1);
+        await page.evaluate(() => {
+            (
+                window as typeof window & {
+                    __releaseFirstProbeRead?: () => void;
+                }
+            ).__releaseFirstProbeRead?.();
+        });
         await expect(page.locator("li.trip:not(.unindexed-note)").first().locator(".trip-title")).toContainText(
             "Jan 30",
         );

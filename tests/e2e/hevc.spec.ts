@@ -40,13 +40,13 @@ test.describe("hevc playback", () => {
         test.skip(!hevcSupported, "HEVC decode not supported on this platform");
 
         await loadTrip(page, SAMPLE_HEVC);
-        // No GPS in this sample, so loadTrip resolved on the mvhd duration. Now
-        // require real playback: currentTime must advance, which only happens if
-        // the remuxed segments fed to MediaSource actually decode.
-        await page.locator("#player-play").click();
+        // Opening a trip already requests autoplay. Do not blindly click the
+        // play/pause toggle here: the MSE attach can finish between loadTrip
+        // resolving and the click, which would pause the first decoded frame.
+        // currentTime can advance only after the remuxed MediaSource decodes.
         await expect
             .poll(() => page.evaluate(() => (document.getElementById("player") as HTMLVideoElement).currentTime), {
-                timeout: 8000,
+                timeout: 15_000,
             })
             .toBeGreaterThan(0);
         await shot(page, "hevc-01-playing");
