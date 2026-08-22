@@ -9,6 +9,8 @@ release tag. Localized texts ship inside the app (the "What's new" panel).
 
 ## 2026-08-23
 
+- **Fixed:** Fullscreen now follows the selected theme.
+- **Fixed:** Notes files no longer overwrite changes from other tabs or browser profiles.
 - **Improved:** More license plates are now found automatically.
 
 ## 2026-08-22

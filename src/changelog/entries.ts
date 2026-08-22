@@ -28,6 +28,38 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-08-23.3",
+        category: "fix",
+        text: {
+            en: "Fullscreen now follows the selected theme.",
+            ru: "Полноэкранный режим теперь следует выбранной теме.",
+            de: "Der Vollbildmodus folgt jetzt dem ausgewählten Design.",
+            es: "La pantalla completa ahora respeta el tema seleccionado.",
+            fr: "Le mode plein écran respecte désormais le thème sélectionné.",
+            pl: "Tryb pełnoekranowy korzysta teraz z wybranego motywu.",
+            pt: "A tela cheia agora segue o tema selecionado.",
+            zh: "全屏模式现在会使用所选主题。",
+            ja: "フルスクリーンでも選択したテーマが使われるようになりました。",
+            ko: "전체 화면에서도 이제 선택한 테마가 적용됩니다.",
+        },
+    },
+    {
+        id: "2026-08-23.2",
+        category: "fix",
+        text: {
+            en: "Notes files no longer overwrite changes from other tabs or browser profiles.",
+            ru: "Файлы пометок больше не перезаписывают изменения из других вкладок и профилей браузера.",
+            de: "Notizdateien überschreiben keine Änderungen aus anderen Tabs oder Browserprofilen mehr.",
+            es: "Los archivos de notas ya no sobrescriben cambios de otras pestañas o perfiles del navegador.",
+            fr: "Les fichiers de notes n’écrasent plus les modifications d’autres onglets ou profils de navigateur.",
+            pl: "Pliki notatek nie nadpisują już zmian z innych kart ani profili przeglądarki.",
+            pt: "Os arquivos de notas não sobrescrevem mais alterações de outras abas ou perfis do navegador.",
+            zh: "备注文件不再覆盖其他标签页或浏览器配置文件中的更改。",
+            ja: "メモファイルが、ほかのタブやブラウザプロファイルの変更を上書きしなくなりました。",
+            ko: "메모 파일이 더 이상 다른 탭이나 브라우저 프로필의 변경 사항을 덮어쓰지 않습니다.",
+        },
+    },
+    {
         id: "2026-08-23.1",
         category: "improvement",
         text: {
