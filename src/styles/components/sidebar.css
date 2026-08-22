@@ -17,6 +17,67 @@
     margin-bottom: var(--dc-space-2);
 }
 
+.trip-analysis-status {
+    margin: 0 0 var(--dc-space-3);
+    padding: var(--dc-space-2);
+    border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+    border-radius: var(--dc-radius-md);
+    background: color-mix(in srgb, var(--accent) 7%, var(--bg-elev-2));
+}
+.trip-analysis-status[hidden] {
+    display: none;
+}
+.trip-analysis-status__header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--dc-space-2);
+    color: var(--fg);
+    font-size: var(--dc-text-xs);
+}
+.trip-analysis-status__header strong {
+    min-width: 0;
+    font-family: var(--dc-font-heavy);
+    font-weight: 700;
+    line-height: 1.25;
+}
+.trip-analysis-status__percent {
+    flex: 0 0 auto;
+    color: var(--accent);
+    font-size: var(--dc-text-2xs);
+    font-variant-numeric: tabular-nums;
+}
+.trip-analysis-status__bar {
+    height: 4px;
+    margin-top: var(--dc-space-2);
+    overflow: hidden;
+    border-radius: var(--dc-radius-pill);
+    background: color-mix(in srgb, var(--fg) 12%, transparent);
+}
+.trip-analysis-status__fill {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent);
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform var(--dc-dur-base) var(--dc-ease);
+}
+.trip-analysis-status__progress {
+    margin-top: var(--dc-space-1);
+    color: var(--fg-dim);
+    font-size: var(--dc-text-2xs);
+    line-height: 1.35;
+    font-variant-numeric: tabular-nums;
+}
+.trip-analysis-status__hint {
+    margin: var(--dc-space-2) 0 0;
+    color: var(--fg);
+    font-size: var(--dc-text-xs);
+    line-height: 1.35;
+}
+
 .sidebar h2 {
     margin: 0;
     font-family: var(--dc-font-heavy);
@@ -431,67 +492,12 @@
     background: var(--err);
     color: var(--dc-white);
 }
-/* Dim the metadata strip while recording facts or deferred GPS are pending.
-   The explicit text remains legible and explains what will happen next. */
-.trip-meta .trip-meta-text.load-recordings-pending,
-.trip-meta .trip-meta-text.load-gps-pending {
-    color: var(--fg-dim);
-    font-style: italic;
-}
-/* Active recording/GPS reads get a gentle opacity pulse. */
-.trip-meta .trip-meta-text.load-recordings-inflight,
+/* Deferred GPS stays explicit on the affected card without another animation;
+   ordinary recording work is explained once by the shared status above the list. */
+.trip-meta .trip-meta-text.load-gps-pending,
 .trip-meta .trip-meta-text.load-gps-inflight {
     color: var(--fg-dim);
-    animation: loading-pulse 1.4s ease-in-out infinite;
-}
-@keyframes loading-pulse {
-    0%,
-    100% {
-        opacity: 1;
-    }
-    50% {
-        opacity: 0.55;
-    }
-}
-/* Text still names the active read when reduced motion disables the pulse. */
-@media (prefers-reduced-motion: reduce) {
-    .trip-meta .trip-meta-text.load-recordings-inflight,
-    .trip-meta .trip-meta-text.load-gps-inflight {
-        animation: none;
-    }
-}
-
-/* Progressive ingest: a card without a thumbnail yet (and one is still
-   coming) shows an animated skeleton sweep over the placeholder hero, so it reads
-   as "still loading" rather than a finished card with a black thumbnail. Driven
-   by preview absence, not metadata state, so the indication runs continuously
-   until the real preview lands.
-   The reserved ::after (see the .trip-header comment) sits under the title/meta
-   (z-index 0). :not(.has-preview) because a real first-frame preview replaces it. */
-.trip--loading .trip-header:not(.has-preview)::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(
-        90deg,
-        transparent 0%,
-        color-mix(in srgb, var(--accent) 14%, transparent) 45%,
-        color-mix(in srgb, var(--accent) 24%, transparent) 50%,
-        color-mix(in srgb, var(--accent) 14%, transparent) 55%,
-        transparent 100%
-    );
-    transform: translateX(-100%);
-    animation: chart-strip-shimmer-sweep 1.6s linear infinite;
-    pointer-events: none;
-    z-index: 0;
-}
-/* Reduced motion: drop the sweep, keep a static centered sheen - still marks the
-   card as loading without animation. */
-@media (prefers-reduced-motion: reduce) {
-    .trip--loading .trip-header:not(.has-preview)::after {
-        animation: none;
-        transform: none;
-    }
+    font-style: italic;
 }
 
 /* Click "opening" feedback: the moment a trip is clicked, a centered spinner +

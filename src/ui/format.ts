@@ -121,7 +121,7 @@ export function formatTripMeta(trip: Trip, loading: TripLoadingState = "loaded")
     const sizePart = `${sizeMb} ${t("units.mb")}`;
     if (loading === "recordings-pending" || loading === "recordings-inflight") {
         const sourceFilesPart = t("plurals.file", { n: tripAllCandidates(trip).length });
-        return `${t("recordingLoad.title")} · ${sourceFilesPart} · ${sizePart}`;
+        return `${sourceFilesPart} · ${sizePart}`;
     }
 
     let distStr = "";
@@ -150,7 +150,7 @@ export function formatFileMeta(video: VideoCandidate, tripStartUtc: number, gpsP
         return `${t("trip.chip.readFailed")} · ${sizeMb} ${t("units.mb")}`;
     }
     if (video.metadataReady === false) {
-        return `${t("recordingLoad.title")} · ${sizeMb} ${t("units.mb")}`;
+        return `${sizeMb} ${t("units.mb")}`;
     }
     const offsetSec = Math.max(0, video.startUtc - tripStartUtc);
     const offsetStr = formatTime(offsetSec); // mm:ss or h:mm:ss - same format as the player scrubber

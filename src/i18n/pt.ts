@@ -190,6 +190,9 @@ export const ptDict = {
     "notif.toast.dismiss": "Fechar",
 
     "sidebar.title": "Viagens",
+    "sidebar.analysis.title": "Verificando os detalhes das viagens",
+    "sidebar.analysis.progress": "Horários e durações · {done} de {total} gravações",
+    "sidebar.analysis.hint": "Já dá para abrir qualquer viagem — vamos preparar primeiro a que você escolher.",
     "sidebar.sort.label": "Campo de ordenação",
     "sidebar.sort.options.date": "Data",
     "sidebar.sort.options.distance": "Distância",
@@ -313,9 +316,9 @@ export const ptDict = {
     "gpsLoad.title": "Carregando GPS de {n, plural, one {# vídeo} other {# vídeos}}",
     "gpsLoad.progress": "{done} de {total}",
     "gpsLoad.cancel": "Pular",
-    "gpsLoad.pending": "O GPS carrega ao abrir",
-    "gpsLoad.reading": "Lendo GPS",
-    "recordingLoad.title": "Lendo gravações",
+    "gpsLoad.pending": "O GPS é verificado ao abrir",
+    "gpsLoad.reading": "Verificando GPS",
+    "recordingLoad.title": "Preparando esta viagem",
     "recordingLoad.cancel": "Cancelar",
 
     "resize.videoMap": "Mudar largura do mapa",

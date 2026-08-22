@@ -199,6 +199,9 @@ export const koDict = {
     "notif.toast.dismiss": "닫기",
 
     "sidebar.title": "주행",
+    "sidebar.analysis.title": "주행 세부 정보를 확인하고 있어요",
+    "sidebar.analysis.progress": "시간과 길이 · 녹화 영상 {total}개 중 {done}개",
+    "sidebar.analysis.hint": "지금 어떤 주행이든 열 수 있어요. 선택한 주행부터 먼저 준비할게요.",
     "sidebar.sort.label": "정렬 기준",
     "sidebar.sort.options.date": "날짜",
     "sidebar.sort.options.distance": "거리",
@@ -322,9 +325,9 @@ export const koDict = {
     "gpsLoad.title": "{n} 개 영상에서 GPS 불러오는 중",
     "gpsLoad.progress": "{done} / {total}",
     "gpsLoad.cancel": "건너뛰기",
-    "gpsLoad.pending": "열 때 GPS 불러오기",
-    "gpsLoad.reading": "GPS 읽는 중",
-    "recordingLoad.title": "녹화 영상 불러오는 중",
+    "gpsLoad.pending": "열 때 GPS 확인",
+    "gpsLoad.reading": "GPS 확인 중",
+    "recordingLoad.title": "이 주행을 준비하고 있어요",
     "recordingLoad.cancel": "취소",
 
     "resize.videoMap": "지도 너비 조절",

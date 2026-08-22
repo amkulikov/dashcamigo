@@ -191,6 +191,9 @@ export const esDict = {
     "notif.toast.dismiss": "Cerrar",
 
     "sidebar.title": "Trayectos",
+    "sidebar.analysis.title": "Comprobando los detalles de los trayectos",
+    "sidebar.analysis.progress": "Hora y duración · {done} de {total} grabaciones",
+    "sidebar.analysis.hint": "Ya puedes abrir cualquier trayecto — prepararemos primero el que elijas.",
     "sidebar.sort.label": "Campo de orden",
     "sidebar.sort.options.date": "Fecha",
     "sidebar.sort.options.distance": "Distancia",
@@ -314,9 +317,9 @@ export const esDict = {
     "gpsLoad.title": "Cargando GPS de {n, plural, one {# vídeo} other {# vídeos}}",
     "gpsLoad.progress": "{done} de {total}",
     "gpsLoad.cancel": "Saltar",
-    "gpsLoad.pending": "El GPS se carga al abrir",
-    "gpsLoad.reading": "Leyendo GPS",
-    "recordingLoad.title": "Leyendo grabaciones",
+    "gpsLoad.pending": "El GPS se comprueba al abrir",
+    "gpsLoad.reading": "Comprobando GPS",
+    "recordingLoad.title": "Preparando este trayecto",
     "recordingLoad.cancel": "Cancelar",
 
     "resize.videoMap": "Ajustar ancho del mapa",

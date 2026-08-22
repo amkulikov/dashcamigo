@@ -118,8 +118,9 @@ let activeRun: AbortController | null = null;
 // a truncated clip, etc.). Keyed by the FIRST candidate's File OBJECT: groupTrips
 // reuses the same candidate Files across a regroup, so the flag survives the Trip
 // rebuild, and a re-drop makes fresh File objects so it naturally resets. The
-// sidebar reads tripPreviewFailed to stop the loading shimmer and show a static
-// "no thumbnail" placeholder instead of shimmering forever.
+// retrying it during every regroup would waste decoder time. The sidebar uses
+// the same static placeholder before and after a failed attempt, so this stays
+// an internal scheduling detail.
 const previewFailedFiles = new WeakSet<File>();
 
 // In-flight first-frame extractions keyed by File, so the opened-trip path
@@ -138,12 +139,6 @@ function extractFirstFrameShared(file: File): Promise<string | null> {
     });
     inflightExtractions.set(file, pending);
     return pending;
-}
-
-/** Whether the trip's first-frame preview was attempted and cannot be produced. */
-export function tripPreviewFailed(trip: Trip): boolean {
-    const first = tripAllCandidates(trip)[0];
-    return first ? previewFailedFiles.has(first.file) : false;
 }
 
 /**

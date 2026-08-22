@@ -32,7 +32,6 @@ import {
 import type { TripLoadingState } from "./format.js";
 import { setTripMeta, tripMetaFor } from "./annotations.js";
 import { isTripSortKey, state } from "./state.js";
-import { tripPreviewFailed } from "./trip-preview.js";
 
 interface SidebarCallbacks {
     /** Opens the first playable frame, tolerating a damaged leading clip. */
@@ -80,6 +79,8 @@ export function renderTrips(): void {
     if (state.trips.length > 0) {
         exitLanding();
     }
+
+    refreshTripAnalysisStatus();
 
     // Aggregate stats at the top of the list so the user can quickly see what is loaded.
     if (state.trips.length > 0) {
@@ -226,14 +227,11 @@ function buildTripCard(trip: Trip, tripIdx: number): HTMLLIElement {
 
     // Card visual state, split into two orthogonal signals:
     //  - DATA: provisional = a clip's moov is not read yet, so duration/distance
-    //    are estimates (meta dims via computeTripLoadingState); readFailed = a clip
-    //    could not be read at all.
-    //  - THUMBNAIL: loading = no preview image yet and one is still expected, so
-    //    the hero shows an animated skeleton; noThumb = no preview will come
-    //    (read failed, or the frame could not be decoded) -> static placeholder.
-    // The thumbnail signal is driven by preview presence, NOT metadata read, so the
-    // loading indication runs continuously from provisional render through
-    // metadata read until the actual preview lands - no gap where it vanishes early.
+    //    stay out of the card; readFailed = a clip could not be read at all.
+    //  - THUMBNAIL: until a preview is available, a static film glyph keeps the
+    //    placeholder intentional. Background progress belongs to the one status
+    //    above the list; animation on individual cards made ordinary work look
+    //    like a problem with those specific trips.
     const cands = tripAllCandidates(trip);
     const focusKey = tripFocusKey(trip);
     if (focusKey) recordingFocusKeys.set(li, focusKey);
@@ -244,13 +242,6 @@ function buildTripCard(trip: Trip, tripIdx: number): HTMLLIElement {
     });
     const readFailed = cands.some((c) => c.metadataFailed === true);
     const hasPreview = !!trip.previewDataUrl;
-    const previewFailed = tripPreviewFailed(trip);
-    const loading = !hasPreview && !readFailed && !previewFailed;
-    const noThumb = !hasPreview && (readFailed || previewFailed);
-    // Only .trip--loading drives a CSS rule (the shimmer). noThumb shows the
-    // film-glyph CHILD below and readFailed gets a chip - neither needs an li
-    // class, so we do not add inert ones.
-    if (loading) li.classList.add("trip--loading");
     if (provisional) li.setAttribute("aria-busy", "true");
 
     // Trip header. Click on any part except the chevron selects the trip (plays from first file); chevron click only expands/collapses.
@@ -279,9 +270,9 @@ function buildTripCard(trip: Trip, tripIdx: number): HTMLLIElement {
     // First-frame preview as the hero card background. CSS .trip-header sets aspect-ratio 3/1 with a gradient overlay for text readability.
     if (hasPreview && trip.previewDataUrl) {
         applyTripPreviewBackground(header, trip.previewDataUrl);
-    } else if (noThumb) {
-        // No thumbnail will come: a muted film glyph distinguishes "done, no
-        // preview" from the still-loading shimmer (which is a bare placeholder).
+    } else {
+        // A muted film glyph is stable while the preview is pending and remains
+        // as the final fallback when extraction fails.
         const icon = document.createElement("div");
         icon.className = "trip-no-preview-icon";
         icon.setAttribute("aria-hidden", "true");
@@ -358,7 +349,9 @@ function buildTripCard(trip: Trip, tripIdx: number): HTMLLIElement {
     metaText.className = "trip-meta-text";
     const loadingState = computeTripLoadingState(trip, tripIdx);
     metaText.textContent = formatTripMeta(trip, loadingState);
-    if (loadingState !== "loaded") metaText.classList.add(`load-${loadingState}`);
+    if (loadingState === "gps-pending" || loadingState === "gps-inflight") {
+        metaText.classList.add(`load-${loadingState}`);
+    }
     meta.appendChild(metaText);
     header.appendChild(meta);
 
@@ -531,6 +524,26 @@ export function refreshTripCard(tripIdx: number): void {
     oldLi.replaceWith(buildTripCard(trip, tripIdx));
     restoreListFocus(focus, dom.list);
     dom.list.setAttribute("aria-busy", state.trips.some(tripHasPending) ? "true" : "false");
+    refreshTripAnalysisStatus();
+}
+
+/** Paints the one shared background-work status above the trip list. */
+export function refreshTripAnalysisStatus(): void {
+    const progress = state.recordingAnalysisProgress;
+    if (!progress || progress.total <= 0) {
+        dom.tripAnalysisStatus.hidden = true;
+        return;
+    }
+    const completed = Math.max(0, Math.min(progress.completed, progress.total));
+    const percent = Math.round((completed / progress.total) * 100);
+    dom.tripAnalysisPercent.textContent = `≈${percent}%`;
+    dom.tripAnalysisProgress.textContent = t("sidebar.analysis.progress", {
+        done: completed,
+        total: progress.total,
+    });
+    dom.tripAnalysisProgressbar.setAttribute("aria-valuenow", String(percent));
+    dom.tripAnalysisProgressFill.style.transform = `scaleX(${percent / 100})`;
+    dom.tripAnalysisStatus.hidden = false;
 }
 
 // The recordings the user just clicked, shown with an "opening" spinner on their trip
@@ -720,7 +733,7 @@ function buildSummaryItem(trips: Trip[]): HTMLLIElement {
     const li = document.createElement("li");
     li.className = "trip-summary";
     if (trips.some(tripHasProvisionalFacts)) {
-        li.textContent = `${t("plurals.trip", { n: trips.length })} · ${t("recordingLoad.title")}`;
+        li.textContent = t("plurals.trip", { n: trips.length });
         return li;
     }
     let totalDuration = 0;
@@ -774,9 +787,8 @@ export function updateTripPreview(trip: Trip, dataUrl: string): void {
     const header = tripLi.querySelector<HTMLElement>(".trip-header");
     if (!header) return;
     applyTripPreviewBackground(header, dataUrl);
-    // The thumbnail arrived: stop the loading shimmer and drop the no-preview
-    // film glyph so the hero photo shows cleanly.
-    tripLi.classList.remove("trip--loading");
+    // The thumbnail arrived: drop the static placeholder glyph so the hero
+    // photo shows cleanly.
     tripLi.querySelector(".trip-no-preview-icon")?.remove();
 }
 

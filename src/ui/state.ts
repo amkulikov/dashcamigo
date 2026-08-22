@@ -216,6 +216,10 @@ export interface AppState {
     // Trip indices whose mandatory metadata read is in flight. Indices stay
     // stable until the closing regroup and are cleared on cancellation.
     readingTrips: Set<number>;
+    // Overall progress for the current recording-details pass. The candidate
+    // snapshot lives in progressive-ingest; the sidebar only receives these
+    // small counters, so it never owns or retains File objects.
+    recordingAnalysisProgress: { completed: number; total: number } | null;
     // === Per-channel MSE backends (see src/per-file-mse.ts) ===
     // Active per-file MSE backend per channel. Created when the current file
     // has cand.needsHevcRemux=true (BlackVue ELITE 9 / Vantrue N2X); disposed
@@ -473,5 +477,6 @@ export const state: AppState = {
     pendingHeavyEmbeddedGps: new Map(),
     inflightEmbeddedGps: new Map(),
     readingTrips: new Set(),
+    recordingAnalysisProgress: null,
     channelBackends: {},
 };

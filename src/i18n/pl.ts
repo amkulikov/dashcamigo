@@ -190,6 +190,9 @@ export const plDict = {
     "notif.toast.dismiss": "Zamknij",
 
     "sidebar.title": "Przejazdy",
+    "sidebar.analysis.title": "Sprawdzamy szczegóły przejazdów",
+    "sidebar.analysis.progress": "Czas i długość · {done} z {total} nagrań",
+    "sidebar.analysis.hint": "Możesz już otworzyć dowolny przejazd — wybrany przygotujemy najpierw.",
     "sidebar.sort.label": "Pole sortowania",
     "sidebar.sort.options.date": "Data",
     "sidebar.sort.options.distance": "Dystans",
@@ -313,9 +316,9 @@ export const plDict = {
     "gpsLoad.title": "Wczytuję GPS z {n, plural, one {# wideo} few {# wideo} many {# wideo} other {# wideo}}",
     "gpsLoad.progress": "{done} z {total}",
     "gpsLoad.cancel": "Pomiń",
-    "gpsLoad.pending": "GPS wczyta się po otwarciu",
-    "gpsLoad.reading": "Odczytuję GPS",
-    "recordingLoad.title": "Wczytuję nagrania",
+    "gpsLoad.pending": "GPS sprawdzimy po otwarciu",
+    "gpsLoad.reading": "Sprawdzamy GPS",
+    "recordingLoad.title": "Przygotowujemy przejazd",
     "recordingLoad.cancel": "Anuluj",
 
     "resize.videoMap": "Zmień szerokość mapy",

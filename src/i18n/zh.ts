@@ -189,6 +189,9 @@ export const zhDict = {
     "notif.toast.dismiss": "关闭",
 
     "sidebar.title": "行程",
+    "sidebar.analysis.title": "正在确认行程详情",
+    "sidebar.analysis.progress": "时间和时长 · 已检查 {done}/{total} 段录像",
+    "sidebar.analysis.hint": "现在就可以打开任意行程，我们会优先准备你选择的行程。",
     "sidebar.sort.label": "排序字段",
     "sidebar.sort.options.date": "日期",
     "sidebar.sort.options.distance": "距离",
@@ -312,9 +315,9 @@ export const zhDict = {
     "gpsLoad.title": "正在从 {n, plural, other {# 个视频}}里加载 GPS",
     "gpsLoad.progress": "{done} / {total}",
     "gpsLoad.cancel": "跳过",
-    "gpsLoad.pending": "打开时加载 GPS",
-    "gpsLoad.reading": "正在读取 GPS",
-    "recordingLoad.title": "正在读取录像",
+    "gpsLoad.pending": "打开时检查 GPS",
+    "gpsLoad.reading": "正在检查 GPS",
+    "recordingLoad.title": "正在准备此行程",
     "recordingLoad.cancel": "取消",
 
     "resize.videoMap": "调整地图宽度",

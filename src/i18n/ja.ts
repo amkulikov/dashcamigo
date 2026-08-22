@@ -200,6 +200,9 @@ export const jaDict = {
     "notif.toast.dismiss": "閉じる",
 
     "sidebar.title": "走行",
+    "sidebar.analysis.title": "走行の詳細を確認しています",
+    "sidebar.analysis.progress": "時刻と長さ · {total} 本中 {done} 本",
+    "sidebar.analysis.hint": "どの走行も今すぐ開けます。選んだ走行を優先して準備します。",
     "sidebar.sort.label": "ソート項目",
     "sidebar.sort.options.date": "日付",
     "sidebar.sort.options.distance": "距離",
@@ -323,9 +326,9 @@ export const jaDict = {
     "gpsLoad.title": "{n} 件の動画から GPS を読み込み中",
     "gpsLoad.progress": "{done} / {total}",
     "gpsLoad.cancel": "スキップ",
-    "gpsLoad.pending": "開くと GPS を読み込みます",
-    "gpsLoad.reading": "GPS を読み込み中",
-    "recordingLoad.title": "録画を読み込み中",
+    "gpsLoad.pending": "開くと GPS を確認します",
+    "gpsLoad.reading": "GPS を確認中",
+    "recordingLoad.title": "この走行を準備しています",
     "recordingLoad.cancel": "キャンセル",
 
     "resize.videoMap": "地図の幅を変更",

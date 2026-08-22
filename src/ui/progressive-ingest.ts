@@ -63,7 +63,7 @@ import { showNoRecordingsModal } from "./no-recordings-modal.js";
 import { notify } from "./notifications.js";
 import { maybeRunIngestTour, maybeRunSourcesTour } from "./onboarding.js";
 import { maybeShowPostIngestToast } from "./pwa-install.js";
-import { refreshTripCard, renderTrips, updateTripPreview } from "./sidebar.js";
+import { refreshTripAnalysisStatus, refreshTripCard, renderTrips, updateTripPreview } from "./sidebar.js";
 import { state } from "./state.js";
 import { ensureTripPreview, schedulePopulateTripPreviews } from "./trip-preview.js";
 
@@ -219,6 +219,12 @@ export function getDeferredGpsConcurrency(): number {
 
 interface ProgressiveIngestRun {
     context: ProgressiveIngestContext;
+    /** Candidates that were unresolved when this pass began. Kept as stable
+     *  object references so regrouping cannot distort the user-facing count. */
+    analysisCandidates: Set<VideoCandidate>;
+    /** Incrementally maintained subset of analysisCandidates. Re-scanning the
+     *  whole card after every trip would turn large folders into O(n²) UI work. */
+    completedAnalysisCandidates: Set<VideoCandidate>;
     listReadyAt: number;
     metadataFailed: number;
     repairedHvcc: number;
@@ -230,6 +236,26 @@ interface ProgressiveIngestRun {
 }
 
 let activeRun: ProgressiveIngestRun | null = null;
+
+function publishRecordingAnalysisProgress(
+    run: ProgressiveIngestRun | null,
+    changedCandidates: Iterable<VideoCandidate> = [],
+): void {
+    if (!run || activeRun !== run) return;
+    for (const candidate of changedCandidates) {
+        if (!run.analysisCandidates.has(candidate)) continue;
+        if (needsRecordingMetadata(candidate)) run.completedAnalysisCandidates.delete(candidate);
+        else run.completedAnalysisCandidates.add(candidate);
+    }
+    const total = run.analysisCandidates.size;
+    state.recordingAnalysisProgress = total > 0 ? { completed: run.completedAnalysisCandidates.size, total } : null;
+    refreshTripAnalysisStatus();
+}
+
+function clearRecordingAnalysisProgress(): void {
+    state.recordingAnalysisProgress = null;
+    refreshTripAnalysisStatus();
+}
 
 /**
  * Renders a useful trip sidebar without file-byte reads, then starts prioritized
@@ -243,6 +269,8 @@ export async function startProgressiveIngest(ctx: ProgressiveIngestContext): Pro
     schedulingPolicy = RESPONSIVE_SCHEDULING;
     const run: ProgressiveIngestRun = {
         context: ctx,
+        analysisCandidates: new Set(),
+        completedAnalysisCandidates: new Set(),
         listReadyAt: 0,
         metadataFailed: 0,
         repairedHvcc: 0,
@@ -355,6 +383,8 @@ export async function startProgressiveIngest(ctx: ProgressiveIngestContext): Pro
     applyTimelapseCadenceWallSpans(ctx.allCandidates, classifyFilenameTime);
 
     candidatePool = ctx.allCandidates;
+    run.analysisCandidates = new Set(ctx.allCandidates.filter(needsRecordingMetadata));
+    publishRecordingAnalysisProgress(run);
     // Every regroup remaps active/expanded state, carries previews and clears the
     // positional event cursor as one atomic UI operation.
     commitRecordingTrips(ctx.allCandidates);
@@ -441,6 +471,7 @@ export function cancelProgressiveIngest(): void {
     sidecarAccelByFileKey = null;
     embeddedAccelByFileKey = new Map();
     activeRun = null;
+    clearRecordingAnalysisProgress();
 }
 
 /**
@@ -744,6 +775,7 @@ async function readRecordingData(
                 refreshTripsAfterRecordingRead([tripIdx]);
                 restampProvisionalMarkers();
                 settleRecordingMetadata(session, [tripIdx]);
+                publishRecordingAnalysisProgress(session.run, candidates);
                 refreshTripCard(tripIdx);
                 const trip = state.trips[tripIdx];
                 if (trip && schedulingPolicy.cadence === "immediate") {
@@ -968,6 +1000,7 @@ async function readRecordingData(
             for (const candidate of pending) {
                 if (candidate.metadataFailed !== true) candidate.metadataReady = false;
             }
+            publishRecordingAnalysisProgress(session.run, pending);
         }
         for (const key of inflightGpsKeys) {
             const remaining = (state.inflightEmbeddedGps.get(key) ?? 1) - 1;
@@ -1085,6 +1118,7 @@ function startBackgroundFill(): void {
             if (!state.unindexed.includes(candidate.file)) state.unindexed.push(candidate.file);
             if (run) run.metadataFailed++;
         }
+        if (run) publishRecordingAnalysisProgress(run, run.analysisCandidates);
         const readable = candidatePool.filter((candidate) => candidate.metadataFailed !== true);
         for (const candidate of candidatePool) {
             if (candidate.metadataFailed === true) state.addedKeys.delete(vendorFileKey(candidate));
@@ -1093,6 +1127,10 @@ function startBackgroundFill(): void {
         reanchorRecordingCandidates(readable);
         mergeRecordingAccel(readable);
         commitRecordingTrips(readable);
+        // The shared status describes mandatory time/duration work. Preview
+        // extraction continues as a visual enhancement and must not leave a
+        // misleading 100% bar on screen while a slow decoder catches up.
+        clearRecordingAnalysisProgress();
         renderTrips();
         restampProvisionalMarkers({ final: true });
         log.info("recording metadata complete", { trips: state.trips.length });

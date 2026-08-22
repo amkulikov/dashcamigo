@@ -241,6 +241,9 @@ export type I18nKey =
 
     // Sidebar
     | "sidebar.title"
+    | "sidebar.analysis.title"
+    | "sidebar.analysis.progress"
+    | "sidebar.analysis.hint"
     | "sidebar.sort.label"
     | "sidebar.sort.options.date"
     | "sidebar.sort.options.distance"

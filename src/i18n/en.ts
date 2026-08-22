@@ -191,6 +191,9 @@ export const enDict = {
     "notif.toast.dismiss": "Dismiss",
 
     "sidebar.title": "Trips",
+    "sidebar.analysis.title": "Checking trip details",
+    "sidebar.analysis.progress": "Time and duration · {done} of {total} recordings",
+    "sidebar.analysis.hint": "You can open any trip now — we'll prepare the one you choose first.",
     "sidebar.sort.label": "Sort field",
     "sidebar.sort.options.date": "Date",
     "sidebar.sort.options.distance": "Distance",
@@ -314,9 +317,9 @@ export const enDict = {
     "gpsLoad.title": "Loading GPS from {n, plural, one {# video} other {# videos}}",
     "gpsLoad.progress": "{done} of {total}",
     "gpsLoad.cancel": "Skip",
-    "gpsLoad.pending": "GPS loads when opened",
-    "gpsLoad.reading": "Reading GPS",
-    "recordingLoad.title": "Reading recordings",
+    "gpsLoad.pending": "GPS checked when opened",
+    "gpsLoad.reading": "Checking GPS",
+    "recordingLoad.title": "Preparing this trip",
     "recordingLoad.cancel": "Cancel",
 
     "resize.videoMap": "Resize map width",

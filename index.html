@@ -786,6 +786,23 @@
                     </button>
                 </div>
             </div>
+            <section id="trip-analysis-status" class="trip-analysis-status" hidden
+                     aria-labelledby="trip-analysis-title">
+                <div class="trip-analysis-status__header">
+                    <strong id="trip-analysis-title" data-i18n="sidebar.analysis.title">Checking trip details</strong>
+                    <span id="trip-analysis-percent" class="trip-analysis-status__percent mono">≈0%</span>
+                </div>
+                <div id="trip-analysis-progressbar" class="trip-analysis-status__bar" role="progressbar"
+                     aria-labelledby="trip-analysis-title" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                    <span id="trip-analysis-progress-fill" class="trip-analysis-status__fill"></span>
+                </div>
+                <div id="trip-analysis-progress" class="trip-analysis-status__progress">
+                    Time and duration · 0 of 0 recordings
+                </div>
+                <p class="trip-analysis-status__hint" data-i18n="sidebar.analysis.hint">
+                    You can open any trip now — we'll prepare the one you choose first.
+                </p>
+            </section>
             <ul id="trip-list" class="trip-list"></ul>
         </aside>
 

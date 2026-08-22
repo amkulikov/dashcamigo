@@ -40,8 +40,15 @@ async function armImmediateTripClickAndCancel(page: Page): Promise<void> {
         const observer = new MutationObserver(() => {
             if (modal.hidden) return;
             const cancel = document.getElementById("recording-load-modal-cancel") as HTMLButtonElement | null;
-            const target = window as typeof window & { __recordingCancelSeen?: { copy: string; clicked: boolean } };
-            target.__recordingCancelSeen = { copy: cancel?.textContent?.trim() ?? "", clicked: false };
+            const title = document.getElementById("recording-load-modal-title");
+            const target = window as typeof window & {
+                __recordingCancelSeen?: { copy: string; title: string; clicked: boolean };
+            };
+            target.__recordingCancelSeen = {
+                copy: cancel?.textContent?.trim() ?? "",
+                title: title?.textContent?.trim() ?? "",
+                clicked: false,
+            };
             cancel?.click();
             target.__recordingCancelSeen.clicked = true;
             observer.disconnect();
@@ -130,6 +137,7 @@ test.describe("progressive ingest", () => {
 
         // The list clears its busy state once every recording is settled.
         await expect(page.locator("#trip-list")).toHaveAttribute("aria-busy", "false", { timeout: 20_000 });
+        await expect(page.locator("#trip-analysis-status")).toBeHidden({ timeout: 20_000 });
 
         // The provisional list initially splits this tiny fixture into two trips.
         // Once real two-second durations land, the final regroup merges them into
@@ -165,10 +173,34 @@ test.describe("progressive ingest", () => {
                 target.__slowProbeReads = (target.__slowProbeReads ?? 0) + 1;
                 return new Promise<void>((resolve) => setTimeout(resolve, 600)).then(() => original.call(this));
             };
+            const status = document.getElementById("trip-analysis-status");
+            const percent = document.getElementById("trip-analysis-percent");
+            const target = window as typeof window & { __analysisProgressSeen?: string[] };
+            target.__analysisProgressSeen = [];
+            if (status && percent) {
+                new MutationObserver(() => {
+                    if (!status.hidden) target.__analysisProgressSeen?.push(percent.textContent?.trim() ?? "");
+                }).observe(status, { attributes: true, childList: true, subtree: true });
+            }
         });
 
         await page.locator("#folder-input").setInputFiles(dir);
         await expect(page.locator("li.trip:not(.unindexed-note)").first()).toBeVisible({ timeout: 10_000 });
+        const analysisStatus = page.locator("#trip-analysis-status");
+        await expect(analysisStatus).toBeVisible();
+        await expect(page.locator("#trip-analysis-title")).toHaveText("Checking trip details");
+        await expect(page.locator("#trip-analysis-percent")).toHaveText("≈0%");
+        await expect(page.locator("#trip-analysis-progressbar")).toHaveAttribute("aria-valuenow", "0");
+        await expect(page.locator("#trip-analysis-progress")).toHaveText("Time and duration · 0 of 30 recordings");
+        await expect(analysisStatus).toContainText(
+            "You can open any trip now — we'll prepare the one you choose first.",
+        );
+        // Background work is explained once above the list. Individual cards
+        // use a stable preview placeholder and facts instead of presenting an
+        // unrelated loading state.
+        const firstTrip = page.locator("li.trip:not(.unindexed-note)").first();
+        await expect(firstTrip.locator(".trip-no-preview-icon")).toBeVisible();
+        await expect(firstTrip.locator(".trip-meta-text")).not.toContainText("Reading");
         expect(
             await page.evaluate(() => (window as typeof window & { __slowProbeReads?: number }).__slowProbeReads ?? 0),
             "the list must render after starting only the first of three delayed probe reads",
@@ -176,6 +208,56 @@ test.describe("progressive ingest", () => {
         await expect(page.locator("li.trip:not(.unindexed-note)").first().locator(".trip-title")).toContainText(
             "Jan 30",
         );
+        await expect(page.locator("#trip-list")).toHaveAttribute("aria-busy", "false", { timeout: 30_000 });
+        expect(
+            await page.evaluate(
+                () =>
+                    (window as typeof window & { __analysisProgressSeen?: string[] }).__analysisProgressSeen?.some(
+                        (value) => /^≈(?:[1-9]\d?|100)%$/.test(value),
+                    ) ?? false,
+            ),
+            "the shared status must expose progress beyond its initial 0% state",
+        ).toBe(true);
+        await expect(analysisStatus).toBeHidden({ timeout: 20_000 });
+    });
+
+    test("explains the shared trip-details work in Russian", async ({ page }) => {
+        await gotoApp(page, "ru");
+        await page.evaluate(() => {
+            const status = document.getElementById("trip-analysis-status");
+            const target = window as typeof window & {
+                __russianAnalysisStatus?: { title: string; progress: string; hint: string };
+            };
+            if (!status) return;
+            new MutationObserver(() => {
+                if (status.hidden || target.__russianAnalysisStatus) return;
+                target.__russianAnalysisStatus = {
+                    title: document.getElementById("trip-analysis-title")?.textContent?.trim() ?? "",
+                    progress: document.getElementById("trip-analysis-progress")?.textContent?.trim() ?? "",
+                    hint: status.querySelector(".trip-analysis-status__hint")?.textContent?.trim() ?? "",
+                };
+            }).observe(status, { attributes: true, childList: true, subtree: true });
+        });
+
+        await page.locator("#folder-input").setInputFiles(SAMPLE_70MAI);
+        await expect
+            .poll(
+                () =>
+                    page.evaluate(
+                        () =>
+                            (
+                                window as typeof window & {
+                                    __russianAnalysisStatus?: { title: string; progress: string; hint: string };
+                                }
+                            ).__russianAnalysisStatus,
+                    ),
+                { timeout: 10_000 },
+            )
+            .toEqual({
+                title: "Уточняем детали поездок",
+                progress: "Время и длительность · 0 из 6 записей",
+                hint: "Поездки уже можно открывать — выбранную подготовим первой.",
+            });
     });
 
     test("keyboard: Enter on the focused trip title opens the trip", async ({ page }) => {
@@ -278,13 +360,13 @@ test.describe("progressive ingest", () => {
                         () =>
                             (
                                 window as typeof window & {
-                                    __recordingCancelSeen?: { copy: string; clicked: boolean };
+                                    __recordingCancelSeen?: { copy: string; title: string; clicked: boolean };
                                 }
                             ).__recordingCancelSeen,
                     ),
                 { timeout: 10_000 },
             )
-            .toEqual({ copy: "Cancel", clicked: true });
+            .toEqual({ copy: "Cancel", title: "Preparing this trip", clicked: true });
 
         await expect(page.locator("#recording-load-modal")).toBeHidden();
         await expect(page.locator("#player-chart-canvas")).toBeHidden();
@@ -303,9 +385,9 @@ test.describe("progressive ingest", () => {
         await page.locator("#folder-input").setInputFiles(SAMPLE_70MAI);
 
         await expect(page.locator("#trip-list")).toHaveAttribute("aria-busy", "false", { timeout: 20_000 });
-        // No card is stuck in the provisional shimmer, and the duplicate re-drop
-        // did not add a second copy of the footage.
-        await expect(page.locator("li.trip.trip--loading")).toHaveCount(0, { timeout: 20_000 });
+        // The shared status converges, and the duplicate re-drop did not add a
+        // second copy of the footage.
+        await expect(page.locator("#trip-analysis-status")).toBeHidden({ timeout: 20_000 });
         expect(
             await trips.count(),
             "duplicate re-drop must yield at least the original trip(s)",
@@ -346,7 +428,7 @@ test.describe("progressive ingest", () => {
         await page.locator("#settings-modal-close").click();
 
         await expect(page.locator("#trip-list")).toHaveAttribute("aria-busy", "false", { timeout: 30_000 });
-        await expect(page.locator("li.trip.trip--loading")).toHaveCount(0, { timeout: 30_000 });
+        await expect(page.locator("#trip-analysis-status")).toBeHidden({ timeout: 30_000 });
         await expect
             .poll(
                 () =>
@@ -371,6 +453,6 @@ test.describe("progressive ingest", () => {
         // Both cards present (70mai trip + gopro trip) and the whole list converges.
         await expect.poll(async () => trips.count(), { timeout: 30_000 }).toBeGreaterThanOrEqual(2);
         await expect(page.locator("#trip-list")).toHaveAttribute("aria-busy", "false", { timeout: 20_000 });
-        await expect(page.locator("li.trip.trip--loading")).toHaveCount(0, { timeout: 20_000 });
+        await expect(page.locator("#trip-analysis-status")).toBeHidden({ timeout: 20_000 });
     });
 });

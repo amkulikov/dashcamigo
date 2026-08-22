@@ -192,6 +192,9 @@ export const frDict = {
     "notif.toast.dismiss": "Fermer",
 
     "sidebar.title": "Trajets",
+    "sidebar.analysis.title": "Vérification des détails des trajets",
+    "sidebar.analysis.progress": "Horaires et durées · {done} enregistrements sur {total}",
+    "sidebar.analysis.hint": "Tu peux déjà ouvrir n’importe quel trajet — on préparera d’abord celui que tu choisis.",
     "sidebar.sort.label": "Champ de tri",
     "sidebar.sort.options.date": "Date",
     "sidebar.sort.options.distance": "Distance",
@@ -315,9 +318,9 @@ export const frDict = {
     "gpsLoad.title": "Chargement du GPS de {n, plural, one {# vidéo} other {# vidéos}}",
     "gpsLoad.progress": "{done} sur {total}",
     "gpsLoad.cancel": "Passer",
-    "gpsLoad.pending": "GPS chargé à l’ouverture",
-    "gpsLoad.reading": "Lecture du GPS",
-    "recordingLoad.title": "Lecture des enregistrements",
+    "gpsLoad.pending": "GPS vérifié à l’ouverture",
+    "gpsLoad.reading": "Vérification du GPS",
+    "recordingLoad.title": "Préparation du trajet",
     "recordingLoad.cancel": "Annuler",
 
     "resize.videoMap": "Régler la largeur de la carte",

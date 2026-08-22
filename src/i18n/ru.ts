@@ -195,6 +195,9 @@ export const ruDict = {
     "notif.toast.dismiss": "Закрыть",
 
     "sidebar.title": "Поездки",
+    "sidebar.analysis.title": "Уточняем детали поездок",
+    "sidebar.analysis.progress": "Время и длительность · {done} из {total} записей",
+    "sidebar.analysis.hint": "Поездки уже можно открывать — выбранную подготовим первой.",
     "sidebar.sort.label": "Поле сортировки",
     "sidebar.sort.options.date": "Дата",
     "sidebar.sort.options.distance": "Дистанция",
@@ -318,9 +321,9 @@ export const ruDict = {
     "gpsLoad.title": "Гружу GPS из {n, plural, one {# видео} few {# видео} other {# видео}}",
     "gpsLoad.progress": "{done} из {total}",
     "gpsLoad.cancel": "Пропустить",
-    "gpsLoad.pending": "GPS загрузится при открытии",
-    "gpsLoad.reading": "Читаю GPS",
-    "recordingLoad.title": "Читаю записи",
+    "gpsLoad.pending": "GPS уточним при открытии",
+    "gpsLoad.reading": "Уточняем GPS",
+    "recordingLoad.title": "Готовим поездку",
     "recordingLoad.cancel": "Отмена",
 
     "resize.videoMap": "Изменить ширину карты",

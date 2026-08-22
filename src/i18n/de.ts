@@ -190,6 +190,9 @@ export const deDict = {
     "notif.toast.dismiss": "Schließen",
 
     "sidebar.title": "Fahrten",
+    "sidebar.analysis.title": "Fahrtdetails werden geprüft",
+    "sidebar.analysis.progress": "Zeit und Dauer · {done} von {total} Aufnahmen",
+    "sidebar.analysis.hint": "Du kannst jede Fahrt schon öffnen — die ausgewählte bereiten wir zuerst vor.",
     "sidebar.sort.label": "Sortierfeld",
     "sidebar.sort.options.date": "Datum",
     "sidebar.sort.options.distance": "Distanz",
@@ -313,9 +316,9 @@ export const deDict = {
     "gpsLoad.title": "Lade GPS aus {n, plural, one {# Video} other {# Videos}}",
     "gpsLoad.progress": "{done} von {total}",
     "gpsLoad.cancel": "Überspringen",
-    "gpsLoad.pending": "GPS wird beim Öffnen geladen",
-    "gpsLoad.reading": "GPS wird gelesen",
-    "recordingLoad.title": "Lese Aufnahmen",
+    "gpsLoad.pending": "GPS wird beim Öffnen geprüft",
+    "gpsLoad.reading": "GPS wird geprüft",
+    "recordingLoad.title": "Fahrt wird vorbereitet",
     "recordingLoad.cancel": "Abbrechen",
 
     "resize.videoMap": "Kartenbreite ändern",
