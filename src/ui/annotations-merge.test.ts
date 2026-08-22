@@ -21,12 +21,14 @@ vi.mock("./folder-sources.js", () => ({
 import {
     _resetForTests,
     applyMergedRecords,
+    deleteMarker,
     markerById,
     markersForTrip,
     rebindFolderAnnotations,
     recordsForFolder,
     setTripMeta,
     tripMetaFor,
+    updateMarkerText,
 } from "./annotations.js";
 import { state } from "./state.js";
 
@@ -142,6 +144,25 @@ describe("applyMergedRecords", () => {
         });
     });
 
+    it("preserves a live local folder binding for an unremembered batch import", () => {
+        applyMergedRecords([meta({ folderId: "folder-A", updatedAt: 100, name: "local" })]);
+        const changed = applyMergedRecords([meta({ folderId: "", updatedAt: 200, name: "from file" })], {
+            preserveFolderIds: new Set(["folder-A"]),
+        });
+        expect(changed).toBe(1);
+        expect(recordsForFolder("folder-A")[0]).toMatchObject({ name: "from file" });
+        expect(recordsForFolder("")).toEqual([]);
+    });
+
+    it("does not preserve a dead folder binding for an unremembered batch import", () => {
+        applyMergedRecords([meta({ folderId: "dead-folder", updatedAt: 100, name: "local" })]);
+        applyMergedRecords([meta({ folderId: "", updatedAt: 200, name: "from file" })], {
+            preserveFolderIds: new Set(["folder-A"]),
+        });
+        expect(recordsForFolder("dead-folder")).toEqual([]);
+        expect(recordsForFolder("")[0]).toMatchObject({ name: "from file" });
+    });
+
     it("applies an incoming tombstone and hides the record from the trip", () => {
         state.trips = [buildTrip()];
         applyMergedRecords([meta()]);
@@ -195,6 +216,16 @@ describe("rebindFolderAnnotations", () => {
         expect(markersForTrip(state.trips[0]!).map((m) => m.id)).toEqual(["marker-1"]);
     });
 
+    it("does not show a marker from another folder at the same UTC", () => {
+        state.trips = [buildTrip()];
+        folderByKey.set(ANCHOR_KEY, "folder-A");
+        applyMergedRecords([
+            marker({ id: "right-folder", folderId: "folder-A" }),
+            marker({ id: "wrong-folder", folderId: "folder-B" }),
+        ]);
+        expect(markersForTrip(state.trips[0]!).map((item) => item.id)).toEqual(["right-folder"]);
+    });
+
     it("leaves an orphaned marker outside every trip of this folder", () => {
         state.trips = [buildTrip()];
         folderByKey.set(ANCHOR_KEY, "folder-A");
@@ -233,6 +264,19 @@ describe("trip-meta anchor resolution", () => {
         applyMergedRecords([meta({ id: "revived", updatedAt: 400, name: "renamed" })]);
         state.trips = [buildTrip()];
         expect(tripMetaFor(state.trips[0]!)?.name).toBe("renamed");
+    });
+
+    it("resolves equal-time records deterministically regardless of load order", () => {
+        const one = meta({ id: "one", updatedAt: 100, name: "One" });
+        const two = meta({ id: "two", updatedAt: 100, name: "Two" });
+        state.trips = [buildTrip()];
+        applyMergedRecords([one, two]);
+        const forward = tripMetaFor(state.trips[0]!)?.id;
+
+        _resetForTests();
+        applyMergedRecords([two, one]);
+        const reverse = tripMetaFor(state.trips[0]!)?.id;
+        expect(forward).toBe(reverse);
     });
 });
 
@@ -282,6 +326,7 @@ describe("setTripMeta on a trip a regroup merged", () => {
         setTripMeta(trip, { name: "", note: "" });
         expect(tripMetaFor(trip), "nothing left to show").toBeNull();
         expect(recordsForFolder("folder-A").find((r) => r.id === "home")?.deleted).toBe(true);
+        expect(recordsForFolder("folder-A").find((r) => r.id === "home")).not.toHaveProperty("name");
     });
 
     it("applies an edit to the visible record even when a remote clock ran ahead", () => {
@@ -315,5 +360,26 @@ describe("setTripMeta on a trip a regroup merged", () => {
         // and the two profiles disagree about the trip forever.
         const written = recordsForFolder("folder-A").find((r) => r.kind === "tripMeta" && r.name === "Airport run");
         expect(written?.updatedAt, "beats the future-dated tombstone").toBeGreaterThan(future);
+    });
+});
+
+describe("marker edits", () => {
+    beforeEach(() => {
+        _resetForTests();
+        folderByKey.clear();
+        state.trips = [];
+    });
+
+    it("beats a future-dated imported version when editing locally", () => {
+        const future = Date.now() + 60 * 60 * 1000;
+        applyMergedRecords([marker({ folderId: "folder-A", updatedAt: future })]);
+        updateMarkerText("marker-1", "updated here");
+        expect(markerById("marker-1")).toMatchObject({ text: "updated here", updatedAt: future + 1 });
+    });
+
+    it("removes private text from a marker tombstone", () => {
+        applyMergedRecords([marker({ folderId: "folder-A", text: "private detail" })]);
+        deleteMarker("marker-1");
+        expect(recordsForFolder("folder-A")[0]).toMatchObject({ deleted: true, text: "" });
     });
 });

@@ -5,7 +5,12 @@
 // unavailability degrades to session-only annotations, never an error.
 
 import { createLogger } from "../log.js";
-import { annotationContentEqual, loadAllAnnotations, saveAnnotation, saveAnnotations } from "../persist/annotations.js";
+import {
+    compareAnnotationVersions,
+    loadAllAnnotations,
+    saveAnnotation,
+    saveAnnotations,
+} from "../persist/annotations.js";
 import { fileIdentityKey } from "../persist/identity.js";
 import type { AnnotationRecord, MarkerAnnotation, TripMetaAnnotation } from "../persist/types.js";
 import type { Trip, VideoCandidate } from "../trips.js";
@@ -20,11 +25,11 @@ const log = createLogger("annotations");
 const recordsById = new Map<string, AnnotationRecord>();
 // anchor file identity -> LIVE trip-meta record (tombstones excluded).
 const tripMetaByAnchor = new Map<string, TripMetaAnnotation>();
-// anchor file identity -> highest updatedAt seen for it, tombstones included.
-// A tombstone leaves no trace in tripMetaByAnchor, so without this an OLDER
-// live record processed afterwards walks into the empty slot and resurrects
-// itself - and the load order is db.getAll's (by UUID), not by time.
-const anchorWatermark = new Map<string, number>();
+// anchor file identity -> winning trip-meta version, tombstones included. A
+// tombstone leaves no trace in tripMetaByAnchor, so this separate winner keeps
+// an older live record from resurrecting it. Keeping the full record (not just
+// updatedAt) also makes exact timestamp ties deterministic across load orders.
+const tripMetaWinnerByAnchor = new Map<string, TripMetaAnnotation>();
 // id -> LIVE timeline marker (tombstones excluded).
 const markersById = new Map<string, MarkerAnnotation>();
 
@@ -41,7 +46,7 @@ export function initAnnotations(onLoaded?: () => void): void {
                 // click on a cold start) - the older DB snapshot must not
                 // override what the merge just wrote.
                 const existing = recordsById.get(record.id);
-                if (existing && existing.updatedAt >= record.updatedAt) continue;
+                if (existing && compareAnnotationVersions(existing, record) >= 0) continue;
                 indexRecord(record);
                 applied++;
             }
@@ -61,26 +66,14 @@ function indexRecord(record: AnnotationRecord): void {
     recordsById.set(record.id, record);
     if (record.kind === "tripMeta") {
         // The anchor entry is shared across record ids (two profiles can
-        // annotate the same trip independently), so resolution is pure LWW
-        // against the anchor's watermark - never against iteration order: a
-        // stale tombstone cannot unindex a newer live record, and a stale live
-        // record cannot re-occupy an anchor a newer tombstone cleared.
+        // annotate the same trip independently), so resolve against the full
+        // winning version, never iteration order.
         const key = record.anchor.fileIdentityKey;
-        const current = tripMetaByAnchor.get(key);
-        const watermark = anchorWatermark.get(key) ?? Number.NEGATIVE_INFINITY;
-        if (record.updatedAt > watermark) anchorWatermark.set(key, record.updatedAt);
-        if (record.deleted) {
-            if (current && (current.id === record.id || current.updatedAt <= record.updatedAt)) {
-                tripMetaByAnchor.delete(key);
-            }
-        } else if (record.updatedAt >= watermark || current?.id === record.id) {
-            // The same-id case bypasses the watermark on purpose and cannot
-            // resurrect anything (a tombstone leaves the slot empty, so
-            // `current` would be absent): it is an edit to the very record on
-            // screen, and a watermark set by another machine's fast clock must
-            // not make the user's own rename look like it did nothing.
-            tripMetaByAnchor.set(key, record);
-        }
+        const winner = tripMetaWinnerByAnchor.get(key);
+        if (winner && compareTripMetaVersions(record, winner) < 0) return;
+        tripMetaWinnerByAnchor.set(key, record);
+        if (record.deleted) tripMetaByAnchor.delete(key);
+        else tripMetaByAnchor.set(key, record);
     } else if (record.kind === "marker") {
         if (record.deleted) markersById.delete(record.id);
         else markersById.set(record.id, record);
@@ -119,7 +112,7 @@ export function tripMetaFor(trip: Trip): TripMetaAnnotation | null {
     let best: TripMetaAnnotation | null = null;
     for (const candidate of tripAllCandidates(trip)) {
         const meta = tripMetaByAnchor.get(candidateIdentityKey(candidate));
-        if (meta && (best === null || meta.updatedAt > best.updatedAt)) best = meta;
+        if (meta && (best === null || compareTripMetaVersions(meta, best) > 0)) best = meta;
     }
     return best;
 }
@@ -184,15 +177,26 @@ export function setTripMeta(trip: Trip, patch: TripMetaPatch): void {
         if (patch.isFavorite) base.isFavorite = true;
         else delete base.isFavorite;
     }
-    // Past the anchor's watermark, not just "now": another machine's fast clock
+    // Past the anchor winner, not just "now": another machine's fast clock
     // can leave a future-stamped record (a tombstone in particular) on this
     // anchor, and a wall-clock stamp behind it loses LWW - indexRecord would
     // drop this edit on the floor, and so would the other machine when the
     // notes file reaches it. The same-id escape hatch in indexRecord does not
     // help here: clearing an anchor leaves no `current` for a new record to
     // match. Bounded by the skew that already exists; it never invents more.
-    base.updatedAt = Math.max(Date.now(), (anchorWatermark.get(base.anchor.fileIdentityKey) ?? 0) + 1);
+    base.updatedAt = Math.max(
+        Date.now(),
+        (tripMetaWinnerByAnchor.get(base.anchor.fileIdentityKey)?.updatedAt ?? 0) + 1,
+    );
     base.deleted = !base.name && !base.note && base.isFavorite !== true;
+    if (base.deleted) {
+        // Tombstones need the anchor for merge/rebinding, but not the note the
+        // user explicitly removed. Do not keep deleted private text forever in
+        // IndexedDB and every future copy of the notes file.
+        delete base.name;
+        delete base.note;
+        delete base.isFavorite;
+    }
     persistRecord(base);
     // A clear is not a moment to talk about keeping annotations - only a
     // record the user wants to keep goes to the user-edit hook.
@@ -203,7 +207,14 @@ export function setTripMeta(trip: Trip, patch: TripMetaPatch): void {
     // trip they were written on, which a different gap setting brings back.
     if (base.deleted) {
         for (const meta of superseded) {
-            persistRecord({ ...meta, deleted: true, updatedAt: base.updatedAt });
+            persistRecord({
+                id: meta.id,
+                folderId: meta.folderId,
+                updatedAt: base.updatedAt,
+                deleted: true,
+                kind: "tripMeta",
+                anchor: meta.anchor,
+            });
         }
     }
 }
@@ -216,12 +227,19 @@ function setOrDrop(record: TripMetaAnnotation, field: "name" | "note", value: st
 }
 
 /** Live markers whose UTC lands inside the trip's wall span, oldest first.
- *  Markers anchor to pure UTC, so regrouping cannot orphan them - they follow
- *  whatever trip covers that moment now. */
+ *  Markers anchor to UTC plus folder ownership, so regrouping cannot orphan
+ *  them without making a same-time trip from another folder claim them. */
 export function markersForTrip(trip: Trip): MarkerAnnotation[] {
     const startMs = trip.startUtc * 1000;
     const endMs = trip.endUtc * 1000;
-    return [...markersById.values()].filter((m) => m.utc >= startMs && m.utc <= endMs).sort((a, b) => a.utc - b.utc);
+    const folderIds = folderIdsForTrip(trip);
+    return [...markersById.values()]
+        .filter((marker) => folderIds.has(marker.folderId) && marker.utc >= startMs && marker.utc <= endMs)
+        .sort((a, b) => a.utc - b.utc);
+}
+
+function folderIdsForTrip(trip: Trip): Set<string> {
+    return new Set(tripAllCandidates(trip).map((candidate) => folderIdForFileKey(candidateIdentityKey(candidate))));
 }
 
 /** A marker by id, or null (deleted/unknown). */
@@ -342,7 +360,7 @@ export function restampProvisionalMarkers(opts?: {
         if (Math.abs(utcMs - marker.utc) < 500) continue;
         // A fresh updatedAt: the corrected UTC must LWW-win over the wrong
         // value that may already sit in the notes file or on another machine.
-        persistRecord({ ...marker, utc: utcMs, updatedAt: Date.now() });
+        persistRecord({ ...marker, utc: utcMs, updatedAt: nextUpdatedAt(marker) });
         moved++;
     }
     if (opts?.final) {
@@ -363,7 +381,7 @@ export function restampProvisionalMarkers(opts?: {
 export function _resetForTests(): void {
     recordsById.clear();
     tripMetaByAnchor.clear();
-    anchorWatermark.clear();
+    tripMetaWinnerByAnchor.clear();
     markersById.clear();
     provisionalMarkerAnchors.clear();
 }
@@ -394,7 +412,7 @@ function indexCandidatesByIdentity(): Map<string, LocatedCandidate> {
 export function updateMarkerText(id: string, text: string): void {
     const marker = markersById.get(id);
     if (!marker) return;
-    const updated = { ...marker, text: text.trim(), updatedAt: Date.now() };
+    const updated = { ...marker, text: text.trim(), updatedAt: nextUpdatedAt(marker) };
     persistRecord(updated);
     userAnnotationHook?.(updated);
 }
@@ -403,7 +421,17 @@ export function updateMarkerText(id: string, text: string): void {
 export function deleteMarker(id: string): void {
     const marker = markersById.get(id);
     if (!marker) return;
-    persistRecord({ ...marker, deleted: true, updatedAt: Date.now() });
+    persistRecord({ ...marker, text: "", deleted: true, updatedAt: nextUpdatedAt(marker) });
+}
+
+function nextUpdatedAt(record: AnnotationRecord): number {
+    return Math.max(Date.now(), record.updatedAt + 1);
+}
+
+function compareTripMetaVersions(a: TripMetaAnnotation, b: TripMetaAnnotation): number {
+    const contentOrder = compareAnnotationVersions(a, b);
+    if (contentOrder !== 0 || a.id === b.id) return contentOrder;
+    return a.id > b.id ? 1 : -1;
 }
 
 function persistRecord(record: AnnotationRecord): void {
@@ -460,28 +488,33 @@ export function recordsForFolder(folderId: string): AnnotationRecord[] {
  * id silently: folderId is per-profile bookkeeping (restamped by the sidecar
  * reader), and without adoption a record imported on another machine - or
  * kept through a forget/re-remember cycle - would stay keyed to a dead id
- * and vanish from every future sidecar write.
+ * and vanish from every future sidecar write. A handle-less batch can pass
+ * preserveFolderIds to keep bindings that still refer to remembered folders;
+ * dead bindings remain adoptable.
  */
-export function applyMergedRecords(records: AnnotationRecord[]): number {
+export function applyMergedRecords(
+    records: AnnotationRecord[],
+    options?: { preserveFolderIds?: ReadonlySet<string> },
+): number {
     let changed = 0;
     const toSave: AnnotationRecord[] = [];
     for (const record of records) {
         const existing = recordsById.get(record.id);
+        const preserveFolder = existing && options?.preserveFolderIds?.has(existing.folderId);
+        const incoming = preserveFolder ? { ...record, folderId: existing.folderId } : record;
         if (existing) {
-            const localWins =
-                existing.updatedAt > record.updatedAt ||
-                (existing.updatedAt === record.updatedAt && annotationContentEqual(existing, record));
+            const localWins = compareAnnotationVersions(existing, incoming) >= 0;
             if (localWins) {
-                if (existing.folderId !== record.folderId) {
-                    const restamped = { ...existing, folderId: record.folderId };
+                if (!preserveFolder && existing.folderId !== incoming.folderId) {
+                    const restamped = { ...existing, folderId: incoming.folderId };
                     indexRecord(restamped);
                     toSave.push(restamped);
                 }
                 continue;
             }
         }
-        indexRecord(record);
-        toSave.push(record);
+        indexRecord(incoming);
+        toSave.push(incoming);
         changed++;
     }
     if (toSave.length > 0) {
@@ -504,8 +537,7 @@ export function applyMergedRecords(records: AnnotationRecord[]): number {
 export function rebindFolderAnnotations(folderId: string, existingFolderIds: ReadonlySet<string>): number {
     const ownedUtcRanges: Array<[number, number]> = [];
     for (const trip of state.trips) {
-        const first = tripAllCandidates(trip)[0];
-        if (first && folderIdForFileKey(candidateIdentityKey(first)) === folderId) {
+        if (folderIdsForTrip(trip).has(folderId)) {
             ownedUtcRanges.push([trip.startUtc * 1000, trip.endUtc * 1000]);
         }
     }

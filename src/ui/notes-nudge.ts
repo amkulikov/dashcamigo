@@ -9,7 +9,7 @@ import { createLogger } from "../log.js";
 import { getFolder } from "../persist/folders.js";
 import type { AnnotationRecord } from "../persist/types.js";
 import { registerUserAnnotationHook } from "./annotations.js";
-import { getNotesConnector, hasLiveSource, rememberLiveSource } from "./folder-sources.js";
+import { getNotesConnector, hasLiveSource, notifyFolderOpened, rememberLiveSource } from "./folder-sources.js";
 import { notify } from "./notifications.js";
 
 const log = createLogger("notes-nudge");
@@ -85,12 +85,16 @@ async function connectNotesFile(folderId: string, anchorKey: string | null): Pro
         log.warn("notes nudge action found no folder to attach to");
         return;
     }
-    // Remembering can auto-attach a notes file already sitting in the folder
-    // (annotations-sidecar's folder-opened hook). Re-read before offering to
-    // CREATE one - a second file next to an adopted one only sows confusion.
-    // The hook runs async, so a still-in-flight adopt can slip past this;
-    // attachSidecar merges before any write either way, so nothing is lost.
-    const fresh = (await getFolder(folder.id).catch(() => null)) ?? folder;
+    // Finish (or repeat) discovery before offering to CREATE a file. This is
+    // the critical fresh-profile path: the notes file may already be sitting
+    // in the folder while IndexedDB has never stored its handle. Awaiting the
+    // folder hook makes attachment part of the decision instead of a detached
+    // race that could open the destructive Save-As picker beside that file.
+    let fresh = (await getFolder(folder.id).catch(() => null)) ?? folder;
+    if (!fresh.sidecarHandle) {
+        await notifyFolderOpened(fresh);
+        fresh = (await getFolder(folder.id).catch(() => null)) ?? fresh;
+    }
     if (fresh.sidecarHandle) return;
     connector.create(fresh);
 }

@@ -6,6 +6,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { VendorFile } from "../parsers/types.js";
+import { rememberFolder } from "../persist/folders.js";
 import { fileIdentityKey, fileIdentityOf } from "../persist/identity.js";
 import type { RememberedFolder } from "../persist/types.js";
 
@@ -29,7 +30,9 @@ import {
     folderDisplayLabel,
     folderIdForFileKey,
     hasLiveSource,
+    registerFolderOpenedHook,
     registerIngestSource,
+    rememberLiveSource,
 } from "./folder-sources.js";
 import type { IngestOrigin } from "./state.js";
 
@@ -53,6 +56,7 @@ function fakeFolder(id: string, label: string, addedAt: number): RememberedFolde
 
 describe("registerIngestSource", () => {
     beforeEach(() => {
+        vi.clearAllMocks();
         _resetForTests();
     });
 
@@ -84,6 +88,31 @@ describe("registerIngestSource", () => {
         expect(folderIdForFileKey(keyOf(other)), "another root stays unbound").toBe("");
         expect(folderIdForFileKey(keyOf(bare)), "a loose file stays unbound").toBe("");
         expect(hasLiveSource(keyOf(other)), "the other root has no handle").toBe(false);
+    });
+
+    it("waits for notes-file discovery when remembering a live source", async () => {
+        const file = vendorFile("CARD/Normal/a.mp4");
+        const handle = fakeHandle("CARD");
+        const folder = { ...fakeFolder("folder-3", "CARD", 1), handle, lastOpenedAt: 2 };
+        vi.mocked(rememberFolder).mockResolvedValue(folder);
+        registerIngestSource([file], { handle, folderId: "" });
+
+        let finishDiscovery: (() => void) | undefined;
+        const discovery = new Promise<void>((resolve) => {
+            finishDiscovery = resolve;
+        });
+        const opened = vi.fn(() => discovery);
+        registerFolderOpenedHook(opened);
+
+        let settled = false;
+        const remembering = rememberLiveSource(keyOf(file)).then((result) => {
+            settled = true;
+            return result;
+        });
+        await vi.waitFor(() => expect(opened).toHaveBeenCalledWith(folder));
+        expect(settled, "must not outrun auto-adoption").toBe(false);
+        finishDiscovery?.();
+        await expect(remembering).resolves.toBe(folder);
     });
 });
 

@@ -101,21 +101,30 @@ export function _resetForTests(): void {
     folderIdByFileKey.clear();
     rememberedCache = [];
     rememberedAvailability.clear();
+    folderOpenedHook = null;
+    notesConnector = null;
 }
 
 // The sidecar layer merges its file after a folder opens or is remembered. A
 // registered hook, not an import - the sidecar module reads annotations, which
 // resolve their folder id through this module.
-let folderOpenedHook: ((folder: RememberedFolder) => void) | null = null;
+let folderOpenedHook: ((folder: RememberedFolder) => void | Promise<void>) | null = null;
 
 /** Registers the after-open hook for remembered folders. */
-export function registerFolderOpenedHook(callback: (folder: RememberedFolder) => void): void {
+export function registerFolderOpenedHook(callback: (folder: RememberedFolder) => void | Promise<void>): void {
     folderOpenedHook = callback;
 }
 
 /** Notifies the sidecar layer that a folder is now open/remembered. */
-export function notifyFolderOpened(folder: RememberedFolder): void {
-    folderOpenedHook?.(folder);
+export async function notifyFolderOpened(folder: RememberedFolder): Promise<void> {
+    try {
+        await folderOpenedHook?.(folder);
+    } catch (err) {
+        // Notes-file IO must not turn a successfully opened recordings folder
+        // into a failed open. The sidecar layer logs its own expected failures;
+        // this boundary catches any unexpected hook rejection.
+        log.warn("folder-opened hook failed", { err: err instanceof Error ? err.message : String(err) });
+    }
 }
 
 /** The two ways to attach a notes file. They are separate because the pickers
@@ -172,7 +181,7 @@ export async function rememberLiveSource(identityKey: string | null): Promise<Re
         bindSourceToFolder(source.handle, record);
         // Adopts annotations made before this point (they carry folderId "")
         // and merges a notes file the folder may already hold.
-        notifyFolderOpened(record);
+        await notifyFolderOpened(record);
         refreshRememberedFolders();
         return record;
     } catch (err) {
@@ -557,7 +566,7 @@ async function onRemember(source: FolderSource, button: HTMLButtonElement): Prom
         bindSourceToFolder(source.handle, record);
         // Adopts annotations made before this click (they carry folderId "")
         // and merges the notes file if this folder already had one.
-        notifyFolderOpened(record);
+        await notifyFolderOpened(record);
         refreshRememberedFolders();
     } catch (err) {
         log.warn("rememberFolder failed", { err: err instanceof Error ? err.message : String(err) });
@@ -660,6 +669,15 @@ async function fillMenu(menu: HTMLElement, source: FolderSource, setOpen: (open:
     if (folder && connector) {
         if (folder.sidecarHandle) {
             menu.appendChild(menuState(t("folderSources.notesConnected")));
+            // A persisted handle can become unreadable, point at a replaced
+            // file, or lose its grant. Keep a non-destructive recovery path
+            // available instead of presenting "Connected" as a dead end.
+            menu.appendChild(
+                menuAction(t("folderSources.useExistingNotes"), () => {
+                    setOpen(false);
+                    connector.useExisting(folder);
+                }),
+            );
         } else {
             // Create first: the common case is a folder that has no notes file
             // yet. Adopting one is for a card that already carries notes from

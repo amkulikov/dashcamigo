@@ -161,18 +161,22 @@ export async function requestFolderPermission(handle: FileSystemDirectoryHandle)
  * browser restart it reads "prompt", and the debounced gesture-less writes
  * can only skip. This must run while user activation is live (a click); it
  * may show the permission prompt, where Chromium offers "Allow on every
- * visit" to end the asking. Silent no-op when already granted/denied or when
- * activation is spent.
+ * visit" to end the asking. Returns whether write access is available after
+ * the attempt; false when denied or when activation is already spent.
  */
-export async function ensureFileReadwritePermission(handle: FileSystemFileHandle): Promise<void> {
-    if (typeof handle.queryPermission !== "function" || typeof handle.requestPermission !== "function") return;
+export async function ensureFileReadwritePermission(handle: FileSystemFileHandle): Promise<boolean> {
+    // Some adapter-backed handles omit the permission methods and rely on the
+    // operation itself. Preserve that path instead of declaring it denied.
+    if (typeof handle.queryPermission !== "function" || typeof handle.requestPermission !== "function") return true;
     try {
         const current = await handle.queryPermission({ mode: "readwrite" });
-        if (current !== "prompt") return;
-        if (navigator.userActivation && !navigator.userActivation.isActive) return;
-        await handle.requestPermission({ mode: "readwrite" });
+        if (current === "granted") return true;
+        if (current !== "prompt") return false;
+        if (navigator.userActivation && !navigator.userActivation.isActive) return false;
+        return (await handle.requestPermission({ mode: "readwrite" })) === "granted";
     } catch (err) {
         log.warn("sidecar permission re-arm failed", { err: err instanceof Error ? err.message : String(err) });
+        return false;
     }
 }
 

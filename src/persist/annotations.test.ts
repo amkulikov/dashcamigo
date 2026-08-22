@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-    annotationContentEqual,
     buildSidecarPayload,
+    compareAnnotationVersions,
     mergeAnnotationLists,
     parseSidecarPayload,
 } from "./annotations.js";
@@ -42,6 +42,16 @@ describe("mergeAnnotationLists", () => {
         expect(mergeAnnotationLists([tombstone], [live])[0]!.deleted, "tombstone on a").toBe(true);
     });
 
+    it("resolves equal live versions deterministically regardless of side", () => {
+        const one = tripMeta({ updatedAt: 100, name: "one" });
+        const two = tripMeta({ updatedAt: 100, name: "two" });
+        const winnerFromOne = mergeAnnotationLists([one], [two])[0]!;
+        const winnerFromTwo = mergeAnnotationLists([two], [one])[0]!;
+        expect(winnerFromOne).toEqual(winnerFromTwo);
+        expect(compareAnnotationVersions(winnerFromOne, one)).toBeGreaterThanOrEqual(0);
+        expect(compareAnnotationVersions(winnerFromOne, two)).toBeGreaterThanOrEqual(0);
+    });
+
     it("lets a newer edit win over an older tombstone", () => {
         const tombstone = tripMeta({ updatedAt: 100, deleted: true });
         const revived = tripMeta({ updatedAt: 200, deleted: false, name: "revived" });
@@ -51,28 +61,9 @@ describe("mergeAnnotationLists", () => {
     });
 });
 
-describe("annotationContentEqual", () => {
-    it("treats records differing only in folderId as equal", () => {
-        const a = tripMeta({ folderId: "f1" });
-        const b = tripMeta({ folderId: "f2" });
-        expect(annotationContentEqual(a, b)).toBe(true);
-    });
-
-    it("detects a content difference at an equal timestamp", () => {
-        const a = tripMeta({ name: "one" });
-        const b = tripMeta({ name: "two" });
-        expect(annotationContentEqual(a, b)).toBe(false);
-    });
-
-    it("detects the live/tombstone difference", () => {
-        const live = tripMeta({ deleted: false });
-        const tombstone = tripMeta({ deleted: true });
-        expect(annotationContentEqual(live, tombstone)).toBe(false);
-    });
-});
-
 describe("parseSidecarPayload", () => {
-    const wrap = (annotations: unknown[]): string => JSON.stringify({ format: "annotations", annotations });
+    const wrap = (annotations: unknown[]): string =>
+        JSON.stringify({ app: "dashcamigo", format: "annotations", version: 1, annotations });
 
     it("returns an empty list for an empty file", () => {
         expect(parseSidecarPayload("")).toEqual([]);
@@ -83,6 +74,14 @@ describe("parseSidecarPayload", () => {
         expect(parseSidecarPayload("not json"), "not JSON").toBeNull();
         expect(parseSidecarPayload("[1,2]"), "not an object").toBeNull();
         expect(parseSidecarPayload('{"format":"other","annotations":[]}'), "foreign format").toBeNull();
+        expect(
+            parseSidecarPayload('{"format":"annotations","version":1,"annotations":[]}'),
+            "missing app marker",
+        ).toBeNull();
+        expect(
+            parseSidecarPayload('{"app":"dashcamigo","format":"annotations","version":2,"annotations":[]}'),
+            "unsupported future version",
+        ).toBeNull();
     });
 
     it("round-trips valid tripMeta and marker records", () => {
@@ -117,6 +116,17 @@ describe("parseSidecarPayload", () => {
         // JSON has no Infinity/NaN literal - emulate a hand-edited file.
         const text = wrap([infinite, nan]).replace(/null/g, "1e999");
         const parsed = parseSidecarPayload(text);
+        expect(parsed).toEqual([]);
+    });
+
+    it("skips unsafe, fractional, and negative timestamps", () => {
+        const parsed = parseSidecarPayload(
+            wrap([
+                tripMeta({ id: "unsafe", updatedAt: Number.MAX_SAFE_INTEGER + 1 }),
+                tripMeta({ id: "fraction", updatedAt: 1.5 }),
+                tripMeta({ id: "negative", updatedAt: -1 }),
+            ]),
+        );
         expect(parsed).toEqual([]);
     });
 

@@ -114,7 +114,7 @@ export async function openViaDirectoryPicker(): Promise<void> {
             return;
         }
         const enumerated = await openFolderHandle(handle, null);
-        if (enumerated) void adoptIfAlreadyRemembered(handle);
+        if (enumerated) await adoptIfAlreadyRemembered(handle);
     } finally {
         pickerInFlight = false;
     }
@@ -169,7 +169,7 @@ async function openFolderHandle(
         // this call establishes. Ingest registers the same source again once
         // the batch is filtered and deduped - the call is idempotent.
         registerIngestSource(files.files, { handle, folderId: folder.id });
-        notifyFolderOpened(folder);
+        await notifyFolderOpened(folder);
     }
     if (files.readErrors > 0) {
         notify({ severity: "warn", messageKey: "status.dropReadFailed" });
@@ -245,7 +245,7 @@ async function adoptIfAlreadyRemembered(handle: FileSystemDirectoryHandle): Prom
         availabilityById.set(folder.id, "available");
         await markFolderOpened(folder.id).catch(() => {});
         void refreshChips();
-        notifyFolderOpened(folder);
+        await notifyFolderOpened(folder);
         return;
     }
 }
