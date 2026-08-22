@@ -51,14 +51,6 @@ import { escapeAttr, escapeText, stringifyJsonLd } from "./html-utils.js";
 import { renderHubCta } from "./hub-cta.js";
 import type { SeoBuildOptions } from "./seo-prerender.js";
 
-// HTML snippet inserted right after <head> open when SeoBuildOptions.noIndex
-// is set. Keeps the directive ahead of <title> so crawlers see it during
-// the first parsing pass.
-// Exported so the sibling alternative-pages plugin reuses the same chrome
-// instead of growing a second copy (see also BRAND_ICON_SVG, pathPrefixFor,
-// buildHreflangLinksHtml, buildOgLocaleAlternatesHtml below).
-export const NOINDEX_META = '<meta name="robots" content="noindex, nofollow">';
-
 // Brand-mark camera icon, single source for vendor pages. Mirrors the SVG
 // embedded inline in index.html (.dc-mark) - design system has no shared
 // icon registry, so the same SVG lives in two places. If the brand mark

@@ -104,9 +104,6 @@ const HOMEPAGE_SHARED_SOURCES = [
     "vite-plugins/html-utils.ts",
 ];
 
-// SITE_ORIGIN and ROOT_URL are imported from src/i18n/seo-config.ts (single
-// source of truth shared with runtime code and other build plugins).
-
 // Dictionaries keyed by Lang code. Duplicates src/i18n/index.ts's private
 // `dictionaries` map - we don't import that one because the file pulls in
 // the runtime IntlMessageFormat / EventTarget code that has no place in a
@@ -710,8 +707,8 @@ export function applyLocale(html: string, locale: LocalePrerenderConfig, options
     // at the locale-prefixed vendor pages. Rewrite href="/cameras/..." to
     // href="/<segment>/cameras/..." so users on /de/ stay in /de/ when they
     // click through to a vendor page. The match is anchored to href="/cameras/
-    // which is only used by these chip links; absolute SITE_ORIGIN URLs in
-    // canonical / hreflang / og:url are untouched. This now applies to
+    // which is only used by these chip links; absolute canonical / hreflang /
+    // og:url values are untouched. This now applies to
     // English too (urlSegment="en") - the source HTML keeps the bare form
     // "/cameras/..." as a baseline, and every prerendered locale rewrites
     // it including /en/.
@@ -719,8 +716,8 @@ export function applyLocale(html: string, locale: LocalePrerenderConfig, options
 
     // Same per-locale rewrite for the landing FAQ's /alternatives/ link, so a
     // visitor on /de/ stays on /de/ when they open the competitor comparison.
-    // Only the bare "/alternatives/" baseline href is used in the FAQ; absolute
-    // SITE_ORIGIN URLs in canonical / hreflang are untouched.
+    // Only the bare "/alternatives/" baseline href is used in the FAQ;
+    // absolute canonical / hreflang values are untouched.
     out = out.replace(/href="\/alternatives\//g, `href="/${locale.seo.urlSegment}/alternatives/`);
 
     // Footer links to the use-case feature pages use bare "/<slug>/" baselines
@@ -736,7 +733,7 @@ export function applyLocale(html: string, locale: LocalePrerenderConfig, options
     // English fallback). Per locale we rewrite it to /<segment>/ so a
     // JS-disabled visitor on /ru/ continues to /ru/, not back to /en/.
     // Same shape as the /cameras/ rewrite above; absolute URLs (canonical,
-    // hreflang, og:url) all use SITE_ORIGIN and are unaffected.
+    // hreflang, og:url) are unaffected.
     out = out.replace(/href="\/en\/"/g, `href="/${locale.seo.urlSegment}/"`);
 
     // Staging / preview deploys: inject the meta-robots noindex,nofollow

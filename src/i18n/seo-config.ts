@@ -35,28 +35,9 @@
 
 import type { Lang } from "./index.js";
 
-// Absolute origin for the production deployment. Centralized so build plugins
-// (sitemap, llms.txt, prerender, vendor pages) share one source of truth and
-// stay in sync if the apex changes.
-export const SITE_ORIGIN = "https://dashcamigo.app";
-
-// Source repository. Same reason as SITE_ORIGIN: the generated pages, llms.txt
-// and the footers all point at it, and it must not drift between them. The two
-// copies in index.html are static markup that cannot import this.
+// Source repository for generated pages, llms.txt and footers. The two copies
+// in index.html are static markup that cannot import this.
 export const REPO_URL = "https://github.com/amkulikov/dashcamigo";
-
-// Absolute URL of the root redirect stub. This is NOT a locale's home URL -
-// it's the language-neutral entry point that JS-redirects every visitor to
-// /<lang>/ by localStorage > navigator > en priority. Used as:
-//  - the share-safe URL the marketing team gives out (always lands every
-//    visitor on their language),
-//  - the "root is a redirect" note in llms.txt (vite-plugins/llms-txt.ts).
-// It is NOT the hreflang x-default target: x-default points at the default
-// locale's home /en/ everywhere - a content-less redirect stub is a poor
-// fallback target for crawlers (see vite-plugins/seo-prerender.ts). The
-// stub's own <link rel=canonical> also points at /en/, not at itself
-// (vite-plugins/root-stub.ts).
-export const ROOT_URL = `${SITE_ORIGIN}/`;
 
 export interface SeoLocale {
     // ISO 639-1 code, matches Lang in i18n/index.ts. Used for <html lang>,
