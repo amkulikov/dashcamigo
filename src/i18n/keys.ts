@@ -179,6 +179,12 @@ export type I18nKey =
     | "landing.how.s3.body"
     | "landing.faq.eyebrow"
     | "landing.faq.h2"
+    // q12 is deliberately first: it gives people concrete, non-financial ways
+    // to help the project before the feature-specific questions.
+    | "landing.faq.q12"
+    | "landing.faq.a12.before"
+    | "landing.faq.a12.link"
+    | "landing.faq.a12.after"
     | "landing.faq.q1"
     | "landing.faq.a1"
     | "landing.faq.q9"
@@ -626,6 +632,7 @@ export type I18nKey =
     // UX-26 - feedback modal ("report a problem")
     | "feedback.entry.title"
     | "feedback.modal.title"
+    | "feedback.thanks"
     // Preset topics - tag the mail subject; set via .feedback-link
     // data-feedback-preset on error entry points (no textarea to prefix anymore).
     | "feedback.step1.preset.load"
@@ -1113,6 +1120,16 @@ export type I18nKey =
     | "pwa.toast.body"
     | "pwa.toast.install"
     | "pwa.toast.dismiss"
+
+    // Recurring project-support nudge after the user has successfully opened
+    // recordings more than once and finished the relevant first-run tips.
+    | "supportPrompt.title"
+    | "supportPrompt.body"
+    | "supportPrompt.github"
+    | "supportPrompt.copy"
+    | "supportPrompt.copied"
+    | "supportPrompt.copyFailed"
+    | "supportPrompt.later"
     | "pwa.guide.title"
     | "pwa.guide.close"
     | "pwa.guide.safariMac.intro"

@@ -317,6 +317,14 @@
         "mainEntity": [
             {
                 "@type": "Question",
+                "name": "dashcamigo is free — how can I help?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "We don't need donations. If dashcamigo helped, star it on GitHub. If you found it through a forum, social media or chat, go back and say what you thought. That helps more people find the project."
+                }
+            },
+            {
+                "@type": "Question",
                 "name": "Is there a dashcam app for PC, or do I need the vendor's app?",
                 "acceptedAnswer": {
                     "@type": "Answer",
@@ -1077,6 +1085,10 @@
                             <h2 id="landing-faq-title" class="landing-faq-h2" data-i18n="landing.faq.h2">Short answers</h2>
                         </div>
                         <div class="landing-faq-list">
+                            <details class="landing-faq-item">
+                                <summary><span data-i18n="landing.faq.q12">dashcamigo is free — how can I help?</span><svg class="landing-faq-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+                                <div class="landing-faq-body"><span data-i18n="landing.faq.a12.before">We don't need donations. If dashcamigo helped, </span><a class="landing-brand-link" href="https://github.com/amkulikov/dashcamigo" target="_blank" rel="noopener noreferrer" data-i18n="landing.faq.a12.link">star it on GitHub</a><span data-i18n="landing.faq.a12.after">. If you found it through a forum, social media or chat, go back and say what you thought. That helps more people find the project.</span></div>
+                            </details>
                             <details class="landing-faq-item">
                                 <summary><span data-i18n="landing.faq.q1">Is there a dashcam app for PC, or do I need the vendor's app?</span><svg class="landing-faq-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
                                 <div class="landing-faq-body" data-i18n="landing.faq.a1">You don't need a separate app. dashcamigo opens 70mai, BlackVue, Viofo and other recordings right in your browser — a free alternative to the vendor's app, with nothing to install and no account. You can also install it from the browser — it pins to your dock and works offline.</div>
@@ -2174,6 +2186,7 @@
 
                 <!-- Step 1: share real recordings via a link (optional). -->
                 <div class="feedback-step" id="feedback-step-recordings">
+                    <p class="feedback-thanks" data-i18n="feedback.thanks">Thanks for taking the time to write — it really helps make dashcamigo better.</p>
                     <h3 class="feedback-step-title" data-i18n="feedback.recordings.title">Have your recordings ready?</h3>
 
                     <!-- Callout shown only when no card was ever loaded - the report
@@ -2557,6 +2570,32 @@
                         data-i18n="pwa.toast.dismiss">Not now</button>
                 <button id="install-banner-install" type="button" class="dc-btn dc-btn--primary"
                         data-i18n="pwa.toast.install">Install</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recurring project-support nudge. It is considered only after the second
+         successful recording load, waits until onboarding/modals/other banners
+         are out of the way, and observes a 30-day cooldown after each exposure
+         (src/ui/support-prompt.ts). -->
+    <div id="support-banner" class="sticky-banner support-banner" hidden role="dialog" aria-modal="false"
+        aria-labelledby="support-banner-title" aria-describedby="support-banner-body">
+        <div class="sticky-banner-body">
+            <div class="sticky-banner-title" id="support-banner-title" data-i18n="supportPrompt.title">Did dashcamigo help?</div>
+            <p class="sticky-banner-lead" id="support-banner-body" data-i18n="supportPrompt.body">
+                We don't need donations. A GitHub star helps. If you found dashcamigo through a forum, social media or chat, go back and say what you thought there.
+            </p>
+        </div>
+        <div class="sticky-banner-footer">
+            <div class="sticky-banner-actions support-banner-actions">
+                <button id="support-banner-later" type="button" class="dc-btn dc-btn--ghost"
+                        data-i18n="supportPrompt.later">Maybe later</button>
+                <span class="sticky-banner-actions-spacer"></span>
+                <button id="support-banner-copy" type="button" class="dc-btn dc-btn--secondary"
+                        aria-live="polite" data-i18n="supportPrompt.copy">Copy link</button>
+                <a id="support-banner-github" class="dc-btn dc-btn--primary"
+                   href="https://github.com/amkulikov/dashcamigo" target="_blank" rel="noopener noreferrer"
+                   data-i18n="supportPrompt.github">Star on GitHub</a>
             </div>
         </div>
     </div>

@@ -31,10 +31,11 @@
 //     placement is unreadable next to a tiny target), while the spotlight still
 //     highlights the target up top.
 //
-// Persistence: one localStorage flag per tour, set only on "complete" or
-// "skip" (Don't show again). Dismissing via Escape / X / "Later" does NOT
-// persist, so the tour reappears at the next trigger - that is the
-// "remind me next time" path the product asks for.
+// Persistence: the completion flag is set only on "complete" or "skip"
+// (Don't show again). Dismissing via Escape / X / "Later" does NOT set it, so
+// the tour reappears at the next trigger - that is the "remind me next time"
+// path the product asks for. A separate offered marker never suppresses a tour;
+// it only keeps later optional prompts from jumping ahead of unresolved tips.
 
 import { type I18nKey, t } from "../i18n/index.js";
 import { createLogger } from "../log.js";
@@ -79,6 +80,10 @@ function storageKey(id: OnboardTourId): string {
     return `dashcamigo:onboarding:${id}`;
 }
 
+function offeredStorageKey(id: OnboardTourId): string {
+    return `dashcamigo:onboarding:${id}:offered`;
+}
+
 /** True if the user already completed or explicitly skipped this tour. */
 function isTourDone(id: OnboardTourId): boolean {
     try {
@@ -96,6 +101,23 @@ function markTourDone(id: OnboardTourId): void {
         localStorage.setItem(storageKey(id), "1");
     } catch (err) {
         log.warn("could not persist onboarding flag", err);
+    }
+}
+
+/** Remembers that this optional tour has actually reached the user. */
+function markTourOffered(id: OnboardTourId): void {
+    try {
+        localStorage.setItem(offeredStorageKey(id), "1");
+    } catch {
+        // The marker only coordinates optional UI; failure must stay invisible.
+    }
+}
+
+function wasTourOffered(id: OnboardTourId): boolean {
+    try {
+        return localStorage.getItem(offeredStorageKey(id)) === "1";
+    } catch {
+        return false;
     }
 }
 
@@ -646,6 +668,7 @@ function startTour(tour: OnboardTour, onFinish?: () => void): void {
         rt = buildOverlay(tour);
         rt.onFinish = onFinish;
         active = rt;
+        markTourOffered(tour.id);
 
         // Mirror the handler at module scope BEFORE attaching it, so a throw
         // later in setup routes through hardKillOverlay, which detaches these
@@ -762,6 +785,22 @@ export function runTripOpenTour(id: OnboardTourId, onResume: () => void): void {
 }
 
 /**
+ * Whether a later, optional prompt may safely appear without jumping ahead of
+ * first-run guidance. Core ingest/player tips must be resolved. Conditional
+ * tips only block while their feature is relevant; export blocks only after
+ * that tip has actually been offered, so people who never export are not held
+ * back forever.
+ */
+export function isOnboardingSettledForSupportPrompt(trips: ReadonlyArray<Trip>): boolean {
+    if (active || pendingTimer !== null) return false;
+    if (!isTourDone("ingest") || !isTourDone("player")) return false;
+    if (!isTourDone("sources") && visibleRect(".folder-source__remember")) return false;
+    if (!isTourDone("multichannel") && trips.some((trip) => tripChannels(trip).length > 1)) return false;
+    if (!isTourDone("export") && wasTourOffered("export")) return false;
+    return true;
+}
+
+/**
  * Clears the seen-state of every tour so they replay at their next trigger
  * (next ingest / trip open / export open). Exposed for the settings "Danger
  * zone" Replay-tips control. Closes any open tour first (without persisting).
@@ -771,6 +810,7 @@ export function resetOnboarding(): void {
     for (const id of ONBOARD_TOUR_IDS) {
         try {
             localStorage.removeItem(storageKey(id));
+            localStorage.removeItem(offeredStorageKey(id));
         } catch {
             // Private mode - nothing was persisted anyway.
         }

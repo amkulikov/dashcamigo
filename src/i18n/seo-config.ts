@@ -35,8 +35,8 @@
 
 import type { Lang } from "./index.js";
 
-// Source repository for generated pages, llms.txt and footers. The two copies
-// in index.html are static markup that cannot import this.
+// Source repository for generated pages, llms.txt and footers. Static copies
+// in index.html cannot import this module.
 export const REPO_URL = "https://github.com/amkulikov/dashcamigo";
 
 export interface SeoLocale {

@@ -41,20 +41,20 @@ const VENDOR_BRANDS_TAIL = "70mai, Viofo, BlackVue, GoPro, Garmin, Vantrue, Thin
 describe("faq-jsonld baseline parity", () => {
     const baseline = extractBaselineFaq(readFileSync(HTML_PATH, "utf-8"));
 
-    it("has 11 questions", () => {
-        expect(baseline).toHaveLength(11);
+    it("has 12 questions", () => {
+        expect(baseline).toHaveLength(12);
     });
 
     it.each([
-        [0, "landing.faq.q1", "landing.faq.a1"],
-        [1, "landing.faq.q9", "landing.faq.a9"],
-        [3, "landing.faq.q3", "landing.faq.a3"],
-        [4, "landing.faq.q4", "landing.faq.a4"],
-        [5, "landing.faq.q5", "landing.faq.a5"],
-        [6, "landing.faq.q11", "landing.faq.a11"],
-        [7, "landing.faq.q6", "landing.faq.a6"],
-        [8, "landing.faq.q10", "landing.faq.a10"],
-        [9, "landing.faq.q7", "landing.faq.a7"],
+        [1, "landing.faq.q1", "landing.faq.a1"],
+        [2, "landing.faq.q9", "landing.faq.a9"],
+        [4, "landing.faq.q3", "landing.faq.a3"],
+        [5, "landing.faq.q4", "landing.faq.a4"],
+        [6, "landing.faq.q5", "landing.faq.a5"],
+        [7, "landing.faq.q11", "landing.faq.a11"],
+        [8, "landing.faq.q6", "landing.faq.a6"],
+        [9, "landing.faq.q10", "landing.faq.a10"],
+        [10, "landing.faq.q7", "landing.faq.a7"],
     ] as const)("entry %i: %s / %s matches dict", (idx, qKey, aKey) => {
         const entry = baseline[idx];
         expect(entry, `missing baseline entry ${idx}`).toBeDefined();
@@ -62,15 +62,22 @@ describe("faq-jsonld baseline parity", () => {
         expect(entry?.text).toBe(enDict[aKey]);
     });
 
-    it("entry 2 (q2) stitches vendor brands between dict fragments", () => {
-        const entry = baseline[2];
+    it("entry 0 (q12) stitches the GitHub link label between dict fragments", () => {
+        const entry = baseline[0];
+        const expected = `${enDict["landing.faq.a12.before"]}${enDict["landing.faq.a12.link"]}${enDict["landing.faq.a12.after"]}`;
+        expect(entry?.name).toBe(enDict["landing.faq.q12"]);
+        expect(entry?.text).toBe(expected);
+    });
+
+    it("entry 3 (q2) stitches vendor brands between dict fragments", () => {
+        const entry = baseline[3];
         const expected = `${VENDOR_BRANDS_TAIL}${enDict["landing.faq.a2.after"]}`;
         expect(entry?.name).toBe(enDict["landing.faq.q2"]);
         expect(entry?.text).toBe(expected);
     });
 
-    it("entry 10 (q8) stitches the /alternatives/ link label between dict fragments", () => {
-        const entry = baseline[10];
+    it("entry 11 (q8) stitches the /alternatives/ link label between dict fragments", () => {
+        const entry = baseline[11];
         const expected = `${enDict["landing.faq.a8.before"]}${enDict["landing.faq.a8.link"]}${enDict["landing.faq.a8.after"]}`;
         expect(entry?.name).toBe(enDict["landing.faq.q8"]);
         expect(entry?.text).toBe(expected);

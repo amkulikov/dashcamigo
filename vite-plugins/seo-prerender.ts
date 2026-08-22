@@ -959,11 +959,14 @@ function rewriteFeatureList(existing: unknown): unknown[] {
 // scanners look for exhaustive lists.
 
 function buildFaqJsonLd(dict: Record<I18nKey, string>): string {
+    // a12 stitches the GitHub anchor text between its surrounding copy.
+    const a12 = `${dict["landing.faq.a12.before"] ?? ""}${dict["landing.faq.a12.link"] ?? ""}${dict["landing.faq.a12.after"] ?? ""}`;
     const a2 = `${getLandingBrandsCommaSeparated()}${dict["landing.faq.a2.after"] ?? ""}`;
     // a8 stitches the /alternatives/ link's anchor text between its fragments,
     // and the visible DOM weaves an <a> there.
     const a8 = `${dict["landing.faq.a8.before"] ?? ""}${dict["landing.faq.a8.link"] ?? ""}${dict["landing.faq.a8.after"] ?? ""}`;
     const items: Array<{ q: string; a: string }> = [
+        { q: dict["landing.faq.q12"] ?? "", a: a12 },
         { q: dict["landing.faq.q1"] ?? "", a: dict["landing.faq.a1"] ?? "" },
         { q: dict["landing.faq.q9"] ?? "", a: dict["landing.faq.a9"] ?? "" },
         { q: dict["landing.faq.q2"] ?? "", a: a2 },

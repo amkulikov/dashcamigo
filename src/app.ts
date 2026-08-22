@@ -120,6 +120,7 @@ import {
     type TripOpenTarget,
 } from "./ui/trip-open-target.js";
 import { initOnboarding, pickTripOpenTour, runTripOpenTour } from "./ui/onboarding.js";
+import { initSupportPrompt } from "./ui/support-prompt.js";
 import { resetVideoZoom } from "./ui/player-zoom.js";
 import { clearOpeningTrip, initSidebar, renderTrips, syncSortControls } from "./ui/sidebar.js";
 import { initSidebarResize } from "./ui/sidebar-resize.js";
@@ -499,6 +500,7 @@ initMobileDrawer();
 // Onboarding tours: only wires live re-localization here; the tours themselves
 // fire from their own seams (ingest done, trip open, export open).
 initOnboarding();
+initSupportPrompt();
 initFileSources();
 // The folder rows above the trip list: where the loaded trips came from and
 // whether that folder is remembered. Wired before the first ingest can

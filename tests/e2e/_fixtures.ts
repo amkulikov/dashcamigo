@@ -221,6 +221,7 @@ export async function presetLocalStorage(
                 localStorage.setItem("dashcamigo:upload-warning-shown-at", now);
                 localStorage.setItem("dashcamigo:pwa:toast:shown", "1");
                 localStorage.setItem("dashcamigo:pwa:toast:dismissedAt", now);
+                localStorage.setItem("dashcamigo:support:action-taken", "1");
                 localStorage.setItem("dashcamigo:lang-banner-dismissed", "1");
                 // Suppress the onboarding tours by default: their full-screen
                 // overlay blocks interaction and would break every spec that
@@ -251,7 +252,10 @@ export async function gotoApp(page: Page, locale = "en"): Promise<void> {
 export async function clearOnboarding(page: Page, ids: OnboardTourId[] = ONBOARD_TOUR_IDS): Promise<void> {
     await page.addInitScript((ids) => {
         try {
-            for (const id of ids) localStorage.removeItem(`dashcamigo:onboarding:${id}`);
+            for (const id of ids) {
+                localStorage.removeItem(`dashcamigo:onboarding:${id}`);
+                localStorage.removeItem(`dashcamigo:onboarding:${id}:offered`);
+            }
         } catch {
             /* private mode - ignore */
         }

@@ -49,6 +49,12 @@
 .feedback-modal-body {
     padding: var(--dc-space-4) var(--dc-space-5) var(--dc-space-5);
 }
+.feedback-thanks {
+    margin: 0 0 var(--dc-space-4);
+    color: var(--fg);
+    font-size: var(--dc-text-md);
+    line-height: var(--dc-leading-snug);
+}
 /* Wizard step heading + body (step 1 recordings). */
 .feedback-step-title {
     font-family: var(--dc-font-heavy);
