@@ -189,7 +189,7 @@ test.describe("offline", () => {
         await context.setOffline(true);
         await expect(banner).toBeVisible();
         await expect(page.locator(".offline-banner-label")).toHaveText(/offline/i);
-        // body class drives the layout re-base (topbar tokens) - assert it flips.
+        // The body class exposes effective connectivity state to shell styling.
         await expect(page.locator("body")).toHaveClass(/has-offline-banner/);
 
         // Info button toggles the detail popover.

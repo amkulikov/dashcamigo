@@ -325,10 +325,7 @@ function closeResetConfirm(): void {
  * must be called exactly once from app.ts.
  */
 export function initSettingsModal(): void {
-    // settings-btn is always shown - Danger zone is universal. Privacy
-    // section is hidden separately when analytics is build-disabled.
     const settingsBtn = document.getElementById("settings-btn");
-    if (settingsBtn) settingsBtn.hidden = false;
 
     const m = modalEl();
     if (!m) {

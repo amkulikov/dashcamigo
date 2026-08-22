@@ -407,17 +407,6 @@ initThemeToggle({
     },
 });
 
-// Splash loader dismissal. The inline bootstrap in index.html added
-// .is-loading to <html> and showed #dc-loader, covering the English
-// baseline HTML until applyStaticI18n() swapped the texts and
-// initThemeToggle() synced aria-pressed on the buttons. rAF guarantees that
-// at least one frame with these changes was painted before the fade starts.
-// A 15s watchdog in the inline bootstrap removes the loader itself if this
-// dispatch never happens (an early error in the imports).
-requestAnimationFrame(() => {
-    dispatchEvent(new Event("dc:ready"));
-});
-
 initLangSwitcher();
 // Footer build id: which release this copy serves - tells the mirror and a
 // self-host apart from production at a glance. Filled at runtime so the
@@ -516,8 +505,25 @@ initFileSources();
 // register a source into it.
 initFolderSources();
 // Persistent-folder mode (Chromium): recent-folder chips on the landing.
-// Needs notifications and the ingest overlay, both initialized above.
-initPersistentFolders();
+// Needs notifications and the ingest overlay, both initialized above. Its
+// first IndexedDB read can add a variable-height block above the capability
+// list, so keep the shell visibility-hidden under the splash until that
+// geometry is settled. A failed read already degrades to an empty block.
+void initPersistentFolders()
+    .catch((err: unknown) => {
+        appLog.warn("recent folders init failed", {
+            err: err instanceof Error ? err.message : String(err),
+        });
+    })
+    .then(() => {
+        // The inline bootstrap in index.html added .is-loading and showed
+        // #dc-loader. rAF guarantees the localized, themed, settled shell is
+        // ready to paint before the fade starts. The 15s inline watchdog remains
+        // the fail-open path for an early import error or stuck storage.
+        requestAnimationFrame(() => {
+            dispatchEvent(new Event("dc:ready"));
+        });
+    });
 // Trip annotations: load the stored records before the first ingest can
 // render cards; wire the name/note editor, the timeline-marker layer (pins
 // reposition through the chart's overlay-sync hook), the marker editor and the

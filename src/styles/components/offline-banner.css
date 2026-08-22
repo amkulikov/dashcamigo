@@ -1,60 +1,45 @@
 /* ===== Offline banner ======================================================
-   Thin fixed strip pinned to the very top, shown when connectivity drops (see
-   src/ui/connectivity.ts + offline-banner.ts). Visible content is compact -
-   a wifi-off icon + "Offline" + an info button; the info popover carries the
-   detail (degraded map + auto-update).
+   Compact fixed status pill inside the topbar's visual band, shown when
+   connectivity drops (see src/ui/connectivity.ts + offline-banner.ts). A
+   wifi-off icon + "Offline" + info button carry the state and its detail.
 
-   LAYOUT: the banner is position:fixed so it never participates in the flex
-   column, but the chrome below it must move down by its height. Rather than
-   offset each top-anchored layer (mobile drawer, toasts, export drawer, landing
-   sticky, viewer fit-height) one by one, we raise --dc-topbar-h /
-   --dc-topbar-h-mobile by the banner height under body.has-offline-banner: those
-   tokens are the single source of truth every layer already reads, so they all
-   follow together. The topbar's own min-height grows with the token, and its
-   padding-top drops its content below the banner. The banner owns the top
-   safe-area (it is the topmost element), so the topbar no longer adds its own.
+   LAYOUT: connectivity can change long after first paint, so the status never
+   adds an in-flow box. The desktop pill is fixed over the flexible middle;
+   narrow bars paint its icon in the already-sized what's-new slot. No grid or
+   topbar geometry changes.
 
    THEME: uses semantic surfaces (--bg-elev/--fg) + the brand accent for the
    status icon and the hairline, so it reads correctly in dark and light.
    ========================================================================= */
 
-body.has-offline-banner {
-    /* Banner height = its content row + the top safe-area it absorbs. Feeds both
-       the banner box and the token re-base below. 30px ~= sm text line + 8px
-       vertical padding + the 1px hairline. */
-    --dc-offline-banner-h: calc(max(var(--dc-space-2), env(safe-area-inset-top)) + 30px);
-
-    /* Re-base the topbar-bottom anchors by the banner height (see header). The
-       mobile value intentionally drops the topbar's own safe-area term (the
-       banner now owns it) and folds the banner height in instead. */
-    --dc-topbar-h: calc(44px + var(--dc-offline-banner-h));
-    --dc-topbar-h-mobile: calc(var(--dc-iconbtn-touch) + var(--dc-space-2) + 1px + var(--dc-offline-banner-h));
+.topbar-whats-slot {
+    display: inline-flex;
+    flex-shrink: 0;
 }
-
-/* Push the in-flow topbar content below the fixed banner. The bumped
-   --dc-topbar-h* above grows the topbar box; this places its row in the lower
-   part, clear of the banner. */
-body.has-offline-banner .topbar {
-    padding-top: var(--dc-offline-banner-h);
+body:not(.has-offline-banner) .topbar-whats-slot:has(#whats-new-btn[data-overflow-hidden="true"]) {
+    display: none;
 }
 
 .offline-banner {
     position: fixed;
-    inset: 0 0 auto 0; /* top:0; left:0; right:0 */
-    z-index: var(--dc-z-header); /* above the in-flow topbar, below menus/modals */
+    top: max(7px, env(safe-area-inset-top, 0px));
+    right: 0;
+    left: 0;
+    z-index: var(--dc-z-header);
     display: flex;
     align-items: center;
     gap: var(--dc-space-2);
     box-sizing: border-box;
-    min-height: var(--dc-offline-banner-h);
-    /* The banner is the topmost element -> it absorbs the top + side safe-area
-       insets. env() is 0 on non-notched devices, so max() keeps the base inset. */
-    padding: var(--dc-space-1) max(var(--dc-space-4), env(safe-area-inset-right)) var(--dc-space-1)
-        max(var(--dc-space-4), env(safe-area-inset-left));
-    padding-top: max(var(--dc-space-1), env(safe-area-inset-top));
+    min-height: 30px;
+    width: max-content;
+    max-width: calc(100vw - 2 * var(--dc-space-3));
+    margin-inline: auto;
+    padding: 2px var(--dc-space-2) 2px var(--dc-space-3);
     background: var(--bg-elev);
     color: var(--fg);
-    border-bottom: 2px solid var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: var(--dc-radius-pill);
+    box-shadow: var(--dc-shadow-popup);
     font-family: var(--dc-font-body);
     font-size: var(--dc-text-sm);
     animation: offline-banner-in var(--dc-dur-entrance) var(--dc-ease-out);
@@ -64,11 +49,9 @@ body.has-offline-banner .topbar {
 }
 @keyframes offline-banner-in {
     from {
-        transform: translateY(-100%);
         opacity: 0;
     }
     to {
-        transform: translateY(0);
         opacity: 1;
     }
 }
@@ -82,9 +65,6 @@ body.has-offline-banner .topbar {
     display: inline-flex;
     align-items: center;
     gap: var(--dc-space-2);
-    /* Take the row so the info button is pushed to the trailing edge, where its
-       popover drops from. min-width:0 lets the label ellipsize if ever needed. */
-    flex: 1;
     min-width: 0;
 }
 .offline-banner-icon {
@@ -126,14 +106,17 @@ body.has-offline-banner .topbar {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
 }
+.offline-banner-mobile-icon {
+    display: none;
+}
 
-/* Detail popover - small brand card under the info button. Anchored to the
-   fixed banner (its positioning context), clamped so it never overflows the
-   viewport on a phone. */
+/* Detail popover - viewport-centered below the topbar. Fixed positioning keeps
+   its phone-width clamp independent of the narrow status pill. */
 .offline-banner-popover {
-    position: absolute;
-    top: calc(100% + var(--dc-space-1));
-    right: max(var(--dc-space-3), env(safe-area-inset-right));
+    position: fixed;
+    top: calc(max(7px, env(safe-area-inset-top, 0px)) + 34px);
+    left: 50%;
+    transform: translateX(-50%);
     z-index: var(--dc-z-menu);
     width: min(320px, calc(100vw - 2 * var(--dc-space-4)));
     box-sizing: border-box;
@@ -163,5 +146,51 @@ body.has-offline-banner .topbar {
         width: var(--dc-iconbtn-touch);
         height: var(--dc-iconbtn-touch);
         margin: calc(-1 * var(--dc-space-2)) 0;
+    }
+}
+
+/* A text pill cannot coexist with touch-sized shell controls on a narrow bar.
+   Collapse it to one wifi-off button; the same button opens the detail card. */
+@media (max-width: 600px) {
+    .topbar-whats-slot {
+        position: relative;
+        width: var(--dc-iconbtn-sm);
+        height: var(--dc-iconbtn-sm);
+    }
+    body.has-offline-banner .topbar-whats-slot {
+        display: inline-flex;
+    }
+    body.has-offline-banner #whats-new-btn {
+        visibility: hidden;
+    }
+    .offline-banner {
+        position: absolute;
+        inset: 0;
+        width: var(--dc-iconbtn-sm);
+        min-height: var(--dc-iconbtn-sm);
+        max-width: none;
+        margin: 0;
+        padding: 0;
+        gap: 0;
+    }
+    .offline-banner-status,
+    .offline-banner-info-icon {
+        display: none;
+    }
+    .offline-banner-mobile-icon {
+        display: block;
+    }
+    .offline-banner-info {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+    }
+}
+
+@media (max-width: 600px) and (pointer: coarse) {
+    .topbar-whats-slot,
+    .offline-banner {
+        width: var(--dc-iconbtn-touch);
+        height: var(--dc-iconbtn-touch);
     }
 }

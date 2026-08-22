@@ -1,8 +1,8 @@
 // Landing mode (body.no-trips) and the transition to normal UI on first ingest.
 //
 // Contract:
-//  - HTML starts with <body class="no-trips">. CSS hides sidebar/player and shows .landing sections.
-//    First paint is clean, nothing flickers before JS runs.
+//  - HTML starts with <body class="no-trips">. CSS keeps the final app grid in
+//    place but visibility-hidden under an absolute .landing overlay.
 //  - exitLanding() is called from ui/sidebar.ts renderTrips() when state.trips first becomes non-empty.
 //    Removes body.no-trips and runs the FLIP animation: large landing-cta → compact sidebar-cta.
 //  - Idempotent: subsequent calls after the transition are no-ops (guarded by body.classList.contains("no-trips")).
@@ -73,7 +73,7 @@ export function exitLanding(): void {
     flipCollapse({
         fromEl: landingCta,
         toEl: dom.sidebarCta,
-        // Removing body.no-trips relays the page synchronously: sidebar visible, viewer shrinks.
+        // The final grid already exists under the overlay; this only swaps paint.
         applyFinalLayout: () => document.body.classList.remove("no-trips"),
         durationMs: ANIM_DURATION_MS,
         easing: ANIM_EASE,

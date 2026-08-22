@@ -224,15 +224,6 @@
     --dc-topbar-h: 44px;
     --dc-topbar-h-mobile: calc(max(8px, env(safe-area-inset-top, 0px)) + var(--dc-iconbtn-touch) + 8px + 1px);
 
-    /* Height reserved at the very top by the offline banner (a fixed strip above
-       the topbar). 0 when the banner is absent, so nothing shifts in the normal
-       case; body.has-offline-banner (offline-banner.css) raises it and re-bases
-       --dc-topbar-h / --dc-topbar-h-mobile by the same amount, so EVERY layer
-       anchored to the topbar bottom (mobile drawer, toasts, export drawer,
-       landing sticky, viewer fit-height) follows from one place - no per-
-       component offset. */
-    --dc-offline-banner-h: 0px;
-
     /* ----- CONTROL SIZES (icon buttons, square affordances) -----
        Single source of truth for icon-button squares. Before this they were
        hard-coded per component and drifted apart: theme toggle 28 in the

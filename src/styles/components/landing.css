@@ -2,13 +2,16 @@
    LANDING (body.no-trips - empty state before first ingest)
    --------------------------------------------------------------------------
    Layout: single-column .landing-inner with stacked blocks - hero (split),
-   works (OS + browsers), how (3 steps), faq, built-with credits. Visible only while
-   body.no-trips. After the first successful ingest landing.ts removes the
-   class and src/ui/landing.ts FLIP-animates #landing-cta into #sidebar-cta.
+   works (OS + browsers), how (3 steps), faq, built-with credits. It overlays
+   the final app grid while body.no-trips is set. After the first successful
+   ingest landing.ts removes the class and FLIP-animates #landing-cta into
+   #sidebar-cta without changing the grid geometry.
    ========================================================================= */
 .landing {
     display: none;
-    flex: 1;
+    position: absolute;
+    inset: 0;
+    z-index: 2;
     overflow-y: auto;
     background: var(--bg);
     color: var(--fg);
@@ -16,23 +19,14 @@
 body.no-trips .landing {
     display: block;
 }
-/* In body.no-trips we hide everything belonging to the "normal" mode:
-   sidebar+resize-handle, the player, both empty-state/codec-unsupported
-   cards, sidebar-cta. The layout grid switches to 1fr - the viewer takes the full width. */
-body.no-trips main.layout {
-    grid-template-columns: 1fr;
-}
+/* Keep normal-mode boxes in their final grid tracks under the landing. Using
+   visibility preserves geometry while removing paint, focus and a11y; the
+   class change can therefore reveal the app without a layout shift. */
 body.no-trips .sidebar,
-body.no-trips .sidebar-resize {
-    display: none;
-}
-body.no-trips .player-wrap,
-body.no-trips .empty-state,
-body.no-trips .codec-unsupported-state {
-    display: none !important;
-}
-body.no-trips .sidebar-cta {
-    display: none;
+body.no-trips .sidebar-resize,
+body.no-trips .sidebar-expand-tab,
+body.no-trips .viewer {
+    visibility: hidden;
 }
 
 .landing-inner {

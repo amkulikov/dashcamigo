@@ -27,8 +27,8 @@ export function initOfflineBanner(): void {
 
     subscribeConnectivity((offline) => {
         banner.hidden = !offline;
-        // body class drives the layout re-base (offline-banner.css bumps the
-        // topbar-bottom tokens so every top-anchored layer shifts down).
+        // The body class is a CSS state hook. The banner overlays existing
+        // chrome, so toggling connectivity never changes page geometry.
         document.body.classList.toggle("has-offline-banner", offline);
         // Going back online closes a left-open popover so it can't linger over
         // a now-hidden banner.

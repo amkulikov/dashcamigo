@@ -53,6 +53,12 @@
          Inline styles are allowed under style-src 'unsafe-inline'. -->
     <style>
       html.is-loading, html.is-loading body { overflow: hidden; }
+      /* Keep layout-affecting startup work out of the Layout Instability API.
+         The splash remains visible as an explicit child override; revealing a
+         visibility-hidden tree paints its settled geometry without a reflow. */
+      html.is-loading body { visibility: hidden; }
+      html.is-loading #dc-loader,
+      html.is-loading #dc-retry-note { visibility: visible; }
       #dc-loader {
         position: fixed; inset: 0; z-index: 9999;
         background: #000;
@@ -420,9 +426,9 @@
     <link rel="stylesheet" href="/src/styles/index.css">
 </head>
 <!-- body.no-trips - the initial "nothing loaded" state, landing mode:
-     sidebar and player-wrap are hidden, the viewer shows landing sections.
-     JS removes the class on the first successful ingest via exitLanding()
-     with a FLIP animation of the CTA from screen center to the sidebar header. -->
+     the landing overlays a visibility-hidden final app grid. JS removes the
+     class on the first successful ingest via exitLanding(), revealing the
+     already-stable grid with a FLIP animation of the CTA into the sidebar. -->
 <body class="no-trips">
     <!-- Splash overlay. Visible while .is-loading is set on <html> - the class
          is applied by the inline script in <head>, removed by the dc:ready
@@ -478,47 +484,6 @@
          individual files through this input instead. -->
     <input id="file-input" type="file" multiple hidden>
 
-    <!-- Offline banner. Thin fixed strip above the topbar, shown when the device
-         loses connectivity: hard-offline via online/offline events, OR "connected
-         but no internet" limbo detected from map tile failures (navigator.onLine
-         stays true there) - see src/ui/connectivity.ts + offline-banner.ts.
-         Visible text is just "Offline"; the info button opens a popover that
-         explains the only real degradation (the map background) and that the app
-         updates itself once back online. Hidden by default; JS toggles [hidden]
-         + body.has-offline-banner. The in-flow topbar reserves its height via the
-         bumped --dc-topbar-h* tokens (offline-banner.css), so every top-anchored
-         layer follows. Copy via data-i18n -> re-localizes on language switch. -->
-    <div id="offline-banner" class="offline-banner" role="status" aria-live="polite" hidden>
-        <span class="offline-banner-status">
-            <svg class="offline-banner-icon" viewBox="0 0 24 24" width="16" height="16" fill="none"
-                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M12 20h.01"></path>
-                <path d="M8.5 16.429a5 5 0 0 1 7 0"></path>
-                <path d="M5 12.859a10 10 0 0 1 5.17-2.69"></path>
-                <path d="M19 12.859a10 10 0 0 0-2.007-1.523"></path>
-                <path d="M2 8.82a15 15 0 0 1 4.177-2.643"></path>
-                <path d="M22 8.82a15 15 0 0 0-11.288-3.764"></path>
-                <path d="m2 2 20 20"></path>
-            </svg>
-            <span class="offline-banner-label" data-i18n="status.offline.label">Offline</span>
-        </span>
-        <button id="offline-banner-info" class="offline-banner-info" type="button"
-                aria-expanded="false" aria-haspopup="dialog" aria-controls="offline-banner-popover"
-                data-i18n-attr="aria-label:status.offline.info,title:status.offline.info"
-                aria-label="What this means" title="What this means">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="10"></circle>
-                <path d="M12 16v-4"></path>
-                <path d="M12 8h.01"></path>
-            </svg>
-        </button>
-        <div id="offline-banner-popover" class="offline-banner-popover" role="dialog"
-             data-i18n-attr="aria-label:status.offline.info" aria-label="What this means" hidden>
-            <p class="offline-banner-detail" data-i18n="status.offline.detail">The map background won't load while you're offline. Video, the speed chart and export still work — and the app updates itself the next time you're online.</p>
-        </div>
-    </div>
-
     <header class="topbar">
         <!-- Trips button: opens the trip-list drawer on mobile (hidden on desktop
              via CSS, and hidden while the list is the full-screen browse surface).
@@ -554,55 +519,11 @@
              Replaces the old #status text element (now via notifications). -->
         <div class="topbar-spacer"></div>
 
-        <!-- Notifications bell. Hidden until the first notification of the
-             session (revealed by src/ui/notifications.ts). Red dot marks
-             unread items; click toggles the drawer below. -->
-        <button id="notif-bell" type="button" class="topbar-iconbtn" hidden
-                data-i18n-attr="aria-label:notif.bell.aria,title:notif.bell.aria"
-                aria-label="Notifications" title="Notifications">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
-                <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
-            </svg>
-            <span id="notif-bell-dot" class="topbar-unread-dot" hidden aria-hidden="true"></span>
-        </button>
-
-        <!-- "What's new" - opens the changelog panel (#whats-new-modal). The
-             dot lights up when entries newer than the last acknowledged one
-             exist (src/ui/whats-new-modal.ts) - a quiet hint, never a popup.
-             Lucide sparkles: "something new" without the urgency of the bell. -->
-        <button id="whats-new-btn" type="button" class="topbar-iconbtn"
-                data-i18n-attr="aria-label:whatsnew.title,title:whatsnew.title"
-                aria-label="What's new" title="What's new">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
-                <path d="M20 3v4"/>
-                <path d="M22 5h-4"/>
-                <path d="M4 17v2"/>
-                <path d="M5 18H3"/>
-            </svg>
-            <span id="whats-new-dot" class="topbar-unread-dot" hidden aria-hidden="true"></span>
-        </button>
-
-        <!-- UX-26: feedback button. Lucide message-circle-question - a bubble
-             with a ?, a universal "ask a question / report" metaphor.
-             Used to be life-buoy - the "help" meaning didn't read without
-             context. Click opens the #feedback-modal. -->
-        <button id="feedback-btn" type="button" class="topbar-iconbtn"
-                data-i18n-attr="aria-label:feedback.entry.title,title:feedback.entry.title"
-                aria-label="Report a problem" title="Report a problem">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>
-                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-                <path d="M12 17h.01"/>
-            </svg>
-        </button>
-
         <!-- PWA install - button appears only if the app is installable.
-             Visibility is driven by src/ui/pwa-install.ts:
+             It comes first in the right-anchored control group so a late
+             beforeinstallprompt reveal consumes spacer width without moving
+             the stable controls that follow it. Visibility is driven by
+             src/ui/pwa-install.ts:
              - Chromium desktop/Android (beforeinstallprompt fired): unhidden,
                click triggers the native install prompt.
              - Safari macOS: unhidden, click opens #install-modal pointing
@@ -621,15 +542,112 @@
             </svg>
         </button>
 
+        <!-- Notifications bell. Hidden until the first notification of the
+             session (revealed by src/ui/notifications.ts). Red dot marks
+             unread items; click toggles the drawer below. -->
+        <button id="notif-bell" type="button" class="topbar-iconbtn" hidden
+                data-i18n-attr="aria-label:notif.bell.aria,title:notif.bell.aria"
+                aria-label="Notifications" title="Notifications">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+                <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+            </svg>
+            <span id="notif-bell-dot" class="topbar-unread-dot" hidden aria-hidden="true"></span>
+        </button>
+
+        <span class="topbar-whats-slot">
+            <!-- "What's new" - opens the changelog panel (#whats-new-modal). The
+                 dot lights up when entries newer than the last acknowledged one
+                 exist (src/ui/whats-new-modal.ts) - a quiet hint, never a popup.
+                 Lucide sparkles: "something new" without the urgency of the bell. -->
+            <button id="whats-new-btn" type="button" class="topbar-iconbtn"
+                    data-i18n-attr="aria-label:whatsnew.title,title:whatsnew.title"
+                    aria-label="What's new" title="What's new">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
+                    <path d="M20 3v4"/>
+                    <path d="M22 5h-4"/>
+                    <path d="M4 17v2"/>
+                    <path d="M5 18H3"/>
+                </svg>
+                <span id="whats-new-dot" class="topbar-unread-dot" hidden aria-hidden="true"></span>
+            </button>
+
+            <!-- Offline status shares the mobile what's-new slot, so a late
+                 connectivity change replaces paint instead of adding width.
+                 On wider bars it is a fixed centered pill. -->
+            <div id="offline-banner" class="offline-banner" role="status" aria-live="polite"
+                 data-i18n-attr="aria-label:status.offline.label" aria-label="Offline" hidden>
+                <span class="offline-banner-status">
+                    <svg class="offline-banner-icon" viewBox="0 0 24 24" width="16" height="16" fill="none"
+                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 20h.01"></path>
+                        <path d="M8.5 16.429a5 5 0 0 1 7 0"></path>
+                        <path d="M5 12.859a10 10 0 0 1 5.17-2.69"></path>
+                        <path d="M19 12.859a10 10 0 0 0-2.007-1.523"></path>
+                        <path d="M2 8.82a15 15 0 0 1 4.177-2.643"></path>
+                        <path d="M22 8.82a15 15 0 0 0-11.288-3.764"></path>
+                        <path d="m2 2 20 20"></path>
+                    </svg>
+                    <span class="offline-banner-label" data-i18n="status.offline.label">Offline</span>
+                </span>
+                <button id="offline-banner-info" class="offline-banner-info" type="button"
+                        aria-expanded="false" aria-haspopup="dialog" aria-controls="offline-banner-popover"
+                        data-i18n-attr="aria-label:status.offline.info,title:status.offline.info"
+                        aria-label="What this means" title="What this means">
+                    <svg class="offline-banner-info-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M12 16v-4"></path>
+                        <path d="M12 8h.01"></path>
+                    </svg>
+                    <!-- Narrow topbars collapse the status pill to this one touch-sized
+                         wifi-off control; CSS keeps the desktop info icon instead. -->
+                    <svg class="offline-banner-mobile-icon" viewBox="0 0 24 24" width="18" height="18" fill="none"
+                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 20h.01"></path>
+                        <path d="M8.5 16.429a5 5 0 0 1 7 0"></path>
+                        <path d="M5 12.859a10 10 0 0 1 5.17-2.69"></path>
+                        <path d="M19 12.859a10 10 0 0 0-2.007-1.523"></path>
+                        <path d="M2 8.82a15 15 0 0 1 4.177-2.643"></path>
+                        <path d="M22 8.82a15 15 0 0 0-11.288-3.764"></path>
+                        <path d="m2 2 20 20"></path>
+                    </svg>
+                </button>
+                <div id="offline-banner-popover" class="offline-banner-popover" role="dialog"
+                     data-i18n-attr="aria-label:status.offline.info" aria-label="What this means" hidden>
+                    <p class="offline-banner-detail" data-i18n="status.offline.detail">The map background won't load while you're offline. Video, the speed chart and export still work — and the app updates itself the next time you're online.</p>
+                </div>
+            </div>
+        </span>
+
+        <!-- UX-26: feedback button. Lucide message-circle-question - a bubble
+             with a ?, a universal "ask a question / report" metaphor.
+             Used to be life-buoy - the "help" meaning didn't read without
+             context. Click opens the #feedback-modal. -->
+        <button id="feedback-btn" type="button" class="topbar-iconbtn"
+                data-i18n-attr="aria-label:feedback.entry.title,title:feedback.entry.title"
+                aria-label="Report a problem" title="Report a problem">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                <path d="M12 17h.01"/>
+            </svg>
+        </button>
+
         <!-- Settings - opens a modal with the crash-reports toggle (Privacy
              tab) plus playback/ingest preferences and the danger-zone reset.
              Placed between feedback-btn and theme-toggle: feedback = "report a
              problem", settings = "manage the app", theme/lang = frequent
-             toggles. Revealed by JS on init (the danger zone is universal).
+             toggles. The danger zone is universal, so this is visible in the
+             static shell instead of changing the bar width during hydration.
              Lucide settings (gear). -->
         <button id="settings-btn" type="button" class="topbar-iconbtn"
                 data-i18n-attr="aria-label:settings.entry.title,title:settings.entry.title"
-                aria-label="Settings" title="Settings" hidden>
+                aria-label="Settings" title="Settings">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
@@ -821,13 +839,12 @@
                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 17 5-5-5-5"/><path d="m13 17 5-5-5-5"/></svg>
         </button>
 
-        <section class="viewer">
-            <!-- Landing sections for body.no-trips (initial state, nothing
-                 loaded yet). Literals in HTML are the English baseline for
-                 crawlers and unfurl bots; data-i18n swaps to Russian after
-                 first paint for RU users. JS removes body.no-trips on the
-                 first ingest, landing hides, the viewer returns to normal layout. -->
-            <div class="landing" id="landing">
+        <!-- Landing sections for body.no-trips (initial state, nothing loaded
+             yet). This absolute grid sibling overlays the final app geometry;
+             removing body.no-trips reveals that geometry without laying it out again.
+             Literals in HTML are the English baseline for crawlers and unfurl
+             bots; data-i18n swaps them for the active locale. -->
+        <div class="landing" id="landing">
                 <div class="landing-inner">
                     <!-- Hero: two-column split (1.22 / 1). Left = copy + drop CTA +
                          capability bullets. Right = privacy "safety wall". On <=1020px
@@ -1213,8 +1230,9 @@
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
                     </button>
                 </label>
-            </div>
+        </div>
 
+        <section class="viewer">
             <!-- Empty-state placeholder for the "trips exist but none is
                  selected" case. JS toggles .viewer.empty - hides .player-wrap,
                  shows a compact card hinting "pick a trip on the left".

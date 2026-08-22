@@ -66,9 +66,10 @@ export function canUseDirectoryPicker(): boolean {
 
 /**
  * Wires the landing chips. Call once from app.ts after notifications/overlay
- * init. No-op on browsers without the API.
+ * init. Resolves after the initial chip geometry is settled; no-op on browsers
+ * without the API.
  */
-export function initPersistentFolders(): void {
+export async function initPersistentFolders(): Promise<void> {
     if (!canUseDirectoryPicker()) return;
     // The SOURCES list's "load" action for a remembered-but-not-loaded folder:
     // same flow as a chip click (permission re-prompt inside the gesture, then
@@ -77,7 +78,7 @@ export function initPersistentFolders(): void {
     registerRememberedFolderOpener((folder) => void openRememberedFolder(folder));
     chipsContainer = document.getElementById("recent-folders");
     chipsList = document.getElementById("recent-folders-list");
-    void refreshChips();
+    await refreshChips();
 }
 
 /**

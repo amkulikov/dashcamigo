@@ -1,0 +1,223 @@
+// Layout-instability regressions at the two async seams that analytics sees:
+// startup hydration and the first folder ingest. The raw score intentionally
+// includes shifts with recent input; a fast CI ingest can finish inside CLS's
+// 500ms input exclusion while the same folder on a real SD card does not.
+
+import type { Page } from "@playwright/test";
+
+import {
+    DESKTOP,
+    MOBILE,
+    SAMPLE_70MAI,
+    expect,
+    gotoApp,
+    mockDirectoryPicker,
+    presetLocalStorage,
+    test,
+} from "./_fixtures.js";
+
+interface LayoutShiftRecord {
+    value: number;
+    hadRecentInput: boolean;
+    sources: string[];
+}
+
+interface LayoutShiftReport {
+    supported: boolean;
+    records: LayoutShiftRecord[];
+}
+
+async function installLayoutShiftObserver(page: Page): Promise<void> {
+    await page.addInitScript(() => {
+        interface ShiftEntry extends PerformanceEntry {
+            value: number;
+            hadRecentInput: boolean;
+            sources?: Array<{ node?: Node | null }>;
+        }
+
+        interface ShiftWindow extends Window {
+            __layoutShiftObserver?: PerformanceObserver;
+            __layoutShiftRecords: LayoutShiftRecord[];
+            __layoutShiftSupported: boolean;
+        }
+
+        const shiftWindow = window as unknown as ShiftWindow;
+        shiftWindow.__layoutShiftRecords = [];
+        shiftWindow.__layoutShiftSupported = PerformanceObserver.supportedEntryTypes.includes("layout-shift");
+        if (!shiftWindow.__layoutShiftSupported) return;
+
+        const labelFor = (node: Node | null | undefined): string => {
+            if (!(node instanceof Element)) return node?.nodeName.toLowerCase() ?? "unknown";
+            if (node.id) return `#${node.id}`;
+            const classes = [...node.classList].slice(0, 2).join(".");
+            return `${node.tagName.toLowerCase()}${classes ? `.${classes}` : ""}`;
+        };
+        const observer = new PerformanceObserver((list) => {
+            for (const rawEntry of list.getEntries()) {
+                const entry = rawEntry as ShiftEntry;
+                shiftWindow.__layoutShiftRecords.push({
+                    value: entry.value,
+                    hadRecentInput: entry.hadRecentInput,
+                    sources: (entry.sources ?? []).map((source) => labelFor(source.node)),
+                });
+            }
+        });
+        observer.observe({ type: "layout-shift", buffered: true });
+        shiftWindow.__layoutShiftObserver = observer;
+    });
+}
+
+async function readLayoutShiftReport(page: Page): Promise<LayoutShiftReport> {
+    await page.evaluate(async () => {
+        await document.fonts.ready;
+        await new Promise<void>((resolve) => {
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        });
+    });
+    return page.evaluate(() => {
+        const shiftWindow = window as Window & {
+            __layoutShiftRecords?: LayoutShiftRecord[];
+            __layoutShiftSupported?: boolean;
+        };
+        return {
+            supported: shiftWindow.__layoutShiftSupported ?? false,
+            records: shiftWindow.__layoutShiftRecords ?? [],
+        };
+    });
+}
+
+function rawLayoutShiftScore(report: LayoutShiftReport): number {
+    return report.records.reduce((total, record) => total + record.value, 0);
+}
+
+test.describe("layout stability", () => {
+    test.beforeEach(async ({ page }) => {
+        await page.setViewportSize(DESKTOP);
+        await presetLocalStorage(page);
+    });
+
+    test("keeps the topbar and final app grid fixed as async UI appears", async ({ page }) => {
+        await installLayoutShiftObserver(page);
+        await gotoApp(page, "en");
+        await expect(page.locator("#landing")).toBeVisible();
+
+        const whatsNew = page.locator("#whats-new-btn");
+        const beforeInstall = await whatsNew.boundingBox();
+        expect(beforeInstall, "what's-new button has initial geometry").not.toBeNull();
+
+        // Chromium supplies this event after installability checks, well after
+        // first paint. The synthetic event drives the same production handler.
+        await page.evaluate(() => {
+            dispatchEvent(new Event("beforeinstallprompt", { cancelable: true }));
+        });
+        await expect(page.locator("#install-btn")).toBeVisible();
+        const afterInstall = await whatsNew.boundingBox();
+        expect(afterInstall, "what's-new button keeps geometry after install reveal").not.toBeNull();
+        expect(
+            Math.abs(afterInstall!.x - beforeInstall!.x),
+            "install reveal does not move #whats-new-btn",
+        ).toBeLessThan(0.5);
+
+        await page.locator("#folder-input").setInputFiles(SAMPLE_70MAI);
+        await expect(page.locator("li.trip:not(.unindexed-note)").first()).toBeVisible({ timeout: 30_000 });
+        await expect(page.locator("#landing"), "the FLIP transition settles and detaches the landing").toHaveCount(0);
+
+        const report = await readLayoutShiftReport(page);
+        expect(report.supported, "Chromium exposes layout-shift performance entries").toBe(true);
+        expect(rawLayoutShiftScore(report), `raw layout shifts: ${JSON.stringify(report.records)}`).toBeLessThanOrEqual(
+            0.02,
+        );
+    });
+
+    test("settles remembered-folder geometry before the splash reveals the landing", async ({ page }) => {
+        await mockDirectoryPicker(page, [{ label: "MOCKCARD", dir: SAMPLE_70MAI }]);
+        await gotoApp(page, "en");
+        await page.locator("#landing-cta").click();
+        await expect(page.locator("li.trip:not(.unindexed-note)").first()).toBeVisible({ timeout: 30_000 });
+        await page.locator("#folder-sources .folder-source__remember").click();
+        await expect(page.locator("#folder-sources .folder-source__state")).toBeVisible();
+
+        await installLayoutShiftObserver(page);
+        await page.addInitScript(() => {
+            const readyWindow = window as Window & {
+                __recentFoldersAtReady?: { hidden: boolean | null; count: number };
+            };
+            addEventListener(
+                "dc:ready",
+                () => {
+                    const recent = document.getElementById("recent-folders");
+                    readyWindow.__recentFoldersAtReady = {
+                        hidden: recent instanceof HTMLElement ? recent.hasAttribute("hidden") : null,
+                        count: document.querySelectorAll("#recent-folders-list .recent-folder-chip").length,
+                    };
+                },
+                { once: true },
+            );
+        });
+
+        await page.reload();
+        await expect(page.locator("#recent-folders")).toBeVisible();
+        await expect(page.locator("#recent-folders-list .recent-folder-chip")).toHaveCount(1);
+        const readySnapshot = await page.evaluate(
+            () =>
+                (
+                    window as Window & {
+                        __recentFoldersAtReady?: { hidden: boolean | null; count: number };
+                    }
+                ).__recentFoldersAtReady,
+        );
+        expect(readySnapshot, "dc:ready is dispatched after recent folders render").toEqual({
+            hidden: false,
+            count: 1,
+        });
+
+        const report = await readLayoutShiftReport(page);
+        expect(report.supported, "Chromium exposes layout-shift performance entries").toBe(true);
+        expect(rawLayoutShiftScore(report), `raw layout shifts: ${JSON.stringify(report.records)}`).toBeLessThanOrEqual(
+            0.02,
+        );
+    });
+});
+
+test.describe("mobile offline layout stability", () => {
+    test.use({ viewport: MOBILE, hasTouch: true, isMobile: true });
+
+    test("shows connectivity status without moving or covering the shell controls", async ({ page, context }) => {
+        await presetLocalStorage(page);
+        await installLayoutShiftObserver(page);
+        await gotoApp(page, "en");
+        await expect(page.locator("#landing")).toBeVisible();
+        await page.evaluate(() => document.fonts.ready);
+
+        const mainBefore = await page.locator("main.layout").boundingBox();
+        expect(mainBefore, "main has settled mobile geometry").not.toBeNull();
+
+        await context.setOffline(true);
+        const banner = page.locator("#offline-banner");
+        await expect(banner).toBeVisible();
+        const [mainAfter, bannerBox, brandBox, feedbackBox] = await Promise.all([
+            page.locator("main.layout").boundingBox(),
+            banner.boundingBox(),
+            page.locator(".dc-mark").boundingBox(),
+            page.locator("#feedback-btn").boundingBox(),
+        ]);
+        expect(mainAfter, "offline status preserves main geometry").toEqual(mainBefore);
+        expect(bannerBox, "offline status has visible geometry").not.toBeNull();
+        expect(brandBox, "mobile brand mark has visible geometry").not.toBeNull();
+        expect(feedbackBox, "feedback remains visible on mobile").not.toBeNull();
+        expect(bannerBox!.x, "offline status stays after the brand mark").toBeGreaterThanOrEqual(
+            brandBox!.x + brandBox!.width,
+        );
+        expect(bannerBox!.x + bannerBox!.width, "offline status stays before right-side controls").toBeLessThanOrEqual(
+            feedbackBox!.x,
+        );
+
+        const report = await readLayoutShiftReport(page);
+        expect(report.supported, "Chromium exposes layout-shift performance entries").toBe(true);
+        expect(rawLayoutShiftScore(report), `raw layout shifts: ${JSON.stringify(report.records)}`).toBeLessThanOrEqual(
+            0.001,
+        );
+
+        await context.setOffline(false);
+    });
+});
