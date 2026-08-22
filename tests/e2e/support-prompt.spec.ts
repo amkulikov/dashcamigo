@@ -122,26 +122,57 @@ test.describe("project support prompt", () => {
         expect(secondShownAt).toBeGreaterThan(firstShownAt);
     });
 
-    test("waits for unresolved onboarding and does not chain itself onto its dismissal", async ({ page }) => {
-        await clearOnboarding(page, ["player"]);
+    test("survives clean-session onboarding without requiring a third load", async ({ page }) => {
+        // The loaded card is multi-camera, but its conditional tour has not yet
+        // been offered. It must not become a permanent gate behind the player
+        // tour that wins this first trip-open seam.
+        await clearOnboarding(page);
         await gotoApp(page, "en");
         await resetSupportState(page);
         await armIngestCounter(page);
 
         await loadAndWait(page, SAMPLE_70MAI);
+        await expect(page.locator(".dc-onb")).toBeVisible({ timeout: 5_000 });
+        await page.locator(".dc-onb__skip").click();
+        await expect(page.locator(".dc-onb")).toHaveCount(0);
+
         await loadAndWait(page, SAMPLE_GOPRO);
         expect(await page.evaluate((key) => localStorage.getItem(key), SUCCESSFUL_LOADS)).toBe("2");
         await expect(page.locator("#support-banner")).toBeHidden();
 
-        // Resolve the player tour. The support prompt must stay away at this
-        // seam; it may try again only after another successful recording load.
+        // Once the core tour has reached the user, the already-earned prompt
+        // retries by itself. No third recording load is required.
         await page.locator("li.trip:not(.unindexed-note)").first().click();
         await expect(page.locator(".dc-onb")).toBeVisible({ timeout: 5_000 });
-        await page.locator(".dc-onb__skip").click();
+        await page.locator(".dc-onb__x").click();
         await expect(page.locator(".dc-onb")).toHaveCount(0);
+        await expect(page.locator("#support-banner")).toBeVisible();
+        expect(await page.evaluate(() => localStorage.getItem("dashcamigo:onboarding:player"))).toBeNull();
+        expect(
+            await page.evaluate(
+                () => (window as typeof window & { __supportIngestDoneCount?: number }).__supportIngestDoneCount,
+            ),
+        ).toBe(2);
+    });
+
+    test("keeps an earned prompt pending until a competing banner leaves", async ({ page }) => {
+        await gotoApp(page, "en");
+        await resetSupportState(page, 1);
+        await armIngestCounter(page);
+
+        await page.evaluate(() => {
+            const installBanner = document.getElementById("install-banner");
+            if (installBanner) installBanner.hidden = false;
+        });
+        await loadAndWait(page, SAMPLE_GOPRO);
         await expect(page.locator("#support-banner")).toBeHidden();
 
-        await loadAndWait(page, SAMPLE_NOGPS);
+        // Programmatic teardown exercises the release observer rather than the
+        // generic user-interaction fallback.
+        await page.evaluate(() => {
+            const installBanner = document.getElementById("install-banner");
+            if (installBanner) installBanner.hidden = true;
+        });
         await expect(page.locator("#support-banner")).toBeVisible();
     });
 

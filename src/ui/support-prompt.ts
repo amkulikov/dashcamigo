@@ -1,9 +1,10 @@
 // Post-use project-support prompt. It counts only recording loads that added at
 // least one playable recording, appears no earlier than the second, and yields
-// to onboarding, modals, fullscreen and higher-priority banners. Dismissing it
-// starts a 30-day cooldown; completing one of its support actions retires it.
-// No prompt queue: if the current moment is busy, a later successful load gets
-// another chance instead of stacking asks back-to-back.
+// to onboarding, modals, fullscreen and higher-priority banners. An earned
+// prompt stays armed while one of those temporary surfaces owns the UI, then
+// retries as soon as the surface leaves; it never requires another recording
+// load just because its first opportunity was busy. Dismissing it starts a
+// 30-day cooldown; completing one of its support actions retires it.
 
 import { getCurrentLang, t } from "../i18n/index.js";
 import { REPO_URL } from "../i18n/seo-config.js";
@@ -21,6 +22,10 @@ const STORAGE_ACTION_TAKEN = "dashcamigo:support:action-taken";
 const LOADS_BEFORE_PROMPT = 2;
 const PROMPT_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
 const COPY_FEEDBACK_MS = 1400;
+
+let promptRetryArmed = false;
+let promptRetryTimer: number | null = null;
+let blockerObserver: MutationObserver | null = null;
 
 function getBanner(): HTMLElement | null {
     return document.getElementById("support-banner");
@@ -100,20 +105,90 @@ function hasCompetingBanner(): boolean {
     return document.getElementById("lang-banner") !== null;
 }
 
-/** Attempts the prompt now; a false result is intentionally not queued. */
+/** Stops the session-local retry loop after exposure or permanent ineligibility. */
+function disarmPromptRetry(): void {
+    promptRetryArmed = false;
+    if (promptRetryTimer !== null) {
+        window.clearTimeout(promptRetryTimer);
+        promptRetryTimer = null;
+    }
+    blockerObserver?.disconnect();
+    blockerObserver = null;
+}
+
+/** Coalesces release signals and retries after the closing handler has settled. */
+function schedulePromptRetry(): void {
+    if (!promptRetryArmed || promptRetryTimer !== null) return;
+    promptRetryTimer = window.setTimeout(() => {
+        promptRetryTimer = null;
+        if (promptRetryArmed) maybeShowSupportPrompt();
+    }, 0);
+}
+
+/**
+ * Watches only UI layers that can temporarily own the prompt's slot. Direct
+ * body children cover the dynamically-created onboarding overlay; static
+ * dialogs/panels and the two banners are observed at their own roots so normal
+ * player/chart DOM churn cannot wake the retry loop.
+ */
+function observePromptBlockers(): void {
+    if (blockerObserver || typeof MutationObserver === "undefined") return;
+    blockerObserver = new MutationObserver(schedulePromptRetry);
+
+    if (document.body) blockerObserver.observe(document.body, { childList: true });
+    for (const surface of document.querySelectorAll<HTMLElement>('.sticky-banner, [role="dialog"], #export-panel')) {
+        blockerObserver.observe(surface, { attributes: true, attributeFilter: ["hidden"] });
+    }
+
+    // The language suggestion is mounted inside .lang-wrap rather than body.
+    const langBannerParent = document.getElementById("lang-banner")?.parentElement;
+    if (langBannerParent && langBannerParent !== document.body) {
+        blockerObserver.observe(langBannerParent, { childList: true });
+    }
+}
+
+function armPromptRetry(): void {
+    promptRetryArmed = true;
+    observePromptBlockers();
+}
+
+/** Attempts now and keeps an eligible prompt armed across temporary blockers. */
 export function maybeShowSupportPrompt(): boolean {
-    if (wasSupportActionTaken() || isPromptOnCooldown()) return false;
+    if (wasSupportActionTaken() || isPromptOnCooldown()) {
+        disarmPromptRetry();
+        return false;
+    }
     const successfulLoads = readSuccessfulLoads();
-    if (successfulLoads === null || successfulLoads < LOADS_BEFORE_PROMPT) return false;
-    if (document.visibilityState !== "visible" || document.fullscreenElement) return false;
-    if (state.exportModeOpen || isAnyModalOpen() || hasCompetingBanner()) return false;
-    if (!isOnboardingSettledForSupportPrompt(state.trips)) return false;
+    if (successfulLoads === null || successfulLoads < LOADS_BEFORE_PROMPT) {
+        disarmPromptRetry();
+        return false;
+    }
 
     const banner = getBanner();
-    if (!banner) return false;
+    if (!banner) {
+        disarmPromptRetry();
+        return false;
+    }
+
+    const temporarilyBlocked =
+        document.visibilityState !== "visible" ||
+        document.fullscreenElement !== null ||
+        state.exportModeOpen ||
+        isAnyModalOpen() ||
+        hasCompetingBanner() ||
+        !isOnboardingSettledForSupportPrompt();
+    if (temporarilyBlocked) {
+        armPromptRetry();
+        return false;
+    }
+
     // Start the cooldown on actual exposure, even if the tab closes before the
     // user chooses an action. If that cannot be persisted, do not risk nagging.
-    if (!rememberPromptShown()) return false;
+    if (!rememberPromptShown()) {
+        disarmPromptRetry();
+        return false;
+    }
+    disarmPromptRetry();
     banner.hidden = false;
     return true;
 }
@@ -178,6 +253,14 @@ async function copyProjectLink(): Promise<void> {
 
 /** Wires the static banner markup. Called once from app.ts. */
 export function initSupportPrompt(): void {
+    // MutationObserver covers DOM-backed layers; these events cover the two
+    // browser-owned blockers, plus an interaction fallback for a future UI
+    // surface that does not expose its close through [hidden]/DOM removal.
+    document.addEventListener("visibilitychange", schedulePromptRetry);
+    document.addEventListener("fullscreenchange", schedulePromptRetry);
+    document.addEventListener("click", schedulePromptRetry);
+    document.addEventListener("keydown", schedulePromptRetry, true);
+
     const github = document.getElementById("support-banner-github") as HTMLAnchorElement | null;
     if (github) {
         github.href = REPO_URL;

@@ -35,7 +35,7 @@
 // (Don't show again). Dismissing via Escape / X / "Later" does NOT set it, so
 // the tour reappears at the next trigger - that is the "remind me next time"
 // path the product asks for. A separate offered marker never suppresses a tour;
-// it only keeps later optional prompts from jumping ahead of unresolved tips.
+// it only records that first-run guidance has actually reached the user.
 
 import { type I18nKey, t } from "../i18n/index.js";
 import { createLogger } from "../log.js";
@@ -786,17 +786,16 @@ export function runTripOpenTour(id: OnboardTourId, onResume: () => void): void {
 
 /**
  * Whether a later, optional prompt may safely appear without jumping ahead of
- * first-run guidance. Core ingest/player tips must be resolved. Conditional
- * tips only block while their feature is relevant; export blocks only after
- * that tip has actually been offered, so people who never export are not held
- * back forever.
+ * first-run guidance. Core ingest/player tips block until they have actually
+ * reached the user; choosing "Later" keeps a tour eligible for its next feature
+ * trigger, but must not suppress unrelated prompts forever. Conditional tips
+ * block only while active/pending: merely loading a multi-camera trip or having
+ * export available is not a reason to postpone feedback.
  */
-export function isOnboardingSettledForSupportPrompt(trips: ReadonlyArray<Trip>): boolean {
+export function isOnboardingSettledForSupportPrompt(): boolean {
     if (active || pendingTimer !== null) return false;
-    if (!isTourDone("ingest") || !isTourDone("player")) return false;
-    if (!isTourDone("sources") && visibleRect(".folder-source__remember")) return false;
-    if (!isTourDone("multichannel") && trips.some((trip) => tripChannels(trip).length > 1)) return false;
-    if (!isTourDone("export") && wasTourOffered("export")) return false;
+    if (!isTourDone("ingest") && !wasTourOffered("ingest")) return false;
+    if (!isTourDone("player") && !wasTourOffered("player")) return false;
     return true;
 }
 
