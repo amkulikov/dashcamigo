@@ -483,6 +483,42 @@ test.describe("player", () => {
         await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(false);
     });
 
+    test("fullscreen overlays keep the selected light palette", async ({ page }) => {
+        await page.locator('.theme-toggle-btn[data-theme="light"]').click();
+        await expect(page.locator("html")).toHaveClass(/dc-light/);
+
+        await page.locator("#player-fullscreen").click();
+        await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
+
+        const palettes = await page.locator("#player-wrap").evaluate(() => {
+            const rgba = (color: string): number[] => {
+                const canvas = document.createElement("canvas");
+                canvas.width = 1;
+                canvas.height = 1;
+                const context = canvas.getContext("2d");
+                if (!context) throw new Error("canvas context unavailable");
+                context.fillStyle = color;
+                context.fillRect(0, 0, 1, 1);
+                return Array.from(context.getImageData(0, 0, 1, 1).data);
+            };
+
+            return ["player-chart", "player-readout", "player-bar"].map((id) => {
+                const element = document.getElementById(id);
+                if (!element) throw new Error(`missing #${id}`);
+                const style = getComputedStyle(element);
+                return { id, background: rgba(style.backgroundColor), foreground: rgba(style.color) };
+            });
+        });
+
+        for (const { id, background, foreground } of palettes) {
+            expect(Math.min(...background.slice(0, 3)), `${id} uses a light fullscreen surface`).toBeGreaterThan(230);
+            expect(Math.max(...foreground.slice(0, 3)), `${id} keeps dark light-theme text`).toBeLessThan(128);
+        }
+
+        await page.evaluate(() => document.exitFullscreen());
+        await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(false);
+    });
+
     test("chart drag-select zooms to the selected span", async ({ page }) => {
         const chart = await boxOf(page, "#player-chart-canvas");
         const y = chart.y + chart.height * 0.4;

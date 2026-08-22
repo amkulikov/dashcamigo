@@ -883,8 +883,8 @@ body.export-mode .tile-drag-handle {
 }
 
 /* Fullscreen mode: native controls are hidden, our .player-bar sits on top.
-   In fullscreen the background is always black - the frame on any monitor
-   must be clean, not diluted by bone. */
+   The video canvas stays black on every monitor, while the overlay surfaces
+   follow the selected theme. */
 /* Fullscreen layout: video fills the whole screen, chart + bar are an
    overlay at the bottom, hidden by default. The user moves the mouse ->
    the .controls-visible class is set by JS for 2 seconds -> controls slide
@@ -915,7 +915,7 @@ body.export-mode .tile-drag-handle {
     transition:
         transform var(--dc-dur-entrance) var(--dc-ease-out),
         opacity var(--dc-dur-entrance) var(--dc-ease-out);
-    background: rgba(0, 0, 0, 0.78);
+    background: color-mix(in srgb, var(--bg) 78%, transparent);
     backdrop-filter: blur(6px);
     pointer-events: none;
     opacity: 0;
