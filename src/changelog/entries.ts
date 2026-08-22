@@ -28,6 +28,54 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-08-23.1",
+        category: "improvement",
+        text: {
+            en: "More license plates are now found automatically.",
+            ru: "Автоматический поиск теперь находит больше автомобильных номеров.",
+            de: "Jetzt werden automatisch mehr Kennzeichen gefunden.",
+            es: "Ahora se encuentran automáticamente más matrículas.",
+            fr: "Davantage de plaques sont désormais détectées automatiquement.",
+            pl: "Automatyczne wykrywanie znajduje teraz więcej tablic rejestracyjnych.",
+            pt: "Agora mais placas são encontradas automaticamente.",
+            zh: "现在可以自动找到更多车牌。",
+            ja: "ナンバープレートを自動でより多く見つけられるようになりました。",
+            ko: "이제 더 많은 번호판을 자동으로 찾습니다.",
+        },
+    },
+    {
+        id: "2026-08-22.3",
+        category: "fix",
+        text: {
+            en: "Improved blur handling during export.",
+            ru: "Улучшена работа зон скрытия при экспорте.",
+            de: "Die Verarbeitung unkenntlich gemachter Bereiche beim Export wurde verbessert.",
+            es: "Se ha mejorado el tratamiento de las zonas ocultas al exportar.",
+            fr: "La gestion des zones masquées lors de l’export a été améliorée.",
+            pl: "Ulepszono obsługę ukrywanych obszarów podczas eksportu.",
+            pt: "O tratamento das áreas ocultas durante a exportação foi aprimorado.",
+            zh: "改进了导出时对隐藏区域的处理。",
+            ja: "エクスポート時の非表示エリアの処理を改善しました。",
+            ko: "내보낼 때 가리는 영역의 처리를 개선했습니다.",
+        },
+    },
+    {
+        id: "2026-08-22.2",
+        category: "improvement",
+        text: {
+            en: "Trips now appear before recording checks finish, with progress shown in the list.",
+            ru: "Поездки теперь появляются до конца проверки записей, а прогресс виден в списке.",
+            de: "Fahrten erscheinen jetzt schon vor Abschluss der Aufnahmeprüfung; der Fortschritt wird in der Liste angezeigt.",
+            es: "Los trayectos ahora aparecen antes de que termine la comprobación de las grabaciones, con el progreso visible en la lista.",
+            fr: "Les trajets apparaissent désormais avant la fin de la vérification des enregistrements, avec la progression affichée dans la liste.",
+            pl: "Przejazdy pojawiają się teraz przed zakończeniem sprawdzania nagrań, a postęp jest widoczny na liście.",
+            pt: "As viagens agora aparecem antes do fim da verificação das gravações, com o progresso exibido na lista.",
+            zh: "录像检查完成前就会显示行程，列表中也会显示进度。",
+            ja: "録画の確認が終わる前に走行が表示され、一覧で進行状況も確認できるようになりました。",
+            ko: "녹화 확인이 끝나기 전부터 주행이 표시되며, 목록에서 진행 상황도 볼 수 있습니다.",
+        },
+    },
+    {
         id: "2026-08-22.1",
         category: "fix",
         text: {

@@ -7,8 +7,14 @@ User-facing changes, newest first. Dates are when the change landed on
 [beta](https://beta.dashcamigo.app); production picks it up with the next
 release tag. Localized texts ship inside the app (the "What's new" panel).
 
+## 2026-08-23
+
+- **Improved:** More license plates are now found automatically.
+
 ## 2026-08-22
 
+- **Fixed:** Improved blur handling during export.
+- **Improved:** Trips now appear before recording checks finish, with progress shown in the list.
 - **Fixed:** Renamed 70mai and Juscar recordings now keep their GPS tracks; invalid dates or coordinates are skipped instead of shifting the route.
 
 ## 2026-08-21
