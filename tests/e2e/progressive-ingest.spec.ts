@@ -320,9 +320,11 @@ test.describe("progressive ingest", () => {
                 { timeout: 10_000 },
             )
             .toBe(true);
-        await expect(page.locator(".dc-toast__body")).toContainText(
-            "Couldn't open this trip. The file may be damaged or no longer available.",
-        );
+        await expect(
+            page.locator(".dc-toast__body", {
+                hasText: "Couldn't open this trip. The file may be damaged or no longer available.",
+            }),
+        ).toBeVisible();
 
         // Convergence: the read failure is terminal, so metadata read finishes and the
         // list clears its busy flag (a wedge would keep it busy forever -> timeout).

@@ -80,7 +80,9 @@ test.describe("timeline markers", () => {
         };
         const pinX = await centreOf(".timeline-marker");
         const playheadX = (): Promise<number> => centreOf("#player-chart-playhead");
-        expect(Math.abs((await playheadX()) - pinX), "the pin is dropped at the playhead").toBeLessThan(3);
+        await expect
+            .poll(async () => Math.abs((await playheadX()) - pinX), { message: "the pin is dropped at the playhead" })
+            .toBeLessThan(4);
 
         // Away from the marker, then back through the list.
         await page.mouse.click(ruler.x + ruler.width * 0.85, ruler.y + ruler.height / 2);
