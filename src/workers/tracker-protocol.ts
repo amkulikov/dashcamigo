@@ -49,15 +49,18 @@ export interface TrackResult {
     /** Decimated keyframes (time- and movement-thresholded), sorted. May be
      *  empty when the first frame already failed to decode. */
     keyframes: TrackResultKeyframe[];
-    /** Content time tracking confidently reached: endContentSec, or earlier
-     *  when the score collapsed / decode ended. */
+    /** Content time tracking confidently reached: endContentSec on a complete
+     *  pass, or the last reliable target position on an early end. */
     trackedUntilSec: number;
-    /** True when the pass stopped early because the tracking score collapsed
-     *  (occlusion / target left the frame) and did not recover. */
-    lostTarget: boolean;
+    /** Why tracking ended. `exited` is a confidently confirmed frame-edge
+     *  departure; `lost` includes confidence collapse, an uncertain EOF tail
+     *  and an unexpectedly short decode. Callers can safely trim only exited;
+     *  a lost tail must hold the last cover to the requested end. */
+    endReason: "completed" | "exited" | "lost";
 }
 
 export const TRACK_REQUEST = "track";
+export const TRACK_NOTIFY_STARTED = "track-started";
 export const TRACK_NOTIFY_PROGRESS = "track-progress";
 
 // --- Detection pass (the "blur all plates / faces" checkboxes) --------------
@@ -131,4 +134,5 @@ export interface DetectResult {
 }
 
 export const DETECT_REQUEST = "detect";
+export const DETECT_NOTIFY_STARTED = "detect-started";
 export const DETECT_NOTIFY_PROGRESS = "detect-progress";

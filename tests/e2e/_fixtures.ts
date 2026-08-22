@@ -356,6 +356,11 @@ export interface ExportSinkFailure {
     errorName: string;
 }
 
+interface ExportCaptureInit {
+    fail?: ExportSinkFailure;
+    pickerDelayMs: number;
+}
+
 /** Screenshot helper - artifacts for human review, written next to the suite. */
 export async function shot(page: Page, name: string): Promise<void> {
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, `${name}.png`), fullPage: false });
@@ -376,8 +381,14 @@ export async function shot(page: Page, name: string): Promise<void> {
  * through - the only way to drive a real sink failure through the whole chain
  * (worker -> port bridge -> the export flow's error mapping).
  */
-export async function installExportCapture(page: Page, failure?: ExportSinkFailure): Promise<void> {
-    await page.addInitScript((fail: ExportSinkFailure | undefined) => {
+export async function installExportCapture(
+    page: Page,
+    failure?: ExportSinkFailure,
+    opts?: { pickerDelayMs?: number },
+): Promise<void> {
+    const initConfig: ExportCaptureInit = { fail: failure, pickerDelayMs: opts?.pickerDelayMs ?? 0 };
+    await page.addInitScript((config: ExportCaptureInit) => {
+        const { fail, pickerDelayMs } = config;
         const enc = new TextEncoder();
         const toU8 = (data: unknown): Uint8Array => {
             if (data == null) return new Uint8Array(0);
@@ -466,13 +477,19 @@ export async function installExportCapture(page: Page, failure?: ExportSinkFailu
             h.getFile = async () => new File([h._buf as BlobPart], h.name, { type: "video/mp4" });
             return h;
         };
-        const w = window as unknown as { showSaveFilePicker: unknown; __lastExportHandle: unknown };
+        const w = window as unknown as {
+            showSaveFilePicker: unknown;
+            __lastExportHandle: unknown;
+            __exportPickerOpened: boolean;
+        };
         w.showSaveFilePicker = async (options?: { suggestedName?: string }) => {
+            w.__exportPickerOpened = true;
+            if (pickerDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, pickerDelayMs));
             const h = makeHandle(options?.suggestedName ?? "export.mp4");
             w.__lastExportHandle = h;
             return h;
         };
-    }, failure);
+    }, initConfig);
 }
 
 /**

@@ -1236,6 +1236,11 @@ body.export-mode .video-grid.pip-overlay-mode .video-tile {
     touch-action: none;
 }
 
+.blur-box:focus-visible {
+    outline: 3px solid var(--dc-white);
+    outline-offset: 3px;
+}
+
 .blur-box--marquee {
     pointer-events: none;
     border-style: solid;
@@ -1303,9 +1308,8 @@ body.export-mode .video-grid.pip-overlay-mode .video-tile {
     color: var(--dc-white);
     font-size: var(--dc-text-sm);
     pointer-events: none;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    text-align: center;
 }
 
 /* Panel bits */
@@ -1448,6 +1452,14 @@ body.export-mode .video-grid.pip-overlay-mode .video-tile {
 
 .export-panel__blur-del-btn:hover {
     color: var(--warn);
+}
+
+@media (pointer: coarse) {
+    .export-panel__blur-del-btn,
+    .export-panel__blur-row-btn {
+        min-width: var(--dc-iconbtn-touch);
+        min-height: var(--dc-iconbtn-touch);
+    }
 }
 
 .export-panel__blur-row-actions {

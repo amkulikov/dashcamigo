@@ -38,20 +38,38 @@ export interface BlurRegion {
     startSec: number;
     endSec: number;
     /** true = the end is owned by auto-tracking (the "Follow a moving object"
-     *  path): a track pass sets endSec to where the object was last confidently
-     *  followed, so the user never dials in an end for something that moves.
+     *  path): a pass follows through the footage, shortening endSec only for a
+     *  confidently confirmed frame exit. On uncertain loss it keeps the full
+     *  span and freeze-holds the last cover, so the failure is over-redaction.
      *  false = the end is the user's (drawn default, "whole clip", or a manual
      *  set-end); a track pass then freeze-holds on loss and never shortens it.
      *  This one flag is what keeps "follow until gone" and "cover this exact
      *  span" from fighting over endSec. */
     autoEnd: boolean;
-    /** true when the last auto-track pass ended on target loss (the object
-     *  stopped being trackable before the footage ran out). The tail may not
-     *  cover a subject that moved or reappeared, so the panel flags the zone for
-     *  the user to eyeball. Cleared when the user edits the span or re-tracks. */
+    /** true when the last auto-track pass ended non-routinely (confirmed exit or
+     *  target/decode loss). The tail may need review, so the panel keeps a
+     *  warning until a successful re-track. */
     lastTrackLost: boolean;
     /** Sorted by contentSec, at least one entry. */
     keyframes: BlurKeyframe[];
+}
+
+/** Deep copy suitable for an export/capture snapshot. Regions are mutable in
+ *  the editor, so copying only the array would still let a later drag or style
+ *  change alter work that has already started. */
+export function cloneBlurRegion(region: BlurRegion): BlurRegion {
+    return {
+        ...region,
+        keyframes: region.keyframes.map((keyframe) => ({
+            ...keyframe,
+            rect: { ...keyframe.rect },
+        })),
+    };
+}
+
+/** Deep-copy a region collection while preserving its readonly input API. */
+export function cloneBlurRegions(regions: readonly BlurRegion[]): BlurRegion[] {
+    return regions.map(cloneBlurRegion);
 }
 
 /** Two keyframes closer than this merge into one on upsert. Half a 60 fps frame

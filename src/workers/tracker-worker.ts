@@ -15,6 +15,7 @@
 import { BlobSource, CanvasSink, Input } from "mediabunny";
 
 import { inflateRect } from "../blur-regions.js";
+import { finalizeFollowEndReason } from "../tracking/follow-end.js";
 import { chooseAnalysisWidth } from "../tracking/analysis-resolution.js";
 import { type TileRect, tileRects } from "../tracking/detect-common.js";
 import {
@@ -38,12 +39,14 @@ import type { CropRect } from "../transcode/compose.js";
 
 import {
     DETECT_NOTIFY_PROGRESS,
+    DETECT_NOTIFY_STARTED,
     DETECT_REQUEST,
     type DetectKind,
     type DetectRequestData,
     type DetectResult,
     type DetectResultTrack,
     TRACK_NOTIFY_PROGRESS,
+    TRACK_NOTIFY_STARTED,
     TRACK_REQUEST,
     type TrackRequestData,
     type TrackResult,
@@ -164,7 +167,7 @@ async function runTrackPass(
     let lastAnalyzedSec = req.seedContentSec;
     let lossStartedSec: number | null = null;
     let exitStartedSec: number | null = null;
-    let lostTarget = false;
+    let endReason: TrackResult["endReason"] = "completed";
     let lastGoodSec = req.seedContentSec;
     let lastEmit: TrackResultKeyframe | null = null;
     let lastProgressAt = 0;
@@ -228,7 +231,7 @@ async function runTrackPass(
                 if (boxVisibleFraction(box, frame.width, frame.height) < EXIT_VISIBLE_FRACTION) {
                     exitStartedSec ??= contentSec;
                     if (contentSec - exitStartedSec >= EXIT_CONFIRM_SEC) {
-                        lostTarget = true;
+                        endReason = "exited";
                         break outer;
                     }
                 } else {
@@ -240,7 +243,7 @@ async function runTrackPass(
                     // occlusion; a long enough loss means the target is gone.
                     lossStartedSec ??= contentSec;
                     if (contentSec - lossStartedSec >= LOSS_RIDE_OUT_SEC) {
-                        lostTarget = true;
+                        endReason = "lost";
                         break outer;
                     }
                 } else {
@@ -262,6 +265,19 @@ async function runTrackPass(
         }
     }
 
+    // A confidence/edge ride-out that reaches EOF before its confirmation
+    // window is still an UNCERTAIN tail, not a successful pass. Likewise, a
+    // decoder that stops materially before the requested end must fail closed.
+    // Label both lost so the client holds the last known cover to the end.
+    endReason = finalizeFollowEndReason(endReason, {
+        initialized,
+        lossPending: lossStartedSec !== null,
+        exitPending: exitStartedSec !== null,
+        requestedEndSec: req.endContentSec,
+        lastAnalyzedSec,
+        analysisIntervalSec: ANALYSIS_MIN_INTERVAL_SEC,
+    });
+
     // Ensure the last confident position is pinned down even if decimation
     // skipped it - the span tail must not extrapolate from an older keyframe.
     if (lastEmit && lastEmit.contentSec < lastGoodSec) {
@@ -273,10 +289,8 @@ async function runTrackPass(
 
     return {
         keyframes,
-        trackedUntilSec: lostTarget
-            ? lastGoodSec
-            : Math.min(req.endContentSec, Math.max(lastGoodSec, req.seedContentSec)),
-        lostTarget,
+        trackedUntilSec: endReason === "completed" ? req.endContentSec : lastGoodSec,
+        endReason,
     };
 }
 
@@ -710,19 +724,25 @@ const server = createWorkerServer(self, {
     onRequest: async (type, data, ctx: RequestContext): Promise<TrackResult | DetectResult> => {
         if (type === TRACK_REQUEST) {
             const req = data as TrackRequestData & { regionId?: string };
-            return await serialize(() =>
-                runTrackPass(req, ctx.signal, (fractionDone) => {
+            return await serialize(() => {
+                // A request can be cancelled while waiting behind another pass.
+                // Do not let it wake/load the model when its queue turn arrives.
+                if (ctx.signal.aborted) throw new DOMException("aborted", "AbortError");
+                server.notify(TRACK_NOTIFY_STARTED, { regionId: req.regionId });
+                return runTrackPass(req, ctx.signal, (fractionDone) => {
                     server.notify(TRACK_NOTIFY_PROGRESS, { fractionDone, regionId: req.regionId });
-                }),
-            );
+                });
+            });
         }
         if (type === DETECT_REQUEST) {
             const req = data as DetectRequestData & { passId?: string };
-            return await serialize(() =>
-                runDetectPass(req, ctx.signal, (fractionDone) => {
+            return await serialize(() => {
+                if (ctx.signal.aborted) throw new DOMException("aborted", "AbortError");
+                server.notify(DETECT_NOTIFY_STARTED, { passId: req.passId });
+                return runDetectPass(req, ctx.signal, (fractionDone) => {
                     server.notify(DETECT_NOTIFY_PROGRESS, { fractionDone, passId: req.passId });
-                }),
-            );
+                });
+            });
         }
         throw new Error(`unknown request type: ${type}`);
     },

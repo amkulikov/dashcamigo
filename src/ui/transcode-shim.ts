@@ -33,7 +33,7 @@ import {
 import { createWorkerClient } from "../workers/_protocol/worker-client.js";
 
 import { state } from "./state.js";
-import { exportPanelState } from "./export-state.js";
+import type { OverlayMapState } from "./export-state.js";
 import { createWorkerWritableProxy } from "./writable-bridge.js";
 import type { OverlayPipelineArgs } from "../transcode/types.js";
 import { computeOutputSize } from "../transcode/compose.js";
@@ -56,6 +56,7 @@ const PREWARM_RANGE_MARGIN_SEC = 30;
 export function transcodeViaWorker(
     args: TranscodeArgs,
     onDiskCommit?: (on: boolean) => void,
+    mapConfig: Readonly<OverlayMapState> | null = null,
 ): Promise<TranscodeResult> {
     const { signal, onProgress, writable, ...rest } = args;
     return runInWorker(
@@ -66,6 +67,7 @@ export function transcodeViaWorker(
         onProgress,
         args.output.overlays,
         onDiskCommit,
+        mapConfig,
     );
 }
 
@@ -73,6 +75,7 @@ export function transcodeViaWorker(
 export function transcodeSplitViaWorker(
     args: TranscodeSplitArgs,
     onDiskCommit?: (on: boolean) => void,
+    mapConfig: Readonly<OverlayMapState> | null = null,
 ): Promise<TranscodeResult> {
     const { signal, onProgress, writable, ...rest } = args;
     return runInWorker(
@@ -83,6 +86,7 @@ export function transcodeSplitViaWorker(
         onProgress,
         args.output.overlays,
         onDiskCommit,
+        mapConfig,
     );
 }
 
@@ -94,6 +98,7 @@ function runInWorker(
     onProgress: TranscodeArgs["onProgress"],
     overlays: OverlayPipelineArgs | null,
     onDiskCommit?: (on: boolean) => void,
+    mapConfig: Readonly<OverlayMapState> | null = null,
 ): Promise<TranscodeResult> {
     // name is static - Vite's worker plugin requires static options.
     const worker = new Worker(new URL("../workers/transcode-worker.ts", import.meta.url), {
@@ -125,15 +130,11 @@ function runInWorker(
     const ensureSnapshotter = (): Promise<ExportMapSnapshotter> => {
         if (snapshotterPromise) return snapshotterPromise;
         const records = overlays?.gpsRecords ?? [];
-        // Base-layer theme is a snapshot-render concern (which style.json the
-        // hidden MapLibre loads) - it never crosses into the worker, so we read
-        // the live panel state here rather than threading it through the worker
-        // args. The panel is locked in "progress" phase during export, so this
-        // matches what buildOverlayPipelineArgs snapshotted.
-        // Camera (theme/mode/tilt/adaptive) is a snapshot-render concern - it
-        // never crosses into the worker, so we read the live (locked) panel
-        // state here rather than threading it through the worker args.
-        const overlayMap = exportPanelState.overlayMap;
+        // Snapshot-render concerns stay on the main thread, but still come from
+        // the same immutable Save-time contract as the worker args. Reading the
+        // live panel here made a delayed export susceptible to later UI state.
+        const overlayMap = mapConfig;
+        if (!overlayMap) throw new Error("map overlay config missing from export snapshot");
         const mapTheme = overlayMap.theme;
         const chase: ChasePrewarmOpts = {
             headingUp: overlayMap.mode === "chase",
@@ -228,16 +229,16 @@ function runInWorker(
     const renderOneSnapshot = async (req: MapSnapshotRequestNotification): Promise<void> => {
         try {
             const snap = await ensureSnapshotter();
-            const om = exportPanelState.overlayMap;
+            if (!mapConfig) throw new Error("map overlay config missing from export snapshot");
             const bitmap = await snap.snapshot({
                 lat: req.lat,
                 lon: req.lon,
                 bearingDeg: req.bearingDeg,
                 zoomKm: req.zoomKm,
                 speedMs: req.speedMs,
-                headingUp: om.mode === "chase",
-                pitchDeg: om.pitchDeg,
-                adaptiveZoom: om.adaptiveZoom,
+                headingUp: mapConfig.mode === "chase",
+                pitchDeg: mapConfig.pitchDeg,
+                adaptiveZoom: mapConfig.adaptiveZoom,
             });
             if (client.disposed) {
                 // Export was cancelled while this snapshot rendered. notify()

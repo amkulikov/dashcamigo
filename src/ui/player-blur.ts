@@ -50,13 +50,16 @@ import {
     notifyBlurRegionsChanged,
     subscribeBlurRegions,
 } from "./blur-regions-state.js";
+import { activeEffectiveBlurRegions } from "./blur-effective.js";
 import { detectRegions, subscribeBlurDetect } from "./blur-detect.js";
 import { ALL_CHANNELS, channelPlayers, channelTileFor, dom } from "./dom.js";
 import { exportPanelState, notifyExportStateChanged, subscribeExportState } from "./export-state.js";
+import { channelDisplayLabel } from "./format.js";
 import { exitCropEditIfOpen } from "./player-crop.js";
 import { attachPointerDrag } from "./pointer-drag.js";
 import { getTripCurrentTime } from "./player.js";
 import { activeTrip, state } from "./state.js";
+import { cancelTrackPassesExceptTrip } from "./blur-track.js";
 import { containRect, type Rect } from "./video-geometry.js";
 
 /** Smallest region dimension as a fraction of the source frame. */
@@ -91,13 +94,16 @@ let lastSeenTrip: ReturnType<typeof activeTrip> = null;
 
 export function initPlayerBlur(): void {
     subscribeExportState(() => {
-        if (!state.exportModeOpen) disarmDraw();
+        if (!blurEditorActive()) disarmDraw();
         // Trip switch invalidates the armed draw layers (their channel
         // closures and tile bindings belong to the previous trip).
         const trip = activeTrip();
         if (trip !== lastSeenTrip) {
             lastSeenTrip = trip;
             disarmDraw();
+            cancelTrackPassesExceptTrip(state.exportModeOpen ? trip : null);
+        } else if (!state.exportModeOpen) {
+            cancelTrackPassesExceptTrip(null);
         }
         geometryEpoch++;
         syncLifecycle();
@@ -140,6 +146,13 @@ function blurUiActive(): boolean {
     // Auto-detected regions paint too (no editor boxes for them - see tick),
     // so a trip with only checkbox-found blur still gets a live preview.
     return state.exportModeOpen && (activeBlurRegions().length > 0 || detectRegions().length > 0);
+}
+
+/** Editing is allowed only while configuring. The preview remains visible in
+ *  progress so the frame still matches the immutable export snapshot, but its
+ *  boxes must not imply that late edits can affect that run. */
+function blurEditorActive(): boolean {
+    return state.exportModeOpen && exportPanelState.phase === "options" && !exportPanelState.configurationLocked;
 }
 
 /** Creates/destroys per-tile UI and starts/stops the rAF loop to match state. */
@@ -249,7 +262,7 @@ function tick(): void {
     // Manual zones + auto-detected regions paint identically; only manual ones
     // get editor boxes (rebuildBoxes reads activeBlurRegions alone - dozens of
     // non-editable auto boxes would bury the drag handles).
-    const regions = [...activeBlurRegions(), ...detectRegions()];
+    const regions = activeEffectiveBlurRegions();
     for (const [ch, ui] of tileUis) {
         paintTile(ch, ui, regions, contentSec);
     }
@@ -277,7 +290,7 @@ function paintTile(ch: Channel, ui: TileUi, regions: readonly BlurRegion[], cont
     const ctx = ui.ctx;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, tile.clientWidth, tile.clientHeight);
-    ui.boxLayer.hidden = cropEditing;
+    ui.boxLayer.hidden = cropEditing || !blurEditorActive();
     if (cropEditing || !v || tile.hidden) return;
 
     previewHelper ??= createRegionBlurHelper();
@@ -360,19 +373,35 @@ function rebuildBoxes(): void {
                 ui.boxes.delete(id);
             }
         }
-        for (const region of regions) {
-            if (region.channel !== ch || ui.boxes.has(region.id)) continue;
-            const el = buildRegionBox(region);
+        for (const [index, region] of regions.entries()) {
+            if (region.channel !== ch) continue;
+            const existing = ui.boxes.get(region.id);
+            if (existing) {
+                existing.setAttribute("aria-label", regionBoxAriaLabel(region, index));
+                continue;
+            }
+            const el = buildRegionBox(region, index);
             ui.boxLayer.appendChild(el);
             ui.boxes.set(region.id, el);
         }
     }
 }
 
-function buildRegionBox(region: BlurRegion): HTMLDivElement {
+function regionBoxAriaLabel(region: BlurRegion, index: number): string {
+    const zoneName = t("export.blur.zone", { n: index + 1 });
+    const trip = activeTrip();
+    const channelName = trip ? ` · ${channelDisplayLabel(region.channel, trip)}` : "";
+    return `${zoneName}${channelName}. ${t("export.blur.editBox")}`;
+}
+
+function buildRegionBox(region: BlurRegion, index: number): HTMLDivElement {
     const el = document.createElement("div");
     el.className = "blur-box";
     el.hidden = true;
+    el.tabIndex = 0;
+    el.setAttribute("role", "group");
+    el.setAttribute("aria-label", regionBoxAriaLabel(region, index));
+    el.addEventListener("keydown", (event) => editBoxWithKeyboard(region, event));
     for (const corner of ["tl", "tr", "bl", "br"] as const) {
         const hnd = document.createElement("div");
         hnd.className = `blur-box-handle blur-box-handle--${corner}`;
@@ -383,8 +412,37 @@ function buildRegionBox(region: BlurRegion): HTMLDivElement {
     return el;
 }
 
+/** Keyboard equivalent of dragging the visual box. Arrows move it; Shift+arrows
+ *  resize its right/bottom edges. */
+function editBoxWithKeyboard(region: BlurRegion, event: KeyboardEvent): void {
+    if (!blurEditorActive() || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+    const current = regionRectAt(region, getTripCurrentTime());
+    if (!current) return;
+    const step = 0.005;
+    const next = { ...current };
+    if (event.shiftKey) {
+        if (event.key === "ArrowLeft") next.wPct = Math.max(MIN_REGION, next.wPct - step);
+        if (event.key === "ArrowRight") next.wPct = Math.min(1 - next.xPct, next.wPct + step);
+        if (event.key === "ArrowUp") next.hPct = Math.max(MIN_REGION, next.hPct - step);
+        if (event.key === "ArrowDown") next.hPct = Math.min(1 - next.yPct, next.hPct + step);
+    } else {
+        if (event.key === "ArrowLeft") next.xPct = Math.max(0, next.xPct - step);
+        if (event.key === "ArrowRight") next.xPct = Math.min(1 - next.wPct, next.xPct + step);
+        if (event.key === "ArrowUp") next.yPct = Math.max(0, next.yPct - step);
+        if (event.key === "ArrowDown") next.yPct = Math.min(1 - next.hPct, next.yPct + step);
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (dom.player && !dom.player.paused) dom.player.pause();
+    commitRect(region, next);
+}
+
 /** Commits the box's current rect as a pinned keyframe at the playhead. */
 function commitRect(region: BlurRegion, rect: CropRect): void {
+    // Save can lock the form while a keyboard/pointer gesture is already in
+    // flight. The export has its own snapshot; stop the editor too so a late
+    // pointerup does not create a zone that appears to belong to that run.
+    if (!blurEditorActive()) return;
     upsertKeyframe(region, getTripCurrentTime(), rect, true);
     geometryEpoch++;
     notifyBlurRegionsChanged();
@@ -399,6 +457,7 @@ function attachBoxMoveDrag(region: BlurRegion, el: HTMLDivElement): void {
     el.addEventListener("click", (e) => e.stopPropagation());
     attachPointerDrag(el, {
         onStart: (e) => {
+            if (!blurEditorActive()) return false;
             if ((e.target as HTMLElement)?.classList.contains("blur-box-handle")) return false;
             // Editing a box on moving video is chaos - hold the frame.
             if (dom.player && !dom.player.paused) dom.player.pause();
@@ -431,6 +490,7 @@ function attachBoxHandleDrag(region: BlurRegion, handle: HTMLElement, corner: "t
     let base: CropRect | null = null;
     attachPointerDrag(handle, {
         onStart: (e) => {
+            if (!blurEditorActive()) return false;
             if (dom.player && !dom.player.paused) dom.player.pause();
             base = regionRectAt(region, getTripCurrentTime());
             if (!base) return false;
@@ -481,7 +541,7 @@ export function toggleBlurDraw(): void {
         disarmDraw();
         return;
     }
-    if (!state.exportModeOpen) return;
+    if (!blurEditorActive()) return;
     // The crop editor owns tile surfaces and the video transform - the two
     // editors must not share a tile. Close it before arming.
     exitCropEditIfOpen();
@@ -520,6 +580,7 @@ function attachDrawDrag(ch: Channel, layer: HTMLDivElement): void {
     layer.addEventListener("click", (e) => e.stopPropagation());
     attachPointerDrag(layer, {
         onStart: (e) => {
+            if (!blurEditorActive()) return false;
             sx = e.clientX;
             sy = e.clientY;
             marquee = document.createElement("div");
@@ -552,6 +613,10 @@ function attachDrawDrag(ch: Channel, layer: HTMLDivElement): void {
 }
 
 function finishDraw(ch: Channel, layer: HTMLDivElement, x0: number, y0: number, x1: number, y1: number): void {
+    if (!blurEditorActive()) {
+        disarmDraw();
+        return;
+    }
     const trip = activeTrip();
     if (!trip) {
         disarmDraw();

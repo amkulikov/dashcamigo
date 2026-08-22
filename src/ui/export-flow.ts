@@ -53,7 +53,7 @@ import { getBrakeThresholdG } from "../events.js";
 import { computeCumulativeDistanceM, sampleSpeedAcross } from "../transcode/frame-pos.js";
 import { getUnits } from "../units-pref.js";
 
-import { anyRegionIntersectsRange, type BlurRegion } from "../blur-regions.js";
+import { anyRegionIntersectsRange, cloneBlurRegions, type BlurRegion } from "../blur-regions.js";
 
 import { isAllocationFailure } from "./allocation-failure.js";
 import { isDestinationLostError, isSinkFailure, tagSinkFailures } from "./destination-error.js";
@@ -65,6 +65,7 @@ import { exportPanelState, OVERLAY_STATE_ACCESSORS, type Quality } from "./expor
 import { activeBlurRegions } from "./blur-regions-state.js";
 import {
     anyDetectEnabled,
+    captureDetectExportRequest,
     detectPassState,
     detectRegions,
     detectStale,
@@ -232,8 +233,8 @@ function anyBlurRegionInExport(): boolean {
  *  entirely. Plain data - structured-clones through the worker bridge as-is,
  *  and the clone is a snapshot: edits made mid-export do not affect the
  *  running encode. */
-function blurRegionsForExport(detected: readonly BlurRegion[]): BlurRegion[] | null {
-    const list = [...activeBlurRegions(), ...detected];
+function blurRegionsForExport(manual: readonly BlurRegion[], detected: readonly BlurRegion[]): BlurRegion[] | null {
+    const list = [...manual, ...detected];
     return list.length ? list : null;
 }
 
@@ -785,9 +786,10 @@ export interface ExportFlowHooks {
 let exportFlowInFlight = false;
 
 /**
- * Runs the export. Reads all configuration from the inline state singletons
- * (exportPanelState + state.composition + state.active). The function handles
- * its own save-file picker; the caller only supplies UI hooks.
+ * Runs the export. Snapshots configuration from the inline state singletons
+ * (exportPanelState + state.composition + state.active) synchronously at entry,
+ * before its first await. The function handles its own save-file picker; the
+ * caller only supplies UI hooks.
  *
  * Calls onDone on success, onError on failure, onCancel on user abort. The
  * AbortController is stored module-side so visibilitychange can re-acquire
@@ -837,6 +839,42 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
     const withGpmf = exportPanelState.withGpmf && hasGps;
     const withGpx = exportPanelState.withGpx && hasGps;
 
+    // Capture every mutable input BEFORE the first await. Native pickers,
+    // capability probes and detector/model work can all suspend for seconds or
+    // minutes. Reading the active singleton afterwards used to let a trip,
+    // layout or blur edit from the future leak into this already-started run
+    // (in the worst case re-enabling stream-copy and shipping raw frames).
+    const channelOrder = [...state.composition.channelOrder];
+    const channel = channelOrder[0] ?? mainChannel();
+    const layout = state.composition.layout;
+    const slotCrops = state.composition.perSlotCrops.map((crop) => (crop ? { ...crop } : null));
+    const slotPipPositions = state.composition.perSlotPipPositions.map((pos) => (pos ? { ...pos } : null));
+    const slotPipScales = [...state.composition.perSlotScales];
+    const quality = exportPanelState.quality;
+    const outputPresetId = exportPanelState.outputPresetId;
+    const letterboxFill = exportPanelState.letterboxFill;
+    const speedFactor = exportPanelState.speedFactor;
+    const withAudio = exportPanelState.withAudio;
+    const watermarkAnchor = watermarkAnchorForExport();
+    const overlays = buildOverlayPipelineArgs(trip);
+    const mapConfig = overlays?.map ? { ...exportPanelState.overlayMap } : null;
+    const dims = resolveOutputDims();
+    const desiredBitrate = resolveReencodeBitrate(trip, dims);
+    const sourceUndecodable = undecodableSource(trip);
+    const expectedBytes = estimateExport()?.bytes ?? 0;
+    const manualBlurRegions = cloneBlurRegions(activeBlurRegions());
+    const detectRequest = captureDetectExportRequest();
+    const initiallyStreamCopy = canStreamCopy();
+    const streamCopyWithoutDetectedRegions =
+        quality === "original" &&
+        outputPresetId === "source" &&
+        channelOrder.length <= 1 &&
+        !slotCrops[0] &&
+        letterboxFill === "black" &&
+        speedFactor === 1 &&
+        overlays === null &&
+        !anyRegionIntersectsRange(manualBlurRegions, channelOrder, startTripSec, endTripSec);
+
     if (dom.player && !dom.player.paused) dom.player.pause();
 
     const basename = `${clipBasename(trip, startTripSec, endTripSec)}_${randomFilenameSuffix()}`;
@@ -868,7 +906,6 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
         // protocol the mux and GPMF injection need. Pre-size its buffer to the
         // estimated output (stream-copy's estimate is close) so the resizable
         // backing never has to grow - no realloc spike during the mux.
-        const expectedBytes = estimateExport()?.bytes ?? 0;
         mp4Handle = createInMemoryFileHandle(fileName, expectedBytes) as unknown as Awaited<
             ReturnType<typeof showSaveFilePicker>
         >;
@@ -911,18 +948,17 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
     // is the authoritative backstop (and the only gate if the user clicked Save
     // before the panel's async probe resolved).
     let reencodeBitrate = 0;
-    if (!canStreamCopy()) {
+    if (!initiallyStreamCopy) {
         // Decode preflight: a source this browser cannot decode makes every
         // re-encode branch impossible. The panel already disables Save with
         // guidance; this backstops a Save clicked before the panel synced.
-        const undecodable = undecodableSource(trip);
-        if (undecodable) {
-            log.warn("re-encode export blocked: source not decodable in this browser", { codec: undecodable.codec });
+        if (sourceUndecodable) {
+            log.warn("re-encode export blocked: source not decodable in this browser", {
+                codec: sourceUndecodable.codec,
+            });
             hooks.onError("export.error.sourceNotPlayable");
             return;
         }
-        const dims = resolveOutputDims();
-        const desiredBitrate = resolveReencodeBitrate(trip, dims);
         const { resolveEncodableH264 } = await import("../transcode/capabilities.js");
         const encodable = await resolveEncodableH264(dims.width, dims.height, desiredBitrate);
         if (!encodable) {
@@ -954,12 +990,11 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
 
     // Picker resolved (not cancelled) - only now switch the UI to the progress
     // view. Cancelling the picker returns above without firing this, leaving the
-    // options form intact so the user can keep editing.
+    // options form intact; the caller unlocks it when this flow settles.
     hooks.onExportStart?.();
 
     activeExportController = new AbortController();
     const exportDurationSec = endTripSec - startTripSec;
-    const speedFactor = exportPanelState.speedFactor;
     // The produced file's duration: the source span compressed by the speed
     // factor (equals exportDurationSec at 1x / stream-copy).
     const outputDurationSec = exportDurationSec / Math.max(1, speedFactor);
@@ -967,12 +1002,11 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
     // desync). Drop it whenever speed > 1, regardless of the panel toggle. The
     // no-encoder drop now happens inside the worker (resolveAudioPlan) and is
     // reported back in TranscodeResult, not gated here.
-    const reencodeAudio = exportPanelState.withAudio && speedFactor === 1;
-    const channel = mainChannel();
-    const isSplit = state.composition.channelOrder.length > 1;
+    const reencodeAudio = withAudio && speedFactor === 1;
+    const isSplit = channelOrder.length > 1;
     // let, not const: the detection pre-pass below can settle a pessimistic
     // "assume blur" gate into a fresh empty result, re-enabling stream-copy.
-    let streamCopy = canStreamCopy();
+    let streamCopy = initiallyStreamCopy;
 
     hooks.onInProgress(true);
     void acquireExportWakeLock();
@@ -1085,16 +1119,20 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
         // Usually a fast cache hit: the checkbox toggle already ran the pass
         // over this range; this is the export-time guarantee for the leftovers
         // (range nudged right before Save, pass still running, etc.).
-        if (anyDetectEnabled()) {
+        if (detectRequest) {
             hooks.onStatus(t("export.progress.detecting"));
-            detectedBlurRegions = await ensureDetectRegionsForExport(activeExportController.signal, (fraction) =>
-                hooks.onProgressFill?.(fraction),
+            detectedBlurRegions = await ensureDetectRegionsForExport(
+                detectRequest,
+                activeExportController.signal,
+                (fraction) => hooks.onProgressFill?.(fraction),
             );
             hooks.onStatus(t("export.status.preparing"));
-            // A fresh result (maybe empty) re-decides the pessimistic
-            // copy-vs-encode gate the preflight took on a stale one.
-            streamCopy = canStreamCopy();
+            // A fresh empty result may settle the initial pessimistic gate back
+            // to copy, but ONLY against the captured config/manual zones.
+            streamCopy = streamCopyWithoutDetectedRegions && detectedBlurRegions.length === 0;
         }
+
+        const effectiveBlurRegions = blurRegionsForExport(manualBlurRegions, detectedBlurRegions);
 
         // Tagged so a failure thrown by the SINK can be told apart from a
         // source-side one that shares its DOMException name (see destination-error.ts).
@@ -1126,7 +1164,7 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
                     channel,
                     startTripSec,
                     endTripSec,
-                    withAudio: exportPanelState.withAudio,
+                    withAudio,
                     withGpmf,
                     mp4Writable: writable,
                     mp4Handle: mp4Handle as unknown as FileSystemFileHandle,
@@ -1168,33 +1206,32 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
             // is the shared finishExport below.
             let transcodeResult: TranscodeResult;
             if (isSplit) {
-                const dims = resolveOutputDims();
                 // Device-fit bitrate from the preflight (full request when the
                 // device handles it, a lower rung when it does not). Fallback
                 // keeps this defensive if the preflight somehow left it unset.
-                const bitrate = reencodeBitrate || resolveReencodeBitrate(trip, dims);
+                const bitrate = reencodeBitrate || desiredBitrate;
                 transcodeResult = await transcodeSplit(
                     {
                         source: {
                             trip,
-                            slotChannels: state.composition.channelOrder,
+                            slotChannels: channelOrder,
                             startTripSec,
                             endTripSec,
                         },
                         output: {
                             height: dims.height,
                             aspect: dims.aspect,
-                            layout: state.composition.layout,
+                            layout,
                             bitrate,
-                            watermarkAnchor: watermarkAnchorForExport(),
+                            watermarkAnchor,
                             withAudio: reencodeAudio,
                             speedFactor,
-                            slotCrops: state.composition.perSlotCrops,
-                            overlayPositions: state.composition.perSlotPipPositions,
-                            slotPipScales: state.composition.perSlotScales,
-                            letterboxFill: exportPanelState.letterboxFill,
-                            overlays: buildOverlayPipelineArgs(trip),
-                            blurRegions: blurRegionsForExport(detectedBlurRegions),
+                            slotCrops,
+                            overlayPositions: slotPipPositions,
+                            slotPipScales,
+                            letterboxFill,
+                            overlays,
+                            blurRegions: effectiveBlurRegions,
                         },
                         writable,
                         signal: activeExportController.signal,
@@ -1203,13 +1240,13 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
                         // sweep an indeterminate bar for its duration, like stream-copy.
                     },
                     hooks.onProgressIndeterminate,
+                    mapConfig,
                 );
             } else {
-                const dims = resolveOutputDims();
                 // Device-fit bitrate from the preflight (full request when the
                 // device handles it, a lower rung when it does not). Fallback
                 // keeps this defensive if the preflight somehow left it unset.
-                const bitrate = reencodeBitrate || resolveReencodeBitrate(trip, dims);
+                const bitrate = reencodeBitrate || desiredBitrate;
                 transcodeResult = await transcode(
                     {
                         source: { trip, channel, startTripSec, endTripSec },
@@ -1217,13 +1254,13 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
                             height: dims.height,
                             aspect: dims.aspect,
                             bitrate,
-                            crop: state.composition.perSlotCrops[0] ?? null,
-                            watermarkAnchor: watermarkAnchorForExport(),
+                            crop: slotCrops[0] ?? null,
+                            watermarkAnchor,
                             withAudio: reencodeAudio,
                             speedFactor,
-                            letterboxFill: exportPanelState.letterboxFill,
-                            overlays: buildOverlayPipelineArgs(trip),
-                            blurRegions: blurRegionsForExport(detectedBlurRegions),
+                            letterboxFill,
+                            overlays,
+                            blurRegions: effectiveBlurRegions,
                         },
                         writable,
                         signal: activeExportController.signal,
@@ -1231,6 +1268,7 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
                         // Same indeterminate-bar bracket as the split path above.
                     },
                     hooks.onProgressIndeterminate,
+                    mapConfig,
                 );
             }
             const gpmfInjected = await postProcessTelemetry(

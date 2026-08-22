@@ -41,7 +41,14 @@ import {
 } from "./export-flow.js";
 import type { ExportDoneSummary } from "./export-flow.js";
 import { nativeFsaAvailable } from "./in-memory-file.js";
-import { clipBasename, formatBytes, formatRateBytes, formatTime, randomFilenameSuffix } from "./format.js";
+import {
+    channelDisplayLabel,
+    clipBasename,
+    formatBytes,
+    formatRateBytes,
+    formatTime,
+    randomFilenameSuffix,
+} from "./format.js";
 import { setExportInProgress, syncExportButton } from "./player-export-button.js";
 import { activeTrip, activeTripHasGps, state } from "./state.js";
 import { downloadBlob } from "../download.js";
@@ -73,6 +80,8 @@ import {
     detectAssetGroups,
     detectCounts,
     detectEnabled,
+    detectRegions,
+    detectStyle,
     type DetectKind,
     detectPassState,
     ensureDetectPass,
@@ -138,9 +147,12 @@ export function initExportPanel(opts: { onCompositionApply: () => void }): void 
     // Blur zones: rows + armed-button label track region edits; export-state
     // changes (arm/disarm notifies it) are covered by syncExportPanel below.
     subscribeBlurRegions(syncBlurGroup);
-    // Track-pass lifecycle ticks re-render the zone rows (running state on the
-    // Follow button).
-    subscribeTrackPasses(syncBlurGroup);
+    // Track-pass lifecycle ticks re-render the zone rows and keep Save blocked
+    // until Follow has committed a complete result.
+    subscribeTrackPasses(() => {
+        syncBlurGroup();
+        syncSaveAvailability();
+    });
     // Model asset download state drives the consent / progress / offline strips
     // (Follow's and the detect checkboxes' - separate rows, same machinery).
     subscribeBlurAssets(() => {
@@ -167,6 +179,7 @@ export function initExportPanel(opts: { onCompositionApply: () => void }): void 
 }
 
 function openOrCloseExportMode(): void {
+    if (exportPanelState.phase === "progress" || exportPanelState.configurationLocked) return;
     if (state.exportModeOpen) closeExportMode();
     else openExportMode();
 }
@@ -177,7 +190,11 @@ function syncExportPanel(): void {
     // stale results) - keep the checkbox block honest alongside the zones.
     syncDetectGroup();
     const phase = exportPanelState.phase;
-    if (dom.exportPanelOptions) dom.exportPanelOptions.hidden = phase !== "options";
+    if (dom.exportPanelOptions) {
+        dom.exportPanelOptions.hidden = phase !== "options";
+        dom.exportPanelOptions.inert = exportPanelState.configurationLocked;
+        dom.exportPanelOptions.setAttribute("aria-busy", String(exportPanelState.configurationLocked));
+    }
     if (dom.exportPanelProgress) dom.exportPanelProgress.hidden = phase !== "progress";
     if (dom.exportPanelDone) dom.exportPanelDone.hidden = phase !== "done";
     if (dom.exportPanelError) dom.exportPanelError.hidden = phase !== "error";
@@ -384,6 +401,14 @@ function renderOptionsSection(): void {
     saveBtnEl = saveBtn;
     root.appendChild(saveBtn);
 
+    const followNote = document.createElement("div");
+    followNote.id = "export-panel-follow-save-note";
+    followNote.className = "export-panel__warn";
+    followNote.textContent = t("export.blur.tracker.saveBlocked");
+    followNote.hidden = true;
+    followSaveNoteEl = followNote;
+    root.appendChild(followNote);
+
     // Reflect the current mode (hide video controls + relabel Save) now that all
     // the nodes exist.
     syncOutputKindUi();
@@ -487,9 +512,8 @@ function syncOutputKindUi(): void {
     }
     if (saveBtnEl) {
         saveBtnEl.textContent = gpx ? t("export.gpx.start") : t("export.start");
-        // gpx never encodes; in video mode syncEstimate/syncEncodeNote owns this.
-        if (gpx) saveBtnEl.disabled = false;
     }
+    syncSaveAvailability();
     // The summary content itself is filled by syncGpxSummary (called from the
     // gpx branch of syncExportPanel, which runs right after this on every tick).
 }
@@ -821,6 +845,8 @@ let estimateDetailsEl: HTMLDivElement | null = null;
 // by syncEstimate; the latter also disables Save.
 let encodeNoteEl: HTMLDivElement | null = null;
 let saveBtnEl: HTMLButtonElement | null = null;
+let followSaveNoteEl: HTMLDivElement | null = null;
+let saveBlockedByEncode = false;
 // Wrapper around every video-only control; hidden in gpx mode (syncOutputKindUi).
 let videoOnlyEl: HTMLDivElement | null = null;
 // The video/gpx segmented switch (hidden on a no-GPS trip) and its two buttons
@@ -916,8 +942,9 @@ function syncEstimate(): void {
  * Reflects the device encode ceiling in the panel: a warn note when the device
  * forced a quality reduction (deviceCapped), an error note + disabled Save when
  * it cannot encode at this resolution at all (blocked). Anything else clears the
- * note and re-enables Save. Keeps the Save button as the single gate the user
- * sees BEFORE committing, matching the "surface the limit up front" decision.
+ * encode gate; Follow/configuration locks can still keep Save disabled. Keeps
+ * the Save button as the single gate the user sees BEFORE committing, matching
+ * the "surface the limit up front" decision.
  */
 function syncEncodeNote(est: ReturnType<typeof estimateExport>): void {
     const note = encodeNoteEl;
@@ -952,7 +979,27 @@ function syncEncodeNote(est: ReturnType<typeof estimateExport>): void {
             note.textContent = "";
         }
     }
-    if (saveBtnEl) saveBtnEl.disabled = blocked || undecodable !== null;
+    saveBlockedByEncode = blocked || undecodable !== null;
+    syncSaveAvailability();
+}
+
+/** Save must never snapshot a half-finished Follow. Before the pass commits,
+ *  the region still has its old short end and seed geometry; exporting that
+ *  would silently uncover the remaining clip. Pending asset consent counts as
+ *  unfinished too: the user already asked for Follow and must explicitly
+ *  cancel that intent before saving without it. */
+function followWorkPending(): boolean {
+    return pendingFollowRegionIds.size > 0 || activeBlurRegions().some((region) => trackPassOf(region.id) !== null);
+}
+
+function syncSaveAvailability(): void {
+    const video = exportPanelState.outputKind === "video";
+    const followPending = video && followWorkPending();
+    if (followSaveNoteEl) followSaveNoteEl.hidden = !followPending;
+    if (!saveBtnEl) return;
+    saveBtnEl.disabled = exportPanelState.configurationLocked || (video && (saveBlockedByEncode || followPending));
+    if (followPending) saveBtnEl.setAttribute("aria-describedby", "export-panel-follow-save-note");
+    else saveBtnEl.removeAttribute("aria-describedby");
 }
 
 // Refs touched by syncSpeedDependentUi: the speed buttons (highlight the active
@@ -1079,6 +1126,8 @@ const FOLLOW_GROUPS: readonly BlurAssetGroupId[] = ["track"];
 // Detect-checkbox UI refs (the "blur all plates / faces" block).
 let blurDetectStripEl: HTMLDivElement | null = null;
 let blurDetectStatusEl: HTMLDivElement | null = null;
+let detectReviewCursor = 0;
+let detectReviewTrip: ReturnType<typeof activeTrip> = null;
 let blurDetectPlatesCbEl: HTMLInputElement | null = null;
 let blurDetectFacesCbEl: HTMLInputElement | null = null;
 let blurDetectGpuNoteEl: HTMLDivElement | null = null;
@@ -1274,9 +1323,20 @@ function onFollowClick(region: BlurRegion): void {
 function runFollow(region: BlurRegion): void {
     const trip = activeTrip();
     if (!trip) return;
+    const previousAutoEnd = region.autoEnd;
     region.autoEnd = true;
     notifyBlurRegionsChanged();
-    void toggleTrackPass(trip, region);
+    void toggleTrackPass(trip, region).then((outcome) => {
+        // Follow is optimistic while the async pass runs. If it never produced
+        // a result (cancel, timeout, worker failure, no usable span), restore
+        // the user's previous timing mode. Do not undo an explicit Set-time
+        // click made while cancellation was settling.
+        if (outcome !== "completed" && region.autoEnd) {
+            region.autoEnd = previousAutoEnd;
+            notifyBlurRegionsChanged();
+            notifyExportStateChanged();
+        }
+    });
 }
 
 /** Runs the download (progress + Cancel land on the strip) and, on success,
@@ -1316,6 +1376,7 @@ let trackerStripSig: string | null = null;
 function syncTrackerStrip(): void {
     const strip = blurTrackerStripEl;
     if (!strip) return;
+    syncSaveAvailability();
     const { phase, progress, activeGroups } = blurAssetsState();
     const pending = pendingFollowRegionIds.size > 0;
     // Only downloads/errors this strip initiated (the Follow path) belong here -
@@ -1545,6 +1606,11 @@ let detectStatusSig: string | null = null;
 /** Re-syncs the checkbox checked state (per-trip flags) and the status row:
  *  scan progress while running, per-kind found counts once fresh. */
 function syncDetectGroup(): void {
+    const reviewTrip = activeTrip();
+    if (reviewTrip !== detectReviewTrip) {
+        detectReviewTrip = reviewTrip;
+        detectReviewCursor = 0;
+    }
     if (blurDetectPlatesCbEl) {
         blurDetectPlatesCbEl.checked = detectEnabled("plate");
         blurDetectPlatesCbEl.disabled = !detectAvailable();
@@ -1583,6 +1649,30 @@ function syncDetectGroup(): void {
         if (kinds.includes("plate")) parts.push(t("export.blur.detect.countPlates", { n: counts.plate }));
         if (kinds.includes("face")) parts.push(t("export.blur.detect.countFaces", { n: counts.face }));
         el.appendChild(trackerMessageNode(parts.join(" · ")));
+        const findings = detectRegions()
+            .slice()
+            .sort((a, b) => a.startSec - b.startSec);
+        if (findings.length > 0) {
+            const review = document.createElement("button");
+            review.type = "button";
+            review.className = "export-panel__secondary-btn export-panel__blur-review-btn";
+            review.textContent = t("export.blur.detect.reviewFindings");
+            review.addEventListener("click", () => {
+                const live = detectRegions()
+                    .slice()
+                    .sort((a, b) => a.startSec - b.startSec);
+                if (live.length === 0) return;
+                const finding = live[detectReviewCursor % live.length]!;
+                detectReviewCursor = (detectReviewCursor + 1) % live.length;
+                // Land just inside the active span: a paused video displays the
+                // frame at-or-before currentTime, so the exact boundary can
+                // otherwise show one frame before the cover appears.
+                seekTripTime(Math.min(finding.endSec, finding.startSec + 0.1));
+            });
+            el.appendChild(review);
+        } else {
+            detectReviewCursor = 0;
+        }
         el.hidden = false;
         return;
     }
@@ -1606,14 +1696,21 @@ function trackerMessageNode(text: string): HTMLElement {
 
 function trackerProgressNode(progress: number, labelText: string): HTMLElement {
     const wrap = document.createElement("div");
+    wrap.setAttribute("aria-live", "polite");
     const label = document.createElement("div");
     label.className = "export-panel__blur-tracker-msg";
     label.textContent = labelText;
     const bar = document.createElement("div");
     bar.className = "export-panel__blur-tracker-bar";
+    const pct = Math.max(0, Math.min(100, Math.round(progress * 100)));
+    bar.setAttribute("role", "progressbar");
+    bar.setAttribute("aria-label", labelText);
+    bar.setAttribute("aria-valuemin", "0");
+    bar.setAttribute("aria-valuemax", "100");
+    bar.setAttribute("aria-valuenow", String(pct));
     const fill = document.createElement("div");
     fill.className = "export-panel__blur-tracker-bar-fill";
-    fill.style.width = `${Math.round(progress * 100)}%`;
+    fill.style.width = `${pct}%`;
     bar.appendChild(fill);
     wrap.append(label, bar);
     return wrap;
@@ -1636,9 +1733,9 @@ function trackerActionsNode(
 }
 
 /** Small state badge for a zone, shown only when it says something the mode
- *  control below cannot: a persistent "lost the object" warning after a pass
+ *  control below cannot: a persistent ending-review warning after a pass
  *  ended early (the incomplete-tail risk must outlive the toast), or "Tracked"
- *  for a Fixed zone whose box still moves on keyframes a pass filled in. A
+ *  for a Set-time zone whose box still moves on keyframes a pass filled in. A
  *  healthy Follow shows nothing - the active Follow segment already says it. */
 function zoneStateLabel(region: BlurRegion): string | null {
     if (!regionHasTrackedKeyframes(region)) return null;
@@ -1661,6 +1758,18 @@ function syncBlurGroup(): void {
     const list = blurListEl;
     if (!list) return;
     const regions = activeBlurRegions();
+    const autoStyle = detectStyle();
+    // Manual zones are authoritative when present; an auto-only trip uses its
+    // own remembered detect style. Do this before the signature early-return:
+    // switching between two trips with no manual rows must still update Select.
+    const effectiveStyle = regions[0]?.style ?? autoStyle ?? exportPanelState.blurStyle;
+    if (regions.length > 0 && autoStyle !== effectiveStyle) setDetectStyle(effectiveStyle);
+    exportPanelState.blurStyle = effectiveStyle;
+    if (blurStyleRowEl) {
+        blurStyleRowEl.hidden = regions.length === 0 && enabledDetectKinds().length === 0;
+        const select = blurStyleRowEl.querySelector<HTMLSelectElement>("select");
+        if (select) select.value = effectiveStyle;
+    }
     // Drop pending Follows whose zone vanished (deleted, or a trip switch swapped
     // the region set) so the consent strip does not linger for a zone that no
     // longer exists and a completed download does not follow a stale region.
@@ -1680,59 +1789,41 @@ function syncBlurGroup(): void {
     // the Follow button label, so all belong in the signature. Rounding the
     // fraction to whole percent bounds the rebuilds at ~100 over a pass, not one
     // per progress tick; -1 marks "not running" distinctly from 0%.
-    const sig = regions
+    const sig = `${effectiveStyle}|${enabledDetectKinds().join("+")}|${regions
         .map((r) => {
             const pct = trackPassOf(r.id);
             return `${r.id}|${r.startSec.toFixed(3)}|${r.endSec.toFixed(3)}|${r.style}|${r.autoEnd ? 1 : 0}|${
                 regionHasTrackedKeyframes(r) ? 1 : 0
             }|${r.lastTrackLost ? 1 : 0}|${pct ? Math.round(pct.fractionDone * 100) : -1}`;
         })
-        .join(";");
+        .join(";")}`;
     if (sig === blurListSig) return;
     blurListSig = sig;
     // The keyframe hint refers to a box that exists - hide it until the first
     // zone (the empty list needs no note: the Add button IS the empty state).
     if (blurMoveHintEl) blurMoveHintEl.hidden = regions.length === 0;
-    // Style row is meaningless without any blur - hide until the first zone
-    // OR the first detect checkbox (auto regions take the same style).
-    if (blurStyleRowEl) {
-        blurStyleRowEl.hidden = regions.length === 0 && enabledDetectKinds().length === 0;
-        // The select is a session pref, but zones belong to trips: after a
-        // trip switch reflect what THIS trip's zones actually use. Mirror the
-        // value into exportPanelState.blurStyle too - a newly drawn zone reads
-        // that (player-blur finishDraw), so leaving it stale would create the
-        // next zone with a style that differs from what the dropdown shows.
-        const select = blurStyleRowEl.querySelector<HTMLSelectElement>("select");
-        if (select && regions.length > 0 && regions[0]) {
-            select.value = regions[0].style;
-            exportPanelState.blurStyle = regions[0].style;
-        }
-    }
     list.innerHTML = "";
     regions.forEach((region, i) => {
         list.appendChild(renderBlurRow(region, i));
     });
 }
 
-/** Fixed mode: the user owns a hand-set span, so the tracker stops moving the
- *  box. Cancels any in-flight follow, drops autoEnd + the check-end flag, keeps
- *  the current span. autoEnd is the single source of truth for the mode - nothing
- *  ambiguous to derive, so it holds on any clip length. */
-function setBlurFixedMode(region: BlurRegion): void {
+/** Manual timing mode: the user owns the start/end, while tracked motion and
+ *  any tail-review warning stay intact. autoEnd is timing ownership, not
+ *  geometry. */
+function setBlurManualTimeMode(region: BlurRegion): void {
     cancelTrackPass(region.id);
     region.autoEnd = false;
-    region.lastTrackLost = false;
     notifyBlurRegionsChanged();
     notifyExportStateChanged();
 }
 
-/** Whole-clip shortcut (a fixed overlay over the entire clip): fixed span
- *  [0, duration], autoEnd off, check-end cleared. */
-function setBlurWholeClip(region: BlurRegion, durationSec: number): void {
-    region.startSec = 0;
-    region.endSec = durationSec;
+/** Whole-export shortcut: use the selected clip range, not the whole source
+ *  trip (which made a row labelled "whole clip" show unrelated timestamps). */
+function setBlurWholeClip(region: BlurRegion, startSec: number, endSec: number): void {
+    region.startSec = startSec;
+    region.endSec = endSec;
     region.autoEnd = false;
-    region.lastTrackLost = false;
     notifyBlurRegionsChanged();
     notifyExportStateChanged();
 }
@@ -1752,7 +1843,11 @@ function setBlurStartHere(region: BlurRegion): void {
 
 /** Move the zone end to the playhead (kept >= start + MIN_ZONE_SPAN_SEC). */
 function setBlurEndHere(region: BlurRegion): void {
-    region.endSec = Math.max(getTripCurrentTime(), region.startSec + MIN_ZONE_SPAN_SEC);
+    const durationSec = activeTrip()?.timeline.contentDurationSec ?? region.endSec;
+    region.endSec = Math.min(durationSec, Math.max(getTripCurrentTime(), region.startSec + MIN_ZONE_SPAN_SEC));
+    if (region.endSec - region.startSec < MIN_ZONE_SPAN_SEC) {
+        region.startSec = Math.max(0, region.endSec - MIN_ZONE_SPAN_SEC);
+    }
     notifyBlurRegionsChanged();
     notifyExportStateChanged();
 }
@@ -1761,15 +1856,15 @@ function setBlurEndHere(region: BlurRegion): void {
  *  - header: name (left) · clickable time-range + delete (right).
  *  - the state badge on its own line, when the zone has a tracked pass.
  *  - a two-way mode control: Follow (tracking owns the box, for a moving object)
- *    vs Fixed (a hand-set area). autoEnd is the single source of truth, so there
+ *    vs Set time (hand-set timing; tracked motion stays). autoEnd is the single source of truth, so there
  *    is no ambiguous state to derive on short clips.
- *  - in Fixed: the Start-here / End-here setters plus a Whole-clip shortcut (the
- *    fixed-overlay use case).
+ *  - in Set time: the Start-here / End-here setters plus a Whole-clip shortcut.
  *  Plain labels + a mode selector replace the old cryptic glyph row: the audience
  *  is drivers, not video editors, and tooltips do not exist on touch. */
 function renderBlurRow(region: BlurRegion, index: number): HTMLElement {
     const trip = activeTrip();
     const durationSec = trip?.timeline.contentDurationSec ?? region.endSec;
+    const exportRange = exportPanelState.range ?? { startTripSec: 0, endTripSec: durationSec };
 
     const row = document.createElement("div");
     row.className = "export-panel__blur-row";
@@ -1780,7 +1875,8 @@ function renderBlurRow(region: BlurRegion, index: number): HTMLElement {
 
     const name = document.createElement("span");
     name.className = "export-panel__blur-row-name";
-    name.textContent = t("export.blur.zone", { n: index + 1 });
+    const zoneName = t("export.blur.zone", { n: index + 1 });
+    name.textContent = trip ? `${zoneName} · ${channelDisplayLabel(region.channel, trip)}` : zoneName;
     head.appendChild(name);
 
     // The range doubles as the "jump to start" control: the old ▸ glyph sat right
@@ -1823,7 +1919,7 @@ function renderBlurRow(region: BlurRegion, index: number): HTMLElement {
         row.appendChild(badge);
     }
 
-    // --- mode: Follow (tracks the object) vs Fixed (a hand-set area) -----------
+    // --- mode: Follow-owned vs user-owned timing -------------------------------
     const seg = document.createElement("div");
     seg.className = "export-panel__segmented export-panel__blur-duration";
     const mkSeg = (label: string, title: string, active: boolean, onClick: () => void): HTMLButtonElement => {
@@ -1858,12 +1954,12 @@ function renderBlurRow(region: BlurRegion, index: number): HTMLElement {
     seg.appendChild(followSeg);
     seg.appendChild(
         mkSeg(t("export.blur.mode.fixed"), t("export.blur.mode.fixedHint"), !region.autoEnd, () =>
-            setBlurFixedMode(region),
+            setBlurManualTimeMode(region),
         ),
     );
     row.appendChild(seg);
 
-    // --- Fixed controls: playhead setters + a whole-clip shortcut -------------
+    // --- Manual timing: playhead setters + a whole-clip shortcut --------------
     if (!region.autoEnd) {
         const fixed = document.createElement("div");
         fixed.className = "export-panel__blur-row-actions";
@@ -1883,7 +1979,7 @@ function renderBlurRow(region: BlurRegion, index: number): HTMLElement {
         fixed.appendChild(mkBtn(t("export.blur.setEnd"), t("export.blur.row.setEnd"), () => setBlurEndHere(region)));
         fixed.appendChild(
             mkBtn(t("export.blur.mode.wholeClip"), t("export.blur.wholeClip"), () =>
-                setBlurWholeClip(region, durationSec),
+                setBlurWholeClip(region, exportRange.startTripSec, exportRange.endTripSec),
             ),
         );
         row.appendChild(fixed);
@@ -2650,50 +2746,62 @@ function runGpxOnlyDownload(): void {
 }
 
 async function onSaveClick(): Promise<void> {
+    if (exportPanelState.configurationLocked) return;
     if (exportPanelState.outputKind === "gpx") {
         runGpxOnlyDownload();
         return;
     }
-    await runExportFlow({
-        onStatus: (s) => setProgressStatus(s),
-        onProgress: (p) => onTranscodeProgress(p),
-        onProgressFill: (fraction) => setProgressFill(fraction * 100),
-        onProgressIndeterminate: (on) => setProgressIndeterminate(on),
-        // Switch to the progress view only after the save picker resolves.
-        // Cancelling the picker never fires this, so the options form stays put
-        // and the user can keep editing the parameters.
-        onExportStart: () => {
-            exportPanelState.phase = "progress";
-            notifyExportStateChanged();
-            setProgressStatus(t("export.status.preparing"));
-            // A previous run can end with the indeterminate sweep still on (the
-            // disk-commit tick is the last progress event) - reset it here or it
-            // leaks into this run's determinate bar.
-            setProgressIndeterminate(false);
-            setProgressFill(0);
-            setProgressMeta("");
-        },
-        onDone: (s) => {
-            exportPanelState.phase = "done";
-            notifyExportStateChanged();
-            renderDoneSummary(s);
-        },
-        onError: (messageKey, params) => {
-            // Move to a terminal error phase with a way back to the configure
-            // view - staying in "progress" left a frozen bar and a dead Cancel
-            // button as the only controls. messageKey is already one of the
-            // friendly export.error.* keys; show it directly, no "Error:" wrap.
-            exportPanelState.phase = "error";
-            notifyExportStateChanged();
-            setErrorStatus(t(messageKey, params));
-        },
-        onCancel: () => {
-            exportPanelState.phase = "options";
-            notifyExportStateChanged();
-        },
-        downloadBlob,
-        onInProgress: setExportInProgress,
-    });
+    if (followWorkPending()) {
+        syncSaveAvailability();
+        return;
+    }
+    exportPanelState.configurationLocked = true;
+    notifyExportStateChanged();
+    try {
+        await runExportFlow({
+            onStatus: (s) => setProgressStatus(s),
+            onProgress: (p) => onTranscodeProgress(p),
+            onProgressFill: (fraction) => setProgressFill(fraction * 100),
+            onProgressIndeterminate: (on) => setProgressIndeterminate(on),
+            // Switch to the progress view only after the save picker resolves.
+            // Cancelling the picker never fires this, so the options form stays put;
+            // the outer finally block unlocks it when the flow settles.
+            onExportStart: () => {
+                exportPanelState.phase = "progress";
+                notifyExportStateChanged();
+                setProgressStatus(t("export.status.preparing"));
+                // A previous run can end with the indeterminate sweep still on (the
+                // disk-commit tick is the last progress event) - reset it here or it
+                // leaks into this run's determinate bar.
+                setProgressIndeterminate(false);
+                setProgressFill(0);
+                setProgressMeta("");
+            },
+            onDone: (s) => {
+                exportPanelState.phase = "done";
+                notifyExportStateChanged();
+                renderDoneSummary(s);
+            },
+            onError: (messageKey, params) => {
+                // Move to a terminal error phase with a way back to the configure
+                // view - staying in "progress" left a frozen bar and a dead Cancel
+                // button as the only controls. messageKey is already one of the
+                // friendly export.error.* keys; show it directly, no "Error:" wrap.
+                exportPanelState.phase = "error";
+                notifyExportStateChanged();
+                setErrorStatus(t(messageKey, params));
+            },
+            onCancel: () => {
+                exportPanelState.phase = "options";
+                notifyExportStateChanged();
+            },
+            downloadBlob,
+            onInProgress: setExportInProgress,
+        });
+    } finally {
+        exportPanelState.configurationLocked = false;
+        notifyExportStateChanged();
+    }
 }
 
 const TRANSCODE_STAGE_KEY = {
@@ -2734,11 +2842,19 @@ function renderProgressSection(): void {
 
     const status = document.createElement("div");
     status.className = "export-panel__progress-status";
+    status.id = "export-panel-progress-status";
+    status.setAttribute("role", "status");
+    status.setAttribute("aria-live", "polite");
     progressStatusEl = status;
     root.appendChild(status);
 
     const bar = document.createElement("div");
     bar.className = "export-panel__progress-bar";
+    bar.setAttribute("role", "progressbar");
+    bar.setAttribute("aria-labelledby", status.id);
+    bar.setAttribute("aria-valuemin", "0");
+    bar.setAttribute("aria-valuemax", "100");
+    bar.setAttribute("aria-valuenow", "0");
     progressBarEl = bar;
     const fill = document.createElement("div");
     fill.className = "export-panel__progress-fill";
@@ -2768,7 +2884,9 @@ function setProgressStatus(text: string): void {
 }
 
 function setProgressFill(pct: number): void {
-    if (progressFillEl) progressFillEl.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+    const value = Math.max(0, Math.min(100, pct));
+    if (progressFillEl) progressFillEl.style.width = `${value}%`;
+    progressBarEl?.setAttribute("aria-valuenow", String(Math.round(value)));
 }
 
 // Toggles the indeterminate (animated) bar for phases with no measurable
@@ -2779,6 +2897,7 @@ function setProgressIndeterminate(on: boolean): void {
     // indeterminate width (35% sweep / reduced-motion 100%) - drop it while
     // the sweep runs; the next determinate tick re-establishes it.
     if (on && progressFillEl) progressFillEl.style.width = "";
+    if (on) progressBarEl?.removeAttribute("aria-valuenow");
 }
 
 function setProgressMeta(text: string): void {

@@ -46,7 +46,7 @@ export function initExportMode(): void {
         if (ev.key !== "Escape") return;
         if (ev.defaultPrevented) return;
         if (!state.exportModeOpen) return;
-        if (exportPanelState.phase === "progress") return;
+        if (exportPanelState.phase === "progress" || exportPanelState.configurationLocked) return;
         closeExportMode();
     });
 
@@ -62,6 +62,7 @@ export function initExportMode(): void {
  * safe in options/done/error phases (no active controller).
  */
 function closeExportAndCancelIfRunning(): void {
+    if (exportPanelState.configurationLocked && exportPanelState.phase === "options") return;
     if (exportPanelState.phase === "progress") cancelActiveExport();
     closeExportMode();
 }

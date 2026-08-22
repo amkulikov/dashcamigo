@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+    cloneBlurRegions,
     anyRegionIntersectsRange,
     createBlurRegion,
     inflateRect,
@@ -209,5 +210,21 @@ describe("inflateRect", () => {
         const out = inflateRect(base, 0.08);
         expect(out.wPct).toBeGreaterThanOrEqual(base.wPct);
         expect(out.hPct).toBeGreaterThanOrEqual(base.hPct);
+    });
+});
+
+describe("cloneBlurRegions", () => {
+    it("detaches keyframes and rects from later editor mutations", () => {
+        const original = makeRegion(0, 10);
+        const [snapshot] = cloneBlurRegions([original]);
+        expect(snapshot).toBeDefined();
+
+        original.style = "fill";
+        original.keyframes[0]!.contentSec = 8;
+        original.keyframes[0]!.rect.xPct = 0.9;
+
+        expect(snapshot?.style).toBe("pixelate");
+        expect(snapshot?.keyframes[0]?.contentSec).toBe(2);
+        expect(snapshot?.keyframes[0]?.rect.xPct).toBe(0.4);
     });
 });

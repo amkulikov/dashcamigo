@@ -16,7 +16,7 @@
 // edits re-trigger through a debounce so a trim-bar drag does not thrash
 // multi-minute passes.
 
-import { type BlurRegion, type BlurStyle } from "../blur-regions.js";
+import { cloneBlurRegions, type BlurRegion, type BlurStyle } from "../blur-regions.js";
 import { sliceCandidatesForRange } from "../export-range.js";
 import { subtractIntervals, type TimeInterval, unionIntervals } from "../tracking/interval-set.js";
 import { createLogger } from "../log.js";
@@ -25,6 +25,7 @@ import type { Trip } from "../trips.js";
 import type { Channel } from "../parsers/types.js";
 import {
     DETECT_NOTIFY_PROGRESS,
+    DETECT_NOTIFY_STARTED,
     DETECT_REQUEST,
     type DetectKind,
     type DetectProgressData,
@@ -84,6 +85,10 @@ interface TrackCacheEntry {
 
 interface TripDetectState {
     enabled: { plate: boolean; face: boolean };
+    /** One style per trip, including while a pass is still running. Keeping it
+     *  here prevents a long multi-camera pass from producing mixed styles when
+     *  the active trip or the style selector changes between channels. */
+    style: BlurStyle;
     /** Last completed pass; `key` names the params it covered. */
     result: { key: string; regions: BlurRegion[]; counts: DetectCounts } | null;
     /** Per-channel track cache: survives range edits, so a re-keyed pass decodes
@@ -97,7 +102,12 @@ const stateByTrip = new WeakMap<Trip, TripDetectState>();
 function tripState(trip: Trip): TripDetectState {
     let st = stateByTrip.get(trip);
     if (!st) {
-        st = { enabled: { plate: false, face: false }, result: null, trackCache: new Map() };
+        st = {
+            enabled: { plate: false, face: false },
+            style: exportPanelState.blurStyle,
+            result: null,
+            trackCache: new Map(),
+        };
         stateByTrip.set(trip, st);
     }
     return st;
@@ -114,6 +124,11 @@ interface RunningDetect {
     /** Settles when the pass stores a result (true) or fails/cancels (false). */
     promise: Promise<boolean>;
     armTimeout: () => void;
+    /** An export has adopted this exact pass. UI reconciliation must not abort
+     *  it when playback auto-advances or the active trip changes: the export is
+     *  intentionally operating on its immutable Save-time trip/params. Its own
+     *  AbortSignal remains authoritative for Cancel. */
+    exportProtected: boolean;
 }
 
 // One running pass app-wide: the worker serializes anyway, and a background
@@ -122,11 +137,11 @@ interface RunningDetect {
 let running: RunningDetect | null = null;
 let runCounter = 0;
 let autoRegionCounter = 0;
-// Params key of the last FAILED (not cancelled) run. The auto re-ensure path
+// Trip + params key of the last FAILED (not cancelled) run. The auto re-ensure path
 // (debounced export-state subscription) skips it - a deterministic failure
 // would otherwise retry in a loop, toasting forever. Any explicit user action
 // (checkbox toggle, download button, Save) clears it and retries.
-let lastFailedRunKey: string | null = null;
+let lastFailedRun: { trip: Trip; key: string } | null = null;
 
 type Listener = () => void;
 const listeners = new Set<Listener>();
@@ -143,13 +158,15 @@ function notifyDetectChanged(): void {
 
 // Route this pass's progress off the shared worker's notification stream.
 subscribeTrackerWorkerNotifications((msg) => {
-    if (msg.type !== DETECT_NOTIFY_PROGRESS) return;
-    const data = msg.data as DetectProgressData & { passId?: string };
+    if (msg.type !== DETECT_NOTIFY_PROGRESS && msg.type !== DETECT_NOTIFY_STARTED) return;
+    const data = msg.data as Partial<DetectProgressData> & { passId?: string };
     const run = running;
     if (!run || !data.passId?.startsWith(`${run.runId}:`)) return;
     const channelIndex = Number(data.passId.slice(run.runId.length + 1));
     if (!Number.isFinite(channelIndex)) return;
-    run.fraction = Math.min(1, (channelIndex + data.fractionDone) / run.channelCount);
+    if (msg.type === DETECT_NOTIFY_PROGRESS && data.fractionDone !== undefined) {
+        run.fraction = Math.min(1, (channelIndex + data.fractionDone) / run.channelCount);
+    }
     run.armTimeout();
     notifyDetectChanged();
 });
@@ -157,7 +174,21 @@ subscribeTrackerWorkerNotifications((msg) => {
 // Range / layout / panel edits re-key the pass; the debounce keeps a trim-bar
 // drag from thrashing it. ensureDetectPass no-ops when the key is unchanged.
 subscribeExportState(() => {
-    if (anyDetectEnabled()) scheduleEnsureDetectPass();
+    // A result/pass belongs to one Trip object. Reconcile on every export-state
+    // change, including switching to a trip with both boxes off; the old code
+    // only ran this branch when the NEW trip had detection enabled, leaving the
+    // old CPU-heavy pass alive and ahead of future work in the worker queue.
+    const trip = activeTrip();
+    if (running && running.trip !== trip && !running.exportProtected) running.controller.abort();
+    if (!state.exportModeOpen || !trip || !anyDetectEnabled()) {
+        if (ensureTimer !== undefined) {
+            window.clearTimeout(ensureTimer);
+            ensureTimer = undefined;
+        }
+        if (running && (!trip || running.trip === trip) && !running.exportProtected) running.controller.abort();
+        return;
+    }
+    scheduleEnsureDetectPass();
 });
 
 // Probe for a WebGPU adapter once at startup: detection (both kinds) is
@@ -242,7 +273,7 @@ export function setDetectEnabled(kind: DetectKind, on: boolean): void {
     if (!trip) return;
     if (on && !detectAvailable()) return; // UI-disabled, belt and braces
     tripState(trip).enabled[kind] = on;
-    if (!on && !anyDetectEnabled() && running?.trip === trip) {
+    if (!on && !anyDetectEnabled() && running?.trip === trip && !running.exportProtected) {
         running.controller.abort();
     }
     notifyDetectChanged();
@@ -274,6 +305,13 @@ export function detectRegions(): BlurRegion[] {
     return params && result && result.key === params.key ? result.regions : [];
 }
 
+/** Style represented by auto regions of the active trip, even before a pass
+ *  finishes. Used to keep the shared style selector honest on trip switches. */
+export function detectStyle(): BlurStyle | null {
+    const trip = activeTrip();
+    return trip ? tripState(trip).style : null;
+}
+
 /** True when a checkbox is on but the current params have no fresh result and
  *  no pass is running for them - i.e. ensureDetectPass would start one. */
 export function detectStale(): boolean {
@@ -290,10 +328,33 @@ export function detectStale(): boolean {
 export function setDetectStyle(style: BlurStyle): void {
     const trip = activeTrip();
     if (!trip) return;
-    const result = tripState(trip).result;
-    if (!result) return;
-    for (const region of result.regions) region.style = style;
+    const st = tripState(trip);
+    const resultAlreadyStyled = st.result?.regions.every((region) => region.style === style) ?? true;
+    if (st.style === style && resultAlreadyStyled) return;
+    st.style = style;
+    for (const region of st.result?.regions ?? []) region.style = style;
     notifyDetectChanged();
+}
+
+/** Immutable detection contract captured synchronously when Save is clicked.
+ *  It deliberately retains the Trip object (source Files are not cloneable),
+ *  but copies every mutable choice that defines the pass. */
+export interface BlurDetectExportRequest {
+    trip: Trip;
+    params: PassParams;
+    style: BlurStyle;
+}
+
+export function captureDetectExportRequest(): BlurDetectExportRequest | null {
+    const trip = activeTrip();
+    if (!trip) return null;
+    const params = passParams(trip);
+    if (!params) return null;
+    return {
+        trip,
+        params: { ...params, channels: [...params.channels], kinds: [...params.kinds] },
+        style: tripState(trip).style,
+    };
 }
 
 let ensureTimer: number | undefined;
@@ -316,39 +377,55 @@ function scheduleEnsureDetectPass(): void {
  */
 export function ensureDetectPass(opts?: { auto?: boolean }): void {
     const trip = activeTrip();
-    if (!trip) return;
-    const params = passParams(trip);
-    if (!params) {
-        if (running?.trip === trip) running.controller.abort();
+    if (!trip) {
+        if (running && !running.exportProtected) running.controller.abort();
         return;
     }
-    if (opts?.auto && lastFailedRunKey === params.key) return; // no auto retry loops
-    if (!opts?.auto) lastFailedRunKey = null;
+    const params = passParams(trip);
+    if (!params) {
+        if (running && !running.exportProtected) running.controller.abort();
+        return;
+    }
+    ensureDetectPassFor(trip, params, opts);
+}
+
+function ensureDetectPassFor(
+    trip: Trip,
+    params: PassParams,
+    opts?: { auto?: boolean; protectForExport?: boolean },
+): void {
+    if (opts?.auto && lastFailedRun?.trip === trip && lastFailedRun.key === params.key) return; // no auto retry loops
+    if (!opts?.auto) lastFailedRun = null;
     if (blurAssetsNeedDownload(detectAssetGroups(params.kinds))) return;
     if (running) {
-        if (running.trip === trip && running.key === params.key) return; // already on it
+        if (running.trip === trip && running.key === params.key) {
+            if (opts?.protectForExport) running.exportProtected = true;
+            return; // already on it
+        }
+        // A Save-time pass owns the worker until it settles. A later live-UI
+        // reconciliation is allowed to wait; cancelling it would make an
+        // unrelated playback/trip change fail the immutable export.
+        if (running.exportProtected && !opts?.protectForExport) return;
         running.controller.abort(); // stale pass (old range/kinds/trip) - stop burning CPU
     }
     const result = tripState(trip).result;
     if (result && result.key === params.key) return; // fresh
-    startRun(trip, params);
+    startRun(trip, params, opts?.protectForExport === true);
 }
 
 /**
- * Export-time guarantee: resolves with the auto regions for the CURRENT params,
- * running (or awaiting) the pass as needed. `onFraction` reports pass progress
+ * Export-time guarantee: resolves with the auto regions for the captured
+ * Save-time params, running (or awaiting) that pass as needed. `onFraction` reports pass progress
  * 0..1 for the export progress bar. Aborting `signal` cancels the pass and
- * rejects with AbortError; a failed pass rejects with the original error.
- * Resolves [] immediately when no kind is enabled.
+ * rejects with AbortError; a failed/unavailable pass rejects rather than ever
+ * treating an enabled privacy promise as an empty result.
  */
 export async function ensureDetectRegionsForExport(
+    request: BlurDetectExportRequest,
     signal: AbortSignal,
     onFraction: (fraction: number) => void,
 ): Promise<BlurRegion[]> {
-    const trip = activeTrip();
-    if (!trip) return [];
-    const params = passParams(trip);
-    if (!params) return [];
+    const { trip, params, style } = request;
     // Consent leftover: the box is checked but the download strip was ignored
     // (never answered) and Save got clicked. Silently exporting WITHOUT the
     // promised blur is the one failure this feature must never have, so Save
@@ -362,16 +439,24 @@ export async function ensureDetectRegionsForExport(
     const st = tripState(trip);
     for (;;) {
         if (signal.aborted) throw new DOMException("aborted", "AbortError");
-        if (st.result && st.result.key === params.key) return st.result.regions;
+        if (st.result && st.result.key === params.key) {
+            // Return a detached export snapshot and force the style captured at
+            // Save. A style edit after Save may legitimately update the cached
+            // preview, but must not mutate this already-confirmed output.
+            const snapshot = cloneBlurRegions(st.result.regions);
+            for (const region of snapshot) region.style = style;
+            return snapshot;
+        }
         // Adopt a matching running pass or start one, then await it.
         if (!(running && running.trip === trip && running.key === params.key)) {
-            ensureDetectPass();
+            ensureDetectPassFor(trip, params, { protectForExport: true });
         }
         const run = running;
         if (!run || run.trip !== trip || run.key !== params.key) {
-            // ensureDetectPass declined to start (e.g. no channels sliced) -
-            // treat as "nothing detected" rather than spin.
-            return [];
+            // Never turn an enabled privacy promise into an unredacted export.
+            // A conflicting protected pass should be impossible because export
+            // flows are serialized, but failing loudly is still safer than [].
+            throw new Error("detect pass unavailable");
         }
         const onAbort = (): void => run.controller.abort();
         signal.addEventListener("abort", onAbort, { once: true });
@@ -407,6 +492,7 @@ function trackRegionSpan(
 function buildRegion(
     kind: DetectKind,
     channel: Channel,
+    style: BlurStyle,
     track: {
         startSec: number;
         endSec: number;
@@ -417,7 +503,7 @@ function buildRegion(
     return {
         id: `auto-${kind}-${autoRegionCounter}`,
         channel,
-        style: exportPanelState.blurStyle,
+        style,
         startSec: track.startSec,
         endSec: track.endSec,
         autoEnd: false,
@@ -426,13 +512,13 @@ function buildRegion(
     };
 }
 
-function startRun(trip: Trip, params: PassParams): void {
+function startRun(trip: Trip, params: PassParams, exportProtected = false): void {
     const controller = new AbortController();
     runCounter += 1;
     const runId = `detect-${runCounter}`;
     // Inactivity timeout via signal (the worker client has no built-in one):
-    // armed/reset from progress ticks so a queued pass's wait is not counted -
-    // mirrors the Follow pass.
+    // armed from the worker's STARTED notification and reset from progress, so
+    // queue wait is not counted while model creation/decode before progress is.
     const timeoutCtrl = new AbortController();
     let timedOut = false;
     let timeoutTimer: number | undefined;
@@ -451,6 +537,7 @@ function startRun(trip: Trip, params: PassParams): void {
         fraction: 0,
         controller,
         armTimeout,
+        exportProtected,
         promise: Promise.resolve(false), // replaced synchronously below
     };
     run.promise = (async (): Promise<boolean> => {
@@ -496,6 +583,13 @@ function startRun(trip: Trip, params: PassParams): void {
                 const result = await trackerWorkerClient().request<DetectResult>(DETECT_REQUEST, request, {
                     signal: AbortSignal.any([controller.signal, timeoutCtrl.signal]),
                 });
+                // The next channel may sit behind a Follow request in the
+                // worker's serialization queue. Stop counting inactivity now;
+                // its own STARTED notification re-arms after that queue.
+                if (timeoutTimer !== undefined) {
+                    window.clearTimeout(timeoutTimer);
+                    timeoutTimer = undefined;
+                }
                 // Fold the newly produced tracks into the cache - only on a
                 // completed request, so an abort/failure leaves it untouched.
                 const updatedCache = st.trackCache.get(channel) ?? {};
@@ -550,7 +644,7 @@ function startRun(trip: Trip, params: PassParams): void {
                         if (!span) continue;
                         counts[kind] += 1;
                         regions.push(
-                            buildRegion(kind, channel, {
+                            buildRegion(kind, channel, st.style, {
                                 startSec: span.startSec,
                                 endSec: span.endSec,
                                 keyframes: track.keyframes,
@@ -559,19 +653,22 @@ function startRun(trip: Trip, params: PassParams): void {
                     }
                 }
             }
+            // The style may have changed while a long multi-channel pass ran.
+            // Normalize once at commit so the completed result is never mixed.
+            for (const region of regions) region.style = st.style;
             tripState(trip).result = { key: params.key, regions, counts };
             return true;
         } catch (err) {
             if ((err as DOMException)?.name === "AbortError") {
                 if (timedOut) {
-                    lastFailedRunKey = params.key;
+                    lastFailedRun = { trip, key: params.key };
                     log.warn("detect pass timed out", { key: params.key });
                     notify({ severity: "warn", messageKey: "export.blur.detect.failed" });
                 } else {
                     log.info("detect pass cancelled", { key: params.key });
                 }
             } else {
-                lastFailedRunKey = params.key;
+                lastFailedRun = { trip, key: params.key };
                 log.warn("detect pass failed", { key: params.key, err: String(err) });
                 notify({ severity: "warn", messageKey: "export.blur.detect.failed" });
             }

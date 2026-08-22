@@ -73,7 +73,7 @@ async function zoneSourceRect(page: Page): Promise<{ x: number; y: number; w: nu
 test.describe("blur regions", () => {
     test.beforeEach(async ({ page }) => {
         await presetLocalStorage(page);
-        await installExportCapture(page); // before gotoApp - captured at bundle load
+        await installExportCapture(page, undefined, { pickerDelayMs: 500 }); // before gotoApp - captured at bundle load
         await page.setViewportSize(DESKTOP);
         await gotoApp(page, "en");
         await loadTrip(page, SAMPLE_70MAI);
@@ -106,24 +106,41 @@ test.describe("blur regions", () => {
         await expect(topTier).toHaveText("Original");
     });
 
-    test("fixed mode: setters + whole-clip shortcut, follow toggles it", async ({ page }) => {
+    test("manual timing: setters + whole-clip shortcut", async ({ page }) => {
         await drawZone(page, 0.4, 0.4, 0.6, 0.6);
         const seg = page.locator(".export-panel__blur-duration");
-        // A freshly drawn zone is Fixed (autoEnd off): that segment is active and
-        // the fixed controls (start / end / whole-clip) are shown.
-        await expect(seg.getByRole("button", { name: "Cover a fixed area for a set time" })).toHaveAttribute(
-            "aria-pressed",
-            "true",
-        );
+        // A freshly drawn zone uses hand-set timing (autoEnd off); tracked
+        // geometry, if added later, is independent of that choice.
+        await expect(
+            seg.getByRole("button", { name: "Set the start and end yourself; tracked motion stays" }),
+        ).toHaveAttribute("aria-pressed", "true");
         await expect(page.locator(".export-panel__blur-row-actions button")).toHaveCount(3);
-        // Whole-clip shortcut stays in Fixed - the setters remain (it is one span
-        // choice, not a separate mode), so no dead-end on short clips.
+        // Whole-clip stays in manual timing; the setters remain.
         await page.getByRole("button", { name: "Cover the whole clip" }).click();
-        await expect(seg.getByRole("button", { name: "Cover a fixed area for a set time" })).toHaveAttribute(
-            "aria-pressed",
-            "true",
-        );
+        await expect(
+            seg.getByRole("button", { name: "Set the start and end yourself; tracked motion stays" }),
+        ).toHaveAttribute("aria-pressed", "true");
         await expect(page.locator(".export-panel__blur-row-actions button")).toHaveCount(3);
+    });
+
+    test("zone can be moved and resized from the keyboard", async ({ page }) => {
+        await drawZone(page, 0.4, 0.4, 0.6, 0.6);
+        const box = page.getByRole("group", {
+            name: "Zone 1 · Front camera. Edit blur zone. Arrows move; Shift plus arrows resize.",
+        });
+        await expect(box).toBeVisible();
+        const before = await zoneSourceRect(page);
+
+        await box.focus();
+        await page.keyboard.press("ArrowRight");
+        await expect.poll(async () => (await zoneSourceRect(page)).x).toBeGreaterThan(before.x);
+        const moved = await zoneSourceRect(page);
+        expect(moved.w).toBeCloseTo(before.w, 2);
+
+        await page.keyboard.press("Shift+ArrowRight");
+        // Geometry paints on the blur preview's next rAF; poll instead of
+        // sampling in the same task as keydown.
+        await expect.poll(async () => (await zoneSourceRect(page)).w).toBeGreaterThan(moved.w);
     });
 
     test("escape cancels drawing without creating a zone", async ({ page }) => {
@@ -153,6 +170,10 @@ test.describe("blur regions", () => {
         await followBtn.click();
         const strip = page.locator(".export-panel__blur-tracker");
         await expect(strip).toBeVisible();
+        await expect(page.locator("#export-panel-save-btn")).toBeDisabled();
+        await expect(page.locator("#export-panel-follow-save-note")).toHaveText(
+            "Finish or cancel Follow before saving.",
+        );
         await strip.getByRole("button", { name: "Download & follow" }).click();
 
         // Download runs, then the follow pass starts (button flips to the
@@ -160,6 +181,7 @@ test.describe("blur regions", () => {
         // settles back to "Follow".
         await expect(followBtn).toHaveText(/Following…/, { timeout: 90_000 });
         await expect(followBtn).toHaveText("Follow", { timeout: 90_000 });
+        await expect(page.locator("#export-panel-save-btn")).toBeEnabled();
 
         // The strip is gone once the assets are ready, and the zone survived the
         // pass with its box still live on the tile.
@@ -258,6 +280,31 @@ test.describe("blur regions", () => {
         await page.locator("#export-panel-blur-style").selectOption("fill");
 
         await page.locator("#export-panel-save-btn").click();
+        await expect
+            .poll(() =>
+                page.evaluate(
+                    () => (window as unknown as { __exportPickerOpened?: boolean }).__exportPickerOpened === true,
+                ),
+            )
+            .toBe(true);
+        // Adversarially edit the still-visible form while the async picker is
+        // pending. The run must keep the fill style captured at Save; the old
+        // flow re-read this mutable region later and exported pixelation. Real
+        // interaction is inert now; dispatch directly to keep the race test.
+        await expect(page.locator("#export-panel-options")).toHaveAttribute("aria-busy", "true");
+        await page.evaluate(() => {
+            const select = document.querySelector<HTMLSelectElement>("#export-panel-blur-style");
+            if (!select) throw new Error("blur style select missing");
+            select.value = "pixelate";
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+        await expect(page.locator("#export-panel-progress")).toBeVisible();
+        await expect(page.locator(".export-panel__progress-bar")).toHaveAttribute("role", "progressbar");
+        // E cannot hide a live export or expose editable boxes behind it.
+        await page.keyboard.press("e");
+        await expect(page.locator("#export-panel")).toBeVisible();
+        await expect(page.locator("#export-panel-progress")).toBeVisible();
+        await expect(page.locator(".blur-box-layer")).toBeHidden();
         await expect(page.locator("#export-panel-done-summary")).toBeVisible({ timeout: 60_000 });
 
         // Decode the produced MP4 in-page (bytes never leave the browser) and

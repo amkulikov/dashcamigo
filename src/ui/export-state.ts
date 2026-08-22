@@ -138,6 +138,11 @@ const MIN_RANGE_SEC = 1;
 
 export interface ExportPanelState {
     phase: ExportPhase;
+    /** True from a video Save click until that flow settles, including the file
+     *  picker and encode preflight while phase is still `options`. The form and
+     *  on-video editors become inert so post-Save edits cannot imply they affect
+     *  the immutable run. */
+    configurationLocked: boolean;
     /** Video clip vs GPS-track-only. See ExportOutputKind. The panel hides every
      *  video control in "gpx" mode and turns Save into a plain .gpx download. */
     outputKind: ExportOutputKind;
@@ -210,6 +215,7 @@ export const OVERLAY_ACCENT_SWATCHES = ["#FF9000", "#FFFFFF", "#1AA7EC", "#1FA46
 function freshExportPanelState(): ExportPanelState {
     return {
         phase: "options",
+        configurationLocked: false,
         outputKind: "video",
         quality: "original",
         manualBitrateMbps: null,
@@ -336,11 +342,9 @@ export function openExportMode(): void {
  * etc.) stay. The range is also kept - leaving export-mode and coming back
  * should not silently widen the range to full trip.
  *
- * Exception: a RUNNING export ("progress") keeps its phase. The export does
- * not stop when the panel closes (E hotkey mid-export), and resetting to
- * "options" re-armed the Save button over the live run - the second flow then
- * clobbered the first one's abort controller. Re-opening lands back on the
- * progress view; the terminal hooks (done/error/cancel) move the phase on.
+ * Exception: a RUNNING export ("progress") keeps its phase. Public UI paths no
+ * longer close a running/locked session (they expose explicit Cancel instead),
+ * but retaining the phase is a defensive backstop for direct callers.
  */
 export function closeExportMode(): void {
     if (!state.exportModeOpen) return;
@@ -428,6 +432,11 @@ export function setRange(startTripSec: number, endTripSec: number): void {
 
 /** Toggles export-mode. Used by the E hotkey and the player-bar Export button. */
 export function toggleExportMode(): void {
+    // A running export owns an immutable UI session. Hiding it with the E
+    // hotkey made it possible to switch trips/edit zones behind the progress
+    // view, while the encoder was still working on the old clip. Cancellation
+    // remains available through the explicit progress-view button.
+    if (exportPanelState.phase === "progress" || exportPanelState.configurationLocked) return;
     if (state.exportModeOpen) closeExportMode();
     else openExportMode();
 }

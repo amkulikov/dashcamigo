@@ -5,13 +5,15 @@
 // segments, fires the request, and folds the resulting keyframes back into the
 // region (unpinned - user pins stay authoritative, replaceGeneratedKeyframes).
 
-import { MIN_ZONE_SPAN_SEC, replaceGeneratedKeyframes, type BlurRegion } from "../blur-regions.js";
+import type { BlurRegion } from "../blur-regions.js";
+import { applyTrackResult } from "../blur-follow.js";
 import { sliceCandidatesForRange } from "../export-range.js";
 import { createLogger } from "../log.js";
 import { tripCandidatesByChannel } from "../trips.js";
 import type { Trip } from "../trips.js";
 import {
     TRACK_NOTIFY_PROGRESS,
+    TRACK_NOTIFY_STARTED,
     TRACK_REQUEST,
     type TrackProgressData,
     type TrackRequestData,
@@ -28,15 +30,16 @@ const log = createLogger("blur-track");
 // Route this pass's progress off the shared worker's notification stream
 // (tracker-worker-client.ts - the worker is shared with blur-detect).
 subscribeTrackerWorkerNotifications((msg) => {
-    if (msg.type !== TRACK_NOTIFY_PROGRESS) return;
-    const data = msg.data as TrackProgressData & { regionId?: string };
+    if (msg.type !== TRACK_NOTIFY_PROGRESS && msg.type !== TRACK_NOTIFY_STARTED) return;
+    const data = msg.data as Partial<TrackProgressData> & { regionId?: string };
     const pass = data.regionId ? runningPasses.get(data.regionId) : null;
     if (pass) {
-        pass.fractionDone = data.fractionDone;
-        // Progress = the pass is actively decoding: (re)arm its inactivity
-        // timeout. The first tick arms it (so a queued pass's wait is never
-        // counted); later ticks reset it, so only a genuinely wedged worker
-        // ever trips the cap.
+        if (msg.type === TRACK_NOTIFY_PROGRESS && data.fractionDone !== undefined) {
+            pass.fractionDone = data.fractionDone;
+        }
+        // Started is emitted INSIDE the worker's serialization gate: queue wait
+        // is excluded, but model creation/decode before the first progress tick
+        // is covered. Later progress ticks reset the inactivity cap.
         pass.armTimeout?.();
         notifyPassChanged();
     }
@@ -49,6 +52,7 @@ subscribeTrackerWorkerNotifications((msg) => {
 const TRACK_REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
 
 interface RunningPass {
+    trip: Trip;
     controller: AbortController;
     /** 0..1, updated from worker progress notifications. */
     fractionDone: number;
@@ -88,6 +92,16 @@ export function cancelTrackPass(regionId: string): void {
     runningPasses.get(regionId)?.controller.abort();
 }
 
+/** Cancels background Follow work that no longer belongs to the visible trip.
+ *  Passing null cancels all passes (export mode closed). */
+export function cancelTrackPassesExceptTrip(trip: Trip | null): void {
+    for (const pass of runningPasses.values()) {
+        if (!trip || pass.trip !== trip) pass.controller.abort();
+    }
+}
+
+export type TrackPassOutcome = "completed" | "cancel-requested" | "cancelled" | "failed" | "not-started";
+
 /**
  * Starts (or cancels, when already running) the tracking pass for a region.
  * Seeds from the LAST pinned keyframe before the zone end - i.e. the user's
@@ -96,10 +110,9 @@ export function cancelTrackPass(regionId: string): void {
  *
  * Two end-of-span behaviors, keyed on region.autoEnd:
  *   - autoEnd (the "Follow a moving object" path): tracking OWNS the end. The
- *     pass runs to the end of the footage but stops itself when the object is
- *     lost; region.endSec is then set to that last-confident point, so the user
- *     never dials in an end for something that moves. On loss an info notice
- *     points them at the tail to verify (a false loss would under-cover).
+ *     pass runs to the end of the footage. A confirmed frame exit shortens the
+ *     span; uncertain target/decode loss keeps the full span and freeze-holds
+ *     the last confident rect (privacy-safe over-redaction). Both ask for review.
  *   - manual end (drawn default / "whole clip" / a hand-set end): tracking fills
  *     keyframes only within the fixed span and, on early loss, freeze-holds the
  *     last confident rect to endSec (regionRectAt) rather than trimming - a span
@@ -108,22 +121,22 @@ export function cancelTrackPass(regionId: string): void {
  *
  * Mutates the region + notifies; resolves when the pass settles.
  */
-export async function toggleTrackPass(trip: Trip, region: BlurRegion): Promise<void> {
+export async function toggleTrackPass(trip: Trip, region: BlurRegion): Promise<TrackPassOutcome> {
     const running = runningPasses.get(region.id);
     if (running) {
         running.controller.abort();
-        return;
+        return "cancel-requested";
     }
 
     const contentDur = trip.timeline.contentDurationSec;
     const pinned = region.keyframes.filter((k) => k.pinned && k.contentSec < region.endSec);
     const seed = pinned.length > 0 ? pinned[pinned.length - 1]! : region.keyframes[0];
-    if (!seed) return;
+    if (!seed) return "not-started";
     const fromSec = Math.max(seed.contentSec, region.startSec);
     // autoEnd follows to the end of footage (the pass halts itself on loss);
     // a manual end tracks only within the user's span.
     const toSec = region.autoEnd ? contentDur : region.endSec;
-    if (toSec - fromSec < 0.05) return;
+    if (toSec - fromSec < 0.05) return "not-started";
 
     const candidates = tripCandidatesByChannel(trip, region.channel);
     const segments = sliceCandidatesForRange(candidates, trip.timeline, fromSec, toSec).map((seg) => ({
@@ -132,7 +145,7 @@ export async function toggleTrackPass(trip: Trip, region: BlurRegion): Promise<v
         endInFile: seg.endInFile,
         tripStart: seg.tripStart,
     }));
-    if (segments.length === 0) return;
+    if (segments.length === 0) return "not-started";
 
     const controller = new AbortController();
     // Inactivity timeout via signal (the client has no built-in timeout): only a
@@ -141,7 +154,8 @@ export async function toggleTrackPass(trip: Trip, region: BlurRegion): Promise<v
     // the worker runs passes one at a time (serialize gate), so a pass queued
     // behind another must not count that queue wait - counting it aborted a
     // perfectly healthy pass and silently discarded its result (no keyframes, a
-    // misleading "timed out" toast).
+    // misleading "timed out" toast). The worker's STARTED notification arms it
+    // from inside that gate, before model creation/decode begins.
     const timeoutCtrl = new AbortController();
     let timedOut = false;
     let timeoutTimer: number | undefined;
@@ -152,9 +166,10 @@ export async function toggleTrackPass(trip: Trip, region: BlurRegion): Promise<v
             timeoutCtrl.abort();
         }, TRACK_REQUEST_TIMEOUT_MS);
     };
-    runningPasses.set(region.id, { controller, fractionDone: 0, armTimeout });
+    runningPasses.set(region.id, { trip, controller, fractionDone: 0, armTimeout });
     // Clear any prior "verify the tail" flag while this pass runs - it will be
     // re-set from this pass's own outcome below.
+    const previousTrackWarning = region.lastTrackLost;
     region.lastTrackLost = false;
     notifyPassChanged();
     try {
@@ -172,28 +187,33 @@ export async function toggleTrackPass(trip: Trip, region: BlurRegion): Promise<v
             result = await trackerWorkerClient().request<TrackResult>(TRACK_REQUEST, request, {
                 signal: AbortSignal.any([controller.signal, timeoutCtrl.signal]),
             });
+            // A response and a user cancel can cross on the message queue. The
+            // explicit cancellation wins even if the worker response was
+            // already in flight; never apply late keyframes behind Set time,
+            // a trip switch or zone deletion.
+            if (controller.signal.aborted) throw new DOMException("aborted", "AbortError");
         } finally {
             if (timeoutTimer !== undefined) window.clearTimeout(timeoutTimer);
         }
 
-        // Follow is the only entry to a pass and it always sets autoEnd, so
-        // tracking owns the end: pull it back to the last-confident point, keeping
-        // at least a minimum span even on an immediate loss. (The autoEnd guard is
-        // an invariant check - a non-Follow pass would leave the span untouched.)
-        replaceGeneratedKeyframes(region, fromSec, toSec, result.keyframes);
-        if (region.autoEnd) {
-            region.endSec = Math.min(contentDur, Math.max(result.trackedUntilSec, region.startSec + MIN_ZONE_SPAN_SEC));
-        }
-        // Flag the tail for review when the object was lost before the footage
-        // ran out: a false loss (occlusion longer than the ride-out window) could
-        // end the cover early and expose a reappearing subject. The panel shows a
-        // persistent "check end" badge; the toast is the immediate nudge.
-        region.lastTrackLost = result.lostTarget;
-        if (result.lostTarget) {
+        // A confirmed frame exit may safely shorten an auto-owned span. A
+        // confidence/decode loss MUST keep the span through the footage end so
+        // regionRectAt freeze-holds the last reliable cover over the uncertain
+        // tail. A completed pass also owns the full requested end.
+        applyTrackResult(region, fromSec, toSec, contentDur, result);
+        // Persistently flag any non-routine ending for review. `lost` already
+        // fails closed by holding the cover; the warning still matters because
+        // a moving/reappearing subject can leave that held rectangle.
+        if (result.endReason === "exited") {
             notify({ severity: "warn", messageKey: "export.blur.track.followedEnd" });
+        } else if (result.endReason === "lost") {
+            notify({ severity: "warn", messageKey: "export.blur.track.lost" });
         }
         notifyBlurRegionsChanged();
+        return "completed";
     } catch (err) {
+        region.lastTrackLost = previousTrackWarning;
+        notifyBlurRegionsChanged();
         if ((err as DOMException)?.name === "AbortError") {
             if (timedOut) {
                 // Not a user cancel: the pass ran past the cap (e.g. a near-static
@@ -201,12 +221,15 @@ export async function toggleTrackPass(trip: Trip, region: BlurRegion): Promise<v
                 // vanish silently.
                 log.warn("track pass timed out", { region: region.id });
                 notify({ severity: "warn", messageKey: "export.blur.track.timeout" });
+                return "failed";
             } else {
                 log.info("track pass cancelled", { region: region.id });
+                return "cancelled";
             }
         } else {
             log.warn("track pass failed", { region: region.id, err: String(err) });
             notify({ severity: "warn", messageKey: "export.blur.track.failed" });
+            return "failed";
         }
     } finally {
         runningPasses.delete(region.id);
