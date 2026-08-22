@@ -13,6 +13,7 @@ import type { ParsedLog } from "../parser.js";
 import type { ClassifiedFile } from "../parsers/registry.js";
 import type { Channel, VendorFile } from "../parsers/types.js";
 import type { PerFileMseBackend } from "../per-file-mse.js";
+import type { RecordingAnalysisProgress } from "../recording-analysis-progress.js";
 import type { CropRect, SplitLayout } from "../transcode/compose.js";
 import { pickFrameChannel } from "../trips.js";
 import type { Trip, TripFrame, VideoCandidate } from "../trips.js";
@@ -216,10 +217,10 @@ export interface AppState {
     // Trip indices whose mandatory metadata read is in flight. Indices stay
     // stable until the closing regroup and are cleared on cancellation.
     readingTrips: Set<number>;
-    // Overall progress for the current recording-details pass. The candidate
-    // snapshot lives in progressive-ingest; the sidebar only receives these
-    // small counters, so it never owns or retains File objects.
-    recordingAnalysisProgress: { completed: number; total: number } | null;
+    // Pending mandatory recording details for the current pass. Completion is
+    // represented by null even while optional GPS or previews continue, so the
+    // status cannot park at 100%. The sidebar never owns or retains File objects.
+    recordingAnalysisProgress: RecordingAnalysisProgress | null;
     // === Per-channel MSE backends (see src/per-file-mse.ts) ===
     // Active per-file MSE backend per channel. Created when the current file
     // has cand.needsHevcRemux=true (BlackVue ELITE 9 / Vantrue N2X); disposed

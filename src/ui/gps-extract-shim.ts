@@ -45,6 +45,14 @@ function poolCapacity(): number {
     return Math.max(1, Math.min(hc - 1, 4));
 }
 
+/** Converts the caller's storage policy into this batch's worker count. */
+export function gpsExtractShardCount(videoCount: number, requestedConcurrency: number, capacity: number): number {
+    const videos = Math.max(0, Math.floor(videoCount));
+    const requested = Math.max(1, Math.floor(requestedConcurrency));
+    const available = Math.max(1, Math.floor(capacity));
+    return Math.min(videos, requested, available);
+}
+
 // Per-batch callback registered before sending request; cleared right after.
 // Only one batch in flight per slot, but multiple slots in parallel - so we
 // keyed by an opaque token, not by slot idx.
@@ -139,11 +147,9 @@ function shardByCloneAffinity(classified: ClassifiedFile[], n: number): Classifi
 export function dispatchParseVideoEmbeddedGpsViaWorker(
     classified: ClassifiedFile[],
     onProgress?: EmbeddedGpsProgressCallback,
-    // Signature parity with the registry dispatcher (see file header: callers
-    // swap implementations by swapping the import alone). In THIS worker-pool
-    // variant the value is unused - pool size dictates parallelism; the
-    // registry's in-thread variant does consume it.
-    _concurrency = 4,
+    // Global file-read concurrency for this batch. Each worker stays serial;
+    // sharding across this many workers supplies the requested parallelism.
+    concurrency = 4,
     signal?: AbortSignal,
     mode: EmbeddedGpsExtractionMode = "all",
     // Keyed by the full vendorFileKey identity - see protocol note.
@@ -151,7 +157,7 @@ export function dispatchParseVideoEmbeddedGpsViaWorker(
 ): Promise<DispatchedEmbeddedGpsResult> {
     const cap = poolCapacity();
     const videoCount = classified.filter((c) => c.role === "video").length;
-    const effectiveShards = Math.min(cap, Math.max(1, videoCount));
+    const effectiveShards = gpsExtractShardCount(videoCount, concurrency, cap);
     const chunks = shardByCloneAffinity(classified, effectiveShards);
     if (chunks.length === 0) {
         return Promise.resolve({

@@ -5,6 +5,7 @@
 
 import { t } from "../i18n/index.js";
 import { recordsHaveGps } from "../parser.js";
+import { recordingAnalysisPercent } from "../recording-analysis-progress.js";
 import { subscribeUnitsChange } from "../units-pref.js";
 import type { Channel } from "../parsers/types.js";
 import type { Trip } from "../trips.js";
@@ -534,8 +535,8 @@ export function refreshTripAnalysisStatus(): void {
         dom.tripAnalysisStatus.hidden = true;
         return;
     }
-    const completed = Math.max(0, Math.min(progress.completed, progress.total));
-    const percent = Math.round((completed / progress.total) * 100);
+    const completed = progress.completed;
+    const percent = recordingAnalysisPercent(progress);
     dom.tripAnalysisPercent.textContent = `≈${percent}%`;
     dom.tripAnalysisProgress.textContent = t("sidebar.analysis.progress", {
         done: completed,

@@ -238,6 +238,12 @@ test.describe("progressive ingest", () => {
             "the shared status must expose progress beyond its initial 0% state",
         ).toBe(true);
         await expect(analysisStatus).toBeHidden({ timeout: 20_000 });
+        expect(
+            await page.evaluate(
+                () => (window as typeof window & { __analysisProgressSeen?: string[] }).__analysisProgressSeen ?? [],
+            ),
+            "completion removes the mandatory-details status instead of parking it at 100% during optional work",
+        ).not.toContain("≈100%");
     });
 
     test("explains the shared trip-details work in Russian", async ({ page }) => {

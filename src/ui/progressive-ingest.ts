@@ -15,6 +15,7 @@ import { combineAccelSources, mergeAccelSamples } from "../parsers/registry-ligh
 import type { AccelSample, GpsRecord, VendorFile } from "../parsers/types.js";
 import { emitLifecycle } from "../perf.js";
 import { looksLikeRecordings } from "../report-structure.js";
+import { pendingRecordingAnalysisProgress } from "../recording-analysis-progress.js";
 import {
     applyTimelapseCadenceWallSpans,
     deriveStartUtc,
@@ -249,7 +250,7 @@ function publishRecordingAnalysisProgress(
         else run.completedAnalysisCandidates.add(candidate);
     }
     const total = run.analysisCandidates.size;
-    state.recordingAnalysisProgress = total > 0 ? { completed: run.completedAnalysisCandidates.size, total } : null;
+    state.recordingAnalysisProgress = pendingRecordingAnalysisProgress(run.completedAnalysisCandidates.size, total);
     refreshTripAnalysisStatus();
 }
 
