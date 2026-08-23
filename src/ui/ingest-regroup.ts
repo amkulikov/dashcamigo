@@ -1,4 +1,5 @@
 import { attachRecordsToCandidates } from "../gps-association.js";
+import { applyStoredGpsSyncToTrip } from "../gps-sync.js";
 import { classifyFilenameTime } from "../parsers/filename/index.js";
 import {
     finalizeTripFromFrames,
@@ -58,6 +59,7 @@ export function refreshRecordingTrip(tripIdx: number): void {
         attachRecordsToCandidates(state.gpsLog, tripAllCandidates(old), loaded);
     }
     const refreshed = finalizeTripFromFrames(old.frames);
+    applyStoredGpsSyncToTrip(refreshed);
     carryOverTripPreviews([old], [refreshed]);
     state.trips[tripIdx] = refreshed;
     // Same frames mean the same content timeline; blur keyframes remain valid.

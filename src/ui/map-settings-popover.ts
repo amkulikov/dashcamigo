@@ -9,6 +9,7 @@
 
 import { t } from "../i18n/index.js";
 import { dom } from "./dom.js";
+import { syncGpsSyncLaunchers } from "./gps-sync-controls.js";
 import {
     getMapLabelScale,
     getStreetLabelDensity,
@@ -53,6 +54,7 @@ function renderSegment<Value extends string | number>(
 // Rendered fresh on every open so the pressed states reflect preferences
 // changed elsewhere (the settings modal selects).
 function renderRows(): void {
+    syncGpsSyncLaunchers();
     renderSegment(
         dom.mapLabelScaleSegment,
         MAP_LABEL_SCALE_VALUES,

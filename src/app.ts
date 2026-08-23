@@ -64,6 +64,7 @@ import { initIngestOverlay } from "./ui/ingest-overlay.js";
 import { initNotifications, notify } from "./ui/notifications.js";
 import { initPwaInstall } from "./ui/pwa-install.js";
 import { initMapSettingsPopover } from "./ui/map-settings-popover.js";
+import { initGpsSyncModal } from "./ui/gps-sync-modal.js";
 import { initSettingsModal } from "./ui/settings-modal.js";
 import { initNoRecordingsModal } from "./ui/no-recordings-modal.js";
 import { isIntentionalNavigation } from "./ui/nav-intent.js";
@@ -431,8 +432,9 @@ initNotifications();
 // subscription fires immediately, so an offline launch shows the banner at once).
 initConnectivity();
 initOfflineBanner();
-// Settings modal provides the gear icon in the header. Hidden when
-// analytics is disabled in the build (nothing else to configure yet).
+// GPS calibration is trip-scoped; general settings carries its player-wide
+// default alongside the other map preferences.
+initGpsSyncModal({ getTripCurrentTime });
 initSettingsModal();
 initMapSettingsPopover();
 initIngestOverlay();

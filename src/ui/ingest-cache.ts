@@ -104,7 +104,8 @@ export function indexCacheDependencyKey(
     for (const file of classified) {
         let affectsVideo = file.role === "gps-log";
         if ((file.role === "sidecar" || file.role === "accel-sidecar") && file.sidecarMp4) {
-            affectsVideo = resolveVideoKey(file.file, file.sidecarMp4, videos) === videoKey;
+            affectsVideo =
+                (file.manualSidecarVideoKey ?? resolveVideoKey(file.file, file.sidecarMp4, videos)) === videoKey;
         }
         if (!affectsVideo) continue;
         dependencies.push(

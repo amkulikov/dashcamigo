@@ -45,6 +45,12 @@ export interface GpsRecord {
     // instead of spreading them evenly by index - accurate on clips with a
     // cold-start or mid-file GPS gap. Absent = no offset (spread evenly).
     relStartSeconds?: number;
+    // True for a track the user manually attached to a video from another
+    // device (for example dashcam GPX + action-camera footage). Its timestamps
+    // are valid for calibration/rendering, but must never anchor the video's
+    // own recording clock or split otherwise-consecutive clips before the user
+    // chooses an offset.
+    externalTrack?: boolean;
     // Bookkeeping for the local-as-UTC correction (see
     // applyLocalClockCorrections in trips.ts): how many seconds have already
     // been SUBTRACTED from this record's original `unixSeconds` to restore

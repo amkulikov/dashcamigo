@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { ClassifiedFile } from "../parsers/registry-light.js";
 import type { VendorFile } from "../parsers/types.js";
 import { buildVideoAssociationIndex } from "../gps-association.js";
+import { vendorFileKey } from "../vendor-file-key.js";
 import { hasIndexCacheIdentityCollision, indexCacheDependencyKey } from "./ingest-cache.js";
 
 function classified(
@@ -72,6 +73,19 @@ describe("indexCacheDependencyKey", () => {
         expect(indexCacheDependencyKey(video, [video, log])).not.toBe(
             indexCacheDependencyKey(video, [video, peer, log]),
         );
+    });
+
+    it("attributes a manually paired GPX to its exact same-named video", () => {
+        const a = classified("CARD/A/clip.mp4", "video");
+        const b = classified("CARD/B/clip.mp4", "video");
+        a.file.sourceKey = "card-a";
+        b.file.sourceKey = "card-b";
+        const gpx = classified("DROP/route.gpx", "sidecar");
+        gpx.manualSidecarVideoKey = vendorFileKey(b.file);
+        const index = buildVideoAssociationIndex([a.file, b.file]);
+
+        expect(indexCacheDependencyKey(a, [a, b, gpx], index)).toBe(indexCacheDependencyKey(a, [a, b], index));
+        expect(indexCacheDependencyKey(b, [a, b, gpx], index)).not.toBe(indexCacheDependencyKey(b, [a, b], index));
     });
 });
 

@@ -45,6 +45,7 @@ import { cancelDeferredGpsLoad } from "./deferred-gps.js";
 import { countByExtension, countByField } from "./ingest-core.js";
 import { reportParseErrors } from "./ingest-diagnostics.js";
 import { scopeIngestFiles } from "./ingest-source-key.js";
+import { looseGpxTarget, pairLooseGpxFiles } from "./loose-gpx.js";
 
 const log = createLogger("ingest");
 
@@ -283,8 +284,21 @@ async function ingestFilesInternal(
     const existingVideoNames = new Set<string>(alreadyLoaded.map((vf) => vf.file.name));
     const classified = await mark("classify", () => dispatchClassifyFiles(vfiles, existingVideoNames, signal));
 
+    // A generic GPX exported by another camera/app rarely shares the action
+    // camera's basename. Pair that late drop to the open (or only) trip, but do
+    // not guess among several new videos/trips: the user can open the intended
+    // trip and add the file again.
+    const classifiedVideos = classified.filter((item) => item.role === "video");
+    const looseGpx = pairLooseGpxFiles(
+        classified,
+        looseGpxTarget(classifiedVideos, state.trips, state.active?.trip ?? null),
+    );
+    if (looseGpx.unassigned > 0) {
+        notify({ severity: "info", messageKey: "status.gpxChooseTrip" });
+    }
+
     // Extract video candidates with their role/relativePath - used from here on instead of the raw File[].
-    const videos = classified.filter((c) => c.role === "video");
+    const videos = classifiedVideos;
     const knownVideoFiles = [...alreadyLoaded, ...videos.map((candidate) => candidate.file)];
     const videoAssociation = buildVideoAssociationIndex(knownVideoFiles);
     const totalGpsLogs = classified.filter((c) => c.role === "gps-log").length;
@@ -366,6 +380,9 @@ async function ingestFilesInternal(
         log.warn("sidecar parse errors", { count: sidecarResult.errors.length, errors: sidecarResult.errors });
     }
     reportParseErrors("sidecar", sidecarResult.errors);
+    if (looseGpx.paired > 0 && sidecarResult.records.some((record) => record.externalTrack)) {
+        notify({ severity: "info", messageKey: "status.gpxAttached" });
+    }
 
     // A shared sidecar (BlackVue `.gps`) classifies against one channel only;
     // clone its records onto the recording's other channels so every channel

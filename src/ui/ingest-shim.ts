@@ -272,9 +272,16 @@ export async function dispatchParseSidecarsViaPool(
     const extractorByFileKey = new Map<string, string>();
 
     const collect = (target: ClassifiedFile, recs: GpsRecord[], extractorId: string): void => {
-        associateRecordsWithVideos(recs, target.file, videoIndex);
+        if (target.manualSidecarVideoKey) {
+            for (const record of recs) {
+                record.externalTrack = true;
+                record.videoKey = target.manualSidecarVideoKey;
+            }
+        } else {
+            associateRecordsWithVideos(recs, target.file, videoIndex);
+        }
         extendArray(records, recs);
-        const key = resolveVideoKey(target.file, target.sidecarMp4!, videoIndex);
+        const key = target.manualSidecarVideoKey ?? resolveVideoKey(target.file, target.sidecarMp4!, videoIndex);
         if (recs.length > 0 && key !== null && !extractorByFileKey.has(key)) {
             extractorByFileKey.set(key, extractorId);
         }

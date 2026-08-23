@@ -319,6 +319,18 @@ export interface Trip {
     // for 70mai (GPS only on front), but guards against duplicates if a future
     // vendor writes GPS on multiple channels simultaneously.
     records: GpsRecord[];
+    // Presentation-time GPS calibration. Candidate.records and state.gpsLog
+    // always keep the parser's original timestamps; this derived Trip view may
+    // shift them so every consumer (map, chart, events and export) sees one
+    // synchronized clock. Optional keeps cached/test Trip literals compatible.
+    gpsOffsetSec?: number;
+    // Automatic start-to-start alignment for a wholly external/manual track.
+    // Hidden from the UI: gpsOffsetSec remains the user's small, meaningful
+    // adjustment relative to the video rather than a years-wide clock delta.
+    gpsBaseOffsetSec?: number;
+    // When true, the derived records view omits points outside actual footage
+    // wall-clock spans. False preserves the historical full-route behavior.
+    gpsTrimToVideo?: boolean;
     // auto-detected events (brakes, turns, stops)
     events: TripEvent[];
     // Inferred ranged signals (stop / brake / turn / accel) derived from
@@ -1104,52 +1116,10 @@ function finalizeTrip(frames: TripFrame[]): Trip {
     const first = frames[0]!;
     const last = frames[frames.length - 1]!;
 
-    // Records from all channels in all frames. Dedup by (unixSeconds, lat, lon)
-    // guards against duplicates if a vendor writes GPS on multiple channels
-    // simultaneously (on 70mai GPS is only on front, so no duplicates by design).
-    // frameChannels iterates in CHANNEL_PRIORITY order (front first), so front's
-    // record wins its identity on a collision - but a camera with per-channel IMU
-    // can carry the impact spike on the lower-priority channel, so transplant the
-    // stronger accel triple onto the survivor (max-|G| wins) instead of dropping
-    // it before detectEvents. Clone, never mutate: candidate.records are reused
-    // across regroups. indexByKey holds the survivor's slot in the pre-sort array.
-    const indexByKey = new Map<string, number>();
-    const merged: GpsRecord[] = [];
-    for (const frame of frames) {
-        for (const ch of frameChannels(frame)) {
-            const c = frame.channels[ch];
-            if (!c) continue;
-            for (const r of c.records) {
-                const key = `${r.unixSeconds}|${r.lat}|${r.lon}`;
-                const existingIdx = indexByKey.get(key);
-                if (existingIdx === undefined) {
-                    indexByKey.set(key, merged.length);
-                    merged.push(r);
-                    continue;
-                }
-                const kept = merged[existingIdx]!;
-                if (
-                    accelMagnitude(r.accelXg, r.accelYg, r.accelZg) >
-                    accelMagnitude(kept.accelXg, kept.accelYg, kept.accelZg)
-                ) {
-                    merged[existingIdx] = { ...kept, accelXg: r.accelXg, accelYg: r.accelYg, accelZg: r.accelZg };
-                }
-            }
-        }
-    }
-    merged.sort((a, b) => a.unixSeconds - b.unixSeconds);
-
-    // Teleport/spike filter MUST run right here: after the sort (it walks an
-    // anchor chain over time-ordered records) and before totalDistanceKm /
-    // detectEvents (event.recordIndex points into trip.records, so filtering
-    // later would shift indices under the events). finalizeTrip is the single
-    // funnel for everything user-visible (map track, marker interpolation,
-    // chart, distance, events, export), and it recomputes on every regroup -
-    // candidate records and state.gpsLog keep the raw parser output.
-    const records = dropTeleportOutliers(merged);
-    if (records.length !== merged.length) {
+    const { records, mergedCount } = collectRawTripRecords(frames);
+    if (records.length !== mergedCount) {
         log.debug("teleport outliers dropped from trip", {
-            dropped: merged.length - records.length,
+            dropped: mergedCount - records.length,
             kept: records.length,
         });
     }
@@ -1223,6 +1193,140 @@ function finalizeTrip(frames: TripFrame[]): Trip {
         confidentChannels,
         cameraTzSec,
     };
+}
+
+/** Builds the parser-timestamp view of a trip from unchanged candidate data.
+ *  Every GPS calibration starts here, so repeated edits never accumulate
+ *  floating-point drift or lose points trimmed by the previous value. */
+function collectRawTripRecords(frames: readonly TripFrame[]): { records: GpsRecord[]; mergedCount: number } {
+    // Records from all channels in all frames. Dedup by (unixSeconds, lat, lon)
+    // guards against duplicates if a vendor writes GPS on multiple channels
+    // simultaneously (on 70mai GPS is only on front, so no duplicates by design).
+    // frameChannels iterates in CHANNEL_PRIORITY order (front first), so front's
+    // record wins its identity on a collision - but a camera with per-channel IMU
+    // can carry the impact spike on the lower-priority channel, so transplant the
+    // stronger accel triple onto the survivor (max-|G| wins) instead of dropping
+    // it before detectEvents. Clone, never mutate: candidate.records are reused
+    // across regroups. indexByKey holds the survivor's slot in the pre-sort array.
+    const indexByKey = new Map<string, number>();
+    const merged: GpsRecord[] = [];
+    for (const frame of frames) {
+        for (const ch of frameChannels(frame)) {
+            const c = frame.channels[ch];
+            if (!c) continue;
+            for (const r of c.records) {
+                const key = `${r.unixSeconds}|${r.lat}|${r.lon}`;
+                const existingIdx = indexByKey.get(key);
+                if (existingIdx === undefined) {
+                    indexByKey.set(key, merged.length);
+                    merged.push(r);
+                    continue;
+                }
+                const kept = merged[existingIdx]!;
+                if (
+                    accelMagnitude(r.accelXg, r.accelYg, r.accelZg) >
+                    accelMagnitude(kept.accelXg, kept.accelYg, kept.accelZg)
+                ) {
+                    merged[existingIdx] = { ...kept, accelXg: r.accelXg, accelYg: r.accelYg, accelZg: r.accelZg };
+                }
+            }
+        }
+    }
+    merged.sort((a, b) => a.unixSeconds - b.unixSeconds);
+
+    // Teleport/spike filter MUST run right here: after the sort (it walks an
+    // anchor chain over time-ordered records) and before totalDistanceKm /
+    // detectEvents (event.recordIndex points into trip.records, so filtering
+    // later would shift indices under the events). finalizeTrip is the single
+    // funnel for everything user-visible (map track, marker interpolation,
+    // chart, distance, events, export), and it recomputes on every regroup -
+    // candidate records and state.gpsLog keep the raw parser output.
+    return { records: dropTeleportOutliers(merged), mergedCount: merged.length };
+}
+
+/** Original, unshifted GPS records for a derived trip. Returns a fresh array;
+ *  record objects themselves remain parser-owned and are never mutated. */
+export function rawTripGpsRecords(trip: Trip): GpsRecord[] {
+    return collectRawTripRecords(trip.frames).records;
+}
+
+interface WallInterval {
+    start: number;
+    end: number;
+}
+
+/** Merges overlapping footage wall spans so trimming is O(records + clips),
+ *  including cameras whose protected/event clips overlap the normal loop. */
+function footageWallIntervals(timeline: TripTimeline): WallInterval[] {
+    const intervals: WallInterval[] = [];
+    for (const seg of timeline.segments) {
+        const start = seg.wallStart;
+        const end = start + seg.wallDurationSec;
+        const last = intervals[intervals.length - 1];
+        if (last && start <= last.end) {
+            if (end > last.end) last.end = end;
+        } else {
+            intervals.push({ start, end });
+        }
+    }
+    return intervals;
+}
+
+function trimGpsRecordsToFootage(records: GpsRecord[], timeline: TripTimeline): GpsRecord[] {
+    const intervals = footageWallIntervals(timeline);
+    if (intervals.length === 0 || records.length === 0) return [];
+    const out: GpsRecord[] = [];
+    let intervalIndex = 0;
+    for (const record of records) {
+        while (intervalIndex < intervals.length && record.unixSeconds > intervals[intervalIndex]!.end) {
+            intervalIndex++;
+        }
+        const interval = intervals[intervalIndex];
+        if (!interval) break;
+        if (record.unixSeconds >= interval.start && record.unixSeconds <= interval.end) out.push(record);
+    }
+    return out;
+}
+
+/** A manually attached track comes from another device, so its calendar clock
+ *  says nothing about the video's. When every usable point is external, make
+ *  offset zero mean "both starts together"; the visible/user-stored offset is
+ *  then only the fine adjustment around that intuitive baseline. */
+function automaticGpsBaseOffsetForRecords(trip: Trip, records: readonly GpsRecord[]): number {
+    const active = records.filter((record) => record.active);
+    const firstSegment = trip.timeline.segments[0];
+    if (!firstSegment || active.length === 0 || active.some((record) => !record.externalTrack)) return 0;
+    return firstSegment.wallStart - active[0]!.unixSeconds;
+}
+
+export function automaticGpsBaseOffsetSec(trip: Trip): number {
+    return automaticGpsBaseOffsetForRecords(trip, rawTripGpsRecords(trip));
+}
+
+/** Rebuilds every GPS-derived Trip aggregate from the original candidate
+ *  records, with one presentation-time offset. Positive values move the track
+ *  later in the video. This mutates only the derived Trip object. */
+export function applyGpsSyncToTrip(trip: Trip, offsetSec: number, trimToVideo: boolean): void {
+    const normalized = Number.isFinite(offsetSec) ? Math.round(offsetSec * 1000) / 1000 : 0;
+    const raw = rawTripGpsRecords(trip);
+    const baseOffsetSec = automaticGpsBaseOffsetForRecords(trip, raw);
+    const effectiveOffsetSec = baseOffsetSec + normalized;
+    const shifted =
+        effectiveOffsetSec === 0
+            ? raw
+            : raw.map((record) => ({ ...record, unixSeconds: record.unixSeconds + effectiveOffsetSec }));
+    const records = trimToVideo ? trimGpsRecordsToFootage(shifted, trip.timeline) : shifted;
+    trip.records = records;
+    trip.gpsOffsetSec = normalized;
+    trip.gpsBaseOffsetSec = baseOffsetSec;
+    trip.gpsTrimToVideo = trimToVideo;
+    trip.distanceKm = totalDistanceKm(records);
+    trip.events = projectEventsOntoTimeline(detectEvents(records, trip.startUtc), trip.timeline);
+    trip.inferredSegments = projectInferredOntoTimeline(
+        detectInferredSegments(records, trip.startUtc),
+        trip.startUtc,
+        trip.timeline,
+    );
 }
 
 /**
@@ -2232,6 +2336,7 @@ function applyLocalClockCorrections(candidates: readonly VideoCandidate[]): void
         const desired = offsetByFingerprint.get(c.fingerprint);
         if (desired === undefined) continue;
         for (const record of c.records) {
+            if (record.externalTrack) continue;
             const applied = record.localClockOffsetAppliedSec ?? 0;
             if (applied === desired) continue;
             record.unixSeconds += applied - desired;

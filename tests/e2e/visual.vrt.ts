@@ -64,6 +64,17 @@ test.describe("visual regression", () => {
         await expect(modal).toHaveScreenshot("hotkeys-modal.png");
     });
 
+    test("GPS synchronization modal", async ({ page }) => {
+        await page.setViewportSize(DESKTOP);
+        await gotoApp(page, "en");
+        await loadTrip(page);
+        await page.locator("#gps-sync-pill").click();
+        const modal = page.locator("#gps-sync-modal");
+        await expect(modal).toBeVisible();
+        await settle(page);
+        await expect(modal).toHaveScreenshot("gps-sync-modal.png");
+    });
+
     test("export panel options (video grid masked)", async ({ page }) => {
         await page.setViewportSize(DESKTOP);
         await gotoApp(page, "en");

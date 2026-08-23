@@ -1452,6 +1452,14 @@
                         </span>
                     </div>
                     <div class="player-readout__context">
+                        <!-- GPS/video calibration stays a quiet action at zero;
+                             a non-zero shift turns it into an accented pill. -->
+                        <button type="button" class="gps-sync-pill" id="gps-sync-pill" hidden
+                                data-i18n-attr="aria-label:gpsSync.open,title:gpsSync.open"
+                                aria-label="Sync GPS" title="Sync GPS">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v4"/><path d="M18 12h4"/><path d="M12 18v4"/><path d="M2 12h4"/><circle cx="12" cy="12" r="3"/></svg>
+                            <span id="gps-sync-pill-label" data-i18n="gpsSync.open">Sync GPS</span>
+                        </button>
                         <!-- The button's text IS the file name, so it doubles as
                              the accessible name; the title carries the full name
                              for when CSS ellipsis eats the tail. Both are set in
@@ -1655,6 +1663,14 @@
                                          data-i18n-attr="aria-label:settings.map.streetNames.label"
                                          aria-label="Street names"></div>
                                 </div>
+                                <div class="map-settings-row">
+                                    <span class="map-settings-row-label" data-i18n="gpsSync.offset.label">Track shift</span>
+                                    <button id="map-gps-sync-btn" class="map-settings-action-btn" type="button"
+                                            data-i18n-attr="aria-label:gpsSync.open"
+                                            aria-label="Sync GPS">
+                                        <span id="map-gps-sync-label" data-i18n="gpsSync.open">Sync GPS</span>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1753,6 +1769,12 @@
                                 aria-label="Toggle speed units" title="Click to switch km/h ↔ mph">
                             <span class="pm-value mono" id="pm-bar-speed">-</span>
                             <span class="pm-unit" id="pm-bar-unit">km/h</span>
+                        </button>
+                        <button type="button" class="gps-sync-pill gps-sync-pill--mobile" id="gps-sync-pill-mobile" hidden
+                                data-i18n-attr="aria-label:gpsSync.open,title:gpsSync.open"
+                                aria-label="Sync GPS" title="Sync GPS">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v4"/><path d="M18 12h4"/><path d="M12 18v4"/><path d="M2 12h4"/><circle cx="12" cy="12" r="3"/></svg>
+                            <span id="gps-sync-pill-mobile-label"></span>
                         </button>
                     </div>
                     <span class="player-spacer"></span>
@@ -2318,6 +2340,62 @@
         </div>
     </div>
 
+    <!-- Per-trip GPS calibration. Kept out of the main settings modal because
+         its most useful action reads the current player position. -->
+    <div id="gps-sync-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true"
+         aria-labelledby="gps-sync-modal-title">
+        <div class="export-modal-card modal-card gps-sync-card">
+            <div class="export-modal-title" id="gps-sync-modal-title" data-i18n="gpsSync.title">Sync GPS with video</div>
+            <p class="gps-sync-description" data-i18n="gpsSync.description">Shift the GPS track until the route and speed match the video.</p>
+            <p id="gps-sync-no-track" class="gps-sync-empty" hidden data-i18n="gpsSync.noTrack">This trip has no GPS track to sync.</p>
+            <div id="gps-sync-controls">
+                <div class="export-modal-section gps-sync-section">
+                    <label class="settings-select-label" for="gps-sync-offset-input" data-i18n="gpsSync.offset.label">Track shift</label>
+                    <div class="gps-sync-offset-row">
+                        <button class="dc-btn dc-btn--secondary gps-sync-step" type="button" data-gps-delta="-10"
+                                data-i18n-attr="aria-label:gpsSync.earlier">−10</button>
+                        <button class="dc-btn dc-btn--secondary gps-sync-step" type="button" data-gps-delta="-1"
+                                data-i18n-attr="aria-label:gpsSync.earlier">−1</button>
+                        <span class="gps-sync-number-wrap">
+                            <input id="gps-sync-offset-input" class="settings-number-input gps-sync-number" type="number"
+                                   inputmode="decimal" min="-31536000" max="31536000" step="0.1">
+                            <span class="settings-numeric-unit" data-i18n="gpsSync.offset.unit">seconds</span>
+                        </span>
+                        <button class="dc-btn dc-btn--secondary gps-sync-step" type="button" data-gps-delta="1"
+                                data-i18n-attr="aria-label:gpsSync.later">+1</button>
+                        <button class="dc-btn dc-btn--secondary gps-sync-step" type="button" data-gps-delta="10"
+                                data-i18n-attr="aria-label:gpsSync.later">+10</button>
+                    </div>
+                    <p class="settings-toggle-desc" data-i18n="gpsSync.offset.hint">Negative moves GPS earlier; positive moves it later.</p>
+                </div>
+                <div class="export-modal-section gps-sync-section">
+                    <button id="gps-sync-align-playhead" class="dc-btn dc-btn--secondary gps-sync-align" type="button"
+                            data-i18n="gpsSync.alignPlayhead">Place track start at current frame</button>
+                    <p class="settings-toggle-desc" data-i18n="gpsSync.alignPlayhead.hint">Uses the frame that was showing when you opened this panel.</p>
+                </div>
+                <div class="export-modal-section gps-sync-section">
+                    <label class="settings-toggle">
+                        <input id="gps-sync-trim-toggle" type="checkbox" checked>
+                        <span class="settings-toggle-slider" aria-hidden="true"></span>
+                        <span class="settings-toggle-label" data-i18n="gpsSync.trim.label">Hide GPS outside the video</span>
+                    </label>
+                    <p class="settings-toggle-desc" data-i18n="gpsSync.trim.description">Extra GPS before the start and after the end won't appear on the route or in exports.</p>
+                    <p id="gps-sync-outside-status" class="gps-sync-outside" hidden></p>
+                </div>
+                <div class="gps-sync-default-actions">
+                    <button id="gps-sync-use-default" class="dc-btn dc-btn--secondary" type="button"
+                            data-i18n="gpsSync.useDefault">Use player default</button>
+                    <button id="gps-sync-save-default" class="dc-btn dc-btn--secondary" type="button"
+                            data-i18n="gpsSync.saveDefault">Use this shift for other trips</button>
+                </div>
+            </div>
+            <div class="export-modal-actions gps-sync-footer">
+                <button id="gps-sync-close" class="dc-btn dc-btn--primary" type="button"
+                        data-i18n="settings.modal.close">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Settings modal. Structure mirrors .export-modal (overlay + card +
          section); initially it only contains a Privacy tab with the anonymous-
          analytics toggle - other preferences will move here later. JS lazily
@@ -2389,6 +2467,17 @@
                         </select>
                     </label>
                     <p class="settings-toggle-desc" data-i18n="settings.map.streetNames.description">Shows street names more often and from farther out.</p>
+                </div>
+                <div class="settings-row">
+                    <label class="settings-select-row">
+                        <span class="settings-select-label" data-i18n="settings.map.gpsOffset.label">Default GPS shift</span>
+                        <span class="settings-numeric-row">
+                            <input id="settings-gps-offset-input" type="number" inputmode="decimal"
+                                   class="settings-number-input" min="-31536000" max="31536000" step="0.1">
+                            <span class="settings-numeric-unit" data-i18n="gpsSync.offset.unit">seconds</span>
+                        </span>
+                    </label>
+                    <p class="settings-toggle-desc" data-i18n="settings.map.gpsOffset.description">Applies to trips without their own GPS sync. Negative moves GPS earlier; positive moves it later.</p>
                 </div>
             </div>
             <!-- Events: brake/impact detection threshold. detectEvents in

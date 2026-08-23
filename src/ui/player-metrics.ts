@@ -11,6 +11,7 @@ import { contentToFrame, contentToWallUtc, displayClockDate, type Trip } from ".
 import type { GpsRecord } from "../parser.js";
 import { formatDistanceFromKm, formatSpeedFromMs, subscribeUnitsChange, toggleUnits } from "../units-pref.js";
 import { dom } from "./dom.js";
+import { syncGpsSyncLaunchers } from "./gps-sync-controls.js";
 import { activeCandidate, activeFrame } from "./state.js";
 
 // Kept in sync with TOLERANCE_SEC in interpolatePosition (parser.ts) so player
@@ -230,6 +231,7 @@ let readTripCurrentSec: (() => number) | null = null;
  * trip that carries a full track.
  */
 export function resyncMetricsForTrip(): void {
+    syncGpsSyncLaunchers();
     if (readTripCurrentSec === null) return;
     refreshMetricsFromActiveFrame(readTripCurrentSec());
 }
@@ -275,6 +277,7 @@ const COPIED_FLASH_MS = 1200;
  */
 export function initPlayerMetrics(getTripCurrentSec: () => number): void {
     readTripCurrentSec = getTripCurrentSec;
+    syncGpsSyncLaunchers();
     for (const toggle of [dom.metrics.speedToggle, dom.metrics.barSpeedToggle]) {
         toggle.addEventListener("click", () => {
             toggleUnits();

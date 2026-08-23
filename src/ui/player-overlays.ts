@@ -33,6 +33,7 @@ import {
     type OverlayTextState,
 } from "./export-state.js";
 import { buildOverlayPipelineArgs } from "./export-flow.js";
+import { registerGpsSyncRefreshListener } from "./gps-sync-refresh.js";
 import { isCoarsePointer } from "./media-queries.js";
 import { attachPointerDrag } from "./pointer-drag.js";
 import { activeFrame, activeTripHasGps, state } from "./state.js";
@@ -75,6 +76,7 @@ let watermarkResizeObserver: ResizeObserver | null = null;
 
 export function initPlayerOverlays(): void {
     subscribeExportState(syncPlayerOverlays);
+    registerGpsSyncRefreshListener(resyncPlayerOverlaysForGpsSync);
     // One PERMANENT subscription across all 8 video slots, self-filtered to
     // the active element (onActivePlayerEvent). A listener attached to the
     // physical dom.player element went stale after a preload slot-swap
@@ -249,7 +251,7 @@ function previewSignature(trip: Trip): string {
     const r = exportPanelState.range
         ? `${exportPanelState.range.startTripSec}|${exportPanelState.range.endTripSec}`
         : "full";
-    return `${trip.startUtc}|${trip.records.length}|${flags}|${r}`;
+    return `${trip.startUtc}|${trip.records.length}|${trip.gpsBaseOffsetSec ?? 0}|${trip.gpsOffsetSec ?? 0}|${trip.gpsTrimToVideo ? 1 : 0}|${flags}|${r}`;
 }
 
 /** Rebuilds the cached args only when the signature changed; otherwise patches
@@ -504,6 +506,15 @@ function syncPlayerOverlays(): void {
     refreshPreviewArgs();
     syncOverlayHitboxes();
     renderPreview();
+}
+
+/** Rebuilds GPS-derived preview caches after a live calibration edit. The
+ *  player may be paused, so waiting for the next timeupdate would leave the
+ *  visible overlay on the old track indefinitely. */
+function resyncPlayerOverlaysForGpsSync(): void {
+    previewSig = "";
+    disposeMapSnapshotter();
+    syncPlayerOverlays();
 }
 
 // Sizes the map overlay box from the output frame width × MAP_BASE_WIDTH_PCT ×

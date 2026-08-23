@@ -147,25 +147,24 @@ export function thinDenseRecords(records: GpsRecord[]): GpsRecord[] {
 /**
  * First record whose GPS clock was synced (a real wall-clock time). Cold-start
  * records (`timeUnsynced`) carry a near-epoch placeholder written before the
- * chip decoded satellite time; they must never be used as a time source for
- * start / TZ derivation. Buckets are sorted ascending, so synced records form
- * the suffix - a forward scan finds the first real one. Returns null when every
- * record is unsynced (a file fully inside the cold-start window).
+ * chip decoded satellite time; manually attached external tracks carry another
+ * device's clock. Neither may be used as a source for video start / camera-TZ
+ * derivation. Returns null when every record is in either category.
  */
 export function firstSyncedRecord(records: GpsRecord[] | null | undefined): GpsRecord | null {
     if (!records) return null;
     for (const r of records) {
-        if (!r.timeUnsynced) return r;
+        if (!r.timeUnsynced && !r.externalTrack) return r;
     }
     return null;
 }
 
-/** Last record whose GPS clock was synced. Counterpart to firstSyncedRecord
- *  for the end-of-window check; null when every record is unsynced. */
+/** Last record whose GPS clock may anchor the video. Counterpart to
+ *  firstSyncedRecord; null when no record may anchor the video. */
 export function lastSyncedRecord(records: GpsRecord[] | null | undefined): GpsRecord | null {
     if (!records) return null;
     for (let i = records.length - 1; i >= 0; i--) {
-        if (!records[i]!.timeUnsynced) return records[i]!;
+        if (!records[i]!.timeUnsynced && !records[i]!.externalTrack) return records[i]!;
     }
     return null;
 }

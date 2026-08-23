@@ -224,6 +224,9 @@ export type I18nKey =
     | "status.dropReadFailed"
     | "status.nothingLoaded"
     | "status.tripOpenFailed"
+    | "status.gpxChooseTrip"
+    | "status.gpxAttached"
+    | "status.gpsDefaultSaved"
     // Shown when the whole picked/dropped selection was hidden or system files
     // (a card copied into a ".backup"/".stversions" folder, a chkdsk FOUND.000
     // recovery folder) - so the junk filter emptied it. Distinct from
@@ -431,6 +434,27 @@ export type I18nKey =
     | "gpsLoad.cancel"
     | "gpsLoad.pending"
     | "gpsLoad.reading"
+
+    // Per-trip GPS/video calibration. The compact launcher appears beside the
+    // readout and in map settings; the detailed controls live in one dialog.
+    | "gpsSync.open"
+    | "gpsSync.badge"
+    | "gpsSync.title"
+    | "gpsSync.description"
+    | "gpsSync.noTrack"
+    | "gpsSync.offset.label"
+    | "gpsSync.offset.unit"
+    | "gpsSync.offset.hint"
+    | "gpsSync.earlier"
+    | "gpsSync.later"
+    | "gpsSync.alignPlayhead"
+    | "gpsSync.alignPlayhead.hint"
+    | "gpsSync.trim.label"
+    | "gpsSync.trim.description"
+    | "gpsSync.outside.hidden"
+    | "gpsSync.outside.shown"
+    | "gpsSync.useDefault"
+    | "gpsSync.saveDefault"
     // Recording-read modal (slow backend): the trip-open path reads the
     // recordings' metadata before playback. Reuses gpsLoad.progress/.cancel.
     | "recordingLoad.title"
@@ -1015,6 +1039,8 @@ export type I18nKey =
     | "settings.map.streetNames.more"
     | "settings.map.streetNames.max"
     | "settings.map.streetNames.description"
+    | "settings.map.gpsOffset.label"
+    | "settings.map.gpsOffset.description"
 
     // Settings -> Events: automatic impact/brake detection threshold in g.
     // Below this value, accel-spikes don't get a marker on the chart/map/strip.

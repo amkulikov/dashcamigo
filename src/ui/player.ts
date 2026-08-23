@@ -61,6 +61,7 @@ import {
 } from "./dom.js";
 import { hideCodecUnsupportedOverlay, showCodecUnsupportedOverlay } from "./empty-state.js";
 import { channelDisplayLabel, formatDuration, formatTime } from "./format.js";
+import { registerGpsSyncRefreshListener } from "./gps-sync-refresh.js";
 import { notify } from "./notifications.js";
 import { ensureMarkerLoop, refreshMap, resetFollowInteractionPause, smoothCameraToCurrentPosition } from "./map.js";
 import { setDrawerOpen } from "./mobile-drawer.js";
@@ -1924,6 +1925,16 @@ export function syncPlayButton(): void {
  * exported below. Public-API list lives in the file header comment.
  */
 export function initPlayer(): void {
+    registerGpsSyncRefreshListener(() => {
+        renderTrips();
+        const trip = activeTrip();
+        if (trip) {
+            rebuildChartFromTrip(trip);
+            refreshMap(trip);
+        }
+        resyncMetricsForTrip();
+    });
+
     // Initialize data-view-mode immediately - without it CSS selectors
     // `.video-grid[data-view-mode="focus"]` won't match and tiles end up in the default (split-like) display.
     // On single-channel this isn't visible (one tile fills the area in either mode), but the first ingest

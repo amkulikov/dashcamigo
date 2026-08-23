@@ -1,0 +1,168 @@
+/* GPS/video calibration: a quiet launcher beside the live GPS readout, the
+   same action in map settings, and one focused per-trip dialog. A non-zero
+   shift is the only state that receives accent, so calibration never becomes
+   ambient chrome for users whose camera clocks already agree. */
+
+.gps-sync-pill {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--dc-space-1);
+    height: 20px;
+    padding: 0 var(--dc-space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-pill);
+    background: transparent;
+    color: var(--fg-dim);
+    font: inherit;
+    font-size: var(--dc-text-xs);
+    white-space: nowrap;
+    cursor: pointer;
+    flex: 0 0 auto;
+    transition:
+        color var(--dc-dur-fast) var(--dc-ease),
+        background var(--dc-dur-fast) var(--dc-ease),
+        border-color var(--dc-dur-fast) var(--dc-ease);
+}
+.gps-sync-pill[hidden] {
+    display: none;
+}
+.gps-sync-pill:hover {
+    color: var(--fg);
+    border-color: var(--accent);
+}
+.gps-sync-pill:focus-visible,
+.map-settings-action-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+.gps-sync-pill.is-shifted,
+.map-settings-action-btn.is-shifted {
+    background: color-mix(in srgb, var(--accent) 16%, var(--bg-elev));
+    border-color: var(--accent);
+    color: var(--accent-ink);
+}
+
+.map-settings-action-btn {
+    min-height: var(--dc-iconbtn);
+    align-self: stretch;
+    padding: 0 var(--dc-space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-sm);
+    background: var(--bg-elev);
+    color: var(--fg);
+    font-family: var(--dc-font-body);
+    font-size: var(--dc-text-sm);
+    text-align: left;
+    cursor: pointer;
+}
+.map-settings-action-btn:hover:not(:disabled) {
+    background: var(--bg-hover);
+    border-color: var(--accent);
+}
+.map-settings-action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.gps-sync-card {
+    width: min(600px, 100%);
+}
+.gps-sync-description,
+.gps-sync-empty {
+    margin: 0 0 var(--dc-space-4);
+    color: var(--fg-dim);
+    font-size: var(--dc-text-md);
+    line-height: 1.5;
+}
+.gps-sync-empty {
+    padding: var(--dc-space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-sm);
+    background: var(--bg-elev-2);
+}
+.gps-sync-section {
+    padding: var(--dc-space-3) 0;
+    border-top: 1px solid var(--border);
+}
+.gps-sync-offset-row {
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+    margin: var(--dc-space-2) 0;
+}
+.gps-sync-step {
+    min-width: 48px;
+    padding-inline: var(--dc-space-2);
+    font-family: var(--dc-font-mono);
+    font-variant-numeric: tabular-nums;
+}
+.gps-sync-number-wrap {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--dc-space-2);
+    flex: 1 1 auto;
+    min-width: 150px;
+}
+.gps-sync-number {
+    width: 100%;
+    min-width: 72px;
+    font-family: var(--dc-font-mono);
+    font-variant-numeric: tabular-nums;
+}
+.gps-sync-align {
+    margin-bottom: var(--dc-space-2);
+}
+.gps-sync-outside {
+    margin: var(--dc-space-2) 0 0 46px;
+    color: var(--accent);
+    font-size: var(--dc-text-sm);
+    line-height: 1.5;
+}
+.gps-sync-default-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--dc-space-2);
+    padding-top: var(--dc-space-3);
+    border-top: 1px solid var(--border);
+}
+.gps-sync-footer {
+    margin-top: var(--dc-space-4);
+}
+
+/* The phone bar has no room for the full quiet label. At zero it is a compact
+   icon; after calibration it grows just enough to expose the signed value. */
+.gps-sync-pill--mobile {
+    height: 24px;
+    min-width: 24px;
+    justify-content: center;
+    padding-inline: var(--dc-space-1);
+}
+
+@media (max-width: 520px), (max-height: 500px) and (orientation: landscape) {
+    .gps-sync-offset-row {
+        flex-wrap: wrap;
+    }
+    .gps-sync-number-wrap {
+        order: -1;
+        flex-basis: 100%;
+    }
+    .gps-sync-step {
+        flex: 1 1 20%;
+    }
+    .gps-sync-default-actions .dc-btn,
+    .gps-sync-align {
+        width: 100%;
+    }
+}
+
+@media (pointer: coarse) {
+    .gps-sync-pill--mobile {
+        position: relative;
+    }
+    .gps-sync-pill--mobile::before {
+        content: "";
+        position: absolute;
+        inset: -10px -5px;
+    }
+}
