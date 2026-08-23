@@ -2,12 +2,22 @@
 // availability, deterministic click feedback, mandatory playback readiness,
 // final regroup reconciliation, cancellation and recovery from unreadable clips.
 
-import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Page } from "@playwright/test";
 
-import { DESKTOP, SAMPLE_70MAI, SAMPLE_GOPRO, expect, gotoApp, presetLocalStorage, shot, test } from "./_fixtures.js";
+import {
+    DESKTOP,
+    SAMPLE_70MAI,
+    SAMPLE_GOPRO,
+    SAMPLE_NOGPS,
+    expect,
+    gotoApp,
+    presetLocalStorage,
+    shot,
+    test,
+} from "./_fixtures.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -66,6 +76,20 @@ function writeBrokenMp4(dir: string, name: string): void {
     ]);
     // Valid ftyp plus padding, but no moov box anywhere.
     writeFileSync(path.join(dir, name), Buffer.concat([ftyp, Buffer.alloc(256)]));
+}
+
+function withMvhdCreationTime(source: string, iso: string): Buffer {
+    const bytes = readFileSync(source);
+    const marker = bytes.indexOf("mvhd", 0, "ascii");
+    if (marker < 0 || bytes[marker + 4] !== 0) throw new Error("fixture needs a version-0 mvhd box");
+    const unixSeconds = Date.parse(iso) / 1000;
+    const quickTimeSeconds = unixSeconds + 2_082_844_800;
+    if (!Number.isInteger(quickTimeSeconds) || quickTimeSeconds < 0 || quickTimeSeconds > 0xffff_ffff) {
+        throw new Error("fixture creation time is outside version-0 mvhd range");
+    }
+    bytes.writeUInt32BE(quickTimeSeconds, marker + 8);
+    bytes.writeUInt32BE(quickTimeSeconds, marker + 12);
+    return bytes;
 }
 
 test.describe("progressive ingest", () => {
@@ -154,6 +178,65 @@ test.describe("progressive ingest", () => {
         ).toBe(4);
 
         await shot(page, "progressive-01-ready");
+    });
+
+    test("recording-scoped NMEA log binds after MP4 metadata becomes ready", async ({ page }) => {
+        const dir = makeTemporaryDirectory("dashcamigo-sectioned-nmea-");
+        const videoDir = path.join(dir, "MP_ROOT/100ANV01");
+        const gpsDir = path.join(dir, "PRIVATE/SONY/GPS");
+        mkdirSync(videoDir, { recursive: true });
+        mkdirSync(gpsDir, { recursive: true });
+        writeFileSync(
+            path.join(videoDir, "MAH00384.MP4"),
+            withMvhdCreationTime(path.join(SAMPLE_NOGPS, "clip-no-gps.mp4"), "2026-01-15T12:00:00.000Z"),
+        );
+        writeFileSync(
+            path.join(gpsDir, "26011500.LOG"),
+            [
+                "@Sonygps/ver5.0/wgs-84/20260115120000.000/",
+                "@Sonygpsoption/0/20260115120001.000/20260115120003.000/",
+                "$GPRMC,120001.000,A,5100.0000,N,00400.0000,E,10.00,,150126,,,A*00",
+                "$GPRMC,120002.000,A,5100.0060,N,00400.0060,E,12.00,,150126,,,A*00",
+                "$GPRMC,120003.000,A,5100.0120,N,00400.0120,E,14.00,,150126,,,A*00",
+                "",
+            ].join("\n"),
+            "utf8",
+        );
+
+        await page.locator("#folder-input").setInputFiles(dir);
+        await expect(page.locator("li.trip:not(.unindexed-note)").first()).toBeVisible({ timeout: 10_000 });
+        await expect(page.locator("#trip-list")).toHaveAttribute("aria-busy", "false", { timeout: 20_000 });
+        await expect
+            .poll(() =>
+                page.evaluate(() => {
+                    const trip = window.__dashcamigo.state.trips[0];
+                    const candidate = trip?.frames.flatMap((frame) => Object.values(frame.channels))[0];
+                    return candidate?.records.length ?? 0;
+                }),
+            )
+            .toBe(3);
+
+        const result = await page.evaluate(() => {
+            const state = window.__dashcamigo.state;
+            const candidate = state.trips[0]?.frames.flatMap((frame) => Object.values(frame.channels))[0];
+            const records = candidate?.records ?? [];
+            return {
+                appliedExtractors: candidate?.appliedExtractors ?? [],
+                sequence: candidate?.sequence ?? null,
+                owners: records.map((record) => record.mp4Filename),
+                allOwned: records.every(
+                    (record) => record.videoKey !== undefined && record.recordingAssociation === undefined,
+                ),
+                firstSpeedMs: records[0]?.speedMs ?? null,
+                gpsLogRecords: state.gpsLog?.records.length ?? 0,
+            };
+        });
+        expect(result.appliedExtractors).toContain("sectioned-nmea-log");
+        expect(result.sequence).toBe(384);
+        expect(result.owners).toEqual(["MAH00384.MP4", "MAH00384.MP4", "MAH00384.MP4"]);
+        expect(result.allOwned).toBe(true);
+        expect(result.firstSpeedMs).toBeCloseTo(5.14444, 5);
+        expect(result.gpsLogRecords).toBe(3);
     });
 
     test("shows the newest trips before a slow storage probe finishes", async ({ page }) => {

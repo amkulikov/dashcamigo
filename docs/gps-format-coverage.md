@@ -92,6 +92,7 @@ carried as explicit caveats in the tables - never silently picked and forgotten.
 | Nextbase binary subtitle fmt1 | 322GW-family (`_FH` high-bitrate clip, 1800 rec @10 Hz) | fmt2 (622GW) is still foreign-source-only - see that table |
 | Escort `.map` sidecar | Escort M2 | |
 | NMEA `.nmea` sidecar | samplefiles MOV_0581 | |
+| Recording-scoped `@Sonygps` NMEA log | Sony HDR-AS30V | One `.LOG` can contain a timestamped section per clip; the section start matches the MP4 `creation_time`, while RMC fixes provide UTC, coordinates, and speed in knots. A GPS cold start can delay the first fix by almost two minutes, so association uses the section header rather than the first fix or file order. |
 
 Some local samples are GPS-less ffmpeg re-encodes (identifiable by the `Lavf` /
 `©too` signature) and correctly yield nothing: the E-Ace re-encode

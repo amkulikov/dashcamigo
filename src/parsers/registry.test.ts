@@ -65,6 +65,14 @@ describe("classifyOneNonVideo", () => {
         expect(cf.sidecarId).toBeNull();
     });
 
+    it("returns role=gps-log for a recording-scoped NMEA .LOG", async () => {
+        const file = makeVendorFile("26082300.LOG", "@Sonygps/ver5.0/wgs-84/20260823075402.000/\n");
+        const cf = await classifyOneNonVideo(file, new Set(), [fakeSidecar], [fakeAccelSidecar]);
+        expect(cf.role).toBe("gps-log");
+        expect(cf.logExtractorId).toBe("sectioned-nmea-log");
+        expect(cf.sidecarId).toBeNull();
+    });
+
     it("returns role=sidecar when a sidecar handler matches a known video", async () => {
         const file = makeVendorFile("trip01.fakegps", "ignored content");
         const known = new Set(["trip01.mp4"]);

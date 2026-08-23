@@ -190,6 +190,12 @@ export const RX_MIVUE = /^FILE(\d{2})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})\.(?:mp
 // (Normal/ is corpus-confirmed, the other two are the standard CarDV set).
 export const RX_MIVUE_PATH_MODE = /(?:^|\/)(Normal|Event|Parking)\//i;
 
+// Action-camera clips paired to a recording-scoped @Sonygps NMEA log. The
+// numeric MAH token is a monotonic clip counter; MP_ROOT/<nnn>ANV01 is the
+// identifying card layout used by this log family.
+export const RX_MAH_SEQUENCE = /^MAH(\d{5})\.mp4$/i;
+export const RX_MAH_VIDEO_PATH = /(?:^|[\\/])MP_ROOT[\\/]\d{3}ANV01[\\/]/i;
+
 // Juscar: 8-digit date _ 6-digit time + F/R + .ts.
 export const RX_JUSCAR = /^(\d{8})_(\d{6})([FR])\.ts$/i;
 export const RX_JUSCAR_PATH_REAR = /(?:^|\/)rear\/[^/]*$/i;

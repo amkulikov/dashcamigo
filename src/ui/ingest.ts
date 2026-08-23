@@ -6,7 +6,7 @@
 // and started after the current ingest's finally{}.
 
 import { t } from "../i18n/index.js";
-import { buildVideoAssociationIndex, recordsForVideo } from "../gps-association.js";
+import { bindRecordsByRecordingStart, buildVideoAssociationIndex, recordsForVideo } from "../gps-association.js";
 import { dropDuplicateFiles } from "../ingest-dedup.js";
 import { ignoredRootSegments, isIgnoredPath } from "../ingest-filter.js";
 import { partitionByIndexCache } from "./ingest-cache.js";
@@ -332,7 +332,8 @@ async function ingestFilesInternal(
     if (signal.aborted) throw new DOMException("ingest aborted", "AbortError");
     setIngestStage(t("ingestOverlay.stage.parsingLogs"));
 
-    // Parse logs before indexing so byFilename indices are ready when records are attached to files.
+    // Parse logs before indexing so filename-owned records are ready now and
+    // recording-start hints can bind as soon as MP4 metadata arrives.
     const logsResult = await mark("parseLogs", () => dispatchParseLogs(classified, videoAssociation, signal));
     if (logsResult.records.length > 0) {
         // Merge if a log already exists (new file may be a rotated version of the old one, or the same file dropped twice).
@@ -353,6 +354,16 @@ async function ingestFilesInternal(
                 skipped: state.gpsLog.skipped,
             });
             log.info("rebound orphan gps-log records", { count: rebound });
+        }
+    }
+    if (state.gpsLog) {
+        const bound = bindRecordsByRecordingStart(state.gpsLog, state.trips.flatMap(tripAllCandidates));
+        state.gpsLog = bound.log;
+        if (bound.boundRecords > 0) {
+            log.info("bound recording-scoped gps log", {
+                records: bound.boundRecords,
+                videos: bound.boundVideos,
+            });
         }
     }
     if (logsResult.errors.length > 0) {
@@ -436,6 +447,19 @@ async function ingestFilesInternal(
                 accelSidecarResult.errors.length === 0,
         ),
     );
+    if (state.gpsLog && cachedCandidates.length > 0) {
+        const bound = bindRecordsByRecordingStart(state.gpsLog, [
+            ...state.trips.flatMap(tripAllCandidates),
+            ...cachedCandidates,
+        ]);
+        state.gpsLog = bound.log;
+        if (bound.boundRecords > 0) {
+            log.info("bound recording-scoped gps log", {
+                records: bound.boundRecords,
+                videos: bound.boundVideos,
+            });
+        }
+    }
     if (cachedCandidates.length > 0) {
         const cachedRecords = cachedCandidates.flatMap((c) => c.records);
         if (cachedRecords.length > 0) {

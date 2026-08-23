@@ -372,6 +372,12 @@ describe("matchFilenameSequence", () => {
         expect(r.value).toBe(0); // front = 0 in Tesla camera-id mapping
     });
 
+    it("recording-scoped NMEA camera counter", () => {
+        const r = matchFilenameSequence(vf("MAH00384.MP4"));
+        expect(r.matchedId).toBe("sectioned-nmea-sequence");
+        expect(r.value).toBe(384);
+    });
+
     it("no sequence in filename - null", () => {
         const r = matchFilenameSequence(vf("clip.mp4"));
         expect(r.value).toBeNull();

@@ -92,7 +92,7 @@ export async function classifyOneNonVideo(
     sidecarHandlers: readonly SidecarHandler[],
     accelHandlers: readonly AccelSidecarHandler[],
 ): Promise<ClassifiedFile> {
-    // log-sidecar (by content: 70mai $V etc.).
+    // log-sidecar (by content: 70mai $V, sectioned NMEA, etc.).
     for (const extractor of LOG_SIDECAR_PRIMITIVES) {
         try {
             if (await extractor.marker(file)) {

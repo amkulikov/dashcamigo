@@ -21,14 +21,24 @@ export interface GpsRecord {
     accelXg: number;
     accelYg: number;
     accelZg: number;
-    // Name of the MP4 this record belongs to. Set by the extractor from a
-    // log field (70mai $V02 field[9]), matched MP4 for GPX sidecars, or
-    // File.name when GPS is embedded in the video.
+    // Name of the MP4 this record belongs to. Set by the extractor from a log
+    // field (70mai $V02 field[9]), matched MP4 for GPX sidecars, File.name when
+    // GPS is embedded, or filled after recording-start association.
     mp4Filename: string;
     // Internal identity of the concrete video file this record belongs to.
     // Parsers leave it absent because most formats only store a basename; the
     // ingest dispatcher fills it while it still knows the source/path.
     videoKey?: string;
+    // A recording-scoped log may know the exact UTC start of its owning clip
+    // without storing that clip's filename. The ingest layer keeps this hint
+    // until MP4 metadata is available, then replaces the placeholder owner
+    // with mp4Filename/videoKey. Unmatched hints remain inert: basename lookups
+    // never expose them to a different recording.
+    recordingAssociation?: {
+        startUtc: number;
+        extractorId: string;
+        sourceKey?: string;
+    };
     // The position fix is valid but the GPS *clock* was not yet synced when
     // this record was written (cold start after a power-up: the chip delivers
     // coordinates before it decodes satellite time, so the firmware stamps a

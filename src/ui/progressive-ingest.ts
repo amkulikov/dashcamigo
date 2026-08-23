@@ -4,7 +4,12 @@
 // cadence and concurrency without changing parsing or commit semantics.
 
 import { indexAllMp4Files } from "../indexer.js";
-import { attachRecordsToCandidates, recordsForVideo, type VideoAssociationIndex } from "../gps-association.js";
+import {
+    attachRecordsToCandidates,
+    bindRecordsByRecordingStart,
+    recordsForVideo,
+    type VideoAssociationIndex,
+} from "../gps-association.js";
 import { createLogger } from "../log.js";
 import { captureSentryMessage } from "../sentry.js";
 import { SLICE_COST_STREAM_ABOVE } from "../parsers/internal/mp4-walker.js";
@@ -1015,6 +1020,7 @@ async function readRecordingData(
 /** Rebuilds affected trips from their current metadata without changing list indices. */
 function refreshTripsAfterRecordingRead(tripIndices: readonly number[]): void {
     const loaded = state.trips.flatMap(tripAllCandidates);
+    bindReadyRecordingLogs(candidatePool ?? loaded);
     for (const tripIdx of tripIndices) {
         const trip = state.trips[tripIdx];
         if (!trip) continue;
@@ -1024,6 +1030,18 @@ function refreshTripsAfterRecordingRead(tripIndices: readonly number[]): void {
         mergeRecordingAccel(candidates);
         for (const frame of trip.frames) finalizeFrameTiming(frame);
         refreshRecordingTrip(tripIdx);
+    }
+}
+
+function bindReadyRecordingLogs(candidates: readonly VideoCandidate[]): void {
+    if (!state.gpsLog) return;
+    const bound = bindRecordsByRecordingStart(state.gpsLog, candidates);
+    state.gpsLog = bound.log;
+    if (bound.boundRecords > 0) {
+        log.info("bound recording-scoped gps log", {
+            records: bound.boundRecords,
+            videos: bound.boundVideos,
+        });
     }
 }
 
@@ -1126,6 +1144,8 @@ function startBackgroundFill(): void {
             if (candidate.metadataFailed === true) state.addedKeys.delete(vendorFileKey(candidate));
         }
         candidatePool = readable;
+        bindReadyRecordingLogs(readable);
+        if (state.gpsLog) attachRecordsToCandidates(state.gpsLog, readable, readable);
         reanchorRecordingCandidates(readable);
         mergeRecordingAccel(readable);
         commitRecordingTrips(readable);

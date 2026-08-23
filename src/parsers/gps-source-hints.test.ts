@@ -92,6 +92,12 @@ describe("classifyGpsSource", () => {
         expect(classifyGpsSource(vf("2026081822373512_r.TS", "VIDEO_R/2026081822373512_r.TS"))).toBe("embedded");
     });
 
+    it("recording-scoped NMEA camera path classifies as log-sidecar", () => {
+        expect(classifyGpsSource(vf("MAH00384.MP4", "H:/MP_ROOT/100ANV01/MAH00384.MP4"))).toBe("log-sidecar");
+        expect(classifyGpsSource(vf("MAH00384.MP4", "H:\\MP_ROOT\\100ANV01\\MAH00384.MP4"))).toBe("log-sidecar");
+        expect(classifyGpsSource(vf("MAH00384.MP4"))).toBe("unknown");
+    });
+
     it("viofo names with no sequence counter keep the novatek embedded hint", () => {
         // T130 parking clips and some OEM firmwares drop the counter
         // (`..._F.mp4` / `..._PR.mp4`); freeGPS is real-sample-validated in
@@ -164,6 +170,12 @@ describe("shouldTryEmbeddedGps", () => {
         const escort = vf("20240429_1830_CAM.mp4");
         expect(shouldTryEmbeddedGps(escort, false)).toBe(false);
         expect(shouldTryEmbeddedGps(escort, true)).toBe(false);
+    });
+
+    it("recording-scoped NMEA path skips an unnecessary embedded probe", () => {
+        const sony = vf("MAH00384.MP4", "MP_ROOT/100ANV01/MAH00384.MP4");
+        expect(shouldTryEmbeddedGps(sony, false)).toBe(false);
+        expect(shouldTryEmbeddedGps(sony, true)).toBe(false);
     });
 
     it("generic-shaped basename-sidecar (ddpai-normal, mivue) - probe when no records, skip once records exist", () => {

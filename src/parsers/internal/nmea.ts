@@ -9,6 +9,8 @@
 //  - BlackVue legacy series (DR400G-HD/DR450/500/550/650, early DR770X):
 //    sidecar `*.gps` with a `[unix_ms]` prefix on each NMEA line. Very old
 //    models (DR400G-HD) may have no-prefix files - not covered yet.
+//  - Recording-scoped text logs: each timestamped @Sonygps section is parsed
+//    independently, then associated with its clip by recording start.
 //  - Thinkware F-series: subtitle track in MP4 with NMEA-RMC sentences
 //    separated by `\0`; the plugin splits the payload then calls parseNmeaText.
 //  - Novatek Type 2 (Nextbase 512GW) and Type 12 (Kenwood): GPRMC appears

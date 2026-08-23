@@ -31,6 +31,8 @@ import {
     RX_IBOX,
     RX_JUSCAR,
     RX_LIGOGPS_TRAILER_TS,
+    RX_MAH_SEQUENCE,
+    RX_MAH_VIDEO_PATH,
     RX_MIVUE,
     RX_MOV_SEQ_FRI,
     RX_NAVITEL,
@@ -48,8 +50,9 @@ import {
  * Where a format keeps its GPS. Drives the embedded-extraction pre-filter.
  *
  * - "embedded": GPS lives inside the MP4/MOV/TS container. Always probe.
- * - "log-sidecar": GPS is in a text log with mp4Filename inside (70mai CSV).
- *   If the log was parsed, records exist by now; if not, embedded won't help.
+ * - "log-sidecar": GPS is in a text log that binds by filename or recording
+ *   start. If the log was parsed, records exist by now; if not, embedded won't
+ *   help.
  * - "basename-sidecar": GPS is in a same-basename file (GPX, .map, .gps).
  *   Sidecar handlers run in parallel; same logic - probing the container is
  *   pointless.
@@ -215,6 +218,14 @@ const GPS_SOURCE_HINTS: readonly GpsSourceHint[] = [
         matches: (f) => RX_MIVUE.test(f.file.name),
         source: "basename-sidecar",
         probeIfNoRecords: true,
+    },
+    // Recording-scoped NMEA log: each @Sonygps header carries the matching
+    // clip's UTC start. The MP_ROOT/...ANV01 path keeps the generic MAH counter
+    // from suppressing embedded probes on a renamed file from another camera.
+    {
+        id: "sectioned-nmea-log",
+        matches: (f) => RX_MAH_SEQUENCE.test(f.file.name) && RX_MAH_VIDEO_PATH.test(f.relativePath),
+        source: "log-sidecar",
     },
     // Unknown-vendor <14-digit>_<7-digit><letter> family, .ts shape only:
     // plaintext LigoGPS/LCAI trailer at EOF (ligogps-trailer-ts primitive).

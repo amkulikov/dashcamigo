@@ -7,9 +7,10 @@
 //     marker() checks cheap markers in Mp4Index (or async-probes the first
 //     sample of a suitable track). For MPEG-TS Mp4Index is empty, the marker
 //     reads the first bytes of the file itself.
-//   - kind="log-sidecar": format lives in a separate file (CSV, NMEA-in-.gps,
-//     ...) and knows its own video - the row/header carries mp4Filename or an
-//     equivalent. marker() reads the first ~256 bytes and checks the signature.
+//   - kind="log-sidecar": format lives in a separate file (CSV, sectioned
+//     NMEA, ...) and knows how to identify its own video - the row carries a
+//     filename or the header carries an exact recording start. marker() reads
+//     a short prefix and checks the signature.
 //     Sidecars driven by "filename A is paired with filename B" stay in
 //     src/parsers/sidecars/ via SidecarHandler - those need knownVideos for
 //     matching, Primitive has no such knowledge.

@@ -1,9 +1,25 @@
+import { mergeIntoGpsLog } from "./parser.js";
 import type { GpsRecord, ParsedLog, VendorFile } from "./parsers/types.js";
 import type { VideoCandidate } from "./trips.js";
 import { vendorFileKey } from "./vendor-file-key.js";
 
 export interface VideoAssociationIndex {
     videosByFilename: ReadonlyMap<string, readonly VendorFile[]>;
+}
+
+export interface RecordingStartAssociationResult {
+    log: ParsedLog;
+    boundRecords: number;
+    boundVideos: number;
+}
+
+// ISO BMFF creation_time is integer-second resolution on the cameras that
+// write recording-scoped logs. One second covers rounding without letting
+// adjacent clips claim the same section.
+const RECORDING_START_TOLERANCE_SEC = 1;
+
+function sameRecordingAssociation(a: NonNullable<GpsRecord["recordingAssociation"]>, b: typeof a): boolean {
+    return a.startUtc === b.startUtc && a.extractorId === b.extractorId && a.sourceKey === b.sourceKey;
 }
 
 export function buildVideoAssociationIndex(videos: readonly VendorFile[]): VideoAssociationIndex {
@@ -21,6 +37,79 @@ export function buildVideoAssociationIndex(videos: readonly VendorFile[]): Video
         sameName.push(video);
     }
     return { videosByFilename: mutable };
+}
+
+/**
+ * Binds recording-scoped log sections once MP4 creation metadata is known.
+ * A section is accepted only when exactly one candidate starts at its header
+ * time. Source scope wins when available; an unresolved tie stays inert.
+ */
+export function bindRecordsByRecordingStart(
+    log: ParsedLog,
+    candidates: readonly VideoCandidate[],
+): RecordingStartAssociationResult {
+    let boundRecords = 0;
+    const boundCandidates = new Set<VideoCandidate>();
+
+    for (const bucket of log.byFilename.values()) {
+        const pending: GpsRecord[] = [];
+        for (const record of bucket) {
+            if (record.recordingAssociation !== undefined) pending.push(record);
+        }
+        const hint = pending[0]?.recordingAssociation;
+        if (
+            !hint ||
+            pending.some(
+                (record) =>
+                    record.recordingAssociation === undefined ||
+                    !sameRecordingAssociation(record.recordingAssociation, hint),
+            )
+        ) {
+            continue;
+        }
+
+        let matches = candidates.filter((candidate) => {
+            const createdSec = candidate.createdUtc?.getTime();
+            return (
+                createdSec !== undefined &&
+                Number.isFinite(createdSec) &&
+                Math.abs(createdSec / 1000 - hint.startUtc) <= RECORDING_START_TOLERANCE_SEC
+            );
+        });
+        if (hint.sourceKey !== undefined && candidates.some((candidate) => candidate.sourceKey === hint.sourceKey)) {
+            // A matching-source candidate may still be waiting for mvhd. Do not
+            // let an already-ready clip from another card claim the section in
+            // that window; cross-source fallback is only for a log added in a
+            // separate drop with none of its original videos present.
+            matches = matches.filter((candidate) => candidate.sourceKey === hint.sourceKey);
+        }
+        if (matches.length !== 1) continue;
+
+        const candidate = matches[0]!;
+        const key = vendorFileKey(candidate);
+        for (const record of pending) {
+            if (record.recordingAssociation === undefined) continue;
+            record.mp4Filename = candidate.file.name;
+            record.videoKey = key;
+            delete record.recordingAssociation;
+            boundRecords++;
+        }
+        if (!candidate.appliedExtractors.includes(hint.extractorId)) {
+            candidate.appliedExtractors.push(hint.extractorId);
+        }
+        boundCandidates.add(candidate);
+    }
+
+    if (boundRecords === 0) return { log, boundRecords, boundVideos: 0 };
+    return {
+        log: mergeIntoGpsLog(null, {
+            records: log.records,
+            appliedExtractors: log.appliedExtractors,
+            skipped: log.skipped,
+        }),
+        boundRecords,
+        boundVideos: boundCandidates.size,
+    };
 }
 
 type VideosOrIndex = readonly VendorFile[] | VideoAssociationIndex;
