@@ -74,8 +74,12 @@ import { initIosFolderWarningModal } from "./ui/ios-folder-warning-modal.js";
 import { initUploadWarningModal } from "./ui/upload-warning-modal.js";
 import { initWebglEnableModal } from "./ui/webgl-enable-modal.js";
 import { loadDeferredGpsForTrip, isCurrentTripOpen, takeTripOpenToken } from "./ui/deferred-gps.js";
-import { getDeferredGpsConcurrency, prepareTripForPlayback } from "./ui/progressive-ingest.js";
-import { initRecordingLoadModal } from "./ui/recording-load-modal.js";
+import {
+    claimForegroundTripPreparation,
+    getDeferredGpsConcurrency,
+    prepareTripForPlayback,
+} from "./ui/progressive-ingest.js";
+import { initTripPreparation } from "./ui/trip-preparation.js";
 import { initHotkeysModal } from "./ui/hotkeys-modal.js";
 import { initWhatsNewModal } from "./ui/whats-new-modal.js";
 import { initExportMode } from "./ui/export-mode.js";
@@ -447,7 +451,7 @@ initNoRecordingsModal();
 initUploadWarningModal();
 initIosFolderWarningModal();
 initSwitchLangModal();
-initRecordingLoadModal();
+initTripPreparation();
 initHotkeysModal();
 initWhatsNewModal();
 // "View" dropdown - toggle chart/strip/mini-map. Reads visibility from localStorage
@@ -574,62 +578,68 @@ async function prepareTripOpen(
         return null;
     }
 
-    // Viewer chunks and mandatory recording metadata are independent. Starting
-    // both now lets the selected file preempt background storage immediately,
-    // instead of waiting for map/chart/player code to download first.
-    const [, preparation] = await Promise.all([
-        initTripUi(),
-        prepareTripForPlayback(initialLocation.tripIdx, target.exactFrame ? initialLocation.frameIdx : undefined),
-    ]);
-    if (!isCurrentTripOpen(openToken)) return null;
-    if (preparation.status === "ready") {
-        // The read gate may skip a damaged leading clip, replace a repaired File
-        // object and finish before viewer initialization. Resolve its stable keys
-        // against the latest trip list instead of trusting the original indices.
-        const readyLocation = resolveTripOpenTarget(state.trips, {
-            ...target,
-            keys: preparation.recordingKeys,
-            exactFrame: true,
-            eventUtc: null,
-        });
-        if (readyLocation) return readyLocation;
-        reportTripOpenFailure(openToken, originalTripIdx);
+    const releasePriority = claimForegroundTripPreparation();
+    try {
+        // Viewer chunks and recording analysis are independent. Starting
+        // both now lets the selected file preempt background storage immediately,
+        // instead of waiting for map/chart/player code to download first.
+        const [, preparation] = await Promise.all([
+            initTripUi(),
+            prepareTripForPlayback(initialLocation.tripIdx, target.exactFrame ? initialLocation.frameIdx : undefined),
+        ]);
+        if (!isCurrentTripOpen(openToken)) return null;
+        if (preparation.status === "ready") {
+            // The read gate may skip a damaged leading clip, replace a repaired File
+            // object and finish before viewer initialization. Resolve its stable keys
+            // against the latest trip list instead of trusting the original indices.
+            const playableTarget: TripOpenTarget = {
+                ...target,
+                keys: preparation.recordingKeys,
+                exactFrame: true,
+                eventUtc: null,
+            };
+            const readyLocation = resolveTripOpenTarget(state.trips, playableTarget);
+            if (!readyLocation) {
+                reportTripOpenFailure(openToken, originalTripIdx);
+                return null;
+            }
+
+            // A selected trip is one atomic viewer payload: do not start video while
+            // a deferred full-file GPS scan can still add the map and chart later.
+            const gpsResult = await loadDeferredGpsForTrip(readyLocation.tripIdx, {
+                concurrency: getDeferredGpsConcurrency(),
+            });
+            if (!isCurrentTripOpen(openToken)) return null;
+            if (gpsResult !== "ready") {
+                if (gpsResult === "failed") {
+                    reportTripOpenFailure(openToken, originalTripIdx);
+                    return null;
+                }
+                clearOpeningTrip();
+                return null;
+            }
+
+            // GPS clock evidence can regroup or reorder trips. Follow the playable
+            // recording identities once more before handing control to the player.
+            const finalLocation = resolveTripOpenTarget(state.trips, playableTarget);
+            if (finalLocation) return finalLocation;
+            reportTripOpenFailure(openToken, originalTripIdx);
+            return null;
+        }
+
+        clearOpeningTrip();
+        if (preparation.status === "unreadable") {
+            notify({ severity: "error", messageKey: "status.tripOpenFailed" });
+        }
         return null;
+    } finally {
+        releasePriority();
     }
-
-    clearOpeningTrip();
-    if (preparation.status === "unreadable") {
-        notify({ severity: "error", messageKey: "status.tripOpenFailed" });
-    }
-    return null;
-}
-
-// Optional full-file GPS work starts after video has produced data, so a slow
-// SD card services the user's picture before a background telemetry scan.
-let optionalGpsStartController: AbortController | null = null;
-
-function scheduleOptionalGpsAfterPlayback(target: TripOpenTarget, openToken: number): void {
-    optionalGpsStartController?.abort();
-    const controller = new AbortController();
-    optionalGpsStartController = controller;
-    const start = (): void => {
-        if (controller.signal.aborted || !isCurrentTripOpen(openToken)) return;
-        if (optionalGpsStartController === controller) optionalGpsStartController = null;
-        const location = resolveTripOpenTarget(state.trips, target);
-        if (!location) return;
-        void loadDeferredGpsForTrip(location.tripIdx, { showProgress: false, concurrency: 1 }).catch((err) => {
-            appLog.warn("optional trip GPS load failed", err);
-        });
-    };
-    const player = dom.player;
-    if (player.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) queueMicrotask(start);
-    else player.addEventListener("loadeddata", start, { once: true, signal: controller.signal });
 }
 
 async function openTripFrame(tripIdx: number, requestedFrameIdx?: number): Promise<void> {
     const target = captureTripOpenTarget(state.trips, tripIdx, requestedFrameIdx);
     const openToken = takeTripOpenToken(target?.tripKeys);
-    optionalGpsStartController?.abort();
     if (!target) {
         reportTripOpenFailure(openToken, tripIdx);
         return;
@@ -643,7 +653,6 @@ async function openTripFrame(tripIdx: number, requestedFrameIdx?: number): Promi
         const trip = state.trips[prepared.tripIdx];
         const tour = trip ? pickTripOpenTour(trip) : null;
         playFrame(prepared.tripIdx, prepared.frameIdx, undefined, /* autoPlay */ tour === null);
-        scheduleOptionalGpsAfterPlayback(target, openToken);
         if (tour) {
             runTripOpenTour(tour, () => void dom.player.play().catch(() => {}));
         } else if (!isMapAvailable()) {
@@ -659,7 +668,6 @@ async function openTripFrame(tripIdx: number, requestedFrameIdx?: number): Promi
 async function openTripEvent(tripIdx: number, eventIndex: number): Promise<void> {
     const target = captureTripOpenTarget(state.trips, tripIdx, undefined, eventIndex);
     const openToken = takeTripOpenToken(target?.tripKeys);
-    optionalGpsStartController?.abort();
     if (!target) {
         reportTripOpenFailure(openToken, tripIdx);
         return;
@@ -668,16 +676,12 @@ async function openTripEvent(tripIdx: number, eventIndex: number): Promise<void>
         const prepared = await prepareTripOpen(target, tripIdx, openToken);
         if (!prepared) return;
 
-        // Event navigation needs telemetry, so unlike normal playback it joins
-        // deferred GPS extraction before resolving the event's timeline offset.
-        const proceed = await loadDeferredGpsForTrip(prepared.tripIdx, {
-            concurrency: getDeferredGpsConcurrency(),
-        });
-        if (!isCurrentTripOpen(openToken)) return;
+        // prepareTripOpen has already completed GPS extraction. Resolve the
+        // event against the final event list produced by that data.
         const resolved = resolveTripOpenTarget(state.trips, target);
         const trip = resolved ? state.trips[resolved.tripIdx] : null;
         const nextEventIndex = trip && target.eventUtc !== null ? closestEventIndex(trip.events, target.eventUtc) : -1;
-        if (!proceed || !resolved || nextEventIndex < 0) {
+        if (!resolved || nextEventIndex < 0) {
             reportTripOpenFailure(openToken, tripIdx);
             return;
         }

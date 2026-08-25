@@ -549,7 +549,7 @@ export function refreshTripAnalysisStatus(): void {
 
 // The recordings the user just clicked, shown with an "opening" spinner on their trip
 // until playback takes over - instant acknowledgement that the click registered,
-// independent of how long metadata read takes (the modal only escalates past a
+// independent of how long metadata read takes (in-player progress only escalates past a
 // threshold, and on a fast backend that never fires). Source-qualified keys
 // survive both regrouping and the File replacement used by container repair.
 let openingKeys: Set<string> | null = null;

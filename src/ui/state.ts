@@ -218,7 +218,7 @@ export interface AppState {
     // stable until the closing regroup and are cleared on cancellation.
     readingTrips: Set<number>;
     // Pending mandatory recording details for the current pass. Completion is
-    // represented by null even while optional GPS or previews continue, so the
+    // represented by null even while embedded GPS or previews continue, so the
     // status cannot park at 100%. The sidebar never owns or retains File objects.
     recordingAnalysisProgress: RecordingAnalysisProgress | null;
     // === Per-channel MSE backends (see src/per-file-mse.ts) ===

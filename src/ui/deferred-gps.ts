@@ -1,7 +1,7 @@
-// Full-scan embedded GPS for a selected trip. Normal playback starts first and
-// runs this work without a modal; event navigation may await it because events
-// depend on telemetry. Updated clocks and boundaries are committed through the
-// shared regroup boundary. Cancelled or failed files remain pending for retry.
+// Full-scan embedded GPS for a selected trip. Trip opening awaits this work so
+// video, map, chart and events appear as one ready payload. Updated clocks and
+// boundaries are committed through the shared regroup boundary. Cancelled or
+// failed files remain pending for retry.
 
 import type { ClassifiedFile } from "../parsers/registry.js";
 import { createLogger } from "../log.js";
@@ -14,15 +14,13 @@ import { embeddedResultHasEffect, mergeAccelIntoCandidates } from "./ingest-core
 import { commitRecordingTripsWhilePreservingIngest, reanchorRecordingCandidates } from "./ingest-regroup.js";
 import { applyEmbeddedGpsResult } from "./embedded-gps-state.js";
 import { vendorFileKey } from "./ingest-candidate.js";
-import {
-    closeRecordingLoadModal,
-    showRecordingLoadModal,
-    updateRecordingLoadModalProgress,
-} from "./recording-load-modal.js";
+import { hideTripPreparation, showTripPreparation, updateTripPreparationProgress } from "./trip-preparation.js";
 import { renderTrips } from "./sidebar.js";
 import { state } from "./state.js";
 
 const log = createLogger("deferred-gps");
+
+export type DeferredGpsLoadResult = "ready" | "cancelled" | "failed";
 
 // A token spans the complete trip-open chain. Every newer click supersedes older
 // async work so it cannot take control of the player after navigation moved on.
@@ -59,28 +57,29 @@ export function cancelDeferredGpsLoad(): void {
 /**
  * Starts or joins a heavy embedded-GPS load for all pending trip files in
  * state.pendingHeavyEmbeddedGps. Resolves:
- *  - immediately if the trip has no pending files (player starts without delay);
+ *  - immediately if the trip has no pending files;
  *  - after parsing completes and the Trip is updated;
- *  - after user Cancel in the modal (all files return to pending for a clean retry).
+ *  - after user Cancel in the viewer (all files return to pending for a clean retry).
  *
- * Returns whether the caller should PROCEED with playback: false when a newer
- * trip click superseded this one while the load ran.
+ * Returns ready only when every target settled. Cancellation and unresolved
+ * files remain distinct so the caller can keep user cancellation quiet while
+ * surfacing a real preparation failure.
  *
  * Re-click semantics: a click on the SAME trip while its load runs JOINS the
- * in-flight session (one modal, one load); a click on a DIFFERENT trip aborts
+ * in-flight session (one progress surface, one load); a click on a DIFFERENT trip aborts
  * the old session (its files return to pending for a retry) and starts fresh.
  */
 export async function loadDeferredGpsForTrip(
     tripIdx: number,
     options: { showProgress?: boolean; concurrency?: number } = {},
-): Promise<boolean> {
+): Promise<DeferredGpsLoadResult> {
     // Read (do NOT mint) the current trip-open token: the caller minted it at the
     // top of the chain via takeTripOpenToken, so a click that superseded this
     // chain during the awaited recording read has already bumped tripOpenSequence and the
-    // checks below return proceed=false.
+    // checks below return cancelled.
     const mySeq = tripOpenSequence;
     const trip = state.trips[tripIdx];
-    if (!trip) return false;
+    if (!trip) return "failed";
     const tripCandidates = tripAllCandidates(trip);
 
     // Source-qualified recording identity, not a positional trip index, decides
@@ -90,16 +89,23 @@ export async function loadDeferredGpsForTrip(
         currentDeferredGpsSession &&
         tripCandidates.some((candidate) => currentDeferredGpsSession?.targetKeys.has(vendorFileKey(candidate)));
     if (currentDeferredGpsSession && !sameTripSession) {
-        currentDeferredGpsSession.controller.abort();
+        const superseded = currentDeferredGpsSession;
+        superseded.controller.abort();
+        // The clicked trip owns storage priority. Do not enqueue its full-file
+        // reads behind a superseded scan that has not observed cancellation yet.
+        await superseded.completion;
+        if (tripOpenSequence !== mySeq) return "cancelled";
     }
-    // Same-trip re-click: join the in-flight session (one modal, one load). Resolving
-    // immediately when targets is empty would start playback behind the blocking
-    // modal and let the first click's handler restart the trip on completion.
+    // Same-trip re-click: join the in-flight session (one surface, one load).
+    // Resolving immediately when targets is empty would start playback while
+    // the first click is still applying the shared GPS result.
     if (currentDeferredGpsSession && sameTripSession) {
         const joined = currentDeferredGpsSession;
         if (options.showProgress ?? true) showDeferredGpsProgress(joined);
-        await joined.completion;
-        if (tripOpenSequence !== mySeq) return false;
+        const result = await joined.completion;
+        if (tripOpenSequence !== mySeq) return "cancelled";
+        if (result !== "ready") return result;
+        if (hasUnresolvedTargets(joined.targetKeys)) return "failed";
 
         // A parallel light scan may have discovered more heavy files in this
         // trip while the joined batch was running. Drain that newly discovered
@@ -116,10 +122,14 @@ export async function loadDeferredGpsForTrip(
             : false;
         return hasNewPending && currentTripIdx !== null
             ? loadDeferredGpsForTrip(currentTripIdx, options)
-            : tripOpenSequence === mySeq;
+            : tripOpenSequence === mySeq
+              ? "ready"
+              : "cancelled";
     }
 
-    if (state.pendingHeavyEmbeddedGps.size === 0) return tripOpenSequence === mySeq;
+    if (state.pendingHeavyEmbeddedGps.size === 0) {
+        return tripOpenSequence === mySeq ? "ready" : "cancelled";
+    }
 
     const targets: ClassifiedFile[] = [];
     const targetCandidates: VideoCandidate[] = [];
@@ -134,7 +144,7 @@ export async function loadDeferredGpsForTrip(
         state.pendingHeavyEmbeddedGps.delete(key);
         state.inflightEmbeddedGps.set(key, (state.inflightEmbeddedGps.get(key) ?? 0) + 1);
     }
-    if (targets.length === 0) return tripOpenSequence === mySeq;
+    if (targets.length === 0) return tripOpenSequence === mySeq ? "ready" : "cancelled";
 
     const controller = new AbortController();
     const session: DeferredGpsSession = {
@@ -142,16 +152,25 @@ export async function loadDeferredGpsForTrip(
         startedTripIdx: tripIdx,
         targetCandidates,
         targetKeys: new Set(targetCandidates.map((candidate) => vendorFileKey(candidate))),
-        completion: Promise.resolve(),
+        completion: Promise.resolve("ready"),
         done: 0,
         total: targets.length,
-        modalToken: null,
+        preparationToken: null,
     };
     currentDeferredGpsSession = session;
     if (options.showProgress ?? true) showDeferredGpsProgress(session);
     session.completion = runDeferredGpsLoad(session, targets, options.concurrency ?? 1);
-    await session.completion;
-    return tripOpenSequence === mySeq;
+    const result = await session.completion;
+    if (tripOpenSequence !== mySeq) return "cancelled";
+    if (result !== "ready") return result;
+    return hasUnresolvedTargets(session.targetKeys) ? "failed" : "ready";
+}
+
+function hasUnresolvedTargets(keys: ReadonlySet<string>): boolean {
+    for (const key of keys) {
+        if (state.pendingHeavyEmbeddedGps.has(key)) return true;
+    }
+    return false;
 }
 
 function findTripContainingKeys(keys: ReadonlySet<string>): number | null {
@@ -161,11 +180,11 @@ function findTripContainingKeys(keys: ReadonlySet<string>): number | null {
     return null;
 }
 
-/** Promotes a background GPS read to visible progress when an event click joins it. */
+/** Promotes a background GPS read to blocking trip-preparation progress. */
 function showDeferredGpsProgress(session: DeferredGpsSession): void {
-    if (session.modalToken !== null) return;
-    session.modalToken = showRecordingLoadModal(session.total, () => session.controller.abort());
-    updateRecordingLoadModalProgress(session.done, session.total, session.modalToken);
+    if (session.preparationToken !== null) return;
+    session.preparationToken = showTripPreparation(session.total, () => session.controller.abort());
+    updateTripPreparationProgress(session.done, session.total, session.preparationToken);
 }
 
 /** The actual load body - tracked as session.completion so same-trip
@@ -174,7 +193,23 @@ async function runDeferredGpsLoad(
     session: DeferredGpsSession,
     targets: ClassifiedFile[],
     concurrency: number,
-): Promise<void> {
+): Promise<DeferredGpsLoadResult> {
+    try {
+        return await runDeferredGpsLoadBody(session, targets, concurrency);
+    } finally {
+        // Keep the session joinable and its progress visible through result
+        // application/regrouping, not merely until the worker replies. A repeat
+        // click in that post-processing window must not start a pre-GPS player.
+        if (session.preparationToken !== null) hideTripPreparation(session.preparationToken);
+        if (currentDeferredGpsSession === session) currentDeferredGpsSession = null;
+    }
+}
+
+async function runDeferredGpsLoadBody(
+    session: DeferredGpsSession,
+    targets: ClassifiedFile[],
+    concurrency: number,
+): Promise<DeferredGpsLoadResult> {
     const controller = session.controller;
 
     renderTrips(); // pending → inflight (skeleton → spinner)
@@ -188,8 +223,8 @@ async function runDeferredGpsLoad(
             targets,
             (done, total) => {
                 session.done = done;
-                if (session.modalToken !== null) {
-                    updateRecordingLoadModalProgress(done, total, session.modalToken);
+                if (session.preparationToken !== null) {
+                    updateTripPreparationProgress(done, total, session.preparationToken);
                 }
             },
             Math.max(1, concurrency),
@@ -226,17 +261,13 @@ async function runDeferredGpsLoad(
                 state.pendingHeavyEmbeddedGps.set(vendorFileKey(cf.file), cf);
             }
         }
-        // Token ownership makes this safe even if a newer visible session has
-        // already replaced the singleton modal: closing an older token no-ops.
-        if (session.modalToken !== null) closeRecordingLoadModal(session.modalToken);
-        if (currentDeferredGpsSession === session) currentDeferredGpsSession = null;
     }
 
     // An ingest may already have regrouped state.trips. Never apply a result or
     // refresh the old tripIdx after its session was explicitly superseded.
     if (aborted || failed) {
         renderTrips();
-        return;
+        return aborted ? "cancelled" : "failed";
     }
 
     const errorNames = new Set(result?.errors.map((err) => err.file) ?? []);
@@ -312,6 +343,7 @@ async function runDeferredGpsLoad(
     }
 
     renderTrips();
+    return "ready";
 }
 
 interface DeferredGpsSession {
@@ -322,10 +354,10 @@ interface DeferredGpsSession {
     targetKeys: Set<string>;
     /** Settles when the load body (runDeferredGpsLoad) finishes - join point for
      *  same-trip re-clicks. */
-    completion: Promise<void>;
+    completion: Promise<DeferredGpsLoadResult>;
     done: number;
     total: number;
-    modalToken: number | null;
+    preparationToken: number | null;
 }
 
 /** Active deferred GPS session (one per app). */

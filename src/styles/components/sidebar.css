@@ -503,7 +503,7 @@
 /* Click "opening" feedback: the moment a trip is clicked, a centered spinner +
    dim appears on its card - instant acknowledgement that the click registered,
    held until playback takes over (clearOpeningTrip, from playFrame). Independent
-   of how long recording analysis takes, so a fast backend (where the progress modal never
+   of how long recording analysis takes, so a fast backend (where in-player progress never
    crosses its threshold) still gives visible feedback. */
 .trip--opening .trip-header {
     filter: brightness(0.82);
@@ -975,7 +975,7 @@
        burger is hidden (topbar.css), so the only thing on screen is the list.
        On the first pick body.browsing is dropped and the list slides/collapses
        back to the off-canvas drawer (the FLIP in mobile-drawer.ts). */
-    body.browsing .sidebar {
+    body.browsing:not(.preparing-trip) .sidebar {
         width: 100%;
         transform: none;
         box-shadow: none;

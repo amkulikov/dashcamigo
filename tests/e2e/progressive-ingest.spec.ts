@@ -9,6 +9,7 @@ import type { Page } from "@playwright/test";
 
 import {
     DESKTOP,
+    MOBILE,
     SAMPLE_70MAI,
     SAMPLE_GOPRO,
     SAMPLE_NOGPS,
@@ -45,12 +46,12 @@ async function armImmediateTripClick(page: Page): Promise<void> {
 async function armImmediateTripClickAndCancel(page: Page): Promise<void> {
     await armImmediateTripClick(page);
     await page.evaluate(() => {
-        const modal = document.getElementById("recording-load-modal");
-        if (!modal) return;
+        const preparation = document.getElementById("trip-preparation");
+        if (!preparation) return;
         const observer = new MutationObserver(() => {
-            if (modal.hidden) return;
-            const cancel = document.getElementById("recording-load-modal-cancel") as HTMLButtonElement | null;
-            const title = document.getElementById("recording-load-modal-title");
+            if (preparation.hidden) return;
+            const cancel = document.getElementById("trip-preparation-cancel") as HTMLButtonElement | null;
+            const title = document.getElementById("trip-preparation-title");
             const target = window as typeof window & {
                 __recordingCancelSeen?: { copy: string; title: string; clicked: boolean };
             };
@@ -63,7 +64,7 @@ async function armImmediateTripClickAndCancel(page: Page): Promise<void> {
             target.__recordingCancelSeen.clicked = true;
             observer.disconnect();
         });
-        observer.observe(modal, { attributes: true, attributeFilter: ["hidden"] });
+        observer.observe(preparation, { attributes: true, attributeFilter: ["hidden"] });
     });
 }
 
@@ -104,6 +105,75 @@ test.describe("progressive ingest", () => {
             await page.route("**/assets/maplibre-gl-*.js", async (route) => {
                 await new Promise((resolve) => setTimeout(resolve, 1200));
                 await route.continue();
+            });
+        }
+        if (testInfo.title.includes("waits for the selected trip GPS")) {
+            await page.addInitScript(() => {
+                const target = window as typeof window & {
+                    __gpsResponseQueued?: boolean;
+                    __gpsResponseReleased?: boolean;
+                    __playbackStartedBeforeGps?: boolean;
+                    __releaseGpsResponses?: () => void;
+                };
+                let responsesReleased = false;
+                const queuedResponses: Array<() => void> = [];
+                target.__releaseGpsResponses = () => {
+                    responsesReleased = true;
+                    target.__gpsResponseReleased = true;
+                    for (const deliver of queuedResponses.splice(0)) deliver();
+                };
+                const NativeWorker = window.Worker;
+                window.Worker = class extends NativeWorker {
+                    constructor(scriptURL: string | URL, options?: WorkerOptions) {
+                        super(scriptURL, options);
+                        if (options?.name !== "gps-extract-worker") return;
+                        // Hold worker replies after the bytes are parsed. This
+                        // exposes whether the player starts before GPS reaches
+                        // the main thread without slowing unrelated file reads.
+                        const nativeAdd = this.addEventListener.bind(this) as (
+                            type: string,
+                            listener: EventListenerOrEventListenerObject,
+                            options?: boolean | AddEventListenerOptions,
+                        ) => void;
+                        this.addEventListener = ((
+                            type: string,
+                            listener: EventListenerOrEventListenerObject,
+                            listenerOptions?: boolean | AddEventListenerOptions,
+                        ): void => {
+                            if (type !== "message") {
+                                nativeAdd(type, listener, listenerOptions);
+                                return;
+                            }
+                            nativeAdd(
+                                type,
+                                (event: Event) => {
+                                    const message = (event as MessageEvent<unknown>).data;
+                                    const isResponse =
+                                        typeof message === "object" &&
+                                        message !== null &&
+                                        "__k" in message &&
+                                        message.__k === "res";
+                                    const deliver = (): void => {
+                                        if (typeof listener === "function") listener.call(this, event);
+                                        else listener.handleEvent(event);
+                                    };
+                                    if (isResponse && !responsesReleased) {
+                                        target.__gpsResponseQueued = true;
+                                        queuedResponses.push(deliver);
+                                        return;
+                                    }
+                                    deliver();
+                                },
+                                listenerOptions,
+                            );
+                        }) as Worker["addEventListener"];
+                    }
+                };
+                setInterval(() => {
+                    if (window.__dashcamigo?.state.active && !target.__gpsResponseReleased) {
+                        target.__playbackStartedBeforeGps = true;
+                    }
+                }, 0);
             });
         }
         await presetLocalStorage(page);
@@ -178,6 +248,95 @@ test.describe("progressive ingest", () => {
         ).toBe(4);
 
         await shot(page, "progressive-01-ready");
+    });
+
+    test("waits for the selected trip GPS before starting playback", async ({ page }) => {
+        const dir = makeTemporaryDirectory("dashcamigo-gps-open-");
+        copyFileSync(path.join(SAMPLE_GOPRO, "hero5-trimmed.mp4"), path.join(dir, "hero5-trimmed.mp4"));
+        await armImmediateTripClick(page);
+        await page.locator("#folder-input").setInputFiles(dir);
+
+        await expect(page.locator("li.trip:not(.unindexed-note)").first()).toBeVisible({ timeout: 30_000 });
+        await expect
+            .poll(
+                () =>
+                    page.evaluate(
+                        () =>
+                            (window as typeof window & { __gpsResponseQueued?: boolean }).__gpsResponseQueued ?? false,
+                    ),
+                { timeout: 10_000 },
+            )
+            .toBe(true);
+
+        const preparation = page.locator("#trip-preparation");
+        await expect(preparation).toBeVisible();
+        // The immediate-click hook can beat the one-time landing-to-sidebar
+        // FLIP that a human must visually wait through. Let that unrelated
+        // transition settle before capturing the stable preparation surface.
+        await expect(page.locator("#landing-cta")).toHaveCount(0);
+        await expect(page.locator("#trip-preparation-title")).toHaveText("Preparing this trip");
+        await expect(page.locator("#trip-preparation-progressbar")).toHaveAttribute("aria-valuemax", "1");
+        await expect(page.locator("#trip-preparation-progressbar")).not.toHaveAttribute("aria-valuenow", /.+/);
+        await expect(page.locator("#trip-preparation-progressbar")).toHaveClass(/is-finalizing/);
+        await expect(page.locator("#player-wrap")).toBeHidden();
+        await shot(page, "progressive-trip-preparation");
+        await page.setViewportSize(MOBILE);
+        await expect
+            .poll(async () => {
+                const box = await page.locator(".sidebar").first().boundingBox();
+                return box ? box.x + box.width : 0;
+            })
+            .toBeLessThanOrEqual(1);
+        await expect(preparation).toBeVisible();
+        await expect(preparation).toBeInViewport();
+        await expect(page.locator("#trip-preparation-cancel")).toBeVisible();
+        await shot(page, "progressive-trip-preparation-mobile");
+        expect(
+            await page.evaluate(() => window.__dashcamigo.state.active),
+            "the player must stay inactive while selected-trip GPS is unresolved",
+        ).toBeNull();
+
+        await page.evaluate(() => {
+            (
+                window as typeof window & {
+                    __releaseGpsResponses?: () => void;
+                }
+            ).__releaseGpsResponses?.();
+        });
+
+        await expect
+            .poll(
+                () =>
+                    page.evaluate(
+                        () =>
+                            (window as typeof window & { __gpsResponseReleased?: boolean }).__gpsResponseReleased ??
+                            false,
+                    ),
+                { timeout: 10_000 },
+            )
+            .toBe(true);
+        await expect(preparation).toBeHidden();
+        await expect
+            .poll(async () => (await page.locator("#player-total").textContent())?.trim(), { timeout: 10_000 })
+            .not.toBe("0:00");
+
+        const result = await page.evaluate(() => {
+            const state = window.__dashcamigo.state;
+            const active = state.active;
+            const trip = active ? state.trips[active.trip] : null;
+            return {
+                records: trip?.records.length ?? 0,
+                pendingGps: state.pendingHeavyEmbeddedGps.size,
+                inflightGps: state.inflightEmbeddedGps.size,
+                startedEarly:
+                    (window as typeof window & { __playbackStartedBeforeGps?: boolean }).__playbackStartedBeforeGps ??
+                    false,
+            };
+        });
+        expect(result.records, "the active trip carries its GPS records at first paint").toBeGreaterThan(0);
+        expect(result.pendingGps, "the active trip has no deferred GPS tail").toBe(0);
+        expect(result.inflightGps, "the active trip has no in-flight GPS tail").toBe(0);
+        expect(result.startedEarly, "playback never becomes active before GPS resolves").toBe(false);
     });
 
     test("recording-scoped NMEA log binds after MP4 metadata becomes ready", async ({ page }) => {
@@ -478,7 +637,7 @@ test.describe("progressive ingest", () => {
             )
             .toEqual({ copy: "Cancel", title: "Preparing this trip", clicked: true });
 
-        await expect(page.locator("#recording-load-modal")).toBeHidden();
+        await expect(page.locator("#trip-preparation")).toBeHidden();
         await expect(page.locator("#player-chart-canvas")).toBeHidden();
         await expect(page.locator("#player-total")).toHaveText("0:00");
 

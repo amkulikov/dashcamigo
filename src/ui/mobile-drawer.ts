@@ -53,7 +53,8 @@ function setInert(el: HTMLElement, on: boolean): void {
  */
 export function syncDrawerA11y(): void {
     const mobile = isMobileViewport();
-    const browsing = document.body.classList.contains("browsing");
+    const browsing =
+        document.body.classList.contains("browsing") && !document.body.classList.contains("preparing-trip");
     const open = dom.sidebar.dataset.drawerOpen === "true";
     setInert(dom.sidebar, mobile && !browsing && !open);
     setInert(dom.viewer, mobile && open);
@@ -73,7 +74,13 @@ export function syncBrowseState(): void {
     const browsingNow = state.trips.length > 0 && !state.active;
     const wasBrowsing = document.body.classList.contains("browsing");
 
-    if (wasBrowsing && !browsingNow && isMobileViewport() && !collapseShown) {
+    if (
+        wasBrowsing &&
+        !browsingNow &&
+        isMobileViewport() &&
+        !collapseShown &&
+        !document.body.classList.contains("preparing-trip")
+    ) {
         collapseShown = true;
         // applyFinalLayout removes body.browsing -> CSS reverts the sidebar to the
         // off-canvas drawer and reveals the icon (the FLIP target). The list fades

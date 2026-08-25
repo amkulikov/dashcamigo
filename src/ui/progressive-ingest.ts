@@ -60,11 +60,7 @@ import {
     vendorFileKey,
 } from "./ingest-candidate.js";
 import { loadDeferredGpsForTrip } from "./deferred-gps.js";
-import {
-    closeRecordingLoadModal,
-    showRecordingLoadModal,
-    updateRecordingLoadModalProgress,
-} from "./recording-load-modal.js";
+import { hideTripPreparation, showTripPreparation, updateTripPreparationProgress } from "./trip-preparation.js";
 import { showNoRecordingsModal } from "./no-recordings-modal.js";
 import { notify } from "./notifications.js";
 import { maybeRunIngestTour, maybeRunSourcesTour } from "./onboarding.js";
@@ -243,6 +239,27 @@ interface ProgressiveIngestRun {
 }
 
 let activeRun: ProgressiveIngestRun | null = null;
+
+// A click owns storage across the complete open chain, including the deferred
+// full-file GPS pass orchestrated by app.ts after prepareTripForPlayback returns.
+// Background pumps park here instead of competing with that foreground read.
+let foregroundPreparationOwners = 0;
+const foregroundReleaseWaiters = new Set<() => void>();
+
+/** Claims foreground storage priority until the returned release is called. */
+export function claimForegroundTripPreparation(): () => void {
+    foregroundPreparationOwners++;
+    let isReleased = false;
+    return () => {
+        if (isReleased) return;
+        isReleased = true;
+        foregroundPreparationOwners = Math.max(0, foregroundPreparationOwners - 1);
+        if (foregroundPreparationOwners > 0) return;
+        const waiters = [...foregroundReleaseWaiters];
+        foregroundReleaseWaiters.clear();
+        for (const resume of waiters) scheduleBackground(resume);
+    };
+}
 
 function publishRecordingAnalysisProgress(
     run: ProgressiveIngestRun | null,
@@ -429,23 +446,14 @@ async function activateScheduling(run: ProgressiveIngestRun): Promise<void> {
 
 // === Per-trip metadata read ===
 
-interface RecordingMetadataGate {
-    completion: Promise<void>;
-    resolve: () => void;
-    settled: boolean;
-}
-
 interface RecordingReadSession {
     controller: AbortController;
-    /** One gate per trip lets a visible trip open as soon as its own mandatory
-     *  metadata is ready, while the shared batch continues at full throughput. */
-    metadataByTrip: Map<number, RecordingMetadataGate>;
     candidatesByTrip: Map<number, VideoCandidate[]>;
     sourceFilesByTrip: Map<number, Set<File>>;
     processedSourceFiles: Set<File>;
     progressListeners: Set<(file: File) => void>;
     completion: Promise<void>;
-    /** Trip-open callers awaiting mandatory metadata, counted per trip so a
+    /** Trip-open callers awaiting selected-trip analysis, counted per trip so a
      *  newer click on another trip can preempt a shared background batch. */
     foregroundWaitersByTrip: Map<number, number>;
     /** The worker failed independently of an explicit/superseding abort. */
@@ -555,18 +563,9 @@ function ensureRecordingReadSession(tripIndices: number[]): RecordingReadSession
     }
     if (pending.length === 0) return null;
 
-    const metadataByTrip = new Map<number, RecordingMetadataGate>();
-    for (const tripIdx of candidatesByTrip.keys()) {
-        let resolve = (): void => {};
-        const completion = new Promise<void>((done) => {
-            resolve = done;
-        });
-        metadataByTrip.set(tripIdx, { completion, resolve, settled: false });
-    }
     const activeTripIndices = [...candidatesByTrip.keys()];
     const session: RecordingReadSession = {
         controller: new AbortController(),
-        metadataByTrip,
         candidatesByTrip,
         sourceFilesByTrip,
         processedSourceFiles: new Set(),
@@ -582,7 +581,6 @@ function ensureRecordingReadSession(tripIndices: number[]): RecordingReadSession
         state.readingTrips.add(tripIdx);
     }
     session.completion = readRecordingData(activeTripIndices, pending, session).finally(() => {
-        settleRecordingMetadata(session, activeTripIndices);
         for (const tripIdx of activeTripIndices) {
             if (sessions.get(tripIdx) !== session) continue;
             sessions.delete(tripIdx);
@@ -591,16 +589,6 @@ function ensureRecordingReadSession(tripIndices: number[]): RecordingReadSession
         }
     });
     return session;
-}
-
-function settleRecordingMetadata(session: RecordingReadSession, tripIndices: readonly number[]): void {
-    for (const tripIdx of tripIndices) {
-        const gate = session.metadataByTrip.get(tripIdx);
-        if (!gate || gate.settled) continue;
-        gate.settled = true;
-        if (sessions.get(tripIdx) === session) state.readingTrips.delete(tripIdx);
-        gate.resolve();
-    }
 }
 
 /**
@@ -613,13 +601,13 @@ async function readTripsInBackground(tripIndices: number[]): Promise<void> {
     await session.completion;
 }
 
-// Escalate to the blocking progress modal once metadata read outlasts a blink. The
+// Escalate to in-player progress once the selected-trip read outlasts a blink. The
 // synchronous "opening" spinner on the card (markOpening in sidebar.ts) is the
-// instant feedback for every click regardless of backend; the modal adds a
+// instant feedback for every click regardless of backend; the viewer adds a
 // progress count + Cancel for genuinely slow loads (real SAF/OTG). Kept low so a
-// moderately slow load surfaces the modal, but above a fast in-memory read so it
+// moderately slow load surfaces progress, but above a fast in-memory read so it
 // does not flash there.
-const READ_MODAL_THRESHOLD_MS = 250;
+const READ_PROGRESS_THRESHOLD_MS = 250;
 
 export type TripPreparationResult =
     | { status: "ready"; frameIdx: number; recordingKeys: string[] }
@@ -627,11 +615,11 @@ export type TripPreparationResult =
     | { status: "unreadable" };
 
 /**
- * Waits only for the selected trip's mandatory playback metadata. A slow read
- * gets a progress modal with Cancel; cancellation never starts playback from
- * estimates. When no frame is requested (trip-header/event navigation), the
- * first playable frame is returned so one damaged leading clip cannot make the
- * whole trip appear dead. Embedded telemetry continues without blocking video.
+ * Waits for all selected-trip recording analysis, including the light embedded
+ * GPS pass. A slow read gets in-player progress with Cancel; cancellation never
+ * starts playback from estimates or without its final GPS data. When no frame
+ * is requested (trip-header/event navigation), the first playable frame is
+ * returned so one damaged leading clip cannot make the whole trip appear dead.
  */
 export async function prepareTripForPlayback(tripIdx: number, frameIdx?: number): Promise<TripPreparationResult> {
     // The list is intentionally visible before the storage probe completes. A
@@ -644,70 +632,68 @@ export async function prepareTripForPlayback(tripIdx: number, frameIdx?: number)
     // batch and restart only the clicked trip; otherwise an older card could
     // sit behind minutes of unrelated removable-storage reads.
     const claimed = sessions.get(tripIdx);
-    const claimedGate = claimed?.metadataByTrip.get(tripIdx);
-    if (
-        claimed &&
+    const shouldRestartClaimed =
+        claimed !== undefined &&
         claimed.tripIndices.length > 1 &&
-        claimedGate?.settled === false &&
-        (claimed.foregroundWaitersByTrip.get(tripIdx) ?? 0) === 0
-    ) {
-        claimed.controller.abort();
-        await claimed.completion;
-    }
+        (claimed.foregroundWaitersByTrip.get(tripIdx) ?? 0) === 0;
 
-    // A direct click is the highest-priority read. If its trip is not already in
-    // the active batch, stop lower-priority work before starting it so removable
-    // storage is never split between an obsolete request and the user's choice.
-    if (!sessions.has(tripIdx)) {
-        for (const other of new Set(sessions.values())) other.controller.abort();
+    // A direct click is the highest-priority read. Stop every unrelated batch,
+    // including a throughput batch that already finished metadata but is still
+    // checking GPS. Wait for cancellation to settle before the selected trip
+    // starts so removable storage is never shared with obsolete background IO.
+    const superseded = [...new Set(sessions.values())].filter((session) => session !== claimed || shouldRestartClaimed);
+    for (const session of superseded) session.controller.abort();
+    if (superseded.length > 0) {
+        await Promise.allSettled(superseded.map((session) => session.completion));
     }
     const session = ensureRecordingReadSession([tripIdx]);
     if (!session) return preparationResult(tripIdx, frameIdx);
-    const metadataGate = session.metadataByTrip.get(tripIdx);
     const sourceFiles = session.sourceFilesByTrip.get(tripIdx);
-    if (!metadataGate || !sourceFiles) return preparationResult(tripIdx, frameIdx);
+    if (!sourceFiles) return preparationResult(tripIdx, frameIdx);
 
     session.foregroundWaitersByTrip.set(tripIdx, (session.foregroundWaitersByTrip.get(tripIdx) ?? 0) + 1);
 
-    let modalShown = false;
-    // Owner token of the modal this call shows. Two foreground metadata reads (rapid
-    // clicks on different trips, slow backend) share the singleton modal; the
-    // token keeps a finishing call from closing / repainting the other's modal.
-    let modalToken = 0;
+    let progressShown = false;
+    // Owner token of the viewer state this call shows. Two foreground reads (rapid
+    // clicks on different trips, slow backend) share the singleton surface; the
+    // token keeps a finishing call from hiding / repainting the other's progress.
+    let preparationToken = 0;
     const updateProgress = (): void => {
         let done = 0;
         for (const sourceFile of sourceFiles) {
             if (session.processedSourceFiles.has(sourceFile)) done++;
         }
-        updateRecordingLoadModalProgress(done, sourceFiles.size, modalToken);
+        updateTripPreparationProgress(done, sourceFiles.size, preparationToken);
     };
     const progressListener = (file: File): void => {
         if (sourceFiles.has(file)) updateProgress();
     };
-    const modalDelay = schedulingPolicy.cadence === "idle" ? 0 : READ_MODAL_THRESHOLD_MS;
+    const progressDelay = schedulingPolicy.cadence === "idle" ? 0 : READ_PROGRESS_THRESHOLD_MS;
+    let analysisSettled = false;
     const timer = setTimeout(() => {
-        if (metadataGate.settled) return;
-        modalShown = true;
-        modalToken = showRecordingLoadModal(sourceFiles.size, () => session.controller.abort(), "recordings");
+        if (analysisSettled) return;
+        progressShown = true;
+        preparationToken = showTripPreparation(sourceFiles.size, () => session.controller.abort());
         session.progressListeners.add(progressListener);
         updateProgress();
-    }, modalDelay);
+    }, progressDelay);
     try {
-        await metadataGate.completion;
+        await session.completion;
+        analysisSettled = true;
     } finally {
         const remainingWaiters = (session.foregroundWaitersByTrip.get(tripIdx) ?? 1) - 1;
         if (remainingWaiters > 0) session.foregroundWaitersByTrip.set(tripIdx, remainingWaiters);
         else session.foregroundWaitersByTrip.delete(tripIdx);
         clearTimeout(timer);
         session.progressListeners.delete(progressListener);
-        if (modalShown) {
-            closeRecordingLoadModal(modalToken);
+        if (progressShown) {
+            hideTripPreparation(preparationToken);
         }
     }
 
-    // Local storage can decode the thumbnail while optional GPS finishes. On
-    // high-latency removable media the responsive policy stays serialized so
-    // the user's playback read keeps exclusive access to the device.
+    // Local storage can decode the thumbnail once all selected-trip recording
+    // data is ready. On high-latency removable media the responsive policy stays
+    // serialized so the foreground read keeps exclusive access to the device.
     const trip = state.trips[tripIdx];
     if (trip && schedulingPolicy.cadence === "immediate") {
         void ensureTripPreview(trip, updateTripPreview);
@@ -781,7 +767,7 @@ async function readRecordingData(
                 if (signal.aborted) return;
                 refreshTripsAfterRecordingRead([tripIdx]);
                 restampProvisionalMarkers();
-                settleRecordingMetadata(session, [tripIdx]);
+                if (sessions.get(tripIdx) === session) state.readingTrips.delete(tripIdx);
                 publishRecordingAnalysisProgress(session.run, candidates);
                 refreshTripCard(tripIdx);
                 const trip = state.trips[tripIdx];
@@ -886,9 +872,8 @@ async function readRecordingData(
                 { withMoovBytes: true },
             );
             if (schedulingPolicy.cadence === "idle") {
-                // Resolving these gates queues the trip-open continuation before
-                // this await resumes, so playFrame can attach the selected video
-                // before optional GPS begins reading the same slow device.
+                // Commit the indexed metadata before GPS begins reading the same
+                // slow device. The trip-open gate still awaits both stages.
                 await Promise.allSettled(metadataChecks);
                 if (signal.aborted) return;
             }
@@ -956,19 +941,18 @@ async function readRecordingData(
         }
         if (signal.aborted) return;
         // Embedded telemetry can refine the absolute clock after core recording
-        // metadata has already unblocked playback. Apply that refinement in place;
-        // trip-boundary reconciliation remains deferred to the closing sweep.
+        // metadata. Apply that refinement in place; trip-boundary reconciliation
+        // remains deferred to the closing sweep.
         refreshTripsAfterRecordingRead(tripIndices);
 
         // Marker anchors remain live until the closing sweep, so this second pass
         // preserves their clip-relative position when telemetry refines startUtc.
         restampProvisionalMarkers();
 
-        // The selected trip may have started playing as soon as its mandatory
-        // metadata gate settled, before the light scan identified a full-scan
-        // GPS format. Start that optional work as soon as it becomes known; the
+        // An already-active trip can receive newly added recordings during a
+        // later ingest. Finish any newly discovered GPS for that live trip; the
         // identity-based deferred loader stays safe across the closing regroup.
-        if (state.active && state.pendingHeavyEmbeddedGps.size > 0) {
+        if (foregroundPreparationOwners === 0 && state.active && state.pendingHeavyEmbeddedGps.size > 0) {
             void loadDeferredGpsForTrip(state.active.trip, { showProgress: false, concurrency: 1 }).catch((err) => {
                 log.warn("active trip GPS load failed", err);
             });
@@ -1169,9 +1153,13 @@ function startBackgroundFill(): void {
 
     const pump = (): void => {
         if (generation !== fillGeneration) return; // superseded
+        if (foregroundPreparationOwners > 0) {
+            foregroundReleaseWaiters.add(pump);
+            return;
+        }
         // A foreground read can start between background ticks. Wait on the
         // actual session promise instead of polling or imposing an arbitrary
-        // timeout: slow removable storage remains cancellable through its modal
+        // timeout: slow removable storage remains cancellable through its viewer
         // and is never mislabeled unreadable merely for taking a long time.
         const liveSessions = [...new Set(sessions.values())];
         if (liveSessions.length > 0) {

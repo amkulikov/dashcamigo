@@ -1252,6 +1252,26 @@
             <div class="empty-state" id="empty-state" role="status" aria-live="polite">
                 <div class="empty-state-card" id="empty-state-card"></div>
             </div>
+            <!-- A clicked trip owns the viewer until its video and GPS data are
+                 both ready. This in-place state keeps the rest of the app usable
+                 and avoids starting a half-populated player. -->
+            <div class="trip-preparation-state" id="trip-preparation" hidden role="region"
+                 aria-labelledby="trip-preparation-title">
+                <div class="trip-preparation-card">
+                    <div class="trip-preparation-spinner" aria-hidden="true"></div>
+                    <div class="trip-preparation-title" id="trip-preparation-title"
+                         data-i18n="recordingLoad.title">Preparing this trip</div>
+                    <p class="trip-preparation-detail" id="trip-preparation-progress"
+                       role="status" aria-live="polite">0 of 0</p>
+                    <div class="trip-preparation-progress-track" id="trip-preparation-progressbar"
+                         role="progressbar" aria-labelledby="trip-preparation-title"
+                         aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+                        <div class="trip-preparation-progress-fill" id="trip-preparation-progress-fill"></div>
+                    </div>
+                    <button id="trip-preparation-cancel" class="dc-btn dc-btn--ghost" type="button"
+                            data-i18n="recordingLoad.cancel">Cancel</button>
+                </div>
+            </div>
             <!-- Overlay for the case when the selected file has a codec the
                  browser can't decode (HEVC on Firefox without HW, etc).
                  Shown via .viewer.codec-unsupported, hides .player-wrap.
@@ -2043,20 +2063,6 @@
                 </ul>
                 <div class="export-modal-actions">
                     <button id="chromium-browsers-modal-close" class="dc-btn dc-btn--primary" type="button" data-i18n="export.close">Close</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Recording progress modal. A slow trip-open uses it for mandatory
-         video metadata; event navigation also uses it for deferred GPS. -->
-    <div id="recording-load-modal" class="export-modal modal-overlay" style="z-index: var(--dc-z-ingest-modal)" hidden role="dialog" aria-modal="true" aria-labelledby="recording-load-modal-title">
-        <div class="export-modal-card modal-card">
-            <div class="export-modal-title" id="recording-load-modal-title">Loading GPS data…</div>
-            <div class="export-modal-section">
-                <p class="export-modal-summary" id="recording-load-modal-progress" role="status" aria-live="polite">0 / 0</p>
-                <div class="export-modal-actions">
-                    <button id="recording-load-modal-cancel" class="dc-btn dc-btn--ghost" type="button" data-i18n="gpsLoad.cancel">Skip</button>
                 </div>
             </div>
         </div>

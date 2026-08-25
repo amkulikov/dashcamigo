@@ -288,7 +288,7 @@ body.no-trips .topbar-iconbtn {
     /* While browsing (trips loaded, none active) the list is the full-screen
        surface, so the toggle is pointless - hide it. It reappears on pick, and
        the list collapses into it (see mobile-drawer.ts syncBrowseState). */
-    body.browsing .topbar-burger {
+    body.browsing:not(.preparing-trip) .topbar-burger {
         display: none;
     }
     .topbar {

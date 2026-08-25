@@ -166,7 +166,7 @@ async function ingestFilesInternal(
     // Stop progressive work before this drop can replace positional trip state;
     // stale sessions must never write through indices owned by the next run.
     cancelProgressiveIngest();
-    // Stop optional full-file GPS reads so a new drop gets storage priority.
+    // Stop deferred full-file GPS reads so a new drop gets storage priority.
     // Unfinished files return to the identity-keyed pending map.
     cancelDeferredGpsLoad();
     // Let the just-shown overlay paint before any O(n) main-thread pass. On a

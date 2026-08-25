@@ -9,10 +9,9 @@
    z-index stack around ingest (tokens in tokens.css): --dc-z-ingest (overlay) <
    the strip (+10). Base modals (--dc-z-modal..modal-top) are below the
    overlay - they do not open during parsing (the header is under the
-   overlay, buttons are unavailable). Exception - unsupported-modal and
-   recording-load-modal: they get an inline --dc-z-ingest-modal in
-   index.html, since they show up during/after ingest and must be ABOVE
-   the overlay.
+   overlay, buttons are unavailable). Exception - unsupported-modal gets
+   an inline --dc-z-ingest-modal in index.html, since it shows during ingest
+   and must be ABOVE the overlay.
    ========================================================================= */
 .ingest-progress-bar {
     position: fixed;
