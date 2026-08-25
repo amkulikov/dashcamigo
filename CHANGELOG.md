@@ -7,8 +7,13 @@ User-facing changes, newest first. Dates are when the change landed on
 [beta](https://beta.dashcamigo.app); production picks it up with the next
 release tag. Localized texts ship inside the app (the "What's new" panel).
 
+## 2026-08-24
+
+- **New camera support:** Sony HDR-AS30V recordings now show their GPS track and speed.
+
 ## 2026-08-23
 
+- **New:** GPS tracks can now be synced with video separately for each trip.
 - **Fixed:** Fullscreen now follows the selected theme.
 - **Fixed:** Notes files no longer overwrite changes from other tabs or browser profiles.
 - **Improved:** More license plates are now found automatically.

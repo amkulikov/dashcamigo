@@ -28,6 +28,38 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-08-24.1",
+        category: "support",
+        text: {
+            en: "Sony HDR-AS30V recordings now show their GPS track and speed.",
+            ru: "Записи Sony HDR-AS30V теперь показывают GPS-трек и скорость.",
+            de: "Sony HDR-AS30V-Aufnahmen zeigen jetzt ihren GPS-Track und die Geschwindigkeit.",
+            es: "Las grabaciones de la Sony HDR-AS30V ahora muestran su track GPS y la velocidad.",
+            fr: "Les enregistrements Sony HDR-AS30V affichent désormais leur trace GPS et leur vitesse.",
+            pl: "Nagrania z Sony HDR-AS30V pokazują teraz ślad GPS i prędkość.",
+            pt: "As gravações da Sony HDR-AS30V agora mostram o trajeto GPS e a velocidade.",
+            zh: "Sony HDR-AS30V 录像现在可以显示 GPS 轨迹和速度。",
+            ja: "Sony HDR-AS30V の録画で GPS 軌跡と速度が表示されるようになりました。",
+            ko: "Sony HDR-AS30V 녹화가 이제 GPS 트랙과 속도를 표시합니다.",
+        },
+    },
+    {
+        id: "2026-08-23.4",
+        category: "feature",
+        text: {
+            en: "GPS tracks can now be synced with video separately for each trip.",
+            ru: "GPS-треки теперь можно синхронизировать с видео отдельно для каждой поездки.",
+            de: "GPS-Tracks lassen sich jetzt für jede Fahrt einzeln mit dem Video synchronisieren.",
+            es: "Los tracks GPS ahora se pueden sincronizar con el vídeo por separado para cada trayecto.",
+            fr: "Les traces GPS peuvent désormais être synchronisées avec la vidéo séparément pour chaque trajet.",
+            pl: "Ślady GPS można teraz synchronizować z filmem osobno dla każdego przejazdu.",
+            pt: "O trajeto GPS agora pode ser sincronizado com o vídeo separadamente em cada viagem.",
+            zh: "现在可以为每个行程单独将 GPS 轨迹与视频同步。",
+            ja: "走行ごとに GPS 軌跡を動画と個別に同期できるようになりました。",
+            ko: "이제 주행마다 GPS 트랙을 영상과 개별적으로 동기화할 수 있습니다.",
+        },
+    },
+    {
         id: "2026-08-23.3",
         category: "fix",
         text: {
