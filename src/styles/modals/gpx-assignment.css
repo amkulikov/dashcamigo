@@ -1,0 +1,53 @@
+/* Ambiguous loose-GPX pairing. Shared overlay/card/button/form primitives own
+   the chrome; this file only lays out the path-to-clip rows. */
+.gpx-assignment-card {
+    width: min(680px, 100%);
+}
+
+.gpx-assignment-intro {
+    color: var(--fg-dim);
+    font-size: var(--dc-text-md);
+    line-height: var(--dc-leading-normal);
+    margin: 0 0 var(--dc-space-3);
+}
+
+.gpx-assignment-list {
+    max-height: min(52vh, 420px);
+    overflow-y: auto;
+    padding-right: var(--dc-space-1);
+}
+
+.gpx-assignment-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(180px, 1.15fr);
+    align-items: center;
+    gap: var(--dc-space-3);
+    border-bottom: 1px solid var(--border);
+    padding: var(--dc-space-3) 0;
+}
+
+.gpx-assignment-path {
+    color: var(--fg);
+    font-size: var(--dc-text-sm);
+    overflow-wrap: anywhere;
+}
+
+.gpx-assignment-arrow {
+    color: var(--fg-mute);
+}
+
+.gpx-assignment-select {
+    min-width: 0;
+    width: 100%;
+}
+
+@media (max-width: 560px) {
+    .gpx-assignment-row {
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--dc-space-2);
+    }
+
+    .gpx-assignment-arrow {
+        display: none;
+    }
+}

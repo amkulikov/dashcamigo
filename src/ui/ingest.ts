@@ -13,7 +13,13 @@ import { partitionByIndexCache } from "./ingest-cache.js";
 import { createLogger } from "../log.js";
 import { captureSentryException } from "../sentry.js";
 import { markStage } from "../perf.js";
-import { cloneRecordsAcrossChannels, firstSyncedRecord, mergeIntoGpsLog, rebindOrphanLogRecords } from "../parser.js";
+import {
+    cloneRecordsAcrossChannels,
+    firstSyncedRecord,
+    mergeIntoGpsLog,
+    rebindOrphanLogRecords,
+    recordsHaveGps,
+} from "../parser.js";
 import {
     classifyFilesViaPool as dispatchClassifyFiles,
     dispatchParseAccelSidecarsViaPool as dispatchParseAccelSidecars,
@@ -45,7 +51,6 @@ import { cancelDeferredGpsLoad } from "./deferred-gps.js";
 import { countByExtension, countByField } from "./ingest-core.js";
 import { reportParseErrors } from "./ingest-diagnostics.js";
 import { scopeIngestFiles } from "./ingest-source-key.js";
-import { looseGpxTarget, pairLooseGpxFiles } from "./loose-gpx.js";
 
 const log = createLogger("ingest");
 
@@ -284,18 +289,7 @@ async function ingestFilesInternal(
     const existingVideoNames = new Set<string>(alreadyLoaded.map((vf) => vf.file.name));
     const classified = await mark("classify", () => dispatchClassifyFiles(vfiles, existingVideoNames, signal));
 
-    // A generic GPX exported by another camera/app rarely shares the action
-    // camera's basename. Pair that late drop to the open (or only) trip, but do
-    // not guess among several new videos/trips: the user can open the intended
-    // trip and add the file again.
     const classifiedVideos = classified.filter((item) => item.role === "video");
-    const looseGpx = pairLooseGpxFiles(
-        classified,
-        looseGpxTarget(classifiedVideos, state.trips, state.active?.trip ?? null),
-    );
-    if (looseGpx.unassigned > 0) {
-        notify({ severity: "info", messageKey: "status.gpxChooseTrip" });
-    }
 
     // Extract video candidates with their role/relativePath - used from here on instead of the raw File[].
     const videos = classifiedVideos;
@@ -374,7 +368,9 @@ async function ingestFilesInternal(
     if (signal.aborted) throw new DOMException("ingest aborted", "AbortError");
     setIngestStage(t("ingestOverlay.stage.parsingSidecars"));
 
-    // GPX sidecars: dispatched through the registry. Attachment by basename was done at classify (sidecarMp4 in ClassifiedFile). Same dedup reason as logsResult.
+    // Parse classifier-owned sidecars first. Loose GPX files are still unknown
+    // here: their manual destinations are resolved only after we know which
+    // clips already received usable GPS from logs or exact-name sidecars.
     const sidecarResult = await mark("parseSidecars", () =>
         dispatchParseSidecars(classified, videoAssociation, signal),
     );
@@ -387,13 +383,6 @@ async function ingestFilesInternal(
             skipped: [],
         });
     }
-    if (sidecarResult.errors.length > 0) {
-        log.warn("sidecar parse errors", { count: sidecarResult.errors.length, errors: sidecarResult.errors });
-    }
-    reportParseErrors("sidecar", sidecarResult.errors);
-    if (looseGpx.paired > 0 && sidecarResult.records.some((record) => record.externalTrack)) {
-        notify({ severity: "info", messageKey: "status.gpxAttached" });
-    }
 
     // A shared sidecar (BlackVue `.gps`) classifies against one channel only;
     // clone its records onto the recording's other channels so every channel
@@ -401,7 +390,8 @@ async function ingestFilesInternal(
     // front+rear in one frame (see cloneRecordsAcrossChannels). Runs on the
     // merged log with the cumulative video set, so a channel dropped in a later
     // ingest still picks up its sibling's track.
-    if (state.gpsLog) {
+    const cloneSharedGps = (): void => {
+        if (!state.gpsLog) return;
         const clonedAcrossChannels = cloneRecordsAcrossChannels(state.gpsLog, knownVideoFiles);
         if (clonedAcrossChannels > 0) {
             state.gpsLog = mergeIntoGpsLog(null, {
@@ -411,6 +401,71 @@ async function ingestFilesInternal(
             });
             log.info("cloned sidecar gps across channels", { count: clonedAcrossChannels });
         }
+    };
+    cloneSharedGps();
+
+    // A generic GPX exported by another camera/app rarely shares the action
+    // camera's basename. Keep the one-file/one-destination convenience, but
+    // stop for an explicit mapping as soon as the batch or destination is
+    // ambiguous. Timing overlap is never treated as permission to merge: known
+    // logs, exact sidecars and pending embedded tracks disable that clip.
+    if (classified.some((item) => item.role === "unknown" && /\.gpx$/i.test(item.file.file.name))) {
+        const { resolveLooseGpxFiles } = await import("./loose-gpx-ingest.js");
+        const protectedGpsVideoKeys = new Set([
+            ...state.pendingHeavyEmbeddedGps.keys(),
+            ...state.inflightEmbeddedGps.keys(),
+        ]);
+        if (state.gpsLog) {
+            for (const video of knownVideoFiles) {
+                if (recordsHaveGps(recordsForVideo(state.gpsLog, video, videoAssociation))) {
+                    protectedGpsVideoKeys.add(vendorFileKey(video));
+                }
+            }
+        }
+        const resolution = await resolveLooseGpxFiles(
+            classified,
+            classifiedVideos,
+            state.trips,
+            state.active?.trip ?? null,
+            protectedGpsVideoKeys,
+            {
+                clipLabel: (name) => t("gpxAssign.clipLabel", { name }),
+                unassigned: t("gpxAssign.unassigned"),
+                alreadyHasGps: t("gpxAssign.alreadyHasGps"),
+            },
+        );
+        if (resolution.needsTrip) notify({ severity: "info", messageKey: "status.gpxChooseTrip" });
+
+        if (resolution.assignedFiles.length > 0) {
+            const manualResult = await mark("parseManualGpx", () =>
+                dispatchParseSidecars(resolution.assignedFiles, videoAssociation, signal),
+            );
+            if (manualResult.records.length > 0) {
+                state.gpsLog = mergeIntoGpsLog(state.gpsLog, {
+                    records: manualResult.records,
+                    appliedExtractors: [],
+                    skipped: [],
+                });
+            }
+            for (const [key, extractor] of manualResult.extractorByFileKey) {
+                sidecarResult.extractorByFileKey.set(key, extractor);
+            }
+            sidecarResult.manualGpxFiles += manualResult.manualGpxFiles;
+            sidecarResult.errors.push(...manualResult.errors);
+            cloneSharedGps();
+        }
+    }
+
+    if (sidecarResult.errors.length > 0) {
+        log.warn("sidecar parse errors", { count: sidecarResult.errors.length, errors: sidecarResult.errors });
+    }
+    reportParseErrors("sidecar", sidecarResult.errors);
+    if (sidecarResult.manualGpxFiles > 0) {
+        notify({
+            severity: "info",
+            messageKey: "status.gpxAttached",
+            messageParams: { n: sidecarResult.manualGpxFiles },
+        });
     }
 
     // Accel-only sidecars (BlackVue .3gf): accelerometer only, no GPS. They are

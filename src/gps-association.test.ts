@@ -201,6 +201,20 @@ describe("GPS video association", () => {
         expect(rec.videoKey).toBe(vendorFileKey(candidate));
     });
 
+    it("does not mix a late recording-scoped log into an explicitly assigned external track", () => {
+        const startUtc = 1_777_777_777;
+        const candidate = recordingCandidate("MP_ROOT/100ANV01/MAH00001.MP4", "card-a", startUtc);
+        candidate.records = [{ ...record(startUtc), externalTrack: true }];
+        const rec = recordingRecord(startUtc, "card-a");
+        const log = rebuildLog(["sectioned-nmea-log"], [rec], []);
+
+        const result = bindRecordsByRecordingStart(log, [candidate]);
+
+        expect(result.boundRecords).toBe(0);
+        expect(rec.recordingAssociation).toBeDefined();
+        expect(rec.videoKey).toBeUndefined();
+    });
+
     it("waits for a same-source candidate instead of binding to a ready clip from another card", () => {
         const startUtc = 1_777_777_777;
         const pendingSameSource = recordingCandidate("A/MAH00001.MP4", "card-a", startUtc);

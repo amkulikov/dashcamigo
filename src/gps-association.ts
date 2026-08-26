@@ -68,9 +68,13 @@ export function bindRecordsByRecordingStart(
             continue;
         }
 
+        // A loose GPX chosen by the user is an explicit source decision. A
+        // recording-scoped log that becomes resolvable only after MP4 metadata
+        // arrives must not silently join that external route later.
         let matches = candidates.filter((candidate) => {
             const createdSec = candidate.createdUtc?.getTime();
             return (
+                !candidate.records.some((record) => record.externalTrack) &&
                 createdSec !== undefined &&
                 Number.isFinite(createdSec) &&
                 Math.abs(createdSec / 1000 - hint.startUtc) <= RECORDING_START_TOLERANCE_SEC

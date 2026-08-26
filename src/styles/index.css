@@ -40,6 +40,7 @@
 @import "./components/drop-overlay.css";
 @import "./components/ingest.css";
 @import "./modals/dialog-shared.css";
+@import "./modals/gpx-assignment.css";
 @import "./components/onboarding.css";
 @import "./modals/feedback.css";
 @import "./modals/hotkeys.css";

@@ -5,6 +5,7 @@ import {
     DESKTOP,
     MOBILE,
     SAMPLE_70MAI,
+    SAMPLE_GOPRO,
     SAMPLE_NOGPS,
     expect,
     gotoApp,
@@ -95,6 +96,7 @@ test.describe("GPS synchronization", () => {
             buffer: Buffer.from(gpx),
         });
 
+        await expect(page.locator("#gpx-assignment-modal")).toBeHidden();
         const pill = page.locator("#gps-sync-pill");
         await expect(pill).toBeVisible({ timeout: 30_000 });
         await expect(page.locator("#notif-drawer-list")).toContainText("GPX track attached");
@@ -140,6 +142,138 @@ test.describe("GPS synchronization", () => {
             };
         });
         expect(shiftedStart.trackStart).toBeCloseTo(shiftedStart.videoStart + 1, 3);
+    });
+
+    test("multiple loose GPX files wait for an explicit clip assignment", async ({ page }) => {
+        await loadTrip(page, SAMPLE_NOGPS);
+        const gpx = (lat: number) => {
+            const points = Array.from({ length: 3 }, (_, index) => {
+                const time = new Date(Date.UTC(2035, 0, 1, 0, 0, index)).toISOString();
+                return `<trkpt lat="${(lat + index * 0.00001).toFixed(6)}" lon="76.900000"><time>${time}</time></trkpt>`;
+            }).join("");
+            return `<?xml version="1.0"?><gpx version="1.1"><trk><trkseg>${points}</trkseg></trk></gpx>`;
+        };
+
+        await page.locator("#file-input").setInputFiles([
+            { name: "route-one.gpx", mimeType: "application/gpx+xml", buffer: Buffer.from(gpx(43.1)) },
+            { name: "route-two.gpx", mimeType: "application/gpx+xml", buffer: Buffer.from(gpx(44.2)) },
+        ]);
+
+        const modal = page.locator("#gpx-assignment-modal");
+        await expect(modal).toBeVisible();
+        await expect(page.locator(".gpx-assignment-path")).toHaveText(["route-one.gpx", "route-two.gpx"]);
+        const selects = page.locator(".gpx-assignment-select");
+        await expect(selects).toHaveCount(2);
+        await expect(page.locator("#gpx-assignment-apply")).toBeDisabled();
+
+        await selects.nth(0).selectOption("0");
+        await expect(selects.nth(1).locator('option[value="0"]')).toHaveAttribute("disabled", "");
+        await expect(page.locator("#gpx-assignment-apply")).toBeEnabled();
+        await page.locator("#gpx-assignment-apply").click();
+
+        await expect(modal).toBeHidden();
+        await expect(page.locator("#gps-sync-pill")).toBeVisible({ timeout: 30_000 });
+        await expect(page.locator("#notif-drawer-list")).toContainText("GPX track attached");
+        const records = await page.evaluate(() => {
+            const state = window.__dashcamigo.state;
+            return state.trips[state.active!.trip]!.frames[0]!.channels.front!.records.map((record) => ({
+                lat: record.lat,
+                external: record.externalTrack,
+            }));
+        });
+        expect(records).toHaveLength(3);
+        expect(records.every((record) => record.external === true)).toBe(true);
+        expect(records.every((record) => record.lat < 44)).toBe(true);
+    });
+
+    test("skipping an ambiguous GPX batch leaves the loaded video unchanged", async ({ page }) => {
+        await loadTrip(page, SAMPLE_NOGPS);
+        const point = (name: string, lat: number) => ({
+            name,
+            mimeType: "application/gpx+xml",
+            buffer: Buffer.from(
+                `<?xml version="1.0"?><gpx version="1.1"><trk><trkseg><trkpt lat="${lat}" lon="76.9"><time>2035-01-01T00:00:00Z</time></trkpt></trkseg></trk></gpx>`,
+            ),
+        });
+        await page.locator("#file-input").setInputFiles([point("route-one.gpx", 43.1), point("route-two.gpx", 44.2)]);
+
+        const modal = page.locator("#gpx-assignment-modal");
+        await expect(modal).toBeVisible();
+        await page.locator("#gpx-assignment-skip").click();
+        await expect(modal).toBeHidden();
+        await expect(page.locator("li.trip:not(.unindexed-note)").first()).toBeVisible();
+        await expect(page.locator("#gps-sync-pill")).toBeHidden();
+        expect(
+            await page.evaluate(() => {
+                const state = window.__dashcamigo.state;
+                return state.trips[state.active!.trip]!.frames[0]!.channels.front!.records.length;
+            }),
+        ).toBe(0);
+    });
+
+    test("a loose GPX cannot be merged into a clip that already has GPS", async ({ page }) => {
+        await loadTrip(page, SAMPLE_GOPRO);
+        const gpsTrip = await page.evaluate(() =>
+            window.__dashcamigo.state.trips.findIndex((trip) =>
+                trip.frames.some((frame) =>
+                    Object.values(frame.channels).some((candidate) =>
+                        candidate?.records.some((record) => Number.isFinite(record.lat) && Number.isFinite(record.lon)),
+                    ),
+                ),
+            ),
+        );
+        expect(gpsTrip).toBeGreaterThanOrEqual(0);
+        await page.locator(`li.trip[data-trip-index="${gpsTrip}"]`).click();
+        await expect(page.locator("#gps-sync-pill")).toBeVisible();
+        const gpx = (name: string) => ({
+            name,
+            mimeType: "application/gpx+xml",
+            buffer: Buffer.from(
+                '<?xml version="1.0"?><gpx version="1.1"><trk><trkseg><trkpt lat="43.1" lon="76.9"><time>2035-01-01T00:00:00Z</time></trkpt></trkseg></trk></gpx>',
+            ),
+        });
+        await page.locator("#file-input").setInputFiles([gpx("route-one.gpx"), gpx("route-two.gpx")]);
+
+        const modal = page.locator("#gpx-assignment-modal");
+        await expect(modal).toBeVisible();
+        const targets = page.locator(".gpx-assignment-select").first().locator('option:not([value=""])');
+        await expect(targets).not.toHaveCount(0);
+        for (let index = 0; index < (await targets.count()); index++) {
+            await expect(targets.nth(index)).toHaveAttribute("disabled", "");
+            await expect(targets.nth(index)).toContainText("already has GPS");
+        }
+        await expect(page.locator("#gpx-assignment-apply")).toBeDisabled();
+        await page.locator("#gpx-assignment-skip").click();
+        await expect(modal).toBeHidden();
+    });
+
+    test("an exact-name sidecar wins before a loose GPX is offered", async ({ page }) => {
+        await loadTrip(page, SAMPLE_NOGPS);
+        const gpx = (name: string, lat: number) => ({
+            name,
+            mimeType: "application/gpx+xml",
+            buffer: Buffer.from(
+                `<?xml version="1.0"?><gpx version="1.1"><trk><trkseg><trkpt lat="${lat}" lon="76.9"><time>2035-01-01T00:00:00Z</time></trkpt></trkseg></trk></gpx>`,
+            ),
+        });
+        await page.locator("#file-input").setInputFiles([gpx("clip-no-gps.gpx", 43.1), gpx("another-route.gpx", 44.2)]);
+
+        const modal = page.locator("#gpx-assignment-modal");
+        await expect(modal).toBeVisible();
+        await expect(page.locator(".gpx-assignment-path")).toHaveText("another-route.gpx");
+        const target = page.locator('.gpx-assignment-select option:not([value=""])');
+        await expect(target).toHaveCount(1);
+        await expect(target).toHaveAttribute("disabled", "");
+        await expect(target).toContainText("already has GPS");
+        await expect(page.locator("#gpx-assignment-apply")).toBeDisabled();
+        await page.locator("#gpx-assignment-skip").click();
+
+        await expect(page.locator("#gps-sync-pill")).toBeVisible();
+        const latitudes = await page.evaluate(() => {
+            const state = window.__dashcamigo.state;
+            return state.trips[state.active!.trip]!.frames[0]!.channels.front!.records.map((record) => record.lat);
+        });
+        expect(latitudes).toEqual([43.1]);
     });
 
     test("the compact phone launcher exposes the same live per-trip control", async ({ page }) => {

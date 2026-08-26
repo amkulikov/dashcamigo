@@ -227,6 +227,13 @@ export type I18nKey =
     | "status.gpxChooseTrip"
     | "status.gpxAttached"
     | "status.gpsDefaultSaved"
+    | "gpxAssign.title"
+    | "gpxAssign.body"
+    | "gpxAssign.clipLabel"
+    | "gpxAssign.unassigned"
+    | "gpxAssign.alreadyHasGps"
+    | "gpxAssign.skip"
+    | "gpxAssign.apply"
     // Shown when the whole picked/dropped selection was hidden or system files
     // (a card copied into a ".backup"/".stversions" folder, a chkdsk FOUND.000
     // recovery folder) - so the junk filter emptied it. Distinct from
