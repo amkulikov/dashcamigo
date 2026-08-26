@@ -56,13 +56,13 @@ function ensureBinary(name) {
     }
 }
 
-// Returns { codec, width, height, fps } of the first video track.
+// Returns video properties plus the non-sensitive container creation time.
 // fps as a number (rounded to an integer if ffprobe returns a fraction like 30000/1001).
 function probeVideo(input) {
     const r = spawnSync("ffprobe", [
         "-v", "error",
         "-select_streams", "v:0",
-        "-show_entries", "stream=codec_name,width,height,r_frame_rate",
+        "-show_entries", "stream=codec_name,width,height,r_frame_rate:format_tags=creation_time",
         "-of", "json",
         input,
     ], { encoding: "utf8" });
@@ -78,11 +78,14 @@ function probeVideo(input) {
     }
     const [num, den] = (stream.r_frame_rate || "30/1").split("/").map(Number);
     const fps = den ? num / den : 30;
+    const creationTime =
+        typeof data.format?.tags?.creation_time === "string" ? data.format.tags.creation_time : null;
     return {
         codec: stream.codec_name,
         width: stream.width,
         height: stream.height,
         fps: Math.round(fps),
+        creationTime,
     };
 }
 
@@ -120,6 +123,7 @@ function buildFfmpegArgs(probe, output, crf) {
         "-c:a", "aac",
         "-b:a", "64k",
         "-t", String(FIXTURE_DURATION_SEC),
+        ...(probe.creationTime ? ["-metadata", `creation_time=${probe.creationTime}`] : []),
         output,
     ];
 }

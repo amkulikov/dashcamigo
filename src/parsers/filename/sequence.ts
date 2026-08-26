@@ -14,7 +14,6 @@ import {
     RX_NAVITEL,
     RX_NEOLINE,
     RX_NEXTBASE,
-    RX_NOVATEK_SINGLE,
     RX_NOVATEK_TS,
     RX_NOVATEK_VANTRUE,
     RX_NOVATEK_VIOFO,
@@ -23,6 +22,7 @@ import {
     RX_TESLA_EVENT_FILENAME,
     RX_TESLA_PATH,
     RX_TESLA_RECENT,
+    matchNovatekSingleFilename,
 } from "./_patterns.js";
 import type { FilenameSequenceTechnique } from "./types.js";
 
@@ -123,7 +123,7 @@ const novatekSequence: FilenameSequenceTechnique = {
             // firmwares drop it) - a missing counter must yield null, not NaN.
             return viofo[4] !== undefined ? Number(viofo[4]) : null;
         }
-        const single = file.file.name.match(RX_NOVATEK_SINGLE);
+        const single = matchNovatekSingleFilename(file.file.name);
         if (single) return Number(single[4]);
         const vantrue = file.file.name.match(RX_NOVATEK_VANTRUE);
         if (vantrue) return Number(vantrue[3]);

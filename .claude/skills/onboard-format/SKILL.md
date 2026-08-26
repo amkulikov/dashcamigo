@@ -129,6 +129,11 @@ Add an entry to `src/parsers/gps-source-hints.ts`:
 - `"basename-sidecar"` - GPS in a file sharing the same basename (GPX/.map/.gps/.3gf).
 - `"none"` - the format is known not to carry GPS in our corpus (e.g. a model that theoretically has embedded GPS but no extractor is implemented yet).
 
+`"none"` is a claim about every model/firmware variant matched by the rule, not
+about one clip. A no-fix or status-only sample proves only that the sample has no
+records. Check for optional-GPS variants first; if any may share the filename
+shape, keep the probe enabled with `"embedded"` or leave the format `"unknown"`.
+
 The hint saves 16 MB of header IO for files with no embedded GPS. If not specified - default "unknown" - we'll try embedded (safe but slower).
 
 ### Step 9. Sidecar handler (optional, for basename-paired formats)

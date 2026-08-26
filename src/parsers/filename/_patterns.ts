@@ -298,6 +298,19 @@ export const RX_NOVATEK_VIOFO = /^(\d{4})_(\d{4})_(\d{6})_(\d+)?([PE]?)([FRTI])\
 export const RX_NOVATEK_PATH_RO = /(?:^|\/)ro\//i;
 // Single-channel Novatek OEM (2E Drive, SilverStone F1, ...).
 export const RX_NOVATEK_SINGLE = /^(\d{4})_(\d{4})_(\d{6})_(\d+)\.(mp4|mov)$/i;
+// Novatek NVT-IM single-camera MOV variant: same split datetime + counter
+// grammar, with a fixed trailing A marker. The marker's meaning is unknown;
+// channel classification comes from the single-camera format, not the letter.
+// A real JOOYFACT A1 sample carries only power-state `freeGPS` blocks, while
+// the related A1G exists with GPS. Keep the spelling distinct for filename
+// matching, but include it in the Novatek-family GPS probe below so a GPS
+// hardware variant can still surface records.
+export const RX_NOVATEK_MOV_A = /^(\d{4})_(\d{4})_(\d{6})_(\d{3})A\.mov$/i;
+
+/** Matches either single-camera Novatek filename spelling. */
+export function matchNovatekSingleFilename(name: string): RegExpMatchArray | null {
+    return name.match(RX_NOVATEK_SINGLE) ?? name.match(RX_NOVATEK_MOV_A);
+}
 // Vantrue: YYYYMMDD_HHMMSS_NNNN_<N|E|P>_<A|B|C>.mp4.
 export const RX_NOVATEK_VANTRUE = /^(\d{8})_(\d{6})_(\d+)_([NEP])_([ABC])\.mp4$/i;
 // Novatek MPEG-TS OEMs: 14-digit timestamp _ 6-digit counter + .ts - the
@@ -311,13 +324,19 @@ export const RX_NOVATEK_TS = /^(\d{14})_(\d{6})\.ts$/i;
 
 /**
  * Whether a filename belongs to the Novatek family (VIOFO multi-channel,
- * single-channel OEM, Vantrue) - the chipsets that ship freeGPS blocks.
+ * single-channel OEM including the MOV-A spelling, Vantrue) - the chipsets
+ * that ship freeGPS blocks or share that optional-GPS firmware family.
  * Shared by the `novatek` gps-source hint and the dispatcher's marker-probe
  * escalation (registry.ts tryParseOne) so the two gates can never disagree
  * on what counts as a Novatek-family name.
  */
 export function isNovatekFamilyFilename(name: string): boolean {
-    return RX_NOVATEK_VIOFO.test(name) || RX_NOVATEK_SINGLE.test(name) || RX_NOVATEK_VANTRUE.test(name);
+    return (
+        RX_NOVATEK_VIOFO.test(name) ||
+        RX_NOVATEK_SINGLE.test(name) ||
+        RX_NOVATEK_MOV_A.test(name) ||
+        RX_NOVATEK_VANTRUE.test(name)
+    );
 }
 
 /**

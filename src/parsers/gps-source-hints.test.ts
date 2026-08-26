@@ -107,6 +107,12 @@ describe("classifyGpsSource", () => {
         expect(classifyGpsSource(vf("2022_0224_132829_PR.MP4"))).toBe("embedded");
     });
 
+    it("Novatek MOV-A keeps the probe enabled for GPS hardware variants", () => {
+        const file = vf("2026_0809_222334_654A.MOV", "MOVIE/2026_0809_222334_654A.MOV");
+        expect(classifyGpsSource(file)).toBe("embedded");
+        expect(shouldTryEmbeddedGps(file, false)).toBe(true);
+    });
+
     it("none formats (no embedded GPS / not yet implemented)", () => {
         expect(classifyGpsSource(vf("20260511134011_073648A.TS"))).toBe("none"); // FitCamX
         expect(classifyGpsSource(vf("front.mp4", "TeslaCam/SentryClips/2026-04-29_18-30-15/front.mp4"))).toBe("none");

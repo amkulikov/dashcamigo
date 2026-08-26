@@ -43,7 +43,6 @@ import {
     RX_NAVITEL,
     RX_NEOLINE,
     RX_NEXTBASE,
-    RX_NOVATEK_SINGLE,
     RX_NOVATEK_VANTRUE,
     RX_NOVATEK_VIOFO,
     RX_REDTIGER,
@@ -57,6 +56,7 @@ import {
     RX_WOLFBOX_PATH_FRONT,
     RX_WOLFBOX_PATH_INTERIOR,
     RX_WOLFBOX_PATH_REAR,
+    matchNovatekSingleFilename,
 } from "./_patterns.js";
 import type { ChannelMatch, FilenameChannelTechnique } from "./types.js";
 
@@ -447,7 +447,7 @@ const novatekSingleChannel: FilenameChannelTechnique = {
     id: "novatek-single-channel",
     extract(file: VendorFile): ChannelMatch | null {
         // Single-channel model - only one camera, nothing to confuse.
-        return RX_NOVATEK_SINGLE.test(file.file.name) ? sure("front") : null;
+        return matchNovatekSingleFilename(file.file.name) ? sure("front") : null;
     },
 };
 

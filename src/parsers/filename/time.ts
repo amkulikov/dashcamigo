@@ -30,7 +30,6 @@ import {
     RX_NAVITEL,
     RX_NEOLINE,
     RX_NEXTBASE,
-    RX_NOVATEK_SINGLE,
     RX_NOVATEK_TS,
     RX_NOVATEK_VANTRUE,
     RX_NOVATEK_VIOFO,
@@ -42,6 +41,7 @@ import {
     RX_TESLA_RECENT,
     RX_VUEROID,
     RX_WOLFBOX,
+    matchNovatekSingleFilename,
 } from "./_patterns.js";
 import type { FilenameTimeTechnique } from "./types.js";
 
@@ -79,7 +79,7 @@ const novatekViofoTime: FilenameTimeTechnique = {
 const novatekSingleTime: FilenameTimeTechnique = {
     id: "novatek-single-time",
     extract(file: VendorFile): Date | null {
-        const m = file.file.name.match(RX_NOVATEK_SINGLE);
+        const m = matchNovatekSingleFilename(file.file.name);
         if (!m) return null;
         return ymdHmsFromSplit(`${m[1]}${m[2]}`, m[3]!);
     },

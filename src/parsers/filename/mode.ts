@@ -32,7 +32,6 @@ import {
     RX_MIVUE,
     RX_MIVUE_PATH_MODE,
     RX_NOVATEK_PATH_RO,
-    RX_NOVATEK_SINGLE,
     RX_NOVATEK_VANTRUE,
     RX_NOVATEK_VIOFO,
     RX_REDTIGER,
@@ -46,6 +45,7 @@ import {
     RX_WOLFBOX,
     RX_WOLFBOX_PATH_EVENT,
     RX_WOLFBOX_PATH_NORMAL,
+    matchNovatekSingleFilename,
 } from "./_patterns.js";
 import type { FilenameModeTechnique } from "./types.js";
 
@@ -282,7 +282,7 @@ const novatekMode: FilenameModeTechnique = {
                     return "normal";
             }
         }
-        if (RX_NOVATEK_SINGLE.test(file.file.name)) {
+        if (matchNovatekSingleFilename(file.file.name)) {
             return RX_NOVATEK_PATH_RO.test(file.relativePath) ? "event" : "normal";
         }
         const vantrue = file.file.name.match(RX_NOVATEK_VANTRUE);

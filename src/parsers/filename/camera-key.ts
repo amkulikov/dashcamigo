@@ -44,7 +44,6 @@ import {
     RX_NAVITEL,
     RX_NEOLINE,
     RX_NEXTBASE,
-    RX_NOVATEK_SINGLE,
     RX_NOVATEK_TS,
     RX_NOVATEK_VANTRUE,
     RX_NOVATEK_VIOFO,
@@ -57,6 +56,7 @@ import {
     RX_THINKWARE,
     RX_VUEROID,
     RX_WOLFBOX,
+    matchNovatekSingleFilename,
 } from "./_patterns.js";
 import type { FilenameCameraKeyTechnique } from "./types.js";
 
@@ -479,7 +479,7 @@ const novatekVantrueCameraKey: FilenameCameraKeyTechnique = {
 const novatekSingleCameraKey: FilenameCameraKeyTechnique = {
     id: "novatek-single-camera-key",
     extract(file: VendorFile): string | null {
-        if (!RX_NOVATEK_SINGLE.test(file.file.name)) return null;
+        if (!matchNovatekSingleFilename(file.file.name)) return null;
         // Single-channel: no channel marker to strip. "ro" is the locked-clip
         // folder (see novatekViofoCameraKey) - strip it so locked and normal
         // clips of one camera share a fingerprint.

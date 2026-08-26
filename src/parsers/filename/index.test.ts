@@ -18,6 +18,7 @@ import {
     RX_MOV_SEQ_FRI,
     RX_NAVITEL,
     RX_NEOLINE,
+    RX_NOVATEK_MOV_A,
     RX_REC_SINGLE,
     RX_REDTIGER,
     RX_VUEROID,
@@ -293,6 +294,47 @@ describe("viofo RO locked folder", () => {
         const r = matchFilenameMode(vf("20230412_111213_0042_N_A.mp4", "DCIM/Movie/RO/20230412_111213_0042_N_A.mp4"));
         expect(r.matchedId).toBe("novatek-mode");
         expect(r.value).toBe("normal");
+    });
+});
+
+// Novatek NVT-IM single-camera MOV with a fixed trailing A marker. The real
+// JOOYFACT A1 card stores loop recordings under MOVIE/; the model has one lens.
+describe("novatek MOV-A techniques", () => {
+    const name = "2026_0809_222334_654A.MOV";
+    const path = `MOVIE/${name}`;
+
+    it("reuses the single-camera time, channel, mode, and sequence capabilities", () => {
+        expect(RX_NOVATEK_MOV_A.test(name)).toBe(true);
+
+        const time = matchFilenameTime(vf(name, path));
+        expect(time.matchedId).toBe("novatek-single-time");
+        expect(time.value?.toISOString()).toBe("2026-08-09T22:23:34.000Z");
+
+        const channel = matchFilenameChannel(vf(name, path));
+        expect(channel.matchedId).toBe("novatek-single-channel");
+        expect(channel.value).toEqual({ channel: "front", confident: true });
+
+        const mode = matchFilenameMode(vf(name, path));
+        expect(mode.matchedId).toBe("novatek-mode");
+        expect(mode.value).toBe("normal");
+
+        const sequence = matchFilenameSequence(vf(name, path));
+        expect(sequence.matchedId).toBe("novatek-sequence");
+        expect(sequence.value).toBe(654);
+    });
+
+    it("RO protected clips stay with normal clips under one camera key", () => {
+        expect(matchFilenameMode(vf(name, `MOVIE/RO/${name}`)).value).toBe("event");
+        expect(cameraFingerprint(vf(name, path))).toBe(
+            cameraFingerprint(vf("2026_0809_222437_655A.MOV", "MOVIE/RO/2026_0809_222437_655A.MOV")),
+        );
+    });
+
+    it("does not infer semantics for other suffixes or extensions", () => {
+        expect(RX_NOVATEK_MOV_A.test("2026_0809_222334_654B.MOV")).toBe(false);
+        expect(RX_NOVATEK_MOV_A.test("2026_0809_222334_654A.MP4")).toBe(false);
+        expect(matchFilenameChannel(vf("2026_0809_222334_654B.MOV")).matchedId).toBeNull();
+        expect(matchFilenameSequence(vf("2026_0809_222334_654B.MOV")).matchedId).toBeNull();
     });
 });
 
