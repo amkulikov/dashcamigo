@@ -28,6 +28,54 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-08-27.2",
+        category: "fix",
+        text: {
+            en: "HEVC recordings no longer show as unsupported when the browser can play them.",
+            ru: "Записи HEVC больше не помечаются как неподдерживаемые, если браузер может их воспроизвести.",
+            de: "HEVC-Aufnahmen werden nicht mehr als nicht unterstützt angezeigt, wenn der Browser sie abspielen kann.",
+            es: "Las grabaciones HEVC ya no aparecen como no compatibles cuando el navegador puede reproducirlas.",
+            fr: "Les enregistrements HEVC ne sont plus indiqués comme incompatibles lorsque le navigateur peut les lire.",
+            pl: "Nagrania HEVC nie są już oznaczane jako nieobsługiwane, jeśli przeglądarka może je odtworzyć.",
+            pt: "As gravações HEVC não aparecem mais como incompatíveis quando o navegador consegue reproduzi-las.",
+            zh: "浏览器能够播放的 HEVC 录像不再显示为不受支持。",
+            ja: "ブラウザで再生できる HEVC 録画が、非対応と表示されなくなりました。",
+            ko: "브라우저에서 재생할 수 있는 HEVC 녹화가 더 이상 지원되지 않는 것으로 표시되지 않습니다.",
+        },
+    },
+    {
+        id: "2026-08-27.1",
+        category: "support",
+        text: {
+            en: "Recordings from Botslab G300H, JOOYFACT A1, MiVue 955WD Pro, and similar models are now supported.",
+            ru: "Записи Botslab G300H, JOOYFACT A1, MiVue 955WD Pro и схожих моделей теперь поддерживаются.",
+            de: "Aufnahmen von Botslab G300H, JOOYFACT A1, MiVue 955WD Pro und ähnlichen Modellen werden jetzt unterstützt.",
+            es: "Ahora se admiten grabaciones de Botslab G300H, JOOYFACT A1, MiVue 955WD Pro y modelos similares.",
+            fr: "Les enregistrements des Botslab G300H, JOOYFACT A1, MiVue 955WD Pro et modèles similaires sont désormais pris en charge.",
+            pl: "Nagrania z Botslab G300H, JOOYFACT A1, MiVue 955WD Pro i podobnych modeli są teraz obsługiwane.",
+            pt: "Agora há suporte para gravações da Botslab G300H, JOOYFACT A1, MiVue 955WD Pro e modelos semelhantes.",
+            zh: "现在支持 Botslab G300H、JOOYFACT A1、MiVue 955WD Pro 及类似型号的录像。",
+            ja: "Botslab G300H、JOOYFACT A1、MiVue 955WD Pro、および同様のモデルの録画に対応しました。",
+            ko: "이제 Botslab G300H, JOOYFACT A1, MiVue 955WD Pro 및 유사 모델의 녹화를 지원합니다.",
+        },
+    },
+    {
+        id: "2026-08-26.1",
+        category: "feature",
+        text: {
+            en: "Multiple GPX tracks can now be matched to individual clips.",
+            ru: "Несколько GPX-треков теперь можно сопоставить с отдельными фрагментами.",
+            de: "Mehrere GPX-Tracks lassen sich jetzt einzelnen Clips zuordnen.",
+            es: "Ahora se pueden asociar varios tracks GPX a clips individuales.",
+            fr: "Plusieurs traces GPX peuvent désormais être associées à des clips individuels.",
+            pl: "Wiele śladów GPX można teraz przypisać do poszczególnych klipów.",
+            pt: "Vários trajetos GPX agora podem ser associados a clipes individuais.",
+            zh: "现在可以将多个 GPX 轨迹分别匹配到各个片段。",
+            ja: "複数の GPX 軌跡を個別のクリップに割り当てられるようになりました。",
+            ko: "이제 여러 GPX 트랙을 개별 클립에 연결할 수 있습니다.",
+        },
+    },
+    {
         id: "2026-08-24.1",
         category: "support",
         text: {

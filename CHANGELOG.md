@@ -7,6 +7,15 @@ User-facing changes, newest first. Dates are when the change landed on
 [beta](https://beta.dashcamigo.app); production picks it up with the next
 release tag. Localized texts ship inside the app (the "What's new" panel).
 
+## 2026-08-27
+
+- **Fixed:** HEVC recordings no longer show as unsupported when the browser can play them.
+- **New camera support:** Recordings from Botslab G300H, JOOYFACT A1, MiVue 955WD Pro, and similar models are now supported.
+
+## 2026-08-26
+
+- **New:** Multiple GPX tracks can now be matched to individual clips.
+
 ## 2026-08-24
 
 - **New camera support:** Sony HDR-AS30V recordings now show their GPS track and speed.
