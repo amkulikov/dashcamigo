@@ -89,9 +89,12 @@ task seems to require crossing one, stop and ask - never work around it silently
   model, a worker client); everything else is functions over interfaces.
 - Relative imports end in `.js`. The bundler resolves without it; the codebase
   never omits it.
-- Doc comments are prose stating the contract, not `@param`/`@returns` tag
-  lists. UPPER_SNAKE_CASE only for literal constants; booleans read as
-  `is`/`has`/`should`/`can`.
+- Add a comment only when a constraint or rationale is not clear from names,
+  types, and control flow. Comments describe the current contract, invariant,
+  or reason - never change history or a list of features that accumulated there;
+  that history belongs in commit messages. Doc comments are prose, not
+  `@param`/`@returns` tag lists. UPPER_SNAKE_CASE only for literal constants;
+  booleans read as `is`/`has`/`should`/`can`.
 
 ### Commits and git history
 
@@ -121,6 +124,17 @@ task seems to require crossing one, stop and ask - never work around it silently
 - **A new npm dependency (or a swap) is an architectural choice** - discuss it
   separately, do not add it along the way. Bar: popular, actively maintained,
   MIT/Apache, sane bundle cost, no paid service pulled in.
+
+### Bundle boundaries
+
+- Treat lazy loading as an architectural boundary, not the automatic response
+  to a bundle-budget failure. Split a module when the graph is materially heavy
+  or the capability is genuinely optional and deferred; keep small cohesive
+  runtime paths together even when they are uncommon.
+- When an intentional small entry-graph change crosses a measured budget, update
+  the owning limit, retain useful headroom, and explain the decision in the
+  commit message. Do not manufacture a dynamic-import boundary solely to
+  preserve the previous number.
 
 ### Logging (`src/log.ts`)
 
