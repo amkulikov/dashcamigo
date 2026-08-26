@@ -75,7 +75,9 @@ createWorkerServer(self, {
                 if (!extractor) throw new Error(`no log extractor: ${req.extractorId}`);
                 return await parseGate.run(async () => {
                     try {
-                        const parsed = await extractor.parse(req.file, undefined, ctx.signal);
+                        const parsed = await extractor.parse(req.file, undefined, ctx.signal, {
+                            knownVideoNames: req.knownVideoNames,
+                        });
                         return {
                             records: parsed.records,
                             skipped: parsed.skipped,

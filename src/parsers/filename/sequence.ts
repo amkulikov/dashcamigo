@@ -9,6 +9,7 @@ import {
     RX_DDPAI_EVENT,
     RX_DDPAI_NORMAL,
     RX_DDPAI_TIMELAPSE,
+    RX_FITCAMX_MP4,
     RX_MAH_SEQUENCE,
     RX_MOV_SEQ_FRI,
     RX_NAVITEL,
@@ -73,6 +74,14 @@ const ddpaiSequence: FilenameSequenceTechnique = {
         const ev = file.file.name.match(RX_DDPAI_EVENT);
         if (ev) return Number(ev[2]);
         return null;
+    },
+};
+
+const fitcamxSequence: FilenameSequenceTechnique = {
+    id: "fitcamx-sequence",
+    extract(file: VendorFile): number | null {
+        const match = file.file.name.match(RX_FITCAMX_MP4);
+        return match ? Number(match[2]) : null;
     },
 };
 
@@ -180,6 +189,7 @@ export const FILENAME_SEQUENCE: readonly FilenameSequenceTechnique[] = [
     carcamSequence,
     recSingleSequence,
     ddpaiSequence,
+    fitcamxSequence,
     sectionedNmeaSequence,
     movSeqFriSequence,
     navitelSequence,

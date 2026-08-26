@@ -21,6 +21,12 @@
 import type { Mp4Index } from "../internal/mp4-index.js";
 import type { ParsedRecords, VendorFile } from "../types.js";
 
+export interface PrimitiveParseContext {
+    // Whole-card logs can bind one timestamp stream across many clips only
+    // after classification has discovered the video names in the same drop.
+    knownVideoNames?: readonly string[];
+}
+
 export interface Primitive {
     // Stable id, shown in diagnostics. Latin + dashes:
     // "csv-70mai", "gpmf", "freegps".
@@ -48,7 +54,12 @@ export interface Primitive {
     // gracefully to the previous behavior (main-side promise rejects on
     // abort, worker keeps reading until done). Adding the check is preferred
     // for any extractor that takes >10ms on a typical file.
-    parse(file: VendorFile, index?: Mp4Index, signal?: AbortSignal): Promise<ParsedRecords>;
+    parse(
+        file: VendorFile,
+        index?: Mp4Index,
+        signal?: AbortSignal,
+        context?: PrimitiveParseContext,
+    ): Promise<ParsedRecords>;
 
     // Optional: when the GPS stream is byte-identical across several files of
     // one "shot" (Juscar writes the same private-PES into both front and rear

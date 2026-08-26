@@ -143,6 +143,9 @@ export const RX_FITCAMX_PATH_REAR = /(?:^|\/)(movie_e|emr_e)\//i;
 export const RX_FITCAMX_PATH_FRONT = /(?:^|\/)(movie|emr)\//i;
 export const RX_FITCAMX_PATH_EVENT = /(?:^|\/)(emr|emr_e)\//i;
 export const RX_FITCAMX_PATH_NORMAL = /(?:^|\/)(movie|movie_e)\//i;
+// 360CARDVR firmware uses the same MP4 stamp/counter/suffix language, but
+// keeps normal loops in REC/ and one whole-session JSONL GPS log in GPS/.
+export const RX_360_CARDVR_REC_PATH = /(?:^|\/)360CARDVR\/REC\//i;
 
 // Ford built-in dashcam (records to a USB stick, footage lands in a
 // FordFootage/ folder): YYYY-MM-DD_HH_MM_SS_<channel>.ts. Per a real sample:

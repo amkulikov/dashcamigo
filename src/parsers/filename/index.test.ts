@@ -1268,6 +1268,14 @@ describe("fitcamx techniques", () => {
         ).toBe(cameraFingerprint(vf("20260807191037_000922AAE.MP4", frontPath)));
     });
 
+    it("360CARDVR REC clips expose normal mode and the camera counter", () => {
+        const file = vf("20260824205434_000001AAN.MP4", "G300H/360CARDVR/REC/20260824205434_000001AAN.MP4");
+        expect(matchFilenameMode(file)).toEqual({ value: "normal", matchedId: "fitcamx-mode" });
+        expect(matchFilenameSequence(file)).toEqual({ value: 1, matchedId: "fitcamx-sequence" });
+        expect(matchFilenameTime(file).matchedId).toBe("generic-datetime");
+        expect(matchFilenameChannel(file).matchedId).toBe("fitcamx-channel");
+    });
+
     it("negative: RX_FITCAMX_MP4 pins the suffix language", () => {
         expect(RX_FITCAMX_MP4.test("20260807191037_000922AAE.ts")).toBe(false); // .mp4 only
         expect(RX_FITCAMX_MP4.test("20260807191037_000922ACE.MP4")).toBe(false); // channel letter is A|B

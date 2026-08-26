@@ -49,9 +49,10 @@ const EAGER_VENDOR_BUDGET_BYTES = 120 * 1024;
 // smallest guarded lib (chart.js ~165KB) leaking back overshoots this budget,
 // while the headroom above the current entry+preload sum absorbs normal app
 // growth before a deliberate bump is needed. GPS synchronization adds a small
-// always-available control and dialog to the player/settings shell; keep 660KB
-// as the deliberate baseline while remaining far below a chart.js regression.
-const EAGER_TOTAL_JS_BUDGET_BYTES = 660 * 1024;
+// always-available control and dialog to the player/settings shell. The
+// Botslab/360GPSINFO parser adds a small built-in format signature, so 661KB is
+// the deliberate baseline while remaining far below a chart.js regression.
+const EAGER_TOTAL_JS_BUDGET_BYTES = 661 * 1024;
 
 function fail(msg) {
     console.error(`\n[check-lazy-chunks] FAIL: ${msg}\n`);

@@ -98,6 +98,13 @@ describe("classifyGpsSource", () => {
         expect(classifyGpsSource(vf("MAH00384.MP4"))).toBe("unknown");
     });
 
+    it("360CARDVR MP4 uses the whole-session JSONL log only inside its card layout", () => {
+        const file = vf("20260824205434_000001AAN.MP4", "G300H/360CARDVR/REC/20260824205434_000001AAN.MP4");
+        expect(classifyGpsSource(file)).toBe("log-sidecar");
+        expect(shouldTryEmbeddedGps(file, false)).toBe(false);
+        expect(classifyGpsSource(vf("20260824205434_000001AAN.MP4"))).toBe("unknown");
+    });
+
     it("viofo names with no sequence counter keep the novatek embedded hint", () => {
         // T130 parking clips and some OEM firmwares drop the counter
         // (`..._F.mp4` / `..._PR.mp4`); freeGPS is real-sample-validated in

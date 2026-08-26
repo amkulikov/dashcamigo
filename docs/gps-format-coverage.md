@@ -93,6 +93,7 @@ carried as explicit caveats in the tables - never silently picked and forgotten.
 | Escort `.map` sidecar | Escort M2 | |
 | NMEA `.nmea` sidecar | samplefiles MOV_0581 | |
 | Recording-scoped `@Sonygps` NMEA log | Sony HDR-AS30V | One `.LOG` can contain a timestamped section per clip; the section start matches the MP4 `creation_time`, while RMC fixes provide UTC, coordinates, and speed in knots. A GPS cold start can delay the first fix by almost two minutes, so association uses the section header rather than the first fix or file order. |
+| `360GPSINFO` whole-session JSONL log | Botslab G300H 2K (G300HPro firmware) | One preallocated 2-MiB `GPS.TXT` spans the `360CARDVR/REC` loop clips. Only the first row has a camera-local clock; later rows advance every 5 s. `a`/`o` are decimal-degree coordinates, `s` is knots, `d` is course, and `99`/`999` is the no-fix sentinel. Rows bind to video-name clock windows and emit `timeUnsynced` + `relStartSeconds`. Layout: `docs/format-360gps-jsonl.md` |
 
 Some local samples are GPS-less ffmpeg re-encodes (identifiable by the `Lavf` /
 `©too` signature) and correctly yield nothing: the E-Ace re-encode

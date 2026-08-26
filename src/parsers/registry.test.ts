@@ -73,6 +73,17 @@ describe("classifyOneNonVideo", () => {
         expect(cf.sidecarId).toBeNull();
     });
 
+    it("returns role=gps-log for a 360GPSINFO JSONL stream", async () => {
+        const file = makeVendorFile(
+            "20260824205434_000001GPS.TXT",
+            '{"a":22,"o":114,"s":5.9,"d":331,"t":"2026:08:24-20:55:25"}\n',
+        );
+        const cf = await classifyOneNonVideo(file, new Set(), [fakeSidecar], [fakeAccelSidecar]);
+        expect(cf.role).toBe("gps-log");
+        expect(cf.logExtractorId).toBe("360gps-jsonl");
+        expect(cf.sidecarId).toBeNull();
+    });
+
     it("returns role=sidecar when a sidecar handler matches a known video", async () => {
         const file = makeVendorFile("trip01.fakegps", "ignored content");
         const known = new Set(["trip01.mp4"]);

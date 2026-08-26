@@ -39,6 +39,7 @@ import { wolfboxGpmdPrimitive } from "./wolfbox-gpmd.js";
 
 import { csv70maiPrimitive } from "./csv-70mai.js";
 import { sectionedNmeaLogPrimitive } from "./sectioned-nmea-log.js";
+import { threeSixtyGpsJsonlPrimitive } from "./360gps-jsonl.js";
 
 // GPS primitives that extract from a video container. The dispatcher walks
 // marker() in order; the first one yielding records wins.
@@ -160,6 +161,10 @@ export const VIDEO_EMBEDDED_PRIMITIVES: readonly Primitive[] = [
 // Log-sidecar primitives: the format carries either a video filename or an
 // exact recording start that can be resolved after indexing. Sidecars paired
 // by basename (GPX, .map, .3gf) live in src/parsers/sidecars/ instead.
-export const LOG_SIDECAR_PRIMITIVES: readonly Primitive[] = [csv70maiPrimitive, sectionedNmeaLogPrimitive];
+export const LOG_SIDECAR_PRIMITIVES: readonly Primitive[] = [
+    csv70maiPrimitive,
+    sectionedNmeaLogPrimitive,
+    threeSixtyGpsJsonlPrimitive,
+];
 
 export type { Primitive } from "./types.js";

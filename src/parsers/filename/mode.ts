@@ -4,6 +4,7 @@
 
 import type { RecordingMode, VendorFile } from "../types.js";
 import {
+    RX_360_CARDVR_REC_PATH,
     RX_70MAI,
     RX_70MAI_PATH_MODE,
     RX_70MAI_PREFIX_MODE,
@@ -169,6 +170,7 @@ const fitcamxMode: FilenameModeTechnique = {
         // files that happen to sit in same-named folders (see fitcamx-channel).
         if (!RX_FITCAMX.test(file.file.name) && !RX_FITCAMX_MP4.test(file.file.name)) return null;
         const path = file.relativePath;
+        if (RX_360_CARDVR_REC_PATH.test(path)) return "normal";
         if (RX_FITCAMX_PATH_EVENT.test(path)) return "event";
         if (RX_FITCAMX_PATH_NORMAL.test(path)) return "normal";
         return null;

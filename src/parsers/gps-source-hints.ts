@@ -15,6 +15,7 @@
 
 import type { VendorFile } from "./types.js";
 import {
+    RX_360_CARDVR_REC_PATH,
     RX_70MAI,
     RX_BEFERICH,
     RX_BLACKVUE,
@@ -25,6 +26,7 @@ import {
     RX_E_ACE,
     RX_ESCORT,
     RX_FITCAMX,
+    RX_FITCAMX_MP4,
     RX_FORD,
     RX_FORD_PATH,
     RX_HPIM,
@@ -159,6 +161,14 @@ const GPS_SOURCE_HINTS: readonly GpsSourceHint[] = [
         id: "escort",
         matches: (f) => RX_ESCORT.test(f.file.name),
         source: "basename-sidecar",
+    },
+    // 360CARDVR: one preallocated 360GPSINFO JSONL log spans the loop-recording
+    // MP4 files under REC/. The path gate keeps the shared MP4 name language
+    // from suppressing an embedded probe for unrelated cameras.
+    {
+        id: "360gps-jsonl",
+        matches: (f) => RX_FITCAMX_MP4.test(f.file.name) && RX_360_CARDVR_REC_PATH.test(f.relativePath),
+        source: "log-sidecar",
     },
     // FitCamX TS: PMT carries only HEVC + AAC, no data/private streams.
     // Switch to "embedded" once a model with a data-stream surfaces.

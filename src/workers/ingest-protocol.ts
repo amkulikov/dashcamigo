@@ -30,6 +30,7 @@ export const INGEST_REQUEST_PARSE_LOG = "parse-log";
 export interface ParseLogRequestData {
     file: VendorFile;
     extractorId: string;
+    knownVideoNames: string[];
 }
 
 export interface ParseLogResult {

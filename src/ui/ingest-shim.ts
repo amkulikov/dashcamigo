@@ -223,8 +223,9 @@ export async function dispatchParseLogsViaPool(
         return { appliedExtractors: [], extractorByFileKey, records: [], skipped: [], errors };
     }
 
+    const knownVideoNames = [...videoIndex.videosByFilename.keys()];
     const { successes, failures } = await dispatchViaPool(targets, (c) => {
-        const req: ParseLogRequestData = { file: c.file, extractorId: c.logExtractorId! };
+        const req: ParseLogRequestData = { file: c.file, extractorId: c.logExtractorId!, knownVideoNames };
         return pool.request<ParseLogResult>(INGEST_REQUEST_PARSE_LOG, req, { signal });
     });
 
