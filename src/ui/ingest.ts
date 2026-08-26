@@ -51,6 +51,7 @@ import { cancelDeferredGpsLoad } from "./deferred-gps.js";
 import { countByExtension, countByField } from "./ingest-core.js";
 import { reportParseErrors } from "./ingest-diagnostics.js";
 import { scopeIngestFiles } from "./ingest-source-key.js";
+import { resolveLooseGpxFiles } from "./loose-gpx-ingest.js";
 
 const log = createLogger("ingest");
 
@@ -410,7 +411,6 @@ async function ingestFilesInternal(
     // ambiguous. Timing overlap is never treated as permission to merge: known
     // logs, exact sidecars and pending embedded tracks disable that clip.
     if (classified.some((item) => item.role === "unknown" && /\.gpx$/i.test(item.file.file.name))) {
-        const { resolveLooseGpxFiles } = await import("./loose-gpx-ingest.js");
         const protectedGpsVideoKeys = new Set([
             ...state.pendingHeavyEmbeddedGps.keys(),
             ...state.inflightEmbeddedGps.keys(),

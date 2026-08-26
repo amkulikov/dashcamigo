@@ -838,10 +838,11 @@ initLangSuggestionBanner();
 // landing's own first paint / LCP stays untouched - the warm-up only runs
 // after the browser is done with the critical work.
 //
-// mediabunny is NOT in this list: the export subtree (app.ts -> {export-mode,
-// player-overlays, export-panel} -> export-flow/export.js -> mediabunny)
-// imports it statically, so it is already eager in this same bundle - nothing
-// to prewarm.
+// mediabunny is NOT in this list: its main-thread graph is materially heavy and
+// only needed after the user supplies a recording (codec probe) or starts an
+// export. Keep that as a real capability boundary instead of downloading it for
+// every landing-page visit; worker prewarm is independent because each worker
+// self-bundles its media code.
 function prefetchDeferredLibs(): void {
     const warm = (): void => {
         // Viewer libs (trip-open).

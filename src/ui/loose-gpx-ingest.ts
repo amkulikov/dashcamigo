@@ -4,6 +4,7 @@
 
 import type { ClassifiedFile } from "../parsers/registry-light.js";
 import type { Trip } from "../trips.js";
+import { showGpxAssignmentModal } from "./gpx-assignment-modal.js";
 import { looseGpxTargets, pairAssignedLooseGpxFiles } from "./loose-gpx-assignment.js";
 import { looseGpxFiles, pairLooseGpxFiles, type LooseGpxTarget } from "./loose-gpx.js";
 
@@ -53,7 +54,6 @@ export async function resolveLooseGpxFiles(
 
     if (targets.length === 0) return { assignedFiles: [], needsTrip: true };
 
-    const { showGpxAssignmentModal } = await import("./gpx-assignment-modal.js");
     const assignments = await showGpxAssignmentModal(files, targets, copy);
     pairAssignedLooseGpxFiles(classified, assignments);
     return { assignedFiles: assignedManualGpx(classified), needsTrip: false };
