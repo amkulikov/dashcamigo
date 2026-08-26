@@ -363,8 +363,11 @@ const iboxCameraKey: FilenameCameraKeyTechnique = {
         const m = file.file.name.match(RX_IBOX);
         if (!m) return null;
         // Channel letter F/R/I at group [5], immediately before `.mp4|.mov`.
+        // The same filename language is also used by dual-channel MiVue. Its
+        // SD layout puts the pair in sibling F/ and R/ folders, so strip both
+        // the single-letter and spelled-out folder dialects.
         const masked = maskNameWithTrailingLetterStripped(file.file.name, m[5]!);
-        const dir = strippedParentDir(file.relativePath, ["front", "rear", "interior"]);
+        const dir = strippedParentDir(file.relativePath, ["f", "r", "i", "front", "rear", "interior"]);
         return `ibox|${dir}|${masked}`;
     },
 };

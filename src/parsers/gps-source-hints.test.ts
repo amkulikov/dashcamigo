@@ -30,10 +30,12 @@ describe("classifyGpsSource", () => {
         expect(classifyGpsSource(vf("FILE260625-144859.MP4"))).toBe("basename-sidecar"); // Mio/Navman MiVue (.NMEA)
     });
 
-    it("mivue stays disjoint from the embedded iBox/Navitel FILE-patterns", () => {
-        // Same FILE prefix, but iBox carries a channel letter and Navitel a
-        // -sequence; only the bare FILE<YYMMDD>-<HHMMSS> shape is the .NMEA sidecar.
+    it("mivue single and F/R-folder dual variants use the NMEA sidecar hint", () => {
         expect(classifyGpsSource(vf("FILE260625-144859.MP4"))).toBe("basename-sidecar"); // MiVue
+        expect(classifyGpsSource(vf("FILE260819-071804F.mp4", "F/FILE260819-071804F.mp4"))).toBe("basename-sidecar");
+        expect(classifyGpsSource(vf("FILE260819-071804R.mp4", "R/FILE260819-071804R.mp4"))).toBe("basename-sidecar");
+        // A flat channel-suffixed name stays ambiguous and therefore keeps the
+        // permissive iBox embedded hint; exact NMEA records still win before it.
         expect(classifyGpsSource(vf("FILE230422-154515F.MOV"))).toBe("embedded"); // iBox
         expect(classifyGpsSource(vf("FILE201104-163014-000429F.mov"))).toBe("embedded"); // Navitel
     });
@@ -202,6 +204,10 @@ describe("shouldTryEmbeddedGps", () => {
         const mivue = vf("FILE260625-144859.MP4");
         expect(shouldTryEmbeddedGps(mivue, false)).toBe(true);
         expect(shouldTryEmbeddedGps(mivue, true)).toBe(false);
+
+        const mivueDualRear = vf("FILE260819-071804R.mp4", "R/FILE260819-071804R.mp4");
+        expect(shouldTryEmbeddedGps(mivueDualRear, false)).toBe(true);
+        expect(shouldTryEmbeddedGps(mivueDualRear, true)).toBe(false);
 
         // The distinctive ddpai variants (timelapse S_/Q_, event G_..._L) keep the
         // unconditional skip - only the generic "normal" shape was demoted.

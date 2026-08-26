@@ -180,6 +180,12 @@ describe("cameraFingerprint - cross-channel identity", () => {
         expect(front).toBe(rear);
     });
 
+    it("MiVue dual: F/R files in single-letter folders share a fingerprint", () => {
+        const front = cameraFingerprint(vf("FILE260819-071804F.mp4", "F/FILE260819-071804F.mp4"));
+        const rear = cameraFingerprint(vf("FILE260819-071804R.mp4", "R/FILE260819-071804R.mp4"));
+        expect(front).toBe(rear);
+    });
+
     it("Novatek VIOFO: F/R/I channels share a fingerprint", () => {
         const front = cameraFingerprint(vf("2023_0821_180010_062F.MP4", "DCIM/2023_0821_180010_062F.MP4"));
         const rear = cameraFingerprint(vf("2023_0821_180010_062R.MP4", "DCIM/2023_0821_180010_062R.MP4"));

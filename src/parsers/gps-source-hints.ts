@@ -36,6 +36,7 @@ import {
     RX_MAH_SEQUENCE,
     RX_MAH_VIDEO_PATH,
     RX_MIVUE,
+    RX_MIVUE_DUAL_PATH,
     RX_MOV_SEQ_FRI,
     RX_NAVITEL,
     RX_NEOLINE,
@@ -204,11 +205,11 @@ const GPS_SOURCE_HINTS: readonly GpsSourceHint[] = [
     },
     // iBox (iCON WiFi Signature Dual, ...): Ambarella tail-atoms - byte-identical
     // to the Navitel R-series layout (IDIT + gps0 + gsea + gsen after moov),
-    // parsed by the navitel-tail primitive. Confirmed on a real iBox sample
-    // (gps0 decodes to valid coords, UTC = IDIT-local minus the camera TZ).
+    // parsed by the navitel-tail primitive. The filename shape is shared by
+    // dual-channel MiVue; top-level F/R paths select its sidecar hint below.
     {
         id: "ibox",
-        matches: (f) => RX_IBOX.test(f.file.name),
+        matches: (f) => RX_IBOX.test(f.file.name) && !RX_MIVUE_DUAL_PATH.test(f.relativePath),
         source: "embedded",
     },
     // Juscar MPEG-TS: LigoGPS plaintext in private-data PES (juscar-ts primitive).
@@ -226,6 +227,16 @@ const GPS_SOURCE_HINTS: readonly GpsSourceHint[] = [
     {
         id: "mivue",
         matches: (f) => RX_MIVUE.test(f.file.name),
+        source: "basename-sidecar",
+        probeIfNoRecords: true,
+    },
+    // Dual-channel MiVue: front and rear live in top-level F/R folders and the
+    // front clip owns a same-basename `.NMEA` sidecar. The name itself is
+    // indistinguishable from iBox, so keep the embedded probe enabled when the
+    // sidecar is absent; an iBox card arranged the same way still degrades safely.
+    {
+        id: "mivue-dual",
+        matches: (f) => RX_IBOX.test(f.file.name) && RX_MIVUE_DUAL_PATH.test(f.relativePath),
         source: "basename-sidecar",
         probeIfNoRecords: true,
     },

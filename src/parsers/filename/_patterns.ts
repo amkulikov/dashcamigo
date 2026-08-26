@@ -173,17 +173,19 @@ export const RX_FORD_PATH = /(?:^|\/)FordFootage\//i;
 // gps-source hint (rationale at the hint entry).
 export const RX_HPIM = /^HPIM(\d{8})-(\d{6})([A-Z])\.ts$/i;
 
-// iBox: FILE + 2-digit-year YY MM DD - HHMMSS + F/R/I channel + extension.
+// FILE + 2-digit-year YY MM DD - HHMMSS + F/R/I channel + extension.
+// Shared by iBox iCON and dual-channel Mio MiVue firmware. The name alone
+// cannot distinguish their GPS carriers; the MiVue 955WD card adds top-level
+// F/ and R/ folders and a same-basename front `.NMEA` sidecar.
 export const RX_IBOX = /^FILE(\d{2})(\d{2})(\d{2})-(\d{6})([FRI])\.(mp4|mov)$/i;
 export const RX_IBOX_PATH_EVENT = /(?:^|\/)event\//i;
 export const RX_IBOX_PATH_PARKING = /(?:^|\/)parking\//i;
+export const RX_MIVUE_DUAL_PATH = /(?:^|\/)[FR]\//i;
 
-// Mio / Navman MiVue (budget line: MiVue 150 Safety, ...): FILE + 2-digit-year
-// YY MM DD - HHMMSS + extension. NO channel letter (single-lens) and NO sequence
-// counter - that is exactly what keeps it disjoint from iBox (FILE...<FRI>) and
-// Navitel (FILE...-<6-digit seq>), so the three FILE-prefixed regexes never
-// claim each other's files. YYMMDD (not DDMMYY) is confirmed against the GPS
-// clock on a real sample: name 260625 == GPRMC date 2026-06-25. GPS lives in a
+// Mio / Navman MiVue single-channel line (MiVue 150 Safety, ...): FILE +
+// 2-digit-year YY MM DD - HHMMSS + extension, with no channel letter or
+// sequence counter. YYMMDD (not DDMMYY) is confirmed against the GPS clock on
+// a real sample: name 260625 == GPRMC date 2026-06-25. GPS lives in a
 // same-basename `.NMEA` sidecar; the MP4 itself carries no embedded GPS.
 export const RX_MIVUE = /^FILE(\d{2})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})\.(?:mp4|mov)$/i;
 // MiVue SD layout splits recording mode into top-level folders (Normal/, Event/,
