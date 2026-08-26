@@ -76,7 +76,7 @@ createWorkerServer(self, {
                 return await parseGate.run(async () => {
                     try {
                         const parsed = await extractor.parse(req.file, undefined, ctx.signal, {
-                            knownVideoNames: req.knownVideoNames,
+                            knownVideos: req.knownVideos,
                         });
                         return {
                             records: parsed.records,

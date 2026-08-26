@@ -21,10 +21,16 @@
 import type { Mp4Index } from "../internal/mp4-index.js";
 import type { ParsedRecords, VendorFile } from "../types.js";
 
+export interface PrimitiveVideoRef {
+    name: string;
+    relativePath: string;
+    sourceKey?: string;
+}
+
 export interface PrimitiveParseContext {
-    // Whole-card logs can bind one timestamp stream across many clips only
-    // after classification has discovered the video names in the same drop.
-    knownVideoNames?: readonly string[];
+    // Whole-card logs need source/path identity as well as basenames: one
+    // ingest may contain several cards with overlapping filename clocks.
+    knownVideos?: readonly PrimitiveVideoRef[];
 }
 
 export interface Primitive {

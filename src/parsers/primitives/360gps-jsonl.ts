@@ -12,7 +12,7 @@
 import { utcMillisecondsFromParts } from "../internal/calendar.js";
 import { KNOTS_TO_MS, type GpsRecord, type ParsedRecords, type SkippedLine, type VendorFile } from "../types.js";
 import { WrongFormatError } from "../types.js";
-import type { Primitive, PrimitiveParseContext } from "./types.js";
+import type { Primitive, PrimitiveParseContext, PrimitiveVideoRef } from "./types.js";
 
 const FORMAT_ID = "360gps-jsonl";
 const RX_LOG_NAME = /^(\d{14})_(\d{6})GPS\.TXT$/i;
@@ -58,16 +58,17 @@ export const threeSixtyGpsJsonlPrimitive: Primitive = {
         if (signal?.aborted) throw new DOMException("aborted", "AbortError");
         const text = await file.file.text();
         if (signal?.aborted) throw new DOMException("aborted", "AbortError");
-        return parseLog(text, file.file.name, context, signal);
+        return parseLog(text, file, context, signal);
     },
 };
 
 function parseLog(
     rawText: string,
-    sourceFilename: string,
+    source: VendorFile,
     context?: PrimitiveParseContext,
     signal?: AbortSignal,
 ): ParsedRecords {
+    const sourceFilename = source.file.name;
     const nul = rawText.indexOf("\0");
     const text = nul < 0 ? rawText : rawText.slice(0, nul);
     const lines = text.split(/\r?\n/);
@@ -83,7 +84,7 @@ function parseLog(
         throw new WrongFormatError(`bad 360GPSINFO timestamp in ${sourceFilename}`);
     }
 
-    const slots = buildVideoSlots(context?.knownVideoNames ?? []);
+    const slots = buildVideoSlots(videoNamesForLog(source, context?.knownVideos ?? []));
     const records: GpsRecord[] = [];
     const skipped: SkippedLine[] = [];
     let sampleIndex = 0;
@@ -213,6 +214,7 @@ function buildVideoSlots(names: readonly string[]): VideoSlot[] {
     interface Candidate {
         name: string;
         startNaiveSec: number;
+        sequence: number;
         channel: string;
     }
 
@@ -227,7 +229,12 @@ function buildVideoSlots(names: readonly string[]): VideoSlot[] {
             candidates = [];
             byStart.set(startNaiveSec, candidates);
         }
-        candidates.push({ name, startNaiveSec, channel: match[3]!.toUpperCase() });
+        candidates.push({
+            name,
+            startNaiveSec,
+            sequence: Number(match[2]),
+            channel: match[3]!.toUpperCase(),
+        });
     }
 
     const selected = [...byStart.values()]
@@ -235,7 +242,20 @@ function buildVideoSlots(names: readonly string[]): VideoSlot[] {
         .sort((a, b) => a.startNaiveSec - b.startNaiveSec);
     const positiveGaps: number[] = [];
     for (let i = 1; i < selected.length; i++) {
-        const gap = selected[i]!.startNaiveSec - selected[i - 1]!.startNaiveSec;
+        const previous = selected[i - 1]!;
+        const current = selected[i]!;
+        const sequenceGap = current.sequence - previous.sequence;
+        if (sequenceGap <= 0) continue;
+        const elapsed = current.startNaiveSec - previous.startNaiveSec;
+        // The counter advances per file, so a dual-channel card can jump by
+        // two between adjacent starts. Conversely, a partial selection can
+        // jump by several starts. Use the observed 60 s loop cadence to tell
+        // those cases apart; fall back to the raw counter when the camera is
+        // configured for a materially different loop length.
+        const defaultCadenceSlots = Math.max(1, Math.round(elapsed / DEFAULT_VIDEO_CADENCE_SEC));
+        const sequenceStride = sequenceGap / defaultCadenceSlots;
+        const elapsedSlots = Number.isInteger(sequenceStride) ? defaultCadenceSlots : sequenceGap;
+        const gap = elapsed / elapsedSlots;
         if (gap >= MIN_VIDEO_CADENCE_SEC && gap <= MAX_VIDEO_CADENCE_SEC) positiveGaps.push(gap);
     }
     positiveGaps.sort((a, b) => a - b);
@@ -250,6 +270,40 @@ function buildVideoSlots(names: readonly string[]): VideoSlot[] {
             endNaiveSec: next ? Math.min(next.startNaiveSec, inferredEnd) : inferredEnd,
         };
     });
+}
+
+function cardRootSegments(relativePath: string, childFolder: "gps" | "rec"): string[] | null {
+    const segments = relativePath.split("/").filter(Boolean);
+    const cardIndex = segments.findIndex((segment) => segment.toLowerCase() === "360cardvr");
+    if (cardIndex < 0 || segments[cardIndex + 1]?.toLowerCase() !== childFolder) return null;
+    return segments.slice(0, cardIndex + 1).map((segment) => segment.toLowerCase());
+}
+
+function sameSegments(a: readonly string[], b: readonly string[]): boolean {
+    return a.length === b.length && a.every((segment, index) => segment === b[index]);
+}
+
+function videoNamesForLog(source: VendorFile, videos: readonly PrimitiveVideoRef[]): string[] {
+    const matching = videos.filter((video) => RX_VIDEO_NAME.test(video.name));
+    const sameSource =
+        source.sourceKey === undefined ? [] : matching.filter((video) => video.sourceKey === source.sourceKey);
+    const scoped = sameSource.length > 0 ? sameSource : matching;
+    const sourceRoot = cardRootSegments(source.relativePath, "gps");
+    if (sourceRoot === null) return scoped.map((video) => video.name);
+
+    const sameCard = scoped.filter((video) => {
+        const videoRoot = cardRootSegments(video.relativePath, "rec");
+        return videoRoot !== null && sameSegments(videoRoot, sourceRoot);
+    });
+    if (sameCard.length > 0) return sameCard.map((video) => video.name);
+
+    // A log picked in a later drop has a fresh sourceKey. Its preserved path
+    // can still identify the already-loaded card before the basename fallback.
+    const crossSourceSameCard = matching.filter((video) => {
+        const videoRoot = cardRootSegments(video.relativePath, "rec");
+        return videoRoot !== null && sameSegments(videoRoot, sourceRoot);
+    });
+    return (crossSourceSameCard.length > 0 ? crossSourceSameCard : scoped).map((video) => video.name);
 }
 
 function findVideoSlot(slots: readonly VideoSlot[], timestamp: number): VideoSlot | null {
@@ -269,4 +323,4 @@ function isNoFixSentinel(row: SourceRow): boolean {
     return row.lat === 99 && row.lon === 999 && row.speedKnots === 99;
 }
 
-export const _internal = { parseLog, parseJsonRow, buildVideoSlots, RECORD_INTERVAL_SEC };
+export const _internal = { parseLog, parseJsonRow, buildVideoSlots, videoNamesForLog, RECORD_INTERVAL_SEC };

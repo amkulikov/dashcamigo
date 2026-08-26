@@ -223,9 +223,15 @@ export async function dispatchParseLogsViaPool(
         return { appliedExtractors: [], extractorByFileKey, records: [], skipped: [], errors };
     }
 
-    const knownVideoNames = [...videoIndex.videosByFilename.keys()];
+    const knownVideoRefs = [...videoIndex.videosByFilename.values()].flatMap((sameName) =>
+        sameName.map((video) => ({
+            name: video.file.name,
+            relativePath: video.relativePath,
+            ...(video.sourceKey === undefined ? {} : { sourceKey: video.sourceKey }),
+        })),
+    );
     const { successes, failures } = await dispatchViaPool(targets, (c) => {
-        const req: ParseLogRequestData = { file: c.file, extractorId: c.logExtractorId!, knownVideoNames };
+        const req: ParseLogRequestData = { file: c.file, extractorId: c.logExtractorId!, knownVideos: knownVideoRefs };
         return pool.request<ParseLogResult>(INGEST_REQUEST_PARSE_LOG, req, { signal });
     });
 

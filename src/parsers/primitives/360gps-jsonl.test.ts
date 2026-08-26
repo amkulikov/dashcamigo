@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { KNOTS_TO_MS, type VendorFile, WrongFormatError } from "../types.js";
 import { threeSixtyGpsJsonlPrimitive } from "./360gps-jsonl.js";
+import type { PrimitiveVideoRef } from "./types.js";
 
 const FIXTURES = resolve(dirname(fileURLToPath(import.meta.url)), "../__fixtures__/360gps-jsonl");
 const VIDEOS = ["20260102030400_000001AAN.MP4", "20260102030500_000002AAN.MP4"];
@@ -22,8 +23,18 @@ function fixture(name: string, fileName = name): VendorFile {
     return makeFile(fileName, readFileSync(resolve(FIXTURES, name)));
 }
 
+function videoRef(name: string, card = "card-a", root = ""): PrimitiveVideoRef {
+    return {
+        name,
+        relativePath: `${root}360CARDVR/REC/${name}`,
+        sourceKey: card,
+    };
+}
+
 function parse(name: string, knownVideoNames = VIDEOS) {
-    return threeSixtyGpsJsonlPrimitive.parse(fixture(name), undefined, undefined, { knownVideoNames });
+    return threeSixtyGpsJsonlPrimitive.parse(fixture(name), undefined, undefined, {
+        knownVideos: knownVideoNames.map((videoName) => videoRef(videoName)),
+    });
 }
 
 describe("threeSixtyGpsJsonlPrimitive.marker", () => {
@@ -73,6 +84,7 @@ describe("threeSixtyGpsJsonlPrimitive.parse", () => {
             "20260102030500_000003ABN.MP4",
             "20260102030500_000004AAN.MP4",
         ]);
+        expect(result.records).toHaveLength(11);
         expect(new Set(result.records.map((record) => record.mp4Filename))).toEqual(
             new Set(["20260102030400_000002AAN.MP4", "20260102030500_000004AAN.MP4"]),
         );
@@ -100,11 +112,37 @@ describe("threeSixtyGpsJsonlPrimitive.parse", () => {
         expect(result.skipped.at(-1)?.reason).toBe("no video for gps timestamp");
     });
 
+    it("uses sequence gaps to keep omitted clips out of a selected video window", async () => {
+        const result = await parse("synthetic-happy.TXT", [VIDEOS[0]!, "20260102030700_000004AAN.MP4"]);
+        expect(result.records).toHaveLength(10);
+        expect(result.records.every((record) => record.mp4Filename === VIDEOS[0])).toBe(true);
+        expect(result.skipped.at(-1)?.reason).toBe("no video for gps timestamp");
+    });
+
+    it("isolates video clocks to the log's card inside a mixed-folder ingest", async () => {
+        const source = fixture("synthetic-happy.TXT");
+        source.relativePath = `A/360CARDVR/GPS/${source.file.name}`;
+        source.sourceKey = "outer-folder";
+        const ownVideos = VIDEOS.map((name) => videoRef(name, "outer-folder", "A/"));
+        const otherVideos = [
+            videoRef("20260102030430_000001AAN.MP4", "outer-folder", "B/"),
+            videoRef("20260102030530_000002AAN.MP4", "outer-folder", "B/"),
+        ];
+
+        const result = await threeSixtyGpsJsonlPrimitive.parse(source, undefined, undefined, {
+            knownVideos: [...ownVideos, ...otherVideos],
+        });
+        expect(result.records).toHaveLength(11);
+        expect(new Set(result.records.map((record) => record.mp4Filename))).toEqual(new Set(VIDEOS));
+    });
+
     it("rejects a marker lookalike with an invalid timestamp anchor", async () => {
         const file = fixture("synthetic-wrong-format.TXT", "20260102030400_000001GPS.TXT");
         expect(await threeSixtyGpsJsonlPrimitive.marker(file)).toBe(true);
         await expect(
-            threeSixtyGpsJsonlPrimitive.parse(file, undefined, undefined, { knownVideoNames: VIDEOS }),
+            threeSixtyGpsJsonlPrimitive.parse(file, undefined, undefined, {
+                knownVideos: VIDEOS.map((name) => videoRef(name)),
+            }),
         ).rejects.toBeInstanceOf(WrongFormatError);
     });
 });

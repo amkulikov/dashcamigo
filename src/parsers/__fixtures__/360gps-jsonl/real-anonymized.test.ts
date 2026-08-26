@@ -48,7 +48,11 @@ describe("real-anonymized 360GPSINFO JSONL log", () => {
         const source = logFile();
         const loadedVideos = videos();
         const parsed = await threeSixtyGpsJsonlPrimitive.parse(source, undefined, undefined, {
-            knownVideoNames: VIDEO_NAMES,
+            knownVideos: loadedVideos.map((video) => ({
+                name: video.file.name,
+                relativePath: video.relativePath,
+                sourceKey: video.sourceKey,
+            })),
         });
 
         expectPlausibleGpsTrack(parsed.records, { minCount: 50 });

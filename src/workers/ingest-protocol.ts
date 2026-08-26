@@ -10,6 +10,7 @@
 // of redundant string-copy traffic per ingest).
 
 import type { ClassifiedFile } from "../parsers/registry.js";
+import type { PrimitiveVideoRef } from "../parsers/primitives/types.js";
 import type { AccelSample, GpsRecord, SkippedLine, VendorFile } from "../parsers/types.js";
 
 // === Classify (batch per shard) ===
@@ -30,7 +31,7 @@ export const INGEST_REQUEST_PARSE_LOG = "parse-log";
 export interface ParseLogRequestData {
     file: VendorFile;
     extractorId: string;
-    knownVideoNames: string[];
+    knownVideos: PrimitiveVideoRef[];
 }
 
 export interface ParseLogResult {
