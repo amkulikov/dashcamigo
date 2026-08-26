@@ -207,18 +207,24 @@ export function applyIndexedMetadata(
 
 /**
  * Sets each candidate's canPlay by probing codec decodability (mediabunny
- * canDecodeVideo, deduped by codec string). A codec=null candidate stays
- * optimistically playable; a thrown probe also
- * defaults to playable (a black frame beats a false "unsupported" overlay).
+ * canDecodeVideo, deduped by codec string). HEVC stays optimistic: Chromium
+ * on Windows can decode it through the OS-backed native/MSE path while
+ * WebCodecs reports it unsupported. The player classifies a real attach/decode failure.
+ * A codec=null candidate and a thrown probe are optimistic for the same reason.
  */
 export async function checkCanPlay(candidates: VideoCandidate[]): Promise<void> {
     // Key = videoCodecString when present, else the codec enum.
     const checks = new Map<string, { codec: VideoCodec; codecString: string | null }>();
     for (const c of candidates) {
         if (!c.codec) continue;
+        if (c.codec === "hevc") {
+            c.canPlay = true;
+            continue;
+        }
         const key = c.videoCodecString ?? c.codec;
         if (!checks.has(key)) checks.set(key, { codec: c.codec, codecString: c.videoCodecString });
     }
+    if (checks.size === 0) return;
     const decodableByKey = new Map<string, boolean>();
     // Dynamic import: this module is in the landing startup graph, and a static
     // value import of mediabunny here would add its whole ~300 KB graph to the
@@ -240,6 +246,8 @@ export async function checkCanPlay(candidates: VideoCandidate[]): Promise<void> 
         }),
     );
     for (const c of candidates) {
-        c.canPlay = c.codec ? (decodableByKey.get(c.videoCodecString ?? c.codec) ?? true) : true;
+        if (c.codec !== "hevc") {
+            c.canPlay = c.codec ? (decodableByKey.get(c.videoCodecString ?? c.codec) ?? true) : true;
+        }
     }
 }

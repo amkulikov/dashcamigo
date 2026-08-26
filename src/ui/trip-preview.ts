@@ -1,10 +1,12 @@
 // First-frame preview for the trip sidebar - the only visual on the card.
-// Extracts one keyframe via mediabunny VideoSampleSink, draws to a canvas with fit:"cover",
-// stores as JPEG dataURL on trip.previewDataUrl. On extraction failure (broken codec /
-// no primary video track / unsupported codec in browser) the card stays as a dark placeholder.
+// Extracts one keyframe via mediabunny CanvasSink, draws with fit:"cover", and
+// stores a JPEG dataURL on trip.previewDataUrl. A native <video> fallback covers
+// ordinary HEVC MP4s that Chromium plays through the OS decoder while its
+// WebCodecs implementation rejects the same stream.
 //
-// Architecture: all decode/encode work runs in Web Workers (src/workers/preview-worker.ts).
-// Main thread only runs a pool of POOL_SIZE workers and round-robins File objects across them.
+// Architecture: the primary decode/encode path runs in Web Workers
+// (src/workers/preview-worker.ts). The main thread only runs a pool of POOL_SIZE
+// workers and round-robins File objects across them, except for the rare native fallback.
 // Each File is passed via postMessage without copying (File is structured-cloneable; File.arrayBuffer()
 // in the worker reads content directly through the Blob backend).
 //
@@ -15,7 +17,8 @@
 // Storage: in-memory only (on the Trip object). Previews regenerate on reload since Files don't survive it.
 
 import { createLogger } from "../log.js";
-import type { Trip } from "../trips.js";
+import { PREVIEW_HEIGHT_PX, PREVIEW_JPEG_QUALITY, PREVIEW_WIDTH_PX } from "../preview-config.js";
+import type { Trip, VideoCandidate } from "../trips.js";
 import { tripAllCandidates } from "../trips.js";
 import {
     PREVIEW_REQUEST_EXTRACT,
@@ -24,6 +27,7 @@ import {
 } from "../workers/preview-protocol.js";
 import { createWorkerClient } from "../workers/_protocol/worker-client.js";
 import { createWorkerPool } from "../workers/_protocol/worker-pool.js";
+import { requiresMseBackend } from "./player-video-src.js";
 
 const log = createLogger("preview");
 
@@ -98,9 +102,99 @@ export function prewarmPreview(): void {
  * Returns a dataURL or null if the file cannot be decoded. Throws on worker-level errors
  * (unhandled exception in the worker) - the caller logs and skips the preview for that trip.
  */
-function extractFirstFrameDataUrl(file: File): Promise<string | null> {
+function extractFirstFrameInWorker(file: File): Promise<string | null> {
     const req: PreviewExtractRequestData = { file };
     return pool.request<PreviewExtractResult>(PREVIEW_REQUEST_EXTRACT, req).then((res) => res.dataUrl);
+}
+
+let nativeFallbackTail: Promise<void> = Promise.resolve();
+
+/** Serializes native fallbacks so thumbnail work never opens several extra
+ * hardware decoders beside the live player. */
+function withNativeFallbackSlot<T>(task: () => Promise<T>): Promise<T> {
+    const result = nativeFallbackTail.then(task, task);
+    nativeFallbackTail = result.then(
+        () => {},
+        () => {},
+    );
+    return result;
+}
+
+function waitForNativeFrame(video: HTMLVideoElement): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => finish(new Error("native preview decode timed out")), 10_000);
+        const finish = (error?: Error): void => {
+            clearTimeout(timeout);
+            video.removeEventListener("loadeddata", onReady);
+            video.removeEventListener("error", onError);
+            if (error) reject(error);
+            else resolve();
+        };
+        const onReady = (): void => finish();
+        const onError = (): void => finish(new Error(video.error?.message || "native preview decode failed"));
+        video.addEventListener("loadeddata", onReady, { once: true });
+        video.addEventListener("error", onError, { once: true });
+    });
+}
+
+/** Uses the same native decoder path as playback for hvc1 HEVC files. */
+async function extractFirstFrameNatively(file: File): Promise<string | null> {
+    if (typeof document === "undefined") return null;
+    return withNativeFallbackSlot(async () => {
+        const video = document.createElement("video");
+        video.muted = true;
+        video.playsInline = true;
+        video.preload = "auto";
+        const url = URL.createObjectURL(file);
+        try {
+            const frameReady = waitForNativeFrame(video);
+            video.src = url;
+            video.load();
+            await frameReady;
+            if (!video.videoWidth || !video.videoHeight) return null;
+
+            const canvas = document.createElement("canvas");
+            canvas.width = PREVIEW_WIDTH_PX;
+            canvas.height = PREVIEW_HEIGHT_PX;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) return null;
+            const scale = Math.max(PREVIEW_WIDTH_PX / video.videoWidth, PREVIEW_HEIGHT_PX / video.videoHeight);
+            const sourceWidth = PREVIEW_WIDTH_PX / scale;
+            const sourceHeight = PREVIEW_HEIGHT_PX / scale;
+            ctx.drawImage(
+                video,
+                (video.videoWidth - sourceWidth) / 2,
+                (video.videoHeight - sourceHeight) / 2,
+                sourceWidth,
+                sourceHeight,
+                0,
+                0,
+                PREVIEW_WIDTH_PX,
+                PREVIEW_HEIGHT_PX,
+            );
+            return canvas.toDataURL("image/jpeg", PREVIEW_JPEG_QUALITY);
+        } finally {
+            video.pause();
+            video.removeAttribute("src");
+            video.load();
+            URL.revokeObjectURL(url);
+        }
+    });
+}
+
+async function extractFirstFrameDataUrl(candidate: VideoCandidate): Promise<string | null> {
+    const canUseNativeFallback = candidate.codec === "hevc" && !requiresMseBackend(candidate);
+    try {
+        const workerResult = await extractFirstFrameInWorker(candidate.file);
+        if (workerResult || !canUseNativeFallback) return workerResult;
+    } catch (err) {
+        if (!canUseNativeFallback) throw err;
+        log.debug("worker preview decode failed, trying native HEVC", {
+            file: candidate.file.name,
+            err: err instanceof Error ? err.message : String(err),
+        });
+    }
+    return extractFirstFrameNatively(candidate.file);
 }
 
 /**
@@ -131,13 +225,13 @@ const previewFailedFiles = new WeakSet<File>();
 const inflightExtractions = new Map<File, Promise<string | null>>();
 
 /** Single-flight wrapper over extractFirstFrameDataUrl, deduped by File. */
-function extractFirstFrameShared(file: File): Promise<string | null> {
-    const existing = inflightExtractions.get(file);
+function extractFirstFrameShared(candidate: VideoCandidate): Promise<string | null> {
+    const existing = inflightExtractions.get(candidate.file);
     if (existing) return existing;
-    const pending = extractFirstFrameDataUrl(file).finally(() => {
-        if (inflightExtractions.get(file) === pending) inflightExtractions.delete(file);
+    const pending = extractFirstFrameDataUrl(candidate).finally(() => {
+        if (inflightExtractions.get(candidate.file) === pending) inflightExtractions.delete(candidate.file);
     });
-    inflightExtractions.set(file, pending);
+    inflightExtractions.set(candidate.file, pending);
     return pending;
 }
 
@@ -155,7 +249,7 @@ export async function ensureTripPreview(trip: Trip, onUpdate: (trip: Trip, dataU
     const first = tripAllCandidates(trip)[0];
     if (!first || previewFailedFiles.has(first.file)) return;
     try {
-        const url = await extractFirstFrameShared(first.file);
+        const url = await extractFirstFrameShared(first);
         if (url) {
             trip.previewDataUrl = url;
             onUpdate(trip, url);
@@ -206,7 +300,7 @@ async function populateTripPreviewsImpl(
             // wastes a worker slot for a result we already know.
             if (!first || previewFailedFiles.has(first.file)) continue;
             try {
-                const url = await extractFirstFrameShared(first.file);
+                const url = await extractFirstFrameShared(first);
                 if (signal.aborted) return;
                 if (url) {
                     trip.previewDataUrl = url;

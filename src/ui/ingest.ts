@@ -45,7 +45,7 @@ import {
 import { type IngestOrigin, state } from "./state.js";
 import { notify } from "./notifications.js";
 import { countUnplayableByExtension, showUnsupportedFormatsModal } from "./unsupported-formats-modal.js";
-import { vendorFileKey } from "./ingest-candidate.js";
+import { checkCanPlay, vendorFileKey } from "./ingest-candidate.js";
 import { cancelProgressiveIngest, resumeProgressiveIngest, startProgressiveIngest } from "./progressive-ingest.js";
 import { cancelDeferredGpsLoad } from "./deferred-gps.js";
 import { countByExtension, countByField } from "./ingest-core.js";
@@ -502,6 +502,17 @@ async function ingestFilesInternal(
                 accelSidecarResult.errors.length === 0,
         ),
     );
+    if (cachedCandidates.length > 0) {
+        await mark("checkCachedCodecs", async () => {
+            try {
+                await checkCanPlay(cachedCandidates);
+            } catch (err) {
+                log.warn("cached codec support check failed", {
+                    err: err instanceof Error ? err.message : String(err),
+                });
+            }
+        });
+    }
     if (state.gpsLog && cachedCandidates.length > 0) {
         const bound = bindRecordsByRecordingStart(state.gpsLog, [
             ...state.trips.flatMap(tripAllCandidates),

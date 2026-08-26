@@ -177,8 +177,8 @@ export async function partitionByIndexCache(
             file: entry.repair ? applyMoovRepair(freshFile, entry.repair) : freshFile,
             sourceKey: cf.file.sourceKey,
             records: entry.candidate.records.map((record) => ({ ...record, videoKey: freshVideoKey })),
-            // Recomputed for THIS machine by the pipeline's checkCanPlay - a
-            // verdict cached on another browser/GPU must not stick.
+            // Recomputed for THIS machine after the cache lookup - a verdict
+            // cached on another browser/GPU must not stick.
             canPlay: true,
         });
     }

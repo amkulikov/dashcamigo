@@ -10,6 +10,7 @@
 
 import { BlobSource, CanvasSink, Input, InputDisposedError, UnsupportedInputFormatError } from "mediabunny";
 
+import { PREVIEW_HEIGHT_PX, PREVIEW_JPEG_QUALITY, PREVIEW_WIDTH_PX } from "../preview-config.js";
 import { clampTsGpsTrailer } from "../ts-trailer.js";
 import { VIDEO_INPUT_FORMATS } from "../video-formats.js";
 
@@ -21,10 +22,6 @@ import {
 import { createWorkerServer, type WorkerScopeEndpoint } from "./_protocol/worker-server.js";
 
 declare const self: WorkerScopeEndpoint;
-
-const PREVIEW_WIDTH_PX = 320;
-const PREVIEW_HEIGHT_PX = 180;
-const PREVIEW_JPEG_QUALITY = 0.7;
 
 /**
  * Extracts the first frame via mediabunny + OffscreenCanvas + convertToBlob.
