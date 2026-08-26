@@ -213,16 +213,22 @@ test.describe("GPS synchronization", () => {
 
     test("a loose GPX cannot be merged into a clip that already has GPS", async ({ page }) => {
         await loadTrip(page, SAMPLE_GOPRO);
-        const gpsTrip = await page.evaluate(() =>
-            window.__dashcamigo.state.trips.findIndex((trip) =>
-                trip.frames.some((frame) =>
-                    Object.values(frame.channels).some((candidate) =>
-                        candidate?.records.some((record) => Number.isFinite(record.lat) && Number.isFinite(record.lon)),
+        const findGpsTrip = () =>
+            page.evaluate(() =>
+                window.__dashcamigo.state.trips.findIndex((trip) =>
+                    trip.frames.some((frame) =>
+                        Object.values(frame.channels).some((candidate) =>
+                            candidate?.records.some(
+                                (record) => Number.isFinite(record.lat) && Number.isFinite(record.lon),
+                            ),
+                        ),
                     ),
                 ),
-            ),
-        );
-        expect(gpsTrip).toBeGreaterThanOrEqual(0);
+            );
+        // loadTrip waits for playable video, while embedded GPS extraction may
+        // still commit afterward. Wait on the state this test actually needs.
+        await expect.poll(findGpsTrip, { timeout: 30_000 }).toBeGreaterThanOrEqual(0);
+        const gpsTrip = await findGpsTrip();
         await page.locator(`li.trip[data-trip-index="${gpsTrip}"]`).click();
         await expect(page.locator("#gps-sync-pill")).toBeVisible();
         const gpx = (name: string) => ({
