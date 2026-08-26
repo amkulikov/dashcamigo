@@ -2374,6 +2374,18 @@ describe("deriveStartUtc: mvhd finalize semantics corroborated by the filename (
         expect(result.startUtc).toBe(nameNaive + 1); // mvhd(+61) - 60
     });
 
+    it("local-as-UTC JOOYFACT clock stays on the filename time in UTC+4", () => {
+        const previousTz = process.env.TZ;
+        process.env.TZ = "Europe/Samara";
+        try {
+            const { result } = derive("2026_0809_222334_654A.MOV", 2, 3);
+            expect(result.source).toBe("mp4");
+            expect(result.startUtc).toBe(Date.UTC(2026, 7, 9, 18, 23, 33) / 1000);
+        } finally {
+            process.env.TZ = previousTz;
+        }
+    });
+
     it("time-lapse clip: mvhd-name == wall span -> start = filename", () => {
         const { nameNaive, result } = derive("LA20240522-105233-001495F.MP4", 98, 6.533, {
             isTimelapse: true,

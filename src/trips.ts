@@ -1933,9 +1933,10 @@ interface DeriveStartUtcArgs {
  * picks the right semantics instead of us guessing the vendor.
  *
  * WITHOUT GPS - no own calibrator, so reuse the camera's estimates,
- * most-trusted first: mvhd + vendor TZ, then mvhd as-is, then filename + the
- * run PRECISE offset (so a no-GPS sibling channel lands on the SAME t=0 as its
- * GPS-bearing front sibling - 70mai-mc carries GPS only on the front), then
+ * most-trusted first: mvhd + vendor TZ, then mvhd corroborated by the filename
+ * and interpreted as the user's local clock, then mvhd as-is, then filename +
+ * the run PRECISE offset (so a no-GPS sibling channel lands on the SAME t=0 as
+ * its GPS-bearing front sibling - 70mai-mc carries GPS only on the front), then
  * filename + 15-min-snapped vendor TZ, then filename as the user's local clock,
  * then mtime. Per-fingerprint (not global) - a global median locks onto the
  * larger group's TZ in a mixed ingest (70mai + NMEA from another zone) and is
@@ -1944,6 +1945,22 @@ interface DeriveStartUtcArgs {
 /** Snap a (claim - firstGps) delta to the 15-min TZ grid. */
 function snapTz(deltaSec: number): number {
     return Math.round(deltaSec / TZ_SNAP_SEC) * TZ_SNAP_SEC;
+}
+
+/** Interprets UTC fields as a wall clock in the browser's local zone. */
+function localUnixFromNaiveClock(naiveUnixSec: number): number {
+    const clock = new Date(naiveUnixSec * 1000);
+    return (
+        new Date(
+            clock.getUTCFullYear(),
+            clock.getUTCMonth(),
+            clock.getUTCDate(),
+            clock.getUTCHours(),
+            clock.getUTCMinutes(),
+            clock.getUTCSeconds(),
+            clock.getUTCMilliseconds(),
+        ).getTime() / 1000
+    );
 }
 
 /**
@@ -2116,6 +2133,7 @@ export function deriveStartUtc({
 
     // WITHOUT GPS: no calibrator, fall back to per-fingerprint TZ estimates
     // (median over sibling files that had GPS), most-trusted first.
+    const filenameLocalDate = parseFilenameLocalTime(file);
     // a) mvhd + per-vendor TZ (mvhd-source estimate - the filename-source one may
     //    carry a different offset on UTC-mvhd firmware, see FingerprintTzEstimate).
     if (createdUtc !== null && fingerprintTz?.mvhdTzSec != null) {
@@ -2134,11 +2152,12 @@ export function deriveStartUtc({
     //    recording's real WALL span (>> video duration), which equally proves
     //    the filename is the start.
     if (createdUtc !== null) {
-        const localDate = parseFilenameLocalTime(file);
-        if (localDate !== null) {
-            const delta = createdUtc.getTime() / 1000 - localDate.getTime() / 1000;
+        if (filenameLocalDate !== null) {
+            const createdNaiveSec = createdUtc.getTime() / 1000;
+            const filenameNaiveSec = filenameLocalDate.getTime() / 1000;
+            const delta = createdNaiveSec - filenameNaiveSec;
             if (delta >= durationSec / 2 && Math.abs(delta - durationSec) <= MVHD_FINALIZE_TOLERANCE_SEC) {
-                return { startUtc: createdUtc.getTime() / 1000 - durationSec, source: "mp4" };
+                return { startUtc: localUnixFromNaiveClock(createdNaiveSec - durationSec), source: "mp4" };
             }
             // For a time-lapse the same delta is the recording's real WALL
             // span. deriveWallDurationSec already judged exactly this
@@ -2147,13 +2166,21 @@ export function deriveStartUtc({
             // value) - branch on its verdict instead of re-deriving the
             // delta against the same thresholds in a second place.
             if (isTimelapse && wallDurationSec !== null) {
-                return { startUtc: localDate.getTime() / 1000, source: "name" };
+                return { startUtc: localUnixFromNaiveClock(filenameNaiveSec), source: "name" };
+            }
+            // A same-clock filename proves that mvhd carries camera-local fields
+            // despite the UTC-shaped container value. Preserve its finer timing,
+            // but interpret those fields in the browser's zone just like the
+            // filename-only fallback below. Honest-UTC mvhd paired with a local
+            // filename differs by the camera zone and does not enter this branch.
+            if (Math.abs(delta) <= MVHD_FINALIZE_TOLERANCE_SEC) {
+                return { startUtc: localUnixFromNaiveClock(createdNaiveSec), source: "mp4" };
             }
         }
     }
-    // b) mvhd as-is (no correction). Risky - may be off by hours with
-    //    local-as-UTC firmware semantics, but a same-second container stamp still
-    //    beats the filename guesses below when no TZ estimate exists.
+    // b) Uncorroborated mvhd as-is (no correction). Risky - it may be off by
+    //    hours with local-as-UTC firmware semantics, but the container stamp
+    //    still beats the filename guesses below when no TZ estimate exists.
     if (createdUtc !== null) {
         return { startUtc: createdUtc.getTime() / 1000, source: "mp4" };
     }
@@ -2166,17 +2193,15 @@ export function deriveStartUtc({
     //    30s frame snap. Siblings share name times, so
     //    resolvePreciseClockOffsetForFile hands both the same run's offset.
     if (preciseFilenameOffsetSec !== null) {
-        const localDate = parseFilenameLocalTime(file);
-        if (localDate !== null) {
-            return { startUtc: localDate.getTime() / 1000 - preciseFilenameOffsetSec, source: "name" };
+        if (filenameLocalDate !== null) {
+            return { startUtc: filenameLocalDate.getTime() / 1000 - preciseFilenameOffsetSec, source: "name" };
         }
     }
     // c) Filename + per-vendor TZ (filename-source estimate). Vendor TZ was
     //    estimated from other files in the ingest that DO have GPS.
     if (fingerprintTz?.filenameTzSec != null) {
-        const localDate = parseFilenameLocalTime(file);
-        if (localDate !== null) {
-            const pseudo = localDate.getTime() / 1000;
+        if (filenameLocalDate !== null) {
+            const pseudo = filenameLocalDate.getTime() / 1000;
             return { startUtc: pseudo - fingerprintTz.filenameTzSec, source: "name" };
         }
     }
@@ -2188,23 +2213,10 @@ export function deriveStartUtc({
     //    vastly more useful than mtime (which carries the file copy date,
     //    not the recording date).
     //
-    //    parseFilenameLocalTime returns Date constructed via Date.UTC(...) -
-    //    read back the wall-clock fields and rebuild via the local-time Date
-    //    constructor so the value lands on the user's clock.
-    {
-        const localDate = parseFilenameLocalTime(file);
-        if (localDate !== null) {
-            const localUnix =
-                new Date(
-                    localDate.getUTCFullYear(),
-                    localDate.getUTCMonth(),
-                    localDate.getUTCDate(),
-                    localDate.getUTCHours(),
-                    localDate.getUTCMinutes(),
-                    localDate.getUTCSeconds(),
-                ).getTime() / 1000;
-            return { startUtc: localUnix, source: "name" };
-        }
+    //    parseFilenameLocalTime returns a Date constructed via Date.UTC(...),
+    //    so reinterpret its UTC fields as a local wall clock.
+    if (filenameLocalDate !== null) {
+        return { startUtc: localUnixFromNaiveClock(filenameLocalDate.getTime() / 1000), source: "name" };
     }
     // e) Last resort - mtime minus duration. On 70mai x800 mtime can be off by hours;
     //    the UI marks this source as unreliable.
