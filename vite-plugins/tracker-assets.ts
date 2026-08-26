@@ -158,6 +158,14 @@ export function trackerAssetsPlugin(assets: TrackerAssets): Plugin {
             });
         },
         closeBundle() {
+            // Vitest loads the shared Vite config with command="serve" and
+            // still runs closeBundle when its module graph shuts down. The dev
+            // plugin is needed for configureServer above, but it must never
+            // rewrite an existing dist/ (or race a build running alongside the
+            // unit suite). A non-null version is the build-only invariant from
+            // computeTrackerAssets().
+            if (assets.ortVersion === null) return;
+
             // 1) ORT wasm/glue -> dist/ort/<version>/ (the version-stamped dir the
             // loader points wasmPaths at - see computeTrackerAssets for why ORT is
             // busted by directory, not filename).
