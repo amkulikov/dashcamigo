@@ -226,7 +226,7 @@ export type I18nKey =
     | "status.tripOpenFailed"
     | "status.gpxChooseTrip"
     | "status.gpxAttached"
-    | "status.gpsDefaultSaved"
+    | "status.gpsCameraApplied"
     | "gpxAssign.title"
     | "gpxAssign.body"
     | "gpxAssign.tripLabel"
@@ -310,6 +310,7 @@ export type I18nKey =
     | "units.kb"
     | "units.mb"
     | "units.gb"
+    | "units.d"
     | "units.h"
     | "units.m"
     | "units.s"
@@ -446,7 +447,7 @@ export type I18nKey =
     | "gpsLoad.reading"
 
     // Per-trip GPS/video calibration. The compact launcher appears beside the
-    // readout and in map settings; the detailed controls live in one dialog.
+    // readout and in map settings; the detailed controls live in one panel.
     | "gpsSync.open"
     | "gpsSync.badge"
     | "gpsSync.title"
@@ -463,8 +464,8 @@ export type I18nKey =
     | "gpsSync.trim.description"
     | "gpsSync.outside.hidden"
     | "gpsSync.outside.shown"
-    | "gpsSync.useDefault"
-    | "gpsSync.saveDefault"
+    | "gpsSync.reset"
+    | "gpsSync.applyCamera"
     // Recording-read modal (slow backend): the trip-open path reads the
     // recordings' metadata before playback. Reuses gpsLoad.progress/.cancel.
     | "recordingLoad.title"
@@ -1049,8 +1050,6 @@ export type I18nKey =
     | "settings.map.streetNames.more"
     | "settings.map.streetNames.max"
     | "settings.map.streetNames.description"
-    | "settings.map.gpsOffset.label"
-    | "settings.map.gpsOffset.description"
 
     // Settings -> Events: automatic impact/brake detection threshold in g.
     // Below this value, accel-spikes don't get a marker on the chart/map/strip.

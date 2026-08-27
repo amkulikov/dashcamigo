@@ -13,6 +13,10 @@ import { activeTrip } from "./state.js";
 function formatSignedOffset(offsetSec: number): string {
     const sign = offsetSec < 0 ? "−" : "+";
     const abs = Math.abs(offsetSec);
+    if (abs >= 86_400) {
+        const days = new Intl.NumberFormat(getDateLocale(), { maximumFractionDigits: 1 }).format(abs / 86_400);
+        return `${sign}${days}${t("units.d")}`;
+    }
     if (abs >= 60) return `${sign}${formatTime(abs)}`;
     const value = new Intl.NumberFormat(getDateLocale(), { maximumFractionDigits: 3 }).format(abs);
     return `${sign}${value}${t("units.s")}`;

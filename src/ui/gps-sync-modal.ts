@@ -1,17 +1,16 @@
-// Per-trip GPS/video calibration dialog. Edits are persisted immediately and
+// Per-trip GPS/video calibration panel. Edits are persisted immediately and
 // rebuild every GPS-derived surface from immutable candidate records, so the
 // user can safely try several offsets without accumulating shifts or losing
 // points hidden by an earlier trim.
 
 import {
     applyStoredGpsSyncToTrip,
-    applyStoredGpsSyncToTrips,
-    getDefaultGpsOffsetSec,
-    gpsOutsideVideoSec,
+    GPS_OFFSET_MAX_SEC,
+    gpsSyncPeerTrips,
+    gpsTrackOverhangSec,
     normalizeGpsOffsetSec,
     rawGpsStartUnix,
     resolvedGpsSyncForTrip,
-    setDefaultGpsOffsetSec,
     setTripGpsOffsetSec,
     setTripGpsTrimToVideo,
     tripHasRawGps,
@@ -26,12 +25,19 @@ import { activateModal, deactivateModal, wireBackdropDismiss } from "./modal-hel
 import { notify } from "./notifications.js";
 import { activeTrip, state } from "./state.js";
 
+const GPS_SYNC_MODAL_QUERY = "(max-width: 767px), (max-height: 500px) and (orientation: landscape)";
+
 let getTripCurrentTime: () => number = () => 0;
 let initialized = false;
+let isModalPresentation: boolean | null = null;
+let returnFocus: HTMLElement | null = null;
 
 function closeGpsSync(): void {
     dom.gpsSyncModal.hidden = true;
-    deactivateModal(dom.gpsSyncModal);
+    if (isModalPresentation === true) deactivateModal(dom.gpsSyncModal);
+    else returnFocus?.focus?.();
+    isModalPresentation = null;
+    returnFocus = null;
 }
 
 /** Refreshes surfaces whose data is snapshotted on trip activation. */
@@ -39,10 +45,26 @@ function refreshGpsSyncSurfaces(): void {
     requestGpsSyncSurfaceRefresh();
 }
 
-/** Re-resolves the player default for all trips without an explicit override. */
-export function applyGpsSyncPreferencesToLoadedTrips(): void {
-    applyStoredGpsSyncToTrips(state.trips);
-    refreshGpsSyncSurfaces();
+function shouldUseModalPresentation(): boolean {
+    return document.fullscreenElement !== null || window.matchMedia(GPS_SYNC_MODAL_QUERY).matches;
+}
+
+function syncPresentationMode(): void {
+    if (dom.gpsSyncModal.hidden) return;
+    const nextIsModal = shouldUseModalPresentation();
+    dom.gpsSyncModal.classList.toggle("is-modeless", !nextIsModal);
+    dom.gpsSyncModal.classList.toggle("is-modal", nextIsModal);
+    dom.gpsSyncModal.setAttribute("aria-modal", String(nextIsModal));
+    if (nextIsModal === isModalPresentation) return;
+
+    if (isModalPresentation === true) deactivateModal(dom.gpsSyncModal);
+    isModalPresentation = nextIsModal;
+    if (isModalPresentation) {
+        activateModal(dom.gpsSyncModal, {
+            onClose: closeGpsSync,
+            initialFocus: tripHasRawGps(activeTrip()) ? dom.gpsSyncOffsetInput : dom.gpsSyncClose,
+        });
+    }
 }
 
 function syncDialog(trip: Trip | null): void {
@@ -54,9 +76,12 @@ function syncDialog(trip: Trip | null): void {
     const resolved = resolvedGpsSyncForTrip(trip);
     dom.gpsSyncOffsetInput.value = String(resolved.offsetSec);
     dom.gpsSyncTrimToggle.checked = resolved.trimToVideo;
-    dom.gpsSyncUseDefault.disabled = !resolved.hasOffsetOverride;
+    dom.gpsSyncReset.disabled = !resolved.hasOffsetOverride;
+    const peers = gpsSyncPeerTrips(trip, state.trips);
+    dom.gpsSyncApplyCamera.hidden = peers.length === 0;
+    dom.gpsSyncApplyCamera.disabled = resolved.offsetSec === 0;
 
-    const outsideSec = gpsOutsideVideoSec(trip, resolved.offsetSec);
+    const outsideSec = gpsTrackOverhangSec(trip, resolved.offsetSec);
     dom.gpsSyncOutsideStatus.hidden = outsideSec < 0.5;
     if (outsideSec >= 0.5) {
         dom.gpsSyncOutsideStatus.textContent = t(
@@ -70,9 +95,11 @@ function syncDialog(trip: Trip | null): void {
 
 function formatOutsideDuration(seconds: number): string {
     const total = Math.max(0, Math.round(seconds));
+    const days = Math.floor(total / 86_400);
     const hours = Math.floor(total / 3600);
     const minutes = Math.floor((total % 3600) / 60);
     const remainder = total % 60;
+    if (days > 0) return `${days}${t("units.d")} ${hours % 24}${t("units.h")}`;
     if (hours > 0) return `${hours}${t("units.h")} ${minutes}${t("units.m")}`;
     if (minutes > 0) return `${minutes}${t("units.m")} ${remainder}${t("units.s")}`;
     return `${remainder}${t("units.s")}`;
@@ -100,25 +127,37 @@ function commitOffsetInput(): void {
 export function openGpsSync(): void {
     const trip = activeTrip();
     if (!trip) return;
-    // Freeze the reference frame: "track start at playhead" must use the frame
-    // that was visible when the user opened calibration, not one several
-    // seconds later after reading the explanation.
-    dom.player.pause();
+    returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     syncDialog(trip);
     dom.gpsSyncModal.hidden = false;
-    activateModal(dom.gpsSyncModal, {
-        onClose: closeGpsSync,
-        initialFocus: tripHasRawGps(trip) ? dom.gpsSyncOffsetInput : dom.gpsSyncClose,
-    });
+    isModalPresentation = null;
+    syncPresentationMode();
+    if (isModalPresentation === false) {
+        (tripHasRawGps(trip) ? dom.gpsSyncOffsetInput : dom.gpsSyncClose).focus({ preventScroll: true });
+    }
 }
 
 export function initGpsSyncModal(opts: { getTripCurrentTime: () => number }): void {
     if (initialized) return;
     initialized = true;
     getTripCurrentTime = opts.getTripCurrentTime;
+    dom.gpsSyncOffsetInput.min = String(-GPS_OFFSET_MAX_SEC);
+    dom.gpsSyncOffsetInput.max = String(GPS_OFFSET_MAX_SEC);
     initGpsSyncLaunchers(openGpsSync);
     dom.gpsSyncClose.addEventListener("click", closeGpsSync);
     wireBackdropDismiss(dom.gpsSyncModal, closeGpsSync, { cardSelector: ".gps-sync-card" });
+    window.matchMedia(GPS_SYNC_MODAL_QUERY).addEventListener("change", syncPresentationMode);
+    document.addEventListener("fullscreenchange", syncPresentationMode);
+    document.addEventListener(
+        "keydown",
+        (event) => {
+            if (dom.gpsSyncModal.hidden || isModalPresentation !== false || event.key !== "Escape") return;
+            event.preventDefault();
+            event.stopPropagation();
+            closeGpsSync();
+        },
+        true,
+    );
 
     dom.gpsSyncOffsetInput.addEventListener("change", commitOffsetInput);
     dom.gpsSyncOffsetInput.addEventListener("keydown", (event) => {
@@ -155,7 +194,7 @@ export function initGpsSyncModal(opts: { getTripCurrentTime: () => number }): vo
         syncDialog(trip);
     });
 
-    dom.gpsSyncUseDefault.addEventListener("click", () => {
+    dom.gpsSyncReset.addEventListener("click", () => {
         const trip = activeTrip();
         if (!trip || !tripHasRawGps(trip)) return;
         setTripGpsOffsetSec(trip, null);
@@ -164,12 +203,18 @@ export function initGpsSyncModal(opts: { getTripCurrentTime: () => number }): vo
         syncDialog(trip);
     });
 
-    dom.gpsSyncSaveDefault.addEventListener("click", () => {
+    dom.gpsSyncApplyCamera.addEventListener("click", () => {
         const trip = activeTrip();
         if (!trip || !tripHasRawGps(trip)) return;
-        setDefaultGpsOffsetSec(trip.gpsOffsetSec ?? getDefaultGpsOffsetSec());
-        applyGpsSyncPreferencesToLoadedTrips();
+        const offsetSec = trip.gpsOffsetSec ?? 0;
+        const peers = gpsSyncPeerTrips(trip, state.trips);
+        if (offsetSec === 0 || peers.length === 0) return;
+        for (const peer of peers) {
+            setTripGpsOffsetSec(peer, offsetSec);
+            applyStoredGpsSyncToTrip(peer);
+        }
+        refreshGpsSyncSurfaces();
         syncDialog(trip);
-        notify({ severity: "info", messageKey: "status.gpsDefaultSaved" });
+        notify({ severity: "info", messageKey: "status.gpsCameraApplied" });
     });
 }

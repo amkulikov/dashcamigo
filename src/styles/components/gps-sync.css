@@ -1,5 +1,5 @@
 /* GPS/video calibration: a quiet launcher beside the live GPS readout, the
-   same action in map settings, and one focused per-trip dialog. A non-zero
+   same action in map settings, and one focused per-trip panel. A non-zero
    shift is the only state that receives accent, so calibration never becomes
    ambient chrome for users whose camera clocks already agree. */
 
@@ -68,6 +68,49 @@
 .gps-sync-card {
     width: min(600px, 100%);
 }
+
+/* On desktop the calibration panel temporarily takes the sidebar's place.
+   The overlay itself ignores pointers, leaving the player, map and timeline
+   fully usable while only the card accepts interaction. Mobile keeps the
+   centered modal because there is no spare pane to dock into. */
+#gps-sync-modal.is-modeless {
+    inset: max(env(titlebar-area-height, 44px), var(--dc-topbar-h)) auto 0 0;
+    width: max(280px, min(var(--sidebar-width, clamp(220px, 22vw, 320px)), calc(100vw - 320px)));
+    padding: 0;
+    align-items: stretch;
+    justify-content: stretch;
+    pointer-events: none;
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+#gps-sync-modal.is-modeless .gps-sync-card {
+    width: 100%;
+    max-height: none;
+    padding: var(--dc-space-5) var(--dc-space-4);
+    pointer-events: auto;
+    border-block: 0;
+    border-left: 0;
+    border-radius: 0;
+    box-shadow: var(--dc-shadow-popup);
+}
+#gps-sync-modal.is-modeless .gps-sync-offset-row {
+    flex-wrap: wrap;
+}
+#gps-sync-modal.is-modeless .gps-sync-number-wrap {
+    order: -1;
+    flex-basis: 100%;
+}
+#gps-sync-modal.is-modeless .gps-sync-step {
+    flex: 1 1 20%;
+}
+#gps-sync-modal.is-modeless .gps-sync-actions .dc-btn,
+#gps-sync-modal.is-modeless .gps-sync-align {
+    width: 100%;
+}
+#gps-sync-modal.is-modeless .gps-sync-outside {
+    margin-left: 0;
+}
 .gps-sync-description,
 .gps-sync-empty {
     margin: 0 0 var(--dc-space-4);
@@ -119,12 +162,15 @@
     font-size: var(--dc-text-sm);
     line-height: 1.5;
 }
-.gps-sync-default-actions {
+.gps-sync-actions {
     display: flex;
     flex-wrap: wrap;
     gap: var(--dc-space-2);
     padding-top: var(--dc-space-3);
     border-top: 1px solid var(--border);
+}
+#gps-sync-modal .gps-sync-actions .dc-btn[hidden] {
+    display: none;
 }
 .gps-sync-footer {
     margin-top: var(--dc-space-4);
@@ -150,7 +196,7 @@
     .gps-sync-step {
         flex: 1 1 20%;
     }
-    .gps-sync-default-actions .dc-btn,
+    .gps-sync-actions .dc-btn,
     .gps-sync-align {
         width: 100%;
     }

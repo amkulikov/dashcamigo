@@ -408,8 +408,8 @@ export const dom = {
     gpsSyncTrimToggle: $id<HTMLInputElement>("gps-sync-trim-toggle"),
     gpsSyncOutsideStatus: $id<HTMLElement>("gps-sync-outside-status"),
     gpsSyncAlignPlayhead: $id<HTMLButtonElement>("gps-sync-align-playhead"),
-    gpsSyncUseDefault: $id<HTMLButtonElement>("gps-sync-use-default"),
-    gpsSyncSaveDefault: $id<HTMLButtonElement>("gps-sync-save-default"),
+    gpsSyncReset: $id<HTMLButtonElement>("gps-sync-reset"),
+    gpsSyncApplyCamera: $id<HTMLButtonElement>("gps-sync-apply-camera"),
     gpsSyncClose: $id<HTMLButtonElement>("gps-sync-close"),
     // GPS readouts for the playhead. `speed`/`unit`/`speedToggle` live in the
     // readout row; `barSpeed`/`barUnit`/`barSpeedToggle` are the speed-only

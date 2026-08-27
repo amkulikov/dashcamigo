@@ -1,21 +1,19 @@
 // GPS-to-video synchronization preferences and Trip hydration.
 //
 // The parser-owned record clocks stay untouched. Per-trip overrides live in
-// localStorage, anchored to a recording's stable file identity; a global player
-// default fills trips without an override. The resolved preference is applied
-// to each freshly-derived Trip at the regroup boundary.
+// localStorage, anchored to a recording's stable file identity. The resolved
+// preference is applied to each freshly-derived Trip at the regroup boundary.
 
 import { recordsHaveGps } from "./parser.js";
 import { fileIdentityKey } from "./persist/identity.js";
 import { applyGpsSyncToTrip, rawTripGpsRecords, type Trip, tripAllCandidates } from "./trips.js";
 
-const DEFAULT_OFFSET_STORAGE_KEY = "dashcamigo:player:gpsOffsetSec";
 const TRIP_SYNC_STORAGE_KEY = "dashcamigo:trips:gpsSync";
 const MAX_STORED_TRIPS = 200;
 
-// One year covers badly configured camera clocks and explicit alignment of a
-// loose GPX from another date while still bounding corrupt storage.
-const GPS_OFFSET_MAX_SEC = 365 * 24 * 60 * 60;
+// A camera reset to 1970 needs decades of correction. Two centuries cover
+// plausible recording clocks while still bounding corrupt storage and input.
+export const GPS_OFFSET_MAX_SEC = 200 * 366 * 24 * 60 * 60;
 
 interface StoredTripGpsSync {
     anchorKey: string;
@@ -34,38 +32,11 @@ export interface ResolvedGpsSync {
     hasOffsetOverride: boolean;
 }
 
-let memoryDefaultOffsetSec = 0;
 let memoryEntries: StoredTripGpsSync[] = [];
 
 export function normalizeGpsOffsetSec(value: number): number {
     if (!Number.isFinite(value)) return 0;
     return Math.min(GPS_OFFSET_MAX_SEC, Math.max(-GPS_OFFSET_MAX_SEC, Math.round(value * 1000) / 1000));
-}
-
-export function getDefaultGpsOffsetSec(): number {
-    try {
-        const raw = localStorage.getItem(DEFAULT_OFFSET_STORAGE_KEY);
-        if (raw !== null) {
-            const parsed = Number(raw);
-            if (Number.isFinite(parsed) && Math.abs(parsed) <= GPS_OFFSET_MAX_SEC) {
-                memoryDefaultOffsetSec = normalizeGpsOffsetSec(parsed);
-            }
-        }
-    } catch {
-        // Storage blocked: the in-memory value still works for this session.
-    }
-    return memoryDefaultOffsetSec;
-}
-
-export function setDefaultGpsOffsetSec(value: number): number {
-    const normalized = normalizeGpsOffsetSec(value);
-    memoryDefaultOffsetSec = normalized;
-    try {
-        localStorage.setItem(DEFAULT_OFFSET_STORAGE_KEY, String(normalized));
-    } catch {
-        // Storage blocked: the in-memory value still works for this session.
-    }
-    return normalized;
 }
 
 function isStoredEntry(value: unknown): value is StoredTripGpsSync {
@@ -121,11 +92,12 @@ function candidateIdentityKey(trip: Trip): string[] {
 }
 
 function externalTrackKey(trip: Trip): string | null {
-    const keys = new Set(
-        rawTripGpsRecords(trip)
-            .filter((record) => record.externalTrack === true && record.externalTrackKey)
-            .map((record) => record.externalTrackKey!),
-    );
+    const keys = new Set<string>();
+    for (const candidate of tripAllCandidates(trip)) {
+        for (const record of candidate.records) {
+            if (record.externalTrack === true && record.externalTrackKey) keys.add(record.externalTrackKey);
+        }
+    }
     return keys.size === 1 ? [...keys][0]! : null;
 }
 
@@ -146,9 +118,9 @@ function storedEntryForTrip(entries: readonly StoredTripGpsSync[], trip: Trip): 
 export function resolvedGpsSyncForTrip(trip: Trip): ResolvedGpsSync {
     const entry = storedEntryForTrip(loadEntries(), trip);
     return {
-        offsetSec: entry?.offsetSec ?? getDefaultGpsOffsetSec(),
-        trimToVideo: entry?.trimToVideo ?? true,
-        hasOffsetOverride: entry?.offsetSec !== undefined,
+        offsetSec: entry?.offsetSec ?? 0,
+        trimToVideo: entry?.trimToVideo ?? false,
+        hasOffsetOverride: entry?.offsetSec !== undefined && entry.offsetSec !== 0,
     };
 }
 
@@ -168,20 +140,21 @@ function upsertTripEntry(trip: Trip, patch: (entry: StoredTripGpsSync) => void):
     else saveEntries([entry, ...without]);
 }
 
-/** Stores an explicit offset, including zero (zero must override a non-zero
- *  player default). Passing null clears only this trip's offset override. */
+/** Stores one trip's offset. Zero and null both restore the raw GPS clock. */
 export function setTripGpsOffsetSec(trip: Trip, value: number | null): void {
     upsertTripEntry(trip, (entry) => {
-        if (value === null) delete entry.offsetSec;
-        else entry.offsetSec = normalizeGpsOffsetSec(value);
+        const normalized = value === null ? 0 : normalizeGpsOffsetSec(value);
+        if (normalized === 0) delete entry.offsetSec;
+        else entry.offsetSec = normalized;
     });
 }
 
-/** Trimming is on by default, so storing true removes the redundant override. */
+/** The complete track is visible by default so a mismatched GPX can be found
+ *  and aligned. Only an explicit opt-in trims points outside the footage. */
 export function setTripGpsTrimToVideo(trip: Trip, trimToVideo: boolean): void {
     upsertTripEntry(trip, (entry) => {
-        if (trimToVideo) delete entry.trimToVideo;
-        else entry.trimToVideo = false;
+        if (trimToVideo) entry.trimToVideo = true;
+        else delete entry.trimToVideo;
     });
 }
 
@@ -197,7 +170,33 @@ export function applyStoredGpsSyncToTrips(trips: readonly Trip[]): void {
 /** Raw-GPS predicate for launch controls. Unlike trip.records it stays true
  *  when a bad offset plus trimming temporarily moves every point off-video. */
 export function tripHasRawGps(trip: Trip | null): boolean {
-    return trip !== null && recordsHaveGps(rawTripGpsRecords(trip));
+    return trip !== null && tripAllCandidates(trip).some((candidate) => recordsHaveGps(candidate.records));
+}
+
+function tripCameraFingerprint(trip: Trip): string | null {
+    const fingerprints = new Set(tripAllCandidates(trip).map((candidate) => candidate.fingerprint));
+    return fingerprints.size === 1 ? [...fingerprints][0]! : null;
+}
+
+function tripHasExternalTrack(trip: Trip): boolean {
+    return tripAllCandidates(trip).some((candidate) =>
+        candidate.records.some((record) => record.externalTrack === true),
+    );
+}
+
+/** Other loaded trips whose native GPS follows the same physical camera
+ *  clock. Loose GPX tracks stay trip-specific even when their video came from
+ *  the same camera because every attached source owns a separate clock. */
+export function gpsSyncPeerTrips(trip: Trip, trips: readonly Trip[]): Trip[] {
+    const fingerprint = tripCameraFingerprint(trip);
+    if (fingerprint === null || tripHasExternalTrack(trip)) return [];
+    return trips.filter(
+        (candidate) =>
+            candidate !== trip &&
+            tripHasRawGps(candidate) &&
+            !tripHasExternalTrack(candidate) &&
+            tripCameraFingerprint(candidate) === fingerprint,
+    );
 }
 
 export function rawGpsStartUnix(trip: Trip): number | null {
@@ -207,7 +206,7 @@ export function rawGpsStartUnix(trip: Trip): number | null {
 /** Edge overhang after applying an offset. It intentionally measures only the
  *  track prefix/suffix; recording pauses inside a trip are explained separately
  *  by the timeline and do not read as an accidentally long GPX. */
-export function gpsOutsideVideoSec(trip: Trip, offsetSec: number): number {
+export function gpsTrackOverhangSec(trip: Trip, offsetSec: number): number {
     const active = rawTripGpsRecords(trip).filter((record) => record.active);
     const first = active[0];
     const last = active[active.length - 1];
@@ -223,6 +222,5 @@ export function gpsOutsideVideoSec(trip: Trip, offsetSec: number): number {
 
 /** Clears module-level fallbacks between deterministic unit tests. */
 export function _resetForTests(): void {
-    memoryDefaultOffsetSec = 0;
     memoryEntries = [];
 }

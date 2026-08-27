@@ -436,8 +436,8 @@ initNotifications();
 // subscription fires immediately, so an offline launch shows the banner at once).
 initConnectivity();
 initOfflineBanner();
-// GPS calibration is trip-scoped; general settings carries its player-wide
-// default alongside the other map preferences.
+// GPS calibration stays scoped to the open trip or an explicit set of loaded
+// trips from the same camera.
 initGpsSyncModal({ getTripCurrentTime });
 initSettingsModal();
 initMapSettingsPopover();

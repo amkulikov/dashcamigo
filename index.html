@@ -2362,13 +2362,13 @@
         </div>
     </div>
 
-    <!-- Per-trip GPS calibration. Kept out of the main settings modal because
-         its most useful action reads the current player position. -->
-    <div id="gps-sync-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true"
+    <!-- Per-trip GPS calibration. It becomes a modeless sidebar on desktop so
+         the player, map and chart remain usable while the values change. -->
+    <div id="gps-sync-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="false"
          aria-labelledby="gps-sync-modal-title">
         <div class="export-modal-card modal-card gps-sync-card">
             <div class="export-modal-title" id="gps-sync-modal-title" data-i18n="gpsSync.title">Sync GPS with video</div>
-            <p class="gps-sync-description" data-i18n="gpsSync.description">Shift the GPS track until the route and speed match the video.</p>
+            <p class="gps-sync-description" data-i18n="gpsSync.description">Play or seek as you adjust — the route and speed update immediately.</p>
             <p id="gps-sync-no-track" class="gps-sync-empty" hidden data-i18n="gpsSync.noTrack">This trip has no GPS track to sync.</p>
             <div id="gps-sync-controls">
                 <div class="export-modal-section gps-sync-section">
@@ -2380,7 +2380,7 @@
                                 data-i18n-attr="aria-label:gpsSync.earlier">−1</button>
                         <span class="gps-sync-number-wrap">
                             <input id="gps-sync-offset-input" class="settings-number-input gps-sync-number" type="number"
-                                   inputmode="decimal" min="-31536000" max="31536000" step="0.1">
+                                   inputmode="decimal" step="0.1">
                             <span class="settings-numeric-unit" data-i18n="gpsSync.offset.unit">seconds</span>
                         </span>
                         <button class="dc-btn dc-btn--secondary gps-sync-step" type="button" data-gps-delta="1"
@@ -2393,22 +2393,22 @@
                 <div class="export-modal-section gps-sync-section">
                     <button id="gps-sync-align-playhead" class="dc-btn dc-btn--secondary gps-sync-align" type="button"
                             data-i18n="gpsSync.alignPlayhead">Place track start at current frame</button>
-                    <p class="settings-toggle-desc" data-i18n="gpsSync.alignPlayhead.hint">Uses the frame that was showing when you opened this panel.</p>
+                    <p class="settings-toggle-desc" data-i18n="gpsSync.alignPlayhead.hint">Seek to where the track begins, then click this button.</p>
                 </div>
                 <div class="export-modal-section gps-sync-section">
                     <label class="settings-toggle">
-                        <input id="gps-sync-trim-toggle" type="checkbox" checked>
+                        <input id="gps-sync-trim-toggle" type="checkbox">
                         <span class="settings-toggle-slider" aria-hidden="true"></span>
                         <span class="settings-toggle-label" data-i18n="gpsSync.trim.label">Hide GPS outside the video</span>
                     </label>
-                    <p class="settings-toggle-desc" data-i18n="gpsSync.trim.description">Extra GPS before the start and after the end won't appear on the route or in exports.</p>
+                    <p class="settings-toggle-desc" data-i18n="gpsSync.trim.description">GPS points with no matching video won't appear on the route or in exports.</p>
                     <p id="gps-sync-outside-status" class="gps-sync-outside" hidden></p>
                 </div>
-                <div class="gps-sync-default-actions">
-                    <button id="gps-sync-use-default" class="dc-btn dc-btn--secondary" type="button"
-                            data-i18n="gpsSync.useDefault">Use player default</button>
-                    <button id="gps-sync-save-default" class="dc-btn dc-btn--secondary" type="button"
-                            data-i18n="gpsSync.saveDefault">Use this shift for other trips</button>
+                <div class="gps-sync-actions">
+                    <button id="gps-sync-reset" class="dc-btn dc-btn--secondary" type="button"
+                            data-i18n="gpsSync.reset">Reset shift</button>
+                    <button id="gps-sync-apply-camera" class="dc-btn dc-btn--secondary" type="button"
+                            data-i18n="gpsSync.applyCamera">Apply to loaded trips from this camera</button>
                 </div>
             </div>
             <div class="export-modal-actions gps-sync-footer">
@@ -2489,17 +2489,6 @@
                         </select>
                     </label>
                     <p class="settings-toggle-desc" data-i18n="settings.map.streetNames.description">Shows street names more often and from farther out.</p>
-                </div>
-                <div class="settings-row">
-                    <label class="settings-select-row">
-                        <span class="settings-select-label" data-i18n="settings.map.gpsOffset.label">Default GPS shift</span>
-                        <span class="settings-numeric-row">
-                            <input id="settings-gps-offset-input" type="number" inputmode="decimal"
-                                   class="settings-number-input" min="-31536000" max="31536000" step="0.1">
-                            <span class="settings-numeric-unit" data-i18n="gpsSync.offset.unit">seconds</span>
-                        </span>
-                    </label>
-                    <p class="settings-toggle-desc" data-i18n="settings.map.gpsOffset.description">Applies to trips without their own GPS sync. Negative moves GPS earlier; positive moves it later.</p>
                 </div>
             </div>
             <!-- Events: brake/impact detection threshold. detectEvents in

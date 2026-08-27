@@ -3,10 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
     _resetForTests,
     applyStoredGpsSyncToTrip,
-    getDefaultGpsOffsetSec,
-    gpsOutsideVideoSec,
+    gpsSyncPeerTrips,
+    gpsTrackOverhangSec,
+    normalizeGpsOffsetSec,
     resolvedGpsSyncForTrip,
-    setDefaultGpsOffsetSec,
     setTripGpsOffsetSec,
     setTripGpsTrimToVideo,
 } from "./gps-sync.js";
@@ -89,6 +89,7 @@ describe("GPS synchronization", () => {
         const value = trip();
         const rawTimes = value.frames[0]!.channels.front!.records.map((item) => item.unixSeconds);
 
+        setTripGpsTrimToVideo(value, true);
         setTripGpsOffsetSec(value, 5);
         applyStoredGpsSyncToTrip(value);
         expect(value.records.map((item) => item.unixSeconds)).toEqual([1000, 1005, 1015]);
@@ -101,9 +102,9 @@ describe("GPS synchronization", () => {
 
     it("lets the user keep or hide GPS outside the footage window", () => {
         const value = trip();
-        expect(gpsOutsideVideoSec(value, 0)).toBe(10);
+        expect(gpsTrackOverhangSec(value, 0)).toBe(10);
+        expect(resolvedGpsSyncForTrip(value).trimToVideo).toBe(false);
 
-        setTripGpsTrimToVideo(value, false);
         applyStoredGpsSyncToTrip(value);
         expect(value.records.map((item) => item.unixSeconds)).toEqual([995, 1000, 1010, 1025]);
 
@@ -123,11 +124,11 @@ describe("GPS synchronization", () => {
 
         applyStoredGpsSyncToTrip(value);
         expect(value.gpsOffsetSec).toBe(0);
-        expect(value.records).toEqual([]);
+        expect(value.records.map((item) => item.unixSeconds)).toEqual([100_000, 100_010, 100_025]);
 
         setTripGpsOffsetSec(value, 1000 - rawStart);
         applyStoredGpsSyncToTrip(value);
-        expect(value.records.map((item) => item.unixSeconds)).toEqual([1000, 1010]);
+        expect(value.records.map((item) => item.unixSeconds)).toEqual([1000, 1010, 1025]);
         expect(external[0]!.unixSeconds).toBe(rawStart);
     });
 
@@ -145,6 +146,7 @@ describe("GPS synchronization", () => {
 
         const value = groupTrips([first, second])[0]!;
         expect(value.frames).toHaveLength(2);
+        setTripGpsTrimToVideo(value, true);
         applyStoredGpsSyncToTrip(value);
 
         // The GPX is associated with the first file but belongs to the whole
@@ -173,25 +175,42 @@ describe("GPS synchronization", () => {
         expect(resolvedGpsSyncForTrip(secondTrip).offsetSec).toBe(0);
     });
 
-    it("persists an explicit zero per trip so it can override a non-zero player default", () => {
-        setDefaultGpsOffsetSec(12);
-        expect(getDefaultGpsOffsetSec()).toBe(12);
-
+    it("persists a trip offset across reloads and treats zero as a reset", () => {
         const firstLoad = trip();
-        setTripGpsOffsetSec(firstLoad, 0);
+        setTripGpsOffsetSec(firstLoad, 12);
         applyStoredGpsSyncToTrip(firstLoad);
-        expect(firstLoad.gpsOffsetSec).toBe(0);
+        expect(firstLoad.gpsOffsetSec).toBe(12);
         expect(resolvedGpsSyncForTrip(firstLoad).hasOffsetOverride).toBe(true);
 
         // Fresh Trip and File objects with the same stable identity simulate a
         // later folder re-open; the per-trip override must survive it.
         const reopened = trip();
         applyStoredGpsSyncToTrip(reopened);
-        expect(reopened.gpsOffsetSec).toBe(0);
-
-        setTripGpsOffsetSec(reopened, null);
-        applyStoredGpsSyncToTrip(reopened);
         expect(reopened.gpsOffsetSec).toBe(12);
+
+        setTripGpsOffsetSec(reopened, 0);
+        applyStoredGpsSyncToTrip(reopened);
+        expect(reopened.gpsOffsetSec).toBe(0);
         expect(resolvedGpsSyncForTrip(reopened).hasOffsetOverride).toBe(false);
+    });
+
+    it("offers only native-GPS trips from the same camera as batch peers", () => {
+        const source = trip(1001);
+        const sameCamera = trip(1002);
+        const otherCamera = trip(1003);
+        otherCamera.frames[0]!.channels.front!.fingerprint = "other-camera";
+        const external = trip(1004);
+        external.frames[0]!.channels.front!.records = external.frames[0]!.channels.front!.records.map((item) => ({
+            ...item,
+            externalTrack: true,
+        }));
+
+        expect(gpsSyncPeerTrips(source, [source, sameCamera, otherCamera, external])).toEqual([sameCamera]);
+        expect(gpsSyncPeerTrips(external, [source, sameCamera, external])).toEqual([]);
+    });
+
+    it("accepts offsets large enough for a camera clock reset to 1970", () => {
+        const fiftySixYearsSec = 56 * 365.25 * 24 * 60 * 60;
+        expect(normalizeGpsOffsetSec(fiftySixYearsSec)).toBeCloseTo(fiftySixYearsSec, 3);
     });
 });

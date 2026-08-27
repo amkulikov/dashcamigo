@@ -1,5 +1,5 @@
 // GPS/video calibration behavior: one quiet launcher, live per-trip overrides,
-// a player-wide default, and the action-camera + manually attached GPX path.
+// same-camera batch application, and the manually attached GPX path.
 
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -24,7 +24,7 @@ test.describe("GPS synchronization", () => {
         await gotoApp(page, "en");
     });
 
-    test("player default and a stable per-trip override stay visually explicit", async ({ page }) => {
+    test("the desktop panel keeps the player usable and persists a resettable trip shift", async ({ page }) => {
         await loadTrip(page, SAMPLE_70MAI);
         const pill = page.locator("#gps-sync-pill");
         await expect(pill).toBeVisible();
@@ -32,45 +32,34 @@ test.describe("GPS synchronization", () => {
         await expect(pill).not.toHaveClass(/is-shifted/);
 
         // The map gear is the contextual duplicate entry point; it opens the
-        // same dialog instead of growing a second set of calibration controls.
-        const modal = page.locator("#gps-sync-modal");
+        // same panel instead of growing a second set of calibration controls.
+        const panel = page.locator("#gps-sync-modal");
         await page.locator(".mini-map").click();
         await page.locator("#map-settings-toggle").click();
         const mapAction = page.locator("#map-gps-sync-btn");
         await expect(mapAction).toBeVisible();
         await expect(mapAction).toHaveText("Sync GPS");
         await mapAction.click();
-        await expect(modal).toBeVisible();
+        await expect(panel).toBeVisible();
+        await expect(panel).toHaveClass(/is-modeless/);
+        await expect(panel).toHaveAttribute("aria-modal", "false");
+        await expect(page.locator("#gps-sync-trim-toggle")).not.toBeChecked();
+        await expect(page.locator("#gps-sync-reset")).toBeDisabled();
+        await expect(page.locator("#gps-sync-apply-camera")).toBeHidden();
+
+        // Calibration must not lock the surface it is calibrating. A real user
+        // click seeks the video while the panel stays open.
+        const beforeSeek = await page.evaluate(() => window.__dashcamigo.dom.player.currentTime);
+        await page.locator("#player-step-fwd").click();
+        await expect
+            .poll(() => page.evaluate(() => window.__dashcamigo.dom.player.currentTime))
+            .toBeGreaterThan(beforeSeek);
+        await expect(panel).toBeVisible();
+
+        await page.locator("#gps-sync-offset-input").fill("1.5");
+        await page.locator("#gps-sync-offset-input").press("Enter");
+        await expect(page.locator("#gps-sync-reset")).toBeEnabled();
         await page.locator("#gps-sync-close").click();
-
-        // General Map settings supplies the player-wide fallback.
-        await page.locator("#settings-btn").click();
-        const defaultInput = page.locator("#settings-gps-offset-input");
-        await defaultInput.fill("0.5");
-        await defaultInput.press("Tab");
-        await page.locator("#settings-modal-close").click();
-        await expect(pill).toHaveClass(/is-shifted/);
-        await expect(pill).toHaveText("GPS +0.5s");
-        await page.locator("#map-settings-toggle").click();
-        await expect(mapAction).toHaveClass(/is-shifted/);
-        await expect(mapAction).toHaveText("GPS +0.5s");
-        await page.keyboard.press("Escape");
-
-        // One discrete edit creates a trip override; changing the global value
-        // afterwards must leave this trip on its own setting.
-        await pill.click();
-        await expect(modal).toBeVisible();
-        await expect(page.locator("#gps-sync-offset-input")).toHaveValue("0.5");
-        await page.locator('[data-gps-delta="1"]').click();
-        await expect(page.locator("#gps-sync-offset-input")).toHaveValue("1.5");
-        await expect(page.locator("#gps-sync-use-default")).toBeEnabled();
-        await page.locator("#gps-sync-close").click();
-        await expect(pill).toHaveText("GPS +1.5s");
-
-        await page.locator("#settings-btn").click();
-        await defaultInput.fill("2.5");
-        await defaultInput.press("Tab");
-        await page.locator("#settings-modal-close").click();
         await expect(pill).toHaveText("GPS +1.5s");
 
         // Reopening the same folder creates fresh File/Trip objects. The stable
@@ -80,8 +69,11 @@ test.describe("GPS synchronization", () => {
         await expect(page.locator("#gps-sync-pill")).toHaveText("GPS +1.5s");
 
         await page.locator("#gps-sync-pill").click();
-        await page.locator("#gps-sync-use-default").click();
-        await expect(page.locator("#gps-sync-offset-input")).toHaveValue("2.5");
+        await page.locator("#gps-sync-reset").click();
+        await expect(page.locator("#gps-sync-offset-input")).toHaveValue("0");
+        await expect(page.locator("#gps-sync-reset")).toBeDisabled();
+        await page.locator("#gps-sync-close").click();
+        await expect(page.locator("#gps-sync-pill")).toHaveText("Sync GPS");
     });
 
     test("a confirmed loose GPX keeps its timestamp until the user explicitly aligns it", async ({ page }) => {
@@ -135,9 +127,10 @@ test.describe("GPS synchronization", () => {
         expect(initial.external, "manual GPX must never become a video clock anchor").toBe(true);
         expect(initial.userOffset).toBe(0);
         expect(initial.trackStart).toBeCloseTo(initial.videoStart + 14 * 24 * 60 * 60, 3);
-        expect(initial.effectiveCount, "a mismatched track starts outside the footage").toBe(0);
+        expect(initial.effectiveCount, "a mismatched track stays visible for alignment").toBe(initial.rawCount);
 
         await pill.click();
+        await expect(page.locator("#gps-sync-trim-toggle")).not.toBeChecked();
         await page.locator("#gps-sync-align-playhead").click();
         await expect
             .poll(() =>
@@ -149,7 +142,7 @@ test.describe("GPS synchronization", () => {
             .toBeGreaterThan(0);
 
         await page.locator("label:has(#gps-sync-trim-toggle)").click();
-        await expect(page.locator("#gps-sync-trim-toggle")).not.toBeChecked();
+        await expect(page.locator("#gps-sync-trim-toggle")).toBeChecked();
         await expect
             .poll(() =>
                 page.evaluate(() => {
@@ -157,7 +150,7 @@ test.describe("GPS synchronization", () => {
                     return state.trips[state.active!.trip]!.records.length;
                 }),
             )
-            .toBe(initial.rawCount);
+            .toBeLessThan(initial.rawCount);
 
         await page.locator('[data-gps-delta="1"]').click();
         const explicitOffset = await page.locator("#gps-sync-offset-input").inputValue();
@@ -363,6 +356,8 @@ test.describe("GPS synchronization", () => {
         await mobilePill.click();
         const modal = page.locator("#gps-sync-modal");
         await expect(modal).toBeVisible();
+        await expect(modal).toHaveClass(/is-modal/);
+        await expect(modal).toHaveAttribute("aria-modal", "true");
         await expect(page.locator(".gps-sync-card")).toBeInViewport();
         await page.locator('[data-gps-delta="1"]').click();
         await page.locator("#gps-sync-close").click();

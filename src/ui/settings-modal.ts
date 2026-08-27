@@ -22,7 +22,6 @@ import {
     getBrakeThresholdG,
     setBrakeThresholdG,
 } from "../events.js";
-import { getDefaultGpsOffsetSec, normalizeGpsOffsetSec, setDefaultGpsOffsetSec } from "../gps-sync.js";
 import { t } from "../i18n/index.js";
 import { createLogger, downloadLogBuffer } from "../log.js";
 import { crashReportingEnabled, isCrashReportingBuilt, setCrashReportingEnabled } from "../sentry.js";
@@ -40,7 +39,6 @@ import { APP_VERSION } from "../version.js";
 import { rebuildChartFromTrip } from "./chart.js";
 import { commitRecordingTripsWhilePreservingIngest } from "./ingest-regroup.js";
 import { formatBytes } from "./format.js";
-import { applyGpsSyncPreferencesToLoadedTrips } from "./gps-sync-modal.js";
 import { reapplyMapLabelPrefs, refreshMap } from "./map.js";
 import {
     getMapLabelScale,
@@ -104,7 +102,6 @@ function openSettings(): void {
     syncCrashToggleFromState();
     syncUnitsSelect();
     syncMapLabelScaleSelect();
-    syncGpsOffsetInput();
     syncSeekStepInputs();
     syncEventsThresholdInputs();
     syncTripGapInput();
@@ -160,11 +157,6 @@ function syncMapLabelScaleSelect(): void {
     if (sel) sel.value = String(getMapLabelScale());
     const density = document.getElementById("settings-map-street-names-select") as HTMLSelectElement | null;
     if (density) density.value = getStreetLabelDensity();
-}
-
-function syncGpsOffsetInput(): void {
-    const input = document.getElementById("settings-gps-offset-input") as HTMLInputElement | null;
-    if (input) input.value = String(getDefaultGpsOffsetSec());
 }
 
 /**
@@ -406,14 +398,6 @@ export function initSettingsModal(): void {
         if (match === undefined) return;
         setStreetLabelDensity(match);
         reapplyMapLabelPrefs();
-    });
-
-    document.getElementById("settings-gps-offset-input")?.addEventListener("change", (ev) => {
-        const input = ev.target as HTMLInputElement;
-        const parsed = Number.parseFloat(input.value);
-        const next = normalizeGpsOffsetSec(Number.isFinite(parsed) ? parsed : 0);
-        input.value = String(setDefaultGpsOffsetSec(next));
-        applyGpsSyncPreferencesToLoadedTrips();
     });
 
     // --- Playback: arrow-key seek step ---
