@@ -1,8 +1,8 @@
-// First-run onboarding tours (src/ui/onboarding.ts). Asserts the four triggers
+// First-run onboarding tours (src/ui/onboarding.ts). Asserts the triggers
 // fire on first run, that "Don't show again" persists (and the X / "later" path
 // does NOT), and that a seeded-done flag suppresses the tour entirely - the
-// guarantee the rest of the e2e suite relies on (presetLocalStorage seeds all
-// four as done so trip/export specs are not blocked by the overlay).
+// guarantee the rest of the e2e suite relies on (presetLocalStorage seeds every
+// tour as done so trip/export specs are not blocked by the overlay).
 //
 // clearOnboarding() must run AFTER presetLocalStorage() and before gotoApp(),
 // so beforeEach only presets + sizes; each test clears the tours it exercises,
@@ -47,8 +47,8 @@ test.describe("onboarding", () => {
         const onb = page.locator(".dc-onb");
         await expect(onb).toBeVisible({ timeout: 5_000 });
         await expect(page.locator(".dc-onb__title")).toContainText("Your trips");
-        // Counter reflects a multi-step tour.
-        await expect(page.locator(".dc-onb__count")).toContainText("/");
+        await expect(page.locator(".dc-onb__count")).toHaveText("1 / 1");
+        await expect(page.locator(".dc-onb__next")).toHaveText(/Got it/);
         await shot(page, "onboarding-01-ingest");
 
         // "Don't show again" ends the tour and persists.
@@ -70,9 +70,7 @@ test.describe("onboarding", () => {
 
         // Step through to the end; the last button completes the tour.
         const next = page.locator(".dc-onb__next");
-        await next.click(); // -> playback
-        await next.click(); // -> view
-        await next.click(); // -> export
+        await next.click(); // -> save clip
         await expect(next).toHaveText(/Got it/);
         await next.click(); // complete
 
@@ -145,10 +143,8 @@ test.describe("onboarding", () => {
 
         const onb = page.locator(".dc-onb");
         await expect(onb).toBeVisible({ timeout: 5_000 });
-        await expect(page.locator(".dc-onb__title")).toContainText("Several cameras");
-        // Step through to the dedicated reorder/hide-cameras step (the one the
-        // multichannel tour exists to teach).
-        await page.locator(".dc-onb__next").click(); // -> layout
+        await expect(page.locator(".dc-onb__title")).toContainText("Layout");
+        // Step through to the dedicated reorder/hide-cameras step.
         await page.locator(".dc-onb__next").click(); // -> arrange cameras
         await expect(page.locator(".dc-onb__title")).toContainText("Arrange cameras");
         await page.locator(".dc-onb__skip").click();
@@ -157,7 +153,7 @@ test.describe("onboarding", () => {
     });
 
     test("danger zone 'Replay tips' clears the seen-state of every tour", async ({ page }) => {
-        // All four seeded done by presetLocalStorage.
+        // Every tour is seeded done by presetLocalStorage.
         await gotoApp(page, "en");
         expect(await flag(page, "player")).toBe("1");
 

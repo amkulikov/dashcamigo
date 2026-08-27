@@ -114,7 +114,6 @@ import {
     playTripEvent,
     reconcileActiveTripAfterRegroup,
     seekThenPlay,
-    seekTripTime,
 } from "./ui/player.js";
 import { initTripUi } from "./ui/trip-ui-init.js";
 import {
@@ -483,7 +482,7 @@ initViewMenu({
 initExportMode();
 initTopPanel({ onCompositionApply: applyComposition, resetZoom: resetVideoZoom });
 initExportPanel({ onCompositionApply: applyComposition });
-initExportTrimBar({ getTripCurrentTime, seekTripTime, seekThenPlay });
+initExportTrimBar({ getTripCurrentTime, seekThenPlay });
 initTimelineRange();
 initPlayerOverlays();
 initPlayerCrop();

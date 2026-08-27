@@ -39,7 +39,7 @@ test.describe("export run", () => {
 
     test("stream-copy single channel writes a valid MP4 with a GPMF track", async ({ page }) => {
         // Reduce to one channel -> canStreamCopy() is true (no re-encode). GPMF is
-        // kept by default (the inverted 'remove' toggle is unchecked), so the
+        // kept by default, so the
         // post-process meta-track injection must run and land a 'gpmd' handler.
         const includes = page.locator(".top-panel__channel-include");
         await expect(includes).toHaveCount(3);
@@ -120,8 +120,7 @@ test.describe("export run", () => {
 
         // Below the top tier -> re-encode (the top tier would stream-copy instead).
         await page.locator('input[name="export-panel-quality"][value="medium"]').check();
-        // The checkbox is the opt-OUT: ticked means "remove the mark".
-        await page.locator("#export-panel-watermark").check();
+        await page.locator("#export-panel-watermark").uncheck();
 
         await page.locator("#export-panel-save-btn").click();
         await expect(page.locator("#export-panel-done-summary")).toBeVisible({ timeout: 100_000 });

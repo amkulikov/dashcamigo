@@ -22,12 +22,10 @@ import { flashRangeTab } from "./timeline-range.js";
 import { t } from "../i18n/index.js";
 import type { I18nKey } from "../i18n/keys.js";
 
-// Playhead accessors (player.ts getTripCurrentTime / seekTripTime / seekThenPlay),
+// Playhead accessors (player.ts getTripCurrentTime / seekThenPlay),
 // injected at init to keep the dep tree acyclic - player.ts must stay importable
-// from here. Drive the set-to-playhead buttons, the "preview clip" seek-into-range,
-// and the double-click "play the clip from its start".
+// from here. Drive the set-to-playhead buttons and clip playback.
 let getPlayheadTripSec: () => number = () => 0;
-let seekPlayheadTripSec: (sec: number) => void = () => {};
 let seekThenPlayTripSec: (sec: number) => void = () => {};
 
 // Two time inputs (start / end) two-way synced with the timeline pull-tabs,
@@ -55,12 +53,6 @@ let rangeFeedbackTimer: ReturnType<typeof setTimeout> | null = null;
  *  stale selection from another context can never be restored. */
 let undoRange: { startTripSec: number; endTripSec: number } | null = null;
 
-/** How close (sec) the playhead may sit to the clip end before "Preview clip"
- *  treats it as "parked at the end" and rewinds to the clip start. Covers the
- *  natural state right after the set-end-to-playhead action, where pressing
- *  play would hit the stop-at-end boundary instantly (a visible "twitch"). */
-const PREVIEW_END_REWIND_SEC = 1;
-
 /** Lucide "arrow-down-to-line": a marker dropping onto a line - "put this clip
  *  edge at the playhead". Shared by both set-to-playhead buttons. */
 const SET_EDGE_ICON_PATHS = ["M12 17V3", "m6 11 6 6 6-6", "M19 21H5"];
@@ -73,11 +65,9 @@ const SET_EDGE_ICON_PATHS = ["M12 17V3", "m6 11 6 6 6-6", "M19 21H5"];
  */
 export function initExportTrimBar(opts: {
     getTripCurrentTime: () => number;
-    seekTripTime: (sec: number) => void;
     seekThenPlay: (sec: number) => void;
 }): void {
     getPlayheadTripSec = opts.getTripCurrentTime;
-    seekPlayheadTripSec = opts.seekTripTime;
     seekThenPlayTripSec = opts.seekThenPlay;
     buildTrimBar();
     subscribeExportState(syncTrimBar);
@@ -100,26 +90,26 @@ function buildTrimBar(): void {
     const row = document.createElement("div");
     row.className = "export-trim-bar__row";
 
-    rangeSetStartBtn = makeSetEdgeButton("start", t("export.range.setStart"));
-    rangeStartInput = makeRangeInput("start", t("export.range.startLabel"));
+    const startField = makeEdgeField("start", t("export.range.startLabel"), t("export.range.setStart"));
+    rangeSetStartBtn = startField.button;
+    rangeStartInput = startField.input;
 
     const sep = document.createElement("span");
     sep.className = "export-trim-bar__sep";
     sep.textContent = "→";
     sep.setAttribute("aria-hidden", "true");
 
-    rangeEndInput = makeRangeInput("end", t("export.range.endLabel"));
-    rangeSetEndBtn = makeSetEdgeButton("end", t("export.range.setEnd"));
+    const endField = makeEdgeField("end", t("export.range.endLabel"), t("export.range.setEnd"));
+    rangeEndInput = endField.input;
+    rangeSetEndBtn = endField.button;
 
     const length = document.createElement("span");
     length.className = "export-trim-bar__length";
     rangeLengthEl = length;
 
-    row.appendChild(rangeSetStartBtn);
-    row.appendChild(rangeStartInput);
+    row.appendChild(startField.root);
     row.appendChild(sep);
-    row.appendChild(rangeEndInput);
-    row.appendChild(rangeSetEndBtn);
+    row.appendChild(endField.root);
     row.appendChild(length);
 
     // Range actions: reset to the full trip (shown only when narrowed), zoom
@@ -180,11 +170,8 @@ function buildTrimBar(): void {
     });
     actions.appendChild(rangeUndoBtn);
 
-    // from-zoom is built (and appended) BEFORE preview so preview stays the
-    // rightmost action. The actions row is right-anchored (margin-left:auto), so
-    // the last child sits at a fixed edge: revealing from-zoom on the first
-    // preview click grows the row leftward and does NOT shift preview - otherwise
-    // the button slides out from under a double-click's second press.
+    // from-zoom is built before playback so the primary range action stays at
+    // the trailing edge when this conditional bridge appears.
     rangeFromZoomBtn = document.createElement("button");
     rangeFromZoomBtn.type = "button";
     rangeFromZoomBtn.id = "export-trim-from-zoom";
@@ -208,27 +195,9 @@ function buildTrimBar(): void {
     rangePreviewBtn.addEventListener("click", () => {
         const range = exportPanelState.range;
         if (!range) return;
-        // Zooming the timeline to the clip window makes the existing zoom
-        // machinery bound playback to it (seek clamp + stop/loop at the end),
-        // so Space now plays exactly the clip - a preview with no new player
-        // code. Z / chart double-click resets the zoom and unclamps.
-        zoomTimelineToRange(range.startTripSec, range.endTripSec);
-        // Land the playhead on the clip start when it is outside the clip OR
-        // parked at/near the clip end (where play would stop instantly);
-        // genuinely mid-clip positions are left alone (resuming a scrub-through).
-        const cur = getPlayheadTripSec();
-        if (cur < range.startTripSec - 0.05 || cur > range.endTripSec - PREVIEW_END_REWIND_SEC) {
-            seekPlayheadTripSec(range.startTripSec);
-        }
-    });
-    // Double-click: zoom to the clip AND play it from the start. seekThenPlay
-    // defers play() to the landing 'seeked' so a cross-file seek to the clip
-    // start does not race the reload (see player.ts). The two single 'click's
-    // that precede this already applied the zoom + rewind; this re-asserts the
-    // start-seek even from a genuinely mid-clip playhead, then plays.
-    rangePreviewBtn.addEventListener("dblclick", () => {
-        const range = exportPanelState.range;
-        if (!range) return;
+        // The preview action has one contract: show exactly the chosen window
+        // and play it from its start. seekThenPlay waits for cross-file seeks to
+        // land before calling play(), including an offset-0 file boundary.
         zoomTimelineToRange(range.startTripSec, range.endTripSec);
         seekThenPlayTripSec(range.startTripSec);
     });
@@ -247,7 +216,37 @@ function buildTrimBar(): void {
     bar.appendChild(feedback);
 }
 
-/** One set-to-playhead icon button. Same funnel as the I/O hotkeys: the shared
+interface EdgeField {
+    root: HTMLElement;
+    input: HTMLInputElement;
+    button: HTMLButtonElement;
+}
+
+/** A labelled range edge with its timecode and set-to-playhead action. */
+function makeEdgeField(which: "start" | "end", label: string, actionLabel: string): EdgeField {
+    const root = document.createElement("div");
+    root.className = "export-trim-bar__field";
+
+    const input = makeRangeInput(which, label);
+    input.id = `export-trim-${which}`;
+
+    const labelEl = document.createElement("label");
+    labelEl.className = "export-trim-bar__label";
+    labelEl.htmlFor = input.id;
+    labelEl.textContent = label;
+
+    const controls = document.createElement("div");
+    controls.className = "export-trim-bar__field-controls";
+    const button = makeSetEdgeButton(which, actionLabel);
+    controls.appendChild(input);
+    controls.appendChild(button);
+
+    root.appendChild(labelEl);
+    root.appendChild(controls);
+    return { root, input, button };
+}
+
+/** One set-to-playhead button. Same funnel as the I/O hotkeys: the shared
  *  clamp absorbs an edge crossing, the tab flash marks what moved. */
 function makeSetEdgeButton(which: "start" | "end", label: string): HTMLButtonElement {
     const btn = document.createElement("button");
@@ -257,6 +256,9 @@ function makeSetEdgeButton(which: "start" | "end", label: string): HTMLButtonEle
     btn.setAttribute("aria-label", label);
     btn.title = label;
     btn.appendChild(buildLucideIcon(SET_EDGE_ICON_PATHS, 14));
+    const text = document.createElement("span");
+    text.textContent = label;
+    btn.appendChild(text);
     btn.addEventListener("click", () => {
         if (!exportPanelState.range) return;
         const res = setRangeEdge(which, getPlayheadTripSec());

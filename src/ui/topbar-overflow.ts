@@ -1,7 +1,6 @@
 // Overflow-bar configuration for the topbar.
-// When the header shrinks the low-priority buttons (what's new/theme/feedback/
-// install) move into the kebab menu. Bell, lang, settings stay always visible -
-// we do not pass them to the overflow-bar.
+// When the header shrinks the low-priority buttons (what's new/install/feedback/
+// theme/settings) move into the kebab menu. Bell and language stay visible.
 //
 // This module is only wiring: which buttons collapse, in what order, how they
 // look in the menu. The generic measuring and rendering logic is in
@@ -23,6 +22,7 @@ export function initTopbarOverflow() {
     const feedbackBtn = document.getElementById("feedback-btn") as HTMLButtonElement | null;
     const installBtn = document.getElementById("install-btn") as HTMLButtonElement | null;
     const whatsNewBtn = document.getElementById("whats-new-btn") as HTMLButtonElement | null;
+    const settingsBtn = document.getElementById("settings-btn") as HTMLButtonElement | null;
     const themeToggle = topbar.querySelector<HTMLElement>(".theme-toggle");
 
     const items: OverflowableItem[] = [];
@@ -67,6 +67,14 @@ export function initTopbarOverflow() {
             // querySelectorAll - their click handlers are already wired by
             // initThemeToggle, we only forward the click.
             customMenuRow: () => renderThemeRow(themeToggle, () => handle.close()),
+        });
+    }
+
+    if (settingsBtn) {
+        items.push({
+            el: settingsBtn,
+            priority: 1,
+            label: () => t("settings.entry.title"),
         });
     }
 

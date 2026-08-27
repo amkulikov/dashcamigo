@@ -195,21 +195,22 @@ test.describe("mobile offline layout stability", () => {
         await context.setOffline(true);
         const banner = page.locator("#offline-banner");
         await expect(banner).toBeVisible();
-        const [mainAfter, bannerBox, brandBox, feedbackBox] = await Promise.all([
+        const [mainAfter, bannerBox, brandBox, overflowBox] = await Promise.all([
             page.locator("main.layout").boundingBox(),
             banner.boundingBox(),
             page.locator(".dc-mark").boundingBox(),
-            page.locator("#feedback-btn").boundingBox(),
+            page.locator("#topbar-overflow").boundingBox(),
         ]);
         expect(mainAfter, "offline status preserves main geometry").toEqual(mainBefore);
         expect(bannerBox, "offline status has visible geometry").not.toBeNull();
         expect(brandBox, "mobile brand mark has visible geometry").not.toBeNull();
-        expect(feedbackBox, "feedback remains visible on mobile").not.toBeNull();
+        expect(overflowBox, "secondary actions remain reachable from mobile overflow").not.toBeNull();
+        await expect(page.locator("#feedback-btn")).toHaveAttribute("data-overflow-hidden", "true");
         expect(bannerBox!.x, "offline status stays after the brand mark").toBeGreaterThanOrEqual(
             brandBox!.x + brandBox!.width,
         );
         expect(bannerBox!.x + bannerBox!.width, "offline status stays before right-side controls").toBeLessThanOrEqual(
-            feedbackBox!.x,
+            overflowBox!.x,
         );
 
         const report = await readLayoutShiftReport(page);

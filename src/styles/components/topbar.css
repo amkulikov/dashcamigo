@@ -339,27 +339,3 @@ body.no-trips .topbar-burger {
         overscroll-behavior: contain;
     }
 }
-
-/* ---------- compact dc-mark on narrow screens ----------
-   At <=480 (typical mobile portrait) the six header buttons + burger +
-   the "dashcamigo" wordmark don't fit even with the kebab. We hide the
-   wordmark text itself, keeping the camera icon - it still reads as the
-   brand mark on its own. The SVG icon comes via ::after on the span (the
-   wordmark itself is a text node right inside .dc-mark), so a separate
-   selector is only needed for the text-prop. */
-@media (max-width: 480px) {
-    .dc-mark {
-        /* Visually hide text nodes while keeping the svg camera. font-size: 0
-           on .dc-mark itself collapses the text node to 0 width, while the
-           svg has explicit width/height (1.1em) - but 1.1em of 0 is 0. We fix
-           this via overflow: visible + width on the svg in abs px. */
-        font-size: 0;
-        line-height: 0;
-        gap: 0;
-    }
-    .dc-mark__icon {
-        /* Restore the icon size independent of .dc-mark's font-size. */
-        width: 22px;
-        height: 22px;
-    }
-}

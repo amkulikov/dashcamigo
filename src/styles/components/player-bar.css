@@ -467,7 +467,7 @@
 }
 .view-menu-row__hint {
     flex: 0 0 auto;
-    color: var(--fg-mute);
+    color: var(--fg-dim);
     font-family: var(--dc-font-mono);
     font-size: var(--dc-text-xs);
 }

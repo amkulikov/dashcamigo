@@ -737,7 +737,7 @@
         <!-- Overflow (kebab) - a container for buttons that don't fit on a narrow
              topbar. Hidden by default; src/ui/overflow-bar.ts uses a ResizeObserver
              to compute available width and moves low-priority buttons
-             (feedback, install, theme-toggle) into the popup. Visually
+             (feedback, settings, install, theme-toggle) into the popup. Visually
              absent on a wide desktop. -->
         <div class="overflow-wrap">
             <button id="topbar-overflow" class="topbar-iconbtn overflow-toggle" type="button"
@@ -771,12 +771,12 @@
                      FLIP animation moves the large central landing CTA onto this one. -->
                 <label for="folder-input" id="sidebar-cta" class="sidebar-cta" tabindex="0"
                        data-i18n-attr="title:sidebar.cta.title"
-                       title="Add more files">
+                       title="Add another recording folder">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                          stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M5 12h14"/><path d="M12 5v14"/>
                     </svg>
-                    <span data-i18n="sidebar.cta.label">Add files</span>
+                    <span data-i18n="sidebar.cta.label">Add folder</span>
                 </label>
                 <!-- Folder rows: sources of this session (status, "remember this
                      one", notes file) plus remembered folders that are not loaded
@@ -865,13 +865,6 @@
                                  inside a translated string. -->
                             <h1 class="landing-hero-h1"><span data-i18n="landing.hero.h1.before">Dashcam player in your browser — </span><span class="landing-hero-h1-hl" data-i18n="landing.hero.h1.hl">map, speed, events</span><span data-i18n="landing.hero.h1.after">.</span></h1>
                             <p class="landing-hero-kicker" data-i18n="landing.hero.kicker">The whole drive, start to finish, as one trip.</p>
-                            <!-- Vendor brand names are language-agnostic literals, no i18n key.
-                                 They are <a> to /cameras/<slug>/ for internal SEO linking;
-                                 the seo-prerender plugin rewrites these hrefs to /ru/cameras/...
-                                 for the RU build. Vantrue now has its own page (linked here);
-                                 Thinkware and the rest stay plain text in the FAQ tail. -->
-                            <p class="landing-hero-lead"><span data-i18n="landing.hero.lead.before">Recordings in MP4, MOV or TS from most dashcams — </span><a class="landing-brand-link" href="/cameras/70mai/">70mai</a>, <a class="landing-brand-link" href="/cameras/viofo/">Viofo</a>, <a class="landing-brand-link" href="/cameras/blackvue/">BlackVue</a>, <a class="landing-brand-link" href="/cameras/gopro/">GoPro</a>, <a class="landing-brand-link" href="/cameras/garmin/">Garmin</a>, <a class="landing-brand-link" href="/cameras/vantrue/">Vantrue</a>, <a class="landing-brand-link" href="/cameras/thinkware/">Thinkware</a><span data-i18n="landing.hero.lead.brandsTail"> and more.</span><span data-i18n="landing.hero.lead.after"> GPS and events — the app reads them straight from the video and the files next to it, no setup.</span> <a class="landing-brand-link" href="/cameras/" data-i18n="landing.hero.allBrands">All supported brands →</a></p>
-
                             <!-- Drop-CTA. The outer <label> is the click+drop target wired to
                                  #folder-input (lives in <body>). The inner <button id="landing-cta">
                                  is the FLIP source - landing.ts measures its rect at first ingest
@@ -905,7 +898,7 @@
                                 <!-- Trust microcopy - answers "what's the catch?" at the moment
                                      of commitment, so it lives inside the CTA card as a footer
                                      row bolted to the button, not as fine print below the card. -->
-                                <p class="landing-drop-foot" data-i18n="landing.drop.freeNote">Free · no ads · no sign-up</p>
+                                <p class="landing-drop-foot" data-i18n="landing.drop.freeNote">Processed on your device — nothing is uploaded</p>
                             </label>
 
                             <!-- Recent folders (persistent-folder mode, Chromium-only).
@@ -918,6 +911,13 @@
                                 </div>
                                 <span class="recent-folders-list" id="recent-folders-list"></span>
                             </div>
+
+                            <!-- Vendor brand names are language-agnostic literals, no i18n key.
+                                 They are <a> to /cameras/<slug>/ for internal SEO linking;
+                                 the seo-prerender plugin rewrites these hrefs to /ru/cameras/...
+                                 for the RU build. Vantrue now has its own page (linked here);
+                                 Thinkware and the rest stay plain text in the FAQ tail. -->
+                            <p class="landing-hero-lead"><span data-i18n="landing.hero.lead.before">Recordings in MP4, MOV or TS from most dashcams — </span><a class="landing-brand-link" href="/cameras/70mai/">70mai</a>, <a class="landing-brand-link" href="/cameras/viofo/">Viofo</a>, <a class="landing-brand-link" href="/cameras/blackvue/">BlackVue</a>, <a class="landing-brand-link" href="/cameras/gopro/">GoPro</a>, <a class="landing-brand-link" href="/cameras/garmin/">Garmin</a>, <a class="landing-brand-link" href="/cameras/vantrue/">Vantrue</a>, <a class="landing-brand-link" href="/cameras/thinkware/">Thinkware</a><span data-i18n="landing.hero.lead.brandsTail"> and more.</span><span data-i18n="landing.hero.lead.after"> GPS and events — the app reads them straight from the video and the files next to it, no setup.</span> <a class="landing-brand-link" href="/cameras/" data-i18n="landing.hero.allBrands">All supported brands →</a></p>
 
                             <!-- Capability bullets (3x2 grid -> 1 column on <=640px). -->
                             <ul class="landing-caps">
@@ -1959,7 +1959,7 @@
                         </button>
                         <ul id="player-overflow-menu" class="overflow-menu overflow-menu--up" role="menu" hidden></ul>
                     </div>
-                    <!-- Divider before "Export" - visually separates player
+                    <!-- Divider before "Save clip" - visually separates player
                          settings from the "hand the finished clip over" action. -->
                     <span class="player-bar-divider" aria-hidden="true"></span>
                     <!-- The "Export" button - always present, enabled once a
@@ -1968,9 +1968,9 @@
                          exists, that selection is substituted automatically. -->
                     <button id="player-export" class="player-export-btn" type="button" disabled aria-keyshortcuts="E"
                             data-i18n-attr="title:player.export.tooltip,aria-label:player.export.tooltip"
-                            title="Export clip · E" aria-label="Export clip · E">
+                            title="Save clip · E" aria-label="Save clip · E">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-                        <span class="player-export-btn__label" data-i18n="player.export.label">Export</span>
+                        <span class="player-export-btn__label" data-i18n="player.export.label">Save clip</span>
                     </button>
                 </div>
             </div>

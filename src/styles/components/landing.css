@@ -727,7 +727,7 @@ body.no-trips .viewer {
     font-size: var(--dc-text-xs);
     letter-spacing: var(--dc-tracking-caps);
     text-transform: uppercase;
-    color: var(--fg-mute);
+    color: var(--fg-dim);
 }
 .landing-works-chips {
     list-style: none;
@@ -775,7 +775,7 @@ body.no-trips .viewer {
     font-size: var(--dc-text-2xs);
     letter-spacing: 0.09em;
     text-transform: uppercase;
-    color: var(--fg-mute);
+    color: var(--fg-dim);
 }
 /* gap above the second tier; tiers are flat siblings in one cell */
 .landing-works-chips + .landing-works-tier-label {

@@ -65,7 +65,7 @@ test.describe("no-GPS export gate", () => {
     });
 
     test("pipeline: a stale 'keep GPS' default does NOT inject a gpmd track", async ({ page }) => {
-        // withGpmf defaults true (the inverted 'remove GPS' box is unchecked), but
+        // withGpmf defaults true, but
         // the trip has no fix, so export-flow's `withGpmf && hasGps` gate must keep
         // the produced MP4 free of a gpmd track. Single channel + source preset =>
         // stream-copy; the assertion is the absence of gpmd, the inverse of the

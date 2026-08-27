@@ -293,10 +293,9 @@ function syncMapOverlayAvailability(): void {
  */
 function syncGpsOptionsAvailability(): void {
     const hasGps = activeTripHasGps();
-    // id -> the box's checked state when GPS is present. gpmf is the inverted
-    // "remove GPS" toggle (checked = !withGpmf); the rest map to their own flag.
+    // id -> the box's checked state when GPS is present.
     const rows: Array<[id: string, checkedWithGps: boolean]> = [
-        ["export-panel-gpmf", !exportPanelState.withGpmf],
+        ["export-panel-gpmf", exportPanelState.withGpmf],
         ["export-panel-gpx", exportPanelState.withGpx],
         // Every overlay-widget checkbox mirrors its enable flag with GPS.
         ...OVERLAY_WIDGET_DEFS.map((d): [string, boolean] => [overlayCbId(d.id), d.state().enabled]),
@@ -1056,9 +1055,9 @@ function renderSpeedGroup(): HTMLElement {
 }
 
 // Reflects the current speed factor: highlights the active button, shows the
-// "audio muted" note and, since audio is force-dropped above 1x, ticks and
-// disables the inverted "remove audio" checkbox. Called on init and after
-// every speed-button click. Cheap - a handful of DOM toggles.
+// "audio muted" note and, since audio is force-dropped above 1x, clears and
+// disables the "include audio" checkbox. Called on init and after every
+// speed-button click. Cheap - a handful of DOM toggles.
 function syncSpeedDependentUi(): void {
     const factor = exportPanelState.speedFactor;
     const spedUp = factor > 1;
@@ -1070,9 +1069,7 @@ function syncSpeedDependentUi(): void {
     if (speedNoteEl) speedNoteEl.hidden = !spedUp;
     if (audioCheckboxEl) {
         audioCheckboxEl.disabled = spedUp;
-        // Inverted "remove audio" toggle: >1x force-drops audio, so show it
-        // ticked (removal active) and disabled; otherwise mirror !withAudio.
-        audioCheckboxEl.checked = spedUp ? true : !exportPanelState.withAudio;
+        audioCheckboxEl.checked = !spedUp && exportPanelState.withAudio;
         audioCheckboxEl.closest(".export-panel__checkbox")?.classList.toggle("is-disabled", spedUp);
     }
     // Resulting clip length = selected range / factor. The range falls back to
@@ -1994,20 +1991,15 @@ function renderToggleGroup(): HTMLElement {
     const legend = document.createElement("legend");
     legend.textContent = t("export.opt.legend");
     wrap.appendChild(legend);
-    // Audio and GPMF are kept by default (withAudio/withGpmf default true). They
-    // are shown as inverted "remove" toggles so a fresh panel has every box
-    // unchecked while the default export still carries sound and the GPS track:
-    // a ticked box means "drop this", so checked = !withX and a tick sets
-    // withX = !v. The field stays positive (true = present) for the pipeline.
     wrap.appendChild(
-        renderCheckbox("export-panel-audio", t("export.opt.audio"), !exportPanelState.withAudio, (v) => {
-            exportPanelState.withAudio = !v;
+        renderCheckbox("export-panel-audio", t("export.opt.audio"), exportPanelState.withAudio, (v) => {
+            exportPanelState.withAudio = v;
             notifyExportStateChanged();
         }),
     );
     wrap.appendChild(
-        renderCheckbox("export-panel-gpmf", t("export.opt.gpmf"), !exportPanelState.withGpmf, (v) => {
-            exportPanelState.withGpmf = !v;
+        renderCheckbox("export-panel-gpmf", t("export.opt.gpmf"), exportPanelState.withGpmf, (v) => {
+            exportPanelState.withGpmf = v;
             notifyExportStateChanged();
         }),
     );
@@ -2028,11 +2020,11 @@ function renderToggleGroup(): HTMLElement {
             },
         ),
     );
-    // Watermark opt-out, last in the group so revealing the plea below it shifts
+    // Watermark control last in the group so revealing the plea below it shifts
     // nothing the user is about to click (same rule as the overlay extras block).
     wrap.appendChild(
-        renderCheckbox("export-panel-watermark", t("export.opt.watermark"), !exportPanelState.withWatermark, (v) => {
-            exportPanelState.withWatermark = !v;
+        renderCheckbox("export-panel-watermark", t("export.opt.watermark"), exportPanelState.withWatermark, (v) => {
+            exportPanelState.withWatermark = v;
             // The preview mark lives in player-overlays and re-reads this on notify.
             notifyExportStateChanged();
         }),
@@ -2048,17 +2040,14 @@ function renderToggleGroup(): HTMLElement {
     return wrap;
 }
 
-// The "why the mark is there" note under the opt-out checkbox, plus the checkbox
-// itself - both reconciled per state tick by syncWatermarkOpt.
+// The "why the mark is there" note and its checkbox are reconciled per state tick.
 let watermarkPleaEl: HTMLElement | null = null;
 
-/** Mirrors the watermark opt-out into the DOM: the inverted checkbox reflects
- *  !withWatermark, and the plea is shown only once the user actually asks to
- *  remove the mark - unticked it would be a lecture nobody asked for. */
+/** Shows the note only once the user turns the mark off. */
 function syncWatermarkOpt(): void {
     const removing = !exportPanelState.withWatermark;
     const cb = document.getElementById("export-panel-watermark") as HTMLInputElement | null;
-    if (cb) cb.checked = removing;
+    if (cb) cb.checked = exportPanelState.withWatermark;
     if (watermarkPleaEl) watermarkPleaEl.hidden = !removing;
 }
 

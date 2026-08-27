@@ -134,24 +134,9 @@ const TOURS: Record<OnboardTourId, OnboardTour> = {
         delayMs: 650,
         steps: [
             {
-                anchors: [".trip-summary", "#trip-list", "#topbar-burger"],
+                anchors: ["li.trip:not(.unindexed-note)", "#trip-list", "#topbar-burger"],
                 titleKey: "onboard.ingest.trips.title",
                 bodyKey: "onboard.ingest.trips.body",
-            },
-            {
-                anchors: ["#trip-sort-key", ".sidebar-header", "#topbar-burger"],
-                titleKey: "onboard.ingest.sort.title",
-                bodyKey: "onboard.ingest.sort.body",
-            },
-            { anchors: [], titleKey: "onboard.ingest.privacy.title", bodyKey: "onboard.ingest.privacy.body" },
-            {
-                // Closing step: where to reach us. Spotlight the feedback button;
-                // when it collapses into the topbar kebab, fall back to that.
-                // No further fallback (the burger opens the drawer, not feedback),
-                // so a target-less centered step is the honest last resort.
-                anchors: ["#feedback-btn", "#topbar-overflow"],
-                titleKey: "onboard.ingest.feedback.title",
-                bodyKey: "onboard.ingest.feedback.body",
             },
         ],
     },
@@ -179,16 +164,6 @@ const TOURS: Record<OnboardTourId, OnboardTour> = {
                 bodyKey: "onboard.player.timeline.body",
             },
             {
-                anchors: ["#player-play"],
-                titleKey: "onboard.player.playback.title",
-                bodyKey: "onboard.player.playback.body",
-            },
-            {
-                anchors: ["#player-view-menu", "#player-overflow"],
-                titleKey: "onboard.player.view.title",
-                bodyKey: "onboard.player.view.body",
-            },
-            {
                 anchors: ["#player-export", "#player-overflow"],
                 titleKey: "onboard.player.export.title",
                 bodyKey: "onboard.player.export.body",
@@ -209,28 +184,12 @@ const TOURS: Record<OnboardTourId, OnboardTour> = {
                 titleKey: "onboard.export.output.title",
                 bodyKey: "onboard.export.output.body",
             },
-            {
-                anchors: ["#export-panel-gpmf", "#export-panel-options"],
-                titleKey: "onboard.export.extras.title",
-                bodyKey: "onboard.export.extras.body",
-            },
-            {
-                anchors: ["#export-panel-save-btn"],
-                titleKey: "onboard.export.save.title",
-                bodyKey: "onboard.export.save.body",
-            },
         ],
     },
     multichannel: {
         id: "multichannel",
         delayMs: 450,
         steps: [
-            {
-                anchors: ["#video-grid"],
-                titleKey: "onboard.multi.cameras.title",
-                bodyKey: "onboard.multi.cameras.body",
-                pad: 4,
-            },
             {
                 anchors: ["#top-panel-layout", "#player-view-mode", "#top-panel"],
                 titleKey: "onboard.multi.layout.title",
@@ -240,11 +199,6 @@ const TOURS: Record<OnboardTourId, OnboardTour> = {
                 anchors: ["#top-panel-channels", "#top-panel"],
                 titleKey: "onboard.multi.channels.title",
                 bodyKey: "onboard.multi.channels.body",
-            },
-            {
-                anchors: ["#top-panel-audio", "#top-panel"],
-                titleKey: "onboard.multi.audio.title",
-                bodyKey: "onboard.multi.audio.body",
             },
         ],
     },

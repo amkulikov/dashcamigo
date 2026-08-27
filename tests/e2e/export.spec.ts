@@ -43,9 +43,9 @@ test.describe("export", () => {
         await openExport(page);
     });
 
-    test("panel opens with audio + GPMF kept (inverted 'remove' toggles unchecked)", async ({ page }) => {
-        await expect(page.locator("#export-panel-audio")).not.toBeChecked();
-        await expect(page.locator("#export-panel-gpmf")).not.toBeChecked();
+    test("panel opens with audio + GPS included", async ({ page }) => {
+        await expect(page.locator("#export-panel-audio")).toBeChecked();
+        await expect(page.locator("#export-panel-gpmf")).toBeChecked();
         await shot(page, "export-01-default");
     });
 
@@ -89,10 +89,9 @@ test.describe("export", () => {
         const seg8 = page.locator('.export-panel__seg-btn[data-factor="8"]');
         await seg8.click();
         await expect(seg8).toHaveClass(/active/);
-        // Audio is force-dropped at >1x: the box disables AND the inverted
-        // "remove audio" toggle ticks on (removal active).
+        // Audio is force-dropped at >1x: the positive option clears and disables.
         await expect(page.locator("#export-panel-audio")).toBeDisabled();
-        await expect(page.locator("#export-panel-audio")).toBeChecked();
+        await expect(page.locator("#export-panel-audio")).not.toBeChecked();
         await expect(page.locator(".export-panel__speed-result")).toBeVisible();
         await shot(page, "export-02-speed-8x");
     });
@@ -378,10 +377,11 @@ test.describe("export", () => {
         await expect(undo).toBeHidden();
     });
 
-    test("preview-clip rewinds a playhead parked at the clip end back to the start", async ({ page }) => {
+    test("Play clip starts a playhead parked at the clip end from the selected start", async ({ page }) => {
         const startInput = page.locator('.export-trim-bar__input[data-range-edge="start"]');
         const endInput = page.locator('.export-trim-bar__input[data-range-edge="end"]');
         const current = page.locator("#player-current");
+        const play = page.locator("#player-play");
 
         // Trim the start, then park the playhead exactly at the clip end, where
         // pressing play would otherwise stop instantly.
@@ -392,7 +392,8 @@ test.describe("export", () => {
         await expect(current).toHaveText(end);
 
         await page.locator("#export-trim-preview").click();
-        await expect(current).toHaveText("0:01");
+        await expect(play).toHaveAttribute("data-paused", "false");
+        await expect(current).not.toHaveText(end);
     });
 
     test("ArrowUp/Down nudge the focused edge by one second", async ({ page }) => {
@@ -547,6 +548,10 @@ test.describe("export", () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         expect(await page.evaluate(() => (window as any).__dashcamigo.state.isPreviewZoom)).toBe(true);
 
+        // Pause the one-click preview before asserting the independent seek clamp.
+        if ((await play.getAttribute("data-paused")) === "false") await play.click();
+        await expect(play).toHaveAttribute("data-paused", "true");
+
         // Digit "9" jumps to 90% of the TRIP (~3.6s) - a trip-time seek that
         // targets well past the window (the mini-progress scrubber is window-mapped
         // and could never overshoot it). The preview clamp snaps it back to the
@@ -557,7 +562,7 @@ test.describe("export", () => {
         await expect(current).toHaveText("0:01");
     });
 
-    test("double-clicking Preview clip plays the clip from its start", async ({ page }) => {
+    test("one click on Play clip plays the clip from its start", async ({ page }) => {
         const startInput = page.locator('.export-trim-bar__input[data-range-edge="start"]');
         const endInput = page.locator('.export-trim-bar__input[data-range-edge="end"]');
         const current = page.locator("#player-current");
@@ -572,15 +577,13 @@ test.describe("export", () => {
         await page.keyboard.press("Shift+KeyO");
         await expect(current).toHaveText(end);
 
-        // Double-click: unlike a single click (zoom + rewind, stays paused), it
-        // starts playback from the clip start via the seek-then-play primitive.
-        await page.locator("#export-trim-preview").dblclick();
+        await page.locator("#export-trim-preview").click();
         await expect(play).toHaveAttribute("data-paused", "false");
         // Playing from the START, not resuming at the parked end.
         await expect(current).not.toHaveText(end);
     });
 
-    test("double-click plays a clip starting on a file boundary (offset-0 cross-file)", async ({ page }) => {
+    test("Play clip handles a clip starting on a file boundary (offset-0 cross-file)", async ({ page }) => {
         // Regression: seekThenPlay's resume latch must also land via loadedmetadata.
         // A cross-file seek to a frame-start target (trip 0:00 = first file, offset
         // 0) writes no currentTime, so it fires no 'seeked'; wired only to 'seeked',
@@ -605,9 +608,8 @@ test.describe("export", () => {
         await endInput.fill("0:03");
         await endInput.press("Enter");
 
-        // Double-click: the clip start (0:00) is outside the parked position, so the
-        // preview rewinds there - a cross-file, offset-0 landing - then plays.
-        await page.locator("#export-trim-preview").dblclick();
+        // One click rewinds to the cross-file, offset-0 start and then plays.
+        await page.locator("#export-trim-preview").click();
         await expect(play).toHaveAttribute("data-paused", "false");
     });
 
@@ -630,18 +632,18 @@ test.describe("export", () => {
         const cb = page.locator("#export-panel-watermark");
         const plea = page.locator("#export-panel-watermark-plea");
         const wm = page.locator("#player-watermark");
-        // Default: the mark ships, so the box is clear and the note stays out of
+        // Default: the mark ships, so the positive box is checked and the note stays out of
         // the way.
-        await expect(cb).not.toBeChecked();
+        await expect(cb).toBeChecked();
         await expect(plea).toBeHidden();
         await expect(wm).toBeVisible();
 
-        await cb.check();
+        await cb.uncheck();
         await expect(plea).toBeVisible();
         // WYSIWYG: opting out drops the mark from the preview, not just the export.
         await expect(wm).toBeHidden();
 
-        await cb.uncheck();
+        await cb.check();
         await expect(plea).toBeHidden();
         await expect(wm).toBeVisible();
     });

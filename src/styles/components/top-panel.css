@@ -47,7 +47,7 @@
 .top-panel__label {
     font-size: var(--dc-text-sm);
     font-weight: 500;
-    color: var(--fg-mute);
+    color: var(--fg-dim);
     text-transform: uppercase;
     letter-spacing: var(--dc-tracking-wide);
     margin-right: var(--dc-space-1);
@@ -58,7 +58,7 @@
     background: transparent;
     border: 1px solid var(--border);
     border-radius: var(--dc-radius-sm);
-    color: var(--fg-mute);
+    color: var(--fg-dim);
     padding: var(--dc-space-1) var(--dc-space-1);
     cursor: pointer;
     display: inline-flex;

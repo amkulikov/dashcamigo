@@ -202,8 +202,8 @@ body.letterbox-blur .video-tile > video:not(.tile-blur-bg) {
  * grid area "trim" exists only under body.export-mode (viewer.css), and the
  * [hidden] flag is owned by export-trim-bar.ts (off outside export mode and
  * during an export run). The inputs share the field look from forms.css;
- * this owns layout only. One wrapping row: set-to-playhead + inputs +
- * length on the left, the action cluster pushed to the trailing edge. */
+ * this owns layout only. One wrapping row: labelled range edges + length on
+ * the left, the action cluster pushed to the trailing edge. */
 .export-trim-bar {
     grid-area: trim;
     display: flex;
@@ -220,10 +220,28 @@ body.letterbox-blur .video-tile > video:not(.tile-blur-bg) {
 
 .export-trim-bar__row {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     gap: var(--dc-space-2);
     flex-wrap: wrap;
     row-gap: var(--dc-space-1);
+}
+
+.export-trim-bar__field {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.export-trim-bar__label {
+    color: var(--fg-dim);
+    font-size: var(--dc-text-xs);
+    font-weight: 600;
+}
+
+.export-trim-bar__field-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-1);
 }
 
 .export-trim-bar__input {
@@ -235,29 +253,36 @@ body.letterbox-blur .video-tile > video:not(.tile-blur-bg) {
 .export-trim-bar__sep {
     color: var(--fg-mute);
     flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    height: 26px;
 }
 
 .export-trim-bar__length {
-    color: var(--fg-mute);
+    color: var(--fg-dim);
     font-size: var(--dc-text-sm);
     font-variant-numeric: tabular-nums;
+    display: inline-flex;
+    align-items: center;
+    min-height: 26px;
 }
 
-/* Set-to-playhead icon buttons flanking the inputs - the touch counterpart of
-   the I/O hotkeys. Compact square matching the input height; grows to the
-   touch floor on coarse pointers. */
+/* Visible set-to-playhead actions beside each edge are the touch counterpart
+   of the I/O hotkeys. */
 .export-trim-bar__set {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: var(--dc-space-1);
     flex-shrink: 0;
-    width: 26px;
     height: 26px;
-    padding: 0;
+    padding: 0 var(--dc-space-2);
     background: transparent;
-    color: var(--fg-mute);
+    color: var(--fg-dim);
     border: 1px solid var(--border);
     border-radius: var(--dc-radius-sm);
+    font-size: var(--dc-text-sm);
+    white-space: nowrap;
     cursor: pointer;
     transition:
         color var(--dc-dur-fast) var(--dc-ease),
@@ -285,6 +310,7 @@ body.letterbox-blur .video-tile > video:not(.tile-blur-bg) {
     flex-wrap: wrap;
     gap: var(--dc-space-2);
     margin-left: auto;
+    min-height: 26px;
 }
 .export-trim-bar__actions:not(:has(button:not([hidden]))) {
     display: none;
@@ -292,7 +318,7 @@ body.letterbox-blur .video-tile > video:not(.tile-blur-bg) {
 .export-trim-bar__action {
     padding: 2px var(--dc-space-2);
     background: transparent;
-    color: var(--fg-mute);
+    color: var(--fg-dim);
     border: 1px solid var(--border);
     border-radius: var(--dc-radius-sm);
     font-size: var(--dc-text-sm);
@@ -330,7 +356,7 @@ body.letterbox-blur .video-tile > video:not(.tile-blur-bg) {
    firing; :empty collapses the reserved space. */
 .export-trim-bar__feedback {
     font-size: var(--dc-text-sm);
-    color: var(--fg-mute);
+    color: var(--fg-dim);
 }
 .export-trim-bar__feedback.is-error {
     color: var(--err);
@@ -369,8 +395,8 @@ body.letterbox-blur .video-tile > video:not(.tile-blur-bg) {
    coarse-pointer floor). */
 @media (pointer: coarse) {
     .export-trim-bar__set {
-        width: var(--dc-iconbtn-touch);
-        height: var(--dc-iconbtn-touch);
+        min-height: var(--dc-iconbtn-touch);
+        padding-inline: var(--dc-space-3);
     }
     .export-trim-bar__action {
         min-height: var(--dc-iconbtn-touch);
@@ -1419,7 +1445,7 @@ body.export-mode .video-grid.pip-overlay-mode .video-tile {
 .export-panel__blur-row-range {
     flex: 1 1 auto;
     text-align: right;
-    color: var(--fg-mute);
+    color: var(--fg-dim);
     /* nowrap: without it "10:28-11:15" line-breaks at the hyphen when squeezed */
     white-space: nowrap;
     overflow: hidden;

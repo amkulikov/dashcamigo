@@ -304,7 +304,7 @@ export async function openExport(page: Page): Promise<void> {
     } else {
         await page.locator("#player-overflow").click();
         const item = page.locator("#player-overflow-menu button.overflow-menu-btn", {
-            hasText: /export|экспорт/i,
+            hasText: /save clip|export|сохранить фрагмент|экспорт/i,
         });
         await expect(item).toBeVisible();
         await item.click();
