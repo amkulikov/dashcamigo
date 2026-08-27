@@ -1,6 +1,6 @@
 import { attachRecordsToCandidates } from "../gps-association.js";
 import { applyStoredGpsSyncToTrip } from "../gps-sync.js";
-import { classifyFilenameTime } from "../parsers/filename/index.js";
+import { classifyFilenameClockTimelapse, classifyFilenameTime } from "../parsers/filename/index.js";
 import {
     finalizeTripFromFrames,
     rederiveStartUtcForCandidates,
@@ -30,7 +30,7 @@ export function registerRecordingWorkCoordinator(coordinator: RecordingWorkCoord
 
 /** Recomputes absolute recording clocks without replacing the current trip list. */
 export function reanchorRecordingCandidates(candidates: VideoCandidate[]): void {
-    rederiveStartUtcForCandidates(candidates, classifyFilenameTime);
+    rederiveStartUtcForCandidates(candidates, classifyFilenameTime, classifyFilenameClockTimelapse);
 }
 
 /** Groups already-anchored candidates and atomically replaces the trip list. */

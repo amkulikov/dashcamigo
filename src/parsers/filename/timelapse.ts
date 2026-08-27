@@ -7,12 +7,18 @@
 //
 // This is ORTHOGONAL to RecordingMode: a 70mai A510 "LA" clip is BOTH parking
 // (mode) AND time-lapse, so it gets its own boolean field rather than a mode
-// value. Filename-driven on purpose - a GPS-density heuristic
+// value. Format-gated on purpose - a GPS-density heuristic
 // (fixes-per-video-second) looks tempting but false-positives on genuine
-// high-rate GPS (GoPro GPMF logs 10-18 Hz), so only an explicit vendor
-// time-lapse marker is trusted.
+// high-rate GPS (GoPro GPMF logs 10-18 Hz). An explicit marker is authoritative;
+// an ambiguous filename family still needs independent container-clock evidence.
 
-import { RX_70MAI, RX_70MAI_PATH_MODE, RX_70MAI_PREFIX_MODE, RX_DDPAI_TIMELAPSE } from "./_patterns.js";
+import {
+    RX_70MAI,
+    RX_70MAI_PATH_MODE,
+    RX_70MAI_PREFIX_MODE,
+    RX_DDPAI_TIMELAPSE,
+    matchNovatekNvtMovFilename,
+} from "./_patterns.js";
 import type { VendorFile } from "../types.js";
 import type { FilenameTechnique } from "./types.js";
 
@@ -42,3 +48,18 @@ const ddpaiTimelapse: FilenameTechnique<boolean> = {
 };
 
 export const FILENAME_TIMELAPSE: readonly FilenameTechnique<boolean>[] = [mai70Timelapse, ddpaiTimelapse];
+
+// A missing mode marker alone is ambiguous on NVT-IM MOV cameras: legacy
+// realtime firmware writes the same no-suffix name. This technique therefore
+// declares only that the container clocks MAY prove time compression. The
+// ingest timing pass makes the actual decision from mvhd-name versus media
+// duration and leaves legacy realtime clips unchanged.
+const novatekNvtMovClockTimelapse: FilenameTechnique<boolean> = {
+    id: "novatek-nvt-mov-clock-timelapse",
+    extract(file: VendorFile): boolean | null {
+        const match = matchNovatekNvtMovFilename(file.file.name);
+        return match && match[5] === "" ? true : null;
+    },
+};
+
+export const FILENAME_CLOCK_TIMELAPSE: readonly FilenameTechnique<boolean>[] = [novatekNvtMovClockTimelapse];

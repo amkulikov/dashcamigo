@@ -14,7 +14,7 @@ import { createLogger } from "../log.js";
 import { captureSentryMessage } from "../sentry.js";
 import { SLICE_COST_STREAM_ABOVE } from "../parsers/internal/mp4-walker.js";
 import { cameraFingerprint } from "../parsers/camera-fingerprint.js";
-import { classifyFilenameTime } from "../parsers/filename/index.js";
+import { classifyFilenameClockTimelapse, classifyFilenameTime } from "../parsers/filename/index.js";
 import type { ClassifiedFile } from "../parsers/registry-light.js";
 import { combineAccelSources, mergeAccelSamples } from "../parsers/registry-light.js";
 import type { AccelSample, GpsRecord, VendorFile } from "../parsers/types.js";
@@ -1024,7 +1024,7 @@ function refreshTripsAfterRecordingRead(tripIndices: readonly number[]): void {
         if (!trip) continue;
         const candidates = tripAllCandidates(trip);
         if (state.gpsLog) attachRecordsToCandidates(state.gpsLog, candidates, loaded);
-        rederiveStartUtcForCandidates(candidates, classifyFilenameTime);
+        rederiveStartUtcForCandidates(candidates, classifyFilenameTime, classifyFilenameClockTimelapse);
         mergeRecordingAccel(candidates);
         for (const frame of trip.frames) finalizeFrameTiming(frame);
         refreshRecordingTrip(tripIdx);

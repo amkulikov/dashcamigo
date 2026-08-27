@@ -30,7 +30,13 @@ import {
     type VideoCandidate,
 } from "./trips.js";
 import { cameraFingerprint } from "./parsers/camera-fingerprint.js";
-import { classifyFilenameTime } from "./parsers/filename/index.js";
+import {
+    classifyFilenameClockTimelapse,
+    classifyFilenameMode,
+    classifyFilenameSequence,
+    classifyFilenameTime,
+    classifyFilenameTimelapse,
+} from "./parsers/filename/index.js";
 import type { Channel, GpsRecord, RecordingMode, VendorFile } from "./parsers/types.js";
 
 // Default fingerprint: a shared constant, NOT per-name. groupTrips partitions
@@ -2497,5 +2503,95 @@ describe("rederiveStartUtcForCandidates: A510 LA end-to-end (wall span + finaliz
         // relStartSeconds path: placed at startUtc+offset across the WALL
         // window (98 s), not squeezed into the 6.5 s video window.
         expect(la.records.map((r) => r.unixSeconds - nameNaive)).toEqual([0, 49, 97]);
+    });
+});
+
+describe("rederiveStartUtcForCandidates: ambiguous NVT-IM MOV modes", () => {
+    function makeNvtCandidate(
+        name: string,
+        durationSec: number,
+        createdIso: string,
+        relativePath: string = `MOVIE/${name}`,
+    ): VideoCandidate {
+        const candidate = makeCandidate({
+            name,
+            relativePath,
+            startUtc: 0,
+            durationSec,
+        });
+        const file = { file: candidate.file, relativePath };
+        candidate.fingerprint = cameraFingerprint(file);
+        candidate.sequence = classifyFilenameSequence(file);
+        candidate.recordingMode = classifyFilenameMode(file);
+        candidate.isTimelapse = classifyFilenameTimelapse(file);
+        candidate.createdUtc = new Date(createdIso);
+        return candidate;
+    }
+
+    it("uses container-clock evidence to join parking clips and split the following drive", () => {
+        const parking437 = makeNvtCandidate("2026_0826_070216_437.MOV", 80, "2026-08-26T07:22:00.000Z");
+        const parking438 = makeNvtCandidate("2026_0826_072219_438.MOV", 61.133333, "2026-08-26T07:37:20.000Z");
+        const driving439 = makeNvtCandidate("2026_0826_073742_439A.MOV", 300, "2026-08-26T07:42:42.000Z");
+        expect(new Set([parking437.fingerprint, parking438.fingerprint, driving439.fingerprint]).size).toBe(1);
+
+        const previousTz = process.env.TZ;
+        process.env.TZ = "Europe/Samara";
+        try {
+            rederiveStartUtcForCandidates(
+                [parking437, parking438, driving439],
+                classifyFilenameTime,
+                classifyFilenameClockTimelapse,
+            );
+        } finally {
+            process.env.TZ = previousTz;
+        }
+
+        expect(parking437.startUtc).toBe(Date.UTC(2026, 7, 26, 3, 2, 16) / 1000);
+        expect(parking438.startUtc).toBe(Date.UTC(2026, 7, 26, 3, 22, 19) / 1000);
+        expect(parking437.wallDurationSec).toBe(1_184);
+        expect(parking438.wallDurationSec).toBe(901);
+        expect([parking437, parking438].map((candidate) => candidate.isTimelapse)).toEqual([true, true]);
+        expect([parking437, parking438].map((candidate) => candidate.recordingMode)).toEqual(["parking", "parking"]);
+        expect(driving439.isTimelapse).toBe(false);
+        expect(driving439.recordingMode).toBe("normal");
+
+        const trips = groupTrips([parking437, parking438, driving439]);
+        expect(trips).toHaveLength(2);
+        expect(trips.map((trip) => trip.isParking)).toEqual([true, false]);
+        expect(trips[0]!.frames.map((frame) => frame.channels.front?.file.name)).toEqual([
+            parking437.file.name,
+            parking438.file.name,
+        ]);
+    });
+
+    it("keeps legacy no-suffix realtime MOV clips out of parking mode", () => {
+        const realtime = makeNvtCandidate("2018_0828_191556_005.MOV", 121, "2018-08-28T19:17:55.000Z");
+
+        rederiveStartUtcForCandidates([realtime], classifyFilenameTime, classifyFilenameClockTimelapse);
+
+        expect(realtime.wallDurationSec).toBeNull();
+        expect(realtime.isTimelapse).toBe(false);
+        expect(realtime.recordingMode).toBe("normal");
+    });
+
+    it("keeps a protected clip's event mode when its timing also proves time-lapse", () => {
+        const name = "2026_0826_070216_437.MOV";
+        const protectedClip = makeNvtCandidate(name, 80, "2026-08-26T07:22:00.000Z", `MOVIE/RO/${name}`);
+        expect(protectedClip.recordingMode).toBe("event");
+
+        rederiveStartUtcForCandidates([protectedClip], classifyFilenameTime, classifyFilenameClockTimelapse);
+
+        expect(protectedClip.isTimelapse).toBe(true);
+        expect(protectedClip.recordingMode).toBe("event");
+    });
+
+    it("does not bridge separate drives merely because their sequence numbers are consecutive", () => {
+        const driving437 = makeNvtCandidate("2026_0826_070216_437A.MOV", 300, "2026-08-26T07:07:16.000Z");
+        const driving438 = makeNvtCandidate("2026_0826_072219_438A.MOV", 300, "2026-08-26T07:27:19.000Z");
+        expect(driving438.sequence).toBe(driving437.sequence! + 1);
+
+        rederiveStartUtcForCandidates([driving437, driving438], classifyFilenameTime, classifyFilenameClockTimelapse);
+
+        expect(groupTrips([driving437, driving438])).toHaveLength(2);
     });
 });

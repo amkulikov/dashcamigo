@@ -18,13 +18,14 @@ import {
     RX_MOV_SEQ_FRI,
     RX_NAVITEL,
     RX_NEOLINE,
-    RX_NOVATEK_MOV_A,
+    RX_NOVATEK_NVT_MOV,
     RX_REC_SINGLE,
     RX_REDTIGER,
     RX_VUEROID,
 } from "./_patterns.js";
 import {
     classifyFilenameChannel,
+    classifyFilenameClockTimelapse,
     classifyFilenameMode,
     classifyFilenameSequence,
     classifyFilenameTime,
@@ -297,42 +298,59 @@ describe("viofo RO locked folder", () => {
     });
 });
 
-// Novatek NVT-IM single-camera MOV with a fixed trailing A marker. The real
-// JOOYFACT A1 card stores loop recordings under MOVIE/; the model has one lens.
-describe("novatek MOV-A techniques", () => {
-    const name = "2026_0809_222334_654A.MOV";
-    const path = `MOVIE/${name}`;
+// Novatek NVT-IM single-camera MOV. Some firmware uses A for realtime driving
+// and no suffix for parking time-lapse; legacy realtime firmware has no suffix,
+// so timing evidence decides the ambiguous spelling after metadata arrives.
+describe("novatek NVT-IM MOV techniques", () => {
+    const drivingName = "2026_0809_222334_654A.MOV";
+    const drivingPath = `MOVIE/${drivingName}`;
+    const parkingName = "2026_0826_070216_437.MOV";
+    const parkingPath = `MOVIE/${parkingName}`;
 
     it("reuses the single-camera time, channel, mode, and sequence capabilities", () => {
-        expect(RX_NOVATEK_MOV_A.test(name)).toBe(true);
+        expect(RX_NOVATEK_NVT_MOV.test(drivingName)).toBe(true);
 
-        const time = matchFilenameTime(vf(name, path));
+        const time = matchFilenameTime(vf(drivingName, drivingPath));
         expect(time.matchedId).toBe("novatek-single-time");
         expect(time.value?.toISOString()).toBe("2026-08-09T22:23:34.000Z");
 
-        const channel = matchFilenameChannel(vf(name, path));
+        const channel = matchFilenameChannel(vf(drivingName, drivingPath));
         expect(channel.matchedId).toBe("novatek-single-channel");
         expect(channel.value).toEqual({ channel: "front", confident: true });
 
-        const mode = matchFilenameMode(vf(name, path));
+        const mode = matchFilenameMode(vf(drivingName, drivingPath));
         expect(mode.matchedId).toBe("novatek-mode");
         expect(mode.value).toBe("normal");
 
-        const sequence = matchFilenameSequence(vf(name, path));
+        const sequence = matchFilenameSequence(vf(drivingName, drivingPath));
         expect(sequence.matchedId).toBe("novatek-sequence");
         expect(sequence.value).toBe(654);
     });
 
+    it("gates no-suffix MOV for clock-proven time-lapse without claiming it from the name alone", () => {
+        expect(RX_NOVATEK_NVT_MOV.test(parkingName)).toBe(true);
+        expect(classifyFilenameTimelapse(vf(parkingName, parkingPath))).toBe(false);
+        expect(classifyFilenameClockTimelapse(vf(parkingName, parkingPath))).toBe(true);
+        expect(classifyFilenameClockTimelapse(vf(drivingName, drivingPath))).toBe(false);
+        // Until the container clocks prove compression, legacy no-suffix MOV
+        // stays on the safe realtime default.
+        expect(matchFilenameMode(vf(parkingName, parkingPath)).value).toBe("normal");
+    });
+
+    it("normalizes the mode marker out of camera identity", () => {
+        expect(cameraFingerprint(vf(drivingName, drivingPath))).toBe(cameraFingerprint(vf(parkingName, parkingPath)));
+    });
+
     it("RO protected clips stay with normal clips under one camera key", () => {
-        expect(matchFilenameMode(vf(name, `MOVIE/RO/${name}`)).value).toBe("event");
-        expect(cameraFingerprint(vf(name, path))).toBe(
+        expect(matchFilenameMode(vf(drivingName, `MOVIE/RO/${drivingName}`)).value).toBe("event");
+        expect(cameraFingerprint(vf(drivingName, drivingPath))).toBe(
             cameraFingerprint(vf("2026_0809_222437_655A.MOV", "MOVIE/RO/2026_0809_222437_655A.MOV")),
         );
     });
 
     it("does not infer semantics for other suffixes or extensions", () => {
-        expect(RX_NOVATEK_MOV_A.test("2026_0809_222334_654B.MOV")).toBe(false);
-        expect(RX_NOVATEK_MOV_A.test("2026_0809_222334_654A.MP4")).toBe(false);
+        expect(RX_NOVATEK_NVT_MOV.test("2026_0809_222334_654B.MOV")).toBe(false);
+        expect(RX_NOVATEK_NVT_MOV.test("2026_0809_222334_654A.MP4")).toBe(false);
         expect(matchFilenameChannel(vf("2026_0809_222334_654B.MOV")).matchedId).toBeNull();
         expect(matchFilenameSequence(vf("2026_0809_222334_654B.MOV")).matchedId).toBeNull();
     });

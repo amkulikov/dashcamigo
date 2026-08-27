@@ -97,7 +97,8 @@ export interface VideoCandidate {
     recordingMode: RecordingMode | null;
     // Time-lapse recording (camera captured frames slower than playback, so the
     // clip is time-compressed and its clock does not track real elapsed time).
-    // Filename-derived (classifyFilenameTimelapse); orthogonal to recordingMode.
+    // Derived from an explicit filename marker, or from a filename-family gate
+    // plus corroborating container clock evidence; orthogonal to recordingMode.
     // Drives the sidebar time-lapse chip and the "clock is not real-time" marker.
     isTimelapse: boolean;
     // unix seconds (UTC) of recording start
@@ -1706,8 +1707,10 @@ const TIMELAPSE_WALL_SPAN_CAP_SEC = 86_400;
 
 /**
  * Real-world (wall-clock) span of a clip, when it provably differs from the
- * video duration. Only a filename-flagged time-lapse clip (isTimelapse) is
- * considered - the flag decides IF, per-file evidence decides HOW MUCH:
+ * video duration. Only a clip with an explicit time-lapse marker or a
+ * format-specific clock-evidence gate is considered. The caller expresses
+ * either eligibility through isTimelapse; per-file evidence then decides IF
+ * the clip is compressed and HOW MUCH wall time it covers:
  *  - the synced-GPS span of the clip's own records (a 1 Hz track covering the
  *    real seconds), and/or
  *  - mvhd minus the filename time: on finalize-semantics cameras (mvhd
@@ -2357,11 +2360,14 @@ function applyLocalClockCorrections(candidates: readonly VideoCandidate[]): void
  *
  * Single source of truth for both per-trip refinement and the closing global
  * sweep. Calling it after metadata or GPS arrives replaces provisional clock
- * evidence before trip boundaries are reconciled.
+ * evidence before trip boundaries are reconciled. The optional clock-inference
+ * classifier only admits ambiguous filename families to the evidence gate; a
+ * plausible wall span is still required before their mode changes.
  */
 export function rederiveStartUtcForCandidates(
     candidates: readonly VideoCandidate[],
     parseFilenameLocalTime: (file: VendorFile) => Date | null,
+    canInferTimelapseFromClock: (file: VendorFile) => boolean = () => false,
 ): void {
     // Restore true UTC on the record axis FIRST: every estimate below
     // (TZ medians, precise clock offsets, GPS windows) reads record times,
@@ -2399,14 +2405,29 @@ export function rederiveStartUtcForCandidates(
     // the video duration), and the cadence fallback needs every clip's
     // neighbors before any single clip can be judged.
     for (const c of candidates) {
-        const filenameLocal = parseFilenameLocalTime({ file: c.file, relativePath: c.relativePath });
+        const vendorFile = { file: c.file, relativePath: c.relativePath };
+        const filenameLocal = parseFilenameLocalTime(vendorFile);
+        const canInferTimelapse = canInferTimelapseFromClock(vendorFile);
         c.wallDurationSec = deriveWallDurationSec({
-            isTimelapse: c.isTimelapse,
+            // Explicit markers stay authoritative. Ambiguous filename families
+            // enter the same evidence gate, but become time-lapse only when a
+            // real wall span survives its plausibility checks.
+            isTimelapse: c.isTimelapse || canInferTimelapse,
             durationSec: c.durationSec,
             createdUtc: c.createdUtc,
             records: c.records,
             filenameNaiveSec: filenameLocal !== null ? filenameLocal.getTime() / 1000 : null,
         });
+        if (!c.isTimelapse && canInferTimelapse && c.wallDurationSec !== null) {
+            c.isTimelapse = true;
+            // Every currently-supported time-lapse family is the background
+            // parking loop. The mode makes the sidebar and trip boundary agree
+            // with frameTripClass, which already treats time-lapse as parking.
+            // Keep a more specific protected/manual classification: that says
+            // why this clip was retained, while isTimelapse still supplies its
+            // parking trip class and wall-clock scale.
+            if (c.recordingMode === null || c.recordingMode === "normal") c.recordingMode = "parking";
+        }
     }
     applyTimelapseCadenceWallSpans(candidates, parseFilenameLocalTime);
 

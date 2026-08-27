@@ -116,10 +116,12 @@ describe("classifyGpsSource", () => {
         expect(classifyGpsSource(vf("2022_0224_132829_PR.MP4"))).toBe("embedded");
     });
 
-    it("Novatek MOV-A keeps the probe enabled for GPS hardware variants", () => {
-        const file = vf("2026_0809_222334_654A.MOV", "MOVIE/2026_0809_222334_654A.MOV");
-        expect(classifyGpsSource(file)).toBe("embedded");
-        expect(shouldTryEmbeddedGps(file, false)).toBe(true);
+    it("Novatek NVT-IM MOV keeps the probe enabled for GPS hardware variants", () => {
+        for (const name of ["2026_0809_222334_654A.MOV", "2026_0826_070216_437.MOV"]) {
+            const file = vf(name, `MOVIE/${name}`);
+            expect(classifyGpsSource(file)).toBe("embedded");
+            expect(shouldTryEmbeddedGps(file, false)).toBe(true);
+        }
     });
 
     it("none formats (no embedded GPS / not yet implemented)", () => {

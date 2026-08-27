@@ -16,7 +16,7 @@ import { FILENAME_CHANNEL } from "./channel.js";
 import { FILENAME_MODE } from "./mode.js";
 import { FILENAME_SEQUENCE } from "./sequence.js";
 import { FILENAME_TIME } from "./time.js";
-import { FILENAME_TIMELAPSE } from "./timelapse.js";
+import { FILENAME_CLOCK_TIMELAPSE, FILENAME_TIMELAPSE } from "./timelapse.js";
 import type { ChannelMatch, FilenameMatch, FilenameTechnique } from "./types.js";
 
 export type { FilenameMatch } from "./types.js";
@@ -67,6 +67,11 @@ export function classifyFilenameSequence(file: VendorFile): number | null {
  *  Defaults to false - only an explicit vendor time-lapse marker flips it. */
 export function classifyFilenameTimelapse(file: VendorFile): boolean {
     return walk(FILENAME_TIMELAPSE, file).value ?? false;
+}
+/** Whether this filename family allows the container clocks to prove that an
+ *  otherwise ambiguous clip is time-lapse. This is eligibility, not a verdict. */
+export function classifyFilenameClockTimelapse(file: VendorFile): boolean {
+    return walk(FILENAME_CLOCK_TIMELAPSE, file).value ?? false;
 }
 /**
  * Cross-channel camera key - first non-null technique match, or null when no

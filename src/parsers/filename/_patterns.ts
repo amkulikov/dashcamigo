@@ -303,18 +303,25 @@ export const RX_NOVATEK_VIOFO = /^(\d{4})_(\d{4})_(\d{6})_(\d+)?([PE]?)([FRTI])\
 export const RX_NOVATEK_PATH_RO = /(?:^|\/)ro\//i;
 // Single-channel Novatek OEM (2E Drive, SilverStone F1, ...).
 export const RX_NOVATEK_SINGLE = /^(\d{4})_(\d{4})_(\d{6})_(\d+)\.(mp4|mov)$/i;
-// Novatek NVT-IM single-camera MOV variant: same split datetime + counter
-// grammar, with a fixed trailing A marker. The marker's meaning is unknown;
-// channel classification comes from the single-camera format, not the letter.
-// A real JOOYFACT A1 sample carries only power-state `freeGPS` blocks, while
-// the related A1G exists with GPS. Keep the spelling distinct for filename
-// matching, but include it in the Novatek-family GPS probe below so a GPS
-// hardware variant can still surface records.
-export const RX_NOVATEK_MOV_A = /^(\d{4})_(\d{4})_(\d{6})_(\d{3})A\.mov$/i;
+// Novatek NVT-IM single-camera MOV variant: same split datetime + 3-digit
+// counter grammar, with an optional trailing A recording-mode marker. On the
+// mode-switching firmware, A is realtime driving and no suffix is parking
+// time-lapse. Older no-suffix NVT-IM firmware also exists, so the missing A is
+// only a CANDIDATE signal: container clock evidence must prove time compression
+// before the mode changes to parking (see filename/timelapse.ts and trips.ts).
+// A real sample carries only power-state `freeGPS` blocks, while related GPS
+// hardware exists. Keep the spelling inside the Novatek-family probe so those
+// variants can still surface records. m[5] is "A" or the empty string.
+export const RX_NOVATEK_NVT_MOV = /^(\d{4})_(\d{4})_(\d{6})_(\d{3})(A?)\.mov$/i;
+
+/** Matches the NVT-IM MOV spelling and exposes its optional mode marker. */
+export function matchNovatekNvtMovFilename(name: string): RegExpMatchArray | null {
+    return name.match(RX_NOVATEK_NVT_MOV);
+}
 
 /** Matches either single-camera Novatek filename spelling. */
 export function matchNovatekSingleFilename(name: string): RegExpMatchArray | null {
-    return name.match(RX_NOVATEK_SINGLE) ?? name.match(RX_NOVATEK_MOV_A);
+    return matchNovatekNvtMovFilename(name) ?? name.match(RX_NOVATEK_SINGLE);
 }
 // Vantrue: YYYYMMDD_HHMMSS_NNNN_<N|E|P>_<A|B|C>.mp4.
 export const RX_NOVATEK_VANTRUE = /^(\d{8})_(\d{6})_(\d+)_([NEP])_([ABC])\.mp4$/i;
@@ -329,7 +336,7 @@ export const RX_NOVATEK_TS = /^(\d{14})_(\d{6})\.ts$/i;
 
 /**
  * Whether a filename belongs to the Novatek family (VIOFO multi-channel,
- * single-channel OEM including the MOV-A spelling, Vantrue) - the chipsets
+ * single-channel OEM including the NVT-IM MOV spelling, Vantrue) - the chipsets
  * that ship freeGPS blocks or share that optional-GPS firmware family.
  * Shared by the `novatek` gps-source hint and the dispatcher's marker-probe
  * escalation (registry.ts tryParseOne) so the two gates can never disagree
@@ -339,7 +346,7 @@ export function isNovatekFamilyFilename(name: string): boolean {
     return (
         RX_NOVATEK_VIOFO.test(name) ||
         RX_NOVATEK_SINGLE.test(name) ||
-        RX_NOVATEK_MOV_A.test(name) ||
+        RX_NOVATEK_NVT_MOV.test(name) ||
         RX_NOVATEK_VANTRUE.test(name)
     );
 }

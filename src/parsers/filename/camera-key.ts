@@ -56,6 +56,7 @@ import {
     RX_THINKWARE,
     RX_VUEROID,
     RX_WOLFBOX,
+    matchNovatekNvtMovFilename,
     matchNovatekSingleFilename,
 } from "./_patterns.js";
 import type { FilenameCameraKeyTechnique } from "./types.js";
@@ -483,11 +484,15 @@ const novatekSingleCameraKey: FilenameCameraKeyTechnique = {
     id: "novatek-single-camera-key",
     extract(file: VendorFile): string | null {
         if (!matchNovatekSingleFilename(file.file.name)) return null;
-        // Single-channel: no channel marker to strip. "ro" is the locked-clip
-        // folder (see novatekViofoCameraKey) - strip it so locked and normal
-        // clips of one camera share a fingerprint.
+        // Single-channel: no channel marker to strip. The optional NVT-IM A is
+        // a recording-mode marker, so normalize it too: driving and parking
+        // clips must share the camera's TZ bucket and grouping partition.
+        const nvtMov = matchNovatekNvtMovFilename(file.file.name);
+        const name = nvtMov?.[5] ? file.file.name.replace(/A(?=\.mov$)/i, "") : file.file.name;
+        // "ro" is the locked-clip folder (see novatekViofoCameraKey) - strip it
+        // so locked and normal clips of one camera share a fingerprint.
         const dir = strippedParentDir(file.relativePath, ["ro"]);
-        return `novatek-single|${dir}|${maskName(file.file.name)}`;
+        return `novatek-single|${dir}|${maskName(name)}`;
     },
 };
 

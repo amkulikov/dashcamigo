@@ -291,7 +291,7 @@ const GPS_SOURCE_HINTS: readonly GpsSourceHint[] = [
         source: "embedded",
     },
     // Novatek family (VIOFO, Vantrue, single-channel OEMs): freeGPS in MP4.
-    // The MOV-A sample has status-only blocks, but the related hardware family
+    // The NVT-IM MOV sample has status-only blocks, but the related hardware family
     // includes an optional-GPS variant, so it must keep the probe enabled.
     {
         id: "novatek",
