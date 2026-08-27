@@ -418,7 +418,7 @@ export const ruDict = {
     "player.progress.position": "{cur} из {total}",
 
     "chart.canvas.label": "График скорости и ускорения",
-    "chart.zoomReset": "Весь обзор",
+    "chart.zoomReset": "Весь график",
     "chart.axis.speed": "Скорость",
     "chart.inferredStrip.empty": "Нет распознанных событий",
     "chart.inferredStrip.kind.stop": "СТОП",

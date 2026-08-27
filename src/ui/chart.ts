@@ -1220,8 +1220,10 @@ function initChartTouchZoom(): void {
 // pull-tabs own their pointers and never start a selection. A press that stays
 // under the threshold remains a plain seek-click.
 
-/** Horizontal travel (px) that turns a press into a selection instead of a click. */
-const DRAG_SELECT_THRESHOLD_PX = 5;
+/** Horizontal travel (px) that turns a press into a selection instead of a click.
+ *  A deliberate chart selection crosses this easily; ordinary pointer wobble
+ *  while seeking does not turn into a surprise deep zoom. */
+const DRAG_SELECT_THRESHOLD_PX = 12;
 // A completed drag fires a trailing click on the host (down/up share the
 // ancestor); suppress it so the release is not read as a seek. Self-clears in
 // case the browser skips the click (mirrors chartPinchSuppressClick).

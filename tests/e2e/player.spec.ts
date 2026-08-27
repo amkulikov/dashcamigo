@@ -523,7 +523,7 @@ test.describe("player", () => {
         const chart = await boxOf(page, "#player-chart-canvas");
         const y = chart.y + chart.height * 0.4;
         // Drag from ~30% to ~70% of the plot. Multiple intermediate moves so the
-        // 5px threshold trips and the selection rectangle path runs.
+        // selection threshold trips and the selection rectangle path runs.
         await page.mouse.move(chart.x + chart.width * 0.3, y);
         await page.mouse.down();
         await page.mouse.move(chart.x + chart.width * 0.45, y, { steps: 4 });
@@ -550,14 +550,37 @@ test.describe("player", () => {
         // The selection rectangle is gone after release.
         await expect(page.locator(".chart-drag-select")).toHaveCount(0);
 
-        // Double-click resets back to the full view (existing gesture).
-        await page.mouse.dblclick(chart.x + chart.width * 0.5, y);
+        // Recovery is visible and labelled; it must not depend on knowing the
+        // double-click gesture.
+        const reset = page.locator("#player-chart-overview-reset");
+        await expect(reset).toBeVisible();
+        await expect(reset).toHaveText("Full view");
+        await shot(page, "player-05b-timeline-zoom-reset");
+        await reset.click();
         await expect
             .poll(() =>
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 page.evaluate(() => (window as any).__dashcamigo.state.chartZoomed),
             )
             .toBe(false);
+    });
+
+    test("small pointer wobble on the chart does not zoom the timeline", async ({ page }) => {
+        const chart = await boxOf(page, "#player-chart-canvas");
+        const x = chart.x + chart.width * 0.45;
+        const y = chart.y + chart.height * 0.4;
+        await page.mouse.move(x, y);
+        await page.mouse.down();
+        await page.mouse.move(x + 8, y);
+        await page.mouse.up();
+
+        await expect
+            .poll(() =>
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                page.evaluate(() => (window as any).__dashcamigo.state.chartZoomed),
+            )
+            .toBe(false);
+        await expect(page.locator("#player-chart-overview-reset")).toBeHidden();
     });
 
     test("inspection zoom does not clamp seeks to the window", async ({ page }) => {
