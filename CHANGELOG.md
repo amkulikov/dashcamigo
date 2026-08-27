@@ -9,6 +9,7 @@ release tag. Localized texts ship inside the app (the "What's new" panel).
 
 ## 2026-08-27
 
+- **Improved:** Improved GPS sync.
 - **Fixed:** HEVC recordings no longer show as unsupported when the browser can play them.
 - **New camera support:** Recordings from Botslab G300H, JOOYFACT A1, MiVue 955WD Pro, and similar models are now supported.
 

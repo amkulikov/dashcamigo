@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-08-27.3",
+        category: "improvement",
+        text: {
+            en: "Improved GPS sync.",
+            ru: "Улучшена синхронизация GPS.",
+            de: "Die GPS-Synchronisierung wurde verbessert.",
+            es: "Se ha mejorado la sincronización GPS.",
+            fr: "La synchronisation GPS a été améliorée.",
+            pl: "Ulepszono synchronizację GPS.",
+            pt: "A sincronização GPS foi aprimorada.",
+            zh: "改进了 GPS 同步。",
+            ja: "GPS 同期を改善しました。",
+            ko: "GPS 동기화를 개선했습니다.",
+        },
+    },
+    {
         id: "2026-08-27.2",
         category: "fix",
         text: {
