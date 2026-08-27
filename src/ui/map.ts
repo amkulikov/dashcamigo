@@ -174,21 +174,24 @@ let lastFailedTheme: MapStyleId | null = null;
  * (severity: user blocked) from "an export-overlay snapshot failed"
  * (severity: optional feature degraded) - they used to merge.
  *
- * "prefetch" - background warmup of the inactive theme from ensureMap; the
- * catch is fully silent (no banner, no lastFailedTheme, no analytics).
- * Analytics is intentionally skipped to avoid double-counting a single
- * network issue when the user later requests that theme and it fails again
- * with source="main".
+ * "prefetch" warms the inactive theme in the background; "preview" has its
+ * own local route fallback. Both stay silent so an optional request cannot
+ * raise or dismiss the main map's error state.
  */
 export type MapLoadSource = "main" | "export" | "preview" | "prefetch";
+
+function isSilentMapLoadSource(source: MapLoadSource): boolean {
+    return source === "prefetch" || source === "preview";
+}
 
 /**
  * Fetches the tile style JSON with a timeout. Caches the result - repeat calls
  * on success return the same object; on failure (null) a new fetch is started.
  * force=true aborts any in-flight fetch and clears the cache, used by the retry
  * button to avoid getting the same null from a previously cached failure.
- * source labels the call site for analytics + decides whether the failure
- * surfaces in the UI - "prefetch" is background-silent.
+ * source labels the call site for diagnostics + decides whether the failure
+ * surfaces in the UI. Background prefetches and previews with a local fallback
+ * stay silent.
  */
 export function loadMapStyle(
     theme: MapStyleId,
@@ -216,7 +219,7 @@ export function loadMapStyle(
     if (provider !== "openfreemap") {
         const style = createFallbackMapStyle(provider, theme);
         cachedMapStyles.set(key, style);
-        hideMapStyleError();
+        if (!isSilentMapLoadSource(source)) hideMapStyleError();
         log.info("map style loaded", { theme, provider, durationMs: 0 });
         return Promise.resolve(style);
     }
@@ -246,8 +249,10 @@ export function loadMapStyle(
                 style.glyphs = new URL(style.glyphs, location.origin).href;
             }
             cachedMapStyles.set(key, style);
-            if (lastFailedTheme === theme) lastFailedTheme = null;
-            hideMapStyleError();
+            if (!isSilentMapLoadSource(source)) {
+                if (lastFailedTheme === theme) lastFailedTheme = null;
+                hideMapStyleError();
+            }
             // The tile server is the only external runtime dependency. Style load
             // time is the first proxy for network issues; clearly visible in a
             // "map opens slowly" bug report.
@@ -281,13 +286,13 @@ export function loadMapStyle(
             if (mapStyleLoadControllers.get(key) === ctrl) {
                 mapStyleLoadControllers.delete(key);
             }
-            // Background prefetch failures stay invisible: no banner, no
-            // lastFailedTheme (retry must not fixate on a theme the user is
-            // not even looking at), and no analytics either - if the user
-            // later requests that theme and it fails again, the user-facing
+            // Background prefetch and local-fallback preview failures stay
+            // invisible: no banner or lastFailedTheme (retry must not fixate on
+            // a theme the user is not even looking at), and no analytics either.
+            // If the user later requests that theme and it fails again, the user-facing
             // failure will fire its own map_load_failed; counting the
             // prefetch attempt too would double-count one real network issue.
-            if (source === "prefetch") return null;
+            if (isSilentMapLoadSource(source)) return null;
             lastFailedTheme = theme;
             showMapStyleError();
             return null;

@@ -2006,7 +2006,16 @@
             <div class="export-modal-title" id="gpx-assignment-title" data-i18n="gpxAssign.title">Match GPS tracks to trips</div>
             <div class="export-modal-section">
                 <p class="gpx-assignment-intro" data-i18n="gpxAssign.body">Choose a trip for each GPX track. Trips that already have GPS stay unchanged.</p>
-                <div id="gpx-assignment-list" class="gpx-assignment-list"></div>
+                <div class="gpx-assignment-workspace">
+                    <div id="gpx-assignment-list" class="gpx-assignment-list" role="list"></div>
+                    <div class="gpx-assignment-preview">
+                        <div id="gpx-assignment-map" class="gpx-assignment-map" aria-hidden="true" inert></div>
+                        <div class="gpx-assignment-preview-caption">
+                            <code id="gpx-assignment-preview-name" class="gpx-assignment-preview-name"></code>
+                            <span id="gpx-assignment-preview-summary" class="gpx-assignment-preview-summary"></span>
+                        </div>
+                    </div>
+                </div>
                 <div class="export-modal-actions">
                     <button id="gpx-assignment-skip" class="dc-btn dc-btn--ghost" type="button" data-i18n="gpxAssign.skip">Skip all</button>
                     <button id="gpx-assignment-apply" class="dc-btn dc-btn--primary" type="button" data-i18n="gpxAssign.apply" disabled>Add tracks</button>

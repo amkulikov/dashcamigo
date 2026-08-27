@@ -38,9 +38,12 @@ const FOCUSABLE_SELECTOR = [
 
 export function focusableWithin(el: HTMLElement): HTMLElement[] {
     return Array.from(el.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
-        // Skip elements hidden via display:none / visibility (offsetParent is
-        // null for them); good enough without a full visibility computation.
-        (n) => n.offsetParent !== null || n === document.activeElement,
+        // `aria-hidden` alone does not remove descendants from the browser's
+        // tab order. Decorative widgets pair it with `inert`; excluding both
+        // here also keeps them from becoming the trap's false first/last item.
+        (n) =>
+            n.closest('[aria-hidden="true"], [inert]') === null &&
+            (n.offsetParent !== null || n === document.activeElement),
     );
 }
 

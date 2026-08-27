@@ -14,6 +14,7 @@ import {
     gotoApp,
     loadTrip,
     presetLocalStorage,
+    shot,
     test,
 } from "./_fixtures.js";
 
@@ -207,7 +208,7 @@ test.describe("GPS synchronization", () => {
         const gpx = (lat: number) => {
             const points = Array.from({ length: 3 }, (_, index) => {
                 const time = new Date(Date.UTC(2035, 0, 1, 0, 0, index)).toISOString();
-                return `<trkpt lat="${(lat + index * 0.00001).toFixed(6)}" lon="76.900000"><time>${time}</time></trkpt>`;
+                return `<trkpt lat="${(lat + index * 0.001).toFixed(6)}" lon="76.900000"><time>${time}</time></trkpt>`;
             }).join("");
             return `<?xml version="1.0"?><gpx version="1.1"><trk><trkseg>${points}</trkseg></trk></gpx>`;
         };
@@ -221,6 +222,33 @@ test.describe("GPS synchronization", () => {
         await expect(modal).toBeVisible();
         await expect(page.locator(".gpx-assignment-path")).toHaveText(["route-one.gpx", "route-two.gpx"]);
         const selects = page.locator(".gpx-assignment-select");
+        await expect(selects.first()).toBeFocused();
+        const trackButtons = page.locator(".gpx-assignment-track");
+        await expect(trackButtons).toHaveCount(2);
+        await expect(trackButtons.nth(0)).toHaveAttribute("aria-pressed", "true");
+        await expect(page.locator("#gpx-assignment-preview-name")).toHaveText("route-one.gpx");
+        await expect(page.locator("#gpx-assignment-preview-summary")).toContainText("3 points");
+        await expect(page.locator("#gpx-assignment-map > *").first()).toBeVisible();
+        await shot(page, "gps-sync-01-gpx-assignment");
+
+        await page.setViewportSize(MOBILE);
+        await page.locator("#gpx-assignment-map").scrollIntoViewIfNeeded();
+        await expect(page.locator("#gpx-assignment-map")).toBeVisible();
+        await shot(page, "gps-sync-02-gpx-assignment-mobile");
+        await page.setViewportSize(DESKTOP);
+
+        await trackButtons.nth(1).click();
+        await expect(trackButtons.nth(1)).toHaveAttribute("aria-pressed", "true");
+        await expect(trackButtons.nth(0)).toHaveAttribute("aria-pressed", "false");
+        await expect(page.locator("#gpx-assignment-preview-name")).toHaveText("route-two.gpx");
+
+        await expect(page.locator(".gpx-assignment-maplibre")).toHaveCount(1);
+        await selects.nth(1).focus();
+        await page.keyboard.press("Tab");
+        await expect(page.locator("#gpx-assignment-skip")).toBeFocused();
+        await page.keyboard.press("Tab");
+        await expect(trackButtons.first()).toBeFocused();
+
         await expect(selects).toHaveCount(2);
         await expect(page.locator("#gpx-assignment-apply")).toBeDisabled();
 

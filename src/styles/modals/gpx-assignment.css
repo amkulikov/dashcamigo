@@ -1,7 +1,7 @@
 /* Ambiguous loose-GPX pairing. Shared overlay/card/button/form primitives own
-   the chrome; this file only lays out the path-to-trip rows. */
+   the chrome; this file owns the track-list + route-preview workspace. */
 .gpx-assignment-card {
-    width: min(680px, 100%);
+    width: min(980px, 100%);
 }
 
 .gpx-assignment-intro {
@@ -11,19 +11,56 @@
     margin: 0 0 var(--dc-space-3);
 }
 
+.gpx-assignment-workspace {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.85fr) minmax(320px, 1.15fr);
+    gap: var(--dc-space-4);
+    min-height: 360px;
+    max-height: min(58vh, 520px);
+    margin-bottom: var(--dc-space-4);
+}
+
 .gpx-assignment-list {
-    max-height: min(52vh, 420px);
+    min-height: 0;
     overflow-y: auto;
     padding-right: var(--dc-space-1);
 }
 
 .gpx-assignment-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(180px, 1.15fr);
-    align-items: center;
-    gap: var(--dc-space-3);
-    border-bottom: 1px solid var(--border);
-    padding: var(--dc-space-3) 0;
+    gap: var(--dc-space-2);
+    border: 1px solid transparent;
+    border-bottom-color: var(--border);
+    border-radius: var(--dc-radius-sm);
+    padding: var(--dc-space-2);
+}
+
+.gpx-assignment-row.is-active {
+    border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.gpx-assignment-track {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.gpx-assignment-track:hover .gpx-assignment-path,
+.gpx-assignment-track:focus-visible .gpx-assignment-path {
+    color: var(--accent);
+}
+
+.gpx-assignment-track:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--dc-radius-xs);
 }
 
 .gpx-assignment-path {
@@ -32,8 +69,11 @@
     overflow-wrap: anywhere;
 }
 
-.gpx-assignment-arrow {
-    color: var(--fg-mute);
+.gpx-assignment-track-meta,
+.gpx-assignment-preview-summary {
+    color: var(--fg-dim);
+    font-size: var(--dc-text-xs);
+    font-variant-numeric: tabular-nums;
 }
 
 .gpx-assignment-select {
@@ -41,13 +81,103 @@
     width: 100%;
 }
 
-@media (max-width: 560px) {
-    .gpx-assignment-row {
+.gpx-assignment-preview {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-md);
+    background: var(--bg);
+}
+
+.gpx-assignment-map {
+    position: relative;
+    min-height: 280px;
+    overflow: hidden;
+    background:
+        linear-gradient(color-mix(in srgb, var(--border) 35%, transparent) 1px, transparent 1px),
+        linear-gradient(90deg, color-mix(in srgb, var(--border) 35%, transparent) 1px, transparent 1px), var(--bg);
+    background-size: 24px 24px;
+}
+
+.gpx-assignment-maplibre.maplibregl-map {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 140ms ease;
+}
+
+.gpx-assignment-maplibre.maplibregl-map.is-ready {
+    opacity: 1;
+}
+
+.gpx-assignment-map-fallback {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 280px;
+}
+
+.gpx-assignment-map-fallback__route {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+}
+
+.gpx-assignment-map-fallback__endpoint {
+    fill: var(--accent);
+    stroke: var(--bg-elev);
+    stroke-width: 3;
+    vector-effect: non-scaling-stroke;
+}
+
+.gpx-assignment-preview-caption {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    padding: var(--dc-space-3);
+    border-top: 1px solid var(--border);
+    background: var(--bg-elev);
+}
+
+.gpx-assignment-preview-name {
+    overflow: hidden;
+    color: var(--fg);
+    font-size: var(--dc-text-sm);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .gpx-assignment-maplibre.maplibregl-map {
+        transition: none;
+    }
+}
+
+@media (pointer: coarse) {
+    .gpx-assignment-track {
+        min-height: var(--dc-iconbtn-touch);
+    }
+}
+
+@media (max-width: 720px) {
+    .gpx-assignment-workspace {
         grid-template-columns: minmax(0, 1fr);
-        gap: var(--dc-space-2);
+        grid-template-rows: auto minmax(240px, 40vh);
+        max-height: none;
     }
 
-    .gpx-assignment-arrow {
-        display: none;
+    .gpx-assignment-list {
+        max-height: min(34vh, 300px);
+    }
+
+    .gpx-assignment-map,
+    .gpx-assignment-map-fallback {
+        min-height: 190px;
     }
 }

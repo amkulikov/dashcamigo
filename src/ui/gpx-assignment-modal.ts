@@ -1,6 +1,11 @@
 // Manual GPX-to-trip assignment for an unassociated batch. The dialog pauses only
 // sidecar classification; skipping it leaves the recording ingest untouched.
 
+import { t } from "../i18n/index.js";
+import { totalDistanceKm } from "../parser.js";
+import { formatDistanceFromKm } from "../units-pref.js";
+import { formatDuration } from "./format.js";
+import { GpxRoutePreview } from "./gpx-route-preview.js";
 import type { LooseGpxAssignment } from "./loose-gpx-assignment.js";
 import type { LooseGpxChoice, LooseGpxPlan } from "./loose-gpx.js";
 import { activateModal, deactivateModal, wireBackdropDismiss } from "./modal-helper.js";
@@ -17,16 +22,23 @@ interface GpxAssignmentCopy {
 interface GpxAssignmentElements {
     modal: HTMLElement;
     list: HTMLDivElement;
+    map: HTMLDivElement;
+    previewName: HTMLElement;
+    previewSummary: HTMLElement;
     skip: HTMLButtonElement;
     apply: HTMLButtonElement;
 }
 
 interface AssignmentRow {
     plan: LooseGpxPlan;
+    root: HTMLDivElement;
+    trackButton: HTMLButtonElement;
     select: HTMLSelectElement;
+    summary: string;
 }
 
 let rows: AssignmentRow[] = [];
+let routePreview: GpxRoutePreview | null = null;
 let pendingResolve: ((assignments: LooseGpxAssignment[]) => void) | null = null;
 let pendingSignal: AbortSignal | null = null;
 let pendingAbort: (() => void) | null = null;
@@ -43,6 +55,9 @@ function assignmentElements(): GpxAssignmentElements {
     return {
         modal: requireElement("gpx-assignment-modal"),
         list: requireElement("gpx-assignment-list"),
+        map: requireElement("gpx-assignment-map"),
+        previewName: requireElement("gpx-assignment-preview-name"),
+        previewSummary: requireElement("gpx-assignment-preview-summary"),
         skip: requireElement("gpx-assignment-skip"),
         apply: requireElement("gpx-assignment-apply"),
     };
@@ -52,6 +67,35 @@ function displayPath(plan: LooseGpxPlan): string {
     return plan.track.file.file.relativePath || plan.track.file.file.file.name;
 }
 
+function trackSummary(plan: LooseGpxPlan): string {
+    const records = plan.track.records;
+    const distance = formatDistanceFromKm(totalDistanceKm(records));
+    const distanceText = `${distance.value.toFixed(distance.value < 10 ? 1 : 0)} ${t(distance.unitKey)}`;
+    const durationSec = plan.track.timeRanges.reduce(
+        (total, range) => total + Math.max(0, range.endUnix - range.startUnix),
+        0,
+    );
+    return t("export.gpx.summary", {
+        n: records.length,
+        dist: distanceText,
+        dur: formatDuration(durationSec),
+    });
+}
+
+function setActiveRow(rowIndex: number): void {
+    if (!elements || rowIndex < 0 || rowIndex >= rows.length) return;
+    for (let index = 0; index < rows.length; index++) {
+        const isActive = index === rowIndex;
+        rows[index]!.root.classList.toggle("is-active", isActive);
+        rows[index]!.trackButton.setAttribute("aria-pressed", String(isActive));
+    }
+    const row = rows[rowIndex]!;
+    elements.previewName.textContent = displayPath(row.plan);
+    elements.previewName.title = displayPath(row.plan);
+    elements.previewSummary.textContent = row.summary;
+    routePreview?.show(row.plan.track.records);
+}
+
 function settle(assignments: LooseGpxAssignment[]): void {
     if (!elements) return;
     if (pendingSignal && pendingAbort) pendingSignal.removeEventListener("abort", pendingAbort);
@@ -59,6 +103,8 @@ function settle(assignments: LooseGpxAssignment[]): void {
     pendingAbort = null;
     elements.modal.hidden = true;
     deactivateModal(elements.modal);
+    routePreview?.dispose();
+    routePreview = null;
     rows = [];
     const resolve = pendingResolve;
     pendingResolve = null;
@@ -117,17 +163,25 @@ function renderRows(plans: readonly LooseGpxPlan[], copy: GpxAssignmentCopy): vo
     const list = elements.list;
     list.replaceChildren();
     rows = plans.map((plan, rowIndex) => {
-        const label = document.createElement("label");
-        label.className = "gpx-assignment-row";
+        const root = document.createElement("div");
+        root.className = "gpx-assignment-row";
+        root.setAttribute("role", "listitem");
+
+        const trackButton = document.createElement("button");
+        trackButton.type = "button";
+        trackButton.className = "gpx-assignment-track";
+        trackButton.setAttribute("aria-pressed", "false");
 
         const path = document.createElement("code");
         path.className = "gpx-assignment-path";
         path.textContent = displayPath(plan);
 
-        const arrow = document.createElement("span");
-        arrow.className = "gpx-assignment-arrow";
-        arrow.textContent = "→";
-        arrow.setAttribute("aria-hidden", "true");
+        const summary = trackSummary(plan);
+        const meta = document.createElement("span");
+        meta.className = "gpx-assignment-track-meta";
+        meta.textContent = summary;
+        trackButton.append(path, meta);
+        trackButton.addEventListener("click", () => setActiveRow(rowIndex));
 
         const select = document.createElement("select");
         select.className = "gpx-assignment-select";
@@ -154,11 +208,15 @@ function renderRows(plans: readonly LooseGpxPlan[], copy: GpxAssignmentCopy): vo
             );
             if (recommendedIndex >= 0) select.value = String(recommendedIndex);
         }
-        select.addEventListener("change", syncChoices);
+        select.addEventListener("change", () => {
+            setActiveRow(rowIndex);
+            syncChoices();
+        });
+        select.addEventListener("focus", () => setActiveRow(rowIndex));
 
-        label.append(path, arrow, select);
-        list.appendChild(label);
-        return { plan, select };
+        root.append(trackButton, select);
+        list.appendChild(root);
+        return { plan, root, trackButton, select, summary };
     });
     syncChoices();
 }
@@ -174,6 +232,8 @@ export function showGpxAssignmentModal(
     if (pendingResolve) settle([]);
     renderRows(plans, copy);
     elements!.modal.hidden = false;
+    routePreview = new GpxRoutePreview(elements!.map);
+    setActiveRow(0);
 
     return new Promise<LooseGpxAssignment[]>((resolve) => {
         pendingResolve = resolve;
