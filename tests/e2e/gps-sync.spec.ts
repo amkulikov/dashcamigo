@@ -152,18 +152,17 @@ test.describe("GPS synchronization", () => {
             )
             .toBeLessThan(initial.rawCount);
 
+        const offsetInput = page.locator("#gps-sync-offset-input");
+        const alignedOffset = Number(await offsetInput.inputValue());
         await page.locator('[data-gps-delta="1"]').click();
-        const explicitOffset = await page.locator("#gps-sync-offset-input").inputValue();
-        expect(Number(explicitOffset)).toBeCloseTo(-14 * 24 * 60 * 60 + 1, 0);
-        const shiftedStart = await page.evaluate(() => {
+        const explicitOffset = Number(await offsetInput.inputValue());
+        expect(explicitOffset).toBeCloseTo(alignedOffset + 1, 3);
+        const shiftedTrackStart = await page.evaluate(() => {
             const state = window.__dashcamigo.state;
             const trip = state.trips[state.active!.trip]!;
-            return {
-                videoStart: trip.timeline.segments[0]!.wallStart,
-                trackStart: trip.records[0]!.unixSeconds,
-            };
+            return trip.records[0]!.unixSeconds;
         });
-        expect(shiftedStart.trackStart).toBeCloseTo(shiftedStart.videoStart + 1, 0);
+        expect(shiftedTrackStart).toBeCloseTo(initial.trackStart + explicitOffset, 3);
     });
 
     test("a unique timestamp overlap recommends the matching trip but still waits for Apply", async ({ page }) => {
