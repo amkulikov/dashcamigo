@@ -80,9 +80,10 @@ export async function indexMp4FileWithMoov(file: File, captureMoov: boolean): Pr
     // check in ingest.ts.
     let videoCodecString: string | null = null;
     // Audio track is IMA ADPCM (Mio/Navman MiVue) - flagged so playback routes
-    // through the MSE backend that transcodes it to Opus (no browser decodes
-    // ADPCM natively). Detected from the soun trak's stsd 4cc in the moov bytes
-    // already in hand, so it costs no extra IO.
+    // through the MSE backend that decodes it to PCM and re-encodes it to an
+    // MSE-playable codec (no browser decodes ADPCM natively). Detected from the
+    // soun trak's stsd 4cc in the moov bytes already in hand, so it costs no
+    // extra IO.
     let audioNeedsTranscode = false;
     // Display-only technical-details fields read from the same moov already in
     // hand (zero extra IO): coded frame size + average fps from the video trak,
@@ -245,19 +246,26 @@ export async function indexNonIsobmffFile(file: File, signal?: AbortSignal): Pro
 
         // Matroska can carry IMA-ADPCM audio (A_MS/ACM + null codec: a PCM WAVE
         // tag would be recognised, so null under A_MS/ACM is the ADPCM variant
-        // mediabunny cannot read). Flag it so playback routes through the MSE
-        // backend, which decodes ADPCM and re-encodes it. TS in our corpus
-        // carries AAC, so this only ever fires for MKV.
+        // mediabunny cannot read). Some cameras also give ISO-BMFF recordings a
+        // `.TS` suffix; extension routing brings them here, but mediabunny still
+        // exposes their real QuickTime `ms\0\x11` sample-entry id. Flag either
+        // form so playback routes through the existing ADPCM transcode path.
         let audioNeedsTranscode = false;
         let audio: IndexedMp4["audio"] = null;
         try {
             const at = await input.getPrimaryAudioTrack();
             if (at) {
                 const audioCodec = await at.getCodec();
-                if (audioCodec === null && (await at.getInternalCodecId()) === "A_MS/ACM") {
+                const internalCodecId = await at.getInternalCodecId();
+                const isIsobmffImaAdpcm = typeof internalCodecId === "string" && isImaAdpcmSampleEntry(internalCodecId);
+                if (isIsobmffImaAdpcm || (audioCodec === null && internalCodecId === "A_MS/ACM")) {
                     audioNeedsTranscode = true;
                 }
-                audio = { codec: audioCodec, channels: at.numberOfChannels, sampleRate: at.sampleRate };
+                audio = {
+                    codec: audioCodec ?? (isIsobmffImaAdpcm ? internalCodecId : null),
+                    channels: at.numberOfChannels,
+                    sampleRate: at.sampleRate,
+                };
             }
         } catch {
             // Unreadable audio metadata - leave audio to drop gracefully.

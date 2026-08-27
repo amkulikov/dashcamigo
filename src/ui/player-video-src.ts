@@ -25,9 +25,10 @@ export const videoOwnedBlobUrl: WeakMap<HTMLVideoElement, string> = new WeakMap(
  * Matroska (.mkv) - none of these containers is natively decodable via
  * <video>.src in Chromium/Firefox/Safari - and for IMA-ADPCM audio (Mio/Navman):
  * there the VIDEO decodes natively but the audio does not, so we route through
- * MSE to transcode ADPCM -> Opus on the fly while stream-copying the video. This
- * is the deliberate "only patched files leave native <video>" contract - a
- * normal MP4 with AAC audio stays on the native path.
+ * MSE to decode ADPCM and re-encode it to an MSE-playable codec while
+ * stream-copying the video. This is the deliberate "only patched files leave
+ * native <video>" contract - a normal MP4 with AAC audio stays on the native
+ * path.
  *
  * Used everywhere the player must choose between the two pipelines: attach,
  * preload eligibility, mini-map. Keep all callsites going through this helper.

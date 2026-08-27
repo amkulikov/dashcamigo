@@ -16,6 +16,23 @@
 // receiving side gets the ArrayBuffer and must treat it as immutable from
 // the sender's perspective.
 
+export type AdpcmPlaybackCodec = "opus" | "aac";
+
+const ADPCM_PLAYBACK_CODEC_MIMES: readonly [AdpcmPlaybackCodec, string][] = [
+    ["opus", 'audio/mp4; codecs="opus"'],
+    ["aac", 'audio/mp4; codecs="mp4a.40.2"'],
+];
+
+/**
+ * MSE-playable encode targets for live ADPCM playback, in preference order.
+ * Opus comes first because it is the established Chromium/Firefox live path;
+ * Safari rejects it and therefore naturally returns AAC only. The worker still
+ * probes whether it can encode each returned codec before choosing one.
+ */
+export function getMseAdpcmPlaybackCodecs(isTypeSupported: (mime: string) => boolean): AdpcmPlaybackCodec[] {
+    return ADPCM_PLAYBACK_CODEC_MIMES.filter(([, mime]) => isTypeSupported(mime)).map(([codec]) => codec);
+}
+
 /** "init" request payload. */
 export interface InitRequestData {
     /** Source file. The worker reads it via blob.slice / blob.arrayBuffer. */
@@ -25,12 +42,18 @@ export interface InitRequestData {
     /**
      * When true, the audio track is IMA ADPCM (Mio/Navman) that mediabunny
      * cannot read. The worker ignores the container's audio track and instead
-     * decodes the ADPCM itself (transcode/adpcm-audio.ts) and re-encodes it - to
-     * AAC where the browser can encode it (universal MSE playback, incl. Safari),
-     * else Opus (Firefox / codec-stripped Chromium), else drops audio - into the
-     * same fMP4 output. Video stays a stream-copy. Default false.
+     * decodes the ADPCM itself (transcode/adpcm-audio.ts) and re-encodes it to
+     * the first codec that both MediaSource can play and the worker can encode.
+     * Video stays a stream-copy. Default false.
      */
     transcodeAdpcmAudio?: boolean;
+    /**
+     * Encode codecs that the main thread's MediaSource reports as playable,
+     * ordered by preference. Chromium/Firefox prefer Opus here: that is the
+     * long-standing, manually verified live-ADPCM path. Safari rejects
+     * Opus-in-MP4 and therefore sends AAC only. Export remains AAC-first.
+     */
+    adpcmPlaybackCodecs?: AdpcmPlaybackCodec[];
 }
 
 /** "init" reply payload. Lets the main thread set up MediaSource + SourceBuffer
@@ -41,9 +64,9 @@ export interface InitResult {
     codecMime: string;
     /**
      * Video-only mime (no audio codec). Main falls back to this - and tells the
-     * worker to drop audio via MSE_NOTIFY_DROP_AUDIO - when codecMime carries an
-     * audio codec that MediaSource.isTypeSupported rejects (the live Safari case:
-     * it cannot play Opus-in-MP4 through MSE). Silent video beats a hard fail.
+     * worker to drop audio via MSE_NOTIFY_DROP_AUDIO - when the combined
+     * video+audio mime is rejected despite the earlier audio-only preflight.
+     * Silent video beats a hard fail.
      */
     videoOnlyMime: string;
     /** Whether the worker found a usable audio track - used by main for UI/log. */

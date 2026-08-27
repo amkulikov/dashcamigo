@@ -76,8 +76,9 @@ export interface IndexedMp4 {
      * True if the audio track is IMA ADPCM (Mio/Navman MiVue, QuickTime `ms `
      * sample entry / WAVE 0x11), which no browser can decode natively. Such a
      * file otherwise plays with silent audio. The flag routes it through the MSE
-     * backend, which decodes the ADPCM to PCM and re-encodes it to Opus on the
-     * fly (see workers/per-file-mse-worker.ts). Video stays a stream-copy.
+     * backend, which decodes the ADPCM to PCM and re-encodes it to an
+     * MSE-playable codec on the fly (see workers/per-file-mse-worker.ts). Video
+     * stays a stream-copy.
      */
     audioNeedsTranscode: boolean;
 }

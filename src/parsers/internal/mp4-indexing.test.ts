@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { indexMp4FileWithMoov } from "./mp4-indexing.js";
+import { indexMp4FileWithMoov, indexOneFile } from "./mp4-indexing.js";
 
 // Proves the indexer flips audioNeedsTranscode for the IMA-ADPCM (Mio/Navman)
 // `ms ` sample entry and leaves it false for ordinary audio - this flag is what
@@ -39,21 +39,43 @@ function mvhd(): Uint8Array {
     return box("mvhd", payload);
 }
 
-/** A soun trak whose stsd sample entry has the given 4cc. */
-function sounTrak(format: string): Uint8Array {
-    const sampleEntry = box(format, new Uint8Array([0, 0, 0, 0, 0, 0, 0, 1]), new Uint8Array(20));
+/** A one-packet soun trak whose stsd sample entry has the given 4cc. */
+function sounTrak(format: string, chunkOffset: number): Uint8Array {
+    const soundDesc = new Uint8Array(20);
+    const soundDv = new DataView(soundDesc.buffer);
+    soundDv.setUint16(8, 2); // channels
+    soundDv.setUint16(10, 4); // sample size
+    soundDv.setUint32(16, 32_000 << 16); // 16.16 sample rate
+    const sampleEntry = box(format, new Uint8Array([0, 0, 0, 0, 0, 0, 0, 1]), soundDesc);
     const stsd = box("stsd", u32be(0, 1), sampleEntry);
-    const stbl = box("stbl", stsd);
+    const stts = box("stts", u32be(0, 1, 1, 32_000));
+    const stsc = box("stsc", u32be(0, 1, 1, 1, 1));
+    const stsz = box("stsz", u32be(0, 32, 1));
+    const stco = box("stco", u32be(0, 1, chunkOffset));
+    const stbl = box("stbl", stsd, stts, stsc, stsz, stco);
     const minf = box("minf", stbl);
     const hdlr = box("hdlr", u32be(0, 0), new Uint8Array([0x73, 0x6f, 0x75, 0x6e]), u32be(0, 0, 0)); // 'soun'
-    const mdia = box("mdia", hdlr, minf);
-    return box("trak", mdia);
+    const mdhdPayload = new Uint8Array(20);
+    const mdhdDv = new DataView(mdhdPayload.buffer);
+    mdhdDv.setUint32(12, 32_000); // timescale
+    mdhdDv.setUint32(16, 32_000); // duration (1 s)
+    const mdia = box("mdia", box("mdhd", mdhdPayload), hdlr, minf);
+    const tkhdPayload = new Uint8Array(84);
+    const tkhdDv = new DataView(tkhdPayload.buffer);
+    tkhdPayload[3] = 1; // enabled track
+    tkhdDv.setUint32(12, 1); // track id
+    tkhdDv.setUint32(20, 1_000); // duration in movie timescale
+    tkhdDv.setUint32(40, 1 << 16); // identity display matrix
+    tkhdDv.setUint32(56, 1 << 16);
+    tkhdDv.setUint32(72, 1 << 30);
+    return box("trak", box("tkhd", tkhdPayload), mdia);
 }
 
-function movWithAudio(format: string): File {
-    const moov = box("moov", mvhd(), sounTrak(format));
+function movWithAudio(format: string, name = "a.mov"): File {
     const ftyp = box("ftyp", new Uint8Array([0x71, 0x74, 0x20, 0x20, 0, 0, 0, 0]));
-    return new File([new Uint8Array([...ftyp, ...moov])], "a.mov");
+    const mdat = box("mdat", new Uint8Array(32));
+    const moov = box("moov", mvhd(), sounTrak(format, ftyp.length + 8));
+    return new File([new Uint8Array([...ftyp, ...mdat, ...moov])], name);
 }
 
 /** A vide trak with a VisualSampleEntry (width/height), an stts giving a fixed
@@ -136,6 +158,21 @@ describe("indexMp4FileWithMoov: audioNeedsTranscode", () => {
         const ftyp = box("ftyp", new Uint8Array([0x71, 0x74, 0x20, 0x20, 0, 0, 0, 0]));
         const file = new File([new Uint8Array([...ftyp, ...moov])], "novid.mov");
         const { indexed } = await indexMp4FileWithMoov(file, false);
+        expect(indexed).not.toBeNull();
+        expect(indexed!.audioNeedsTranscode).toBe(false);
+    });
+});
+
+describe("indexOneFile: ISO-BMFF disguised as transport stream", () => {
+    it("flags the real IMA-ADPCM sample entry when an MP4/MOV is named .TS", async () => {
+        const { indexed } = await indexOneFile(movWithAudio(MS_IMA, "camera.TS"), false);
+        expect(indexed).not.toBeNull();
+        expect(indexed!.audioNeedsTranscode).toBe(true);
+        expect(indexed!.audio!.codec).toBe(MS_IMA);
+    });
+
+    it("does not flag an ordinary audio sample entry merely because the file is named .TS", async () => {
+        const { indexed } = await indexOneFile(movWithAudio("mp4a", "ordinary.TS"), false);
         expect(indexed).not.toBeNull();
         expect(indexed!.audioNeedsTranscode).toBe(false);
     });

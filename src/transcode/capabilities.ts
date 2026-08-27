@@ -36,13 +36,20 @@ const log = createLogger("transcode:caps");
  * encoder request). Never throws - a probe failure degrades to the next
  * candidate, then to null.
  */
-export async function resolveEncodeAudioCodec(): Promise<"aac" | "opus" | null> {
+export async function resolveEncodeAudioCodec(
+    preference: readonly ("aac" | "opus")[] = ["aac", "opus"],
+): Promise<"aac" | "opus" | null> {
+    if (preference.length === 0) return null;
     try {
-        // Order is the preference: AAC wins whenever the browser can encode it.
+        // Order is the preference. Export callers use the AAC-first default for
+        // broad native-player compatibility; the live MSE player may pass an
+        // Opus-first list when the browser says it can play Opus-in-MP4. Keeping
+        // the playback choice here means the capability probe still exactly
+        // matches the encoder that will be constructed.
         // The result is provably one of the two candidates (or null), so the
         // narrowed return type is sound and lets callers (e.g. the MSE worker's
         // mime builder) switch on it without a default branch.
-        return (await getFirstEncodableAudioCodec(["aac", "opus"], {
+        return (await getFirstEncodableAudioCodec([...preference], {
             numberOfChannels: AUDIO_TARGET_CHANNELS,
             sampleRate: AUDIO_TARGET_SAMPLE_RATE,
             quality: new Quality({ bitrate: AUDIO_TARGET_BITRATE }),

@@ -12,9 +12,9 @@
 //     pcm-s16 source.
 //   - PLAYER (workers/per-file-mse-worker.ts): whole-file feed from a seek
 //     position to EOF, timestamps on the absolute file timeline plus the cycle's
-//     PTS shift (feedToEnd). Sink is an AAC encode source (universal MSE
-//     playback, incl. Safari) or Opus (Firefox / codec-stripped Chromium);
-//     pcm-s16 is not MSE-playable so it has no PCM fallback - it drops audio.
+//     PTS shift (feedToEnd). Sink prefers Opus where MSE can play it and uses
+//     AAC where it cannot (notably Safari); pcm-s16 is not MSE-playable, so the
+//     player has no PCM fallback and drops audio if neither encoder is usable.
 //
 // Both encode consumers resample to 48 kHz / stereo via the source transform
 // (AUDIO_TARGET_*): RFC 7845 mandates 48 kHz for Opus-in-ISOBMFF, and it also
@@ -104,8 +104,9 @@ export interface AdpcmAudioReader {
 /**
  * Container-aware IMA-ADPCM opener. Routes `.mkv` to the Matroska packet-driven
  * reader (openMatroskaAdpcmAudio) and everything else to the ISOBMFF moov-walking
- * reader (openAdpcmAudio). Every export/player call site goes through this so a
- * new container needs one branch here, not a change at each site.
+ * reader (openAdpcmAudio). The latter intentionally includes ISO-BMFF recordings
+ * mislabeled `.TS` by some cameras. Every export/player call site goes through
+ * this so a new container needs one branch here, not a change at each site.
  */
 export async function openAdpcmAudioAuto(file: File): Promise<AdpcmAudioReader | null> {
     if (isMatroskaName(file.name)) {

@@ -12,8 +12,9 @@
 //   does not hit this because the browser demuxes off the main thread in
 //   native code; we only hit it when our own JS-based pipeline is required.
 //
-// Scope of this backend: HEVC sample entry hev1 (mediabunny remuxes to hvc1)
-// and MPEG-TS containers. ISOBMFF MP4/MOV go straight to native <video>.
+// Scope of this backend: HEVC sample entry hev1 (mediabunny remuxes to hvc1),
+// MPEG-TS/Matroska containers, and otherwise-native MP4/MOV whose ADPCM audio
+// must be decoded and re-encoded. Ordinary ISOBMFF goes straight to <video>.
 //
 // Main side responsibilities:
 //   - Lifecycle of WorkerClient, MediaSource, SourceBuffer.
@@ -41,6 +42,7 @@ import {
     MSE_NOTIFY_START_FEED,
     MSE_NOTIFY_TICK,
     MSE_REQUEST_INIT,
+    getMseAdpcmPlaybackCodecs,
     type ErrorNotificationData,
     type FeedDoneNotificationData,
     type InitRequestData,
@@ -292,10 +294,19 @@ export class PerFileMseBackend {
             const timeoutTimer = setTimeout(() => this.initAbort?.abort(), READY_TIMEOUT_MS);
             let initResult: InitResult;
             try {
+                // Live playback and exported files have different codec
+                // priorities. Chromium's original, manually verified ADPCM
+                // path was Opus; prefer it whenever MSE can consume
+                // Opus-in-MP4. Safari reports Opus unsupported and keeps the
+                // AAC path added specifically for it.
+                const adpcmPlaybackCodecs = this.transcodeAdpcmAudio
+                    ? getMseAdpcmPlaybackCodecs((mime) => MediaSource.isTypeSupported(mime))
+                    : undefined;
                 const initReq: InitRequestData = {
                     file: this._file,
                     startSec: this.startSec,
                     transcodeAdpcmAudio: this.transcodeAdpcmAudio,
+                    adpcmPlaybackCodecs,
                 };
                 initResult = await this.client.request<InitResult>(MSE_REQUEST_INIT, initReq, {
                     signal: this.initAbort.signal,
@@ -312,8 +323,9 @@ export class PerFileMseBackend {
             if (this.disposed) return;
             const hasAudio = initResult.hasAudio;
             // Pick the mime the SourceBuffer will actually use. The combined
-            // (video+audio) mime is preferred, but some browsers cannot PLAY a
-            // codec they let us encode: Safari MSE rejects Opus-in-MP4 outright.
+            // (video+audio) mime is preferred. The per-codec preflight above is
+            // necessarily audio-only; this final check catches a browser that
+            // rejects the specific video+audio combination.
             // When the audio came from our ADPCM re-encode (audioTranscoded), the
             // video is a plain stream the user wants, so dropping audio and
             // keeping video beats a hard "unsupported" overlay. We tell the worker

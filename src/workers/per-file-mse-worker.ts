@@ -47,6 +47,7 @@ import {
     MSE_NOTIFY_START_FEED,
     MSE_NOTIFY_TICK,
     MSE_REQUEST_INIT,
+    type AdpcmPlaybackCodec,
     type ErrorNotificationData,
     type FeedDoneNotificationData,
     type InitRequestData,
@@ -121,9 +122,9 @@ let startSec = 0;
 // we decode it ourselves and re-encode. When set, audioTrack/audioCodec stay
 // null and the audio half of the feed runs through adpcmReader instead.
 let transcodeAdpcmAudio = false;
-// Encode codec for the ADPCM transcode, picked at init by encode capability:
-// "aac" where the browser can encode it (universal MSE playback incl. Safari),
-// else "opus" (Firefox / codec-stripped Chromium). null = no encoder -> no audio.
+// Encode codec for the ADPCM transcode, picked at init from the main thread's
+// MSE-playable preference list and the worker's encode capability. null means
+// that no codec satisfies both halves, so playback continues without audio.
 let adpcmEncodeCodec: "aac" | "opus" | null = null;
 let adpcmReader: AdpcmAudioReader | null = null;
 // Set by MSE_NOTIFY_DROP_AUDIO: main found the chosen audio codec not
@@ -158,7 +159,7 @@ interface FeedCycle {
     output: Output;
     videoSource: EncodedVideoPacketSource;
     // EncodedAudioPacketSource for stream-copy (AAC/etc), AudioSampleSource for
-    // the ADPCM->Opus transcode path. null when the file has no usable audio.
+    // the ADPCM transcode path. null when the file has no usable audio.
     audioSource: EncodedAudioPacketSource | AudioSampleSource | null;
     /** moof/ftyp etc bytes accumulated before the matching mdat/moov flush. */
     pendingSegment: Uint8Array[];
@@ -244,7 +245,12 @@ const server = createWorkerServer(self, {
             throw new Error(`unknown request type: ${type}`);
         }
         const req = data as InitRequestData;
-        return await onInit(req.file, req.startSec, req.transcodeAdpcmAudio ?? false);
+        return await onInit(
+            req.file,
+            req.startSec,
+            req.transcodeAdpcmAudio ?? false,
+            req.adpcmPlaybackCodecs ?? ["aac", "opus"],
+        );
     },
     onNotification: (type, data) => {
         switch (type) {
@@ -312,7 +318,12 @@ function adpcmAudioMimeParam(codec: "aac" | "opus"): string {
     return codec === "aac" ? "mp4a.40.2" : "opus";
 }
 
-async function onInit(file: File, initialStartSec: number, wantTranscodeAudio: boolean): Promise<InitResult> {
+async function onInit(
+    file: File,
+    initialStartSec: number,
+    wantTranscodeAudio: boolean,
+    adpcmPlaybackCodecs: readonly AdpcmPlaybackCodec[],
+): Promise<InitResult> {
     if (disposed) throw new Error("init-on-disposed-worker");
     workerFile = file;
     startSec = Math.max(0, initialStartSec);
@@ -350,12 +361,11 @@ async function onInit(file: File, initialStartSec: number, wantTranscodeAudio: b
         // without audio.
         adpcmReader = await openAdpcmAudioAuto(file);
         if (adpcmReader) {
-            // Pick the encode codec by what the browser can actually encode:
-            // AAC first (universal MSE playback, incl. Safari which cannot play
-            // Opus-in-MP4), Opus fallback (Firefox / codec-stripped Chromium
-            // cannot encode AAC, but their MSE plays Opus). null = no audio
-            // encoder at all (Safari < 26) -> play video without audio.
-            adpcmEncodeCodec = await resolveEncodeAudioCodec();
+            // Main has already filtered this preference list by what its MSE
+            // can play. Chromium/Firefox prefer the original, proven Opus path;
+            // Safari supplies AAC because it rejects Opus-in-MP4. The worker
+            // then picks the first candidate it can actually encode.
+            adpcmEncodeCodec = await resolveEncodeAudioCodec(adpcmPlaybackCodecs);
             if (adpcmEncodeCodec) {
                 transcodeAdpcmAudio = true;
                 audioCodecParam = adpcmAudioMimeParam(adpcmEncodeCodec);

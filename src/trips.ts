@@ -188,8 +188,9 @@ export interface VideoCandidate {
     // True if the audio track is IMA ADPCM (Mio/Navman MiVue), which no browser
     // decodes natively - the file would play with silent audio on the native
     // <video> path. Routes playback through PerFileMseBackend, which decodes the
-    // ADPCM and re-encodes it to Opus on the fly while stream-copying the video.
-    // Propagated from IndexedMp4 during ingest. See requiresMseBackend.
+    // ADPCM and re-encodes it to an MSE-playable codec on the fly while
+    // stream-copying the video. Propagated from IndexedMp4 during ingest. See
+    // requiresMseBackend.
     audioNeedsTranscode: boolean;
     // Absolute UTC of video frame 0, when the GPS extractor itself can tie it
     // (e.g. RVMI tReV baseline). null when unknown - deriveStartUtc then falls
