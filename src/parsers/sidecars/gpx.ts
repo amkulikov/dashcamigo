@@ -19,6 +19,9 @@ import { readSidecarText } from "./_read.js";
 
 const RX_GPX = /\.gpx$/i;
 const RX_GPX_TIME = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$/i;
+// A source segment can still contain a device-off gap. Do not treat an
+// unobserved span longer than this as evidence that the GPX overlaps a trip.
+const TIME_RANGE_GAP_SEC = 5 * 60;
 
 export const gpxSidecar: SidecarHandler = {
     id: "gpx",
@@ -28,11 +31,40 @@ export const gpxSidecar: SidecarHandler = {
     },
 
     async parse(file: VendorFile, mp4Filename: string, signal?: AbortSignal): Promise<GpsRecord[]> {
-        // Routed through the shared reader so a cancelled ingest stops here like everywhere else.
-        const text = await readSidecarText(file, signal);
-        return parseGpx(text, mp4Filename);
+        return (await parseGpxTrack(file, mp4Filename, signal)).records;
     },
 };
+
+export interface GpxTimeRange {
+    startUnix: number;
+    endUnix: number;
+}
+
+/** Rich GPX result used only by the loose-track assignment UI. Normal
+ *  basename sidecars keep the SidecarHandler contract above. */
+export interface ParsedGpxTrack {
+    records: GpsRecord[];
+    /** One range per source track/route segment (waypoints are singletons).
+     *  Keeping the source gaps prevents a morning+evening GPX from appearing
+     *  to overlap an unrelated recording in the middle of the day. */
+    timeRanges: GpxTimeRange[];
+    /** GPX requires an explicit zone, but some exporters omit it. We still
+     *  parse those timestamps deterministically as UTC; callers must not use
+     *  that assumption for an automatic recommendation. */
+    hasExplicitTimezone: boolean;
+}
+
+/** Reads and parses a GPX while retaining the timing evidence needed to match
+ *  an otherwise-unassociated track to a recording trip. */
+export async function parseGpxTrack(
+    file: VendorFile,
+    mp4Filename: string,
+    signal?: AbortSignal,
+): Promise<ParsedGpxTrack> {
+    // Routed through the shared reader so a cancelled ingest stops here like everywhere else.
+    const text = await readSidecarText(file, signal);
+    return parseGpx(text, mp4Filename);
+}
 
 /**
  * Parses GPX file content and returns records in the shared GpsRecord format.
@@ -50,7 +82,7 @@ export const gpxSidecar: SidecarHandler = {
  *
  * Throws if the root tag is not gpx or no valid records are found.
  */
-function parseGpx(text: string, mp4Filename: string): GpsRecord[] {
+function parseGpx(text: string, mp4Filename: string): ParsedGpxTrack {
     const doc = new DOMParser().parseFromString(text, "application/xml");
 
     // DOMParser does not throw on invalid XML - it returns a <parsererror> element.
@@ -67,14 +99,51 @@ function parseGpx(text: string, mp4Filename: string): GpsRecord[] {
     }
 
     const records: GpsRecord[] = [];
+    const timeRanges: GpxTimeRange[] = [];
+    let hasExplicitTimezone = true;
+
+    const collectRange = (points: readonly Element[]): void => {
+        const rangeRecords: GpsRecord[] = [];
+        for (const point of points) {
+            const parsed = trkptToRecord(point, mp4Filename);
+            if (!parsed) continue;
+            records.push(parsed.record);
+            rangeRecords.push(parsed.record);
+            if (!parsed.hasExplicitTimezone) hasExplicitTimezone = false;
+        }
+        if (rangeRecords.length === 0) return;
+        rangeRecords.sort((a, b) => a.unixSeconds - b.unixSeconds);
+        let startUnix = rangeRecords[0]!.unixSeconds;
+        let previousUnix = startUnix;
+        for (let i = 1; i < rangeRecords.length; i++) {
+            const currentUnix = rangeRecords[i]!.unixSeconds;
+            if (currentUnix - previousUnix > TIME_RANGE_GAP_SEC) {
+                timeRanges.push({ startUnix, endUnix: previousUnix });
+                startUnix = currentUnix;
+            }
+            previousUnix = currentUnix;
+        }
+        timeRanges.push({ startUnix, endUnix: previousUnix });
+    };
 
     // Namespace prefixes are legal in GPX, so match local names rather than
-    // only unprefixed qualified names. Route points share the same point shape.
-    for (const pointName of ["trkpt", "wpt", "rtept"]) {
-        for (const point of elementsByLocalName(doc, pointName)) {
-            const rec = trkptToRecord(point, mp4Filename);
-            if (rec) records.push(rec);
-        }
+    // only unprefixed qualified names. Preserve source segmentation for time
+    // matching; it is semantically meaningful even though the map renders the
+    // combined sorted record list.
+    const trackSegments = elementsByLocalName(doc, "trkseg");
+    for (const segment of trackSegments) collectRange(elementsByLocalName(segment, "trkpt"));
+    for (const route of elementsByLocalName(doc, "rte")) collectRange(elementsByLocalName(route, "rtept"));
+    for (const waypoint of elementsByLocalName(doc, "wpt")) collectRange([waypoint]);
+
+    // Be liberal with malformed-but-previously-supported GPX that puts track
+    // or route points directly under the root instead of a segment/container.
+    // Collect only orphans so a document that also has valid segments neither
+    // loses those points nor duplicates the well-formed ones above.
+    for (const point of elementsByLocalName(doc, "trkpt")) {
+        if (!hasAncestorByLocalName(point, "trkseg")) collectRange([point]);
+    }
+    for (const point of elementsByLocalName(doc, "rtept")) {
+        if (!hasAncestorByLocalName(point, "rte")) collectRange([point]);
     }
 
     if (records.length === 0) {
@@ -88,7 +157,8 @@ function parseGpx(text: string, mp4Filename: string): GpsRecord[] {
     // heading keeps it. Per-file by construction - every record here shares the
     // one mp4Filename, so this never bearings across a recording gap.
     forwardFillBearingsIfAllZero(records);
-    return records;
+    timeRanges.sort((a, b) => a.startUnix - b.startUnix);
+    return { records, timeRanges, hasExplicitTimezone };
 }
 
 /**
@@ -100,7 +170,7 @@ function parseGpx(text: string, mp4Filename: string): GpsRecord[] {
  *
  * Returns unix milliseconds, or null if the string is unparseable.
  */
-function parseGpxTime(raw: string): number | null {
+function parseGpxTime(raw: string): { ms: number; hasExplicitTimezone: boolean } | null {
     const trimmed = raw.trim();
     if (trimmed === "") return null;
     // 70mai-style trailing Z after an offset.
@@ -127,7 +197,7 @@ function parseGpxTime(raw: string): number | null {
         const direction = zone.startsWith("-") ? -1 : 1;
         ms -= direction * (offsetHours * 60 + offsetMinutes) * 60_000;
     }
-    return Number.isFinite(ms) ? ms : null;
+    return Number.isFinite(ms) ? { ms, hasExplicitTimezone: zone !== undefined } : null;
 }
 
 function elementsByLocalName(root: Document | Element, name: string): Element[] {
@@ -136,12 +206,24 @@ function elementsByLocalName(root: Document | Element, name: string): Element[] 
     return Array.from(root.getElementsByTagName(name));
 }
 
+function hasAncestorByLocalName(element: Element, name: string): boolean {
+    let parent: Node | null = element.parentNode;
+    while (parent) {
+        if (parent.nodeType === 1) {
+            const ancestor = parent as Element;
+            if ((ancestor.localName || ancestor.nodeName.split(":").pop()) === name) return true;
+        }
+        parent = parent.parentNode;
+    }
+    return false;
+}
+
 /**
  * Converts a <trkpt> or <wpt> element to a GpsRecord. Returns null if
  * lat/lon or time are missing or invalid - silently skipped so one bad
  * element does not abort the whole file.
  */
-function trkptToRecord(el: Element, mp4Filename: string): GpsRecord | null {
+function trkptToRecord(el: Element, mp4Filename: string): { record: GpsRecord; hasExplicitTimezone: boolean } | null {
     const latRaw = el.getAttribute("lat");
     const lonRaw = el.getAttribute("lon");
     if (latRaw === null || lonRaw === null || latRaw.trim() === "" || lonRaw.trim() === "") return null;
@@ -151,8 +233,8 @@ function trkptToRecord(el: Element, mp4Filename: string): GpsRecord | null {
 
     const timeEl = elementsByLocalName(el, "time")[0];
     if (!timeEl) return null;
-    const ms = parseGpxTime((timeEl.textContent ?? "").trim());
-    if (ms === null) return null;
+    const parsedTime = parseGpxTime((timeEl.textContent ?? "").trim());
+    if (parsedTime === null) return null;
 
     // speed/course are common extensions. A bad optional field must not discard
     // an otherwise valid point; normalize it to the contract's neutral value.
@@ -164,18 +246,21 @@ function trkptToRecord(el: Element, mp4Filename: string): GpsRecord | null {
     const bearingDeg = Number.isFinite(courseValue) ? ((courseValue % 360) + 360) % 360 : 0;
 
     return {
-        unixSeconds: ms / 1000,
-        active: true, // GPX normally contains only valid points
-        lat,
-        lon,
-        bearingDeg,
-        speedMs,
-        // GPX has no accelerometer data - brake events will not be detected
-        // on these tracks (gMagnitude = 0).
-        accelXg: 0,
-        accelYg: 0,
-        accelZg: 0,
-        mp4Filename,
+        record: {
+            unixSeconds: parsedTime.ms / 1000,
+            active: true, // GPX normally contains only valid points
+            lat,
+            lon,
+            bearingDeg,
+            speedMs,
+            // GPX has no accelerometer data - brake events will not be detected
+            // on these tracks (gMagnitude = 0).
+            accelXg: 0,
+            accelYg: 0,
+            accelZg: 0,
+            mp4Filename,
+        },
+        hasExplicitTimezone: parsedTime.hasExplicitTimezone,
     };
 }
 

@@ -325,10 +325,6 @@ export interface Trip {
     // shift them so every consumer (map, chart, events and export) sees one
     // synchronized clock. Optional keeps cached/test Trip literals compatible.
     gpsOffsetSec?: number;
-    // Automatic start-to-start alignment for a wholly external/manual track.
-    // Hidden from the UI: gpsOffsetSec remains the user's small, meaningful
-    // adjustment relative to the video rather than a years-wide clock delta.
-    gpsBaseOffsetSec?: number;
     // When true, the derived records view omits points outside actual footage
     // wall-clock spans. False preserves the historical full-route behavior.
     gpsTrimToVideo?: boolean;
@@ -1289,37 +1285,17 @@ function trimGpsRecordsToFootage(records: GpsRecord[], timeline: TripTimeline): 
     return out;
 }
 
-/** A manually attached track comes from another device, so its calendar clock
- *  says nothing about the video's. When every usable point is external, make
- *  offset zero mean "both starts together"; the visible/user-stored offset is
- *  then only the fine adjustment around that intuitive baseline. */
-function automaticGpsBaseOffsetForRecords(trip: Trip, records: readonly GpsRecord[]): number {
-    const active = records.filter((record) => record.active);
-    const firstSegment = trip.timeline.segments[0];
-    if (!firstSegment || active.length === 0 || active.some((record) => !record.externalTrack)) return 0;
-    return firstSegment.wallStart - active[0]!.unixSeconds;
-}
-
-export function automaticGpsBaseOffsetSec(trip: Trip): number {
-    return automaticGpsBaseOffsetForRecords(trip, rawTripGpsRecords(trip));
-}
-
 /** Rebuilds every GPS-derived Trip aggregate from the original candidate
  *  records, with one presentation-time offset. Positive values move the track
  *  later in the video. This mutates only the derived Trip object. */
 export function applyGpsSyncToTrip(trip: Trip, offsetSec: number, trimToVideo: boolean): void {
     const normalized = Number.isFinite(offsetSec) ? Math.round(offsetSec * 1000) / 1000 : 0;
     const raw = rawTripGpsRecords(trip);
-    const baseOffsetSec = automaticGpsBaseOffsetForRecords(trip, raw);
-    const effectiveOffsetSec = baseOffsetSec + normalized;
     const shifted =
-        effectiveOffsetSec === 0
-            ? raw
-            : raw.map((record) => ({ ...record, unixSeconds: record.unixSeconds + effectiveOffsetSec }));
+        normalized === 0 ? raw : raw.map((record) => ({ ...record, unixSeconds: record.unixSeconds + normalized }));
     const records = trimToVideo ? trimGpsRecordsToFootage(shifted, trip.timeline) : shifted;
     trip.records = records;
     trip.gpsOffsetSec = normalized;
-    trip.gpsBaseOffsetSec = baseOffsetSec;
     trip.gpsTrimToVideo = trimToVideo;
     trip.distanceKm = totalDistanceKm(records);
     trip.events = projectEventsOntoTimeline(detectEvents(records, trip.startUtc), trip.timeline);

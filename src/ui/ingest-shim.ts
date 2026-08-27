@@ -263,7 +263,6 @@ export async function dispatchParseLogsViaPool(
 interface DispatchedSidecarsResult {
     records: GpsRecord[];
     extractorByFileKey: Map<string, string>;
-    manualGpxFiles: number;
     errors: Array<{ file: string; sidecarId: string; message: string }>;
 }
 
@@ -278,20 +277,11 @@ export async function dispatchParseSidecarsViaPool(
     const videoIndex = "videosByFilename" in knownVideos ? knownVideos : buildVideoAssociationIndex(knownVideos);
     const errors: DispatchedSidecarsResult["errors"] = [];
     const extractorByFileKey = new Map<string, string>();
-    let manualGpxFiles = 0;
 
     const collect = (target: ClassifiedFile, recs: GpsRecord[], extractorId: string): void => {
-        if (target.manualSidecarVideoKey) {
-            for (const record of recs) {
-                record.externalTrack = true;
-                record.videoKey = target.manualSidecarVideoKey;
-            }
-        } else {
-            associateRecordsWithVideos(recs, target.file, videoIndex);
-        }
-        if (target.manualSidecarVideoKey && extractorId === "gpx" && recs.length > 0) manualGpxFiles++;
+        associateRecordsWithVideos(recs, target.file, videoIndex);
         extendArray(records, recs);
-        const key = target.manualSidecarVideoKey ?? resolveVideoKey(target.file, target.sidecarMp4!, videoIndex);
+        const key = resolveVideoKey(target.file, target.sidecarMp4!, videoIndex);
         if (recs.length > 0 && key !== null && !extractorByFileKey.has(key)) {
             extractorByFileKey.set(key, extractorId);
         }
@@ -369,7 +359,7 @@ export async function dispatchParseSidecarsViaPool(
         }
     }
 
-    return { records, extractorByFileKey, manualGpxFiles, errors };
+    return { records, extractorByFileKey, errors };
 }
 
 // ===== parse accel sidecars =====

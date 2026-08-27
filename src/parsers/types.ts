@@ -61,6 +61,10 @@ export interface GpsRecord {
     // own recording clock or split otherwise-consecutive clips before the user
     // chooses an offset.
     externalTrack?: boolean;
+    // Stable identity of the manually attached GPX source. GPS Sync preferences
+    // include it so an offset tuned for one route cannot leak onto a different
+    // GPX later attached to the same video trip.
+    externalTrackKey?: string;
     // Bookkeeping for the local-as-UTC correction (see
     // applyLocalClockCorrections in trips.ts): how many seconds have already
     // been SUBTRACTED from this record's original `unixSeconds` to restore

@@ -7,25 +7,22 @@
 
 import { recordsHaveGps } from "./parser.js";
 import { fileIdentityKey } from "./persist/identity.js";
-import {
-    applyGpsSyncToTrip,
-    automaticGpsBaseOffsetSec,
-    rawTripGpsRecords,
-    type Trip,
-    tripAllCandidates,
-} from "./trips.js";
+import { applyGpsSyncToTrip, rawTripGpsRecords, type Trip, tripAllCandidates } from "./trips.js";
 
 const DEFAULT_OFFSET_STORAGE_KEY = "dashcamigo:player:gpsOffsetSec";
 const TRIP_SYNC_STORAGE_KEY = "dashcamigo:trips:gpsSync";
 const MAX_STORED_TRIPS = 200;
 
-// External tracks get their own automatic start baseline, so this is the
-// user's fine-offset ceiling. One year still covers badly configured native
-// camera clocks while bounding corrupt storage.
+// One year covers badly configured camera clocks and explicit alignment of a
+// loose GPX from another date while still bounding corrupt storage.
 const GPS_OFFSET_MAX_SEC = 365 * 24 * 60 * 60;
 
 interface StoredTripGpsSync {
     anchorKey: string;
+    /** Present for a manually attached GPX. Prevents a calibration saved for
+     *  one track from being reused when another GPX is attached to the same
+     *  recording later. */
+    trackKey?: string;
     offsetSec?: number;
     trimToVideo?: boolean;
     updatedAt: number;
@@ -75,6 +72,7 @@ function isStoredEntry(value: unknown): value is StoredTripGpsSync {
     if (typeof value !== "object" || value === null) return false;
     const entry = value as Record<string, unknown>;
     if (typeof entry.anchorKey !== "string" || entry.anchorKey === "") return false;
+    if (entry.trackKey !== undefined && (typeof entry.trackKey !== "string" || entry.trackKey === "")) return false;
     if (typeof entry.updatedAt !== "number" || !Number.isFinite(entry.updatedAt) || entry.updatedAt < 0) return false;
     if (
         entry.offsetSec !== undefined &&
@@ -122,11 +120,24 @@ function candidateIdentityKey(trip: Trip): string[] {
     );
 }
 
+function externalTrackKey(trip: Trip): string | null {
+    const keys = new Set(
+        rawTripGpsRecords(trip)
+            .filter((record) => record.externalTrack === true && record.externalTrackKey)
+            .map((record) => record.externalTrackKey!),
+    );
+    return keys.size === 1 ? [...keys][0]! : null;
+}
+
 function storedEntryForTrip(entries: readonly StoredTripGpsSync[], trip: Trip): StoredTripGpsSync | null {
     const keys = new Set(candidateIdentityKey(trip));
+    const trackKey = externalTrackKey(trip);
     let best: StoredTripGpsSync | null = null;
     for (const entry of entries) {
         if (!keys.has(entry.anchorKey)) continue;
+        // Legacy entries without a track key remain valid for native/basename
+        // GPS, but deliberately do not migrate onto a manually attached GPX.
+        if ((entry.trackKey ?? null) !== trackKey) continue;
         if (best === null || entry.updatedAt > best.updatedAt) best = entry;
     }
     return best;
@@ -146,7 +157,10 @@ function upsertTripEntry(trip: Trip, patch: (entry: StoredTripGpsSync) => void):
     const existing = storedEntryForTrip(entries, trip);
     const anchorKey = existing?.anchorKey ?? candidateIdentityKey(trip)[0];
     if (!anchorKey) return;
-    const entry: StoredTripGpsSync = existing ? { ...existing } : { anchorKey, updatedAt: 0 };
+    const trackKey = externalTrackKey(trip);
+    const entry: StoredTripGpsSync = existing
+        ? { ...existing }
+        : { anchorKey, ...(trackKey === null ? {} : { trackKey }), updatedAt: 0 };
     patch(entry);
     entry.updatedAt = Math.max(Date.now(), (existing?.updatedAt ?? 0) + 1);
     const without = entries.filter((item) => item !== existing);
@@ -202,9 +216,8 @@ export function gpsOutsideVideoSec(trip: Trip, offsetSec: number): number {
     if (!first || !last || !firstSegment || !lastSegment) return 0;
     const videoStart = firstSegment.wallStart;
     const videoEnd = lastSegment.wallStart + lastSegment.wallDurationSec;
-    const effectiveOffsetSec = (trip.gpsBaseOffsetSec ?? automaticGpsBaseOffsetSec(trip)) + offsetSec;
-    const before = Math.max(0, videoStart - (first.unixSeconds + effectiveOffsetSec));
-    const after = Math.max(0, last.unixSeconds + effectiveOffsetSec - videoEnd);
+    const before = Math.max(0, videoStart - (first.unixSeconds + offsetSec));
+    const after = Math.max(0, last.unixSeconds + offsetSec - videoEnd);
     return before + after;
 }
 

@@ -13,13 +13,7 @@ import { partitionByIndexCache } from "./ingest-cache.js";
 import { createLogger } from "../log.js";
 import { captureSentryException } from "../sentry.js";
 import { markStage } from "../perf.js";
-import {
-    cloneRecordsAcrossChannels,
-    firstSyncedRecord,
-    mergeIntoGpsLog,
-    rebindOrphanLogRecords,
-    recordsHaveGps,
-} from "../parser.js";
+import { cloneRecordsAcrossChannels, firstSyncedRecord, mergeIntoGpsLog, rebindOrphanLogRecords } from "../parser.js";
 import {
     classifyFilesViaPool as dispatchClassifyFiles,
     dispatchParseAccelSidecarsViaPool as dispatchParseAccelSidecars,
@@ -30,7 +24,7 @@ import type { VendorFile } from "../parsers/types.js";
 import { cameraFingerprint } from "../parsers/camera-fingerprint.js";
 import { classifyFilenameTime } from "../parsers/filename/index.js";
 import { estimatePreciseClockOffsetByFingerprint, estimateTzByFingerprint, tripAllCandidates } from "../trips.js";
-import type { TzSample, VideoCandidate } from "../trips.js";
+import type { Trip, TzSample, VideoCandidate } from "../trips.js";
 
 import { registerIngestSource } from "./folder-sources.js";
 import { mergeNotesFilesFromBatch } from "./annotations-sidecar.js";
@@ -405,68 +399,61 @@ async function ingestFilesInternal(
     };
     cloneSharedGps();
 
-    // A generic GPX exported by another camera/app rarely shares the action
-    // camera's basename. Keep the one-file/one-destination convenience, but
-    // stop for an explicit mapping as soon as the batch or destination is
-    // ambiguous. Timing overlap is never treated as permission to merge: known
-    // logs, exact sidecars and pending embedded tracks disable that clip.
-    if (classified.some((item) => item.role === "unknown" && /\.gpx$/i.test(item.file.file.name))) {
-        const protectedGpsVideoKeys = new Set([
-            ...state.pendingHeavyEmbeddedGps.keys(),
-            ...state.inflightEmbeddedGps.keys(),
-        ]);
-        if (state.gpsLog) {
-            for (const video of knownVideoFiles) {
-                if (recordsHaveGps(recordsForVideo(state.gpsLog, video, videoAssociation))) {
-                    protectedGpsVideoKeys.add(vendorFileKey(video));
-                }
-            }
-        }
-        const resolution = await resolveLooseGpxFiles(
-            classified,
-            classifiedVideos,
-            state.trips,
-            state.active?.trip ?? null,
-            protectedGpsVideoKeys,
-            {
-                clipLabel: (name) => t("gpxAssign.clipLabel", { name }),
-                unassigned: t("gpxAssign.unassigned"),
-                alreadyHasGps: t("gpxAssign.alreadyHasGps"),
-            },
-        );
-        if (resolution.needsTrip) notify({ severity: "info", messageKey: "status.gpxChooseTrip" });
-
-        if (resolution.assignedFiles.length > 0) {
-            const manualResult = await mark("parseManualGpx", () =>
-                dispatchParseSidecars(resolution.assignedFiles, videoAssociation, signal),
-            );
-            if (manualResult.records.length > 0) {
-                state.gpsLog = mergeIntoGpsLog(state.gpsLog, {
-                    records: manualResult.records,
-                    appliedExtractors: [],
-                    skipped: [],
-                });
-            }
-            for (const [key, extractor] of manualResult.extractorByFileKey) {
-                sidecarResult.extractorByFileKey.set(key, extractor);
-            }
-            sidecarResult.manualGpxFiles += manualResult.manualGpxFiles;
-            sidecarResult.errors.push(...manualResult.errors);
-            cloneSharedGps();
-        }
-    }
-
     if (sidecarResult.errors.length > 0) {
         log.warn("sidecar parse errors", { count: sidecarResult.errors.length, errors: sidecarResult.errors });
     }
     reportParseErrors("sidecar", sidecarResult.errors);
-    if (sidecarResult.manualGpxFiles > 0) {
-        notify({
-            severity: "info",
-            messageKey: "status.gpxAttached",
-            messageParams: { n: sidecarResult.manualGpxFiles },
-        });
-    }
+
+    // Only role=unknown XML GPX reaches this deferred resolver. Model-specific
+    // `.gpx` formats (notably DDPai NMEA), logs, and exact-basename GPX were
+    // claimed above and remain entirely on their parser-owned association path.
+    // Defer the dialog until progressive ingest has enough candidate timing to
+    // offer one destination per derived trip rather than one per video file.
+    const hasLooseGpx = classified.some((item) => item.role === "unknown" && /\.gpx$/i.test(item.file.file.name));
+    const protectedGpsVideoKeys = new Set([
+        ...state.pendingHeavyEmbeddedGps.keys(),
+        ...state.inflightEmbeddedGps.keys(),
+    ]);
+    const resolveLooseGpx = hasLooseGpx
+        ? async (trips: readonly Trip[]): Promise<void> => {
+              const resolution = await mark("parseManualGpx", () =>
+                  resolveLooseGpxFiles(
+                      classified,
+                      trips,
+                      protectedGpsVideoKeys,
+                      {
+                          tripLabel: (name) => t("gpxAssign.tripLabel", { name }),
+                          unassigned: t("gpxAssign.unassigned"),
+                          alreadyHasGps: t("gpxAssign.alreadyHasGps"),
+                          timeMatches: t("gpxAssign.timeMatches"),
+                          timeMismatch: t("gpxAssign.timeMismatch"),
+                          timeUncertain: t("gpxAssign.timeUncertain"),
+                      },
+                      signal,
+                  ),
+              );
+              if (resolution.errors.length > 0) {
+                  sidecarResult.errors.push(...resolution.errors);
+                  log.warn("loose GPX parse errors", { count: resolution.errors.length, errors: resolution.errors });
+                  reportParseErrors("sidecar", resolution.errors);
+              }
+              if (resolution.needsTrip) notify({ severity: "info", messageKey: "status.gpxChooseTrip" });
+              if (resolution.records.length > 0) {
+                  state.gpsLog = mergeIntoGpsLog(state.gpsLog, {
+                      records: resolution.records,
+                      appliedExtractors: [],
+                      skipped: [],
+                  });
+              }
+              if (resolution.assignedFiles > 0) {
+                  notify({
+                      severity: "info",
+                      messageKey: "status.gpxAttached",
+                      messageParams: { n: resolution.assignedFiles },
+                  });
+              }
+          }
+        : undefined;
 
     // Accel-only sidecars (BlackVue .3gf): accelerometer only, no GPS. They are
     // merged once recording clocks are ready.
@@ -624,6 +611,7 @@ async function ingestFilesInternal(
         hasUnsupportedFormats: unplayableByExt.size > 0,
         signal,
         schedulingFiles: videosToIndex.map((cf) => cf.file),
+        ...(resolveLooseGpx ? { resolveLooseGpx } : {}),
     });
     if (signal.aborted) resumeProgressiveIngest();
 }

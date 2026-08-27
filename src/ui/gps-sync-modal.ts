@@ -17,7 +17,7 @@ import {
     tripHasRawGps,
 } from "../gps-sync.js";
 import { t } from "../i18n/index.js";
-import { automaticGpsBaseOffsetSec, contentToWallUtc, type Trip } from "../trips.js";
+import { contentToWallUtc, type Trip } from "../trips.js";
 
 import { dom } from "./dom.js";
 import { initGpsSyncLaunchers } from "./gps-sync-controls.js";
@@ -143,7 +143,7 @@ export function initGpsSyncModal(opts: { getTripCurrentTime: () => number }): vo
         const gpsStart = rawGpsStartUnix(trip);
         if (gpsStart === null) return;
         const playheadWall = contentToWallUtc(trip.timeline, getTripCurrentTime());
-        applyOffset(trip, playheadWall - (gpsStart + (trip.gpsBaseOffsetSec ?? automaticGpsBaseOffsetSec(trip))));
+        applyOffset(trip, playheadWall - gpsStart);
     });
 
     dom.gpsSyncTrimToggle.addEventListener("change", () => {

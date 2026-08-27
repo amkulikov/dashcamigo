@@ -229,9 +229,12 @@ export type I18nKey =
     | "status.gpsDefaultSaved"
     | "gpxAssign.title"
     | "gpxAssign.body"
-    | "gpxAssign.clipLabel"
+    | "gpxAssign.tripLabel"
     | "gpxAssign.unassigned"
     | "gpxAssign.alreadyHasGps"
+    | "gpxAssign.timeMatches"
+    | "gpxAssign.timeMismatch"
+    | "gpxAssign.timeUncertain"
     | "gpxAssign.skip"
     | "gpxAssign.apply"
     // Shown when the whole picked/dropped selection was hidden or system files

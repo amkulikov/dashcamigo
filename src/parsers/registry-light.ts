@@ -19,10 +19,6 @@ export interface ClassifiedFile {
     sidecarMp4: string | null;
     // log-sidecar extractor id (for gps-log role). null otherwise.
     logExtractorId: string | null;
-    // Exact session owner set only by the UI's unambiguous loose-GPX flow.
-    // It disambiguates repeated camera basenames; its presence also means the
-    // parsed records keep their own device clock and cannot anchor the video.
-    manualSidecarVideoKey?: string;
 }
 
 /**

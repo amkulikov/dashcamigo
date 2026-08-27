@@ -1,5 +1,5 @@
 /* Ambiguous loose-GPX pairing. Shared overlay/card/button/form primitives own
-   the chrome; this file only lays out the path-to-clip rows. */
+   the chrome; this file only lays out the path-to-trip rows. */
 .gpx-assignment-card {
     width: min(680px, 100%);
 }

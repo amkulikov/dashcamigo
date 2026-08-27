@@ -1,15 +1,17 @@
-// Manual GPX-to-clip assignment for an ambiguous batch. The dialog pauses only
+// Manual GPX-to-trip assignment for an unassociated batch. The dialog pauses only
 // sidecar classification; skipping it leaves the recording ingest untouched.
 
-import type { ClassifiedFile } from "../parsers/registry-light.js";
 import type { LooseGpxAssignment } from "./loose-gpx-assignment.js";
-import type { LooseGpxTarget } from "./loose-gpx.js";
+import type { LooseGpxChoice, LooseGpxPlan } from "./loose-gpx.js";
 import { activateModal, deactivateModal, wireBackdropDismiss } from "./modal-helper.js";
 
 interface GpxAssignmentCopy {
-    clipLabel: (name: string) => string;
+    tripLabel: (name: string) => string;
     unassigned: string;
     alreadyHasGps: string;
+    timeMatches: string;
+    timeMismatch: string;
+    timeUncertain: string;
 }
 
 interface GpxAssignmentElements {
@@ -20,13 +22,14 @@ interface GpxAssignmentElements {
 }
 
 interface AssignmentRow {
-    file: ClassifiedFile;
+    plan: LooseGpxPlan;
     select: HTMLSelectElement;
 }
 
 let rows: AssignmentRow[] = [];
-let targets: readonly LooseGpxTarget[] = [];
 let pendingResolve: ((assignments: LooseGpxAssignment[]) => void) | null = null;
+let pendingSignal: AbortSignal | null = null;
+let pendingAbort: (() => void) | null = null;
 let isInitialized = false;
 let elements: GpxAssignmentElements | null = null;
 
@@ -45,16 +48,18 @@ function assignmentElements(): GpxAssignmentElements {
     };
 }
 
-function displayPath(file: ClassifiedFile): string {
-    return file.file.relativePath || file.file.file.name;
+function displayPath(plan: LooseGpxPlan): string {
+    return plan.track.file.file.relativePath || plan.track.file.file.file.name;
 }
 
 function settle(assignments: LooseGpxAssignment[]): void {
     if (!elements) return;
+    if (pendingSignal && pendingAbort) pendingSignal.removeEventListener("abort", pendingAbort);
+    pendingSignal = null;
+    pendingAbort = null;
     elements.modal.hidden = true;
     deactivateModal(elements.modal);
     rows = [];
-    targets = [];
     const resolve = pendingResolve;
     pendingResolve = null;
     resolve?.(assignments);
@@ -64,16 +69,27 @@ function skipAll(): void {
     settle([]);
 }
 
-/** A clip accepts at most one GPX in one dialog. This prevents an accidental
+/** A trip accepts at most one GPX in one dialog. This prevents an accidental
  *  merged route while still letting the user leave any track unassigned. */
 function syncChoices(): void {
-    const selected = new Set(rows.map((row) => row.select.value).filter((value) => value !== ""));
+    const selected = new Set(
+        rows
+            .map((row) =>
+                row.select.value === "" ? null : row.plan.choices[Number(row.select.value)]?.target.videoKey,
+            )
+            .filter((value): value is string => value !== null && value !== undefined),
+    );
     for (const row of rows) {
+        const rowSelectedKey =
+            row.select.value === "" ? null : (row.plan.choices[Number(row.select.value)]?.target.videoKey ?? null);
         for (const option of Array.from(row.select.options)) {
             if (option.value === "") continue;
-            const target = targets[Number(option.value)];
+            const choice = row.plan.choices[Number(option.value)];
             option.disabled =
-                target?.hasGps === true || (selected.has(option.value) && row.select.value !== option.value);
+                choice?.target.hasGps === true ||
+                (choice !== undefined &&
+                    selected.has(choice.target.videoKey) &&
+                    rowSelectedKey !== choice.target.videoKey);
         }
     }
     if (elements) elements.apply.disabled = selected.size === 0;
@@ -83,23 +99,30 @@ function applyAssignments(): void {
     const assignments: LooseGpxAssignment[] = [];
     for (const row of rows) {
         if (row.select.value === "") continue;
-        const target = targets[Number(row.select.value)];
-        if (target && !target.hasGps) assignments.push({ file: row.file, target });
+        const choice = row.plan.choices[Number(row.select.value)];
+        if (choice && !choice.target.hasGps) assignments.push({ track: row.plan.track, target: choice.target });
     }
     settle(assignments);
 }
 
-function renderRows(files: readonly ClassifiedFile[], copy: GpxAssignmentCopy): void {
+function choiceStatus(choice: LooseGpxChoice, copy: GpxAssignmentCopy): string {
+    if (choice.target.hasGps) return copy.alreadyHasGps;
+    if (choice.timeMatch === "overlap") return copy.timeMatches;
+    if (choice.timeMatch === "uncertain") return copy.timeUncertain;
+    return copy.timeMismatch;
+}
+
+function renderRows(plans: readonly LooseGpxPlan[], copy: GpxAssignmentCopy): void {
     if (!elements) return;
     const list = elements.list;
     list.replaceChildren();
-    rows = files.map((file, rowIndex) => {
+    rows = plans.map((plan, rowIndex) => {
         const label = document.createElement("label");
         label.className = "gpx-assignment-row";
 
         const path = document.createElement("code");
         path.className = "gpx-assignment-path";
-        path.textContent = displayPath(file);
+        path.textContent = displayPath(plan);
 
         const arrow = document.createElement("span");
         arrow.className = "gpx-assignment-arrow";
@@ -109,26 +132,33 @@ function renderRows(files: readonly ClassifiedFile[], copy: GpxAssignmentCopy): 
         const select = document.createElement("select");
         select.className = "gpx-assignment-select";
         select.id = `gpx-assignment-select-${rowIndex}`;
-        select.setAttribute("aria-label", copy.clipLabel(file.file.file.name));
+        select.setAttribute("aria-label", copy.tripLabel(plan.track.file.file.file.name));
 
         const unassigned = document.createElement("option");
         unassigned.value = "";
         unassigned.textContent = copy.unassigned;
         select.appendChild(unassigned);
 
-        for (let targetIndex = 0; targetIndex < targets.length; targetIndex++) {
-            const target = targets[targetIndex]!;
+        for (let choiceIndex = 0; choiceIndex < plan.choices.length; choiceIndex++) {
+            const choice = plan.choices[choiceIndex]!;
+            const target = choice.target;
             const option = document.createElement("option");
-            option.value = String(targetIndex);
-            option.textContent = target.hasGps ? `${target.label} · ${copy.alreadyHasGps}` : target.label;
+            option.value = String(choiceIndex);
+            option.textContent = `${target.label} · ${choiceStatus(choice, copy)}`;
             option.disabled = target.hasGps;
             select.appendChild(option);
+        }
+        if (plan.recommendedVideoKey !== null) {
+            const recommendedIndex = plan.choices.findIndex(
+                (choice) => choice.target.videoKey === plan.recommendedVideoKey,
+            );
+            if (recommendedIndex >= 0) select.value = String(recommendedIndex);
         }
         select.addEventListener("change", syncChoices);
 
         label.append(path, arrow, select);
         list.appendChild(label);
-        return { file, select };
+        return { plan, select };
     });
     syncChoices();
 }
@@ -136,22 +166,27 @@ function renderRows(files: readonly ClassifiedFile[], copy: GpxAssignmentCopy): 
 /** Shows every unassigned GPX and resolves with only the rows the user chose.
  *  A second open settles the earlier promise as skipped before replacing it. */
 export function showGpxAssignmentModal(
-    files: readonly ClassifiedFile[],
-    availableTargets: readonly LooseGpxTarget[],
+    plans: readonly LooseGpxPlan[],
     copy: GpxAssignmentCopy,
+    signal?: AbortSignal,
 ): Promise<LooseGpxAssignment[]> {
     initGpxAssignmentModal();
     if (pendingResolve) settle([]);
-    targets = availableTargets;
-    renderRows(files, copy);
+    renderRows(plans, copy);
     elements!.modal.hidden = false;
 
     return new Promise<LooseGpxAssignment[]>((resolve) => {
         pendingResolve = resolve;
+        if (signal) {
+            pendingSignal = signal;
+            pendingAbort = skipAll;
+            signal.addEventListener("abort", pendingAbort, { once: true });
+        }
         activateModal(elements!.modal, {
             onClose: skipAll,
             initialFocus: rows[0]?.select ?? elements!.skip,
         });
+        if (signal?.aborted) skipAll();
     });
 }
 

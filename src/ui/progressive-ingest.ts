@@ -28,12 +28,13 @@ import {
     estimateProvisionalDurationByFingerprint,
     estimateTzByFingerprint,
     finalizeFrameTiming,
+    groupTrips,
     needsRecordingMetadata,
     rederiveStartUtcForCandidates,
     resolvePreciseClockOffsetForFile,
     tripAllCandidates,
 } from "../trips.js";
-import type { VideoCandidate } from "../trips.js";
+import type { Trip, VideoCandidate } from "../trips.js";
 
 import { restampProvisionalMarkers } from "./annotations.js";
 import { registerCandidateRepair, scheduleIndexCacheWrite } from "./ingest-cache.js";
@@ -199,6 +200,10 @@ export interface ProgressiveIngestContext {
     hasUnsupportedFormats: boolean;
     signal: AbortSignal;
     schedulingFiles: VendorFile[];
+    /** Optional UI-owned resolver for XML GPX files left unknown after every
+     *  authoritative classifier. It runs only after provisional candidates
+     *  can be grouped into real trip destinations. */
+    resolveLooseGpx?: (trips: readonly Trip[]) => Promise<void>;
 }
 
 // Default duration fed to deriveStartUtc in the first (filename-only) pass: it
@@ -405,6 +410,15 @@ export async function startProgressiveIngest(ctx: ProgressiveIngestContext): Pro
     // bundles into one trip already in the instant list instead of jumping
     // from N trips to one at the final sweep.
     applyTimelapseCadenceWallSpans(ctx.allCandidates, classifyFilenameTime);
+
+    if (ctx.resolveLooseGpx) {
+        await ctx.resolveLooseGpx(groupTrips(ctx.allCandidates));
+        if (ctx.signal.aborted || activeRun !== run) return;
+        // The resolver may have appended confirmed external records to GpsLog.
+        // Re-attachment is idempotent and covers both the new track and any
+        // carried-over candidate chosen as its trip anchor.
+        if (state.gpsLog) attachRecordsToCandidates(state.gpsLog, ctx.allCandidates, ctx.videoAssociation);
+    }
 
     candidatePool = ctx.allCandidates;
     run.analysisCandidates = new Set(ctx.allCandidates.filter(needsRecordingMetadata));

@@ -107,7 +107,13 @@ export async function touchIndexCacheEntries(keys: string[]): Promise<void> {
  *  a structured-clone snapshot, so later in-session mutations don't leak in. */
 export function toCachedCandidate(candidate: VideoCandidate): CachedCandidateFields {
     const { file: _file, sourceKey: _sourceKey, ...fields } = candidate;
-    return fields;
+    // A loose GPX is an explicit per-session user choice. Persisting it inside
+    // the video's cache would silently restore the route after the GPX was
+    // removed and bypass the assignment dialog on the next folder open.
+    return {
+        ...fields,
+        records: fields.records.filter((record) => record.externalTrack !== true),
+    };
 }
 
 // Rough stored weight of one GpsRecord: nine numeric fields plus the source

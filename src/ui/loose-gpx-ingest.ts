@@ -1,60 +1,89 @@
-// Resolves loose GPX files after the normal GPS logs and sidecars have parsed.
-// Waiting until then is deliberate: a manual track must never be merged merely
-// because its timestamps also happen to fit a clip with a known GPS source.
+// Resolves only genuine loose XML GPX files: classification has already given
+// model-specific logs/sidecars and exact-basename GPX their authoritative
+// owners before this module sees the remaining role=unknown files.
 
+import { parseGpxTrack } from "../parsers/sidecars/gpx.js";
 import type { ClassifiedFile } from "../parsers/registry-light.js";
+import type { GpsRecord } from "../parsers/types.js";
+import { fileIdentityKey, fileIdentityOf } from "../persist/identity.js";
 import type { Trip } from "../trips.js";
 import { showGpxAssignmentModal } from "./gpx-assignment-modal.js";
-import { looseGpxTargets, pairAssignedLooseGpxFiles } from "./loose-gpx-assignment.js";
-import { looseGpxFiles, pairLooseGpxFiles, type LooseGpxTarget } from "./loose-gpx.js";
+import { looseGpxTargets, planLooseGpxAssignments, recordsForLooseGpxAssignments } from "./loose-gpx-assignment.js";
+import { looseGpxFiles, type ParsedLooseGpx } from "./loose-gpx.js";
 
 interface LooseGpxCopy {
-    clipLabel: (name: string) => string;
+    tripLabel: (name: string) => string;
     unassigned: string;
     alreadyHasGps: string;
+    timeMatches: string;
+    timeMismatch: string;
+    timeUncertain: string;
 }
 
 export interface LooseGpxResolution {
-    assignedFiles: ClassifiedFile[];
+    records: GpsRecord[];
+    assignedFiles: number;
     needsTrip: boolean;
+    errors: Array<{ file: string; sidecarId: string; message: string }>;
 }
 
-function assignedManualGpx(classified: readonly ClassifiedFile[]): ClassifiedFile[] {
-    return classified.filter(
-        (item) => item.role === "sidecar" && item.sidecarId === "gpx" && item.manualSidecarVideoKey !== undefined,
-    );
-}
-
-/** Adds the actual post-parse source status to a proposed target. A pending
- *  deferred embedded track is also protected: it is known to exist even though
- *  its records have not reached the candidate yet. */
-function detectGps(target: LooseGpxTarget, protectedGpsVideoKeys: ReadonlySet<string>): LooseGpxTarget {
-    const hasGps = target.hasGps || protectedGpsVideoKeys.has(target.videoKey);
-    return hasGps === target.hasGps ? target : { ...target, hasGps };
+async function parseLooseTracks(
+    files: readonly ClassifiedFile[],
+    signal?: AbortSignal,
+): Promise<{ tracks: ParsedLooseGpx[]; errors: LooseGpxResolution["errors"] }> {
+    const tracks: ParsedLooseGpx[] = [];
+    const errors: LooseGpxResolution["errors"] = [];
+    for (const item of files) {
+        if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+        try {
+            // The temporary filename is replaced with the confirmed trip anchor
+            // before records enter GpsLog.
+            const parsed = await parseGpxTrack(item.file, item.file.file.name, signal);
+            tracks.push({
+                file: item,
+                records: parsed.records,
+                timeRanges: parsed.timeRanges,
+                hasExplicitTimezone: parsed.hasExplicitTimezone,
+                trackKey: fileIdentityKey(fileIdentityOf(item.file.file, item.file.relativePath)),
+            });
+        } catch (err) {
+            if (err instanceof DOMException && err.name === "AbortError") throw err;
+            errors.push({
+                file: item.file.file.name,
+                sidecarId: "gpx",
+                message: err instanceof Error ? err.message : String(err),
+            });
+        }
+    }
+    return { tracks, errors };
 }
 
 export async function resolveLooseGpxFiles(
-    classified: ClassifiedFile[],
-    newVideos: readonly ClassifiedFile[],
-    loadedTrips: readonly Trip[],
-    activeTripIndex: number | null,
+    classified: readonly ClassifiedFile[],
+    trips: readonly Trip[],
     protectedGpsVideoKeys: ReadonlySet<string>,
     copy: LooseGpxCopy,
+    signal?: AbortSignal,
 ): Promise<LooseGpxResolution> {
     const files = looseGpxFiles(classified);
-    if (files.length === 0) return { assignedFiles: [], needsTrip: false };
+    if (files.length === 0) return { records: [], assignedFiles: 0, needsTrip: false, errors: [] };
 
-    const withGps = (target: LooseGpxTarget): LooseGpxTarget => detectGps(target, protectedGpsVideoKeys);
-    const targets = looseGpxTargets(newVideos, loadedTrips, activeTripIndex).map(withGps);
-
-    if (files.length === 1 && targets.length === 1 && !targets[0]!.hasGps) {
-        pairLooseGpxFiles(classified, targets[0]!);
-        return { assignedFiles: assignedManualGpx(classified), needsTrip: false };
+    const parsed = await parseLooseTracks(files, signal);
+    const targets = looseGpxTargets(trips, protectedGpsVideoKeys);
+    if (targets.length === 0) {
+        return { records: [], assignedFiles: 0, needsTrip: true, errors: parsed.errors };
     }
 
-    if (targets.length === 0) return { assignedFiles: [], needsTrip: true };
-
-    const assignments = await showGpxAssignmentModal(files, targets, copy);
-    pairAssignedLooseGpxFiles(classified, assignments);
-    return { assignedFiles: assignedManualGpx(classified), needsTrip: false };
+    const plans = planLooseGpxAssignments(parsed.tracks, targets);
+    if (plans.length === 0) {
+        return { records: [], assignedFiles: 0, needsTrip: false, errors: parsed.errors };
+    }
+    const assignments = await showGpxAssignmentModal(plans, copy, signal);
+    if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+    return {
+        records: recordsForLooseGpxAssignments(assignments),
+        assignedFiles: assignments.length,
+        needsTrip: false,
+        errors: parsed.errors,
+    };
 }

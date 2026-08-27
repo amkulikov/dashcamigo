@@ -76,6 +76,19 @@ describe("toCachedCandidate", () => {
         expect(rebuilt.records[0]!.lat, "records survive").toBeCloseTo(52.1);
         expect(rebuilt.createdUtc?.getTime(), "Date survives").toBe(1_753_900_000_000);
     });
+
+    it("never persists a manually attached GPX inside the video cache", () => {
+        const candidate = makeCandidate();
+        candidate.records.push({
+            ...candidate.records[0]!,
+            unixSeconds: candidate.records[0]!.unixSeconds + 1,
+            externalTrack: true,
+            externalTrackKey: "route.gpx\u00001\u00001",
+        });
+        const cached = toCachedCandidate(candidate);
+        expect(cached.records).toHaveLength(1);
+        expect(cached.records[0]!.externalTrack).not.toBe(true);
+    });
 });
 
 describe("buildCacheEntry", () => {

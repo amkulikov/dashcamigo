@@ -112,27 +112,27 @@ describe("GPS synchronization", () => {
         expect(value.records.map((item) => item.unixSeconds)).toEqual([1000, 1010]);
     });
 
-    it("automatically aligns a wholly external track start before applying the user's fine offset", () => {
-        const rawStart = 1_800_000_000;
+    it("keeps an external track on its absolute clock until the user applies an offset", () => {
+        const rawStart = 100_000;
         const external = [rawStart, rawStart + 10, rawStart + 25].map((time, index) => ({
             ...record(time, index),
             externalTrack: true,
+            externalTrackKey: "route-a",
         }));
         const value = groupTrips([candidate(external)])[0]!;
 
         applyStoredGpsSyncToTrip(value);
         expect(value.gpsOffsetSec).toBe(0);
-        expect(value.gpsBaseOffsetSec).toBe(1000 - rawStart);
-        expect(value.records.map((item) => item.unixSeconds)).toEqual([1000, 1010]);
+        expect(value.records).toEqual([]);
 
-        setTripGpsOffsetSec(value, 3);
+        setTripGpsOffsetSec(value, 1000 - rawStart);
         applyStoredGpsSyncToTrip(value);
-        expect(value.records.map((item) => item.unixSeconds)).toEqual([1003, 1013]);
+        expect(value.records.map((item) => item.unixSeconds)).toEqual([1000, 1010]);
         expect(external[0]!.unixSeconds).toBe(rawStart);
     });
 
     it("keeps one external track synchronized across consecutive action-camera clips", () => {
-        const rawStart = 1_800_000_000;
+        const rawStart = 1000;
         const external = [0, 10, 25, 35, 45].map((delta, index) => ({
             ...record(rawStart + delta, index),
             externalTrack: true,
@@ -151,6 +151,26 @@ describe("GPS synchronization", () => {
         // derived trip; trimming uses both footage spans and drops only the
         // point beyond the second clip.
         expect(value.records.map((item) => item.unixSeconds)).toEqual([1000, 1010, 1025, 1035]);
+    });
+
+    it("does not reuse an external-track override for another GPX on the same video", () => {
+        const first = [record(1000, 0)].map((item) => ({
+            ...item,
+            externalTrack: true,
+            externalTrackKey: "route-a",
+        }));
+        const firstTrip = groupTrips([candidate(first)])[0]!;
+        setTripGpsOffsetSec(firstTrip, 7);
+        expect(resolvedGpsSyncForTrip(firstTrip).offsetSec).toBe(7);
+
+        const second = [record(1000, 0)].map((item) => ({
+            ...item,
+            externalTrack: true,
+            externalTrackKey: "route-b",
+        }));
+        const secondTrip = groupTrips([candidate(second)])[0]!;
+        expect(resolvedGpsSyncForTrip(secondTrip).hasOffsetOverride).toBe(false);
+        expect(resolvedGpsSyncForTrip(secondTrip).offsetSec).toBe(0);
     });
 
     it("persists an explicit zero per trip so it can override a non-zero player default", () => {

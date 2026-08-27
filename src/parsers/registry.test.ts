@@ -16,6 +16,8 @@ import {
     mergeAccelSamples,
 } from "./registry.js";
 import { combineAccelSources } from "./registry-light.js";
+import { gpxSidecar } from "./sidecars/gpx.js";
+import { ddpaiGpxSidecar } from "./sidecars/nmea-sidecar.js";
 import type { AccelSample, AccelSidecarHandler, GpsRecord, SidecarHandler, VendorFile } from "./types.js";
 import { detectEvents } from "../events.js";
 import { vendorFileKey } from "../vendor-file-key.js";
@@ -82,6 +84,25 @@ describe("classifyOneNonVideo", () => {
         expect(cf.role).toBe("gps-log");
         expect(cf.logExtractorId).toBe("360gps-jsonl");
         expect(cf.sidecarId).toBeNull();
+    });
+
+    it("keeps a model-specific DDPai .gpx on its authoritative sidecar path", async () => {
+        const file = makeVendorFile(
+            "20190719161640_0060.gpx",
+            "$GPRMC,161640.00,A,5546.0000,N,03737.0000,E,0,0,190719,,*00\n",
+        );
+        file.relativePath = "DCIM/103gps/20190719161640_0060.gpx";
+        const cf = await classifyOneNonVideo(
+            file,
+            new Set(["20190719161640_0060.mp4"]),
+            [ddpaiGpxSidecar, gpxSidecar],
+            [],
+        );
+        expect(cf).toMatchObject({
+            role: "sidecar",
+            sidecarId: "ddpai-gpx",
+            sidecarMp4: "20190719161640_0060.mp4",
+        });
     });
 
     it("returns role=sidecar when a sidecar handler matches a known video", async () => {

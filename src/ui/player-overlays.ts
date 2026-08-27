@@ -251,7 +251,7 @@ function previewSignature(trip: Trip): string {
     const r = exportPanelState.range
         ? `${exportPanelState.range.startTripSec}|${exportPanelState.range.endTripSec}`
         : "full";
-    return `${trip.startUtc}|${trip.records.length}|${trip.gpsBaseOffsetSec ?? 0}|${trip.gpsOffsetSec ?? 0}|${trip.gpsTrimToVideo ? 1 : 0}|${flags}|${r}`;
+    return `${trip.startUtc}|${trip.records.length}|${trip.gpsOffsetSec ?? 0}|${trip.gpsTrimToVideo ? 1 : 0}|${flags}|${r}`;
 }
 
 /** Rebuilds the cached args only when the signature changed; otherwise patches

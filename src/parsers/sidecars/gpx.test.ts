@@ -17,7 +17,7 @@ afterAll(() => {
 });
 
 import { makeVendorFile } from "../__fixtures__/helpers.js";
-import { gpxSidecar, serializeGpx } from "./gpx.js";
+import { gpxSidecar, parseGpxTrack, serializeGpx } from "./gpx.js";
 import type { GpsRecord } from "../types.js";
 
 function gpxDoc(content: string): string {
@@ -172,6 +172,15 @@ describe("gpxSidecar.parse", () => {
         expect(records).toHaveLength(1);
     });
 
+    it("keeps orphan track points even when the document also has a valid waypoint", async () => {
+        const text = gpxDoc(`
+            <trk><trkpt lat="55" lon="37"><time>2024-01-15T12:34:56Z</time></trkpt></trk>
+            <wpt lat="56" lon="38"><time>2024-01-15T12:34:57Z</time></wpt>
+        `);
+        const records = await gpxSidecar.parse!(makeVendorFile("a.gpx", text), "a.mp4");
+        expect(records.map((record) => record.lat)).toEqual([55, 56]);
+    });
+
     it("parses prefix-qualified GPX elements", async () => {
         const text = `<?xml version="1.0"?>
             <gpx:gpx version="1.1" creator="test" xmlns:gpx="http://www.topografix.com/GPX/1/1">
@@ -228,6 +237,55 @@ describe("gpxSidecar.parse", () => {
         );
         const records = await gpxSidecar.parse!(makeVendorFile("a.gpx", text), "a.mp4");
         expect(records[0]!.unixSeconds).toBe(Date.UTC(2024, 0, 15, 12, 34, 56) / 1000);
+    });
+
+    it("reports whether every usable timestamp has an explicit timezone", async () => {
+        const explicit = gpxDoc(
+            `<trk><trkseg><trkpt lat="55" lon="37"><time>2024-01-15T12:34:56+03:00</time></trkpt></trkseg></trk>`,
+        );
+        const uncertain = gpxDoc(
+            `<trk><trkseg><trkpt lat="55" lon="37"><time>2024-01-15T12:34:56</time></trkpt></trkseg></trk>`,
+        );
+        expect((await parseGpxTrack(makeVendorFile("a.gpx", explicit), "a.mp4")).hasExplicitTimezone).toBe(true);
+        expect((await parseGpxTrack(makeVendorFile("a.gpx", uncertain), "a.mp4")).hasExplicitTimezone).toBe(false);
+    });
+
+    it("preserves separate source segments as separate time ranges", async () => {
+        const text = gpxDoc(`
+            <trk>
+                <trkseg>
+                    <trkpt lat="55" lon="37"><time>2024-01-15T08:00:00Z</time></trkpt>
+                    <trkpt lat="55" lon="37"><time>2024-01-15T08:01:00Z</time></trkpt>
+                </trkseg>
+                <trkseg>
+                    <trkpt lat="55" lon="37"><time>2024-01-15T18:00:00Z</time></trkpt>
+                    <trkpt lat="55" lon="37"><time>2024-01-15T18:01:00Z</time></trkpt>
+                </trkseg>
+            </trk>
+        `);
+        const parsed = await parseGpxTrack(makeVendorFile("a.gpx", text), "a.mp4");
+        expect(parsed.timeRanges).toEqual([
+            {
+                startUnix: Date.UTC(2024, 0, 15, 8, 0) / 1000,
+                endUnix: Date.UTC(2024, 0, 15, 8, 1) / 1000,
+            },
+            {
+                startUnix: Date.UTC(2024, 0, 15, 18, 0) / 1000,
+                endUnix: Date.UTC(2024, 0, 15, 18, 1) / 1000,
+            },
+        ]);
+    });
+
+    it("splits an unobserved long gap inside one source segment", async () => {
+        const text = gpxDoc(`
+            <trk><trkseg>
+                <trkpt lat="55" lon="37"><time>2024-01-15T08:00:00Z</time></trkpt>
+                <trkpt lat="55" lon="37"><time>2024-01-15T18:00:00Z</time></trkpt>
+            </trkseg></trk>
+        `);
+        const parsed = await parseGpxTrack(makeVendorFile("a.gpx", text), "a.mp4");
+        expect(parsed.timeRanges).toHaveLength(2);
+        expect(parsed.timeRanges.every((range) => range.startUnix === range.endUnix)).toBe(true);
     });
 
     it("skips impossible calendar dates and timezone offsets", async () => {
