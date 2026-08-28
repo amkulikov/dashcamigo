@@ -7,6 +7,15 @@ User-facing changes, newest first. Dates are when the change landed on
 [beta](https://beta.dashcamigo.app); production picks it up with the next
 release tag. Localized texts ship inside the app (the "What's new" panel).
 
+## 2026-08-29
+
+- **New:** Map markers can now use different vehicles, colors, and sizes.
+
+## 2026-08-28
+
+- **Fixed:** Zoomed charts now show a button to return to the full timeline.
+- **New:** GPX tracks can now be previewed before assigning them to trips.
+
 ## 2026-08-27
 
 - **Improved:** Improved GPS sync.

@@ -28,6 +28,54 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-08-29.1",
+        category: "feature",
+        text: {
+            en: "Map markers can now use different vehicles, colors, and sizes.",
+            ru: "Для маркера на карте теперь можно выбрать транспорт, цвет и размер.",
+            de: "Kartenmarker können jetzt verschiedene Fahrzeuge, Farben und Größen verwenden.",
+            es: "Los marcadores del mapa ahora pueden usar distintos vehículos, colores y tamaños.",
+            fr: "Les marqueurs de carte peuvent désormais utiliser différents véhicules, couleurs et tailles.",
+            pl: "Znaczniki na mapie mogą teraz przedstawiać różne pojazdy oraz mieć różne kolory i rozmiary.",
+            pt: "Os marcadores do mapa agora podem usar diferentes veículos, cores e tamanhos.",
+            zh: "现在可以为地图标记选择不同的车辆、颜色和大小。",
+            ja: "マップマーカーで車種、色、サイズを選べるようになりました。",
+            ko: "이제 지도 마커의 차량 종류, 색상, 크기를 선택할 수 있습니다.",
+        },
+    },
+    {
+        id: "2026-08-28.2",
+        category: "fix",
+        text: {
+            en: "Zoomed charts now show a button to return to the full timeline.",
+            ru: "После увеличения графика теперь видна кнопка возврата ко всей шкале времени.",
+            de: "Vergrößerte Diagramme zeigen jetzt eine Schaltfläche zur Rückkehr zur vollständigen Zeitleiste.",
+            es: "Los gráficos ampliados ahora muestran un botón para volver a la línea de tiempo completa.",
+            fr: "Les graphiques agrandis affichent désormais un bouton pour revenir à la chronologie complète.",
+            pl: "Powiększone wykresy mają teraz przycisk powrotu do pełnej osi czasu.",
+            pt: "Os gráficos ampliados agora mostram um botão para voltar à linha do tempo completa.",
+            zh: "图表缩放后现在会显示返回完整时间轴的按钮。",
+            ja: "グラフを拡大すると、タイムライン全体に戻るボタンが表示されるようになりました。",
+            ko: "이제 차트를 확대하면 전체 타임라인으로 돌아가는 버튼이 표시됩니다.",
+        },
+    },
+    {
+        id: "2026-08-28.1",
+        category: "feature",
+        text: {
+            en: "GPX tracks can now be previewed before assigning them to trips.",
+            ru: "GPX-треки теперь можно просмотреть перед привязкой к поездкам.",
+            de: "GPX-Tracks können jetzt vor der Zuordnung zu Fahrten in einer Vorschau angezeigt werden.",
+            es: "Ahora se pueden previsualizar los tracks GPX antes de asignarlos a trayectos.",
+            fr: "Les traces GPX peuvent désormais être prévisualisées avant leur attribution aux trajets.",
+            pl: "Ślady GPX można teraz podejrzeć przed przypisaniem ich do przejazdów.",
+            pt: "Os trajetos GPX agora podem ser visualizados antes de serem associados a viagens.",
+            zh: "现在可以在将 GPX 轨迹分配给行程前预览轨迹。",
+            ja: "GPX 軌跡を走行に割り当てる前にプレビューできるようになりました。",
+            ko: "이제 GPX 트랙을 주행에 연결하기 전에 미리 볼 수 있습니다.",
+        },
+    },
+    {
         id: "2026-08-27.3",
         category: "improvement",
         text: {
