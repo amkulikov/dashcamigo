@@ -53,6 +53,11 @@
         opacity: 1;
     }
 }
+@media (prefers-reduced-motion: reduce) {
+    .lang-banner {
+        animation: none;
+    }
+}
 
 .lang-banner-text {
     line-height: var(--dc-leading-normal);

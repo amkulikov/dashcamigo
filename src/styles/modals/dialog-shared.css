@@ -20,9 +20,18 @@
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     font-family: var(--dc-font-body);
+    opacity: 1;
+    transition:
+        opacity var(--dc-dur-slow) var(--dc-ease),
+        display var(--dc-dur-slow);
+    /* Unsupported browsers ignore this declaration and keep the opacity-only
+       entry transition; current browsers hold display until fade-out ends. */
+    transition-behavior: allow-discrete;
 }
 .modal-overlay[hidden] {
     display: none;
+    opacity: 0;
+    pointer-events: none;
 }
 .modal-card {
     background: var(--bg-elev);
@@ -32,6 +41,21 @@
     border: 1px solid var(--border);
     border-radius: var(--dc-radius-lg);
     box-sizing: border-box;
+    transform: translateY(0) scale(1);
+    transition: transform var(--dc-dur-slow) var(--dc-ease-out);
+}
+.modal-overlay[hidden] .modal-card {
+    transform: translateY(8px) scale(0.985);
+}
+/* Entry transitions need an explicit before-change style when the modal comes
+   from display:none. The same resting transform above drives the exit. */
+@starting-style {
+    .modal-overlay:not([hidden]) {
+        opacity: 0;
+    }
+    .modal-overlay:not([hidden]) .modal-card {
+        transform: translateY(8px) scale(0.985);
+    }
 }
 
 /* Info / settings / reset / install dialogs. Reuse the .export-modal* class
@@ -99,5 +123,12 @@
     }
     .modal-card {
         margin-top: max(var(--dc-space-3), env(safe-area-inset-top));
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .modal-overlay,
+    .modal-card {
+        transition: none;
     }
 }

@@ -557,6 +557,30 @@ body.map-unavailable #player-map {
     display: none;
 }
 
+/* Shared-element bridge for View -> map. The live map fades in underneath;
+   this lightweight portal carries the map glyph and the View button's exact
+   starting geometry without stretching its text across the whole player. */
+.map-morph-portal {
+    position: fixed;
+    z-index: var(--dc-z-modal);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    overflow: hidden;
+    pointer-events: none;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--bg-elev) 90%, var(--accent));
+    border: 1px solid var(--accent);
+    box-shadow: var(--dc-shadow-popup);
+    transform-origin: 0 0;
+}
+.map-morph-portal svg {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+}
+
 /* Mobile (any orientation): drop the mini-map circle entirely. On phone
    the full map is one tap away via the bar button - the corner circle
    covers the front camera and is a bad touch target on top of that.

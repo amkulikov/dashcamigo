@@ -25,6 +25,33 @@ test.describe("navigation & shell", () => {
         await shot(page, "nav-01-landing-en");
     });
 
+    test("landing topbar becomes elevated after scrolling", async ({ page }) => {
+        await gotoApp(page, "en");
+        const landing = page.locator("#landing");
+        const topbar = page.locator(".topbar");
+
+        await expect(
+            topbar.locator(".dc-mark"),
+            "the brand remains visible on the uninterrupted surface",
+        ).toBeVisible();
+        const landingBackground = await landing.evaluate((element) => getComputedStyle(element).backgroundColor);
+        await expect
+            .poll(() => topbar.evaluate((element) => getComputedStyle(element).backgroundColor), {
+                message: "topbar shares the untouched landing background",
+            })
+            .toBe(landingBackground);
+
+        await landing.evaluate((element) => {
+            element.scrollTop = 32;
+        });
+        await expect(page.locator("body")).toHaveClass(/landing-scrolled/);
+        await expect
+            .poll(() => topbar.evaluate((element) => getComputedStyle(element).backgroundColor), {
+                message: "scrolled topbar restores its elevated surface",
+            })
+            .not.toBe(landingBackground);
+    });
+
     test("/ru/ landing renders Cyrillic hero copy", async ({ page }) => {
         await gotoApp(page, "ru");
         await expect(page.locator("#landing")).toBeVisible();

@@ -44,6 +44,11 @@
         opacity: 1;
     }
 }
+@media (prefers-reduced-motion: reduce) {
+    .sticky-banner {
+        animation: none;
+    }
+}
 
 .sticky-banner-body {
     display: flex;

@@ -75,6 +75,25 @@
     display: none;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+    .ingest-overlay:not([hidden]) {
+        animation: ingest-overlay-in var(--dc-dur-slow) var(--dc-ease);
+    }
+    .ingest-overlay:not([hidden]) .ingest-overlay-card {
+        animation: ingest-overlay-card-in var(--dc-dur-slow) var(--dc-ease-out);
+    }
+}
+@keyframes ingest-overlay-in {
+    from {
+        opacity: 0;
+    }
+}
+@keyframes ingest-overlay-card-in {
+    from {
+        transform: translateY(8px) scale(0.985);
+    }
+}
+
 .ingest-overlay-card {
     background: var(--bg-elev);
     border: 1px solid var(--border);

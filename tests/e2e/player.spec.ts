@@ -1,6 +1,8 @@
 // Player controls and timeline interactions on a loaded multichannel trip.
 // Fail-loud, web-first assertions so a regression turns the test red.
 
+import type { Page } from "@playwright/test";
+
 import {
     DESKTOP,
     SAMPLE_70MAI,
@@ -21,6 +23,26 @@ import {
 const MINIMAP_FRAME_PADDING_PX = 16;
 const MINIMAP_DRAG_THRESHOLD_PX = 5;
 
+/** Seek through the public scrubber and wait for the media seek itself, not
+ * merely for currentTime to read zero. A cross-file seek swaps in a fresh
+ * <video> whose currentTime starts at zero before its source is playable; that
+ * transient value used to let play/pause tests click into an in-flight attach. */
+async function seekToTripStart(page: Page): Promise<void> {
+    await page.locator("#player-mini-progress").focus();
+    await page.keyboard.press("Home");
+    const master = page.locator(".video-tile.active video:not(.preload-slot):not(.tile-blur-bg)");
+    await expect
+        .poll(
+            () =>
+                master.evaluate(
+                    (video: HTMLVideoElement) =>
+                        video.currentSrc !== "" && video.readyState >= 2 && !video.seeking && video.currentTime < 0.1,
+                ),
+            { message: "Home must land on a playable first frame" },
+        )
+        .toBe(true);
+}
+
 test.describe("player", () => {
     test.beforeEach(async ({ page }) => {
         await presetLocalStorage(page);
@@ -40,11 +62,7 @@ test.describe("player", () => {
             await play.click();
             await expect(play).toHaveAttribute("data-paused", "true");
         }
-        await page.locator("#player-mini-progress").focus();
-        await page.keyboard.press("Home");
-        await expect
-            .poll(() => masterVideoTime(page), { message: "Home must settle at the first frame" })
-            .toBeLessThan(0.1);
+        await seekToTripStart(page);
 
         await play.click();
         await expect(play).toHaveAttribute("data-paused", "false");
@@ -68,9 +86,7 @@ test.describe("player", () => {
         // busy browser finishes viewer setup. Put the paused playhead at a known
         // frame with the scrubber's public keyboard control; forward stepping at
         // the clamped trip end is correctly a no-op.
-        await page.locator("#player-mini-progress").focus();
-        await page.keyboard.press("Home");
-        await expect.poll(time, { message: "Home must settle at the first frame" }).toBeLessThan(0.1);
+        await seekToTripStart(page);
 
         // The fixture is 30 fps, so a step is 1/30s. Each step is an async seek;
         // fire them one-settled-at-a-time rather than hammering three at once. A
@@ -106,7 +122,15 @@ test.describe("player", () => {
 
     test("frame-step while playing pauses first; holding auto-repeats", async ({ page }) => {
         const play = page.locator("#player-play");
-        if ((await play.getAttribute("data-paused")) === "true") await play.click();
+        // The fixture is only four seconds long and may reach EOF while a busy
+        // full-suite worker finishes setup. Starting from EOF takes the
+        // asynchronous restart path, so establish a known non-terminal frame
+        // before asserting the ordinary playing -> frame-step transition.
+        if ((await play.getAttribute("data-paused")) === "false") await play.click();
+        await expect(play).toHaveAttribute("data-paused", "true");
+        await seekToTripStart(page);
+
+        await play.click();
         await expect(play).toHaveAttribute("data-paused", "false");
 
         const fwd = page.locator("#player-step-fwd");
@@ -259,6 +283,80 @@ test.describe("player", () => {
         );
         expect(Math.abs(after.y - before.y - dy), "mini-map must follow the pointer vertically").toBeLessThanOrEqual(2);
         await shot(page, "player-04-minimap-moved");
+    });
+
+    test("View exposes off, mini and large map states with shared-element transitions", async ({ page }) => {
+        const body = page.locator("body");
+        const player = page.locator("#player-wrap");
+        const miniMap = page.locator("#mini-map");
+        const largeMap = page.locator(".map-wrap");
+        const mode = (name: "off" | "mini" | "large") => page.locator(`[data-map-mode="${name}"]`);
+        const waitForMorph = async (): Promise<void> => {
+            await expect(body).toHaveClass(/map-morphing/);
+            await expect(body).not.toHaveClass(/map-morphing/);
+        };
+        const expectSurfacePainted = async (surface: ReturnType<typeof page.locator>): Promise<void> => {
+            await expect(surface).toBeVisible();
+            await expect.poll(() => surface.evaluate((element) => getComputedStyle(element).opacity)).toBe("1");
+            expect(await surface.evaluate((element) => element.getAnimations().length)).toBe(0);
+        };
+
+        await page.locator("#player-view-menu").click();
+        await expect(mode("mini")).toHaveAttribute("aria-checked", "true");
+
+        await mode("large").click();
+        await expect(player).toHaveClass(/map-expanded/);
+        await waitForMorph();
+        await expectSurfacePainted(largeMap);
+        await expect(mode("large")).toHaveAttribute("aria-checked", "true");
+
+        await mode("mini").click();
+        await expect(player).not.toHaveClass(/map-expanded/);
+        await waitForMorph();
+        await expectSurfacePainted(miniMap);
+        await expect(mode("mini")).toHaveAttribute("aria-checked", "true");
+
+        await mode("off").click();
+        await waitForMorph();
+        await expect(miniMap).toBeHidden();
+        await expect(mode("off")).toHaveAttribute("aria-checked", "true");
+
+        await mode("large").click();
+        await expect(page.locator(".map-morph-portal")).toBeVisible();
+        await waitForMorph();
+        await expect(player).toHaveClass(/map-expanded/);
+        await expectSurfacePainted(largeMap);
+        await expect(mode("large")).toHaveAttribute("aria-checked", "true");
+
+        // Reuse both MapLibre containers once more. A finished WAAPI effect with
+        // fill:forwards used to leave the old source at computed opacity:0, so
+        // layout assertions passed while the repeated map render was blank.
+        await mode("mini").click();
+        await waitForMorph();
+        await expectSurfacePainted(miniMap);
+        await shot(page, "player-05-view-map-modes");
+    });
+
+    test("View restores the saved large map mode after reload", async ({ page }) => {
+        await page.locator("#player-view-menu").click();
+        await page.locator('[data-map-mode="large"]').click();
+        await expect(page.locator("body")).not.toHaveClass(/map-morphing/);
+        await expect
+            .poll(() =>
+                page.evaluate(() => {
+                    const stored = JSON.parse(localStorage.getItem("dc.viewer.panels") ?? "{}") as {
+                        mapMode?: string;
+                    };
+                    return stored.mapMode;
+                }),
+            )
+            .toBe("large");
+
+        await page.reload();
+        await loadTrip(page, SAMPLE_70MAI);
+        await expect(page.locator("#player-wrap")).toHaveClass(/map-expanded/);
+        await page.locator("#player-view-menu").click();
+        await expect(page.locator('[data-map-mode="large"]')).toHaveAttribute("aria-checked", "true");
     });
 
     test("chase is the default follow mode: expanding the big map tilts it", async ({ page }) => {

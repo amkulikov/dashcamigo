@@ -35,13 +35,16 @@
     box-shadow: -4px 0 16px rgba(0, 0, 0, 0.18);
     /* Slide-in animation. transform avoids reflowing the viewer column. */
     transform: translateX(100%);
-    transition: transform var(--dc-dur-entrance) cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition:
+        transform var(--dc-dur-entrance) cubic-bezier(0.2, 0.8, 0.2, 1),
+        visibility 0s linear var(--dc-dur-entrance);
     visibility: hidden;
 }
 
 body.export-mode .export-panel {
     transform: translateX(0);
     visibility: visible;
+    transition-delay: 0s, 0s;
 }
 
 .export-panel[hidden] {
@@ -93,6 +96,18 @@ body.export-mode .export-panel {
 
 .export-panel__section[hidden] {
     display: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .export-panel__section:not([hidden]) {
+        animation: dc-export-phase-in var(--dc-dur-base) var(--dc-ease-out);
+    }
+}
+@keyframes dc-export-phase-in {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
 }
 
 /* Export-panel action buttons. Kept as their own classes (6 call sites incl.
@@ -677,6 +692,9 @@ fieldset.export-panel__group {
         visibility: visible;
         z-index: auto;
     }
+    body.export-mode .export-panel {
+        animation: dc-export-panel-mobile-in var(--dc-dur-entrance) var(--dc-ease-out);
+    }
     /* Not in export-mode: take no flow space. Overrides the base
        `.export-panel[hidden] { display: flex }` (which exists only for the
        desktop slide animation) - in-flow that would leave an empty "Save clip"
@@ -698,6 +716,13 @@ fieldset.export-panel__group {
        bottom of the first screen. */
     body.export-mode .player-wrap {
         min-height: 0;
+    }
+}
+
+@keyframes dc-export-panel-mobile-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
     }
 }
 
@@ -976,6 +1001,10 @@ fieldset.export-panel__group {
     .sidebar,
     #sidebar-resize {
         transition: none;
+    }
+
+    .export-panel {
+        animation: none;
     }
 
     /* Drop the looping sweep (continuous motion is a WCAG 2.3.3 target). A

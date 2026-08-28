@@ -52,7 +52,9 @@
     justify-content: center;
     font-size: var(--dc-text-base);
     line-height: 1;
-    transition: background var(--dc-dur-fast) var(--dc-ease);
+    transition:
+        background var(--dc-dur-fast) var(--dc-ease),
+        transform var(--dc-dur-fast) var(--dc-ease);
 }
 .player-btn:hover {
     background: var(--bg-hover);
@@ -62,9 +64,11 @@
    surface. */
 .player-btn:not(#player-play):active {
     background: var(--bg-active);
+    transform: scale(0.94);
 }
 #player-play:active {
     background: var(--accent-hot);
+    transform: scale(0.94);
 }
 .player-btn:focus-visible {
     outline: 2px solid var(--accent);
@@ -472,6 +476,64 @@
     font-size: var(--dc-text-xs);
 }
 
+/* Map has three meaningful layouts, so a checkbox would lie about its state.
+   Keep the label aligned with the checkbox rows, then expose the layouts as a
+   compact segmented control. */
+.view-menu-map {
+    padding: var(--dc-space-2);
+    border-radius: var(--dc-radius-sm);
+}
+.view-menu-map[data-disabled="true"] {
+    opacity: 0.4;
+}
+.view-menu-map__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--dc-space-2);
+    padding: 0 2px var(--dc-space-2);
+}
+.view-menu-map__modes {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    padding: 2px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-sm);
+}
+.view-menu-map__modes button {
+    min-width: 0;
+    min-height: 30px;
+    padding: var(--dc-space-1) var(--dc-space-2);
+    border: 0;
+    border-radius: calc(var(--dc-radius-sm) - 2px);
+    background: transparent;
+    color: var(--fg-mute);
+    font: 600 var(--dc-text-sm) / 1 var(--dc-font-ui);
+    cursor: pointer;
+    transition:
+        color var(--dc-dur-fast) var(--dc-ease),
+        background var(--dc-dur-fast) var(--dc-ease),
+        box-shadow var(--dc-dur-fast) var(--dc-ease);
+}
+.view-menu-map__modes button:hover,
+.view-menu-map__modes button:focus-visible {
+    color: var(--fg);
+    background: var(--bg-hover);
+    outline: none;
+}
+.view-menu-map__modes button:focus-visible {
+    box-shadow: inset 0 0 0 2px var(--accent);
+}
+.view-menu-map__modes button[aria-checked="true"] {
+    color: var(--dc-black);
+    background: var(--accent);
+    box-shadow: var(--dc-shadow-sm);
+}
+.view-menu-map__modes button:disabled {
+    cursor: not-allowed;
+}
+
 /* Speed pill is also a button (click flips km/h <-> mph). Strip the default
    <button> chrome so it sits visually identical to the non-clickable pills
    beside it; the affordance is the cursor change on hover. */
@@ -651,6 +713,24 @@
     }
     .view-menu-row__label {
         font-size: var(--dc-text-base);
+    }
+    .view-menu-map {
+        padding: var(--dc-space-2) var(--dc-space-3);
+    }
+    .view-menu-map__header {
+        min-height: 28px;
+    }
+    .view-menu-map__modes button {
+        min-height: 40px;
+        font-size: var(--dc-text-md);
+    }
+    /* The corner mini-map is intentionally absent on phones; do not offer a
+       mode that would result in no visible surface. Off / Large remain. */
+    .view-menu-map__modes {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .view-menu-map__modes [data-map-mode="mini"] {
+        display: none;
     }
     /* Playback-speed dropdown rows get the same 44px touch floor as the
        view-menu rows next to them. */

@@ -1868,9 +1868,9 @@
                         <!-- lucide: map -->
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/></svg>
                     </button>
-                    <!-- "View" dropdown: toggle visibility of chart / events strip / mini-map.
-                         3 checkboxes + hotkeys C / E / M. State persisted in localStorage
-                         dc.viewer.panels. See src/ui/view-menu.ts. -->
+                    <!-- "View" dropdown: chart / events / readouts are visibility
+                         toggles; map is a three-state off / mini / large control.
+                         Hotkeys C / T / M / G. See src/ui/view-menu.ts. -->
                     <div class="view-menu-wrap">
                         <button id="player-view-menu" class="player-btn player-btn-text view-menu-button" type="button"
                                 aria-haspopup="true" aria-expanded="false"
@@ -1906,15 +1906,21 @@
                                 <span class="view-menu-row__label" data-i18n="viewMenu.strip">Events strip</span>
                                 <span class="view-menu-row__hint mono">T</span>
                             </button>
-                            <button type="button" class="view-menu-row" role="menuitemcheckbox" data-panel="map"
-                                    aria-checked="true">
-                                <span class="view-menu-row__check" aria-hidden="true">
-                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                         stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                                </span>
-                                <span class="view-menu-row__label" data-i18n="viewMenu.map">Mini-map</span>
-                                <span class="view-menu-row__hint mono">M</span>
-                            </button>
+                            <div class="view-menu-map" data-panel="map">
+                                <div class="view-menu-map__header">
+                                    <span class="view-menu-row__label" data-i18n="viewMenu.map">Map</span>
+                                    <span class="view-menu-row__hint mono">M</span>
+                                </div>
+                                <div class="view-menu-map__modes" role="group"
+                                     data-i18n-attr="aria-label:viewMenu.map" aria-label="Map">
+                                    <button type="button" role="menuitemradio" data-map-mode="off"
+                                            aria-checked="false" data-i18n="viewMenu.map.off">Off</button>
+                                    <button type="button" role="menuitemradio" data-map-mode="mini"
+                                            aria-checked="true" data-i18n="viewMenu.map.mini">Mini</button>
+                                    <button type="button" role="menuitemradio" data-map-mode="large"
+                                            aria-checked="false" data-i18n="viewMenu.map.large">Large</button>
+                                </div>
+                            </div>
                             <button type="button" class="view-menu-row" role="menuitemcheckbox" data-panel="readout"
                                     aria-checked="true">
                                 <span class="view-menu-row__check" aria-hidden="true">

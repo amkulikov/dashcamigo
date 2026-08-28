@@ -47,6 +47,7 @@ import { initOfflineBanner } from "./ui/offline-banner.js";
 import { initLangSuggestionBanner } from "./ui/lang-suggestion-banner.js";
 import { initLandingDock } from "./ui/landing-dock.js";
 import { initLandingShot } from "./ui/landing-shot.js";
+import { initLandingTopbar } from "./ui/landing-topbar.js";
 import { dom } from "./ui/dom.js";
 import { syncEmptyState } from "./ui/empty-state.js";
 import { initFileSources } from "./ui/file-sources.js";
@@ -453,9 +454,9 @@ initSwitchLangModal();
 initTripPreparation();
 initHotkeysModal();
 initWhatsNewModal();
-// "View" dropdown - toggle chart/strip/mini-map. Reads visibility from localStorage
-// at startup and applies it; hotkeys C / E / M bound here are global so they
-// work without focusing the dropdown. Mini-map close-X is replaced by this menu.
+// "View" dropdown - chart/strip/readout toggles plus the map's off/mini/large
+// control. Reads visibility from localStorage; map.ts registers the layout
+// transition handler once MapLibre is ready.
 initViewMenu({
     button: dom.viewMenuButton,
     popover: dom.viewMenuPopover,
@@ -495,6 +496,8 @@ setDroppedRegionPassCanceller(cancelTrackPass);
 initFeedbackModal();
 // Hero-shot lightbox: landing right-column thumb -> full-size screenshot.
 initLandingShot();
+// The topbar shares the landing background until the landing starts scrolling.
+initLandingTopbar();
 // Docked CTA: keeps the drop/open action reachable at any landing scroll depth.
 initLandingDock();
 // Wire the "turn the map on" guide before surfaceDegradedCapabilities() below

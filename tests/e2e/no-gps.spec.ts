@@ -42,6 +42,11 @@ const GPS_OPTION_IDS = [
 test.describe("no-GPS export gate", () => {
     test.beforeEach(async ({ page }) => {
         await presetLocalStorage(page);
+        // A trip without GPS may temporarily disable the map controls, but it
+        // must not overwrite the layout chosen on a previous GPS-bearing trip.
+        await page.addInitScript(() => {
+            localStorage.setItem("dc.viewer.panels", JSON.stringify({ map: true, mapMode: "large" }));
+        });
         await installExportCapture(page); // before gotoApp - captured at bundle load
         await page.setViewportSize(DESKTOP);
         await gotoApp(page, "en");
@@ -62,6 +67,15 @@ test.describe("no-GPS export gate", () => {
         // nothing is enabled, so the inspector stays hidden.
         await expect(page.locator("#export-panel-overlay-inspector")).toBeHidden();
         await shot(page, "no-gps-01-export-options");
+    });
+
+    test("opening a no-GPS trip preserves the saved map mode", async ({ page }) => {
+        const storedMode = await page.evaluate(() => {
+            const stored = JSON.parse(localStorage.getItem("dc.viewer.panels") ?? "{}") as { mapMode?: string };
+            return stored.mapMode;
+        });
+        expect(storedMode).toBe("large");
+        await expect(page.locator('[data-map-mode="large"]')).toBeDisabled();
     });
 
     test("pipeline: a stale 'keep GPS' default does NOT inject a gpmd track", async ({ page }) => {

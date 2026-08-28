@@ -1,14 +1,11 @@
-// "View" dropdown - toggle visibility of the optional viewer panels. Per design
-// handoff (spec/04-view-menu.md): button in player toolbar + popover with one
-// checkbox per panel, state persisted via localStorage["dc.viewer.panels"],
-// one global hotkey each (see HOTKEY_BY_PANEL).
+// "View" dropdown - toggle visibility of the optional viewer panels. Chart,
+// events and readouts are checkboxes; map is a three-state control
+// (off / mini / large) whose layout transition is owned by map.ts. The basic
+// on/off preference remains persisted in localStorage["dc.viewer.panels"].
 //
 // Toggling a panel sets the `hidden` attribute on its host element; layout
 // reflows via existing CSS grid/flex rules (no JS layout math here).
 //
-// Mini-map standalone close-X is replaced by the "Mini-map" checkbox row -
-// see src/ui/map.ts where the legacy button is now hidden via this module.
-
 import { createLogger } from "../log.js";
 
 import { isAnyModalOpen } from "./modal-helper.js";
@@ -17,6 +14,7 @@ const STORAGE_KEY = "dc.viewer.panels";
 const HOTKEY_BY_PANEL = { chart: "KeyC", strip: "KeyT", map: "KeyM", readout: "KeyG" } as const;
 const PANELS = ["chart", "strip", "map", "readout"] as const;
 export type Panel = (typeof PANELS)[number];
+export type MapViewMode = "off" | "mini" | "large";
 
 const log = createLogger("view-menu");
 
@@ -27,6 +25,9 @@ const DEFAULT_PANELS: ViewPanels = { chart: true, strip: true, map: true, readou
 
 /** In-memory mirror of the persisted state. */
 let currentPanels: ViewPanels = { ...DEFAULT_PANELS };
+let currentMapMode: MapViewMode = "mini";
+let preferredMapMode: MapViewMode = "mini";
+let mapModeRequestHandler: ((mode: MapViewMode) => void) | null = null;
 
 /** Listeners for visibility changes. Map.ts uses this to suppress mini-map
  *  visibility logic when the user hid it via the menu. */
@@ -42,25 +43,54 @@ export function getViewPanels(): ViewPanels {
     return { ...currentPanels };
 }
 
-function loadFromStorage(): ViewPanels {
+export function getPreferredMapMode(): MapViewMode {
+    return preferredMapMode;
+}
+
+/** Map.ts registers the state transition here after its maps are ready. Keeping
+ *  the callback in this direction avoids a view-menu -> MapLibre dependency. */
+export function setMapModeRequestHandler(handler: ((mode: MapViewMode) => void) | null): void {
+    mapModeRequestHandler = handler;
+}
+
+/** Reflects map.ts's canonical layout state in the segmented control. */
+export function syncMapModeControl(mode: MapViewMode): void {
+    currentMapMode = mode;
+    applyMapModeControl();
+}
+
+interface LoadedViewPreferences {
+    panels: ViewPanels;
+    mapMode: MapViewMode;
+}
+
+function isMapViewMode(value: unknown): value is MapViewMode {
+    return value === "off" || value === "mini" || value === "large";
+}
+
+function loadFromStorage(): LoadedViewPreferences {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return { ...DEFAULT_PANELS };
-        const parsed = JSON.parse(raw) as Partial<ViewPanels>;
+        if (!raw) return { panels: { ...DEFAULT_PANELS }, mapMode: "mini" };
+        const parsed = JSON.parse(raw) as Partial<ViewPanels> & { mapMode?: unknown };
         // !== false, not ?? true: a panel added after the preference was
         // written is absent from the stored object and must default to on.
         const restored = {} as ViewPanels;
         for (const panel of PANELS) restored[panel] = parsed[panel] !== false;
-        return restored;
+        // Migration: old preferences only stored map:boolean. Preserve that
+        // choice, then write the richer mode on the next explicit user action.
+        const mapMode = isMapViewMode(parsed.mapMode) ? parsed.mapMode : restored.map ? "mini" : "off";
+        restored.map = mapMode !== "off";
+        return { panels: restored, mapMode };
     } catch {
         // private mode / malformed JSON - fall back to defaults
-        return { ...DEFAULT_PANELS };
+        return { panels: { ...DEFAULT_PANELS }, mapMode: "mini" };
     }
 }
 
-function saveToStorage(panels: ViewPanels): void {
+function saveToStorage(): void {
     try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(panels));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...currentPanels, mapMode: preferredMapMode }));
     } catch {
         // private mode - silent
     }
@@ -90,10 +120,32 @@ let currentOpts: ViewMenuOptions | null = null;
  *  click) and syncs the checkbox + persisted state. No-op if unavailable. */
 export function setPanelVisible(panel: Panel, visible: boolean): void {
     if (!availability[panel]) return;
+    if (panel === "map") {
+        setMapViewModePreference(visible ? (preferredMapMode === "large" ? "large" : "mini") : "off");
+        return;
+    }
     if (currentPanels[panel] === visible) return;
     currentPanels[panel] = visible;
-    saveToStorage(currentPanels);
+    saveToStorage();
     if (currentOpts) applyPanels(currentOpts);
+    notifyListeners();
+}
+
+/** Persists only explicit map choices. Availability changes for a no-GPS trip
+ *  never call this, so opening such a trip cannot overwrite another trip's
+ *  preferred mini/large layout. */
+export function setMapViewModePreference(mode: MapViewMode): void {
+    if (!availability.map) return;
+    if (preferredMapMode === mode && currentPanels.map === (mode !== "off")) return;
+    preferredMapMode = mode;
+    currentMapMode = mode;
+    currentPanels.map = mode !== "off";
+    saveToStorage();
+    if (currentOpts) applyPanels(currentOpts);
+    notifyListeners();
+}
+
+function notifyListeners(): void {
     for (const l of listeners) {
         try {
             l({ ...currentPanels });
@@ -111,7 +163,7 @@ export function setPanelVisible(panel: Panel, visible: boolean): void {
 export function setPanelAvailable(panel: Panel, available: boolean): void {
     if (availability[panel] === available) return;
     availability[panel] = available;
-    const row = document.querySelector<HTMLElement>(`.view-menu-row[data-panel="${panel}"]`);
+    const row = document.querySelector<HTMLElement>(`[data-panel="${panel}"]`);
     if (row) {
         if (available) {
             row.removeAttribute("aria-disabled");
@@ -119,6 +171,11 @@ export function setPanelAvailable(panel: Panel, available: boolean): void {
         } else {
             row.setAttribute("aria-disabled", "true");
             row.setAttribute("data-disabled", "true");
+        }
+        if (panel === "map") {
+            row.querySelectorAll<HTMLButtonElement>("[data-map-mode]").forEach((button) => {
+                button.disabled = !available;
+            });
         }
     }
     if (currentOpts) applyPanels(currentOpts);
@@ -131,7 +188,10 @@ export function setPanelAvailable(panel: Panel, available: boolean): void {
  */
 export function initViewMenu(opts: ViewMenuOptions): () => void {
     currentOpts = opts;
-    currentPanels = loadFromStorage();
+    const loaded = loadFromStorage();
+    currentPanels = loaded.panels;
+    currentMapMode = loaded.mapMode;
+    preferredMapMode = loaded.mapMode;
     applyPanels(opts);
 
     function togglePopover(force?: boolean): void {
@@ -148,6 +208,10 @@ export function initViewMenu(opts: ViewMenuOptions): () => void {
     // computing the new value (no DOM lookup, no microtask churn).
     function toggle(panel: Panel): void {
         if (!availability[panel]) return;
+        if (panel === "map" && mapModeRequestHandler) {
+            mapModeRequestHandler(currentMapMode === "off" ? "mini" : "off");
+            return;
+        }
         setPanelVisible(panel, !currentPanels[panel]);
     }
 
@@ -163,6 +227,30 @@ export function initViewMenu(opts: ViewMenuOptions): () => void {
             const panel = row.dataset.panel as Panel | undefined;
             if (!panel) return;
             toggle(panel);
+        });
+    });
+
+    const mapModes = [...opts.popover.querySelectorAll<HTMLButtonElement>("[data-map-mode]")];
+    mapModes.forEach((button) => {
+        button.addEventListener("click", () => {
+            if (!availability.map) return;
+            const mode = button.dataset.mapMode as MapViewMode | undefined;
+            if (!mode) return;
+            if (mapModeRequestHandler) mapModeRequestHandler(mode);
+            else setPanelVisible("map", mode !== "off");
+        });
+        button.addEventListener("keydown", (event) => {
+            const visibleModes = mapModes.filter((modeButton) => modeButton.getClientRects().length > 0);
+            const visibleIndex = visibleModes.indexOf(button);
+            if (visibleIndex < 0) return;
+            let nextIndex: number | null = null;
+            if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextIndex = visibleIndex - 1;
+            if (event.key === "ArrowRight" || event.key === "ArrowDown") nextIndex = visibleIndex + 1;
+            if (event.key === "Home") nextIndex = 0;
+            if (event.key === "End") nextIndex = visibleModes.length - 1;
+            if (nextIndex === null) return;
+            event.preventDefault();
+            visibleModes[(nextIndex + visibleModes.length) % visibleModes.length]?.focus();
         });
     });
 
@@ -226,5 +314,14 @@ function applyPanels(opts: ViewMenuOptions): void {
         const panel = row.dataset.panel as Panel | undefined;
         if (!panel) return;
         row.setAttribute("aria-checked", currentPanels[panel] ? "true" : "false");
+    });
+    applyMapModeControl();
+}
+
+function applyMapModeControl(): void {
+    document.querySelectorAll<HTMLButtonElement>("[data-map-mode]").forEach((button) => {
+        const selected = button.dataset.mapMode === currentMapMode;
+        button.setAttribute("aria-checked", selected ? "true" : "false");
+        button.tabIndex = selected ? 0 : -1;
     });
 }

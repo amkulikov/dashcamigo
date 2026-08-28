@@ -85,6 +85,10 @@ test.describe("mobile portrait", () => {
         await page.locator("#player-view-menu").click();
         // The view-menu popover with the panel toggles.
         await expect(page.locator('.view-menu-row[data-panel="chart"]')).toBeVisible();
+        await expect(page.locator('[data-map-mode="off"]')).toBeVisible();
+        await expect(page.locator('[data-map-mode="off"]')).toHaveAttribute("aria-checked", "true");
+        await expect(page.locator('[data-map-mode="mini"]')).toBeHidden();
+        await expect(page.locator('[data-map-mode="large"]')).toBeVisible();
         await shot(page, "mobile-04-view-menu");
     });
 

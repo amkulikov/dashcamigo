@@ -285,6 +285,12 @@ body.export-mode .player-wrap:not(:fullscreen):not(.map-expanded) {
     background: rgba(0, 0, 0, 0.4);
     z-index: 5; /* above video-tile, below .video-minimap */
     pointer-events: none; /* zoom-pans must pass through */
+    animation: video-loading-overlay-in var(--dc-dur-fast) var(--dc-ease);
+}
+@keyframes video-loading-overlay-in {
+    from {
+        opacity: 0;
+    }
 }
 
 .video-tile {
@@ -320,6 +326,9 @@ body.export-mode .player-wrap:not(:fullscreen):not(.map-expanded) {
 }
 .video-grid[data-view-mode="split"] .video-tile.active {
     box-shadow: inset 0 0 0 3px var(--accent);
+}
+.video-grid[data-view-mode="split"] .video-tile {
+    transition: box-shadow var(--dc-dur-base) var(--dc-ease);
 }
 /* Non-active tiles are clickable to swap. */
 .video-grid[data-view-mode="split"][data-channel-count="2"] .video-tile:not(.active),
@@ -398,7 +407,9 @@ body.export-mode .player-wrap:not(:fullscreen):not(.map-expanded) {
     border-radius: var(--dc-radius-sm);
     overflow: hidden;
     cursor: pointer;
-    transition: border-color var(--dc-dur-base) var(--dc-ease);
+    transition:
+        border-color var(--dc-dur-base) var(--dc-ease),
+        box-shadow var(--dc-dur-base) var(--dc-ease);
     box-shadow: var(--dc-shadow-popup);
 }
 .video-grid[data-view-mode="focus"] .video-tile:not(.active):hover {
@@ -813,6 +824,20 @@ body.export-mode .tile-drag-handle {
     padding: var(--dc-space-1) var(--dc-space-2);
     pointer-events: none;
     user-select: none;
+    animation: tile-drop-placeholder-in var(--dc-dur-fast) var(--dc-ease-out);
+}
+@keyframes tile-drop-placeholder-in {
+    from {
+        opacity: 0;
+        transform: scale(0.985);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .video-loading-overlay:not([hidden]),
+    .tile-drop-placeholder {
+        animation: none;
+    }
 }
 
 /* Floating label that tracks the pointer during a tile drag so the gesture is

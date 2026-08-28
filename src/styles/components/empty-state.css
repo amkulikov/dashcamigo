@@ -50,6 +50,18 @@
     text-align: center;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+    .viewer.preparing .trip-preparation-card {
+        animation: trip-preparation-card-in var(--dc-dur-slow) var(--dc-ease-out);
+    }
+}
+@keyframes trip-preparation-card-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px) scale(0.985);
+    }
+}
+
 .trip-preparation-spinner {
     width: 42px;
     height: 42px;

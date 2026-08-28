@@ -34,7 +34,16 @@ import {
 } from "./media-queries.js";
 import type { GpsRecord } from "../parser.js";
 import { displayClockDate, wallToContentSec, type Trip, type TripFrame } from "../trips.js";
-import { getViewPanels, setPanelAvailable, setPanelVisible, subscribeViewPanels } from "./view-menu.js";
+import {
+    getViewPanels,
+    getPreferredMapMode,
+    type MapViewMode,
+    setMapModeRequestHandler,
+    setMapViewModePreference,
+    setPanelAvailable,
+    subscribeViewPanels,
+    syncMapModeControl,
+} from "./view-menu.js";
 
 const log = createLogger("map");
 
@@ -1881,14 +1890,11 @@ export function resetFollowInteractionPause(): void {
 //   - state.hasTrack    - active GPS points exist
 //   - state.mapExpanded - large map is shown beside the video
 //
-// Mini-map visibility is driven by the "View" menu (src/ui/view-menu.ts,
-// localStorage["dc.viewer.panels"].map). When the user toggles it off
-// via menu or hotkey M, dom.miniMap gets `hidden`. When no GPS is present
-// the panel is also hidden (and the view-menu row is disabled).
-//
-// Nothing else here flips mini-map visibility - the previous close-X +
-// "Show mini-map" reveal button + morph animation between them have been
-// removed (replaced by the unified menu).
+// The View menu exposes the combined state as off / mini / large. The persisted
+// on/off preference still lives in localStorage["dc.viewer.panels"].map;
+// state.mapExpanded distinguishes mini from large during the current session.
+// Every entry point below commits through setMapViewMode so controls, layout and
+// shared-element animations stay in sync.
 
 // Cap on the big map's render resolution while it is actively following. 1.5 is
 // still high-DPI (well above a non-Retina 1.0), so the softening is barely
@@ -1938,6 +1944,7 @@ export function applyMapLayout(): void {
         dom.miniMapClose.hidden = true;
         dom.mapCollapseBtn.hidden = true;
         dom.playerMapBtn.disabled = true;
+        syncMapModeControl(currentMapViewMode());
         return;
     }
     // Mini-map visibility = GPS available AND not in expanded mode AND user
@@ -1975,6 +1982,7 @@ export function applyMapLayout(): void {
     dom.playerMapBtn.setAttribute("aria-label", playerMapLabel);
     dom.playerMapBtn.title = playerMapLabel;
     dom.playerMapBtn.setAttribute("aria-pressed", showBigMap ? "true" : "false");
+    syncMapModeControl(currentMapViewMode());
 
     // Apply / clear the follow-resolution cap for the new layout (expand shows the
     // big map -> cap; collapse hides it -> restore). Before the resize() below so
@@ -1989,103 +1997,261 @@ export function applyMapLayout(): void {
     });
 }
 
-function expandMap(): void {
-    if (state.mapExpanded || !state.hasTrack) return;
-    state.mapExpanded = true;
-    applyMapLayout();
-    // Default follow mode is "chase": tilt the big map into the 3D view the first
-    // time it is shown. The tilt + 3D buildings live in enterChaseCamera, not in
-    // the hot follow loop, so flipping the state default alone would leave the map
-    // flat. Idempotent (pitch-guarded), so re-expanding never re-eases.
-    ensureChaseEngaged();
+const MAP_MORPH_DURATION_MS = 320;
+let mapMorphRunning = false;
+let pendingMapModeRequest: { mode: MapViewMode; control: HTMLElement } | null = null;
+
+function currentMapViewMode(): MapViewMode {
+    if (!getViewPanels().map) return "off";
+    if (state.mapExpanded) return "large";
+    // The mini-map is deliberately absent on phones. Treat the collapsed
+    // state as off there so the View control never claims an invisible mode.
+    return isMobileLayout() ? "off" : "mini";
 }
 
-function collapseMap(): void {
-    if (!state.mapExpanded) return;
-    state.mapExpanded = false;
+function commitMapViewMode(mode: MapViewMode): void {
+    state.mapExpanded = mode === "large";
+    setMapViewModePreference(mode);
     applyMapLayout();
+    if (mode === "large") {
+        // Default follow mode is chase. Idempotent (pitch-guarded), so showing
+        // the large map again does not restart the camera ease unnecessarily.
+        ensureChaseEngaged();
+    }
 }
 
-/** Mini-map close-X: morph mini-map into the "View" button (visual cue:
- *  "the panel collapsed into the menu") and then flip the view-menu state
- *  so the checkbox + localStorage match. ViewMenuButton must exist - it
- *  is always present in the playerbar. Fallback (button missing somehow)
- *  - flip state immediately without animation. */
-function closeMiniMapToViewMenu(): void {
-    const target = dom.viewMenuButton;
-    if (!target) {
-        setPanelVisible("map", false);
+function surfaceForMapMode(mode: MapViewMode): HTMLElement | null {
+    if (mode === "mini") return dom.miniMap;
+    if (mode === "large") return dom.mapWrap;
+    return null;
+}
+
+function restoreInlineStyle(element: HTMLElement, style: string | null): void {
+    if (style === null) element.removeAttribute("style");
+    else element.setAttribute("style", style);
+}
+
+function finishMapMorph(): void {
+    mapMorphRunning = false;
+    document.body.classList.remove("map-morphing");
+    const pending = pendingMapModeRequest;
+    pendingMapModeRequest = null;
+    if (pending) queueMicrotask(() => setMapViewMode(pending.mode, pending.control));
+}
+
+/** Keeps the live MapLibre surface on screen as a fixed overlay while the real
+ *  layout changes underneath it, then maps its measured rectangle onto the
+ *  destination. Because this animates the real canvas (not cloneNode's blank
+ *  canvas), route and marker continuity survive mini ↔ large transitions. */
+function morphMapSurface(
+    source: HTMLElement,
+    target: HTMLElement,
+    applyFinalLayout: () => void,
+    fadeTarget: boolean,
+): void {
+    const fromRect = source.getBoundingClientRect();
+    const targetStyle = target.getAttribute("style");
+    const sourceStyle = source.getAttribute("style");
+    if (prefersReducedMotion() || typeof source.animate !== "function" || fromRect.width === 0) {
+        applyFinalLayout();
         return;
     }
-    // Hide the X immediately - it does not need to morph; the mini-map body
-    // is the visual focus.
-    dom.miniMapClose.hidden = true;
-    morphHide(dom.miniMap, target).then(() => {
-        // State sync after animation. setPanelVisible writes to the menu's
-        // store + applies hidden on dom.miniMap (no-op since morph already
-        // hid it via inline display:none) + fires subscribers (applyMapLayout
-        // among them). Triggers MapLibre resize on next frame.
-        setPanelVisible("map", false);
-    });
+
+    const fromRadius = getComputedStyle(source).borderRadius;
+    source.style.position = "fixed";
+    source.style.inset = "auto";
+    source.style.left = `${fromRect.left}px`;
+    source.style.top = `${fromRect.top}px`;
+    source.style.width = `${fromRect.width}px`;
+    source.style.height = `${fromRect.height}px`;
+    source.style.margin = "0";
+    source.style.transform = "none";
+    source.style.transformOrigin = "0 0";
+    source.style.zIndex = "var(--dc-z-modal)";
+    source.style.pointerEvents = "none";
+    source.style.overflow = "hidden";
+    source.style.display = "block";
+    if (fadeTarget) target.style.opacity = "0";
+
+    applyFinalLayout();
+    // applyMapLayout hides the old surface as part of the final state. The
+    // promoted fixed overlay must remain visible only for the animation run.
+    source.hidden = false;
+    source.style.display = "block";
+    const toRect = target.getBoundingClientRect();
+    if (toRect.width === 0 || toRect.height === 0) {
+        restoreInlineStyle(source, sourceStyle);
+        restoreInlineStyle(target, targetStyle);
+        applyFinalLayout();
+        return;
+    }
+
+    const dx = toRect.left - fromRect.left;
+    const dy = toRect.top - fromRect.top;
+    const sx = toRect.width / fromRect.width;
+    const sy = toRect.height / fromRect.height;
+    const toRadius = getComputedStyle(target).borderRadius;
+    mapMorphRunning = true;
+    document.body.classList.add("map-morphing");
+    const sourceAnimation = source.animate(
+        [
+            { transform: "translate(0, 0) scale(1)", borderRadius: fromRadius, opacity: 1, offset: 0 },
+            { opacity: 1, offset: 0.72 },
+            {
+                transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`,
+                borderRadius: toRadius,
+                opacity: fadeTarget ? 0 : 0.12,
+                offset: 1,
+            },
+        ],
+        { duration: MAP_MORPH_DURATION_MS, easing: "cubic-bezier(0.22, 1, 0.36, 1)", fill: "forwards" },
+    );
+    const targetAnimation = fadeTarget
+        ? target.animate([{ opacity: 0 }, { opacity: 0, offset: 0.62 }, { opacity: 1 }], {
+              duration: MAP_MORPH_DURATION_MS,
+              easing: "ease-out",
+              fill: "forwards",
+          })
+        : null;
+
+    let settled = false;
+    const settle = (): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        // `fill:forwards` otherwise keeps the animation-origin opacity/transform
+        // above the restored CSS forever. The next time this same MapLibre
+        // surface is shown it would occupy layout but remain transparent.
+        if (sourceAnimation.playState !== "idle") sourceAnimation.cancel();
+        targetAnimation?.cancel();
+        restoreInlineStyle(source, sourceStyle);
+        restoreInlineStyle(target, targetStyle);
+        applyFinalLayout();
+        finishMapMorph();
+    };
+    sourceAnimation.addEventListener("finish", settle);
+    sourceAnimation.addEventListener("cancel", settle);
+    const timeout = setTimeout(settle, MAP_MORPH_DURATION_MS + 80);
 }
 
-const MORPH_DURATION_MS = 350;
-const MORPH_TIMEOUT_MS = 500;
-
-/** Animates `source` shrinking + sliding toward `target`. Resolves when
- *  the transitionend fires (or the safety timer expires). Used for the
- *  "mini-map flies into View button" close gesture. */
-function morphHide(source: HTMLElement, target: HTMLElement): Promise<void> {
-    // Honor prefers-reduced-motion (WCAG 2.3.3): skip the 350ms fly-to-button
-    // morph and settle instantly. The caller still runs setPanelVisible, so the
-    // end result (mini-map hidden) is identical, just without the animation. Same
-    // instant-settle path flip.ts takes.
-    if (prefersReducedMotion()) {
-        return Promise.resolve();
+/** Opens a map out of the control that requested it. A small map portal grows
+ *  from the View/mobile-map button while the destination MapLibre surface fades
+ *  in underneath, avoiding a stretched toolbar label. */
+function morphMapFromControl(control: HTMLElement, target: HTMLElement, applyFinalLayout: () => void): void {
+    const fromRect = control.getBoundingClientRect();
+    const targetStyle = target.getAttribute("style");
+    if (prefersReducedMotion() || typeof target.animate !== "function" || fromRect.width === 0) {
+        applyFinalLayout();
+        return;
     }
-    const sRect = source.getBoundingClientRect();
-    const tRect = target.getBoundingClientRect();
-    const dx = tRect.left + tRect.width / 2 - (sRect.left + sRect.width / 2);
-    const dy = tRect.top + tRect.height / 2 - (sRect.top + sRect.height / 2);
-    const scaleX = tRect.width / sRect.width;
-    const scaleY = tRect.height / sRect.height;
 
-    source.style.transformOrigin = "center center";
-    // var(--dc-ease) resolves against :root in the CSSOM - reuse the house curve
-    // instead of duplicating its cubic-bezier literal here.
-    source.style.transition = `transform ${MORPH_DURATION_MS}ms var(--dc-ease), opacity ${MORPH_DURATION_MS}ms var(--dc-ease)`;
-    source.style.pointerEvents = "none"; // do not catch clicks while flying
+    target.style.opacity = "0";
+    applyFinalLayout();
+    const toRect = target.getBoundingClientRect();
+    if (toRect.width === 0 || toRect.height === 0) {
+        restoreInlineStyle(target, targetStyle);
+        applyFinalLayout();
+        return;
+    }
 
-    return new Promise<void>((resolve) => {
-        requestAnimationFrame(() =>
-            requestAnimationFrame(() => {
-                source.style.transform = `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})`;
-                source.style.opacity = "0";
-            }),
-        );
-
-        let done = false;
-        const finish = (): void => {
-            if (done) return;
-            done = true;
-            source.removeEventListener("transitionend", onEnd);
-            clearTimeout(timer);
-            // Reset inline styles so the next show is clean. The actual
-            // visibility comes from setPanelVisible -> applyPanels -> hidden.
-            source.style.transition = "";
-            source.style.transform = "";
-            source.style.opacity = "";
-            source.style.transformOrigin = "";
-            source.style.pointerEvents = "";
-            resolve();
-        };
-        const onEnd = (e: TransitionEvent): void => {
-            if (e.target !== source || e.propertyName !== "transform") return;
-            finish();
-        };
-        source.addEventListener("transitionend", onEnd);
-        const timer = setTimeout(finish, MORPH_TIMEOUT_MS);
+    const portal = document.createElement("div");
+    portal.className = "map-morph-portal";
+    portal.setAttribute("aria-hidden", "true");
+    const icon = dom.playerMapBtn.querySelector("svg")?.cloneNode(true);
+    if (icon) portal.appendChild(icon);
+    Object.assign(portal.style, {
+        left: `${fromRect.left}px`,
+        top: `${fromRect.top}px`,
+        width: `${fromRect.width}px`,
+        height: `${fromRect.height}px`,
     });
+    document.body.appendChild(portal);
+
+    const dx = toRect.left - fromRect.left;
+    const dy = toRect.top - fromRect.top;
+    const sx = toRect.width / fromRect.width;
+    const sy = toRect.height / fromRect.height;
+    mapMorphRunning = true;
+    document.body.classList.add("map-morphing");
+    const portalAnimation = portal.animate(
+        [
+            { transform: "translate(0, 0) scale(1)", opacity: 0.92, borderRadius: "8px", offset: 0 },
+            { opacity: 0.78, offset: 0.62 },
+            {
+                transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`,
+                opacity: 0,
+                borderRadius: getComputedStyle(target).borderRadius,
+                offset: 1,
+            },
+        ],
+        { duration: MAP_MORPH_DURATION_MS, easing: "cubic-bezier(0.22, 1, 0.36, 1)", fill: "forwards" },
+    );
+    const targetAnimation = target.animate([{ opacity: 0 }, { opacity: 0, offset: 0.5 }, { opacity: 1 }], {
+        duration: MAP_MORPH_DURATION_MS,
+        easing: "ease-out",
+        fill: "forwards",
+    });
+
+    let settled = false;
+    const settle = (): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        targetAnimation.cancel();
+        portal.remove();
+        restoreInlineStyle(target, targetStyle);
+        applyFinalLayout();
+        finishMapMorph();
+    };
+    portalAnimation.addEventListener("finish", settle);
+    portalAnimation.addEventListener("cancel", settle);
+    const timeout = setTimeout(settle, MAP_MORPH_DURATION_MS + 80);
+}
+
+function setMapViewMode(mode: MapViewMode, control: HTMLElement = dom.viewMenuButton): void {
+    if (!state.hasTrack) return;
+    if (mapMorphRunning) {
+        pendingMapModeRequest = { mode, control };
+        return;
+    }
+    // Mini is not a renderable mode on phones; M and programmatic requests use
+    // the large map there, matching the dedicated toolbar button's behaviour.
+    const nextMode = mode === "mini" && isMobileLayout() ? "large" : mode;
+    const previousMode = currentMapViewMode();
+    if (previousMode === nextMode) return;
+    const applyFinalLayout = (): void => commitMapViewMode(nextMode);
+    const source = surfaceForMapMode(previousMode);
+    const target = surfaceForMapMode(nextMode);
+
+    if (source && target) {
+        dom.miniMapClose.hidden = true;
+        morphMapSurface(source, target, applyFinalLayout, true);
+        return;
+    }
+    if (source) {
+        dom.miniMapClose.hidden = true;
+        morphMapSurface(source, control, applyFinalLayout, false);
+        return;
+    }
+    if (target) {
+        morphMapFromControl(control, target, applyFinalLayout);
+        return;
+    }
+    applyFinalLayout();
+}
+
+function expandMap(control: HTMLElement = dom.miniMap): void {
+    setMapViewMode("large", control);
+}
+
+function collapseMap(control: HTMLElement = dom.viewMenuButton): void {
+    if (!state.mapExpanded) return;
+    if (isMobileLayout()) setMapViewMode("off", control);
+    else setMapViewMode("mini", control);
+}
+
+function closeMiniMapToViewMenu(): void {
+    setMapViewMode("off", dom.viewMenuButton);
 }
 
 // Mini-map position persisted as proportions of drag-range (frame - mini -
@@ -3085,6 +3251,7 @@ function syncChaseControls(): void {
  */
 export function initMap(cb: MapCallbacks): void {
     callbacks = cb;
+    state.mapExpanded = getPreferredMapMode() === "large";
 
     subscribeMapProvider((provider, previous) => {
         mapAttributionControl.setProvider(provider);
@@ -3158,7 +3325,7 @@ export function initMap(cb: MapCallbacks): void {
     // Reflect the hydrated toggle state (aria-pressed/active) on first paint.
     syncChaseControls();
 
-    dom.mapCollapseBtn.addEventListener("click", collapseMap);
+    dom.mapCollapseBtn.addEventListener("click", () => collapseMap(dom.viewMenuButton));
     // Player-bar map toggle: single entry point for mobile users to expand or
     // collapse the map (mini-map circle is hidden via CSS on mobile). Force
     // userWantsMap=true on expand so the click works regardless of the View
@@ -3168,21 +3335,19 @@ export function initMap(cb: MapCallbacks): void {
     // panel may want it shown as the mini-map circle on desktop later.
     dom.playerMapBtn.addEventListener("click", () => {
         if (state.mapExpanded) {
-            collapseMap();
+            collapseMap(dom.playerMapBtn);
         } else {
-            if (!getViewPanels().map) setPanelVisible("map", true);
-            expandMap();
+            expandMap(dom.playerMapBtn);
         }
     });
+    setMapModeRequestHandler((mode) => setMapViewMode(mode, dom.viewMenuButton));
     // Close-X on the mini-map: morph into "View" button + flip menu state.
     dom.miniMapClose.addEventListener("click", (e) => {
         e.stopPropagation();
         closeMiniMapToViewMenu();
     });
-    // Re-apply map layout when the user toggles mini-map via "View" menu. The
-    // menu sets dom.miniMap.hidden directly; applyMapLayout reads getViewPanels()
-    // for the source of truth and re-runs MapLibre resize so the canvas
-    // matches the new container size.
+    // Re-apply map layout when map visibility changes outside the tri-state
+    // handler (trip availability, compatibility and export lifecycle paths).
     subscribeViewPanels(() => applyMapLayout());
     // Entering/leaving export mode hides/restores the viewer's map + mini-map
     // (see applyMapLayout's exportSuppressed branch). Recompute on every

@@ -2,8 +2,10 @@
    TOPBAR + BRAND MARK + ICON BUTTONS + THEME/LANG TOGGLES
    ========================================================================= */
 .topbar {
-    /* The topbar follows the theme: dark elev on dark, white on light.
-       Text color via --fg also switches automatically.
+    /* The topbar follows the theme: dark elev on dark, white on light. The
+       untouched landing overrides this to --bg so its first screen reads as
+       one surface; scrolling restores the elevated chrome here.
+       Text color via --fg switches automatically.
 
        Heights are tokenized: --dc-topbar-h (44px desktop min-height, used
        by WCO overlay / export drawer / landing sticky) and
@@ -31,6 +33,20 @@
        its min-content width and prevents the rest of the flex row from shrinking. */
     min-width: 0;
     color: var(--fg);
+}
+
+/* At the top of the landing, the header is part of the hero instead of a
+   separate app-chrome strip. Keep the mark visible: it names the product and
+   balances the controls on the right. A small scroll threshold is applied in
+   landing-topbar.ts before the regular elevated surface and divider return. */
+body.no-trips .topbar {
+    transition:
+        background var(--dc-dur-slow) var(--dc-ease),
+        border-color var(--dc-dur-slow) var(--dc-ease);
+}
+body.no-trips:not(.landing-scrolled) .topbar {
+    background: var(--bg);
+    border-bottom-color: transparent;
 }
 
 /* Trips button. Hidden by default (shown only on mobile, see media query below). */

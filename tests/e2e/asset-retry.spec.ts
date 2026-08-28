@@ -44,6 +44,14 @@ test("dead shell reloads itself and boots once the assets come back", async ({ p
     await reload;
     await expect(page.locator(".landing-cta").first()).not.toHaveClass(/is-pending/);
 
+    // The CTA is baseline HTML and can become observable before app.ts has
+    // completed startup. The stable-uptime timer is armed by `dc:ready`, so
+    // advancing the fake clock before that event races the timer registration
+    // on a saturated full-suite worker. `is-loading` is removed synchronously
+    // by the dc:ready handler (the 15s watchdog cannot fire while the fake
+    // clock is parked here), making this the actual boot-complete boundary.
+    await expect(page.locator("html")).not.toHaveClass(/is-loading/);
+
     // A successful boot takes the updating note down immediately, but returns
     // the budget only after 30s of stable uptime - a boot that succeeds right
     // before a lazy chunk 404s must not reset the counter (the infinite-loop

@@ -24,6 +24,7 @@ import { createLogger } from "../log.js";
 import { dom } from "./dom.js";
 import { flipCollapse } from "./flip.js";
 import { disconnectLandingDock } from "./landing-dock.js";
+import { disconnectLandingTopbar } from "./landing-topbar.js";
 import { initTripUi } from "./trip-ui-init.js";
 
 const log = createLogger("landing");
@@ -46,6 +47,7 @@ function removeLandingFromDom(): void {
     // and turns the removal above into a detached-DOM leak. All consumers
     // null-check these refs; there is no way back to landing until reload.
     disconnectLandingDock();
+    disconnectLandingTopbar();
     dom.landingCta = null;
     dom.landingDrop = null;
     dom.landingDock = null;
