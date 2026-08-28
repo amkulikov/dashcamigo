@@ -162,8 +162,10 @@
    full settings and export controls keep the roomier labelled cards. */
 .map-marker-control--compact {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: var(--dc-space-2) var(--dc-space-3);
+    /* The map pane can be narrower than the color swatches plus localized
+       size labels. Separate rows keep both controls readable at every width. */
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--dc-space-2);
     width: min(410px, 100%);
 }
 
@@ -200,6 +202,7 @@
 }
 
 .map-marker-control--compact .map-marker-control__size-row {
+    justify-content: flex-end;
     flex-wrap: nowrap;
     gap: 0;
 }

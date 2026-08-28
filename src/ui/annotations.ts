@@ -470,8 +470,15 @@ export function registerUserAnnotationHook(callback: (record: AnnotationRecord) 
 export function tripFolderId(trip: Trip): string {
     const existing = tripMetaFor(trip);
     if (existing?.folderId) return existing.folderId;
+    const anchorKey = tripAnchorFileIdentityKey(trip);
+    return anchorKey ? folderIdForFileKey(anchorKey) : "";
+}
+
+/** Identity used to anchor this trip's metadata, and to resolve its live
+ *  source before that source has been remembered. */
+export function tripAnchorFileIdentityKey(trip: Trip): string | null {
     const first = tripAllCandidates(trip)[0];
-    return first ? folderIdForFileKey(candidateIdentityKey(first)) : "";
+    return first ? candidateIdentityKey(first) : null;
 }
 
 /** Every record of a folder, tombstones included - the sidecar file must

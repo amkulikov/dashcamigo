@@ -6,10 +6,12 @@ import { t } from "../i18n/index.js";
 import { annotationStorageHintKey } from "./annotations-sidecar.js";
 import { deleteMarker, markerById, updateMarkerText } from "./annotations.js";
 import { activateModal, deactivateModal, wireBackdropDismiss } from "./modal-helper.js";
+import { canConnectTripDataFile, connectTripDataFile } from "./notes-nudge.js";
 
 let modal: HTMLElement | null = null;
 let textInput: HTMLInputElement | null = null;
 let storageHint: HTMLElement | null = null;
+let storageAction: HTMLButtonElement | null = null;
 let currentMarkerId: string | null = null;
 // True while the editor is showing a marker the SAME click just created. The
 // pin exists before the dialog does (so it previews live while the user types),
@@ -27,10 +29,12 @@ export function initMarkerModal(callbacks: { onChanged: () => void }): void {
     modal = document.getElementById("marker-modal");
     textInput = document.getElementById("marker-modal-text") as HTMLInputElement | null;
     storageHint = document.getElementById("marker-modal-storage-hint");
+    storageAction = document.getElementById("marker-modal-storage-action") as HTMLButtonElement | null;
     if (!modal || !textInput) return;
 
     document.getElementById("marker-modal-cancel")?.addEventListener("click", close);
     document.getElementById("marker-modal-save")?.addEventListener("click", save);
+    storageAction?.addEventListener("click", backUpTripData);
     document.getElementById("marker-modal-delete")?.addEventListener("click", () => {
         if (currentMarkerId) {
             deleteMarker(currentMarkerId);
@@ -77,8 +81,27 @@ function syncStorageHint(markerId: string, folderId: string): void {
     const hint = storageHint;
     if (!hint) return;
     hint.textContent = t("annotations.storageHint");
+    if (storageAction) {
+        storageAction.disabled = false;
+        storageAction.hidden = true;
+    }
     void annotationStorageHintKey(folderId).then((key) => {
-        if (currentMarkerId === markerId) hint.textContent = t(key);
+        if (currentMarkerId !== markerId) return;
+        hint.textContent = t(key);
+        if (storageAction) {
+            storageAction.hidden = key === "annotations.storageHintFile" || !canConnectTripDataFile(folderId, null);
+        }
+    });
+}
+
+function backUpTripData(): void {
+    const markerId = currentMarkerId;
+    const marker = markerId ? markerById(markerId) : null;
+    const action = storageAction;
+    if (!markerId || !marker || !action) return;
+    action.disabled = true;
+    void connectTripDataFile(marker.folderId, null).finally(() => {
+        if (currentMarkerId === markerId) syncStorageHint(markerId, marker.folderId);
     });
 }
 

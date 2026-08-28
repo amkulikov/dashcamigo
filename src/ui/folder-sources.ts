@@ -130,8 +130,8 @@ export async function notifyFolderOpened(folder: RememberedFolder): Promise<void
 /** The two ways to attach a notes file. They are separate because the pickers
  *  behave differently on an existing file - see annotations-sidecar. */
 export interface NotesConnector {
-    create(folder: RememberedFolder): void;
-    useExisting(folder: RememberedFolder): void;
+    create(folder: RememberedFolder): Promise<void>;
+    useExisting(folder: RememberedFolder): Promise<void>;
 }
 
 // Notes-file actions for a folder. Registered by annotations-sidecar.ts, absent
@@ -675,7 +675,7 @@ async function fillMenu(menu: HTMLElement, source: FolderSource, setOpen: (open:
             menu.appendChild(
                 menuAction(t("folderSources.useExistingNotes"), () => {
                     setOpen(false);
-                    connector.useExisting(folder);
+                    void connector.useExisting(folder);
                 }),
             );
         } else {
@@ -685,13 +685,13 @@ async function fillMenu(menu: HTMLElement, source: FolderSource, setOpen: (open:
             menu.appendChild(
                 menuAction(t("folderSources.createNotes"), () => {
                     setOpen(false);
-                    connector.create(folder);
+                    void connector.create(folder);
                 }),
             );
             menu.appendChild(
                 menuAction(t("folderSources.useExistingNotes"), () => {
                     setOpen(false);
-                    connector.useExisting(folder);
+                    void connector.useExisting(folder);
                 }),
             );
         }

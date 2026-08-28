@@ -68,14 +68,18 @@ async function evaluate(record: AnnotationRecord): Promise<void> {
         severity: "info",
         messageKey: "notesNudge.message",
         actionKey: "notesNudge.action",
-        onAction: () => void connectNotesFile(record.folderId, anchorKey),
+        onAction: () => void connectTripDataFile(record.folderId, anchorKey),
     });
 }
 
 /** The toast action: resolve (remembering the folder first when needed) and
  *  hand off to the same create flow the folder menu uses. Runs inside the
  *  click, so the save picker still has its user activation. */
-async function connectNotesFile(folderId: string, anchorKey: string | null): Promise<void> {
+export function canConnectTripDataFile(folderId: string, anchorKey: string | null): boolean {
+    return getNotesConnector() !== null && (folderId !== "" || hasLiveSource(anchorKey));
+}
+
+export async function connectTripDataFile(folderId: string, anchorKey: string | null): Promise<void> {
     const connector = getNotesConnector();
     if (!connector) return;
     const folder = folderId
@@ -85,6 +89,7 @@ async function connectNotesFile(folderId: string, anchorKey: string | null): Pro
         log.warn("notes nudge action found no folder to attach to");
         return;
     }
+    const hadSidecar = Boolean(folder.sidecarHandle);
     // Finish (or repeat) discovery before offering to CREATE a file. This is
     // the critical fresh-profile path: the notes file may already be sitting
     // in the folder while IndexedDB has never stored its handle. Awaiting the
@@ -95,6 +100,13 @@ async function connectNotesFile(folderId: string, anchorKey: string | null): Pro
         await notifyFolderOpened(fresh);
         fresh = (await getFolder(folder.id).catch(() => null)) ?? fresh;
     }
-    if (fresh.sidecarHandle) return;
-    connector.create(fresh);
+    if (fresh.sidecarHandle) {
+        // A handle that was already persisted may be stale, so this explicit
+        // action is its non-destructive reconnect path. A file attached by the
+        // discovery immediately above is already connected: opening another
+        // picker here would make one click ask the user for the same file twice.
+        if (hadSidecar) await connector.useExisting(fresh);
+        return;
+    }
+    await connector.create(fresh);
 }

@@ -98,11 +98,44 @@
     color: var(--fg-dim);
 }
 
-/* Where-the-data-lives line under the editor fields - informative, quiet. */
-.annotation-storage-hint {
+/* Where-the-data-lives line under the editor fields, with a persistent backup
+   entry when this folder does not have a trip-data file connected yet. */
+.annotation-storage {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--dc-space-1) var(--dc-space-3);
     margin: 0 0 var(--dc-space-3);
+}
+.annotation-storage-hint {
+    margin: 0;
     font-size: var(--dc-text-xs);
     color: var(--fg-mute);
+}
+.annotation-storage-action {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--accent);
+    cursor: pointer;
+    font: inherit;
+    font-size: var(--dc-text-xs);
+}
+.annotation-storage-action:hover {
+    color: var(--accent-hot);
+    text-decoration: underline;
+}
+.annotation-storage-action:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+.annotation-storage-action:disabled {
+    color: var(--fg-mute);
+    cursor: wait;
+}
+.annotation-storage-action[hidden] {
+    display: none;
 }
 
 .trip-meta-field input,

@@ -96,16 +96,31 @@ test.describe("folder sources, file-system picker", () => {
         await row.locator(".folder-source__menu").click();
         const menu = row.locator(".folder-source__popup");
         await expect(menu).toBeVisible();
-        // Attaching a notes file is an entry here, never an interrupting toast -
+        // Attaching a trip data file is an entry here, never an interrupting toast -
         // and both ways to do it are offered, because only one of the two
         // pickers can adopt a file that already holds notes.
-        await expect(menu).toContainText("Keep notes in a new file");
-        await expect(menu).toContainText("Use an existing notes file");
+        await expect(menu).toContainText("Keep trip data in a new file");
+        await expect(menu).toContainText("Use an existing trip data file");
 
         await menu.getByRole("button", { name: "Forget this folder" }).click();
         // Back to an offer, and the trips it produced are untouched.
         await expect(row.locator(".folder-source__remember")).toBeVisible();
         await expect(page.locator("li.trip:not(.unindexed-note)").first()).toBeVisible();
+    });
+
+    test("offers trip data backup where trip annotations are edited", async ({ page }) => {
+        await page.locator("#landing-cta").click();
+        const card = page.locator("li.trip:not(.unindexed-note)").first();
+        await expect(card).toBeVisible({ timeout: 30_000 });
+
+        // This entry is visible even before the separate Remember action: the
+        // backup flow can remember the live source as part of the same click.
+        await card.locator(".trip-edit").click();
+        const modal = page.locator("#trip-meta-modal");
+        await expect(modal).toBeVisible();
+        await expect(modal.locator("#trip-meta-storage-action")).toBeVisible();
+        await expect(modal.locator("#trip-meta-storage-action")).toHaveText("Back up trip data…");
+        await modal.locator("#trip-meta-cancel").click();
     });
 
     test("a second folder gets its own row", async ({ page }) => {

@@ -25,6 +25,7 @@
 // would be excluded from this machine's writes and the two profiles would
 // endlessly erase each other's notes from the file.
 
+import { t } from "../i18n/index.js";
 import type { I18nKey } from "../i18n/keys.js";
 import { createLogger } from "../log.js";
 import type { VendorFile } from "../parsers/types.js";
@@ -57,10 +58,12 @@ const log = createLogger("annotations-sidecar");
 // but that is a deliberate act on a Save-As dialog, not a slip.
 const SIDECAR_SUGGESTED_NAME = "notes.dashcamigo";
 const SIDECAR_EXTENSION = ".dashcamigo";
-const SIDECAR_FILE_TYPE: FilePickerAcceptType = {
-    description: "dashcamigo notes",
-    accept: { "application/json": [".dashcamigo"] },
-};
+function sidecarFileType(): FilePickerAcceptType {
+    return {
+        description: t("sidecar.fileDescription"),
+        accept: { "application/json": [".dashcamigo"] },
+    };
+}
 const WRITE_DEBOUNCE_MS = 1500;
 type SidecarDiscovery = "none" | "attached" | "blocked";
 
@@ -92,8 +95,8 @@ export function initAnnotationsSidecar(): void {
     // exists, so the row hides the entry everywhere else.
     if (typeof window.showSaveFilePicker === "function" && typeof window.showOpenFilePicker === "function") {
         registerNotesConnector({
-            create: (folder) => void createSidecarFile(folder),
-            useExisting: (folder) => void adoptSidecarFile(folder),
+            create: createSidecarFile,
+            useExisting: adoptSidecarFile,
         });
     }
     // A write still sitting in its debounce window at tab close would be
@@ -309,7 +312,7 @@ async function createSidecarFile(folder: RememberedFolder): Promise<void> {
             // confirms; picking elsewhere is allowed and works the same.
             startIn: current.handle,
             excludeAcceptAllOption: true,
-            types: [SIDECAR_FILE_TYPE],
+            types: [sidecarFileType()],
         });
     } catch (err) {
         if (!isPickerDismissal(err)) {
@@ -334,7 +337,7 @@ async function adoptSidecarFile(folder: RememberedFolder): Promise<void> {
             startIn: folder.handle,
             multiple: false,
             excludeAcceptAllOption: true,
-            types: [SIDECAR_FILE_TYPE],
+            types: [sidecarFileType()],
         });
     } catch (err) {
         if (!isPickerDismissal(err)) {

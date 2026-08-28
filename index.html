@@ -2176,7 +2176,11 @@
                 </label>
                 <!-- Where the annotation lands; swapped per open to the
                      notes-file variant when the folder has one connected. -->
-                <p class="annotation-storage-hint" id="trip-meta-storage-hint" data-i18n="annotations.storageHint">Saved in this browser on this device.</p>
+                <div class="annotation-storage">
+                    <p class="annotation-storage-hint" id="trip-meta-storage-hint" data-i18n="annotations.storageHint">Saved in this browser on this device.</p>
+                    <button id="trip-meta-storage-action" class="annotation-storage-action" type="button"
+                            data-i18n="annotations.storageAction" hidden>Back up trip data…</button>
+                </div>
                 <div class="export-modal-actions">
                     <button id="trip-meta-cancel" class="dc-btn dc-btn--ghost" type="button" data-i18n="tripMeta.cancel">Cancel</button>
                     <button id="trip-meta-save" class="dc-btn dc-btn--primary" type="button" data-i18n="tripMeta.save">Save</button>
@@ -2195,7 +2199,11 @@
                     <span data-i18n="markerModal.textLabel">Text</span>
                     <input id="marker-modal-text" type="text" maxlength="200" autocomplete="off">
                 </label>
-                <p class="annotation-storage-hint" id="marker-modal-storage-hint" data-i18n="annotations.storageHint">Saved in this browser on this device.</p>
+                <div class="annotation-storage">
+                    <p class="annotation-storage-hint" id="marker-modal-storage-hint" data-i18n="annotations.storageHint">Saved in this browser on this device.</p>
+                    <button id="marker-modal-storage-action" class="annotation-storage-action" type="button"
+                            data-i18n="annotations.storageAction" hidden>Back up trip data…</button>
+                </div>
                 <div class="export-modal-actions">
                     <button id="marker-modal-delete" class="dc-btn dc-btn--ghost marker-modal-delete" type="button" data-i18n="markerModal.delete">Delete</button>
                     <button id="marker-modal-cancel" class="dc-btn dc-btn--ghost" type="button" data-i18n="markerModal.cancel">Cancel</button>

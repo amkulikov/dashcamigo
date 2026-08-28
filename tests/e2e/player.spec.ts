@@ -301,6 +301,11 @@ test.describe("player", () => {
             expect(await surface.evaluate((element) => element.getAnimations().length)).toBe(0);
         };
 
+        const miniMarkerWidth = await miniMap
+            .locator(".car-marker__canvas")
+            .evaluate((element) => Number.parseFloat(getComputedStyle(element).width));
+        expect(miniMarkerWidth, "the default marker stays proportional to the mini-map").toBeCloseTo(26.4, 1);
+
         await page.locator("#player-view-menu").click();
         await expect(mode("mini")).toHaveAttribute("aria-checked", "true");
 
@@ -415,6 +420,21 @@ test.describe("player", () => {
             "data-marker-render-key",
             /^truck:/,
         );
+        expect(
+            await markerControl
+                .locator("button[data-marker-color]")
+                .evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))),
+            "quick colors follow common car colors before the brand default",
+        ).toEqual(["White", "Black", "Gray", "Silver", "Blue", "Red", "Green", "Orange"]);
+        const customColor = await boxOf(page, "#map-popover-marker-color");
+        const markerSizes = await boxOf(page, '[data-marker-control="map-popover"] .map-marker-control__size-segment');
+        const overlapWidth =
+            Math.min(customColor.x + customColor.width, markerSizes.x + markerSizes.width) -
+            Math.max(customColor.x, markerSizes.x);
+        const overlapHeight =
+            Math.min(customColor.y + customColor.height, markerSizes.y + markerSizes.height) -
+            Math.max(customColor.y, markerSizes.y);
+        expect(overlapWidth <= 0 || overlapHeight <= 0, "custom color and marker sizes do not overlap").toBe(true);
         await shot(page, "player-10-map-marker-popover");
         await expect(scaleSeg.locator('button[aria-pressed="true"]'), "default size preset is pressed").toHaveText(
             "100%",

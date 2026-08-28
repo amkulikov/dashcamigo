@@ -864,6 +864,6 @@ body.map-unavailable #player-map {
     height: var(--map-marker-size, 44px);
 }
 .mini-map .car-marker__canvas {
-    width: calc(var(--map-marker-size, 44px) * 0.84);
-    height: calc(var(--map-marker-size, 44px) * 0.84);
+    width: calc(var(--map-marker-size, 44px) * 0.6);
+    height: calc(var(--map-marker-size, 44px) * 0.6);
 }

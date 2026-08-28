@@ -5,14 +5,16 @@
 import { t } from "../i18n/index.js";
 import type { Trip } from "../trips.js";
 import { annotationStorageHintKey } from "./annotations-sidecar.js";
-import { setTripMeta, tripFolderId, tripMetaFor } from "./annotations.js";
+import { setTripMeta, tripAnchorFileIdentityKey, tripFolderId, tripMetaFor } from "./annotations.js";
 import { activateModal, deactivateModal, wireBackdropDismiss } from "./modal-helper.js";
+import { canConnectTripDataFile, connectTripDataFile } from "./notes-nudge.js";
 import { renderTrips } from "./sidebar.js";
 
 let modal: HTMLElement | null = null;
 let nameInput: HTMLInputElement | null = null;
 let noteInput: HTMLTextAreaElement | null = null;
 let storageHint: HTMLElement | null = null;
+let storageAction: HTMLButtonElement | null = null;
 // The Trip object, not an index: state.trips is rebuilt/reordered by
 // regrouping (a second folder dropped while the modal is open), and a stale
 // index would save the edit onto whichever trip now sits at that position.
@@ -24,10 +26,12 @@ export function initTripMetaModal(): void {
     nameInput = document.getElementById("trip-meta-name") as HTMLInputElement | null;
     noteInput = document.getElementById("trip-meta-note") as HTMLTextAreaElement | null;
     storageHint = document.getElementById("trip-meta-storage-hint");
+    storageAction = document.getElementById("trip-meta-storage-action") as HTMLButtonElement | null;
     if (!modal || !nameInput || !noteInput) return;
 
     document.getElementById("trip-meta-cancel")?.addEventListener("click", close);
     document.getElementById("trip-meta-save")?.addEventListener("click", save);
+    storageAction?.addEventListener("click", backUpTripData);
     wireBackdropDismiss(modal, close);
     // Escape/Tab live in modal-helper (activateModal); only Enter-to-save in
     // the single-line name field is ours. The textarea keeps Enter for
@@ -57,9 +61,30 @@ export function openTripMetaModal(trip: Trip): void {
 function syncStorageHint(trip: Trip): void {
     const hint = storageHint;
     if (!hint) return;
+    const folderId = tripFolderId(trip);
+    const anchorKey = tripAnchorFileIdentityKey(trip);
     hint.textContent = t("annotations.storageHint");
-    void annotationStorageHintKey(tripFolderId(trip)).then((key) => {
-        if (currentTrip === trip) hint.textContent = t(key);
+    if (storageAction) {
+        storageAction.disabled = false;
+        storageAction.hidden = true;
+    }
+    void annotationStorageHintKey(folderId).then((key) => {
+        if (currentTrip !== trip) return;
+        hint.textContent = t(key);
+        if (storageAction) {
+            storageAction.hidden =
+                key === "annotations.storageHintFile" || !canConnectTripDataFile(folderId, anchorKey);
+        }
+    });
+}
+
+function backUpTripData(): void {
+    const trip = currentTrip;
+    const action = storageAction;
+    if (!trip || !action) return;
+    action.disabled = true;
+    void connectTripDataFile(tripFolderId(trip), tripAnchorFileIdentityKey(trip)).finally(() => {
+        if (currentTrip === trip) syncStorageHint(trip);
     });
 }
 

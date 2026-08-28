@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
     annotationHook: null as ((record: AnnotationRecord) => void) | null,
     folder: null as RememberedFolder | null,
     create: vi.fn(),
+    useExisting: vi.fn(),
     getFolder: vi.fn(async () => mocks.folder),
     notify: vi.fn<(input: NotifyInput) => void>(),
     notifyFolderOpened: vi.fn<(folder: RememberedFolder) => Promise<void>>(),
@@ -19,7 +20,7 @@ vi.mock("./annotations.js", () => ({
     },
 }));
 vi.mock("./folder-sources.js", () => ({
-    getNotesConnector: () => ({ create: mocks.create, useExisting: vi.fn() }),
+    getNotesConnector: () => ({ create: mocks.create, useExisting: mocks.useExisting }),
     hasLiveSource: () => true,
     notifyFolderOpened: mocks.notifyFolderOpened,
     rememberLiveSource: vi.fn(),
@@ -84,5 +85,6 @@ describe("notes-file nudge", () => {
         finishDiscovery?.();
         await vi.waitFor(() => expect(mocks.getFolder).toHaveBeenCalledTimes(4));
         expect(mocks.create, "the discovered file is reused").not.toHaveBeenCalled();
+        expect(mocks.useExisting, "the discovered file is already connected").not.toHaveBeenCalled();
     });
 });

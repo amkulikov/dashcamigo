@@ -20,12 +20,14 @@ const SHAPE_LABEL_KEYS = {
 } as const satisfies Record<MapMarkerShape, I18nKey>;
 
 const COLOR_PRESETS: ReadonlyArray<{ color: string; labelKey: I18nKey }> = [
-    { color: "#ff9000", labelKey: "settings.map.marker.color.orange" },
-    { color: "#e5484d", labelKey: "settings.map.marker.color.red" },
-    { color: "#2f7ee6", labelKey: "settings.map.marker.color.blue" },
-    { color: "#30a46c", labelKey: "settings.map.marker.color.green" },
-    { color: "#8e4ec6", labelKey: "settings.map.marker.color.purple" },
+    { color: "#f4f4f2", labelKey: "settings.map.marker.color.white" },
+    { color: "#1c1d1f", labelKey: "settings.map.marker.color.black" },
     { color: "#737a76", labelKey: "settings.map.marker.color.gray" },
+    { color: "#b9bec4", labelKey: "settings.map.marker.color.silver" },
+    { color: "#2f7ee6", labelKey: "settings.map.marker.color.blue" },
+    { color: "#e5484d", labelKey: "settings.map.marker.color.red" },
+    { color: "#30a46c", labelKey: "settings.map.marker.color.green" },
+    { color: "#ff9000", labelKey: "settings.map.marker.color.orange" },
 ];
 
 const SIZE_LABEL_KEYS = {
