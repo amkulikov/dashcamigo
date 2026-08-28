@@ -111,8 +111,11 @@ export async function openMatroskaAdpcmAudio(file: File): Promise<AdpcmAudioRead
                         sampleRate,
                         timestamp: anchorSec + emittedFrames / sampleRate,
                     });
-                    await source.add(sample);
-                    sample.close();
+                    try {
+                        await source.add(sample);
+                    } finally {
+                        sample.close();
+                    }
                     if (!firstEmitted) {
                         firstEmitted = true;
                         onFirstEmit?.();

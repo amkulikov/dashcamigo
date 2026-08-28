@@ -54,8 +54,6 @@ const log = createLogger("persistent-folders");
 // actual open attempts. Session-only - reality is re-probed on every render.
 const availabilityById = new Map<string, FolderAvailability>();
 
-let chipsContainer: HTMLElement | null = null;
-let chipsList: HTMLElement | null = null;
 let pickerInFlight = false;
 
 /** Whether the FSA picker path should be used instead of <input webkitdirectory>. */
@@ -76,8 +74,6 @@ export async function initPersistentFolders(): Promise<void> {
     // enumerate + ingest). Registered, not imported - folder-sources is the
     // lower module.
     registerRememberedFolderOpener((folder) => void openRememberedFolder(folder));
-    chipsContainer = document.getElementById("recent-folders");
-    chipsList = document.getElementById("recent-folders-list");
     await refreshChips();
 }
 
@@ -254,14 +250,27 @@ async function adoptIfAlreadyRemembered(handle: FileSystemDirectoryHandle): Prom
  *  liveness probe per folder - the status dots recolor as answers arrive.
  *  Hides the block when nothing is remembered. */
 async function refreshChips(): Promise<void> {
-    if (!chipsContainer || !chipsList) return;
+    // Once ingest removes the landing page there is nowhere to render chips;
+    // avoid an IndexedDB read as well as retaining or touching detached nodes.
+    if (!document.getElementById("recent-folders") || !document.getElementById("recent-folders-list")) return;
+    const renderToken = ++chipsRenderToken;
     let folders: RememberedFolder[];
     try {
         folders = await listFolders();
     } catch {
-        chipsContainer.hidden = true;
+        if (renderToken === chipsRenderToken) {
+            const container = document.getElementById("recent-folders");
+            if (container) container.hidden = true;
+        }
         return;
     }
+    if (renderToken !== chipsRenderToken) return;
+    // The landing page is removed after the first successful ingest. Resolve
+    // its nodes only after the asynchronous DB read so this module never keeps
+    // or writes through detached DOM references.
+    const chipsContainer = document.getElementById("recent-folders");
+    const chipsList = document.getElementById("recent-folders-list");
+    if (!chipsContainer || !chipsList) return;
     chipsContainer.hidden = folders.length === 0;
     chipsList.replaceChildren();
     const labels = disambiguatedLabels(folders);
@@ -271,8 +280,7 @@ async function refreshChips(): Promise<void> {
         chipById.set(folder.id, chip);
         chipsList.appendChild(chip);
     }
-    syncForgetAllButton(folders.length > 1);
-    const renderToken = ++chipsRenderToken;
+    syncForgetAllButton(chipsContainer, folders.length > 1);
     for (const folder of folders) {
         void probeFolderAvailability(folder.handle).then((availability) => {
             // A newer render has its own probes in flight - a slow answer
@@ -344,10 +352,8 @@ function applyAvailability(chip: HTMLElement, availability: FolderAvailability):
     else chip.removeAttribute("title");
 }
 
-// Single instance living in the card header, attached/detached per render.
-let forgetAllButton: HTMLElement | null = null;
-
-function syncForgetAllButton(shouldShow: boolean): void {
+function syncForgetAllButton(container: HTMLElement, shouldShow: boolean): void {
+    let forgetAllButton = container.querySelector<HTMLElement>(".recent-folders-forget-all");
     if (!shouldShow) {
         forgetAllButton?.remove();
         return;
@@ -370,5 +376,5 @@ function syncForgetAllButton(shouldShow: boolean): void {
         });
         forgetAllButton = forgetAll;
     }
-    chipsContainer?.querySelector(".recent-folders-head")?.appendChild(forgetAllButton);
+    container.querySelector(".recent-folders-head")?.appendChild(forgetAllButton);
 }

@@ -2009,6 +2009,26 @@ describe("rederiveStartUtcForCandidates: TZ-sample dedup keyed by File identity"
     });
 });
 
+describe("rederiveStartUtcForCandidates: filename-time memoization", () => {
+    it("parses each File+relativePath once and caches null results", () => {
+        const shared = new File([new Uint8Array(16)], "clip.mp4", { lastModified: 1_700_000_000_000 });
+        const a = makeCandidate({ name: "clip.mp4", relativePath: "front/clip.mp4", startUtc: 0 });
+        const b = makeCandidate({ name: "clip.mp4", relativePath: "front/clip.mp4", startUtc: 0 });
+        const c = makeCandidate({ name: "clip.mp4", relativePath: "backup/clip.mp4", startUtc: 0 });
+        a.file = shared;
+        b.file = shared;
+        c.file = shared;
+        const calls: string[] = [];
+
+        rederiveStartUtcForCandidates([a, b, c], (file) => {
+            calls.push(file.relativePath);
+            return null;
+        });
+
+        expect(calls).toEqual(["front/clip.mp4", "backup/clip.mp4"]);
+    });
+});
+
 // ===== display clock (camera clock when known) =====
 //
 // These run under the TZ=UTC pin (package.json test script), so the browser

@@ -356,7 +356,7 @@ function applyChartXRange(min: number, max: number, fullView: boolean): void {
 
 export function applyChartLayout(): void {
     const noGps = !state.hasTrack;
-    dom.playerWrapEl.classList.toggle("no-gps", noGps);
+    dom.playerWrap.classList.toggle("no-gps", noGps);
     // Chart.js must recalculate canvas size after area height changes.
     requestAnimationFrame(() => {
         if (state.chart) state.chart.resize();
@@ -1646,8 +1646,8 @@ function redrawInferredStrip(): void {
  *  shared timelineSecToFrac so it stays aligned with the progress bar + range
  *  overlay AND keeps working when the chart canvas is hidden (no plot area for
  *  getPixelForValue). Null before a trip is active. */
-function relSecToPlayerChartCssX(relSec: number): number | null {
-    const frac = timelineSecToFrac(relSec);
+function relSecToPlayerChartCssX(relSec: number, view: TimelineView | null = getTimelineView()): number | null {
+    const frac = view ? timelineSecToFracInView(relSec, view) : null;
     if (frac == null || !dom.playerChartEl) return null;
     return frac * dom.playerChartEl.clientWidth;
 }
@@ -1655,14 +1655,14 @@ function relSecToPlayerChartCssX(relSec: number): number | null {
 /** Updates the orange playhead overlay - one DOM element spanning chart
  *  canvas + ruler + strip. Called from player.ts on timeupdate. Cheap:
  *  CSS left only, no canvas redraw. */
-export function setPlayerCursorRelSec(relSec: number | null): void {
+export function setPlayerCursorRelSec(relSec: number | null, view: TimelineView | null = getTimelineView()): void {
     const el = dom.playerChartPlayhead;
     if (!el) return;
     if (relSec == null) {
         el.hidden = true;
         return;
     }
-    const x = relSecToPlayerChartCssX(relSec);
+    const x = relSecToPlayerChartCssX(relSec, view);
     if (x == null) {
         el.hidden = true;
         return;
@@ -1725,12 +1725,14 @@ function enforceEdgeGutterAxisWidth(axis: { width: number }): void {
  *
  * Returns null before a trip is active.
  */
-export function getTimelineView(): {
+export interface TimelineView {
     startSec: number;
     endSec: number;
     leftFrac: number;
     rightFrac: number;
-} | null {
+}
+
+export function getTimelineView(): TimelineView | null {
     if (!state.chart) return null;
     const trip = activeTrip();
     // Footage-time axis: the timeline spans the concatenated footage, pauses
@@ -1759,25 +1761,20 @@ export function getTimelineView(): {
     return { startSec, endSec, leftFrac: gutterFrac, rightFrac: gutterFrac };
 }
 
-/**
- * Maps a trip-relative seconds value to a fraction [0,1] of the timeline host
- * width, gutter- and window-aware. THE single conversion shared by the
- * playhead, the always-on progress bar and the export range overlay - each
- * just multiplies by its own element width - so they line up across every
- * chart-visibility / zoom combination. Out-of-window values clamp to the
- * nearest edge (same as the progress thumb). Null before a trip is active.
- */
-export function timelineSecToFrac(sec: number): number | null {
-    const v = getTimelineView();
-    if (!v) return null;
+/** Maps trip-relative seconds to a fraction [0,1] of the timeline host width
+ *  using a captured geometry snapshot. Shared by the playhead, progress bar,
+ *  markers and export range so each update reads mutable chart state once.
+ *  Out-of-window values clamp to the nearest edge. */
+export function timelineSecToFracInView(sec: number, view: TimelineView): number {
+    const v = view;
     const span = v.endSec - v.startSec;
     const posFrac = span > 0 ? Math.max(0, Math.min(1, (sec - v.startSec) / span)) : 0;
     return v.leftFrac + posFrac * (1 - v.leftFrac - v.rightFrac);
 }
 
-/** Inverse of timelineSecToFrac: a fraction [0,1] of the host width back to
- *  trip-seconds, clamped to the visible window. Used for click/drag seek and
- *  range-tab dragging. Null before a trip is active. */
+/** Inverse mapping: a fraction [0,1] of the host width back to trip-seconds,
+ *  clamped to the visible window. Used for click/drag seek and range-tab
+ *  dragging. Null before a trip is active. */
 export function timelineFracToSec(frac: number): number | null {
     const v = getTimelineView();
     if (!v) return null;

@@ -52,7 +52,7 @@ export function showIngestOverlay(): void {
  * ingest re-points it at the controller via showIngestOverlay.
  */
 export function beginPreIngestReading(): boolean {
-    if (state.ingestInProgress) return false;
+    if (state.ingestController !== null) return false;
     preIngestOwners++;
     dom.ingestOverlay.hidden = false;
     dom.ingestOverlayCancel.disabled = false;

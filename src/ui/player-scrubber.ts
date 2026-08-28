@@ -10,7 +10,13 @@
 
 import { t } from "../i18n/index.js";
 import { contentToFrame, pickFrameChannel } from "../trips.js";
-import { getTimelineView, setPlayerCursorRelSec, timelineFracToSec, timelineSecToFrac } from "./chart.js";
+import {
+    getTimelineView,
+    setPlayerCursorRelSec,
+    timelineFracToSec,
+    timelineSecToFracInView,
+    type TimelineView,
+} from "./chart.js";
 import { dom } from "./dom.js";
 import { formatTime } from "./format.js";
 import { extractFrameAt } from "./frame-extract.js";
@@ -46,17 +52,18 @@ export function updatePlayerProgressUi(): void {
     if (!state.active) {
         dom.playerBar.current.textContent = "0:00";
         dom.playerBar.total.textContent = "0:00";
-        setPlayerCursorRelSec(null);
-        updateMiniProgress(null);
+        setPlayerCursorRelSec(null, null);
+        updateMiniProgress(null, null);
         return;
     }
     const cur = getTripCurrentTimeFn();
+    const view = getTimelineView();
     dom.playerBar.current.textContent = formatTime(cur);
     // Single playhead DOM overlay spans chart canvas + ruler + strip; one
     // visual element, no risk of misalignment between chart-drawn line and
     // strip DOM line.
-    setPlayerCursorRelSec(cur);
-    updateMiniProgress(cur);
+    setPlayerCursorRelSec(cur, view);
+    updateMiniProgress(cur, view);
 }
 
 /**
@@ -70,10 +77,9 @@ export function updatePlayerProgressUi(): void {
  * (the single position indicator) and the two drifted on each timeupdate. The
  * thumb sits exactly on the playhead via the shared timelineSecToFrac mapping.
  */
-function updateMiniProgress(curSec: number | null): void {
+function updateMiniProgress(curSec: number | null, view: TimelineView | null = getTimelineView()): void {
     if (!dom.miniProgress) return;
-    const view = getTimelineView();
-    const curFrac = curSec === null ? null : timelineSecToFrac(curSec);
+    const curFrac = curSec === null || !view ? null : timelineSecToFracInView(curSec, view);
     if (!view || curFrac === null) {
         dom.miniProgressThumb.style.left = "0";
         dom.miniProgress.setAttribute("aria-valuenow", "0");

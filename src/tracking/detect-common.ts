@@ -88,8 +88,10 @@ export function letterboxInto(
     fill: string,
     centered: boolean,
 ): LetterboxMap {
-    scratch.width = size;
-    scratch.height = size;
+    // Assigning either dimension resets the backing store and the 2D context.
+    // Detector inputs have a fixed shape, so avoid doing that for every tile.
+    if (scratch.width !== size) scratch.width = size;
+    if (scratch.height !== size) scratch.height = size;
     const ctx = scratch.getContext("2d", { alpha: false });
     if (!ctx) throw new Error("detect: letterbox canvas ctx unavailable");
     ctx.fillStyle = fill;
@@ -101,6 +103,18 @@ export function letterboxInto(
     const dy = centered ? Math.trunc((size - dh) / 2) : 0;
     ctx.drawImage(source, sx, sy, sw, sh, dx, dy, dw, dh);
     return { scale, dx, dy };
+}
+
+/** Packs RGBA pixels into normalized RGB CHW planes. `target` must hold
+ *  exactly three floats per source pixel. Kept here so both YOLO detectors use
+ *  the same allocation-free hot-path implementation. */
+export function packRgbPlanarNormalized(rgba: Uint8ClampedArray, target: Float32Array): void {
+    const n = rgba.length / 4;
+    for (let i = 0; i < n; i++) {
+        target[i] = rgba[i * 4]! / 255;
+        target[n + i] = rgba[i * 4 + 1]! / 255;
+        target[2 * n + i] = rgba[i * 4 + 2]! / 255;
+    }
 }
 
 /** Intersection-over-union of two frame-pixel boxes. */

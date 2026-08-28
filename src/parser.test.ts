@@ -1013,6 +1013,28 @@ describe("mergeIntoGpsLog: incremental merge equals full rebuild", () => {
         const a102 = log2.byFilename.get("a.mp4")!.find((r) => r.unixSeconds === 102)!;
         expect(a102.accelYg).toBe(0.9); // stronger accel from batch 2 kept
     });
+
+    it("reuses record indexes for an empty batch while preserving labels and skipped diagnostics", () => {
+        const existing = mergeIntoGpsLog(null, makeBatches()[0]!);
+        const skipped = line("clock-hint-only");
+        const merged = mergeIntoGpsLog(existing, {
+            records: [],
+            appliedExtractors: ["freegps", "clock-hint"],
+            skipped: [skipped],
+        });
+
+        expect(merged).not.toBe(existing);
+        expect(merged.records).toBe(existing.records);
+        expect(merged.byFilename).toBe(existing.byFilename);
+        expect(merged.byVideoKey).toBe(existing.byVideoKey);
+        expect(merged.appliedExtractors).toEqual(["freegps", "clock-hint"]);
+        expect(merged.skipped).toEqual([...existing.skipped, skipped]);
+    });
+
+    it("returns the existing log itself for a completely empty batch", () => {
+        const existing = mergeIntoGpsLog(null, makeBatches()[0]!);
+        expect(mergeIntoGpsLog(existing, { records: [], appliedExtractors: [], skipped: [] })).toBe(existing);
+    });
 });
 
 describe("rebindOrphanLogRecords (70mai ghost names in GPSData)", () => {

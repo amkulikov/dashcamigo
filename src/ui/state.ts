@@ -120,7 +120,7 @@ export interface AppState {
     // the session instead of being mistaken for a repeated drop.
     addedKeys: Set<string>;
     trips: Trip[];
-    unindexed: File[];
+    unindexed: Set<File>;
     expandedTrips: Set<number>;
     // Active frame in the active trip. Channel + layout choice live in
     // `composition` because they survive frame changes and apply both to
@@ -159,7 +159,6 @@ export interface AppState {
     miniMapData: MiniMapData | null;
     mapExpanded: boolean;
     hasTrack: boolean;
-    tripSourceId: string;
     hoverPopup: maplibregl.Popup | null;
     chart: Chart | null;
     chartTooltipEl: HTMLDivElement | null;
@@ -179,12 +178,11 @@ export interface AppState {
     // details in src/ui/player.ts (computeZoomGeometry / clampZoomOffset).
     videoZoom: { scale: number; offsetX: number; offsetY: number };
     followMode: FollowMode;
-    // Ingest lifecycle: true while folder parsing is in progress. AbortController
-    // cancels the current ingest on Cancel click - its signal is passed to
+    // A non-null AbortController marks an active ingest and cancels it on a
+    // Cancel click. Its signal is passed to
     // indexAllMp4Files and dispatchParseVideoEmbeddedGps, which exit on the next
     // worker iteration. The queue holds additional drops that arrived while the
     // current ingest is active; they run sequentially.
-    ingestInProgress: boolean;
     ingestController: AbortController | null;
     // Each entry keeps the batch's origin folder next to its files - a drop
     // that waited here must still be attributable to the folder it came from.
@@ -435,7 +433,7 @@ export const state: AppState = {
     gpsLog: null,
     addedKeys: new Set(),
     trips: [],
-    unindexed: [],
+    unindexed: new Set(),
     expandedTrips: new Set(),
     active: null,
     composition: defaultCompositionForChannels(["front"]),
@@ -457,7 +455,6 @@ export const state: AppState = {
     miniMapData: null,
     mapExpanded: false,
     hasTrack: false,
-    tripSourceId: "trip-line",
     hoverPopup: null,
     chart: null,
     chartTooltipEl: null,
@@ -470,7 +467,6 @@ export const state: AppState = {
     // shown (see ensureChaseEngaged in map.ts), since the hot follow loop only
     // maintains center/bearing/zoom, not pitch.
     followMode: "chase",
-    ingestInProgress: false,
     ingestController: null,
     ingestQueue: [],
     lastIngestFiles: null,

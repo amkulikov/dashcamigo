@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { iouOf, type RawDetection, suppressOverlaps, tileGridSize, tileRects } from "./detect-common.js";
+import {
+    iouOf,
+    packRgbPlanarNormalized,
+    type RawDetection,
+    suppressOverlaps,
+    tileGridSize,
+    tileRects,
+} from "./detect-common.js";
 
 function det(x: number, y: number, w: number, h: number, score: number): RawDetection {
     return { x, y, w, h, score };
@@ -58,5 +65,13 @@ describe("suppressOverlaps", () => {
         const a = det(10, 10, 20, 20, 1);
         expect(iouOf(a, a)).toBe(1);
         expect(iouOf(a, det(100, 100, 20, 20, 1))).toBe(0);
+    });
+});
+
+describe("packRgbPlanarNormalized", () => {
+    it("packs interleaved RGBA pixels into normalized RGB planes", () => {
+        const target = new Float32Array(6);
+        packRgbPlanarNormalized(new Uint8ClampedArray([255, 128, 0, 7, 64, 32, 16, 9]), target);
+        expect(target).toEqual(new Float32Array([1, 64 / 255, 128 / 255, 32 / 255, 0, 16 / 255]));
     });
 });

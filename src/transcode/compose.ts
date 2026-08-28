@@ -99,8 +99,8 @@ export function fillBlurredCover(
         dsH = BLUR_DOWNSCALE_MAX;
         dsW = Math.max(2, Math.round(BLUR_DOWNSCALE_MAX * ratio));
     }
-    helper.smallCanvas.width = dsW;
-    helper.smallCanvas.height = dsH;
+    if (helper.smallCanvas.width !== dsW) helper.smallCanvas.width = dsW;
+    if (helper.smallCanvas.height !== dsH) helper.smallCanvas.height = dsH;
     drawBlurSource(helper.smallCtx, source, 0, 0, sourceW, sourceH, 0, 0, dsW, dsH);
     // 1b. Black out privacy regions BEFORE the blur: the backdrop is a copy of
     // the whole frame, so without this the region content ships in the bars -
@@ -120,8 +120,12 @@ export function fillBlurredCover(
     }
     // 2. Blur via ctx.filter onto a separate canvas (filter applies to the
     //    draw operation - cannot be applied in-place).
-    helper.blurCanvas.width = dsW;
-    helper.blurCanvas.height = dsH;
+    if (helper.blurCanvas.width !== dsW) helper.blurCanvas.width = dsW;
+    if (helper.blurCanvas.height !== dsH) helper.blurCanvas.height = dsH;
+    // Resizing used to clear this backing store every frame. Keep that pixel
+    // invariant when dimensions are unchanged so filtered transparent edges
+    // cannot retain data from the previous source frame.
+    helper.blurCtx.clearRect(0, 0, dsW, dsH);
     helper.blurCtx.filter = `blur(${BLUR_RADIUS_PX}px)`;
     helper.blurCtx.drawImage(helper.smallCanvas, 0, 0);
     helper.blurCtx.filter = "none";
@@ -414,8 +418,8 @@ export function paintRegionBlur(
         cols = Math.max(2, Math.round(destRect.w / SOFT_BLUR_DOWNSCALE));
         rows = Math.max(2, Math.round(destRect.h / SOFT_BLUR_DOWNSCALE));
     }
-    scratchCanvas.width = cols;
-    scratchCanvas.height = rows;
+    if (scratchCanvas.width !== cols) scratchCanvas.width = cols;
+    if (scratchCanvas.height !== rows) scratchCanvas.height = rows;
     // Downscale with smoothing ON: each scratch pixel box-averages its block.
     scratchCtx.imageSmoothingEnabled = true;
     scratchCtx.imageSmoothingQuality = "high";

@@ -94,7 +94,7 @@ export async function ingestFiles(vfiles: VendorFile[], origin: IngestOrigin | n
     // received when the user supplied it, not become part of the later batch.
     vfiles = scopeIngestFiles(vfiles, origin);
 
-    if (state.ingestInProgress) {
+    if (state.ingestController !== null) {
         // Queue the raw (unfiltered) list - it is filtered when this wrapper
         // re-runs on it at dequeue, so no junk slips through.
         state.ingestQueue.push({ files: vfiles, origin });
@@ -102,8 +102,8 @@ export async function ingestFiles(vfiles: VendorFile[], origin: IngestOrigin | n
         return;
     }
 
-    state.ingestInProgress = true;
-    state.ingestController = new AbortController();
+    const controller = new AbortController();
+    state.ingestController = controller;
     showIngestOverlay();
     setIngestStage(t("ingestOverlay.stage.classifying"));
     showIngestProgress();
@@ -112,7 +112,7 @@ export async function ingestFiles(vfiles: VendorFile[], origin: IngestOrigin | n
     let cancelled = false;
     let failed = false;
     try {
-        await ingestFilesInternal(vfiles, state.ingestController.signal, origin);
+        await ingestFilesInternal(vfiles, controller.signal, origin);
     } catch (err) {
         // AbortError means the user clicked Cancel; partial state stays in the sidebar.
         if (err instanceof DOMException && err.name === "AbortError") {
@@ -133,7 +133,6 @@ export async function ingestFiles(vfiles: VendorFile[], origin: IngestOrigin | n
         }
     } finally {
         state.ingestController = null;
-        state.ingestInProgress = false;
         hideIngestOverlay();
         hideIngestProgress();
         // An interrupted ingest may have carried pending trips from an earlier
@@ -141,7 +140,7 @@ export async function ingestFiles(vfiles: VendorFile[], origin: IngestOrigin | n
         if (cancelled || failed) resumeProgressiveIngest();
     }
 
-    // Start the next queued item after the current ingest fully finishes (ingestInProgress = false above,
+    // Start the next queued item after the current ingest fully finishes (the controller is null above,
     // otherwise the wrapper would push it back into the queue). Tail call - stack does not grow.
     const next = state.ingestQueue.shift();
     if (next) {
@@ -225,7 +224,7 @@ async function ingestFilesInternal(
 
     // Read failures belong to this batch; a later clean drop must not inherit
     // an earlier batch's recovery note.
-    state.unindexed = [];
+    state.unindexed = new Set();
 
     // Per-ingest stage timings for the final "ingest done" log. Each heavy stage is wrapped via mark().
     // Rounded to 1 ms - sub-millisecond precision is noise here. Same mark() also calls markStage()

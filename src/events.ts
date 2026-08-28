@@ -151,7 +151,6 @@ export function detectEvents(records: GpsRecord[] | null | undefined, tripStartU
 
     const events: TripEvent[] = [];
     detectBrakes(records, tripStartUtc, threshold, events);
-    events.sort((a, b) => a.unixSeconds - b.unixSeconds);
     return events;
 }
 

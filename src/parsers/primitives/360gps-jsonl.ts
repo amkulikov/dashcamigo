@@ -322,5 +322,3 @@ function findVideoSlot(slots: readonly VideoSlot[], timestamp: number): VideoSlo
 function isNoFixSentinel(row: SourceRow): boolean {
     return row.lat === 99 && row.lon === 999 && row.speedKnots === 99;
 }
-
-export const _internal = { parseLog, parseJsonRow, buildVideoSlots, videoNamesForLog, RECORD_INTERVAL_SEC };

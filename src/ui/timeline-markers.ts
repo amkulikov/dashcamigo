@@ -11,7 +11,7 @@
 import { t } from "../i18n/index.js";
 import { contentToWallUtc, wallToContentSec } from "../trips.js";
 import { addMarker, markersForTrip } from "./annotations.js";
-import { getTimelineView, timelineSecToFrac } from "./chart.js";
+import { getTimelineView, timelineSecToFracInView } from "./chart.js";
 import { dom } from "./dom.js";
 import { syncMarkerListButton } from "./marker-list-modal.js";
 import { openMarkerModal } from "./marker-modal.js";
@@ -68,8 +68,7 @@ export function refreshTimelineMarkers(): void {
         for (const marker of markers) {
             const contentSec = wallToContentSec(trip.timeline, marker.utc / 1000);
             if (contentSec < view.startSec || contentSec > view.endSec) continue;
-            const frac = timelineSecToFrac(contentSec);
-            if (frac == null) continue;
+            const frac = timelineSecToFracInView(contentSec, view);
             visible.push({ id: marker.id, text: marker.text, contentSec, frac });
         }
     }

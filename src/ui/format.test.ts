@@ -4,13 +4,24 @@ import { describe, it, expect } from "vitest";
 import {
     clipBasename,
     dateBucketLabel,
+    eventLabel,
     formatBytes,
+    formatEventSeverity,
     formatFileMeta,
     formatRateBytes,
     formatTripTitle,
 } from "./format.js";
 import { t } from "../i18n/index.js";
 import { buildTripTimeline, type Trip, type TripFrame, type VideoCandidate } from "../trips.js";
+
+describe("event formatting", () => {
+    it("formats the only EventKind without unreachable fallbacks", () => {
+        expect(eventLabel("brake")).toBe(t("event.brake.label"));
+        expect(
+            formatEventSeverity({ kind: "brake", unixSeconds: 100, relSec: 0, severity: 0.42, recordIndex: 0 }),
+        ).toBe("0.42 g");
+    });
+});
 
 /**
  * Minimal fake Trip - clipBasename needs startUtc and a timeline. A single

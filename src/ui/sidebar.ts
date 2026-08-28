@@ -153,10 +153,10 @@ export function renderTrips(): void {
         dom.list.appendChild(buildTripCard(trip, tripIdx));
     });
 
-    if (state.unindexed.length > 0) {
+    if (state.unindexed.size > 0) {
         const note = document.createElement("li");
         note.className = "trip unindexed-note";
-        note.innerHTML = `<div class="trip-header"><div class="trip-title">${t("sidebar.unindexed.title")}</div><div class="trip-meta">${t("sidebar.unindexed.note", { n: state.unindexed.length })}</div></div>`;
+        note.innerHTML = `<div class="trip-header"><div class="trip-title">${t("sidebar.unindexed.title")}</div><div class="trip-meta">${t("sidebar.unindexed.note", { n: state.unindexed.size })}</div></div>`;
         dom.list.appendChild(note);
     }
 

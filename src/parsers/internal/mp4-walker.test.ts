@@ -11,7 +11,6 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
     findMoovInFile,
-    findPrimaryVideoSampleFormat,
     fourCCToVideoCodec,
     hevcCodecStringFromHvcc,
     iterBoxes,
@@ -21,7 +20,11 @@ import {
     readTkhdRotation,
     readHandlerType,
     readChunkByteRanges,
+    readFirstSampleEntry,
+    readSampleDurationsInTicks,
+    readSampleStartsInTicks,
     readSoundSampleParams,
+    readVideoFrameRate,
     findBox,
     type Box,
     type SampleEntry,
@@ -368,6 +371,31 @@ function u32be(...ns: number[]): Uint8Array {
     });
     return out;
 }
+
+function trakWithSampleTable(...tableBoxes: Uint8Array[]): { dv: DataView; trak: Box } {
+    const trakBytes = box("trak", box("mdia", box("minf", box("stbl", ...tableBoxes))));
+    return {
+        dv: new DataView(trakBytes.buffer, trakBytes.byteOffset, trakBytes.byteLength),
+        trak: { type: "trak", start: 0, end: trakBytes.length, payloadStart: 8 },
+    };
+}
+
+function trakWithTiming(
+    timescale: number,
+    ...entries: Array<[sampleCount: number, sampleDelta: number]>
+): {
+    dv: DataView;
+    trak: Box;
+} {
+    const mdhd = box("mdhd", u32be(0, 0, 0, timescale, 0));
+    const stts = box("stts", u32be(0, entries.length, ...entries.flat()));
+    const trakBytes = box("trak", box("mdia", mdhd, box("minf", box("stbl", stts))));
+    return {
+        dv: new DataView(trakBytes.buffer, trakBytes.byteOffset, trakBytes.byteLength),
+        trak: { type: "trak", start: 0, end: trakBytes.length, payloadStart: 8 },
+    };
+}
+
 function le(spec: [number, number][]): Uint8Array {
     const total = spec.reduce((a, [, w]) => a + w, 0);
     const out = new Uint8Array(total);
@@ -484,17 +512,65 @@ describe("readChunkByteRanges", () => {
     });
 });
 
-describe("findHvccInTrak / findPrimaryVideoSampleFormat", () => {
-    it("returns null when no hvcC present (AVC public fixture)", async () => {
-        const buf = readFileSync(resolve(REPO_ROOT, "tests/testdata/dashcam-viewer-corpus/MOV_0581.mp4"));
-        const file = new File([buf], "test.mp4");
-        const found = await findMoovInFile(file);
-        const dv = new DataView(found!.bytes.buffer, found!.bytes.byteOffset, found!.bytes.byteLength);
-        // findPrimaryVideoSampleFormat returns the FourCC; AVC fixture should
-        // not be hvc1/hev1 → findHvccInTrak returns null on that trak.
-        const fourcc = findPrimaryVideoSampleFormat(dv);
-        expect(fourcc).not.toBeNull();
-        expect(fourcc).not.toMatch(/^(hvc1|hev1)$/);
+describe("readFirstSampleEntry", () => {
+    it("reads a fixed-size first sample without materialising the complete table", () => {
+        const { dv, trak } = buildSounTrak();
+        expect(readFirstSampleEntry(dv, trak)).toEqual({ offset: 1000, size: 1, index: 1 });
+    });
+
+    it("skips empty leading chunks and reads a variable size through co64", () => {
+        const co64 = box("co64", u32be(0, 2, 0, 1000, 0, 2000));
+        const stsc = box("stsc", u32be(0, 2, 1, 0, 1, 2, 2, 1));
+        const stsz = box("stsz", u32be(0, 0, 2, 7, 9));
+        const { dv, trak } = trakWithSampleTable(co64, stsc, stsz);
+        expect(readFirstSampleEntry(dv, trak)).toEqual({ offset: 2000, size: 7, index: 1 });
+    });
+
+    it("returns null instead of throwing on a truncated table header", () => {
+        const stco = box("stco", u32be(0));
+        const stsc = box("stsc", u32be(0, 1, 1, 1, 1));
+        const stsz = box("stsz", u32be(0, 1, 1));
+        const { dv, trak } = trakWithSampleTable(stco, stsc, stsz);
+        expect(() => readFirstSampleEntry(dv, trak)).not.toThrow();
+        expect(readFirstSampleEntry(dv, trak)).toBeNull();
+    });
+});
+
+describe("stts readers", () => {
+    it("expands starts/durations but summarizes VFR directly for frame rate", () => {
+        const { dv, trak } = trakWithTiming(30_000, [2, 1000], [1, 2000]);
+        expect(readSampleStartsInTicks(dv, trak)).toEqual([0, 1000, 2000]);
+        expect(readSampleDurationsInTicks(dv, trak)).toEqual([1000, 1000, 2000]);
+        expect(readVideoFrameRate(dv, trak)).toBeCloseTo(22.5, 9);
+    });
+
+    it("rejects a corrupt oversized sample count before allocating", () => {
+        const { dv, trak } = trakWithTiming(30_000, [10_000_001, 1000]);
+        expect(readSampleStartsInTicks(dv, trak)).toBeNull();
+        expect(readSampleDurationsInTicks(dv, trak)).toBeNull();
+        expect(readVideoFrameRate(dv, trak)).toBeNull();
+    });
+
+    it("returns null instead of throwing on a truncated stts header", () => {
+        const mdhd = box("mdhd", u32be(0, 0, 0, 30_000, 0));
+        const stts = box("stts", u32be(0));
+        const trakBytes = box("trak", box("mdia", mdhd, box("minf", box("stbl", stts))));
+        const dv = new DataView(trakBytes.buffer, trakBytes.byteOffset, trakBytes.byteLength);
+        const trak = { type: "trak", start: 0, end: trakBytes.length, payloadStart: 8 };
+        expect(readSampleStartsInTicks(dv, trak)).toBeNull();
+        expect(readSampleDurationsInTicks(dv, trak)).toBeNull();
+        expect(readVideoFrameRate(dv, trak)).toBeNull();
+    });
+
+    it("rejects a zero-tick duration summary", () => {
+        const { dv, trak } = trakWithTiming(30_000, [2, 0]);
+        expect(readSampleDurationsInTicks(dv, trak)).toEqual([0, 0]);
+        expect(readVideoFrameRate(dv, trak)).toBeNull();
+    });
+
+    it("rejects an FPS summary whose total tick count is not a safe integer", () => {
+        const { dv, trak } = trakWithTiming(30_000, [10_000_000, 0xffffffff]);
+        expect(readVideoFrameRate(dv, trak)).toBeNull();
     });
 });
 

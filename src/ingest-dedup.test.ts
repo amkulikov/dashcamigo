@@ -230,6 +230,67 @@ describe("dropDuplicateFiles", () => {
         }
     });
 
+    it("reads each colliding File head at most once across pairwise comparisons", async () => {
+        const incoming = [
+            vf("a/X.MP4", makeContent(LARGE_SIZE, 1)),
+            vf("b/X.MP4", makeContent(LARGE_SIZE, 2)),
+            vf("c/X.MP4", makeContent(LARGE_SIZE, 3)),
+        ];
+        const calls = new Map<File, number>();
+        const originalSlice = File.prototype.slice;
+        const sliceSpy = vi.spyOn(File.prototype, "slice").mockImplementation(function (
+            this: File,
+            start?: number,
+            end?: number,
+            contentType?: string,
+        ) {
+            calls.set(this, (calls.get(this) ?? 0) + 1);
+            return originalSlice.call(this, start, end, contentType);
+        });
+        try {
+            const { kept, dropped } = await dropDuplicateFiles(incoming, []);
+            expect(kept).toEqual(incoming);
+            expect(dropped).toEqual([]);
+            for (const item of incoming) expect(calls.get(item.file)).toBe(1);
+        } finally {
+            sliceSpy.mockRestore();
+        }
+    });
+
+    it("evicts a rejected probe promise so a later pair retries the File", async () => {
+        const content = makeContent(LARGE_SIZE, 7);
+        const incoming = [vf("a/X.MP4", content), vf("b/X.MP4", content), vf("c/X.MP4", content)];
+        const first = incoming[0]!.file;
+        const originalSlice = File.prototype.slice;
+        let firstHeadCalls = 0;
+        const sliceSpy = vi.spyOn(File.prototype, "slice").mockImplementation(function (
+            this: File,
+            start?: number,
+            end?: number,
+            contentType?: string,
+        ) {
+            if (this === first && start === 0) {
+                firstHeadCalls++;
+                if (firstHeadCalls === 1) {
+                    return {
+                        arrayBuffer: async () => {
+                            throw new Error("transient read failure");
+                        },
+                    } as unknown as Blob;
+                }
+            }
+            return originalSlice.call(this, start, end, contentType);
+        });
+        try {
+            const { kept, dropped } = await dropDuplicateFiles(incoming, []);
+            expect(kept.map((item) => item.relativePath)).toEqual(["a/X.MP4", "b/X.MP4"]);
+            expect(dropped).toEqual([{ droppedPath: "c/X.MP4", keptPath: "a/X.MP4" }]);
+            expect(firstHeadCalls).toBe(2);
+        } finally {
+            sliceSpy.mockRestore();
+        }
+    });
+
     it("throws AbortError when the signal is already aborted and probing is needed", async () => {
         const content = makeContent(1024, 4);
         const incoming = [vf("a/X.MP4", content), vf("b/X.MP4", content)];

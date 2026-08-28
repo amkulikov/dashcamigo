@@ -111,7 +111,6 @@ export function initPlayerBlur(): void {
     subscribeBlurRegions(() => {
         geometryEpoch++;
         syncLifecycle();
-        rebuildBoxes();
     });
     // Auto-detected regions arrive/expire without touching the manual list -
     // repaint (and start/stop the loop) on their changes too.
@@ -364,17 +363,26 @@ function paintTile(ch: Channel, ui: TileUi, regions: readonly BlurRegion[], cont
 
 function rebuildBoxes(): void {
     if (!blurUiActive()) return;
-    const regions = activeBlurRegions();
+    const byChannel = new Map<Channel, { entries: Array<{ region: BlurRegion; index: number }>; ids: Set<string> }>();
+    for (const [index, region] of activeBlurRegions().entries()) {
+        let group = byChannel.get(region.channel);
+        if (!group) {
+            group = { entries: [], ids: new Set() };
+            byChannel.set(region.channel, group);
+        }
+        group.entries.push({ region, index });
+        group.ids.add(region.id);
+    }
     for (const [ch, ui] of tileUis) {
-        const wanted = new Set(regions.filter((r) => r.channel === ch).map((r) => r.id));
+        const group = byChannel.get(ch);
         for (const [id, el] of ui.boxes) {
-            if (!wanted.has(id)) {
+            if (!group?.ids.has(id)) {
                 el.remove();
                 ui.boxes.delete(id);
             }
         }
-        for (const [index, region] of regions.entries()) {
-            if (region.channel !== ch) continue;
+        if (!group) continue;
+        for (const { region, index } of group.entries) {
             const existing = ui.boxes.get(region.id);
             if (existing) {
                 existing.setAttribute("aria-label", regionBoxAriaLabel(region, index));

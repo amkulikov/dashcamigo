@@ -32,12 +32,20 @@
 import {
     letterboxInto,
     type LetterboxMap,
+    packRgbPlanarNormalized,
     type RawDetection,
     suppressOverlaps,
     type TileRect,
     tileRects,
 } from "./detect-common.js";
 import { loadOrt, type OrtModule, type OrtRuntime } from "./ort-runtime.js";
+
+type OrtTensor = InstanceType<OrtModule["Tensor"]>;
+
+interface InputSlot {
+    readonly data: Float32Array;
+    readonly tensor: OrtTensor;
+}
 
 /** The re-export's static input side (see header). */
 const INPUT_SIZE = 960;
@@ -67,11 +75,20 @@ const NMS_IOU = 0.45;
 export class FaceDetector {
     /** Reused letterbox target - one allocation per detector. */
     private readonly scratch = new OffscreenCanvas(INPUT_SIZE, INPUT_SIZE);
+    /** Two slots are required by the one-run-deep CPU/GPU pipeline: while ORT
+     *  owns one tensor, the next tile is packed into the other. */
+    private readonly inputSlots: readonly [InputSlot, InputSlot];
 
     private constructor(
-        private readonly ort: OrtModule,
+        ort: OrtModule,
         private readonly session: Awaited<ReturnType<OrtModule["InferenceSession"]["create"]>>,
-    ) {}
+    ) {
+        const makeSlot = (): InputSlot => {
+            const data = new Float32Array(3 * INPUT_SIZE * INPUT_SIZE);
+            return { data, tensor: new ort.Tensor("float32", data, [1, 3, INPUT_SIZE, INPUT_SIZE]) };
+        };
+        this.inputSlots = [makeSlot(), makeSlot()];
+    }
 
     /** Loads the model and prepares a session on the given runtime. `wasmDir`
      *  must host the matching ort binaries (see vite-plugins/tracker-assets). The
@@ -106,61 +123,76 @@ export class FaceDetector {
             if (!inFlight) return;
             const { outputs, lb, tile } = inFlight;
             inFlight = null;
-            const out = (await outputs)[this.session.outputNames[0]!];
-            if (!out) return;
-            // [1, 5, N] channels-first: cx, cy, w, h, score in input pixels.
-            const data = out.data as Float32Array;
-            const n = out.dims[2]!;
-            for (let i = 0; i < n; i++) {
-                const score = data[4 * n + i]!;
-                if (!(score >= FACE_SCORE_MIN)) continue;
-                const cx = data[i]!;
-                const cy = data[n + i]!;
-                const w = data[2 * n + i]!;
-                const h = data[3 * n + i]!;
-                if (w / lb.scale < FACE_MIN_WIDTH_PX) continue;
-                detections.push({
-                    x: (cx - w / 2 - lb.dx) / lb.scale + tile.sx,
-                    y: (cy - h / 2 - lb.dy) / lb.scale + tile.sy,
-                    w: w / lb.scale,
-                    h: h / lb.scale,
-                    score,
-                });
+            let resolved: Awaited<typeof outputs> | null = null;
+            try {
+                resolved = await outputs;
+                const out = resolved[this.session.outputNames[0]!];
+                if (!out) return;
+                // [1, 5, N] channels-first: cx, cy, w, h, score in input pixels.
+                const data = out.data as Float32Array;
+                const n = out.dims[2]!;
+                for (let i = 0; i < n; i++) {
+                    const score = data[4 * n + i]!;
+                    if (!(score >= FACE_SCORE_MIN)) continue;
+                    const cx = data[i]!;
+                    const cy = data[n + i]!;
+                    const w = data[2 * n + i]!;
+                    const h = data[3 * n + i]!;
+                    if (w / lb.scale < FACE_MIN_WIDTH_PX) continue;
+                    detections.push({
+                        x: (cx - w / 2 - lb.dx) / lb.scale + tile.sx,
+                        y: (cy - h / 2 - lb.dy) / lb.scale + tile.sy,
+                        w: w / lb.scale,
+                        h: h / lb.scale,
+                        score,
+                    });
+                }
+            } finally {
+                if (resolved) {
+                    for (const tensor of Object.values(resolved)) tensor.dispose();
+                }
             }
         };
-        for (const tile of tiles) {
-            const lb = letterboxInto(
-                this.scratch,
-                frame,
-                tile.sx,
-                tile.sy,
-                tile.sw,
-                tile.sh,
-                INPUT_SIZE,
-                LETTERBOX_FILL,
-                true,
-            );
-            const tensor = this.toTensor();
+        try {
+            for (let tileIdx = 0; tileIdx < tiles.length; tileIdx++) {
+                const tile = tiles[tileIdx]!;
+                const lb = letterboxInto(
+                    this.scratch,
+                    frame,
+                    tile.sx,
+                    tile.sy,
+                    tile.sw,
+                    tile.sh,
+                    INPUT_SIZE,
+                    LETTERBOX_FILL,
+                    true,
+                );
+                const tensor = this.toTensor(this.inputSlots[tileIdx & 1]!);
+                // Slot N-2 is no longer owned by ORT after collect resolves, so
+                // it is safe for the next iteration to reuse it.
+                await collect();
+                inFlight = { outputs: this.session.run({ [this.session.inputNames[0]!]: tensor }), lb, tile };
+            }
             await collect();
-            inFlight = { outputs: this.session.run({ [this.session.inputNames[0]!]: tensor }), lb, tile };
+        } catch (error) {
+            // If canvas readback/packing failed while the previous run was
+            // pending, still drain and dispose that run's outputs.
+            try {
+                await collect();
+            } catch {
+                // Preserve the original failure.
+            }
+            throw error;
         }
-        await collect();
         return suppressOverlaps(detections, NMS_IOU);
     }
 
     /** RGB planes, /255 (the ultralytics export's expected normalization). */
-    private toTensor(): InstanceType<OrtModule["Tensor"]> {
-        const ort = this.ort;
+    private toTensor(slot: InputSlot): OrtTensor {
         const ctx = this.scratch.getContext("2d", { alpha: false });
         if (!ctx) throw new Error("face-detector: scratch ctx unavailable");
         const rgba = ctx.getImageData(0, 0, INPUT_SIZE, INPUT_SIZE).data;
-        const n = INPUT_SIZE * INPUT_SIZE;
-        const data = new Float32Array(3 * n);
-        for (let i = 0; i < n; i++) {
-            data[i] = rgba[i * 4]! / 255;
-            data[n + i] = rgba[i * 4 + 1]! / 255;
-            data[2 * n + i] = rgba[i * 4 + 2]! / 255;
-        }
-        return new ort.Tensor("float32", data, [1, 3, INPUT_SIZE, INPUT_SIZE]);
+        packRgbPlanarNormalized(rgba, slot.data);
+        return slot.tensor;
     }
 }

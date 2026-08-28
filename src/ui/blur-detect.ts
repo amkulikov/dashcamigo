@@ -431,8 +431,9 @@ export async function ensureDetectRegionsForExport(
     // promised blur is the one failure this feature must never have, so Save
     // with the checkbox on counts as the go-ahead - the strip already told the
     // user the size, and the pass right after makes the download visible.
-    if (blurAssetsNeedDownload(detectAssetGroups(params.kinds))) {
-        const ok = await downloadBlurAssets(detectAssetGroups(params.kinds), signal);
+    const assetGroups = detectAssetGroups(params.kinds);
+    if (blurAssetsNeedDownload(assetGroups)) {
+        const ok = await downloadBlurAssets(assetGroups, signal);
         if (signal.aborted) throw new DOMException("aborted", "AbortError");
         if (!ok) throw new Error("detect model download failed");
     }

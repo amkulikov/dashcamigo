@@ -55,6 +55,9 @@ async function readBytes(file: File, start: number, end: number): Promise<Uint8A
     return new Uint8Array(await file.slice(start, end).arrayBuffer());
 }
 
+type ProbePart = "head" | "tail";
+type ProbeReader = (file: File, part: ProbePart, start: number, end: number) => Promise<Uint8Array>;
+
 function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
     if (a.length !== b.length) return false;
     for (let i = 0; i < a.length; i++) {
@@ -70,44 +73,22 @@ function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
  * tail holds either the last mdat bytes or the moov with per-file timestamps,
  * both unique per recording.
  */
-async function sameContent(a: File, b: File): Promise<boolean> {
+async function sameContent(a: File, b: File, readProbe: ProbeReader): Promise<boolean> {
     const headEnd = Math.min(PROBE_BYTES, a.size);
-    const [headA, headB] = await Promise.all([readBytes(a, 0, headEnd), readBytes(b, 0, headEnd)]);
+    const [headA, headB] = await Promise.all([readProbe(a, "head", 0, headEnd), readProbe(b, "head", 0, headEnd)]);
     if (!bytesEqual(headA, headB)) return false;
     if (a.size <= PROBE_BYTES) return true;
     const tailStart = Math.max(headEnd, a.size - PROBE_BYTES);
-    const [tailA, tailB] = await Promise.all([readBytes(a, tailStart, a.size), readBytes(b, tailStart, b.size)]);
+    const [tailA, tailB] = await Promise.all([
+        readProbe(a, "tail", tailStart, a.size),
+        readProbe(b, "tail", tailStart, b.size),
+    ]);
     return bytesEqual(tailA, tailB);
 }
 
-/**
- * Orders duplicates by which copy is worth keeping. relativePath feeds the
- * path-based channel/mode classifiers and the camera fingerprint, so:
- *  1. the copy whose path is recognised by a channel technique (Movie/Front/...)
- *     wins over a structure-less backup copy (backup/...);
- *  2. then camera cohesion - keep the copy whose camera fingerprint is shared by
- *     the most files in the drop. A camera's channels live in sibling folders
- *     (video/front, video/rear) that the fingerprint collapses to one key. If a
- *     duplicated channel survives from a DIFFERENT parent than its siblings
- *     (e.g. a partial copy with front but no rear), the channels end up with
- *     different fingerprints and stop merging into one multichannel trip.
- *     Anchoring to the most-populated fingerprint keeps a camera in one folder.
- *     `fingerprintFreq` counts the whole comparison set (see dropDuplicateFiles);
- *  3. tie-break: fewer path segments (closer to the drop root = more likely the
- *     primary SD layout), then lexicographic for determinism.
- */
-function compareKeepPreference(a: VendorFile, b: VendorFile, fingerprintFreq: Map<string, number>): number {
-    const aChannel = matchFilenameChannel(a).matchedId !== null ? 0 : 1;
-    const bChannel = matchFilenameChannel(b).matchedId !== null ? 0 : 1;
-    if (aChannel !== bChannel) return aChannel - bChannel;
-    // Higher fingerprint frequency first - keeps a camera's channels together.
-    const aFreq = fingerprintFreq.get(cameraFingerprint(a)) ?? 0;
-    const bFreq = fingerprintFreq.get(cameraFingerprint(b)) ?? 0;
-    if (aFreq !== bFreq) return bFreq - aFreq;
-    const aDepth = a.relativePath.split(/[/\\]/).length;
-    const bDepth = b.relativePath.split(/[/\\]/).length;
-    if (aDepth !== bDepth) return aDepth - bDepth;
-    return a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : 0;
+interface KeepPreferenceRank {
+    channelRank: 0 | 1;
+    depth: number;
 }
 
 /**
@@ -145,6 +126,50 @@ export async function dropDuplicateFiles(
         else loadedByKey.set(key, [vf]);
     }
 
+    // A colliding group can compare one survivor with many candidates. Cache
+    // each immutable File's head/tail promise for this dedup pass so every range
+    // is read at most once. A failed read is evicted: the contract treats that
+    // pair as distinct, but a later pair may retry a transient device failure.
+    const probeCache = new WeakMap<File, Partial<Record<ProbePart, Promise<Uint8Array>>>>();
+    const readProbe: ProbeReader = (file, part, start, end) => {
+        let cached = probeCache.get(file);
+        if (!cached) {
+            cached = {};
+            probeCache.set(file, cached);
+        }
+        const existing = cached[part];
+        if (existing) return existing;
+        const pending = readBytes(file, start, end);
+        cached[part] = pending;
+        void pending.catch(() => {
+            if (cached[part] === pending) delete cached[part];
+        });
+        return pending;
+    };
+
+    // Sort may invoke its comparator repeatedly for the same file. These ranks
+    // depend only on immutable VendorFile metadata, so calculate each once.
+    const rankCache = new WeakMap<VendorFile, KeepPreferenceRank>();
+    const rankOf = (vf: VendorFile): KeepPreferenceRank => {
+        const cached = rankCache.get(vf);
+        if (cached) return cached;
+        const rank: KeepPreferenceRank = {
+            channelRank: matchFilenameChannel(vf).matchedId !== null ? 0 : 1,
+            depth: vf.relativePath.split(/[/\\]/).length,
+        };
+        rankCache.set(vf, rank);
+        return rank;
+    };
+
+    const fingerprintCache = new WeakMap<VendorFile, string>();
+    const fingerprintOf = (vf: VendorFile): string => {
+        const cached = fingerprintCache.get(vf);
+        if (cached !== undefined) return cached;
+        const fingerprint = cameraFingerprint(vf);
+        fingerprintCache.set(vf, fingerprint);
+        return fingerprint;
+    };
+
     // Camera-fingerprint frequency over the whole comparison set (the drop plus
     // already-loaded files). compareKeepPreference uses it to keep a camera's
     // channels in one folder so dedup never splits a multichannel trip into
@@ -161,13 +186,28 @@ export async function dropDuplicateFiles(
         if (fingerprintFreq) return fingerprintFreq;
         const freq = new Map<string, number>();
         const bump = (vf: VendorFile) => {
-            const fp = cameraFingerprint(vf);
+            const fp = fingerprintOf(vf);
             freq.set(fp, (freq.get(fp) ?? 0) + 1);
         };
         for (const vf of incoming) bump(vf);
         for (const vf of alreadyLoaded) bump(vf);
         fingerprintFreq = freq;
         return freq;
+    };
+
+    /** Orders duplicate copies by recognised channel path, camera cohesion,
+     * path depth, then lexicographic path. Expensive classifiers are cached
+     * above and the whole-card fingerprint pass remains lazy. */
+    const compareKeepPreference = (a: VendorFile, b: VendorFile): number => {
+        const aRank = rankOf(a);
+        const bRank = rankOf(b);
+        if (aRank.channelRank !== bRank.channelRank) return aRank.channelRank - bRank.channelRank;
+        const freq = getFingerprintFreq();
+        const aFreq = freq.get(fingerprintOf(a)) ?? 0;
+        const bFreq = freq.get(fingerprintOf(b)) ?? 0;
+        if (aFreq !== bFreq) return bFreq - aFreq;
+        if (aRank.depth !== bRank.depth) return aRank.depth - bRank.depth;
+        return a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : 0;
     };
 
     const keep = new Set<VendorFile>();
@@ -182,7 +222,7 @@ export async function dropDuplicateFiles(
         // Probe in keep-preference order so the best copy becomes the unique
         // representative and the worse-path copies get dropped against it.
         // Already-loaded copies always win - they cannot be replaced anyway.
-        const ordered = [...group].sort((x, y) => compareKeepPreference(x, y, getFingerprintFreq()));
+        const ordered = [...group].sort(compareKeepPreference);
         const uniques: VendorFile[] = loaded ? [...loaded] : [];
         for (const vf of ordered) {
             if (signal?.aborted) throw new DOMException("ingest aborted", "AbortError");
@@ -194,7 +234,7 @@ export async function dropDuplicateFiles(
                 let equal = vendorFileKey(unique) === vendorFileKey(vf);
                 if (!equal) {
                     try {
-                        equal = await sameContent(unique.file, vf.file);
+                        equal = await sameContent(unique.file, vf.file, readProbe);
                     } catch {
                         // Read failure - keep the file; indexing will surface the
                         // real error with proper user-facing reporting.

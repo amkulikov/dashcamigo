@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { _testFindPhantomTracks, repairPhantomTracks } from "./phantom-track.js";
+import { findPhantomTracks, repairPhantomTracks } from "./phantom-track.js";
 
 // ====== minimal ISOBMFF box builders ======
 
@@ -82,7 +82,7 @@ const HEALTHY_AUDIO: TrackSpec = { handler: "soun", offsets: [0x40000, 0x40400],
 describe("findPhantomTracks", () => {
     it("flags an audio track with all-zero chunk offsets, not the intact video", () => {
         const moov = moovWith(trak(VALID_VIDEO), trak(PHANTOM_AUDIO_ZERO_OFFSETS));
-        const edits = _testFindPhantomTracks(moov);
+        const edits = findPhantomTracks(moov);
         expect(edits).toHaveLength(1);
         expect(edits[0]!.handler).toBe("soun");
         expect(edits[0]!.reason).toBe("zero-offsets");
@@ -93,34 +93,34 @@ describe("findPhantomTracks", () => {
 
     it("flags a track whose chunk offsets are valid but every sample size is 0", () => {
         const zeroSizeAudio: TrackSpec = { handler: "soun", offsets: [0x40000, 0x40400, 0x40800], sizes: [0, 0, 0] };
-        const edits = _testFindPhantomTracks(moovWith(trak(VALID_VIDEO), trak(zeroSizeAudio)));
+        const edits = findPhantomTracks(moovWith(trak(VALID_VIDEO), trak(zeroSizeAudio)));
         expect(edits).toHaveLength(1);
         expect(edits[0]!.reason).toBe("zero-size");
     });
 
     it("does not flag a healthy audio track", () => {
-        const edits = _testFindPhantomTracks(moovWith(trak(VALID_VIDEO), trak(HEALTHY_AUDIO)));
+        const edits = findPhantomTracks(moovWith(trak(VALID_VIDEO), trak(HEALTHY_AUDIO)));
         expect(edits).toHaveLength(0);
     });
 
     it("never neutralizes a video track even if it is itself phantom (nothing to fall back to)", () => {
         const phantomVideo: TrackSpec = { handler: "vide", offsets: [0, 0], sizes: [0, 0] };
-        const edits = _testFindPhantomTracks(moovWith(trak(phantomVideo), trak(HEALTHY_AUDIO)));
+        const edits = findPhantomTracks(moovWith(trak(phantomVideo), trak(HEALTHY_AUDIO)));
         expect(edits).toHaveLength(0);
     });
 
     it("is idempotent: zeroing the reported counts removes the defect", () => {
         const moov = moovWith(trak(VALID_VIDEO), trak(PHANTOM_AUDIO_ZERO_OFFSETS));
-        const edits = _testFindPhantomTracks(moov);
+        const edits = findPhantomTracks(moov);
         const dv = new DataView(moov.buffer);
         for (const off of edits[0]!.countOffsets) dv.setUint32(off, 0);
         // Now the track declares 0 samples → no longer phantom, no further edits.
-        expect(_testFindPhantomTracks(moov)).toHaveLength(0);
+        expect(findPhantomTracks(moov)).toHaveLength(0);
     });
 
     it("handles multiple phantom tracks (e.g. audio + a dead meta track)", () => {
         const phantomMeta: TrackSpec = { handler: "meta", offsets: [0, 0], sizes: [0, 0] };
-        const edits = _testFindPhantomTracks(
+        const edits = findPhantomTracks(
             moovWith(trak(VALID_VIDEO), trak(PHANTOM_AUDIO_ZERO_OFFSETS), trak(phantomMeta)),
         );
         expect(edits.map((e) => e.handler).sort()).toEqual(["meta", "soun"]);
@@ -141,8 +141,8 @@ describe("findPhantomTracks bounds guards (truncated tables)", () => {
         const stco = box("stco", u32(0), u32(3), u32(0), u32(0), u32(0)); // all-zero -> would be phantom if readable
         const audioTrak = trakFromStbl("soun", stts, stsc, stco, headerOnly("stsz"));
         const moov = moovWith(trak(VALID_VIDEO), audioTrak);
-        expect(() => _testFindPhantomTracks(moov)).not.toThrow();
-        expect(_testFindPhantomTracks(moov)).toHaveLength(0);
+        expect(() => findPhantomTracks(moov)).not.toThrow();
+        expect(findPhantomTracks(moov)).toHaveLength(0);
     });
 
     it("does not throw or repair on a header-only stco as the last box in moov", () => {
@@ -154,8 +154,8 @@ describe("findPhantomTracks bounds guards (truncated tables)", () => {
         const stsz = box("stsz", u32(0), u32(0), u32(3), u32(0), u32(0), u32(0)); // 3 samples, all-zero sizes
         const audioTrak = trakFromStbl("soun", stts, stsc, stsz, headerOnly("stco"));
         const moov = moovWith(trak(VALID_VIDEO), audioTrak);
-        expect(() => _testFindPhantomTracks(moov)).not.toThrow();
-        expect(_testFindPhantomTracks(moov)).toHaveLength(0);
+        expect(() => findPhantomTracks(moov)).not.toThrow();
+        expect(findPhantomTracks(moov)).toHaveLength(0);
     });
 
     it("repairs a genuine phantom track without writing into truncated stts/stsc neighbor boxes", () => {
@@ -170,7 +170,7 @@ describe("findPhantomTracks bounds guards (truncated tables)", () => {
         const audioTrak = trakFromStbl("soun", sttsStub, stscStub, stsz, stco);
         const moov = moovWith(trak(VALID_VIDEO), audioTrak);
 
-        const edits = _testFindPhantomTracks(moov);
+        const edits = findPhantomTracks(moov);
         expect(edits).toHaveLength(1);
         expect(edits[0]!.reason).toBe("zero-offsets");
         // Only stsz.sample_count + stco.entry_count - the header-only stts/stsc are skipped.
@@ -189,7 +189,7 @@ describe("findPhantomTracks bounds guards (truncated tables)", () => {
             expect(patched[i]).toBe(original[i]);
         }
         // And the patch actually removed the defect.
-        expect(_testFindPhantomTracks(patched)).toHaveLength(0);
+        expect(findPhantomTracks(patched)).toHaveLength(0);
     });
 });
 
@@ -216,7 +216,7 @@ describe("repairPhantomTracks (File round-trip)", () => {
         const patched = new Uint8Array(await repaired!.file.arrayBuffer());
         const moovStart = ftyp.length + mdat.length;
         const patchedMoov = patched.subarray(moovStart, moovStart + moov.length);
-        expect(_testFindPhantomTracks(patchedMoov)).toHaveLength(0);
+        expect(findPhantomTracks(patchedMoov)).toHaveLength(0);
 
         // Bytes before moov (ftyp + mdat) are untouched.
         expect(Array.from(patched.subarray(0, moovStart))).toEqual([...ftyp, ...mdat]);

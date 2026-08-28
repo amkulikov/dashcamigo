@@ -36,10 +36,10 @@ const MAP_PCT_STEP_SHIFT = 5;
  *  The clamp midpoint (34) remains the last resort while the pane has no
  *  layout (map not expanded). */
 function currentMapPct(): number {
-    const raw = getComputedStyle(dom.playerWrapEl).getPropertyValue("--map-width").trim();
+    const raw = getComputedStyle(dom.playerWrap).getPropertyValue("--map-width").trim();
     const cur = parseFloat(raw);
     if (Number.isFinite(cur)) return cur;
-    const wrapWidth = dom.playerWrapEl.getBoundingClientRect().width;
+    const wrapWidth = dom.playerWrap.getBoundingClientRect().width;
     const mapWidth = dom.mapWrap.getBoundingClientRect().width;
     if (wrapWidth > 0 && mapWidth > 0) return (mapWidth / wrapWidth) * 100;
     return 34;
@@ -49,7 +49,7 @@ function setMapPct(pct: number): number {
     const clamped = Math.max(MAP_PCT_MIN, Math.min(MAP_PCT_MAX, pct));
     // --map-width is the variable the map-expanded grid templates consume
     // (viewer.css); a percentage there resolves against the player-wrap width.
-    dom.playerWrapEl.style.setProperty("--map-width", `${clamped}%`);
+    dom.playerWrap.style.setProperty("--map-width", `${clamped}%`);
     // Keep the separator's announced value in sync with the visual ratio so a
     // screen reader reads the real position, not a stale one.
     dom.videoMapResize.setAttribute("aria-valuenow", String(Math.round(clamped)));
@@ -67,7 +67,7 @@ function restoreResizeState(): void {
     }
     const savedMapPct = parseFloat(raw || "");
     if (Number.isFinite(savedMapPct) && savedMapPct >= MAP_PCT_MIN && savedMapPct <= MAP_PCT_MAX) {
-        dom.playerWrapEl.style.setProperty("--map-width", `${savedMapPct}%`);
+        dom.playerWrap.style.setProperty("--map-width", `${savedMapPct}%`);
     }
 }
 
@@ -128,7 +128,7 @@ export function initPlayerResize(): void {
             // Map-pct = map width as a percentage of player-wrap total width.
             // The cursor is between video and map, so everything to the right
             // of the cursor is the map. Compute percentage from the right edge.
-            const wrapRect = dom.playerWrapEl.getBoundingClientRect();
+            const wrapRect = dom.playerWrap.getBoundingClientRect();
             const x = e.clientX - wrapRect.left;
             const mapW = wrapRect.width - x;
             setMapPct((mapW / wrapRect.width) * 100);
@@ -137,7 +137,7 @@ export function initPlayerResize(): void {
         onEnd: () => {
             if (!resizeDragging) return;
             // Store as a number (without "%") - restore adds "%" back.
-            const raw = getComputedStyle(dom.playerWrapEl).getPropertyValue("--map-width").trim();
+            const raw = getComputedStyle(dom.playerWrap).getPropertyValue("--map-width").trim();
             const cur = parseFloat(raw);
             if (Number.isFinite(cur)) {
                 try {

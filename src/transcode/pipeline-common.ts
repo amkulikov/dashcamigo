@@ -660,8 +660,11 @@ export async function emitSilence(
             sampleRate,
             timestamp: offsetSec + elapsed,
         });
-        await audioSource.add(sample);
-        sample.close();
+        try {
+            await audioSource.add(sample);
+        } finally {
+            sample.close();
+        }
         elapsed += thisFrames / sampleRate;
     }
 }

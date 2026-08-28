@@ -97,6 +97,7 @@ export function initOverflowBar(opts: OverflowBarOptions): OverflowBarHandle {
         overflowMenu.hidden = !open;
         overflowButton.setAttribute("aria-expanded", String(open));
         if (open) {
+            document.addEventListener("keydown", onKeyDown);
             // queueMicrotask - so the same click event that opened the menu
             // does not fire as an "outside click" right after registration.
             // (e.stopPropagation on overflowButton also covers it, but defensive.)
@@ -106,9 +107,12 @@ export function initOverflowBar(opts: OverflowBarOptions): OverflowBarHandle {
                     docClickAttached = true;
                 }
             });
-        } else if (docClickAttached) {
-            document.removeEventListener("click", onDocClick);
-            docClickAttached = false;
+        } else {
+            document.removeEventListener("keydown", onKeyDown);
+            if (docClickAttached) {
+                document.removeEventListener("click", onDocClick);
+                docClickAttached = false;
+            }
         }
     }
 
@@ -376,8 +380,6 @@ export function initOverflowBar(opts: OverflowBarOptions): OverflowBarHandle {
             setMenuOpen(false);
         }
     }
-    document.addEventListener("keydown", onKeyDown);
-
     // Initial measure right away - a frame can pass before the first
     // ResizeObserver delivery, and the user would see "all buttons + then
     // collapse".

@@ -370,6 +370,7 @@ let trackRecs: GpsRecord[] = [];
 let trackCumDist: number[] = [];
 let trackTotalDist = 0;
 
+const TRIP_SOURCE_ID = "trip-line";
 const TRAIL_LAYER_SUFFIX = "-trail";
 
 /**
@@ -447,7 +448,7 @@ function cancelTrailingTrailWrite(): void {
  */
 function setTrailProgress(progress: number): void {
     if (!state.map) return;
-    const layerId = `${state.tripSourceId}${TRAIL_LAYER_SUFFIX}`;
+    const layerId = `${TRIP_SOURCE_ID}${TRAIL_LAYER_SUFFIX}`;
     if (!state.map.getLayer(layerId)) return;
     const now = performance.now();
     const sincePrevMs = now - trailLastWriteAt;
@@ -1171,10 +1172,10 @@ export function refreshMap(trip: Trip | null): void {
     miniAppliedLon = Number.NaN;
     miniAppliedBearing = Number.NaN;
 
-    const trailLayerId = `${state.tripSourceId}${TRAIL_LAYER_SUFFIX}`;
+    const trailLayerId = `${TRIP_SOURCE_ID}${TRAIL_LAYER_SUFFIX}`;
     if (map.getLayer(trailLayerId)) map.removeLayer(trailLayerId);
-    if (map.getLayer(state.tripSourceId)) map.removeLayer(state.tripSourceId);
-    if (map.getSource(state.tripSourceId)) map.removeSource(state.tripSourceId);
+    if (map.getLayer(TRIP_SOURCE_ID)) map.removeLayer(TRIP_SOURCE_ID);
+    if (map.getSource(TRIP_SOURCE_ID)) map.removeSource(TRIP_SOURCE_ID);
     if (state.marker) {
         state.marker.remove();
         state.marker = null;
@@ -1274,7 +1275,7 @@ export function refreshMap(trip: Trip | null): void {
     trackTotalDist = trailProgress.total;
 
     // lineMetrics:true enables line-progress for line-gradient.
-    map.addSource(state.tripSourceId, {
+    map.addSource(TRIP_SOURCE_ID, {
         type: "geojson",
         lineMetrics: true,
         data: {
@@ -1285,9 +1286,9 @@ export function refreshMap(trip: Trip | null): void {
     });
     // Base track layer: speed gradient over the whole route.
     map.addLayer({
-        id: state.tripSourceId,
+        id: TRIP_SOURCE_ID,
         type: "line",
-        source: state.tripSourceId,
+        source: TRIP_SOURCE_ID,
         layout: { "line-join": "round", "line-cap": "round" },
         paint: {
             "line-width": 4,
@@ -1302,7 +1303,7 @@ export function refreshMap(trip: Trip | null): void {
     map.addLayer({
         id: trailLayerId,
         type: "line",
-        source: state.tripSourceId,
+        source: TRIP_SOURCE_ID,
         layout: { "line-join": "round", "line-cap": "round" },
         paint: {
             "line-width": 5,
@@ -1430,17 +1431,17 @@ function onEventsClick(e: maplibregl.MapLayerMouseEvent): void {
 }
 
 function addTrackListeners(map: maplibregl.Map): void {
-    map.on("click", state.tripSourceId, onTrackClick);
-    map.on("mousemove", state.tripSourceId, onTrackHover);
-    map.on("mouseenter", state.tripSourceId, onTrackEnter);
-    map.on("mouseleave", state.tripSourceId, onTrackLeave);
+    map.on("click", TRIP_SOURCE_ID, onTrackClick);
+    map.on("mousemove", TRIP_SOURCE_ID, onTrackHover);
+    map.on("mouseenter", TRIP_SOURCE_ID, onTrackEnter);
+    map.on("mouseleave", TRIP_SOURCE_ID, onTrackLeave);
 }
 
 function removeTrackListeners(map: maplibregl.Map): void {
-    map.off("click", state.tripSourceId, onTrackClick);
-    map.off("mousemove", state.tripSourceId, onTrackHover);
-    map.off("mouseenter", state.tripSourceId, onTrackEnter);
-    map.off("mouseleave", state.tripSourceId, onTrackLeave);
+    map.off("click", TRIP_SOURCE_ID, onTrackClick);
+    map.off("mousemove", TRIP_SOURCE_ID, onTrackHover);
+    map.off("mouseenter", TRIP_SOURCE_ID, onTrackEnter);
+    map.off("mouseleave", TRIP_SOURCE_ID, onTrackLeave);
 }
 
 function addEventsListeners(map: maplibregl.Map): void {
@@ -1569,8 +1570,8 @@ function refreshMiniMap(data: MiniMapData | null): void {
     }
 
     // Clear previous track.
-    if (mini.getLayer(state.tripSourceId)) mini.removeLayer(state.tripSourceId);
-    if (mini.getSource(state.tripSourceId)) mini.removeSource(state.tripSourceId);
+    if (mini.getLayer(TRIP_SOURCE_ID)) mini.removeLayer(TRIP_SOURCE_ID);
+    if (mini.getSource(TRIP_SOURCE_ID)) mini.removeSource(TRIP_SOURCE_ID);
     if (state.miniMapMarker) {
         state.miniMapMarker.remove();
         state.miniMapMarker = null;
@@ -1579,7 +1580,7 @@ function refreshMiniMap(data: MiniMapData | null): void {
     if (!data || data.coords.length === 0) return;
     const { coords, gradient } = data;
 
-    mini.addSource(state.tripSourceId, {
+    mini.addSource(TRIP_SOURCE_ID, {
         type: "geojson",
         lineMetrics: true,
         data: {
@@ -1590,9 +1591,9 @@ function refreshMiniMap(data: MiniMapData | null): void {
     });
     // Thinner line on mini-map: at small scale a 4 px line turns into a blob.
     mini.addLayer({
-        id: state.tripSourceId,
+        id: TRIP_SOURCE_ID,
         type: "line",
-        source: state.tripSourceId,
+        source: TRIP_SOURCE_ID,
         layout: { "line-join": "round", "line-cap": "round" },
         paint: {
             "line-width": 3,
@@ -1932,7 +1933,7 @@ export function applyMapLayout(): void {
         // viewer.css), and without this term this branch would be the one path
         // that breaks that invariant. Restored on close via the same recompute.
         const showNotice = state.hasTrack && getViewPanels().map && !state.exportModeOpen;
-        dom.playerWrapEl.classList.toggle("map-expanded", showNotice);
+        dom.playerWrap.classList.toggle("map-expanded", showNotice);
         dom.miniMap.hidden = true;
         dom.miniMapClose.hidden = true;
         dom.mapCollapseBtn.hidden = true;
@@ -1956,7 +1957,7 @@ export function applyMapLayout(): void {
     const showMini = state.hasTrack && !state.mapExpanded && userWantsMap && !exportSuppressed;
 
     // Update class first so the grid reflows immediately.
-    dom.playerWrapEl.classList.toggle("map-expanded", showBigMap);
+    dom.playerWrap.classList.toggle("map-expanded", showBigMap);
 
     dom.miniMap.hidden = !showMini;
     // Close-X follows the mini-map - if there's no map to close, no button.

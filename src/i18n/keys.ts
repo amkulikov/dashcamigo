@@ -440,9 +440,7 @@ export type I18nKey =
 
     // Deferred-load modal for full embedded-GPS scans. Ordinary video playback
     // continues; event navigation waits because its target depends on telemetry.
-    | "gpsLoad.title"
     | "gpsLoad.progress"
-    | "gpsLoad.cancel"
     | "gpsLoad.pending"
     | "gpsLoad.reading"
 
@@ -467,7 +465,7 @@ export type I18nKey =
     | "gpsSync.reset"
     | "gpsSync.applyCamera"
     // Recording-read modal (slow backend): the trip-open path reads the
-    // recordings' metadata before playback. Reuses gpsLoad.progress/.cancel.
+    // recordings' metadata before playback. Reuses gpsLoad.progress.
     | "recordingLoad.title"
     | "recordingLoad.cancel"
 
@@ -1216,35 +1214,17 @@ export type I18nKey =
     | "onboard.dialogLabel"
     | "onboard.ingest.trips.title"
     | "onboard.ingest.trips.body"
-    | "onboard.ingest.sort.title"
-    | "onboard.ingest.sort.body"
-    | "onboard.ingest.privacy.title"
-    | "onboard.ingest.privacy.body"
-    | "onboard.ingest.feedback.title"
-    | "onboard.ingest.feedback.body"
     | "onboard.sources.remember.title"
     | "onboard.sources.remember.body"
     | "onboard.player.timeline.title"
     | "onboard.player.timeline.body"
-    | "onboard.player.playback.title"
-    | "onboard.player.playback.body"
-    | "onboard.player.view.title"
-    | "onboard.player.view.body"
     | "onboard.player.export.title"
     | "onboard.player.export.body"
     | "onboard.export.range.title"
     | "onboard.export.range.body"
     | "onboard.export.output.title"
     | "onboard.export.output.body"
-    | "onboard.export.extras.title"
-    | "onboard.export.extras.body"
-    | "onboard.export.save.title"
-    | "onboard.export.save.body"
-    | "onboard.multi.cameras.title"
-    | "onboard.multi.cameras.body"
     | "onboard.multi.layout.title"
     | "onboard.multi.layout.body"
     | "onboard.multi.channels.title"
-    | "onboard.multi.channels.body"
-    | "onboard.multi.audio.title"
-    | "onboard.multi.audio.body";
+    | "onboard.multi.channels.body";

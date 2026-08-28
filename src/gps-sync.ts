@@ -115,13 +115,17 @@ function storedEntryForTrip(entries: readonly StoredTripGpsSync[], trip: Trip): 
     return best;
 }
 
-export function resolvedGpsSyncForTrip(trip: Trip): ResolvedGpsSync {
-    const entry = storedEntryForTrip(loadEntries(), trip);
+function resolvedGpsSyncForTripFromEntries(entries: readonly StoredTripGpsSync[], trip: Trip): ResolvedGpsSync {
+    const entry = storedEntryForTrip(entries, trip);
     return {
         offsetSec: entry?.offsetSec ?? 0,
         trimToVideo: entry?.trimToVideo ?? false,
         hasOffsetOverride: entry?.offsetSec !== undefined && entry.offsetSec !== 0,
     };
+}
+
+export function resolvedGpsSyncForTrip(trip: Trip): ResolvedGpsSync {
+    return resolvedGpsSyncForTripFromEntries(loadEntries(), trip);
 }
 
 function upsertTripEntry(trip: Trip, patch: (entry: StoredTripGpsSync) => void): void {
@@ -164,7 +168,11 @@ export function applyStoredGpsSyncToTrip(trip: Trip): void {
 }
 
 export function applyStoredGpsSyncToTrips(trips: readonly Trip[]): void {
-    for (const trip of trips) applyStoredGpsSyncToTrip(trip);
+    const entries = loadEntries();
+    for (const trip of trips) {
+        const sync = resolvedGpsSyncForTripFromEntries(entries, trip);
+        applyGpsSyncToTrip(trip, sync.offsetSec, sync.trimToVideo);
+    }
 }
 
 /** Raw-GPS predicate for launch controls. Unlike trip.records it stays true

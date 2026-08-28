@@ -433,13 +433,18 @@ export function initSettingsModal(): void {
     const eventsInput = document.getElementById("settings-events-threshold-input") as HTMLInputElement | null;
     const eventsOff = document.getElementById("settings-events-threshold-off") as HTMLInputElement | null;
 
-    function applyEventsThresholdFromInput(): void {
-        if (!eventsInput) return;
+    function storeEventsThresholdFromInput(): boolean {
+        if (!eventsInput) return false;
         const raw = Number.parseFloat(eventsInput.value);
-        if (!Number.isFinite(raw) || raw <= 0) return;
+        if (!Number.isFinite(raw) || raw <= 0) return false;
         const clamped = Math.min(BRAKE_G_THRESHOLD_MAX, Math.max(BRAKE_G_THRESHOLD_MIN, raw));
         if (clamped !== raw) eventsInput.value = String(clamped);
         setBrakeThresholdG(clamped);
+        return true;
+    }
+
+    function applyEventsThresholdFromInput(): void {
+        if (!storeEventsThresholdFromInput()) return;
         recomputeEventsForLoadedTrips();
     }
 
@@ -452,12 +457,9 @@ export function initSettingsModal(): void {
             setBrakeThresholdG(Number.POSITIVE_INFINITY);
         } else {
             if (eventsInput) eventsInput.disabled = false;
-            applyEventsThresholdFromInput();
-            // applyEventsThresholdFromInput is a no-op on empty / invalid input,
-            // so it won't write or recompute when the user just unchecks "off"
-            // without a value in the field. Guarantee a finite threshold by
-            // falling back to the default.
-            if (!Number.isFinite(getBrakeThresholdG())) {
+            // An empty / invalid field does not write a value. Guarantee a
+            // finite threshold when the user turns detection back on.
+            if (!storeEventsThresholdFromInput()) {
                 setBrakeThresholdG(0.5);
                 if (eventsInput) eventsInput.value = "0.5";
             }
@@ -482,14 +484,19 @@ export function initSettingsModal(): void {
     const TRIP_GAP_MIN_MINUTES = 0.5;
     const TRIP_GAP_MAX_MINUTES = 180;
 
-    function applyTripGapFromInput(): void {
-        if (!tripInput) return;
+    function storeTripGapFromInput(): boolean {
+        if (!tripInput) return false;
         const raw = Number.parseFloat(tripInput.value);
-        if (!Number.isFinite(raw) || raw <= 0) return;
+        if (!Number.isFinite(raw) || raw <= 0) return false;
         const minutes = Math.min(TRIP_GAP_MAX_MINUTES, Math.max(TRIP_GAP_MIN_MINUTES, raw));
         // Echo the clamped value back so the user sees what was actually saved.
         if (minutes !== raw) tripInput.value = String(minutes);
         setTripGapSec(minutes * 60);
+        return true;
+    }
+
+    function applyTripGapFromInput(): void {
+        if (!storeTripGapFromInput()) return;
         regroupLoadedTrips();
     }
 
@@ -504,7 +511,7 @@ export function initSettingsModal(): void {
             setTripGapSec(Number.POSITIVE_INFINITY);
         } else {
             if (tripInput) tripInput.disabled = false;
-            applyTripGapFromInput();
+            storeTripGapFromInput();
         }
         regroupLoadedTrips();
     });

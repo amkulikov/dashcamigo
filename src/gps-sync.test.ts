@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
     _resetForTests,
     applyStoredGpsSyncToTrip,
+    applyStoredGpsSyncToTrips,
     gpsSyncPeerTrips,
     gpsTrackOverhangSec,
     normalizeGpsOffsetSec,
@@ -192,6 +193,22 @@ describe("GPS synchronization", () => {
         applyStoredGpsSyncToTrip(reopened);
         expect(reopened.gpsOffsetSec).toBe(0);
         expect(resolvedGpsSyncForTrip(reopened).hasOffsetOverride).toBe(false);
+    });
+
+    it("loads the stored-entry snapshot once for a bulk apply", () => {
+        const first = trip(2001);
+        const second = trip(2002);
+        setTripGpsOffsetSec(first, 4);
+        setTripGpsOffsetSec(second, 9);
+
+        const getItemSpy = vi.spyOn(localStorage, "getItem");
+        applyStoredGpsSyncToTrips([first, second]);
+
+        const syncReads = getItemSpy.mock.calls.filter(([key]) => key === "dashcamigo:trips:gpsSync");
+        expect(syncReads).toHaveLength(1);
+        expect(first.gpsOffsetSec).toBe(4);
+        expect(second.gpsOffsetSec).toBe(9);
+        getItemSpy.mockRestore();
     });
 
     it("offers only native-GPS trips from the same camera as batch peers", () => {

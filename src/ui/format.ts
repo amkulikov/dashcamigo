@@ -341,15 +341,13 @@ function formatClockForFilename(d: Date, withDate: boolean): string {
 }
 
 // Labels are re-localized on each call (cheap, one Map lookup) to stay in sync with the current language.
-export function eventLabel(kind: EventKind): string {
-    if (kind === "brake") return t("event.brake.label");
-    return kind;
+export function eventLabel(_kind: EventKind): string {
+    return t("event.brake.label");
 }
 
-/** Formats event severity for a tooltip ("0.42 g"). Currently only "brake"; switch is kept for future kinds. */
+/** Formats brake-event severity for a tooltip ("0.42 g"). */
 export function formatEventSeverity(ev: TripEvent): string {
-    if (ev.kind === "brake") return `${ev.severity.toFixed(2)} g`;
-    return "";
+    return `${ev.severity.toFixed(2)} g`;
 }
 
 /** Returns a comparator for the given sort key. Distance, duration, and size are pre-computed by finalizeTrip, so comparison is O(1). */

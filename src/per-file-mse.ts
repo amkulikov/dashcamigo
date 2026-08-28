@@ -31,7 +31,6 @@
 import { createLogger } from "./log.js";
 import { captureSentryMessage } from "./sentry.js";
 import {
-    MSE_NOTIFY_DISPOSE,
     MSE_NOTIFY_DROP_AUDIO,
     MSE_NOTIFY_ERROR,
     MSE_NOTIFY_FEED_DONE,
@@ -132,12 +131,6 @@ interface PerFileMseBackendOptions {
      * 0 and the screen went black.
      */
     durationSec?: number;
-    /**
-     * Whether the file is an MPEG-TS container. Retained on the option set
-     * for compatibility with the player; not used internally any more (the
-     * worker pays no TS-specific upfront cost now).
-     */
-    isTransportStream?: boolean;
     /**
      * IMA-ADPCM audio (Mio/Navman): the worker decodes the ADPCM and re-encodes
      * it (AAC, else Opus, else drops it) on the fly rather than stream-copying
@@ -625,14 +618,9 @@ export class PerFileMseBackend {
         this.initAbort?.abort();
         this.initAbort = null;
         if (this.client) {
-            // Best-effort dispose signal to worker (so it can cancel its
-            // mediabunny Output cleanly before terminate); then teardown.
-            // client.dispose() rejects any remaining pending requests.
-            try {
-                this.client.notify(MSE_NOTIFY_DISPOSE);
-            } catch {
-                /* ignore */
-            }
+            // WorkerClient disposal terminates the worker and rejects any
+            // remaining request; a notification immediately before terminate
+            // has no delivery guarantee and therefore cannot own cleanup.
             this.client.dispose("backend disposed");
             this.client = null;
         }

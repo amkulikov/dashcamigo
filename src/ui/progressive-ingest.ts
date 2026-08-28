@@ -832,7 +832,7 @@ async function readRecordingData(
                     try {
                         if (!indexed) {
                             candidate.metadataFailed = true;
-                            state.unindexed.push(file);
+                            state.unindexed.add(file);
                             if (session.run) session.run.metadataFailed++;
                             log.warn("recording metadata read failed", { file: candidate.file.name });
                             return;
@@ -1133,7 +1133,7 @@ function startBackgroundFill(): void {
         for (const candidate of candidatePool) {
             if (!needsRecordingMetadata(candidate)) continue;
             candidate.metadataFailed = true;
-            if (!state.unindexed.includes(candidate.file)) state.unindexed.push(candidate.file);
+            state.unindexed.add(candidate.file);
             if (run) run.metadataFailed++;
         }
         if (run) publishRecordingAnalysisProgress(run, run.analysisCandidates);

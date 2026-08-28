@@ -36,7 +36,6 @@ import { createEncodeAudioSource, resolveEncodeAudioCodec } from "../transcode/c
 import { clampTsGpsTrailer } from "../ts-trailer.js";
 import { VIDEO_INPUT_FORMATS } from "../video-formats.js";
 import {
-    MSE_NOTIFY_DISPOSE,
     MSE_NOTIFY_DROP_AUDIO,
     MSE_NOTIFY_ERROR,
     MSE_NOTIFY_FEED_DONE,
@@ -104,7 +103,7 @@ const MIN_ADAPTIVE_AHEAD_SEC = 2.5;
 const BASE_MAX_APPEND_QUEUE_LEN = 12;
 const MAX_APPEND_QUEUE_CAP = 48;
 
-declare const self: WorkerScopeEndpoint & { close(): void };
+declare const self: WorkerScopeEndpoint;
 
 // Worker state. One worker = one backend = one file.
 // Long-lived (set once at init, kept across seeks):
@@ -183,7 +182,6 @@ let currentCycle: FeedCycle | null = null;
 
 // Last tick info from main, used for backpressure.
 let lastTick = { currentTime: 0, appendQueueLen: 0, playbackRate: 1 };
-let disposed = false;
 let failed = false;
 
 // One-shot resolvers waiting for the next MSE_NOTIFY_TICK. Filled by
@@ -201,7 +199,7 @@ function wakeTickWaiters(): void {
 }
 
 function waitForNextTick(signal: AbortSignal): Promise<void> {
-    if (signal.aborted || disposed) return Promise.resolve();
+    if (signal.aborted) return Promise.resolve();
     return new Promise<void>((resolve) => {
         const fire = () => {
             tickWaiters.delete(fire);
@@ -213,7 +211,7 @@ function waitForNextTick(signal: AbortSignal): Promise<void> {
     });
 }
 
-// All state-mutating handlers (init, start-feed, seek, dispose) must run one
+// All state-mutating handlers (start-feed and seek) must run one
 // at a time. Without this gate, fast chart-drag seeks fan out into concurrent
 // onSeek invocations: the second cancel() throws "Output has already been
 // canceled", the second nullifies an output that a parallel onStartFeed just
@@ -284,9 +282,6 @@ const server = createWorkerServer(self, {
                 serialize(() => onSeek(seek.startSec, seek.cycleId));
                 return;
             }
-            case MSE_NOTIFY_DISPOSE:
-                serialize(() => onDispose());
-                return;
         }
     },
 });
@@ -324,7 +319,6 @@ async function onInit(
     wantTranscodeAudio: boolean,
     adpcmPlaybackCodecs: readonly AdpcmPlaybackCodec[],
 ): Promise<InitResult> {
-    if (disposed) throw new Error("init-on-disposed-worker");
     workerFile = file;
     startSec = Math.max(0, initialStartSec);
     input = new Input({ source: new BlobSource(await clampTsGpsTrailer(file)), formats: VIDEO_INPUT_FORMATS });
@@ -427,7 +421,7 @@ async function onInit(
  * segments.
  */
 async function startNewFeedCycle(cycleId: number, armSeekDone: boolean): Promise<void> {
-    if (disposed || failed) return;
+    if (failed) return;
     if (!videoTrack || !videoCodec || !videoDecoderConfig) {
         return fail("startNewFeed-missing-state");
     }
@@ -467,8 +461,11 @@ async function startNewFeedCycle(cycleId: number, armSeekDone: boolean): Promise
     // Cycle-local accumulator. Closure over the cycle object: if a new
     // cycle takes over later, the old output's still-pending callbacks
     // mutate the OLD cycle.pendingSegment, never the new one.
+    const isStale = (): boolean => cycle.abort.signal.aborted || failed;
     const accumulate = (data: Uint8Array) => {
-        if (disposed) return;
+        // Abort can race mediabunny's output callbacks after a seek. Check
+        // before allocating/copying so stale boxes do not consume memory.
+        if (isStale()) return;
         const copy = new Uint8Array(data.length);
         copy.set(data);
         cycle.pendingSegment.push(copy);
@@ -495,14 +492,16 @@ async function startNewFeedCycle(cycleId: number, armSeekDone: boolean): Promise
     };
 
     const flushAsInit = (data: Uint8Array) => {
-        if (disposed) return;
+        // Guard before merge and ownership transfer; an aborted cycle must not
+        // spend work constructing bytes that main will discard by cycle id.
+        if (isStale()) return;
         const merged = mergeAndFlush(data);
         const ntf: InitSegmentNotificationData = { cycleId: cycle.id, bytes: merged };
         server.notify(MSE_NOTIFY_INIT_SEGMENT, ntf, [merged.buffer]);
     };
 
     const flushAsMedia = (data: Uint8Array) => {
-        if (disposed) return;
+        if (isStale()) return;
         const merged = mergeAndFlush(data);
         // Bitrate sample, cycle-scoped. mediaSecondsCovered tracks the maximum
         // feedSentUpToSec advance since this cycle started; bytes tally includes
@@ -557,7 +556,7 @@ async function startNewFeedCycle(cycleId: number, armSeekDone: boolean): Promise
     } catch (e) {
         return fail("output-start-threw", e);
     }
-    if (disposed) return;
+    if (cycle.abort.signal.aborted || failed) return;
 
     currentCycle = cycle;
     // Fire and forget; runFeed catches its own errors and surfaces via fail().
@@ -567,7 +566,7 @@ async function startNewFeedCycle(cycleId: number, armSeekDone: boolean): Promise
 }
 
 async function onStartFeed(cycleId: number): Promise<void> {
-    if (disposed || failed) return;
+    if (failed) return;
     // Initial start: no prior cycle, no seek-done expectation.
     await startNewFeedCycle(cycleId, false);
 }
@@ -590,7 +589,7 @@ async function onStartFeed(cycleId: number): Promise<void> {
  * read on a new Input would cost PMT + first PES IO again.
  */
 async function onSeek(newStartSec: number, newCycleId: number): Promise<void> {
-    if (disposed || failed) return;
+    if (failed) return;
     if (!input || !videoTrack) {
         log.debug("seek before init - ignoring", { newStartSec });
         return;
@@ -605,6 +604,10 @@ async function onSeek(newStartSec: number, newCycleId: number): Promise<void> {
         } catch {
             /* ignore */
         }
+        // Release boxes copied before abort. Any later callback sees the
+        // aborted signal before copying or merging more bytes.
+        oldCycle.pendingSegment = [];
+        oldCycle.pendingSegmentLen = 0;
         // Fire-and-forget cancel. The outer try guards against a sync throw
         // from cancel() if the output already finalized (natural feed-done
         // before this seek arrived); .catch on the returned promise only
@@ -629,34 +632,6 @@ async function onSeek(newStartSec: number, newCycleId: number): Promise<void> {
     // Start the new cycle right away. armSeekDone=true so its first media
     // segment fires "seek-done" back to main.
     await startNewFeedCycle(newCycleId, true);
-}
-
-async function onDispose(): Promise<void> {
-    if (disposed) return;
-    disposed = true;
-    // Release any feed loops parked in waitForNextTick - cycle.abort below
-    // would also reach them via the abort listener, but a waiter added on
-    // an already-aborted signal could race that path.
-    wakeTickWaiters();
-    if (currentCycle) {
-        try {
-            currentCycle.abort.abort();
-        } catch {
-            /* ignore */
-        }
-        try {
-            currentCycle.output.cancel().catch(() => undefined);
-        } catch {
-            /* already finalized */
-        }
-        currentCycle = null;
-    }
-    try {
-        input?.dispose();
-    } catch {
-        /* ignore */
-    }
-    self.close();
 }
 
 /**
@@ -694,7 +669,7 @@ async function runFeed(cycle: FeedCycle): Promise<void> {
             fail("no-video-keyframe");
             return;
         }
-        if (signal.aborted || disposed) return;
+        if (signal.aborted) return;
 
         // Peek the audio start TIMESTAMP (file time of the first audio frame)
         // up front so framePtsOffset keeps both streams non-negative after the
@@ -714,7 +689,7 @@ async function runFeed(cycle: FeedCycle): Promise<void> {
             }
             audioStartTs = firstAudio?.timestamp ?? null;
         }
-        if (signal.aborted || disposed) return;
+        if (signal.aborted) return;
 
         // Anchor the timeline at the earliest video keyframe / audio start.
         // For startSec === 0 we always shift to 0; for seek we keep the absolute
@@ -745,7 +720,7 @@ async function runFeed(cycle: FeedCycle): Promise<void> {
                     await reader.feedToEnd(audioSource, Math.max(0, startSec), framePtsOffset, signal, resolvePrimed);
                 } catch (e) {
                     // Audio failure is not critical - video continues silently.
-                    if (!(signal.aborted || disposed)) log.warn("feedTranscodedAudio threw, dropping audio", e);
+                    if (!signal.aborted) log.warn("feedTranscodedAudio threw, dropping audio", e);
                 } finally {
                     // Never leave the video feed blocked: onFirstEmit does not
                     // fire if the range is empty (e.g. a seek past audio end) or
@@ -754,7 +729,7 @@ async function runFeed(cycle: FeedCycle): Promise<void> {
                 }
             })();
             await primed;
-            if (signal.aborted || disposed) return;
+            if (signal.aborted) return;
             promises.push(audioFeed);
         } else if (audioSinkForPrimer && audioTrack && cycle.audioSource && audioDecoderConfig && firstAudio) {
             // Stream-copy: prime with the first encoded packet + decoder config.
@@ -768,11 +743,11 @@ async function runFeed(cycle: FeedCycle): Promise<void> {
                 await audioSource.add(adjusted, { decoderConfig: audioDecoderConfig });
                 primedAudioFirstPacket = firstAudio;
             } catch (e) {
-                if (!(signal.aborted || disposed)) {
+                if (!signal.aborted) {
                     log.warn("audio primer add threw, dropping audio", e);
                 }
             }
-            if (signal.aborted || disposed) return;
+            if (signal.aborted) return;
             if (primedAudioFirstPacket) {
                 promises.push(feedAudio(cycle, audioTrack, framePtsOffset, primedAudioFirstPacket));
             }
@@ -780,18 +755,18 @@ async function runFeed(cycle: FeedCycle): Promise<void> {
 
         promises.push(feedVideo(cycle, videoSink, startKey, videoDecoderConfig, framePtsOffset));
         await Promise.all(promises);
-        if (signal.aborted || disposed) return;
+        if (signal.aborted) return;
 
         try {
             await cycle.output.finalize();
         } catch (e) {
             log.debug("runFeed: finalize threw", e);
         }
-        if (signal.aborted || disposed) return;
+        if (signal.aborted) return;
         const ntf: FeedDoneNotificationData = { cycleId: cycle.id };
         server.notify(MSE_NOTIFY_FEED_DONE, ntf);
     } catch (e) {
-        if (signal.aborted || disposed) return;
+        if (signal.aborted) return;
         fail("runFeed-uncaught", e);
     }
 }
@@ -807,9 +782,9 @@ async function feedVideo(
     let configPushed = false;
     let pkt: EncodedPacket | null = startKey;
     while (pkt) {
-        if (signal.aborted || disposed) return;
+        if (signal.aborted) return;
         await waitForBufferRoom(cycle);
-        if (signal.aborted || disposed) return;
+        if (signal.aborted) return;
         if (!hasVideoContent(pkt)) {
             pkt = await sink.getNextPacket(pkt, { verifyKeyPackets: true });
             continue;
@@ -820,7 +795,7 @@ async function feedVideo(
         try {
             await cycle.videoSource.add(adjusted, meta);
         } catch (e) {
-            if (signal.aborted || disposed) return;
+            if (signal.aborted) return;
             fail("video-add-threw", e);
             return;
         }
@@ -828,7 +803,7 @@ async function feedVideo(
         // concurrent onSeek may have already aborted us. Re-check before
         // mutating cycle state so an obsolete cycle does not advance its
         // own counter past where it actually fed.
-        if (signal.aborted || disposed) return;
+        if (signal.aborted) return;
         if (adjustedTs > cycle.feedSentUpToSec) cycle.feedSentUpToSec = adjustedTs;
         configPushed = true;
         // verifyKeyPackets: bitstream-check the key/delta flag of each fed packet,
@@ -870,12 +845,12 @@ async function feedAudio(
     // audio sits in its internal queue until then.
     let pkt: EncodedPacket | null = await sink.getNextPacket(primedFirstPacket);
     while (pkt) {
-        if (signal.aborted || disposed) return;
+        if (signal.aborted) return;
         const adjusted = framePtsOffset !== 0 ? pkt.clone({ timestamp: pkt.timestamp + framePtsOffset }) : pkt;
         try {
             await audioSource.add(adjusted);
         } catch (e) {
-            if (signal.aborted || disposed) return;
+            if (signal.aborted) return;
             // Audio failure is not critical - video continues silently.
             log.warn("feedAudio: audio-add threw, dropping audio", e);
             return;
@@ -907,7 +882,7 @@ async function feedAudio(
  */
 async function waitForBufferRoom(cycle: FeedCycle): Promise<void> {
     const signal = cycle.abort.signal;
-    while (!signal.aborted && !disposed) {
+    while (!signal.aborted) {
         // Floor currentTime at cycle.startTimestamp. Between worker's
         // onSeek and main's video.currentTime = target write, a tick
         // can arrive carrying the pre-seek currentTime; without the

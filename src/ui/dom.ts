@@ -266,7 +266,6 @@ export const dom = {
     topbarBurger: $id<HTMLButtonElement>("topbar-burger"),
     videoMapResize: $id<HTMLDivElement>("video-map-resize"),
     mapWrap: $sel<HTMLDivElement>(".map-wrap"),
-    playerWrapEl: $id<HTMLElement>("player-wrap"),
     /**
      * UX-18: follow mode is now a segmented control (3 buttons instead of one
      * cyclic button). The old #map-follow was removed; access via querySelectorAll
@@ -294,7 +293,6 @@ export const dom = {
     videoMinimapFrame: $id<HTMLDivElement>("video-minimap-frame"),
     videoLoadingOverlay: $id<HTMLDivElement>("video-loading-overlay"),
     viewer: $sel<HTMLElement>(".viewer"),
-    emptyState: $id<HTMLElement>("empty-state"),
     dropOverlay: $id<HTMLElement>("drop-overlay"),
     ingestOverlay: $id<HTMLElement>("ingest-overlay"),
     ingestOverlayStatus: $id<HTMLElement>("ingest-overlay-status"),
@@ -354,9 +352,6 @@ export const dom = {
     exportPanelProgress: $id<HTMLDivElement>("export-panel-progress"),
     exportPanelDone: $id<HTMLDivElement>("export-panel-done"),
     exportPanelError: $id<HTMLDivElement>("export-panel-error"),
-    // Timeline range overlay (export-mode pull-tabs + mask). Inserted by
-    // src/ui/timeline-range.ts on init; hidden in casual mode.
-    playerChartCanvasWrap: $id<HTMLDivElement>("player-chart-canvas-wrap"),
     // Export-mode preview overlays burned into the player frame. Updated by
     // src/ui/player-overlays.ts from the current GPS record.
     playerOverlayFrame: $id<HTMLDivElement>("player-overlay-frame"),

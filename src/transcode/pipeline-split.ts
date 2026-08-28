@@ -68,6 +68,7 @@ import {
 import { drawMapPlaceholder } from "./map-overlay.js";
 import { drawTelemetryOverlays } from "./telemetry-overlays.js";
 import { createVideoSourceResolver } from "./normalize-degenerate-video.js";
+import { locateMonotonicSegment } from "./segment-locator.js";
 import { interpolatePosition } from "../parser.js";
 import type { OverlayPipelineArgs } from "./types.js";
 
@@ -355,6 +356,8 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
     // rare null-sample edge cases.
     interface SlotRuntime {
         currentSegmentIdx: number;
+        /** Monotonic lookup cursor; deliberately survives decoder swaps. */
+        locatorSegmentIdx: number;
         // The active segment's start in trip-local seconds (seg.tripStart).
         // localTime in the source file = tripTimeSec - segTripStart. Absolute,
         // not a back-to-back duration sum, so a mid-range gap in this slot does
@@ -378,6 +381,7 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
     }
     const slotRuntimes: SlotRuntime[] = source.slotChannels.map(() => ({
         currentSegmentIdx: -1,
+        locatorSegmentIdx: 0,
         segTripStart: 0,
         input: null,
         sink: null,
@@ -452,17 +456,7 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
         // sum) keeps this slot aligned to the master clock even when it is
         // missing a file mid-range - in that gap no segment matches and we keep
         // the last valid frame instead of pulling later footage forward.
-        let activeIdx = -1;
-        for (let i = 0; i < segs.length; i++) {
-            const seg = segs[i]!;
-            const segTripStart = seg.tripStart + seg.startInFile;
-            const segTripEnd = seg.tripStart + seg.endInFile;
-            if (tripTimeSec >= segTripStart - 1e-6 && tripTimeSec < segTripEnd + 1e-6) {
-                activeIdx = i;
-                break;
-            }
-            if (tripTimeSec < segTripStart) break; // before this seg, no earlier match -> in a gap
-        }
+        const activeIdx = locateMonotonicSegment(segs, tripTimeSec, rt);
 
         if (activeIdx < 0) {
             // tripTime is in a gap or past all slot segments - leave rt as-is

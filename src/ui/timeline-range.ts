@@ -16,7 +16,7 @@
 // MIN_RANGE_SEC and never diverge; the rest of the system reads the resulting
 // exportPanelState.range (trim bar, Save logic).
 
-import { getTimelineView, timelineFracToSec, timelineSecToFrac } from "./chart.js";
+import { getTimelineView, timelineFracToSec, timelineSecToFracInView } from "./chart.js";
 import { t } from "../i18n/index.js";
 import { dom } from "./dom.js";
 import { exportPanelState, setRangeEdge, subscribeExportState } from "./export-state.js";
@@ -104,13 +104,19 @@ export function syncTimelineRange(): void {
     if (!container) return;
     const range = exportPanelState.range;
     const host = dom.playerChartEl;
-    const startFrac = range ? timelineSecToFrac(range.startTripSec) : null;
-    const endFrac = range ? timelineSecToFrac(range.endTripSec) : null;
-    if (!state.exportModeOpen || !range || !host || startFrac === null || endFrac === null) {
+    if (!state.exportModeOpen || !range || !host) {
         container.hidden = true;
         hideBubble();
         return;
     }
+    const view = getTimelineView();
+    if (!view) {
+        container.hidden = true;
+        hideBubble();
+        return;
+    }
+    const startFrac = timelineSecToFracInView(range.startTripSec, view);
+    const endFrac = timelineSecToFracInView(range.endTripSec, view);
     const w = host.clientWidth;
     if (w <= 0) {
         container.hidden = true;
@@ -131,11 +137,8 @@ export function syncTimelineRange(): void {
     // edge, which read as "zooming moved my range". Flag the pinned state so
     // CSS can restyle the tab as an off-screen pointer. The epsilon keeps the
     // exact window==range case (the "Preview clip" zoom) in the normal style.
-    const view = getTimelineView();
-    if (view) {
-        tabStart?.classList.toggle("is-offscreen", range.startTripSec < view.startSec - OFFSCREEN_EPSILON_SEC);
-        tabEnd?.classList.toggle("is-offscreen", range.endTripSec > view.endSec + OFFSCREEN_EPSILON_SEC);
-    }
+    tabStart?.classList.toggle("is-offscreen", range.startTripSec < view.startSec - OFFSCREEN_EPSILON_SEC);
+    tabEnd?.classList.toggle("is-offscreen", range.endTripSec > view.endSec + OFFSCREEN_EPSILON_SEC);
     // Masks dim everything left/right of the range (incl. the axis gutters)
     // across the full stacked height.
     if (maskLeft) {

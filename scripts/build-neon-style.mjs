@@ -104,17 +104,35 @@ function neonize(layer) {
             out.paint = { ...w, "line-color": "#b35e00", "line-opacity": 0.85 };
         } else if (id.includes("motorway_casing")) {
             // Widest glow halo.
-            out.paint = { ...w, "line-color": ORANGE, "line-blur": { stops: [[6, 2], [20, 14]] }, "line-opacity": 0.4 };
+            out.paint = {
+                ...w,
+                "line-color": ORANGE,
+                "line-blur": {
+                    stops: [
+                        [6, 2],
+                        [20, 14],
+                    ],
+                },
+                "line-opacity": 0.4,
+            };
         } else if (id.includes("motorway_inner")) {
             out.paint = { ...w, "line-color": ORANGE_HOT };
         } else if (id.includes("motorway_subtle")) {
             out.paint = { ...w, "line-color": ORANGE_CORE };
         } else if (id.includes("major_casing")) {
-            out.paint = { ...w, "line-color": ORANGE, "line-blur": { stops: [[10, 2], [20, 10]] }, "line-opacity": 0.35 };
+            out.paint = {
+                ...w,
+                "line-color": ORANGE,
+                "line-blur": {
+                    stops: [
+                        [10, 2],
+                        [20, 10],
+                    ],
+                },
+                "line-opacity": 0.35,
+            };
         } else if (id.includes("major_inner")) {
             out.paint = { ...w, "line-color": ORANGE_CORE };
-        } else if (id.includes("major_subtle")) {
-            out.paint = { ...w, "line-color": ORANGE_DIM };
         } else {
             out.paint = { ...w, "line-color": ORANGE_DIM };
         }

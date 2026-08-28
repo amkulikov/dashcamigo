@@ -193,6 +193,17 @@ export const SEO_LOCALES: ReadonlyArray<SeoLocale> = [
     },
 ];
 
+// Static indexes for the immutable locale configuration. Build plugins call
+// these accessors for every generated page, so avoid repeated scans and fresh
+// filtered arrays while keeping SEO_LOCALES as the single authored source.
+const SEO_LOCALE_BY_LANG: ReadonlyMap<Lang, SeoLocale> = new Map(SEO_LOCALES.map((locale) => [locale.lang, locale] as const));
+const SEO_LOCALE_BY_URL_SEGMENT: ReadonlyMap<string, SeoLocale> = new Map(SEO_LOCALES.map((locale) => [locale.urlSegment, locale] as const));
+const INDEXABLE_SEO_LOCALES: ReadonlyArray<SeoLocale> = SEO_LOCALES.filter((locale) => locale.indexable);
+const DEFAULT_SEO_LOCALE = SEO_LOCALE_BY_LANG.get("en");
+if (!DEFAULT_SEO_LOCALE) {
+    throw new Error("seo-config: no English locale in SEO_LOCALES (English is the required default)");
+}
+
 // English is the default locale. Like every other locale it lives under its
 // own segment (/en/) - the root "/" is a redirect stub, not English content.
 // hreflang x-default points at this locale's variant of each page (/en/ for
@@ -200,13 +211,11 @@ export const SEO_LOCALES: ReadonlyArray<SeoLocale> = [
 // Several functions below assume this is non-null - we keep an English entry
 // in SEO_LOCALES at all times.
 export function getDefaultSeoLocale(): SeoLocale {
-    const en = SEO_LOCALES.find((l) => l.lang === "en");
-    if (!en) throw new Error("seo-config: no English locale in SEO_LOCALES (English is the required default)");
-    return en;
+    return DEFAULT_SEO_LOCALE!;
 }
 
 export function getSeoLocaleByLang(lang: Lang): SeoLocale | undefined {
-    return SEO_LOCALES.find((l) => l.lang === lang);
+    return SEO_LOCALE_BY_LANG.get(lang);
 }
 
 // Match a URL path's first segment to a locale. Empty string ("") means
@@ -217,7 +226,7 @@ export function getSeoLocaleByLang(lang: Lang): SeoLocale | undefined {
 // Unknown segment → undefined (caller decides: 404, redirect, treat as root).
 export function getSeoLocaleByUrlSegment(segment: string): SeoLocale | undefined {
     if (segment === "") return undefined;
-    return SEO_LOCALES.find((l) => l.urlSegment === segment);
+    return SEO_LOCALE_BY_URL_SEGMENT.get(segment);
 }
 
 // Locales that go into hreflang clusters and the sitemap. Currently equals
@@ -225,7 +234,7 @@ export function getSeoLocaleByUrlSegment(segment: string): SeoLocale | undefined
 // "draft" locale can be hidden from search engines without removing it
 // from the runtime LANGS list.
 export function getIndexableSeoLocales(): ReadonlyArray<SeoLocale> {
-    return SEO_LOCALES.filter((l) => l.indexable);
+    return INDEXABLE_SEO_LOCALES;
 }
 
 // All hreflang codes a locale claims: the primary plus any generic-language

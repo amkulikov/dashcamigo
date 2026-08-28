@@ -300,10 +300,9 @@ export function fillForwardBearings(records: GpsRecord[]): void {
  * Threshold below which a record is treated as stationary for bearing
  * purposes. 1.0 m/s (~3.6 km/h) covers GPS coordinate drift on a parked car
  * and slow rollback while still letting parking-lot maneuvers (5+ km/h) keep
- * their real heading. Exported so map-layer logic (display dead-band) shares
- * the same constant.
+ * their real heading.
  */
-export const STATIONARY_SPEED_MS = 1.0;
+const STATIONARY_SPEED_MS = 1.0;
 
 /**
  * Forces bearingDeg to inherit the last "moving" bearing for every record
@@ -873,6 +872,21 @@ export function mergeIntoGpsLog(
 ): ParsedLog {
     if (!existing) {
         return rebuildLog(batch.appliedExtractors, thinDenseRecords(dedupRecords(batch.records)), batch.skipped);
+    }
+
+    // A positive extractor result may carry only a clock hint/label and no GPS
+    // rows. Preserve the existing record indexes by reference instead of copying
+    // and flattening the complete log for an empty data batch.
+    if (batch.records.length === 0) {
+        if (batch.appliedExtractors.length === 0 && batch.skipped.length === 0) return existing;
+        return {
+            ...existing,
+            appliedExtractors:
+                batch.appliedExtractors.length === 0
+                    ? existing.appliedExtractors
+                    : unionStringArrays(existing.appliedExtractors, batch.appliedExtractors),
+            skipped: batch.skipped.length === 0 ? existing.skipped : existing.skipped.concat(batch.skipped),
+        };
     }
 
     // Incremental merge. The dedup key carries videoKey when known (and the raw

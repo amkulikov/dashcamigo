@@ -18,7 +18,6 @@ import {
     findBox,
     findHvccInTrak,
     findMoovInFile,
-    findPrimaryVideoSampleFormat,
     fourCCToVideoCodec,
     hevcCodecStringFromHvcc,
     isImaAdpcmSampleEntry,
@@ -26,6 +25,7 @@ import {
     readHandlerType,
     readMvhdCreationTime,
     readMvhdDurationSec,
+    readSampleFormat,
     readSoundSampleParams,
     readTkhdRotation,
     readVideoFrameRate,
@@ -68,8 +68,8 @@ export async function indexMp4FileWithMoov(file: File, captureMoov: boolean): Pr
         return { indexed: null };
     }
     const createdUtc = readMvhdCreationTime(moovDv);
-    const codecParam = findPrimaryVideoSampleFormat(moovDv);
-    const codec = codecParam ? fourCCToVideoCodec(codecParam) : null;
+    let codecParam: string | null = null;
+    let codec: VideoCodec | null = null;
 
     let rotation: Mp4Rotation = 0;
     let needsRemux = false;
@@ -101,6 +101,8 @@ export async function indexMp4FileWithMoov(file: File, captureMoov: boolean): Pr
             const handler = readHandlerType(moovDv, child);
             if (handler === "vide" && !sawVideo) {
                 sawVideo = true;
+                codecParam = readSampleFormat(moovDv, child);
+                codec = codecParam ? fourCCToVideoCodec(codecParam) : null;
                 rotation = readTkhdRotation(moovDv, child);
                 const dims = readVisualSampleDimensions(moovDv, child);
                 if (dims) {

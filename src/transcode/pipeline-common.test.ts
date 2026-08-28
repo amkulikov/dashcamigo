@@ -1,13 +1,32 @@
 import { describe, expect, it } from "vitest";
+import { type AudioSample, type AudioSampleSource } from "mediabunny";
 
 import {
     createMp4StreamOutput,
     discardOutputQuietly,
+    emitSilence,
     frameNeedsNoComposite,
     joinAllOrThrowFirst,
     nextTolerant,
     resolveAudioPlan,
 } from "./pipeline-common.js";
+
+describe("emitSilence", () => {
+    it("closes the sample when the output source rejects it", async () => {
+        const boom = new Error("encoder rejected sample");
+        let captured: AudioSample | null = null;
+        const source = {
+            async add(sample: AudioSample) {
+                captured = sample;
+                throw boom;
+            },
+        } as unknown as AudioSampleSource;
+
+        await expect(emitSilence(source, 0, 0.1, 48_000, 2, new AbortController().signal)).rejects.toBe(boom);
+        expect(captured).not.toBeNull();
+        expect(() => captured!.allocationSize({ planeIndex: 0 })).toThrow("AudioSample is closed");
+    });
+});
 
 // Builds an async iterator that yields each value in turn, then either ends
 // cleanly or throws `throwAtEnd` in place of the final {done:true}.

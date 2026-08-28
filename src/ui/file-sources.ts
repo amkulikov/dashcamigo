@@ -155,9 +155,7 @@ async function walkEntry(entry: FileSystemEntry, out: VendorFile[], errors: { co
 export function initFileSources(): void {
     dom.folderInput.addEventListener("change", () => {
         const files = Array.from(dom.folderInput.files || []);
-        if (files.length > 0) {
-            // ingestFiles takes over the pre-ingest overlay (showIngestOverlay).
-        } else {
+        if (files.length === 0) {
             // Empty selection (an empty folder, or some browsers' "open" with
             // nothing chosen). ingestFiles([]) only warns and returns, so it
             // will not hide the pre-ingest overlay we raised on click - retract

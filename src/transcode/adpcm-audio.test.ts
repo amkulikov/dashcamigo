@@ -277,4 +277,20 @@ describe("openAdpcmAudio", () => {
         expect(dur).toBe(0);
         expect(samples.length).toBe(0);
     });
+
+    it("closes an emitted sample when the output source rejects it", async () => {
+        const reader = (await openAdpcmAudio(buildAdpcmMovFile(makeBlocks(1, BLOCK_LEN), CHANNELS, SR)))!;
+        const boom = new Error("encoder rejected sample");
+        let captured: AudioSample | null = null;
+        const source = {
+            async add(sample: AudioSample) {
+                captured = sample;
+                throw boom;
+            },
+        } as unknown as AudioSampleSource;
+
+        await expect(reader.feedRange(source, 0, 1, 0)).rejects.toBe(boom);
+        expect(captured).not.toBeNull();
+        expect(() => captured!.allocationSize({ planeIndex: 0 })).toThrow("AudioSample is closed");
+    });
 });

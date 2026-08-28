@@ -51,6 +51,13 @@ export interface SampleEntry {
     index: number;
 }
 
+interface SttsMetadata {
+    entryCount: number;
+    arrayStart: number;
+    totalSamples: number;
+    totalTicks: number;
+}
+
 /**
  * Finds the first box with the given type inside [start, end) of the DataView.
  * Returns null if not found. Supports 32-bit and 64-bit (size==1 → largesize)
@@ -94,6 +101,32 @@ export function* iterBoxes(dv: DataView, start: number, end: number): Generator<
     }
 }
 
+/** Validates stts bounds/counts once and summarizes its run-length entries. */
+function readSttsMetadata(dv: DataView, trak: Box): SttsMetadata | null {
+    const stbl = walkPath(dv, trak, "mdia", "minf", "stbl");
+    if (!stbl) return null;
+    const stts = findBox(dv, stbl.payloadStart, stbl.end, "stts");
+    if (!stts) return null;
+    // FullBox version/flags (4) + entry_count (4).
+    if (stts.payloadStart + 8 > stts.end) return null;
+    const entryCount = dv.getUint32(stts.payloadStart + 4);
+    const arrayStart = stts.payloadStart + 8;
+    if (entryCount > MAX_SAMPLE_TABLE_ENTRIES) return null;
+    if (arrayStart + entryCount * 8 > stts.end) return null;
+
+    let totalSamples = 0;
+    let totalTicks = 0;
+    for (let i = 0; i < entryCount; i++) {
+        const offset = arrayStart + i * 8;
+        const sampleCount = dv.getUint32(offset);
+        const sampleDelta = dv.getUint32(offset + 4);
+        totalSamples += sampleCount;
+        if (totalSamples > MAX_SAMPLE_TABLE_ENTRIES) return null;
+        totalTicks += sampleCount * sampleDelta;
+    }
+    return { entryCount, arrayStart, totalSamples, totalTicks };
+}
+
 /**
  * Reads sample start times from stts.
  *
@@ -107,30 +140,15 @@ export function* iterBoxes(dv: DataView, start: number, end: number): Generator<
  * absent or corrupt.
  */
 export function readSampleStartsInTicks(dv: DataView, trak: Box): number[] | null {
-    const stbl = walkPath(dv, trak, "mdia", "minf", "stbl");
-    if (!stbl) return null;
-    const stts = findBox(dv, stbl.payloadStart, stbl.end, "stts");
-    if (!stts) return null;
-    const entryCount = dv.getUint32(stts.payloadStart + 4);
-    const arrayStart = stts.payloadStart + 8;
-    if (entryCount > MAX_SAMPLE_TABLE_ENTRIES) return null;
-    if (arrayStart + entryCount * 8 > stts.end) return null;
-
-    // Pre-scan total sample count: a corrupt stts can declare entry_count=1,
-    // sample_count=2^30 - without this guard we'd allocate a 4 GB array.
-    let totalSamples = 0;
-    for (let i = 0; i < entryCount; i++) {
-        const sampleCount = dv.getUint32(arrayStart + i * 8);
-        totalSamples += sampleCount;
-        if (totalSamples > MAX_SAMPLE_TABLE_ENTRIES) return null;
-    }
+    const metadata = readSttsMetadata(dv, trak);
+    if (!metadata) return null;
 
     const starts: number[] = [];
-    starts.length = totalSamples;
+    starts.length = metadata.totalSamples;
     let writeIdx = 0;
     let cumulativeTicks = 0;
-    for (let i = 0; i < entryCount; i++) {
-        const off = arrayStart + i * 8;
+    for (let i = 0; i < metadata.entryCount; i++) {
+        const off = metadata.arrayStart + i * 8;
         const sampleCount = dv.getUint32(off);
         const sampleDelta = dv.getUint32(off + 4);
         for (let j = 0; j < sampleCount; j++) {
@@ -148,27 +166,14 @@ export function readSampleStartsInTicks(dv: DataView, trak: Box): number[] | nul
  * seconds. Returns null if stts is absent or corrupt.
  */
 export function readSampleDurationsInTicks(dv: DataView, trak: Box): number[] | null {
-    const stbl = walkPath(dv, trak, "mdia", "minf", "stbl");
-    if (!stbl) return null;
-    const stts = findBox(dv, stbl.payloadStart, stbl.end, "stts");
-    if (!stts) return null;
-    const entryCount = dv.getUint32(stts.payloadStart + 4);
-    const arrayStart = stts.payloadStart + 8;
-    if (entryCount > MAX_SAMPLE_TABLE_ENTRIES) return null;
-    if (arrayStart + entryCount * 8 > stts.end) return null;
-
-    let totalSamples = 0;
-    for (let i = 0; i < entryCount; i++) {
-        const sampleCount = dv.getUint32(arrayStart + i * 8);
-        totalSamples += sampleCount;
-        if (totalSamples > MAX_SAMPLE_TABLE_ENTRIES) return null;
-    }
+    const metadata = readSttsMetadata(dv, trak);
+    if (!metadata) return null;
 
     const durations: number[] = [];
-    durations.length = totalSamples;
+    durations.length = metadata.totalSamples;
     let writeIdx = 0;
-    for (let i = 0; i < entryCount; i++) {
-        const off = arrayStart + i * 8;
+    for (let i = 0; i < metadata.entryCount; i++) {
+        const off = metadata.arrayStart + i * 8;
         const sampleCount = dv.getUint32(off);
         const sampleDelta = dv.getUint32(off + 4);
         for (let j = 0; j < sampleCount; j++) {
@@ -232,27 +237,6 @@ export function readHandlerType(dv: DataView, trak: Box): string | null {
         dv.getUint8(offset + 2),
         dv.getUint8(offset + 3),
     );
-}
-
-/**
- * Finds the first video track in moov (handler='vide') and returns the FourCC
- * of its stsd sample entry ('avc1' / 'hvc1' / 'hev1' / 'av01' / 'vp09' / ...).
- * Used by the indexer for the diagnostic `codecParam` field without calling
- * mediabunny `getCodecParameterString()` - the FourCC gives exactly the signal
- * needed in bug reports ('hev1' vs 'hvc1' for the MSE pipeline).
- *
- * dv can be a DataView over the full file or over a standalone moov buffer
- * (findMoovInFile.bytes) - findBox(dv, 0, ..., "moov") works in both cases.
- */
-export function findPrimaryVideoSampleFormat(dv: DataView): string | null {
-    const moov = findBox(dv, 0, dv.byteLength, "moov");
-    if (!moov) return null;
-    for (const child of iterBoxes(dv, moov.payloadStart, moov.end)) {
-        if (child.type !== "trak") continue;
-        if (readHandlerType(dv, child) !== "vide") continue;
-        return readSampleFormat(dv, child);
-    }
-    return null;
 }
 
 /**
@@ -371,12 +355,16 @@ export function readVisualSampleDimensions(dv: DataView, trak: Box): { width: nu
 export function readVideoFrameRate(dv: DataView, trak: Box): number | null {
     const timescale = readMediaTimescale(dv, trak);
     if (!timescale || timescale <= 0) return null;
-    const durations = readSampleDurationsInTicks(dv, trak);
-    if (!durations || durations.length === 0) return null;
-    let sumTicks = 0;
-    for (const d of durations) sumTicks += d;
-    if (sumTicks <= 0) return null;
-    return (durations.length * timescale) / sumTicks;
+    const metadata = readSttsMetadata(dv, trak);
+    if (
+        !metadata ||
+        metadata.totalSamples === 0 ||
+        metadata.totalTicks <= 0 ||
+        !Number.isSafeInteger(metadata.totalTicks)
+    ) {
+        return null;
+    }
+    return (metadata.totalSamples * timescale) / metadata.totalTicks;
 }
 
 /**
@@ -688,33 +676,65 @@ export function readSampleTable(dv: DataView, trak: Box): SampleEntry[] | null {
     return samples;
 }
 
-/** Reads stco (u32) or co64 (u64) → array of absolute chunk offsets. */
-function readChunkOffsets(dv: DataView, stbl: Box): number[] | null {
-    const stco = findBox(dv, stbl.payloadStart, stbl.end, "stco");
-    if (stco) {
-        const entryCount = dv.getUint32(stco.payloadStart + 4);
-        const arrayStart = stco.payloadStart + 8;
-        if (arrayStart + entryCount * 4 > stco.end) return null;
-        const out = new Array<number>(entryCount);
-        for (let i = 0; i < entryCount; i++) {
-            out[i] = dv.getUint32(arrayStart + i * 4);
-        }
-        return out;
-    }
-    const co64 = findBox(dv, stbl.payloadStart, stbl.end, "co64");
-    if (co64) {
-        const entryCount = dv.getUint32(co64.payloadStart + 4);
-        const arrayStart = co64.payloadStart + 8;
-        if (arrayStart + entryCount * 8 > co64.end) return null;
-        const out = new Array<number>(entryCount);
-        for (let i = 0; i < entryCount; i++) {
-            const hi = dv.getUint32(arrayStart + i * 8);
-            const lo = dv.getUint32(arrayStart + i * 8 + 4);
-            out[i] = hi * 0x100000000 + lo;
-        }
-        return out;
+/**
+ * Resolves only the first sample of a track without materialising the complete
+ * per-sample table. Empty leading chunks are skipped according to stsc; the
+ * first non-empty chunk starts at its stco/co64 offset, so no preceding sample
+ * sizes need to be summed. Returns null for an empty or corrupt table.
+ */
+export function readFirstSampleEntry(dv: DataView, trak: Box): SampleEntry | null {
+    const stbl = walkPath(dv, trak, "mdia", "minf", "stbl");
+    if (!stbl) return null;
+
+    const chunkOffsets = readChunkOffsetTable(dv, stbl);
+    if (chunkOffsets === null) return null;
+    const stsc = readStsc(dv, stbl);
+    if (stsc === null) return null;
+    const sampleSizes = readSampleSizes(dv, stbl);
+    if (sampleSizes === null || sampleSizes.count === 0) return null;
+
+    for (let chunkIdx = 0; chunkIdx < chunkOffsets.count; chunkIdx++) {
+        if (samplesPerChunkAt(stsc, chunkIdx) === 0) continue;
+        const size = sampleSizes.at(0);
+        if (size === null) return null;
+        return { offset: chunkOffsetAt(dv, chunkOffsets, chunkIdx), size, index: 1 };
     }
     return null;
+}
+
+interface ChunkOffsetTable {
+    count: number;
+    arrayStart: number;
+    stride: 4 | 8;
+}
+
+/** Locates and validates stco/co64 without materialising its offsets. */
+function readChunkOffsetTable(dv: DataView, stbl: Box): ChunkOffsetTable | null {
+    // Preserve stco priority: a present-but-corrupt stco is an error rather
+    // than an invitation to fall back to a second co64 table.
+    const box = findBox(dv, stbl.payloadStart, stbl.end, "stco") ?? findBox(dv, stbl.payloadStart, stbl.end, "co64");
+    if (!box || box.payloadStart + 8 > box.end) return null;
+    const count = dv.getUint32(box.payloadStart + 4);
+    const arrayStart = box.payloadStart + 8;
+    const stride: 4 | 8 = box.type === "stco" ? 4 : 8;
+    if (count > MAX_SAMPLE_TABLE_ENTRIES) return null;
+    if (arrayStart + count * stride > box.end) return null;
+    return { count, arrayStart, stride };
+}
+
+function chunkOffsetAt(dv: DataView, table: ChunkOffsetTable, index: number): number {
+    const offset = table.arrayStart + index * table.stride;
+    if (table.stride === 4) return dv.getUint32(offset);
+    return dv.getUint32(offset) * 0x100000000 + dv.getUint32(offset + 4);
+}
+
+/** Reads stco (u32) or co64 (u64) → array of absolute chunk offsets. */
+function readChunkOffsets(dv: DataView, stbl: Box): number[] | null {
+    const table = readChunkOffsetTable(dv, stbl);
+    if (table === null) return null;
+    const out = new Array<number>(table.count);
+    for (let i = 0; i < table.count; i++) out[i] = chunkOffsetAt(dv, table, i);
+    return out;
 }
 
 interface StscEntry {
@@ -726,8 +746,10 @@ interface StscEntry {
 function readStsc(dv: DataView, stbl: Box): StscEntry[] | null {
     const stsc = findBox(dv, stbl.payloadStart, stbl.end, "stsc");
     if (!stsc) return null;
+    if (stsc.payloadStart + 8 > stsc.end) return null;
     const entryCount = dv.getUint32(stsc.payloadStart + 4);
     const arrayStart = stsc.payloadStart + 8;
+    if (entryCount > MAX_SAMPLE_TABLE_ENTRIES) return null;
     if (arrayStart + entryCount * 12 > stsc.end) return null;
     const out: StscEntry[] = [];
     for (let i = 0; i < entryCount; i++) {
@@ -772,6 +794,7 @@ interface SampleSizes {
 function readSampleSizes(dv: DataView, stbl: Box): SampleSizes | null {
     const stsz = findBox(dv, stbl.payloadStart, stbl.end, "stsz");
     if (!stsz) return null;
+    if (stsz.payloadStart + 12 > stsz.end) return null;
     const sampleSize = dv.getUint32(stsz.payloadStart + 4);
     const sampleCount = dv.getUint32(stsz.payloadStart + 8);
     if (sampleCount > MAX_SAMPLE_TABLE_ENTRIES) return null;

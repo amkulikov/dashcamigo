@@ -31,16 +31,25 @@ test.describe("player", () => {
 
     test("play/pause control toggles the playing state", async ({ page }) => {
         const play = page.locator("#player-play");
-        // The app may auto-start playback on trip activation, so the initial state
-        // is not stable across runs - assert the control toggles it BOTH ways
-        // from whatever it is. (Actual frame decode/advance is covered by the
-        // export-run suite, which reads decoded frames; asserting currentTime here
-        // is flaky under headless multichannel.)
-        const startedPaused = (await play.getAttribute("data-paused")) === "true";
+        // The four-second fixture can finish while a busy full-suite worker is
+        // still settling setup. A click at that point exercises the asynchronous
+        // restart-from-end path, not the ordinary play toggle this test names.
+        // Pause and seek to a known non-terminal frame before checking both
+        // transitions so worker scheduling cannot change the branch under test.
+        if ((await play.getAttribute("data-paused")) === "false") {
+            await play.click();
+            await expect(play).toHaveAttribute("data-paused", "true");
+        }
+        await page.locator("#player-mini-progress").focus();
+        await page.keyboard.press("Home");
+        await expect
+            .poll(() => masterVideoTime(page), { message: "Home must settle at the first frame" })
+            .toBeLessThan(0.1);
+
         await play.click();
-        await expect(play).toHaveAttribute("data-paused", startedPaused ? "false" : "true");
+        await expect(play).toHaveAttribute("data-paused", "false");
         await play.click();
-        await expect(play).toHaveAttribute("data-paused", startedPaused ? "true" : "false");
+        await expect(play).toHaveAttribute("data-paused", "true");
         await shot(page, "player-01-playpause");
     });
 

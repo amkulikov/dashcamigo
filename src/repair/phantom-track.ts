@@ -236,14 +236,3 @@ function allSampleSizesZero(dv: DataView, payloadStart: number, end: number): bo
     }
     return true;
 }
-
-// ====== exposed for tests ======
-
-/**
- * Test wrapper: runs the phantom-track scan on a standalone moov buffer and
- * reports the edits (handler + reason + count offsets). No file I/O so tests
- * stay unit-level.
- */
-export function _testFindPhantomTracks(moovBytes: Uint8Array): PhantomEdit[] {
-    return findPhantomTracks(moovBytes);
-}

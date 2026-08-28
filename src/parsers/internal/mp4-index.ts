@@ -40,6 +40,7 @@ import {
     listTopLevelBoxes,
     type Box,
     loadSamples,
+    readFirstSampleEntry,
     readHandlerType,
     readMvhdCreationTime,
     readMvhdDurationSec,
@@ -765,12 +766,12 @@ export async function getFirstSampleOfTrack(
         index.firstSampleCache.set(key, null);
         return null;
     }
-    const samples = readSampleTable(index.moovView, track.trakBox);
-    if (!samples || samples.length === 0) {
+    const sample = readFirstSampleEntry(index.moovView, track.trakBox);
+    if (!sample) {
         index.firstSampleCache.set(key, null);
         return null;
     }
-    const buffers = await loadSamples(vf.file, samples.slice(0, 1));
+    const buffers = await loadSamples(vf.file, [sample]);
     const buf = buffers[0];
     if (!buf) {
         index.firstSampleCache.set(key, null);

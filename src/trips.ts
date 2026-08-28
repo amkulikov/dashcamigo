@@ -721,7 +721,6 @@ export function groupTrips(videos: VideoCandidate[], gapSec: number = getTripGap
     //  - Single-channel (70mai x800): adjacent clips 60+ sec apart exceed
     //    the 30s snap boundary, so each file gets its own frame.
     const framesByKey = new Map<string, TripFrame>();
-    const frameOrder: string[] = [];
     for (const video of sorted) {
         const channel: Channel = video.channel ?? DEFAULT_CHANNEL;
         // Snap is used ONLY as the grouping key for multi-channel frames:
@@ -781,7 +780,6 @@ export function groupTrips(videos: VideoCandidate[], gapSec: number = getTripGap
                 channels: {},
             };
             framesByKey.set(key, existing);
-            frameOrder.push(key);
         }
         existing.channels[channel] = video;
     }
@@ -802,8 +800,7 @@ export function groupTrips(videos: VideoCandidate[], gapSec: number = getTripGap
     // recording mode live in the path (Normal/Front, RecentClips/...), so a
     // folder split would tear one trip apart along its own mode/channel subdirs.
     const framesByFingerprint = new Map<string, TripFrame[]>();
-    for (const k of frameOrder) {
-        const frame = framesByKey.get(k)!;
+    for (const frame of framesByKey.values()) {
         // All candidates in a frame share a fingerprint (it is part of the frame
         // key), so any present channel answers for the whole frame.
         const fingerprint = frameCanonicalCandidate(frame)?.fingerprint ?? "";
@@ -2374,6 +2371,23 @@ export function rederiveStartUtcForCandidates(
     // and local-as-UTC records would bake the camera zone into all of them.
     applyLocalClockCorrections(candidates);
 
+    // The filename registry is pure but regex/date-heavy and this sweep asks it
+    // several times through independent estimators. Cache by both immutable File
+    // identity and relativePath because path-based techniques can distinguish two
+    // VendorFile views of the same File. Map.has keeps null misses cached too.
+    const filenameTimeCache = new WeakMap<File, Map<string, Date | null>>();
+    const memoizedFilenameTime = (file: VendorFile): Date | null => {
+        let byPath = filenameTimeCache.get(file.file);
+        if (!byPath) {
+            byPath = new Map();
+            filenameTimeCache.set(file.file, byPath);
+        }
+        if (byPath.has(file.relativePath)) return byPath.get(file.relativePath)!;
+        const parsed = parseFilenameLocalTime(file);
+        byPath.set(file.relativePath, parsed);
+        return parsed;
+    };
+
     const tzSamples: TzSample[] = [];
     // Dedup by File IDENTITY, not basename: two DISTINCT files can share a
     // basename (a Viofo RO/ protected copy vs its Movie/ sibling, or the same
@@ -2397,8 +2411,8 @@ export function rederiveStartUtcForCandidates(
             durationSec: c.durationSec,
         });
     }
-    const tzByFingerprint = estimateTzByFingerprint(tzSamples, parseFilenameLocalTime);
-    const preciseOffsetRuns = estimatePreciseClockOffsetByFingerprint(tzSamples, parseFilenameLocalTime);
+    const tzByFingerprint = estimateTzByFingerprint(tzSamples, memoizedFilenameTime);
+    const preciseOffsetRuns = estimatePreciseClockOffsetByFingerprint(tzSamples, memoizedFilenameTime);
 
     // Wall spans first, over the WHOLE set: deriveStartUtc validates GPS
     // windows against them (a time-lapse clip's GPS covers the wall span, not
@@ -2406,7 +2420,7 @@ export function rederiveStartUtcForCandidates(
     // neighbors before any single clip can be judged.
     for (const c of candidates) {
         const vendorFile = { file: c.file, relativePath: c.relativePath };
-        const filenameLocal = parseFilenameLocalTime(vendorFile);
+        const filenameLocal = memoizedFilenameTime(vendorFile);
         const canInferTimelapse = canInferTimelapseFromClock(vendorFile);
         c.wallDurationSec = deriveWallDurationSec({
             // Explicit markers stay authoritative. Ambiguous filename families
@@ -2429,7 +2443,7 @@ export function rederiveStartUtcForCandidates(
             if (c.recordingMode === null || c.recordingMode === "normal") c.recordingMode = "parking";
         }
     }
-    applyTimelapseCadenceWallSpans(candidates, parseFilenameLocalTime);
+    applyTimelapseCadenceWallSpans(candidates, memoizedFilenameTime);
 
     // Per-fingerprint tally of clips whose mvhd could not be reconciled with
     // their own GPS window (see the tripwire log after the loop).
@@ -2444,12 +2458,12 @@ export function rederiveStartUtcForCandidates(
             durationSec: c.durationSec,
             records: c.records,
             fingerprintTz: tzByFingerprint.get(c.fingerprint) ?? null,
-            parseFilenameLocalTime,
+            parseFilenameLocalTime: memoizedFilenameTime,
             preciseFilenameOffsetSec: resolvePreciseClockOffsetForFile(
                 preciseOffsetRuns,
                 c.fingerprint,
                 vendorFile,
-                parseFilenameLocalTime,
+                memoizedFilenameTime,
             ),
             embeddedStartUtcHint: c.embeddedStartUtcHint,
             isTimelapse: c.isTimelapse,

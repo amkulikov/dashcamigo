@@ -4,11 +4,11 @@
 // Why it does not fit a pure RPC shape: this is a long-lived feed loop with
 // push events in both directions. "init" is a one-shot request/reply
 // (metadata read → codec mime); after that, control messages from main
-// (start-feed, tick, seek, dispose) are fire-and-forget, and data from the
+// (start-feed, tick, seek) are fire-and-forget, and data from the
 // worker (init-segment, media-segment, feed-done, seek-done, error) is a
 // push stream. So:
 //   - init                                   → request (await ack)
-//   - start-feed, tick, seek, dispose        → main → worker notifications
+//   - start-feed, tick, seek                 → main → worker notifications
 //   - init-segment, media-segment, ...       → worker → main notifications
 //
 // Transfer note: init/media segment bytes are sent via the framework's
@@ -149,7 +149,6 @@ export const MSE_NOTIFY_START_FEED = "start-feed";
 export const MSE_NOTIFY_DROP_AUDIO = "drop-audio";
 export const MSE_NOTIFY_TICK = "tick";
 export const MSE_NOTIFY_SEEK = "seek";
-export const MSE_NOTIFY_DISPOSE = "dispose";
 export const MSE_NOTIFY_INIT_SEGMENT = "init-segment";
 export const MSE_NOTIFY_MEDIA_SEGMENT = "media-segment";
 export const MSE_NOTIFY_FEED_DONE = "feed-done";

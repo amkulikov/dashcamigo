@@ -206,8 +206,11 @@ export async function openAdpcmAudio(file: File): Promise<AdpcmAudioReader | nul
                     sampleRate,
                     timestamp: mapTs(f),
                 });
-                await source.add(sample);
-                sample.close();
+                try {
+                    await source.add(sample);
+                } finally {
+                    sample.close();
+                }
                 if (!firstAddDone) {
                     firstAddDone = true;
                     onAfterFirstAdd?.();
