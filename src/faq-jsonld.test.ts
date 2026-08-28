@@ -16,8 +16,10 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { enDict } from "./i18n/en.js";
+import { REPO_URL } from "./i18n/seo-config.js";
 
 const HTML_PATH = resolve(process.cwd(), "index.html");
+const baselineHtml = readFileSync(HTML_PATH, "utf-8");
 
 interface FaqEntry {
     name: string;
@@ -39,7 +41,7 @@ function extractBaselineFaq(html: string): FaqEntry[] {
 const VENDOR_BRANDS_TAIL = "70mai, Viofo, BlackVue, GoPro, Garmin, Vantrue, Thinkware";
 
 describe("faq-jsonld baseline parity", () => {
-    const baseline = extractBaselineFaq(readFileSync(HTML_PATH, "utf-8"));
+    const baseline = extractBaselineFaq(baselineHtml);
 
     it("has 12 questions", () => {
         expect(baseline).toHaveLength(12);
@@ -51,7 +53,6 @@ describe("faq-jsonld baseline parity", () => {
         [4, "landing.faq.q3", "landing.faq.a3"],
         [5, "landing.faq.q4", "landing.faq.a4"],
         [6, "landing.faq.q5", "landing.faq.a5"],
-        [7, "landing.faq.q11", "landing.faq.a11"],
         [8, "landing.faq.q6", "landing.faq.a6"],
         [9, "landing.faq.q10", "landing.faq.a10"],
         [10, "landing.faq.q7", "landing.faq.a7"],
@@ -74,6 +75,14 @@ describe("faq-jsonld baseline parity", () => {
         const expected = `${VENDOR_BRANDS_TAIL}${enDict["landing.faq.a2.after"]}`;
         expect(entry?.name).toBe(enDict["landing.faq.q2"]);
         expect(entry?.text).toBe(expected);
+    });
+
+    it("entry 7 (q11) stitches the plain-text GitHub URL between dict fragments", () => {
+        const entry = baseline[7];
+        const expected = `${enDict["landing.faq.a11.before"]}${REPO_URL}${enDict["landing.faq.a11.after"]}`;
+        expect(entry?.name).toBe(enDict["landing.faq.q11"]);
+        expect(entry?.text).toBe(expected);
+        expect(baselineHtml).toContain(`href="${REPO_URL}" target="_blank" rel="noopener noreferrer">${REPO_URL}</a>`);
     });
 
     it("entry 11 (q8) stitches the /alternatives/ link label between dict fragments", () => {

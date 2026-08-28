@@ -64,6 +64,7 @@ import {
     getDefaultSeoLocale,
     getHreflangCodes,
     getIndexableSeoLocales,
+    REPO_URL,
     type SeoLocale,
 } from "../src/i18n/seo-config.js";
 import {
@@ -962,6 +963,7 @@ function buildFaqJsonLd(dict: Record<I18nKey, string>): string {
     // a12 stitches the GitHub anchor text between its surrounding copy.
     const a12 = `${dict["landing.faq.a12.before"] ?? ""}${dict["landing.faq.a12.link"] ?? ""}${dict["landing.faq.a12.after"] ?? ""}`;
     const a2 = `${getLandingBrandsCommaSeparated()}${dict["landing.faq.a2.after"] ?? ""}`;
+    const a11 = `${dict["landing.faq.a11.before"] ?? ""}${REPO_URL}${dict["landing.faq.a11.after"] ?? ""}`;
     // a8 stitches the /alternatives/ link's anchor text between its fragments,
     // and the visible DOM weaves an <a> there.
     const a8 = `${dict["landing.faq.a8.before"] ?? ""}${dict["landing.faq.a8.link"] ?? ""}${dict["landing.faq.a8.after"] ?? ""}`;
@@ -973,7 +975,7 @@ function buildFaqJsonLd(dict: Record<I18nKey, string>): string {
         { q: dict["landing.faq.q3"] ?? "", a: dict["landing.faq.a3"] ?? "" },
         { q: dict["landing.faq.q4"] ?? "", a: dict["landing.faq.a4"] ?? "" },
         { q: dict["landing.faq.q5"] ?? "", a: dict["landing.faq.a5"] ?? "" },
-        { q: dict["landing.faq.q11"] ?? "", a: dict["landing.faq.a11"] ?? "" },
+        { q: dict["landing.faq.q11"] ?? "", a: a11 },
         { q: dict["landing.faq.q6"] ?? "", a: dict["landing.faq.a6"] ?? "" },
         { q: dict["landing.faq.q10"] ?? "", a: dict["landing.faq.a10"] ?? "" },
         { q: dict["landing.faq.q7"] ?? "", a: dict["landing.faq.a7"] ?? "" },

@@ -198,7 +198,8 @@ export type I18nKey =
     | "landing.faq.q5"
     | "landing.faq.a5"
     | "landing.faq.q11"
-    | "landing.faq.a11"
+    | "landing.faq.a11.before"
+    | "landing.faq.a11.after"
     | "landing.faq.q6"
     | "landing.faq.a6"
     // q10 = privacy blur; sits between q6 (cut a clip) and q7 (best browser)
