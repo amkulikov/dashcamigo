@@ -15,15 +15,13 @@
 // serialization. Per-file progress is pushed via server.notify("progress").
 
 import { createLogger } from "../log.js";
-import { dispatchParseVideoEmbeddedGps } from "../parsers/registry.js";
-
 import {
     GPS_NOTIFY_PROGRESS,
     GPS_REQUEST_EXTRACT,
     type ExtractRequestData,
     type ExtractResult,
-    type ProgressNotificationData,
 } from "./gps-extract-protocol.js";
+import { dispatchGpsExtractRequest } from "./gps-extract-request.js";
 import { createParseGate } from "./_protocol/parse-gate.js";
 import { createWorkerServer, type WorkerScopeEndpoint } from "./_protocol/worker-server.js";
 
@@ -48,22 +46,9 @@ const server = createWorkerServer(self, {
         const req = data as ExtractRequestData;
         return parseGate.run(async () => {
             try {
-                return await dispatchParseVideoEmbeddedGps(
-                    req.classified,
-                    (done, total, file) => {
-                        const ntf: ProgressNotificationData = {
-                            token: req.token,
-                            done,
-                            total,
-                            fileName: file.file.name,
-                        };
-                        server.notify(GPS_NOTIFY_PROGRESS, ntf);
-                    },
-                    req.concurrency,
-                    ctx.signal,
-                    req.mode,
-                    req.prebuiltMoovByPath,
-                );
+                return await dispatchGpsExtractRequest(req, ctx.signal, (progress) => {
+                    server.notify(GPS_NOTIFY_PROGRESS, progress);
+                });
             } catch (err) {
                 // dispatchParseVideoEmbeddedGps rethrows AbortError on cancel;
                 // surface it as-is so the client side sees AbortError, not a

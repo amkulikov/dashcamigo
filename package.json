@@ -30,11 +30,11 @@
   },
   "scripts": {
     "dev": "vite",
-    "prebuild": "node scripts/validate-map-styles.mjs",
+    "prebuild": "node scripts/validate-map-styles.mjs && node scripts/parser-cache-revisions.mjs --check",
     "build": "vite build && node scripts/check-lazy-chunks.mjs && node scripts/generate-third-party-notices.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "pretest": "node scripts/validate-map-styles.mjs",
+    "pretest": "node scripts/validate-map-styles.mjs && node scripts/parser-cache-revisions.mjs --check",
     "test": "TZ=UTC vitest run",
     "test:deployment-profile": "TZ=UTC vitest run src/i18n/deployment-profile.test.ts src/i18n/seo-prerender-build.test.ts src/i18n/static-search-meta.test.ts src/csp-hash.integration.test.ts src/sw-precache.integration.test.ts",
     "test:watch": "TZ=UTC vitest",
@@ -50,6 +50,8 @@
     "knip": "knip",
     "indexnow": "node scripts/indexnow-ping.mjs",
     "generate:changelog": "node scripts/generate-changelog-md.mjs",
+    "generate:parser-cache-revisions": "node scripts/parser-cache-revisions.mjs",
+    "validate:parser-cache-revisions": "node scripts/parser-cache-revisions.mjs --check",
     "validate:styles": "node scripts/validate-map-styles.mjs",
     "screenshots:readme": "node scripts/generate-readme-screenshots.mjs"
   },
@@ -75,6 +77,7 @@
     "@xmldom/xmldom": "^0.9.10",
     "html-minifier-terser": "^7.2.0",
     "knip": "^6.32.2",
+    "rolldown": "1.2.5",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
     "vitest": "^4.1.11"

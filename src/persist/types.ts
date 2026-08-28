@@ -4,19 +4,17 @@
 // FileSystemHandle objects are the one exception - browsers clone them
 // natively, which is the whole mechanism this feature stands on.
 
-import type { IndexerRepair } from "../indexer.js";
-import type { VideoCandidate } from "../trips.js";
+import type { AccelSample, GpsRecord } from "../parsers/types.js";
+import type { IndexedMp4, IndexerRepair } from "../workers/indexer-protocol.js";
+
+export { RECORDING_METADATA_CACHE_REVISION } from "./cache-revisions.generated.js";
 
 /**
- * Bumped by hand whenever indexing/parsing semantics change in a way that
- * makes cached results stale (new extractor, changed classification, fixed
- * timestamp derivation, ...). A mismatch invalidates the whole cache and the
- * folder is re-indexed in full on next open. Deliberately one global version:
- * per-extractor granularity would need a dependency matrix (classify + source
- * hints + extractors + sidecars) that is easy to get wrong, and a silently
- * stale cache is worse than one extra re-index.
+ * Stored-record shape only. Parser compatibility is carried by each embedded
+ * GPS artifact; container metadata has its own revision. Derived candidate
+ * fields and external sidecars are never persisted.
  */
-export const INDEX_CACHE_VERSION = 23;
+export const INDEX_CACHE_FORMAT = 2;
 
 /**
  * Cheap cross-session identity of a file inside a picked folder, matchable
@@ -54,20 +52,47 @@ export interface RememberedFolder {
     sidecarHandle?: FileSystemFileHandle;
 }
 
-/**
- * Everything a VideoCandidate carries except the live File - the cacheable
- * remainder. Derived with Omit so a field added to VideoCandidate flows into
- * the cache automatically; whether its SEMANTICS require an
- * INDEX_CACHE_VERSION bump stays a review-time decision.
- */
-export type CachedCandidateFields = Omit<VideoCandidate, "file" | "sourceKey">;
+export interface CachedRecordingMetadata {
+    revision: string;
+    indexed: IndexedMp4;
+    repair?: IndexerRepair;
+}
+
+/** Session ownership, external-track choices, and post-parse clock corrections
+ * are rebuilt on restore rather than persisted with byte-derived GPS. */
+export type CachedEmbeddedGpsRecord = Omit<
+    GpsRecord,
+    "videoKey" | "recordingAssociation" | "externalTrack" | "externalTrackKey" | "localClockOffsetAppliedSec"
+>;
+
+export interface CachedParsedEmbeddedGps {
+    status: "parsed";
+    /** Winner plus every primitive that preceded it in dispatch order. */
+    dispatchRevision: string;
+    extractorId: string;
+    /** Persistent identity of the file whose bytes were parsed. Differs from
+     *  the owning entry for cloneAcrossGroup followers. */
+    sourceIdentityKey: string;
+    records: CachedEmbeddedGpsRecord[];
+    videoStartUtcHint?: number;
+    localClockOffsetHintSec?: number;
+    accelSamples?: AccelSample[];
+}
+
+export interface CachedNoEmbeddedGps {
+    status: "none";
+    /** Full registry revision: every primitive participated in this negative. */
+    dispatchRevision: string;
+}
+
+export type CachedEmbeddedGps = CachedParsedEmbeddedGps | CachedNoEmbeddedGps;
 
 /** One cached indexing result, keyed by the file identity. */
 export interface CachedFileIndex {
     /** fileIdentityKey() of the source file. */
     identityKey: string;
-    /** INDEX_CACHE_VERSION at write time; a mismatch means reindex. */
-    version: number;
+    /** INDEX_CACHE_FORMAT at write time; a mismatch means legacy data. */
+    cacheFormat: number;
     /** Last write OR last cache hit (refreshed on use, so the prune evicts
      *  what is not being opened, not what was merely written first). */
     savedAt: number;
@@ -75,16 +100,10 @@ export interface CachedFileIndex {
      *  volume-based prune. Absent on entries written before it existed;
      *  those are evicted first when the prune runs. */
     bytes?: number;
-    /** Identity of every parsed log/GPS/accel sidecar present with the video. */
-    dependencyKey: string;
-    candidate: CachedCandidateFields;
-    /**
-     * Container-repair descriptor when the indexer patched this file's moov.
-     * The on-disk bytes stay broken forever, so the repair re-applies on every
-     * restore; without it the cached candidate would point at a file whose
-     * codec config the candidate metadata no longer matches.
-     */
-    repair?: IndexerRepair;
+    metadata: CachedRecordingMetadata;
+    /** Absent means embedded extraction was not completed (for example a
+     *  sidecar already supplied GPS, or a heavy scan is still pending). */
+    embeddedGps?: CachedEmbeddedGps;
 }
 
 /**

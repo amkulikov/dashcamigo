@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { VendorFile } from "../types.js";
-import { blackvueChannelCloneGroup, juscarTsCloneGroup, videoCloneAffinityKey } from "./clone-groups.js";
+import { blackvueChannelCloneGroup } from "../blackvue-clone-group.js";
+import { juscarTsCloneGroup, videoCloneAffinityKey } from "./clone-groups.js";
 
 function file(path: string): VendorFile {
     return { file: new File([], path.split("/").pop()!), relativePath: path, sourceKey: "drop" };

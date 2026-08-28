@@ -3,11 +3,14 @@
 // in ui/ingest-cache.ts.
 
 import { createLogger } from "../log.js";
-import type { IndexerRepair } from "../indexer.js";
-import type { VideoCandidate } from "../trips.js";
 import { getIndexCacheLimitBytes } from "./cache-limit.js";
 import { openPersistDb, type PersistDb } from "./db.js";
-import { type CachedCandidateFields, type CachedFileIndex, INDEX_CACHE_VERSION } from "./types.js";
+import {
+    type CachedEmbeddedGps,
+    type CachedFileIndex,
+    type CachedRecordingMetadata,
+    INDEX_CACHE_FORMAT,
+} from "./types.js";
 
 const log = createLogger("index-cache");
 
@@ -41,8 +44,8 @@ const PUT_CHUNK = 200;
 const TOTAL_BYTES_META_KEY = "indexCacheBytes";
 
 /**
- * Fetches cache entries for the given identity keys. Entries written under a
- * different INDEX_CACHE_VERSION are treated as absent (and left for the prune
+ * Fetches cache entries for the given identity keys. Entries written in a
+ * different storage format are treated as absent (and left for the prune
  * to age out - deleting them here would put a write transaction on the hot
  * ingest path). Missing keys are simply absent from the result map.
  */
@@ -53,7 +56,7 @@ export async function getIndexCacheEntries(keys: string[]): Promise<Map<string, 
     await Promise.all(
         keys.map(async (key) => {
             const entry = await tx.store.get(key);
-            if (entry && entry.version === INDEX_CACHE_VERSION) out.set(key, entry);
+            if (isCurrentCacheEntry(entry)) out.set(key, entry);
         }),
     );
     await tx.done;
@@ -88,7 +91,7 @@ export async function touchIndexCacheEntries(keys: string[]): Promise<void> {
     await Promise.all(
         batch.map(async (key) => {
             const entry = await tx.store.get(key);
-            if (!entry || entry.version !== INDEX_CACHE_VERSION) return;
+            if (!isCurrentCacheEntry(entry)) return;
             entry.savedAt = now;
             // Voided on purpose (the batch is fire-and-forget), but with its own
             // catch: an aborted transaction rejects every pending request, and a
@@ -103,17 +106,17 @@ export async function touchIndexCacheEntries(keys: string[]): Promise<void> {
     }
 }
 
-/** Strips the live File off a candidate for storage. Pure; the stored copy is
- *  a structured-clone snapshot, so later in-session mutations don't leak in. */
-export function toCachedCandidate(candidate: VideoCandidate): CachedCandidateFields {
-    const { file: _file, sourceKey: _sourceKey, ...fields } = candidate;
-    // A loose GPX is an explicit per-session user choice. Persisting it inside
-    // the video's cache would silently restore the route after the GPX was
-    // removed and bypass the assignment dialog on the next folder open.
-    return {
-        ...fields,
-        records: fields.records.filter((record) => record.externalTrack !== true),
-    };
+/** Narrow old IndexedDB values before current code reads their artifact shape. */
+export function isCurrentCacheEntry(value: unknown): value is CachedFileIndex {
+    if (typeof value !== "object" || value === null) return false;
+    const entry = value as Partial<CachedFileIndex>;
+    return (
+        entry.cacheFormat === INDEX_CACHE_FORMAT &&
+        typeof entry.identityKey === "string" &&
+        typeof entry.savedAt === "number" &&
+        typeof entry.metadata === "object" &&
+        entry.metadata !== null
+    );
 }
 
 // Rough stored weight of one GpsRecord: nine numeric fields plus the source
@@ -121,40 +124,40 @@ export function toCachedCandidate(candidate: VideoCandidate): CachedCandidateFie
 // the volume bound keeps meaning roughly what it says; the prune itself only
 // ever compares entries against each other.
 const BYTES_PER_RECORD = 200;
-// Everything on a candidate that is not its records: paths, codec strings,
-// classifier verdicts, the fixed scalars.
-const BYTES_PER_CANDIDATE = 512;
+const BYTES_PER_ACCEL_SAMPLE = 40;
+// IndexedMp4 fields, cache revisions, ids, and IndexedDB record overhead.
+const BYTES_PER_ENTRY = 512;
 
 /**
- * Approximate stored size of an entry in bytes: the records (which dominate by
- * orders of magnitude) plus a flat allowance for the rest and the repair's
- * patched-moov buffer. Arithmetic, not JSON.stringify: this runs once per file
- * at the end of every ingest, on the main thread, and serializing a
- * thousand-record candidate to measure it costs more than storing it.
+ * Approximate stored size of an entry. Arithmetic, not JSON.stringify: dense
+ * telemetry dominates and serializing it solely for accounting is expensive.
  */
-export function approxEntryBytes(candidate: CachedCandidateFields, repair: IndexerRepair | undefined): number {
-    const repairBytes = repair ? repair.patchedMoov.byteLength + 256 : 0;
-    const pathBytes = candidate.relativePath.length * 2;
-    return candidate.records.length * BYTES_PER_RECORD + BYTES_PER_CANDIDATE + pathBytes + repairBytes;
+export function approxEntryBytes(
+    identityKey: string,
+    metadata: CachedRecordingMetadata,
+    embeddedGps: CachedEmbeddedGps | undefined,
+): number {
+    const repairBytes = metadata.repair ? metadata.repair.patchedMoov.byteLength + 256 : 0;
+    const recordBytes = embeddedGps?.status === "parsed" ? embeddedGps.records.length * BYTES_PER_RECORD : 0;
+    const accelBytes =
+        embeddedGps?.status === "parsed" ? (embeddedGps.accelSamples?.length ?? 0) * BYTES_PER_ACCEL_SAMPLE : 0;
+    return identityKey.length * 2 + recordBytes + accelBytes + repairBytes + BYTES_PER_ENTRY;
 }
 
-/** Assembles a store entry for a freshly indexed candidate. */
+/** Assembles one immutable artifact snapshot for storage. */
 export function buildCacheEntry(
     identityKey: string,
-    candidate: VideoCandidate,
-    repair: IndexerRepair | undefined,
-    dependencyKey: string,
+    metadata: CachedRecordingMetadata,
+    embeddedGps: CachedEmbeddedGps | undefined,
 ): CachedFileIndex {
-    const cachedCandidate = toCachedCandidate(candidate);
     const entry: CachedFileIndex = {
         identityKey,
-        version: INDEX_CACHE_VERSION,
+        cacheFormat: INDEX_CACHE_FORMAT,
         savedAt: Date.now(),
-        bytes: approxEntryBytes(cachedCandidate, repair),
-        dependencyKey,
-        candidate: cachedCandidate,
+        bytes: approxEntryBytes(identityKey, metadata, embeddedGps),
+        metadata,
     };
-    if (repair) entry.repair = repair;
+    if (embeddedGps) entry.embeddedGps = embeddedGps;
     return entry;
 }
 
@@ -339,7 +342,7 @@ async function pruneIndexCache(db: PersistDb, totalHint: number): Promise<void> 
     while (cursor && (total > limitBytes || entriesLeft > MAX_ENTRIES)) {
         const entry = cursor.value;
         // A pre-`bytes` entry never contributed to the total (subtracts 0);
-        // a version-mismatched one is unreadable anyway - the walk clears
+        // a legacy-format one is unreadable anyway - the walk clears
         // both as it reaches them, reclaiming space the total cannot see.
         total -= entry.bytes ?? 0;
         entriesLeft--;

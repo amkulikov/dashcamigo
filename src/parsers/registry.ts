@@ -21,7 +21,7 @@ import { extendArray } from "../array-extend.js";
 import { createLogger } from "../log.js";
 import { forwardFillBearingsIfAllZero } from "../parser.js";
 import { vendorFileKey } from "../vendor-file-key.js";
-import { videoCloneAffinityKey } from "./primitives/clone-groups.js";
+import { VIDEO_CLONE_GROUPERS, videoCloneAffinityKey } from "./primitives/clone-groups.js";
 // The light, main-thread-safe classification helpers live in registry-light.ts
 // (see the rationale there); re-exported for the worker-side callers that
 // already import everything from this module.
@@ -181,6 +181,9 @@ export interface DispatchedEmbeddedGpsResult {
      * appliedExtractors into diagnostics; UI does not look at this.
      */
     winningExtractorByFileKey: Map<string, string>;
+    /** Owning file key -> file key whose bytes were parsed. Equal in the common
+     *  case; cloneAcrossGroup followers point at their parsed primary. */
+    sourceFileKeyByFileKey: Map<string, string>;
     /**
      * vendorFileKey -> wall-clock UTC of video frame 0 if the extractor could
      * tie it (RVMI tReV baseline). Authoritative startUtc input - consumed by
@@ -357,12 +360,11 @@ function buildWorkItems(videos: ClassifiedFile[]): WorkItem[] {
     for (const c of videos) {
         let groupKey: string | null = null;
         let owningExtractorId: string | null = null;
-        for (const extractor of VIDEO_EMBEDDED_PRIMITIVES) {
-            if (!extractor.cloneAcrossGroup) continue;
-            const key = extractor.cloneAcrossGroup(c.file);
+        for (const grouper of VIDEO_CLONE_GROUPERS) {
+            const key = grouper.cloneAcrossGroup(c.file);
             if (key !== null) {
                 groupKey = key;
-                owningExtractorId = extractor.id;
+                owningExtractorId = grouper.id;
                 break;
             }
         }
@@ -422,6 +424,7 @@ export async function dispatchParseVideoEmbeddedGps(
     const errors: Array<{ file: string; extractor: string; message: string }> = [];
     const used = new Set<string>();
     const winningExtractorByFileKey = new Map<string, string>();
+    const sourceFileKeyByFileKey = new Map<string, string>();
     const videoStartUtcHintByFileKey = new Map<string, number>();
     const localClockOffsetHintByFileKey = new Map<string, number>();
     const accelByFileKey = new Map<string, AccelSample[]>();
@@ -474,10 +477,12 @@ export async function dispatchParseVideoEmbeddedGps(
             try {
                 matched = await extractor.marker(vf, index);
             } catch (err) {
+                const message = err instanceof Error ? err.message : String(err);
+                errors.push({ file: vf.file.name, extractor: extractor.id, message });
                 log.debug("extractor marker threw", {
                     extractor: extractor.id,
                     file: vf.file.name,
-                    err: err instanceof Error ? err.message : String(err),
+                    err: message,
                 });
             }
             if (!matched) continue;
@@ -532,6 +537,7 @@ export async function dispatchParseVideoEmbeddedGps(
             index = await buildMp4Index(vf.file, { prebuiltMoov, probeBytes: 0 });
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
+            errors.push({ file: vf.file.name, extractor: "mp4-index", message });
             log.warn("mp4 index build failed", { file: vf.file.name, err: message });
             return null;
         }
@@ -602,6 +608,7 @@ export async function dispatchParseVideoEmbeddedGps(
                 extendArray(allSkipped, result.skipped);
                 used.add(result.extractorId);
                 winningExtractorByFileKey.set(usedKey, result.extractorId);
+                sourceFileKeyByFileKey.set(usedKey, usedKey);
                 if (result.videoStartUtcHint !== undefined) {
                     videoStartUtcHintByFileKey.set(usedKey, result.videoStartUtcHint);
                 }
@@ -619,6 +626,7 @@ export async function dispatchParseVideoEmbeddedGps(
                         allRecords.push({ ...rec, mp4Filename: followerName, videoKey: followerKey });
                     }
                     winningExtractorByFileKey.set(followerKey, result.extractorId);
+                    sourceFileKeyByFileKey.set(followerKey, usedKey);
                     // cloneAcrossGroup means followers are byte-synchronized
                     // with the primary, so they share media-time 0 wall-clock -
                     // and, for the same reason, the same accel stream.
@@ -655,6 +663,7 @@ export async function dispatchParseVideoEmbeddedGps(
         skipped: allSkipped,
         errors,
         winningExtractorByFileKey,
+        sourceFileKeyByFileKey,
         videoStartUtcHintByFileKey,
         localClockOffsetHintByFileKey,
         accelByFileKey,

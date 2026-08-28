@@ -9,7 +9,7 @@
 export type { GpsRecord, ParsedLog, SkippedLine } from "./parsers/types.js";
 
 import { mai70NameCore } from "./parsers/filename/_patterns.js";
-import { blackvueChannelCloneGroup } from "./parsers/primitives/clone-groups.js";
+import { blackvueChannelCloneGroup } from "./parsers/blackvue-clone-group.js";
 import type { GpsRecord, InterpolatedPosition, ParsedLog, SkippedLine, VendorFile } from "./parsers/types.js";
 import { vendorFileKey } from "./vendor-file-key.js";
 

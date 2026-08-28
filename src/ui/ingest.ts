@@ -472,21 +472,25 @@ async function ingestFilesInternal(
     // separate inputs remain distinct.
     const newVideos = videos.filter((c) => !state.addedKeys.has(vendorFileKey(c.file)));
 
-    // Cross-session index cache: files whose (relativePath, size, mtime)
-    // identity matches a stored entry at the current INDEX_CACHE_VERSION skip
-    // every byte-reading stage - the candidate, GPS records included, is
-    // rebuilt from IndexedDB and only genuine misses go through indexing
-    // below. Identity-keyed, so the FSA folder restore, a classic re-pick
-    // (Firefox/Safari) and DnD all reuse the same entries.
-    const { cachedCandidates, misses: videosToIndex } = await mark("cacheLookup", () =>
-        partitionByIndexCache(
-            newVideos,
-            classified,
-            videoAssociation,
-            logsResult.errors.length === 0 &&
+    // Cross-session cache hits restore only expensive byte-derived artifacts.
+    // Filename fields, external inputs, clocks, and grouping remain live
+    // computations, so their fixes never require a cache-wide version bump.
+    const {
+        cachedCandidates,
+        cachedMetadataByFileKey,
+        restoredEmbeddedRecords,
+        restoredEmbeddedAccelByFileKey,
+        writeBlockLeaseByFileKey,
+        misses: videosToIndex,
+    } = await mark("cacheLookup", () =>
+        partitionByIndexCache(newVideos, classified, videoAssociation, {
+            gpsLog: state.gpsLog,
+            extractorByFileKey: [logsResult.extractorByFileKey, sidecarResult.extractorByFileKey],
+            areValid:
+                logsResult.errors.length === 0 &&
                 sidecarResult.errors.length === 0 &&
                 accelSidecarResult.errors.length === 0,
-        ),
+        }),
     );
     if (cachedCandidates.length > 0) {
         await mark("checkCachedCodecs", async () => {
@@ -512,18 +516,14 @@ async function ingestFilesInternal(
             });
         }
     }
-    if (cachedCandidates.length > 0) {
-        const cachedRecords = cachedCandidates.flatMap((c) => c.records);
-        if (cachedRecords.length > 0) {
-            // Same dedup-merge as every other records source: the standalone
-            // log/sidecar files re-parse each session and would double the
-            // track against the cached copies otherwise.
-            state.gpsLog = mergeIntoGpsLog(state.gpsLog, {
-                records: cachedRecords,
-                appliedExtractors: [],
-                skipped: [],
-            });
-        }
+    if (restoredEmbeddedRecords.length > 0) {
+        // Only embedded raw records are restored. Logs and sidecars above were
+        // parsed under current code and never compete with stale cached copies.
+        state.gpsLog = mergeIntoGpsLog(state.gpsLog, {
+            records: restoredEmbeddedRecords,
+            appliedExtractors: [],
+            skipped: [],
+        });
     }
 
     // Assemble the raw files into the candidate list.
@@ -594,6 +594,9 @@ async function ingestFilesInternal(
         logExtractorByFileKey: logsResult.extractorByFileKey,
         sidecarExtractorByFileKey: sidecarResult.extractorByFileKey,
         accelByFileKey: accelSidecarResult.accelByFileKey,
+        cachedEmbeddedAccelByFileKey: restoredEmbeddedAccelByFileKey,
+        cachedRecordingMetadataByFileKey: cachedMetadataByFileKey,
+        cacheWriteBlockLeaseByFileKey: writeBlockLeaseByFileKey,
         videoAssociation,
         errorCounts: {
             logs: logsResult.errors.length,
@@ -609,6 +612,9 @@ async function ingestFilesInternal(
         videosNewCount: newVideos.length,
         hasUnsupportedFormats: unplayableByExt.size > 0,
         signal,
+        // Metadata-only hits still read video bytes in the embedded-GPS worker.
+        // Include them in the storage probe so a broad parser revision does not
+        // accidentally run high-concurrency reads against removable media.
         schedulingFiles: videosToIndex.map((cf) => cf.file),
         ...(resolveLooseGpx ? { resolveLooseGpx } : {}),
     });

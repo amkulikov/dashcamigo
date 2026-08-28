@@ -21,6 +21,8 @@ import type { AccelSample, GpsRecord, VendorFile } from "../parsers/types.js";
 import { emitLifecycle } from "../perf.js";
 import { looksLikeRecordings } from "../report-structure.js";
 import { pendingRecordingAnalysisProgress } from "../recording-analysis-progress.js";
+import type { CachedRecordingMetadata } from "../persist/types.js";
+import type { IndexedMp4, IndexerRepair } from "../workers/indexer-protocol.js";
 import {
     applyTimelapseCadenceWallSpans,
     deriveStartUtc,
@@ -37,7 +39,15 @@ import {
 import type { Trip, VideoCandidate } from "../trips.js";
 
 import { restampProvisionalMarkers } from "./annotations.js";
-import { registerCandidateRepair, scheduleIndexCacheWrite } from "./ingest-cache.js";
+import {
+    bindIndexCacheWriteBlock,
+    cacheRetentionKeysForGpsWork,
+    registerCandidateMetadata,
+    registerEmbeddedGpsCacheArtifacts,
+    releaseIndexCacheSnapshots,
+    releaseIndexCacheWriteBlocks,
+    scheduleIndexCacheWrite,
+} from "./ingest-cache.js";
 import { fileIdentityOf } from "../persist/identity.js";
 import {
     commitRecordingTrips,
@@ -183,6 +193,12 @@ export interface ProgressiveIngestContext {
     sidecarExtractorByFileKey: Map<string, string>;
     /** BlackVue-style accel-only sidecar (.3gf) samples per video identity. */
     accelByFileKey: Map<string, AccelSample[]>;
+    /** Raw embedded accel restored from the artifact cache. */
+    cachedEmbeddedAccelByFileKey: Map<string, AccelSample[]>;
+    /** Metadata hits whose embedded GPS alone must be recomputed. */
+    cachedRecordingMetadataByFileKey: Map<string, CachedRecordingMetadata>;
+    /** Ambiguous/invalid-input cache-write leases for this ingest's misses. */
+    cacheWriteBlockLeaseByFileKey: Map<string, symbol>;
     /** All loaded + current videos, indexed once for O(1) basename lookup. */
     videoAssociation: VideoAssociationIndex;
     errorCounts: {
@@ -295,6 +311,7 @@ export async function startProgressiveIngest(ctx: ProgressiveIngestContext): Pro
     // Background fill from a previous drop was already superseded by
     // cancelProgressiveIngest in ingestFilesInternal; here we adopt this drop's state.
     sidecarAccelByFileKey = ctx.accelByFileKey;
+    embeddedAccelByFileKey = new Map(ctx.cachedEmbeddedAccelByFileKey);
     schedulingPolicy = RESPONSIVE_SCHEDULING;
     const run: ProgressiveIngestRun = {
         context: ctx,
@@ -369,6 +386,7 @@ export async function startProgressiveIngest(ctx: ProgressiveIngestContext): Pro
     ];
     const provisionalDuration = estimateProvisionalDurationByFingerprint(spacingSamples);
 
+    const newlyBuiltCandidates: VideoCandidate[] = [];
     for (const d of derived) {
         const appliedExtractors: string[] = [];
         const fileKey = vendorFileKey(d.cf.file);
@@ -376,24 +394,27 @@ export async function startProgressiveIngest(ctx: ProgressiveIngestContext): Pro
         if (fromLog) appliedExtractors.push(fromLog);
         const fromSidecar = ctx.sidecarExtractorByFileKey.get(fileKey);
         if (fromSidecar) appliedExtractors.push(fromSidecar);
-        ctx.allCandidates.push(
-            buildProvisionalCandidate({
-                file: d.cf.file,
-                fingerprint: d.fingerprint,
-                startUtc: d.startUtc,
-                startSource: d.source,
-                cameraTzSec: ctx.tzByFingerprint.get(d.fingerprint)?.filenameTzSec ?? null,
-                durationSec: provisionalDuration.get(d.fingerprint) ?? NOMINAL_DERIVE_DURATION_SEC,
-                records: d.records,
-                appliedExtractors,
-                classifierFields: d.classifierFields,
-            }),
-        );
+        const candidate = buildProvisionalCandidate({
+            file: d.cf.file,
+            fingerprint: d.fingerprint,
+            startUtc: d.startUtc,
+            startSource: d.source,
+            cameraTzSec: ctx.tzByFingerprint.get(d.fingerprint)?.filenameTzSec ?? null,
+            durationSec: provisionalDuration.get(d.fingerprint) ?? NOMINAL_DERIVE_DURATION_SEC,
+            records: d.records,
+            appliedExtractors,
+            classifierFields: d.classifierFields,
+        });
+        const writeBlockLease = ctx.cacheWriteBlockLeaseByFileKey.get(fileKey);
+        if (writeBlockLease) bindIndexCacheWriteBlock(candidate, writeBlockLease);
+        newlyBuiltCandidates.push(candidate);
+        ctx.allCandidates.push(candidate);
     }
 
     // addedKeys and state.trips are one commit boundary. An abort before the trip
     // swap must leave both untouched so a re-drop can discover every file.
     if (ctx.signal.aborted) {
+        releaseIndexCacheWriteBlocks(newlyBuiltCandidates);
         if (activeRun === run) activeRun = null;
         return;
     }
@@ -404,6 +425,15 @@ export async function startProgressiveIngest(ctx: ProgressiveIngestContext): Pro
         attachRecordsToCandidates(state.gpsLog, ctx.allCandidates, ctx.videoAssociation);
     }
 
+    // A full artifact hit already has mvhd/GPS facts, but its lightweight
+    // hydration intentionally does not guess fleet TZ or precise filename
+    // offsets in isolation. Re-anchor the mixed pool before its first grouping
+    // (and before loose-GPX matching), otherwise a warm GPS-less sibling can sit
+    // hours away from the same cold-ingest recording until the closing sweep.
+    if (ctx.allCandidates.some((candidate) => candidate.metadataReady === true)) {
+        rederiveStartUtcForCandidates(ctx.allCandidates, classifyFilenameTime, classifyFilenameClockTimelapse);
+    }
+
     // Wall spans for time-lapse runs, from filename cadence alone - the
     // provisional durations are per-fingerprint estimates, but the cadence
     // factor is a ratio over the same estimate, so a parked lapse night
@@ -412,8 +442,18 @@ export async function startProgressiveIngest(ctx: ProgressiveIngestContext): Pro
     applyTimelapseCadenceWallSpans(ctx.allCandidates, classifyFilenameTime);
 
     if (ctx.resolveLooseGpx) {
-        await ctx.resolveLooseGpx(groupTrips(ctx.allCandidates));
-        if (ctx.signal.aborted || activeRun !== run) return;
+        try {
+            await ctx.resolveLooseGpx(groupTrips(ctx.allCandidates));
+        } catch (err) {
+            releaseIndexCacheWriteBlocks(newlyBuiltCandidates);
+            if (activeRun === run) activeRun = null;
+            throw err;
+        }
+        if (ctx.signal.aborted || activeRun !== run) {
+            releaseIndexCacheWriteBlocks(newlyBuiltCandidates);
+            if (activeRun === run) activeRun = null;
+            return;
+        }
         // The resolver may have appended confirmed external records to GpsLog.
         // Re-attachment is idempotent and covers both the new track and any
         // carried-over candidate chosen as its trip anchor.
@@ -763,6 +803,8 @@ async function readRecordingData(
     const gpsBatchPromises: Array<Promise<Awaited<ReturnType<typeof dispatchParseVideoEmbeddedGps>>>> = [];
     const gpsBatchKeys: string[][] = [];
     const inflightGpsKeys = new Set<string>();
+    const ownedCacheMetadata = new Map<string, { identityKey: string; metadata: CachedRecordingMetadata }>();
+    let cacheSnapshotsHandedOff = false;
     let gpsBatch: ClassifiedFile[] = [];
     let gpsBatchMoov = new Map<string, Uint8Array>();
     const embeddedBatchSize = 16;
@@ -822,61 +864,98 @@ async function readRecordingData(
         gpsBatchKeys.push(batch.map((candidate) => vendorFileKey(candidate.file)));
     };
 
+    const applyIndexedResult = (
+        candidate: VideoCandidate,
+        indexed: IndexedMp4,
+        moovBytes: Uint8Array | undefined,
+        repair: IndexerRepair | undefined,
+    ): void => {
+        const sourceFile = candidate.file;
+        const plan = planEmbeddedGpsQueue(candidate, candidate.records.length > 0, moovBytes != null);
+        // Apply the complete cached/indexed result before publishing either
+        // cache state or GPS work. If a corrupt repair throws, the caller can
+        // fall back to indexing real bytes without leaving a duplicate queued
+        // parse or a bad metadata snapshot behind.
+        const appliedRepair = applyIndexedMetadata(candidate, indexed, repair);
+        const registered = registerCandidateMetadata(
+            fileIdentityOf(sourceFile, candidate.relativePath),
+            indexed,
+            repair,
+        );
+        ownedCacheMetadata.set(registered.identityKey, registered);
+        if (plan.queue) {
+            const file: VendorFile = {
+                file: sourceFile,
+                relativePath: candidate.relativePath,
+                sourceKey: candidate.sourceKey,
+            };
+            const classified: ClassifiedFile = {
+                file,
+                role: "video",
+                sidecarId: null,
+                sidecarMp4: null,
+                logExtractorId: null,
+            };
+            const gpsKey = vendorFileKey(file);
+            gpsTargets.push(classified);
+            gpsBatch.push(classified);
+            if (!inflightGpsKeys.has(gpsKey)) {
+                inflightGpsKeys.add(gpsKey);
+                state.inflightEmbeddedGps.set(gpsKey, (state.inflightEmbeddedGps.get(gpsKey) ?? 0) + 1);
+            }
+            if (plan.cacheMoov && moovBytes) gpsBatchMoov.set(gpsKey, moovBytes);
+            // Fast local storage benefits from overlapping GPS shards with
+            // indexing. A metadata-only cache hit has no retained moov and
+            // simply lets the GPS worker read it once itself.
+            if (schedulingPolicy.cadence === "immediate" && gpsBatch.length >= embeddedBatchSize) {
+                dispatchGpsBatch();
+            }
+        }
+        if (session.run) {
+            if (appliedRepair.hvccRepaired) session.run.repairedHvcc++;
+            if (appliedRepair.phantomRepaired) session.run.repairedPhantom++;
+        }
+    };
+
     try {
         try {
+            const filesToIndex: VideoCandidate[] = [];
+            for (const candidate of pending) {
+                const metadata = session.run?.context.cachedRecordingMetadataByFileKey.get(vendorFileKey(candidate));
+                if (!metadata) {
+                    filesToIndex.push(candidate);
+                    continue;
+                }
+                const sourceFile = candidate.file;
+                try {
+                    applyIndexedResult(candidate, metadata.indexed, undefined, metadata.repair);
+                    markSourceFileProcessed(candidate, sourceFile);
+                } catch (err) {
+                    // The partition validates the stored shape, but applying a
+                    // corrupt repair can still throw. Fall back to real bytes
+                    // for this file instead of failing its whole batch.
+                    log.warn("cached recording metadata failed, re-indexing", {
+                        file: sourceFile.name,
+                        err: err instanceof Error ? err.message : String(err),
+                    });
+                    filesToIndex.push(candidate);
+                }
+            }
             await indexAllMp4Files(
-                pending.map((candidate) => candidate.file),
+                filesToIndex.map((candidate) => candidate.file),
                 (_done, _total, file, indexed, moovBytes, repair) => {
                     const candidate = byFile.get(file);
                     if (!candidate) return;
                     try {
                         if (!indexed) {
                             candidate.metadataFailed = true;
+                            releaseIndexCacheWriteBlocks([candidate]);
                             state.unindexed.add(file);
                             if (session.run) session.run.metadataFailed++;
                             log.warn("recording metadata read failed", { file: candidate.file.name });
                             return;
                         }
-
-                        const plan = planEmbeddedGpsQueue(candidate, candidate.records.length > 0, moovBytes != null);
-                        if (plan.queue) {
-                            const file: VendorFile = {
-                                file: candidate.file,
-                                relativePath: candidate.relativePath,
-                                sourceKey: candidate.sourceKey,
-                            };
-                            const classified: ClassifiedFile = {
-                                file,
-                                role: "video",
-                                sidecarId: null,
-                                sidecarMp4: null,
-                                logExtractorId: null,
-                            };
-                            const gpsKey = vendorFileKey(file);
-                            gpsTargets.push(classified);
-                            gpsBatch.push(classified);
-                            if (!inflightGpsKeys.has(gpsKey)) {
-                                inflightGpsKeys.add(gpsKey);
-                                state.inflightEmbeddedGps.set(gpsKey, (state.inflightEmbeddedGps.get(gpsKey) ?? 0) + 1);
-                            }
-                            if (plan.cacheMoov && moovBytes) {
-                                gpsBatchMoov.set(gpsKey, moovBytes);
-                            }
-                            // Fast local storage benefits from overlapping GPS
-                            // shards with indexing. On a responsive backend the
-                            // mandatory video read keeps exclusive priority until
-                            // its playback gate has settled.
-                            if (schedulingPolicy.cadence === "immediate" && gpsBatch.length >= embeddedBatchSize) {
-                                dispatchGpsBatch();
-                            }
-                        }
-                        if (repair)
-                            registerCandidateRepair(fileIdentityOf(candidate.file, candidate.relativePath), repair);
-                        const appliedRepair = applyIndexedMetadata(candidate, indexed, repair);
-                        if (session.run) {
-                            if (appliedRepair.hvccRepaired) session.run.repairedHvcc++;
-                            if (appliedRepair.phantomRepaired) session.run.repairedPhantom++;
-                        }
+                        applyIndexedResult(candidate, indexed, moovBytes, repair);
                     } finally {
                         markSourceFileProcessed(candidate, file);
                     }
@@ -906,7 +985,6 @@ async function readRecordingData(
         }
         if (signal.aborted) return;
 
-        const gpsErrorNames = new Set<string>();
         const crashedGpsKeys = new Set<string>();
         if (gpsBatchPromises.length > 0) {
             const settled = await Promise.allSettled(gpsBatchPromises);
@@ -931,6 +1009,7 @@ async function readRecordingData(
             }
 
             const embeddedResult = mergeEmbeddedResults(fulfilled);
+            registerEmbeddedGpsCacheArtifacts(gpsTargets, embeddedResult, crashedGpsKeys);
             if (embeddedResultHasEffect(embeddedResult)) {
                 applyEmbeddedGpsResult(
                     embeddedResult,
@@ -941,7 +1020,6 @@ async function readRecordingData(
             for (const [fileKey, samples] of embeddedResult.accelByFileKey) {
                 embeddedAccelByFileKey.set(fileKey, samples);
             }
-            for (const error of embeddedResult.errors) gpsErrorNames.add(error.file);
             session.run?.embeddedErrors.push(...embeddedResult.errors);
             for (const heavy of embeddedResult.heavyFiles) {
                 state.pendingHeavyEmbeddedGps.set(vendorFileKey(heavy.file), heavy);
@@ -972,23 +1050,20 @@ async function readRecordingData(
             });
         }
 
-        // Persist the completed recording analysis for the next session. Failed
-        // metadata and incomplete GPS scans stay out of the cache so they can retry.
+        // Persist metadata even when GPS is deferred or failed. The embedded
+        // artifact registry contains only completed parses/verified negatives;
+        // missing GPS stays a retryable miss on the next open.
         const metadataReadyNow = pending.filter((cand) => cand.metadataReady === true);
-        const gpsTargetKeys = new Set(gpsTargets.map((cf) => vendorFileKey(cf.file)));
-        const skipKeys = new Set<string>();
-        for (const cand of metadataReadyNow) {
-            const key = vendorFileKey(cand);
-            if (!gpsTargetKeys.has(key)) continue;
-            if (
-                crashedGpsKeys.has(key) ||
-                state.pendingHeavyEmbeddedGps.has(key) ||
-                (cand.records.length === 0 && gpsErrorNames.has(cand.file.name))
-            ) {
-                skipKeys.add(key);
-            }
-        }
-        scheduleIndexCacheWrite(metadataReadyNow, skipKeys);
+        // This batch keeps one inflight reference until its finally block. The
+        // helper discounts that completed light owner, but retains metadata for
+        // a pending or concurrently auto-deferred scan.
+        const retainMetadataForVideoKeys = cacheRetentionKeysForGpsWork(
+            state.pendingHeavyEmbeddedGps.keys(),
+            state.inflightEmbeddedGps,
+            inflightGpsKeys,
+        );
+        scheduleIndexCacheWrite(metadataReadyNow, retainMetadataForVideoKeys);
+        cacheSnapshotsHandedOff = true;
 
         log.info("recording batch read", {
             trips: tripIndices.length,
@@ -996,6 +1071,7 @@ async function readRecordingData(
             durationMs: Math.round(performance.now() - t0),
         });
     } finally {
+        if (!cacheSnapshotsHandedOff) releaseIndexCacheSnapshots(ownedCacheMetadata.values());
         // An aborted or crashed batch may already have applied metadata to a
         // subset of its files, but it has not necessarily run codec checks or
         // embedded-GPS analysis for them. Put every otherwise-readable member
@@ -1130,12 +1206,15 @@ function startBackgroundFill(): void {
             abortRecordingSessions();
         }
         const run = activeRun;
+        const terminalFailures: VideoCandidate[] = [];
         for (const candidate of candidatePool) {
             if (!needsRecordingMetadata(candidate)) continue;
             candidate.metadataFailed = true;
+            terminalFailures.push(candidate);
             state.unindexed.add(candidate.file);
             if (run) run.metadataFailed++;
         }
+        releaseIndexCacheWriteBlocks(terminalFailures);
         if (run) publishRecordingAnalysisProgress(run, run.analysisCandidates);
         const readable = candidatePool.filter((candidate) => candidate.metadataFailed !== true);
         for (const candidate of candidatePool) {

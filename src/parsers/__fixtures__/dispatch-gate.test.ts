@@ -17,6 +17,7 @@ import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type ClassifiedFile, dispatchParseVideoEmbeddedGps } from "../registry.js";
+import { vendorFileKey } from "../../vendor-file-key.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -154,6 +155,19 @@ describe("embedded GPS dispatch gate (classifyEmbeddedGpsKind wiring)", () => {
             expect(result.appliedExtractors).toContain(c.extractor);
         });
     }
+
+    it("records the parsed source for cloneAcrossGroup followers", async () => {
+        const front = videoFile("juscar/real-anonymized.TS", "20260429_182640F.ts");
+        const rear = videoFile("juscar/real-anonymized.TS", "20260429_182640R.ts");
+        const frontKey = vendorFileKey(front.file);
+        const rearKey = vendorFileKey(rear.file);
+
+        const result = await dispatchParseVideoEmbeddedGps([front, rear], undefined, 1);
+
+        expect(result.sourceFileKeyByFileKey.get(frontKey)).toBe(frontKey);
+        expect(result.sourceFileKeyByFileKey.get(rearKey)).toBe(frontKey);
+        expect(result.records.some((record) => record.videoKey === rearKey)).toBe(true);
+    });
 });
 
 // ===== Synthetic in-memory cases (no committed fixture file exists) =====

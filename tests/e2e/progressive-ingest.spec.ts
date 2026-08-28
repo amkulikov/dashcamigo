@@ -176,6 +176,43 @@ test.describe("progressive ingest", () => {
                 }, 0);
             });
         }
+        if (testInfo.title.includes("reuses cached metadata while stale GPS reparses")) {
+            await page.addInitScript(() => {
+                const target = window as typeof window & {
+                    __workerRequests?: Array<{ worker: string; type: string }>;
+                };
+                target.__workerRequests = [];
+                const NativeWorker = window.Worker;
+                window.Worker = class extends NativeWorker {
+                    readonly trackedName: string;
+
+                    constructor(scriptURL: string | URL, options?: WorkerOptions) {
+                        super(scriptURL, options);
+                        this.trackedName = options?.name ?? "unnamed";
+                    }
+
+                    override postMessage(message: unknown, transfer: Transferable[]): void;
+                    override postMessage(message: unknown, options?: StructuredSerializeOptions): void;
+                    override postMessage(
+                        message: unknown,
+                        transferOrOptions: Transferable[] | StructuredSerializeOptions = [],
+                    ): void {
+                        if (
+                            typeof message === "object" &&
+                            message !== null &&
+                            "__k" in message &&
+                            message.__k === "req" &&
+                            "type" in message &&
+                            typeof message.type === "string"
+                        ) {
+                            target.__workerRequests?.push({ worker: this.trackedName, type: message.type });
+                        }
+                        if (Array.isArray(transferOrOptions)) super.postMessage(message, transferOrOptions);
+                        else super.postMessage(message, transferOrOptions);
+                    }
+                };
+            });
+        }
         await presetLocalStorage(page);
         // The override wins over the probe and minimum batch size.
         await page.addInitScript(() => {
@@ -724,4 +761,82 @@ test.describe("progressive ingest", () => {
         await expect(page.locator("#trip-list")).toHaveAttribute("aria-busy", "false", { timeout: 20_000 });
         await expect(page.locator("#trip-analysis-status")).toBeHidden({ timeout: 20_000 });
     });
+
+    test("reuses cached metadata while stale GPS reparses after reload", async ({ page }) => {
+        await page.locator("#folder-input").setInputFiles(SAMPLE_GOPRO);
+        await expect(page.locator("#trip-list")).toHaveAttribute("aria-busy", "false", { timeout: 30_000 });
+        await expect.poll(() => storedParsedGpsCacheEntries(page), { timeout: 20_000 }).toBeGreaterThan(0);
+        expect(await staleEmbeddedGpsCacheEntries(page)).toBeGreaterThan(0);
+
+        await page.reload();
+        await page.locator("#folder-input").setInputFiles(SAMPLE_GOPRO);
+        await expect(page.locator("#trip-list")).toHaveAttribute("aria-busy", "false", { timeout: 30_000 });
+        await expect(page.locator("#trip-analysis-status")).toBeHidden({ timeout: 30_000 });
+
+        const requests = await page.evaluate(
+            () =>
+                (
+                    window as typeof window & {
+                        __workerRequests?: Array<{ worker: string; type: string }>;
+                    }
+                ).__workerRequests ?? [],
+        );
+        expect(requests).toContainEqual({ worker: "gps-extract-worker", type: "extract" });
+        expect(requests).not.toContainEqual({ worker: "indexer-worker", type: "index-all" });
+    });
 });
+
+async function storedParsedGpsCacheEntries(page: Page): Promise<number> {
+    return page.evaluate(
+        () =>
+            new Promise<number>((resolve, reject) => {
+                const request = indexedDB.open("dashcamigo");
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => {
+                    const db = request.result;
+                    const get = db.transaction("indexCache").objectStore("indexCache").getAll();
+                    get.onerror = () => reject(get.error);
+                    get.onsuccess = () => {
+                        resolve(
+                            get.result.filter(
+                                (entry: { embeddedGps?: { status?: string } }) =>
+                                    entry.embeddedGps?.status === "parsed",
+                            ).length,
+                        );
+                        db.close();
+                    };
+                };
+            }),
+    );
+}
+
+async function staleEmbeddedGpsCacheEntries(page: Page): Promise<number> {
+    return page.evaluate(
+        () =>
+            new Promise<number>((resolve, reject) => {
+                const request = indexedDB.open("dashcamigo");
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => {
+                    const db = request.result;
+                    const transaction = db.transaction("indexCache", "readwrite");
+                    const store = transaction.objectStore("indexCache");
+                    const get = store.getAll();
+                    let changed = 0;
+                    get.onerror = () => reject(get.error);
+                    get.onsuccess = () => {
+                        for (const entry of get.result) {
+                            if (entry.embeddedGps?.status !== "parsed") continue;
+                            entry.embeddedGps.dispatchRevision = "forced-stale-e2e";
+                            store.put(entry);
+                            changed++;
+                        }
+                    };
+                    transaction.onerror = () => reject(transaction.error);
+                    transaction.oncomplete = () => {
+                        resolve(changed);
+                        db.close();
+                    };
+                };
+            }),
+    );
+}

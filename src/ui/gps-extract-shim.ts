@@ -11,26 +11,26 @@
 // clones), then groups are distributed across workers via shardKey.
 // This keeps clone-savings intact while giving each worker ~equal work.
 
-import { extendArray } from "../array-extend.js";
 import { createLogger } from "../log.js";
-// clone-groups, NOT primitives/index: the full primitive registry pulls every
-// extractor implementation into this eager module; the shard planner only
-// needs the filename groupers (see clone-groups.ts).
-import { VIDEO_CLONE_GROUPERS, videoCloneAffinityKey } from "../parsers/primitives/clone-groups.js";
 import type { ClassifiedFile, DispatchedEmbeddedGpsResult } from "../parsers/registry.js";
-import type { AccelSample, GpsRecord, SkippedLine, VendorFile } from "../parsers/types.js";
-import { vendorFileKey } from "../vendor-file-key.js";
+import type { VendorFile } from "../parsers/types.js";
 
 import {
     GPS_NOTIFY_PROGRESS,
     GPS_REQUEST_EXTRACT,
     type EmbeddedGpsExtractionMode,
-    type ExtractRequestData,
     type ExtractResult,
     type ProgressNotificationData,
 } from "../workers/gps-extract-protocol.js";
 import { createWorkerClient } from "../workers/_protocol/worker-client.js";
 import { createWorkerPool } from "../workers/_protocol/worker-pool.js";
+import {
+    buildGpsExtractShardRequest,
+    mergeSettledGpsExtractShards,
+    shardByCloneAffinity,
+} from "./gps-extract-artifacts.js";
+
+export { mergeEmbeddedResults } from "./gps-extract-artifacts.js";
 
 const log = createLogger("gps-extract-shim");
 
@@ -97,51 +97,6 @@ export function prewarmGpsExtract(): void {
     pool.prewarm();
 }
 
-/**
- * Splits video files in `classified` into `n` chunks preserving
- * cloneAcrossGroup affinity (Juscar F/R/I + similar). Non-video files are
- * dropped (the worker filters them anyway).
- */
-function shardByCloneAffinity(classified: ClassifiedFile[], n: number): ClassifiedFile[][] {
-    const videos = classified.filter((c) => c.role === "video");
-    if (videos.length === 0 || n <= 1) return videos.length > 0 ? [videos] : [];
-
-    const groups = new Map<string, ClassifiedFile[]>();
-    const singletons: ClassifiedFile[] = [];
-    for (const v of videos) {
-        let key: string | null = null;
-        for (const ex of VIDEO_CLONE_GROUPERS) {
-            const k = ex.cloneAcrossGroup(v.file);
-            if (k !== null) {
-                key = videoCloneAffinityKey(ex.id, v.file, k);
-                break;
-            }
-        }
-        if (key === null) {
-            singletons.push(v);
-        } else {
-            let arr = groups.get(key);
-            if (!arr) {
-                arr = [];
-                groups.set(key, arr);
-            }
-            arr.push(v);
-        }
-    }
-
-    const chunks: ClassifiedFile[][] = Array.from({ length: n }, () => []);
-    let cursor = 0;
-    for (const arr of groups.values()) {
-        chunks[cursor % n]!.push(...arr);
-        cursor++;
-    }
-    for (const s of singletons) {
-        chunks[cursor % n]!.push(s);
-        cursor++;
-    }
-    return chunks.filter((c) => c.length > 0);
-}
-
 /** Same signature as dispatchParseVideoEmbeddedGps in parsers/registry.js,
  *  plus optional prebuiltMoovByPath to skip the 2× moov read on cold SD. */
 export function dispatchParseVideoEmbeddedGpsViaWorker(
@@ -166,6 +121,7 @@ export function dispatchParseVideoEmbeddedGpsViaWorker(
             skipped: [],
             errors: [],
             winningExtractorByFileKey: new Map(),
+            sourceFileKeyByFileKey: new Map(),
             videoStartUtcHintByFileKey: new Map(),
             localClockOffsetHintByFileKey: new Map(),
             accelByFileKey: new Map(),
@@ -195,41 +151,12 @@ export function dispatchParseVideoEmbeddedGpsViaWorker(
     }
 
     const subResults = chunks.map((chunk, shardIdx) => {
-        // Build a per-shard sub-map of prebuilt moov bytes - only the files
-        // that are actually in THIS shard, keyed by vendorFileKey. Each
-        // Uint8Array is transferred (zero-copy) to its worker; we list every
-        // buffer in `transfer`. Keying by concrete file identity is what
-        // keeps a buffer from being listed in two shards' transfer arrays.
-        let shardMoov: Map<string, Uint8Array> | undefined;
-        const transfer: Transferable[] = [];
-        if (prebuiltMoovByPath && prebuiltMoovByPath.size > 0) {
-            shardMoov = new Map();
-            for (const cf of chunk) {
-                const key = vendorFileKey(cf.file);
-                const bytes = prebuiltMoovByPath.get(key);
-                if (bytes) {
-                    shardMoov.set(key, bytes);
-                    transfer.push(bytes.buffer);
-                }
-            }
-            if (shardMoov.size === 0) shardMoov = undefined;
-        }
-
-        const req: ExtractRequestData = {
-            // All shards of one dispatch carry the SAME token so their progress
-            // notifications route to this dispatch's single callback.
-            token,
-            classified: chunk,
-            // concurrency=1 inside the worker: file-level parallelism comes
-            // from the pool, internal concurrency would just trash IO further.
-            concurrency: 1,
-            mode,
-            prebuiltMoovByPath: shardMoov,
-        };
+        // All shards carry one token so their progress routes to this dispatch.
+        const { request, transfer } = buildGpsExtractShardRequest(token, chunk, mode, prebuiltMoovByPath);
         // shardKey pins same-affinity chunks to the same slot if dispatched
         // back-to-back during the same session - but more importantly,
         // distributes our N chunks across N distinct slots.
-        return pool.request<ExtractResult>(GPS_REQUEST_EXTRACT, req, {
+        return pool.request<ExtractResult>(GPS_REQUEST_EXTRACT, request, {
             signal,
             shardKey: `shard-${shardIdx}`,
             transfer,
@@ -237,87 +164,8 @@ export function dispatchParseVideoEmbeddedGpsViaWorker(
     });
 
     return Promise.allSettled(subResults)
-        .then((settled) => {
-            // Crash isolation: one worker slot dying must not discard the healthy
-            // shards of this (or any concurrently in-flight) batch. Merge the
-            // survivors; fold each crashed shard into the standard parse-error
-            // channel so ingest.ts surfaces it without aborting the whole drop.
-            const fulfilled: DispatchedEmbeddedGpsResult[] = [];
-            const shardErrors: DispatchedEmbeddedGpsResult["errors"] = [];
-            for (let i = 0; i < settled.length; i++) {
-                const s = settled[i]!;
-                if (s.status === "fulfilled") {
-                    fulfilled.push(s.value);
-                    continue;
-                }
-                // User cancel must still propagate so ingest.ts aborts the stage
-                // rather than treating it as a per-file failure (ingest.ts:817).
-                if (s.reason instanceof DOMException && s.reason.name === "AbortError") {
-                    throw s.reason;
-                }
-                // One error PER FILE of the dead shard, named by basename -
-                // never one "shard-N" entry. Consumers key this channel by
-                // file.name to decide what may be written to the index cache;
-                // a synthetic shard name matches nothing, so every file the
-                // crash swallowed would be cached as a confirmed "no GPS" and
-                // never re-extracted. The whole shard did fail, so naming each
-                // of its files is also the honest report.
-                const message = s.reason instanceof Error ? s.reason.message : String(s.reason);
-                for (const cf of chunks[i] ?? []) {
-                    shardErrors.push({ file: cf.file.file.name, extractor: "gps-extract-worker", message });
-                }
-            }
-            const merged = mergeResults(fulfilled);
-            extendArray(merged.errors, shardErrors);
-            return merged;
-        })
+        .then((settled) => mergeSettledGpsExtractShards(settled, chunks))
         .finally(() => {
             if (onProgress) progressByToken.delete(token);
         });
-}
-
-/**
- * Concatenates several DispatchedEmbeddedGpsResult into one. Exposed so the
- * progressive batch caller can merge independently dispatched shards before
- * applying their records and attribution.
- */
-export function mergeEmbeddedResults(results: DispatchedEmbeddedGpsResult[]): DispatchedEmbeddedGpsResult {
-    return mergeResults(results);
-}
-
-function mergeResults(results: DispatchedEmbeddedGpsResult[]): DispatchedEmbeddedGpsResult {
-    const appliedSet = new Set<string>();
-    const records: GpsRecord[] = [];
-    const skipped: SkippedLine[] = [];
-    const errors: DispatchedEmbeddedGpsResult["errors"] = [];
-    const winningExtractorByFileKey = new Map<string, string>();
-    const videoStartUtcHintByFileKey = new Map<string, number>();
-    const localClockOffsetHintByFileKey = new Map<string, number>();
-    const accelByFileKey = new Map<string, AccelSample[]>();
-    const heavyFiles: ClassifiedFile[] = [];
-    for (const r of results) {
-        for (const ex of r.appliedExtractors) appliedSet.add(ex);
-        // extendArray, not push(...): a long single-file embedded GPS stream
-        // (Novatek/GoPro) can carry 100k+ records and the spread overflows the
-        // call-argument limit.
-        extendArray(records, r.records);
-        extendArray(skipped, r.skipped);
-        extendArray(errors, r.errors);
-        for (const [k, v] of r.winningExtractorByFileKey) winningExtractorByFileKey.set(k, v);
-        for (const [k, v] of r.videoStartUtcHintByFileKey) videoStartUtcHintByFileKey.set(k, v);
-        for (const [k, v] of r.localClockOffsetHintByFileKey) localClockOffsetHintByFileKey.set(k, v);
-        for (const [k, v] of r.accelByFileKey) accelByFileKey.set(k, v);
-        extendArray(heavyFiles, r.heavyFiles);
-    }
-    return {
-        appliedExtractors: [...appliedSet],
-        records,
-        skipped,
-        errors,
-        winningExtractorByFileKey,
-        videoStartUtcHintByFileKey,
-        localClockOffsetHintByFileKey,
-        accelByFileKey,
-        heavyFiles,
-    };
 }

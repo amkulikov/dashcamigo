@@ -1,17 +1,16 @@
-// Cross-session index-cache glue for progressive ingest: partition
-// classified videos into cache hits (candidate rebuilt from IndexedDB, byte
-// stages skipped) and misses (full pipeline), and write freshly indexed
-// candidates back after their recording analysis completes.
-//
-// The cache is keyed by file identity (relativePath, size, lastModified)
-// alone - not by folder or picker path - so the FSA restore, a classic
-// webkitdirectory re-pick (Firefox/Safari) and DnD all hit the same entries:
-// every picker path produces the same root-prefixed relativePath.
+// Cross-session artifact-cache glue for progressive ingest. The cache stores
+// only expensive byte-derived facts: container metadata and raw embedded GPS.
+// Filename classification, external inputs, clocks, and trip grouping always
+// run under the current code after a hit.
 
-import type { IndexerRepair } from "../indexer.js";
-import { buildVideoAssociationIndex, resolveVideoKey, type VideoAssociationIndex } from "../gps-association.js";
+import { recordsForVideo, type VideoAssociationIndex } from "../gps-association.js";
 import { createLogger } from "../log.js";
-import type { ClassifiedFile } from "../parsers/registry.js";
+import { cameraFingerprint } from "../parsers/camera-fingerprint.js";
+import { classifyFilenameTime } from "../parsers/filename/index.js";
+import { embeddedGpsDispatchRevision, noEmbeddedGpsDispatchRevision } from "../parsers/primitives/cache-revisions.js";
+import type { ClassifiedFile, DispatchedEmbeddedGpsResult } from "../parsers/registry.js";
+import { shouldTryEmbeddedGps } from "../parsers/gps-source-hints.js";
+import type { AccelSample, GpsRecord, ParsedLog } from "../parsers/types.js";
 import { fileIdentityKey, fileIdentityOf } from "../persist/identity.js";
 import {
     buildCacheEntry,
@@ -19,45 +18,168 @@ import {
     putIndexCacheEntries,
     touchIndexCacheEntries,
 } from "../persist/index-cache.js";
-import type { CachedFileIndex, FileIdentity } from "../persist/types.js";
-import type { VideoCandidate } from "../trips.js";
-import { applyMoovRepair, vendorFileKey } from "./ingest-candidate.js";
+import {
+    type CachedEmbeddedGps,
+    type CachedFileIndex,
+    type CachedRecordingMetadata,
+    type FileIdentity,
+    RECORDING_METADATA_CACHE_REVISION,
+} from "../persist/types.js";
+import { deriveStartUtc, type VideoCandidate } from "../trips.js";
+import type { IndexedMp4, IndexerRepair } from "../workers/indexer-protocol.js";
+import { buildEmbeddedGpsCacheArtifactUpdates } from "./ingest-cache-artifacts.js";
+import {
+    applyIndexedMetadata,
+    buildProvisionalCandidate,
+    filenameClassifierFields,
+    vendorFileKey,
+} from "./ingest-candidate.js";
 
 const log = createLogger("ingest-cache");
 
-const DEPENDENCY_SEPARATOR = String.fromCharCode(1);
+// Completed artifacts from this session. Progressive metadata and deferred GPS
+// settle at different times, so writes assemble the latest pair by persistent
+// file identity. Raw GPS is cloned before current-session clock/accel passes can
+// mutate it.
+const metadataByIdentity = new Map<string, CachedRecordingMetadata>();
+const embeddedGpsByIdentity = new Map<string, CachedEmbeddedGps>();
+const writeBlockLeasesByIdentity = new Map<string, Set<symbol>>();
+let writeBlockLeaseByCandidate = new WeakMap<VideoCandidate, { identityKey: string; token: symbol }>();
 
-// Container-repair descriptors of THIS session's indexed files, keyed by the
-// same file IDENTITY the cache entries are (path + size + mtime), not by path
-// alone: two cards with the same folder layout produce identical paths, and a
-// repair descriptor applied to the wrong file's moov would hand playback a
-// patched header that does not match its bytes. A session registry (not a
-// per-ingest map) because progressive and deferred cache writes can complete
-// after the initial list render. A cached entry without its repair would
-// describe bytes the file on disk does not have. Repairs are rare, so retaining
-// these descriptors for the session is bounded in practice.
-const repairByIdentity = new Map<string, IndexerRepair>();
-const dependencyByIdentity = new Map<string, string>();
-const writeBlockedIdentities = new Set<string>();
+function candidateIdentityKey(candidate: VideoCandidate): string {
+    return fileIdentityKey({
+        relativePath: candidate.relativePath,
+        size: candidate.file.size,
+        lastModified: candidate.file.lastModified,
+    });
+}
+
+/** Binds one collision/invalid-input write guard to the live candidate that
+ * will eventually either finish or remain retryable in state. */
+export function bindIndexCacheWriteBlock(candidate: VideoCandidate, token: symbol): void {
+    const identityKey = candidateIdentityKey(candidate);
+    let leases = writeBlockLeasesByIdentity.get(identityKey);
+    if (!leases) {
+        leases = new Set();
+        writeBlockLeasesByIdentity.set(identityKey, leases);
+    }
+    leases.add(token);
+    writeBlockLeaseByCandidate.set(candidate, { identityKey, token });
+}
+
+/** Releases only this candidate's guard; sibling batches sharing the cheap
+ * identity remain blocked until every owning candidate has settled. */
+export function releaseIndexCacheWriteBlocks(candidates: Iterable<VideoCandidate>): void {
+    for (const candidate of candidates) {
+        const lease = writeBlockLeaseByCandidate.get(candidate);
+        if (!lease) continue;
+        writeBlockLeaseByCandidate.delete(candidate);
+        const leases = writeBlockLeasesByIdentity.get(lease.identityKey);
+        if (!leases) continue;
+        leases.delete(lease.token);
+        if (leases.size === 0) writeBlockLeasesByIdentity.delete(lease.identityKey);
+    }
+}
+
+/** Keys whose metadata snapshot must survive this write because some GPS work
+ * still owns it. `ownedInflightKeys` removes the caller's already-completed
+ * light-scan reference while preserving a concurrent deferred owner's ref. */
+export function cacheRetentionKeysForGpsWork(
+    pendingKeys: Iterable<string>,
+    inflight: ReadonlyMap<string, number>,
+    ownedInflightKeys: ReadonlySet<string> = new Set(),
+): Set<string> {
+    const retained = new Set(pendingKeys);
+    for (const [key, count] of inflight) {
+        const ownedHere = ownedInflightKeys.has(key) ? 1 : 0;
+        if (count > ownedHere) retained.add(key);
+    }
+    return retained;
+}
+
+/** Records byte-derived metadata before it is applied to the live candidate. */
+export function registerCandidateMetadata(
+    identity: FileIdentity,
+    indexed: IndexedMp4,
+    repair: IndexerRepair | undefined,
+): { identityKey: string; metadata: CachedRecordingMetadata } {
+    const identityKey = fileIdentityKey(identity);
+    const metadata: CachedRecordingMetadata = {
+        revision: RECORDING_METADATA_CACHE_REVISION,
+        indexed,
+    };
+    if (repair) metadata.repair = repair;
+    metadataByIdentity.set(identityKey, metadata);
+    // A fresh metadata pass starts a new parse attempt for this identity. Do
+    // not let a GPS artifact left in this module from an earlier ingest/reset
+    // hitch a ride on the new write if an external log now suppresses embedded
+    // parsing or the current embedded parse fails before publishing a result.
+    embeddedGpsByIdentity.delete(identityKey);
+    return { identityKey, metadata };
+}
+
+/** Releases snapshots owned by an aborted/failed batch without deleting a
+ * newer batch's replacement for the same persistent identity. */
+export function releaseIndexCacheSnapshots(
+    snapshots: Iterable<{ identityKey: string; metadata: CachedRecordingMetadata }>,
+): void {
+    for (const { identityKey, metadata } of snapshots) {
+        if (metadataByIdentity.get(identityKey) !== metadata) continue;
+        metadataByIdentity.delete(identityKey);
+        embeddedGpsByIdentity.delete(identityKey);
+    }
+}
 
 /**
- * Records a file's container repair for later cache writes. Call wherever the
- * indexer reports one, with the identity of the ORIGINAL file - applyMoovRepair
- * is constant-size and preserves name/lastModified, so the patched file's
- * identity is the same either way.
+ * Captures raw per-file embedded results before they enter mutable session
+ * state. Excluded, errored, and heavy-deferred files deliberately keep no GPS
+ * artifact, so the next open retries instead of blessing a partial negative.
  */
-export function registerCandidateRepair(identity: FileIdentity, repair: IndexerRepair): void {
-    repairByIdentity.set(fileIdentityKey(identity), repair);
+export function registerEmbeddedGpsCacheArtifacts(
+    targets: readonly ClassifiedFile[],
+    result: DispatchedEmbeddedGpsResult,
+    excludedKeys: ReadonlySet<string> = new Set(),
+): void {
+    for (const [identityKey, artifact] of buildEmbeddedGpsCacheArtifactUpdates(targets, result, excludedKeys)) {
+        if (artifact) embeddedGpsByIdentity.set(identityKey, artifact);
+        else embeddedGpsByIdentity.delete(identityKey);
+    }
+}
+
+export { buildEmbeddedGpsCacheArtifactUpdates } from "./ingest-cache-artifacts.js";
+
+export interface IndexCacheExternalInputs {
+    gpsLog: ParsedLog | null;
+    extractorByFileKey: readonly ReadonlyMap<string, string>[];
+    /** False after any log/sidecar read failed: artifacts may still be read,
+     *  but this ingest must not replace the last known-good cache entry. */
+    areValid: boolean;
 }
 
 export interface IndexCachePartition {
-    /** Rebuilt candidates for identity-matched entries; repair re-applied. */
     cachedCandidates: VideoCandidate[];
-    /** Files that need the full byte pipeline. */
+    /** Current metadata for files whose embedded artifact alone must rerun. */
+    cachedMetadataByFileKey: Map<string, CachedRecordingMetadata>;
+    /** Raw embedded records restored into candidates and awaiting GpsLog merge. */
+    restoredEmbeddedRecords: GpsRecord[];
+    /** Cached high-rate accel streams for the current post-derive merge. */
+    restoredEmbeddedAccelByFileKey: Map<string, AccelSample[]>;
+    /** Per-run leases that forbid ambiguous/invalid-input cache writes. */
+    writeBlockLeaseByFileKey: Map<string, symbol>;
     misses: ClassifiedFile[];
-    /** False when the cache store itself failed (private mode, storage off) -
-     *  the "next time is faster" promise would be a lie then. */
     cacheAvailable: boolean;
+}
+
+function emptyPartition(misses: ClassifiedFile[], cacheAvailable: boolean): IndexCachePartition {
+    return {
+        cachedCandidates: [],
+        cachedMetadataByFileKey: new Map(),
+        restoredEmbeddedRecords: [],
+        restoredEmbeddedAccelByFileKey: new Map(),
+        writeBlockLeaseByFileKey: new Map(),
+        misses,
+        cacheAvailable,
+    };
 }
 
 function cacheKeyOf(cf: ClassifiedFile): string {
@@ -75,77 +197,255 @@ export function hasIndexCacheIdentityCollision(video: ClassifiedFile, videos: Vi
     );
 }
 
-/**
- * Dependency identity for one cached candidate. Card-wide GPS logs affect all
- * videos; paired GPS/accel sidecars affect only the concrete video they resolve
- * to. An edit or removal therefore invalidates every dependent cache entry,
- * without turning a one-file sidecar change into a full-card reindex.
- */
-export function indexCacheDependencyKey(
-    video: ClassifiedFile,
-    classified: readonly ClassifiedFile[],
-    videos: VideoAssociationIndex = buildVideoAssociationIndex(
-        classified.filter((file) => file.role === "video").map((file) => file.file),
-    ),
-): string {
-    const videoKey = vendorFileKey(video.file);
-    const dependencies: string[] = [];
-
-    // A second loaded file with the same basename can turn a formerly unique
-    // log association into a path-resolved or ambiguous one. Include those
-    // peers so a snapshot cannot retain ownership decided under old topology.
-    for (const peer of videos.videosByFilename.get(video.file.file.name) ?? []) {
-        if (vendorFileKey(peer) === videoKey) continue;
-        dependencies.push(
-            ["video-peer", fileIdentityKey(fileIdentityOf(peer.file, peer.relativePath))].join(DEPENDENCY_SEPARATOR),
-        );
-    }
-
-    for (const file of classified) {
-        let affectsVideo = file.role === "gps-log";
-        if ((file.role === "sidecar" || file.role === "accel-sidecar") && file.sidecarMp4) {
-            affectsVideo = resolveVideoKey(file.file, file.sidecarMp4, videos) === videoKey;
-        }
-        if (!affectsVideo) continue;
-        dependencies.push(
-            [
-                file.role,
-                file.logExtractorId ?? "",
-                file.sidecarId ?? "",
-                fileIdentityKey(fileIdentityOf(file.file.file, file.file.relativePath)),
-            ].join(DEPENDENCY_SEPARATOR),
-        );
-    }
-    return dependencies.sort().join(DEPENDENCY_SEPARATOR);
+/** Pure compatibility gate, exported so revision behavior stays unit-tested. */
+export function isIndexCacheEntryCompatible(
+    entry: CachedFileIndex,
+    needsEmbeddedGps: boolean,
+    availableIdentityKeys: ReadonlySet<string>,
+): boolean {
+    if (!isCurrentRecordingMetadata(entry.metadata)) return false;
+    if (!needsEmbeddedGps) return true;
+    const embedded = entry.embeddedGps;
+    return isCurrentEmbeddedGps(embedded, availableIdentityKeys);
 }
 
-/**
- * Splits the new videos of a drop by index-cache state. Cache unavailability
- * (private mode, storage off) degrades to "everything is a miss" - the
- * pipeline must never fail because the cache did.
- */
+function isFiniteNullableNumber(value: unknown): value is number | null {
+    return value === null || (typeof value === "number" && Number.isFinite(value));
+}
+
+function isNullableString(value: unknown): value is string | null {
+    return value === null || typeof value === "string";
+}
+
+function isFiniteNumber(value: unknown): value is number {
+    return typeof value === "number" && Number.isFinite(value);
+}
+
+function isCurrentEmbeddedGps(value: unknown, availableIdentityKeys: ReadonlySet<string>): value is CachedEmbeddedGps {
+    if (typeof value !== "object" || value === null) return false;
+    const embedded = value as Partial<CachedEmbeddedGps>;
+    if (embedded.status === "none") {
+        return embedded.dispatchRevision === noEmbeddedGpsDispatchRevision();
+    }
+    if (
+        embedded.status !== "parsed" ||
+        typeof embedded.extractorId !== "string" ||
+        typeof embedded.sourceIdentityKey !== "string" ||
+        embedded.dispatchRevision !== embeddedGpsDispatchRevision(embedded.extractorId) ||
+        !availableIdentityKeys.has(embedded.sourceIdentityKey) ||
+        !Array.isArray(embedded.records) ||
+        !embedded.records.every((record) => {
+            if (typeof record !== "object" || record === null) return false;
+            const raw = record as Record<string, unknown>;
+            return (
+                isFiniteNumber(raw.unixSeconds) &&
+                typeof raw.active === "boolean" &&
+                isFiniteNumber(raw.lat) &&
+                isFiniteNumber(raw.lon) &&
+                isFiniteNumber(raw.bearingDeg) &&
+                isFiniteNumber(raw.speedMs) &&
+                isFiniteNumber(raw.accelXg) &&
+                isFiniteNumber(raw.accelYg) &&
+                isFiniteNumber(raw.accelZg) &&
+                typeof raw.mp4Filename === "string" &&
+                (raw.timeUnsynced === undefined || typeof raw.timeUnsynced === "boolean") &&
+                (raw.relStartSeconds === undefined || isFiniteNumber(raw.relStartSeconds)) &&
+                raw.videoKey === undefined &&
+                raw.recordingAssociation === undefined &&
+                raw.externalTrack === undefined &&
+                raw.externalTrackKey === undefined &&
+                raw.localClockOffsetAppliedSec === undefined
+            );
+        }) ||
+        (embedded.videoStartUtcHint !== undefined && !isFiniteNumber(embedded.videoStartUtcHint)) ||
+        (embedded.localClockOffsetHintSec !== undefined && !isFiniteNumber(embedded.localClockOffsetHintSec)) ||
+        (embedded.accelSamples !== undefined &&
+            (!Array.isArray(embedded.accelSamples) ||
+                !embedded.accelSamples.every(
+                    (sample) =>
+                        typeof sample === "object" &&
+                        sample !== null &&
+                        isFiniteNumber(sample.msSinceStart) &&
+                        isFiniteNumber(sample.accelXg) &&
+                        isFiniteNumber(sample.accelYg) &&
+                        isFiniteNumber(sample.accelZg),
+                )))
+    ) {
+        return false;
+    }
+    return true;
+}
+
+/** A corrupt cache entry may cost a re-index, but must never poison ingest. */
+export function isCurrentRecordingMetadata(value: unknown): value is CachedRecordingMetadata {
+    if (typeof value !== "object" || value === null) return false;
+    const metadata = value as Partial<CachedRecordingMetadata>;
+    const indexed = metadata.indexed as Partial<IndexedMp4> | undefined;
+    if (
+        metadata.revision !== RECORDING_METADATA_CACHE_REVISION ||
+        typeof indexed !== "object" ||
+        indexed === null ||
+        typeof indexed.durationSec !== "number" ||
+        !Number.isFinite(indexed.durationSec) ||
+        indexed.durationSec < 0 ||
+        (indexed.createdUtc !== null &&
+            (!(indexed.createdUtc instanceof Date) || !Number.isFinite(indexed.createdUtc.getTime()))) ||
+        !isNullableString(indexed.codec) ||
+        !isNullableString(indexed.codecParam) ||
+        !isNullableString(indexed.videoCodecString) ||
+        !([0, 90, 180, 270] as unknown[]).includes(indexed.rotation) ||
+        !isFiniteNullableNumber(indexed.width) ||
+        !isFiniteNullableNumber(indexed.height) ||
+        !isFiniteNullableNumber(indexed.fps) ||
+        typeof indexed.needsHevcRemux !== "boolean" ||
+        typeof indexed.audioNeedsTranscode !== "boolean"
+    ) {
+        return false;
+    }
+    if (indexed.audio !== null) {
+        if (typeof indexed.audio !== "object" || indexed.audio === null) return false;
+        const audio = indexed.audio as Partial<NonNullable<IndexedMp4["audio"]>>;
+        if (
+            !isNullableString(audio.codec) ||
+            typeof audio.channels !== "number" ||
+            !Number.isFinite(audio.channels) ||
+            typeof audio.sampleRate !== "number" ||
+            !Number.isFinite(audio.sampleRate)
+        ) {
+            return false;
+        }
+    }
+    const repair = metadata.repair;
+    if (repair !== undefined) {
+        if (
+            typeof repair !== "object" ||
+            repair === null ||
+            !(repair.patchedMoov instanceof Uint8Array) ||
+            !Number.isSafeInteger(repair.moovFileStart) ||
+            !Number.isSafeInteger(repair.moovFileEnd) ||
+            repair.moovFileStart < 0 ||
+            repair.moovFileEnd < repair.moovFileStart ||
+            repair.patchedMoov.byteLength !== repair.moovFileEnd - repair.moovFileStart ||
+            !Array.isArray(repair.phantomNeutralized) ||
+            !repair.phantomNeutralized.every((handler) => typeof handler === "string")
+        ) {
+            return false;
+        }
+        if (
+            repair.hvcc !== null &&
+            (typeof repair.hvcc !== "object" ||
+                typeof repair.hvcc.needsHevcRemux !== "boolean" ||
+                (repair.hvcc.reason !== "header" && repair.hvcc.reason !== "arrays") ||
+                !isNullableString(repair.hvcc.videoCodecString))
+        ) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/** Ensures a cached repair can be spliced into this concrete file. */
+export function isRecordingMetadataApplicableToFile(metadata: unknown, fileSize: number): boolean {
+    if (!isCurrentRecordingMetadata(metadata)) return false;
+    return metadata.repair === undefined || metadata.repair.moovFileEnd <= fileSize;
+}
+
+function currentExternalExtractorIds(
+    videoKey: string,
+    extractorMaps: readonly ReadonlyMap<string, string>[],
+): string[] {
+    const ids = new Set<string>();
+    for (const map of extractorMaps) {
+        const id = map.get(videoKey);
+        if (id) ids.add(id);
+    }
+    return [...ids];
+}
+
+export function hydrateCandidate(
+    file: ClassifiedFile,
+    entry: CachedFileIndex,
+    externalRecords: GpsRecord[],
+    extractorMaps: readonly ReadonlyMap<string, string>[],
+): { candidate: VideoCandidate; embeddedRecords: GpsRecord[]; accel: AccelSample[] | null } {
+    if (!isRecordingMetadataApplicableToFile(entry.metadata, file.file.file.size)) {
+        throw new Error("cached recording repair is outside the current file");
+    }
+    const freshVideoKey = vendorFileKey(file.file);
+    const needsEmbeddedGps = shouldTryEmbeddedGps(file.file, externalRecords.length > 0);
+    const embedded = needsEmbeddedGps && entry.embeddedGps?.status === "parsed" ? entry.embeddedGps : null;
+    const embeddedRecords: GpsRecord[] = embedded
+        ? embedded.records.map((record) => ({ ...record, videoKey: freshVideoKey }))
+        : [];
+    const records = externalRecords.length > 0 ? externalRecords : embeddedRecords;
+    const fingerprint = cameraFingerprint(file.file);
+    const classifierFields = filenameClassifierFields(file.file);
+    const appliedExtractors = currentExternalExtractorIds(freshVideoKey, extractorMaps);
+    if (embedded && !appliedExtractors.includes(embedded.extractorId)) appliedExtractors.push(embedded.extractorId);
+    const derived = deriveStartUtc({
+        file: file.file,
+        fingerprint,
+        createdUtc: entry.metadata.indexed.createdUtc,
+        durationSec: entry.metadata.indexed.durationSec,
+        records,
+        fingerprintTz: null,
+        parseFilenameLocalTime: classifyFilenameTime,
+        preciseFilenameOffsetSec: null,
+        embeddedStartUtcHint: embedded?.videoStartUtcHint ?? null,
+        isTimelapse: classifierFields.isTimelapse,
+        wallDurationSec: null,
+    });
+    const candidate = buildProvisionalCandidate({
+        file: file.file,
+        fingerprint,
+        startUtc: derived.startUtc,
+        startSource: derived.source,
+        cameraTzSec: null,
+        durationSec: entry.metadata.indexed.durationSec,
+        records,
+        appliedExtractors,
+        classifierFields,
+    });
+    candidate.embeddedStartUtcHint = embedded?.videoStartUtcHint ?? null;
+    candidate.localClockOffsetHintSec = embedded?.localClockOffsetHintSec ?? null;
+    applyIndexedMetadata(candidate, entry.metadata.indexed, entry.metadata.repair);
+    return {
+        candidate,
+        embeddedRecords,
+        accel: embedded?.accelSamples?.map((sample) => ({ ...sample })) ?? null,
+    };
+}
+
+export type IndexCacheReuse = "full" | "metadata" | "none";
+
+/** Decides artifact reuse without touching IndexedDB or live candidates. */
+export function indexCacheReuseKind(
+    entry: CachedFileIndex | undefined,
+    needsEmbeddedGps: boolean,
+    availableIdentityKeys: ReadonlySet<string>,
+    deferForLooseGpx = false,
+): IndexCacheReuse {
+    if (!entry || !isCurrentRecordingMetadata(entry.metadata)) return "none";
+    // Loose-GPX selection is based on the provisional, pre-index trip layout.
+    // Keep that input identical on cold and warm ingest: no cached file may
+    // contribute mvhd duration/timing until after the resolver has run.
+    if (deferForLooseGpx) return "metadata";
+    return isIndexCacheEntryCompatible(entry, needsEmbeddedGps, availableIdentityKeys) ? "full" : "metadata";
+}
+
+/** Splits new videos into current artifact hits and files needing byte reads. */
 export async function partitionByIndexCache(
     videos: ClassifiedFile[],
     classified: readonly ClassifiedFile[],
     videoAssociation: VideoAssociationIndex,
-    externalInputsValid: boolean,
+    external: IndexCacheExternalInputs,
 ): Promise<IndexCachePartition> {
-    if (videos.length === 0) return { cachedCandidates: [], misses: videos, cacheAvailable: true };
-    const dependencyByVideoKey = new Map<string, string>();
+    if (videos.length === 0) return emptyPartition(videos, true);
     const collisionKeys = new Set<string>();
     for (const video of videos) {
         const key = cacheKeyOf(video);
-        const dependencyKey = indexCacheDependencyKey(video, classified, videoAssociation);
-        dependencyByIdentity.set(key, dependencyKey);
-        dependencyByVideoKey.set(key, dependencyKey);
         if (hasIndexCacheIdentityCollision(video, videoAssociation)) collisionKeys.add(key);
-        if (externalInputsValid && !collisionKeys.has(key)) writeBlockedIdentities.delete(key);
-        else writeBlockedIdentities.add(key);
     }
-    // A failed log/sidecar read makes a previous snapshot unsafe even when its
-    // metadata dependency is unchanged. Reindex for this run and do not replace
-    // the last known-good entry with a partial result.
-    if (!externalInputsValid) return { cachedCandidates: [], misses: videos, cacheAvailable: false };
     let entries: Map<string, CachedFileIndex>;
     try {
         entries = await getIndexCacheEntries(videos.map(cacheKeyOf));
@@ -153,77 +453,161 @@ export async function partitionByIndexCache(
         log.warn("index cache unavailable, running full pipeline", {
             err: err instanceof Error ? err.message : String(err),
         });
-        return { cachedCandidates: [], misses: videos, cacheAvailable: false };
+        const unavailable = emptyPartition(videos, false);
+        for (const video of videos) {
+            const identityKey = cacheKeyOf(video);
+            if (!external.areValid || collisionKeys.has(identityKey)) {
+                unavailable.writeBlockLeaseByFileKey.set(vendorFileKey(video.file), Symbol(identityKey));
+            }
+        }
+        return unavailable;
     }
+
+    const availableIdentityKeys = new Set(
+        classified
+            .filter((file) => file.role === "video" && !hasIndexCacheIdentityCollision(file, videoAssociation))
+            .map((file) => cacheKeyOf(file)),
+    );
     const cachedCandidates: VideoCandidate[] = [];
+    const cachedMetadataByFileKey = new Map<string, CachedRecordingMetadata>();
+    const restoredEmbeddedRecords: GpsRecord[] = [];
+    const restoredEmbeddedAccelByFileKey = new Map<string, AccelSample[]>();
+    const writeBlockLeaseByFileKey = new Map<string, symbol>();
     const misses: ClassifiedFile[] = [];
     const hitKeys: string[] = [];
-    for (const cf of videos) {
-        const key = cacheKeyOf(cf);
-        const entry = entries.get(key);
-        if (collisionKeys.has(key) || !entry || entry.dependencyKey !== dependencyByVideoKey.get(key)) {
-            misses.push(cf);
+    const deferEmbeddedForLooseGpx = classified.some(
+        (file) => file.role === "unknown" && /\.gpx$/i.test(file.file.file.name),
+    );
+    for (const file of videos) {
+        const identityKey = cacheKeyOf(file);
+        const entry = entries.get(identityKey);
+        const externalRecords = external.gpsLog ? recordsForVideo(external.gpsLog, file.file, videoAssociation) : [];
+        const needsEmbeddedGps = shouldTryEmbeddedGps(file.file, externalRecords.length > 0);
+        const reuse =
+            collisionKeys.has(identityKey) ||
+            (entry !== undefined && !isRecordingMetadataApplicableToFile(entry.metadata, file.file.file.size))
+                ? "none"
+                : indexCacheReuseKind(entry, needsEmbeddedGps, availableIdentityKeys, deferEmbeddedForLooseGpx);
+        if (reuse === "none" || !entry) {
+            misses.push(file);
             continue;
         }
-        hitKeys.push(key);
-        const freshFile = cf.file.file;
-        const freshVideoKey = vendorFileKey(cf.file);
-        cachedCandidates.push({
-            ...entry.candidate,
-            // The on-disk bytes still carry the broken moov - re-apply the
-            // repair recorded at index time, or the cached codec metadata
-            // would describe a file it no longer matches.
-            file: entry.repair ? applyMoovRepair(freshFile, entry.repair) : freshFile,
-            sourceKey: cf.file.sourceKey,
-            records: entry.candidate.records.map((record) => ({ ...record, videoKey: freshVideoKey })),
-            // Recomputed for THIS machine after the cache lookup - a verdict
-            // cached on another browser/GPU must not stick.
-            canPlay: true,
-        });
+        if (reuse === "metadata") {
+            // Metadata and GPS are independent artifacts: a parser change or
+            // unfinished heavy scan reruns only embedded extraction. Loose GPX
+            // assignment also takes this cold-equivalent path so a warm cache
+            // cannot disable a choice that was available on first ingest.
+            misses.push(file);
+            cachedMetadataByFileKey.set(vendorFileKey(file.file), entry.metadata);
+            hitKeys.push(identityKey);
+            continue;
+        }
+        try {
+            const restored = hydrateCandidate(file, entry, externalRecords, external.extractorByFileKey);
+            cachedCandidates.push(restored.candidate);
+            restoredEmbeddedRecords.push(...restored.embeddedRecords);
+            if (restored.accel) restoredEmbeddedAccelByFileKey.set(vendorFileKey(file.file), restored.accel);
+        } catch (err) {
+            log.warn("invalid index cache entry, re-indexing file", {
+                file: file.file.file.name,
+                err: err instanceof Error ? err.message : String(err),
+            });
+            misses.push(file);
+            continue;
+        }
+        hitKeys.push(identityKey);
     }
-    if (cachedCandidates.length > 0) {
-        log.info("index cache hits", { hits: cachedCandidates.length, total: videos.length });
-        // Mark the hits as USED so the volume prune keeps what the user
-        // actually opens. Fire-and-forget, off the ingest critical path.
+    if (hitKeys.length > 0) {
+        log.info("index cache hits", { hits: hitKeys.length, total: videos.length });
         void touchIndexCacheEntries(hitKeys).catch(() => {});
     }
-    return { cachedCandidates, misses, cacheAvailable: true };
+    for (const miss of misses) {
+        const identityKey = cacheKeyOf(miss);
+        if (!external.areValid || collisionKeys.has(identityKey)) {
+            writeBlockLeaseByFileKey.set(vendorFileKey(miss.file), Symbol(identityKey));
+        }
+    }
+    return {
+        cachedCandidates,
+        cachedMetadataByFileKey,
+        restoredEmbeddedRecords,
+        restoredEmbeddedAccelByFileKey,
+        writeBlockLeaseByFileKey,
+        misses,
+        cacheAvailable: true,
+    };
 }
 
-/**
- * Fire-and-forget write of freshly indexed candidates. A failed write only
- * costs a future reindex - never surfaces past a warn log. `skipKeys`
- * (vendorFileKey set) excludes files whose snapshot must not stick: records
- * not extracted yet (heavy-deferred) or extraction crashed - caching the
- * empty state would freeze "no GPS" across sessions. Repairs come from the
- * session registry (registerCandidateRepair).
- */
-export function scheduleIndexCacheWrite(candidates: VideoCandidate[], skipKeys: ReadonlySet<string>): void {
+/** Writes completed artifacts, then releases their potentially dense session
+ *  snapshots. Metadata explicitly retained for pending heavy/error retries is
+ *  released by the later deferred write. */
+export function scheduleIndexCacheWrite(
+    candidates: VideoCandidate[],
+    retainMetadataForVideoKeys: ReadonlySet<string> = new Set(),
+): void {
     const entries: CachedFileIndex[] = [];
+    const releases: Array<{
+        candidate: VideoCandidate;
+        identityKey: string;
+        metadata: CachedRecordingMetadata | undefined;
+        embeddedGps: CachedEmbeddedGps | undefined;
+        retain: boolean;
+    }> = [];
     for (const candidate of candidates) {
-        const key = vendorFileKey(candidate);
-        if (skipKeys.has(key)) continue;
-        // applyMoovRepair is constant-size and preserves name/lastModified, so
-        // the patched candidate.file still carries the ORIGINAL file identity.
-        const identityKey = fileIdentityKey({
-            relativePath: candidate.relativePath,
-            size: candidate.file.size,
-            lastModified: candidate.file.lastModified,
+        const videoKey = vendorFileKey(candidate);
+        const identityKey = candidateIdentityKey(candidate);
+        const metadata = metadataByIdentity.get(identityKey);
+        const embeddedGps = embeddedGpsByIdentity.get(identityKey);
+        const writeBlocked = (writeBlockLeasesByIdentity.get(identityKey)?.size ?? 0) > 0;
+        releases.push({
+            candidate,
+            identityKey,
+            metadata,
+            embeddedGps,
+            retain: retainMetadataForVideoKeys.has(videoKey),
         });
-        if (writeBlockedIdentities.has(identityKey)) continue;
-        entries.push(
-            buildCacheEntry(
-                identityKey,
-                candidate,
-                repairByIdentity.get(identityKey),
-                dependencyByIdentity.get(identityKey) ?? "",
-            ),
-        );
+        if (writeBlocked) continue;
+        if (!metadata) continue;
+        entries.push(buildCacheEntry(identityKey, metadata, embeddedGps));
     }
-    if (entries.length === 0) return;
+
+    const releaseCompletedArtifacts = (): void => {
+        for (const release of releases) {
+            if (release.retain) continue;
+            if (release.metadata && metadataByIdentity.get(release.identityKey) === release.metadata) {
+                metadataByIdentity.delete(release.identityKey);
+            }
+            if (release.embeddedGps && embeddedGpsByIdentity.get(release.identityKey) === release.embeddedGps) {
+                embeddedGpsByIdentity.delete(release.identityKey);
+            }
+            releaseIndexCacheWriteBlocks([release.candidate]);
+        }
+    };
+    if (entries.length === 0) {
+        releaseCompletedArtifacts();
+        return;
+    }
     void putIndexCacheEntries(entries)
         .then(() => log.info("index cache written", { entries: entries.length }))
         .catch((err: unknown) => {
             log.warn("index cache write failed", { err: err instanceof Error ? err.message : String(err) });
-        });
+        })
+        .finally(releaseCompletedArtifacts);
+}
+
+/** Clears module-owned session registries between isolated unit tests. */
+export function _resetForTests(): void {
+    metadataByIdentity.clear();
+    embeddedGpsByIdentity.clear();
+    writeBlockLeasesByIdentity.clear();
+    writeBlockLeaseByCandidate = new WeakMap();
+}
+
+/** Inspect one private snapshot without exposing mutable registries. */
+export function _cacheMetadataForTests(identityKey: string): CachedRecordingMetadata | undefined {
+    return metadataByIdentity.get(identityKey);
+}
+
+export function _isIndexCacheWriteBlockedForTests(candidate: VideoCandidate): boolean {
+    return (writeBlockLeasesByIdentity.get(candidateIdentityKey(candidate))?.size ?? 0) > 0;
 }

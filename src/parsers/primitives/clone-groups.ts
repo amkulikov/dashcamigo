@@ -8,11 +8,9 @@
 // Guarded by scripts/check-lazy-chunks.mjs.
 
 import type { VendorFile } from "../types.js";
-import { blackvueChannelGroupKey } from "../filename/_patterns.js";
-
 const GROUP_SEPARATOR = String.fromCharCode(0);
 
-function strippedParentPath(file: VendorFile, channelFolders: readonly string[]): string {
+export function strippedParentPath(file: VendorFile, channelFolders: readonly string[]): string {
     const segments = file.relativePath.split("/").filter(Boolean);
     segments.pop();
     const channelNames = new Set(channelFolders.map((folder) => folder.toLowerCase()));
@@ -26,13 +24,6 @@ function strippedParentPath(file: VendorFile, channelFolders: readonly string[])
 export function videoCloneAffinityKey(extractorId: string, file: VendorFile, groupKey: string): string {
     const parent = strippedParentPath(file, ["front", "rear", "interior"]);
     return [extractorId, file.sourceKey ?? "", parent, groupKey].join(GROUP_SEPARATOR);
-}
-
-/** Source-local BlackVue recording key, with manual channel folders folded. */
-export function blackvueChannelCloneGroup(file: VendorFile): string | null {
-    const recording = blackvueChannelGroupKey(file.file.name);
-    if (recording === null) return null;
-    return [strippedParentPath(file, ["front", "rear", "interior"]), recording].join(GROUP_SEPARATOR);
 }
 
 // `YYYYMMDD_HHMMSS<F|R>.ts` - same regex as the old Juscar vendor plugin. Used

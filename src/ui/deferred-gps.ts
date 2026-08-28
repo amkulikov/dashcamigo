@@ -9,7 +9,11 @@ import { tripAllCandidates, type VideoCandidate } from "../trips.js";
 
 import { restampProvisionalMarkers } from "./annotations.js";
 import { dispatchParseVideoEmbeddedGpsViaWorker as dispatchParseVideoEmbeddedGps } from "./gps-extract-shim.js";
-import { scheduleIndexCacheWrite } from "./ingest-cache.js";
+import {
+    cacheRetentionKeysForGpsWork,
+    registerEmbeddedGpsCacheArtifacts,
+    scheduleIndexCacheWrite,
+} from "./ingest-cache.js";
 import { embeddedResultHasEffect, mergeAccelIntoCandidates } from "./ingest-core.js";
 import { commitRecordingTripsWhilePreservingIngest, reanchorRecordingCandidates } from "./ingest-regroup.js";
 import { applyEmbeddedGpsResult } from "./embedded-gps-state.js";
@@ -278,6 +282,7 @@ async function runDeferredGpsLoadBody(
                 state.pendingHeavyEmbeddedGps.set(key, target);
             }
         }
+        registerEmbeddedGpsCacheArtifacts(targets, result);
     }
 
     if (result && embeddedResultHasEffect(result)) {
@@ -322,20 +327,13 @@ async function runDeferredGpsLoadBody(
     }
     restampProvisionalMarkers({ final: true, finalCandidates: allCandidates });
 
-    // Cache successful scans, including a verified "no GPS" result. Pending or
-    // errored files stay excluded so the next trip-open can retry them.
+    // Cache metadata plus whichever raw embedded artifacts were verified above.
+    // Errored targets have no GPS artifact and remain retryable.
     if (result) {
-        const scanned = session.targetCandidates;
-        // A file the extractor errored on AND that came back empty is not a
-        // verified "no GPS" - it is a failure, and caching it would deny the
-        // retry that may well succeed. Both halves are needed: the errors carry
-        // a basename, and the dispatcher keeps walking past a failed extractor,
-        // so a file another primitive then claimed is not a failure at all.
-        const skipKeys = new Set(state.pendingHeavyEmbeddedGps.keys());
-        for (const cand of scanned) {
-            if (cand.records.length === 0 && errorNames.has(cand.file.name)) skipKeys.add(vendorFileKey(cand));
-        }
-        scheduleIndexCacheWrite(scanned, skipKeys);
+        scheduleIndexCacheWrite(
+            session.targetCandidates,
+            cacheRetentionKeysForGpsWork(state.pendingHeavyEmbeddedGps.keys(), state.inflightEmbeddedGps),
+        );
     }
 
     if (result && result.errors.length > 0) {
