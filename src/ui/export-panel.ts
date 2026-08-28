@@ -103,6 +103,7 @@ import {
 import { subscribeConnectivity } from "./connectivity.js";
 import { isMapAvailable } from "./map.js";
 import { STREET_LABEL_DENSITY_LABEL_KEYS, STREET_LABEL_DENSITY_VALUES } from "./map-label-scale.js";
+import { renderMapMarkerControl } from "./map-marker-control.js";
 
 const log = createLogger("export-panel");
 
@@ -184,7 +185,12 @@ function openOrCloseExportMode(): void {
     else openExportMode();
 }
 
+let wasExportModeOpen = false;
+
 function syncExportPanel(): void {
+    const hasJustOpened = state.exportModeOpen && !wasExportModeOpen;
+    wasExportModeOpen = state.exportModeOpen;
+    if (hasJustOpened && selectedOverlayKey === "map") refreshOverlayInspector();
     syncBlurGroup();
     // Trip switches and range edits re-key the detect state (per-trip flags,
     // stale results) - keep the checkbox block honest alongside the zones.
@@ -2347,6 +2353,7 @@ function refreshOverlayInspector(): void {
     );
 
     if (def.isMap) {
+        root.appendChild(renderMapMarkerField());
         root.appendChild(renderMapShapeSegment());
         root.appendChild(renderMapThemeSegment());
         root.appendChild(renderMapLabelSizeSegment());
@@ -2377,6 +2384,29 @@ function refreshOverlayInspector(): void {
     hint.className = "export-panel__note export-panel__ov-hint";
     hint.textContent = t("export.overlays.dragHint");
     root.appendChild(hint);
+}
+
+function renderMapMarkerField(): HTMLElement {
+    const wrap = document.createElement("div");
+    wrap.className = "export-panel__ov-field";
+    const label = document.createElement("span");
+    label.className = "export-panel__ov-field-label";
+    label.textContent = t("export.overlays.mapMarker");
+    const host = document.createElement("div");
+    host.id = "export-map-marker-control";
+    renderMapMarkerControl(host, {
+        appearance: exportPanelState.overlayMap.marker,
+        onChange: (appearance) => {
+            exportPanelState.overlayMap.marker = appearance;
+            notifyExportStateChanged();
+        },
+        idPrefix: "export",
+    });
+    const note = document.createElement("p");
+    note.className = "export-panel__note";
+    note.textContent = t("export.overlays.mapMarker.description");
+    wrap.append(label, host, note);
+    return wrap;
 }
 
 /** Map clip-shape segmented control (inspector, map only). */

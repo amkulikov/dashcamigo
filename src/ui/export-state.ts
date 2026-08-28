@@ -15,6 +15,7 @@ import type { MapShape, OverlayStyleId, WatermarkAnchor } from "../transcode/typ
 import type { Trip } from "../trips.js";
 
 import type { StreetLabelDensity } from "./map-label-scale.js";
+import { getMapMarkerAppearance, type MapMarkerAppearance } from "./map-marker-pref.js";
 import { activeTrip, state } from "./state.js";
 import type { MapStyleId } from "./theme.js";
 
@@ -104,6 +105,9 @@ export interface OverlayMapState {
      *  and how early by zoom they turn on). Same lifecycle as labelScalePct;
      *  independent of the viewer's density preference. */
     labelDensity: StreetLabelDensity;
+    /** Current-position marker for this export. Seeded from the global map
+     * preference when export mode opens, then edited independently. */
+    marker: MapMarkerAppearance;
     /** Camera view. "north" = north-up (the legacy look); "chase" = tilted,
      *  heading-up (the car points up, road ahead in view). Default "north". */
     mode: MapViewMode;
@@ -252,6 +256,7 @@ function freshExportPanelState(): ExportPanelState {
             theme: "neon",
             labelScalePct: 100,
             labelDensity: "standard",
+            marker: getMapMarkerAppearance(),
             mode: "chase",
             pitchDeg: 58,
             adaptiveZoom: true,
@@ -323,6 +328,7 @@ export function notifyExportStateChanged(): void {
 export function openExportMode(): void {
     if (state.exportModeOpen) return;
     state.exportModeOpen = true;
+    exportPanelState.overlayMap.marker = getMapMarkerAppearance();
     if (!exportPanelState.range) {
         const trip = activeTrip();
         if (trip) {

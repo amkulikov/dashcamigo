@@ -122,7 +122,6 @@ interface ThemeColors {
     markerStart: string; // --dc-green
     markerEnd: string; // --dc-red
     markerStroke: string; // --dc-marker-stroke (#fff on dark / #0E0E0E on light)
-    markerCar: string; // --dc-orange
     // Semi-transparent veil drawn over the not-yet-driven portion of the
     // track ("trail" overlay in map.ts): --bg with alpha, so it dims toward
     // whichever map background the active theme uses.
@@ -178,7 +177,6 @@ export function themeColors(): ThemeColors {
         markerStart: getCssVar("--dc-green"),
         markerEnd: getCssVar("--dc-red"),
         markerStroke: getCssVar("--dc-marker-stroke"),
-        markerCar: getCssVar("--dc-orange"),
         // Veil = background color at ~45% alpha, one semantic ("blend toward
         // the map background") for both palettes. Strength is a tradeoff: at
         // 72% the un-driven track was near-invisible against the base map in

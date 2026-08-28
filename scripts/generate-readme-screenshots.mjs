@@ -17,8 +17,8 @@
 //   3. Writes to docs/screenshots/:
 //        app-desktop.png       - >=3 trips, top trip selected, split front/rear,
 //                                map expanded with the speed-colored route. Dark.
-//        app-mobile-player.png - a trip open and playing. Light theme, so the
-//                                hero shows both themes at once.
+//        app-mobile-player.png - a trip paused at the deer-braking moment. Light
+//                                theme, so the hero shows both themes at once.
 //        readme-hero.webp      - the two shots above composed on a brand-gradient
 //                                backdrop; the only image README.md embeds.
 //   4. Writes to public/landing/ (shipped with the site, embedded by the
@@ -142,31 +142,52 @@ const TRIPS = [
     { hhmmss: "124000", clips: 2, startDistM: 1200, frontFrame: "cover_2.jpg" },
     { hhmmss: "180500", clips: 4, startDistM: 0, frontFrame: "front_sample.jpg" },
 ];
+const HERO_TRIP_INDEX = TRIPS.length - 1;
+// The committed front frame catches a deer in the road. Park both screenshot
+// playheads at the instant the synthetic car finishes its emergency stop so
+// the frame, readout, graph and map all tell the same story.
+const HERO_BRAKE_SEC = 72;
+const HERO_BRAKE_START_SEC = 68;
+const HERO_ACCEL_START_SEC = 74;
+const HERO_ACCEL_END_SEC = 88;
 
 // Winding Black-Forest stretch (Schwarzwaldhochstraße / B500 near Mummelsee),
 // hand-traced N->S so vector tiles render green/scenic. Purely synthetic -
 // nothing here derives from a real recording. [lat, lon].
 const TRACK_ANCHORS = [
     [48.594, 8.205],
-    [48.5915, 8.2075],
-    [48.589, 8.206],
-    [48.5865, 8.2085],
-    [48.584, 8.207],
-    [48.5815, 8.2095],
-    [48.579, 8.208],
-    [48.5765, 8.2105],
-    [48.574, 8.209],
-    [48.5715, 8.2115],
-    [48.569, 8.21],
-    [48.5665, 8.212],
+    [48.5928, 8.2065],
+    [48.5911, 8.2071],
+    [48.5895, 8.2068],
+    [48.5878, 8.2056],
+    [48.5869, 8.2059],
+    [48.5858, 8.2077],
+    [48.5839, 8.2092],
+    [48.5821, 8.209],
+    [48.5807, 8.2078],
+    [48.579, 8.2075],
+    [48.5776, 8.2086],
+    [48.5765, 8.2103],
+    [48.5747, 8.2111],
+    [48.5733, 8.2104],
+    [48.5719, 8.209],
+    [48.5702, 8.2087],
+    [48.5687, 8.21],
+    [48.5672, 8.2121],
+    [48.5651, 8.213],
+    [48.5634, 8.2124],
+    [48.5619, 8.2106],
+    [48.5603, 8.2101],
+    [48.5588, 8.211],
+    [48.5574, 8.2127],
+    [48.5553, 8.2134],
 ];
 
-// Speed profile: a smooth sine in [11, 25] m/s (~40-90 km/h) so buildSpeedGradient
-// paints a visible color range along the route. Also drives per-second travel
-// distance (densify anchors by distance = speed).
-const SPEED_MID_MS = 18;
-const SPEED_AMP_MS = 7;
-const SPEED_PERIOD_S = 40;
+// Cruise around 90 km/h with small, non-periodic-looking corrections. The hero
+// trip then has one deliberate story beat: a hard stop for the deer followed by
+// a measured acceleration. This drives the chart, telemetry, event strip and
+// distance along the route together instead of painting repeated sine waves.
+const CRUISE_SPEED_MS = 25;
 
 // --- geo helpers -----------------------------------------------------------
 
@@ -215,17 +236,43 @@ function pointAtDistance(d) {
     return [a[0] + (b[0] - a[0]) * frac, a[1] + (b[1] - a[1]) * frac];
 }
 
+function smoothstep(value) {
+    const t = Math.max(0, Math.min(1, value));
+    return t * t * (3 - 2 * t);
+}
+
+function cruiseSpeedAt(s, tripIdx) {
+    const phase = tripIdx * 7.3;
+    return (
+        CRUISE_SPEED_MS +
+        0.52 * Math.sin((s + phase) / 10.7) +
+        0.27 * Math.sin((s + phase * 0.4) / 3.9) +
+        0.18 * Math.cos((s + phase) / 17.3)
+    );
+}
+
 // Instantaneous speed (m/s) at footage second s.
-function speedAt(s) {
-    return SPEED_MID_MS + SPEED_AMP_MS * Math.sin((2 * Math.PI * s) / SPEED_PERIOD_S);
+function speedAt(s, tripIdx) {
+    const cruise = cruiseSpeedAt(s, tripIdx);
+    if (tripIdx !== HERO_TRIP_INDEX || s < HERO_BRAKE_START_SEC) return cruise;
+    if (s <= HERO_BRAKE_SEC) {
+        const braking = smoothstep((s - HERO_BRAKE_START_SEC) / (HERO_BRAKE_SEC - HERO_BRAKE_START_SEC));
+        return cruise * (1 - braking);
+    }
+    if (s < HERO_ACCEL_START_SEC) return 0;
+    if (s < HERO_ACCEL_END_SEC) {
+        const accelerating = smoothstep((s - HERO_ACCEL_START_SEC) / (HERO_ACCEL_END_SEC - HERO_ACCEL_START_SEC));
+        return cruise * accelerating;
+    }
+    return cruise;
 }
 
 // Distance travelled from the trip's start after `s` whole seconds (sum of the
 // per-second speed) - integrates the speed profile so faster seconds cover more
 // ground. Returns metric distance to add to the trip's startDistM.
-function travelledBy(s) {
+function travelledBy(s, tripIdx) {
     let d = 0;
-    for (let k = 0; k < s; k++) d += speedAt(k);
+    for (let k = 0; k < s; k++) d += speedAt(k, tripIdx);
     return d;
 }
 
@@ -302,10 +349,13 @@ function buildGpsLog(clips) {
             // Footage second within the clip's trip drives position + speed so a
             // trip is one continuous sub-route on the forest polyline.
             const tripSecond = clip.clipInTrip * CLIP_SEC + t;
-            const distAlong = clip.startDistM + travelledBy(tripSecond);
+            const distAlong = clip.startDistM + travelledBy(tripSecond, clip.tripIdx);
             const here = pointAtDistance(distAlong);
-            const next = pointAtDistance(clip.startDistM + travelledBy(tripSecond + 1));
-            const speed = speedAt(tripSecond); // m/s
+            const speed = speedAt(tripSecond, clip.tripIdx); // m/s
+            // A full stop produces two identical integrated positions. Keep the
+            // last frame aligned with the road by sampling its tangent at least
+            // one metre ahead instead of deriving a meaningless 0° bearing.
+            const next = pointAtDistance(distAlong + Math.max(speed, 1));
             const bearing = bearingDeg(here, next);
             // Write raw field[0] 8h behind the intended UTC (parser adds +8h back).
             const rawTs = clip.clipStartPseudoUnix - FIRMWARE_BIAS_SEC + t;
@@ -435,8 +485,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // no upload-warning / PWA toast / onboarding overlay is ever in frame.
 // theme: explicit "dark"/"light" override (src/ui/theme.ts ThemeChoice) - the
 // shots must not depend on the machine's OS scheme.
-async function presetLocalStorage(context, theme = "dark") {
-    await context.addInitScript((chosenTheme) => {
+async function presetLocalStorage(context, theme = "dark", marker = null) {
+    await context.addInitScript(({ chosenTheme, mapMarker }) => {
         try {
             const now = String(Date.now());
             localStorage.setItem("dc-theme", chosenTheme);
@@ -451,10 +501,11 @@ async function presetLocalStorage(context, theme = "dark") {
             // Metric units: the synthetic track is a German forest road - km/h
             // readouts keep the shot internally consistent (en-US defaults to mph).
             localStorage.setItem("dashcamigo:units", "metric");
+            if (mapMarker) localStorage.setItem("dashcamigo:mapMarker", JSON.stringify(mapMarker));
         } catch {
             /* private mode - ignore */
         }
-    }, theme);
+    }, { chosenTheme: theme, mapMarker: marker });
 }
 
 // Waits for MapLibre to reach an idle frame (tiles finished) then a short settle
@@ -517,6 +568,27 @@ async function selectTopTrip(page) {
     );
 }
 
+// Seek through the real scrubber rather than reaching into app modules. Pausing
+// makes the generated artwork deterministic and leaves the playhead precisely
+// on the 0 km/h sample at the deer frame.
+async function seekToHeroBrake(page) {
+    const play = page.locator("#player-play");
+    if ((await play.getAttribute("data-paused")) === "false") {
+        await play.click();
+        await page.waitForFunction(() => document.getElementById("player-play")?.dataset.paused === "true");
+    }
+    // 4 jumps to 40% of this 180 s trip (72 s). Unlike a pixel click this is
+    // immune to the chart's dynamic left/right plot gutters.
+    await page.keyboard.press("4");
+    await page.waitForFunction(
+        () => {
+            const value = Number(document.getElementById("player-mini-progress")?.getAttribute("aria-valuenow"));
+            return Number.isFinite(value) && Math.abs(value - 40) < 1;
+        },
+    );
+    await page.waitForTimeout(700);
+}
+
 // --- per-screenshot flows --------------------------------------------------
 
 async function shotDesktop(browser, fixtureRoot) {
@@ -530,7 +602,7 @@ async function shotDesktop(browser, fixtureRoot) {
         locale: "en-US",
         timezoneId: "UTC", // displayed trip time == filename wall-clock; day never rolls
     });
-    await presetLocalStorage(context);
+    await presetLocalStorage(context, "dark", { shape: "sedan", color: "#2f7ee6", size: "medium" });
     const page = await context.newPage();
     await page.goto(`${BASE_URL}/en/`);
 
@@ -593,6 +665,7 @@ async function shotDesktop(browser, fixtureRoot) {
         );
     });
     await waitForMapIdle(page);
+    await seekToHeroBrake(page);
 
     const out = join(OUT_DIR, "app-desktop.png");
     await page.screenshot({ path: out, fullPage: false });
@@ -620,13 +693,6 @@ async function shotMobilePlayer(browser, fixtureRoot) {
     if (tripCount < 3) throw new Error(`mobile-player: expected >=3 trips, got ${tripCount}`);
     await selectTopTrip(page);
 
-    // Ensure it is playing (a real click is a trusted gesture, works headless
-    // without an autoplay flag).
-    const play = page.locator("#player-play");
-    if ((await play.getAttribute("data-paused")) === "true") await play.click();
-    await page.waitForFunction(() => document.getElementById("player-play")?.dataset.paused === "false", {
-        timeout: 5_000,
-    });
     // Wait for a real decoded frame on the front tile before shooting.
     await page
         .waitForFunction(
@@ -637,6 +703,7 @@ async function shotMobilePlayer(browser, fixtureRoot) {
             { timeout: 10_000 },
         )
         .catch(() => {});
+    await seekToHeroBrake(page);
 
     // Open the map (on mobile the #player-map button is the only way in - the
     // mini-map circle is hidden there). It fills the otherwise-empty area under

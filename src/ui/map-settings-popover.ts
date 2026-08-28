@@ -19,6 +19,8 @@ import {
     STREET_LABEL_DENSITY_LABEL_KEYS,
     STREET_LABEL_DENSITY_VALUES,
 } from "./map-label-scale.js";
+import { renderMapMarkerControl } from "./map-marker-control.js";
+import { getMapMarkerAppearance, setMapMarkerAppearance } from "./map-marker-pref.js";
 import { reapplyMapLabelPrefs } from "./map.js";
 
 // Segment buttons carry their preset in data-value; a click persists it,
@@ -55,6 +57,12 @@ function renderSegment<Value extends string | number>(
 // changed elsewhere (the settings modal selects).
 function renderRows(): void {
     syncGpsSyncLaunchers();
+    renderMapMarkerControl(dom.mapMarkerControl, {
+        appearance: getMapMarkerAppearance(),
+        onChange: setMapMarkerAppearance,
+        idPrefix: "map-popover",
+        compact: true,
+    });
     renderSegment(
         dom.mapLabelScaleSegment,
         MAP_LABEL_SCALE_VALUES,

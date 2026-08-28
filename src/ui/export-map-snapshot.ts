@@ -13,8 +13,8 @@
 //    the target zoom, jumpTo each pre-warm waypoint, wait for `idle`. After
 //    pre-warm every needed tile is in the maplibre tile cache; hot-loop
 //    snapshots are then jumpTo + a SYNCHRONOUS redraw() (no rAF wait) + readback.
-//  - Car marker (orange chevron arrow) is painted directly onto the composite
-//    2D canvas via drawCarMarker - centered, rotated by the per-snapshot bearing.
+//  - The selected position marker is painted directly onto the composite 2D
+//    canvas - centered, rotated by the per-snapshot bearing.
 //    It is NOT a DOM/SVG element and NOT an OffscreenCanvas. The snapshot then
 //    ships as a single self-contained ImageBitmap that already includes the
 //    marker, so the result "looks like the player mini-map" without the
@@ -31,10 +31,12 @@ import type * as maplibregl from "maplibre-gl";
 import { probeWebGL } from "../capabilities.js";
 import { createLogger } from "../log.js";
 import type { GpsRecord } from "../parsers/types.js";
-import { type MapStyleId, themeColors } from "./theme.js";
+import type { MapStyleId } from "./theme.js";
 import { buildMercatorCumulativeDistances, buildSpeedGradient } from "./speed-gradient.js";
 import { addBuildings3dLayer, loadMaplibre, loadMapStyle, type MapLoadSource, removeBuildings3dLayer } from "./map.js";
 import { applyStreetLabelDensity, scaleStyleTextSizes, type StreetLabelDensity } from "./map-label-scale.js";
+import { DEFAULT_MAP_MARKER_APPEARANCE, type MapMarkerAppearance, mapMarkerSizeScale } from "./map-marker-pref.js";
+import { drawMapMarker } from "./map-marker-renderer.js";
 import { getMapProvider, reportMapProviderTileError, subscribeMapProvider } from "./map-provider.js";
 import { transformMapTileRequest } from "./map-tile-cache.js";
 
@@ -158,6 +160,8 @@ export interface ExportMapSnapshotter {
      *  by the preview, which (unlike the export) does not prewarm, so its first
      *  snapshot would otherwise capture a blank base layer before tiles arrive. */
     snapshot(req: SnapshotRequest, opts?: { waitForIdle?: boolean }): Promise<ImageBitmap>;
+    /** Updates only the marker compositor; the MapLibre style stays intact. */
+    setMarkerAppearance(appearance: MapMarkerAppearance): void;
     /** Tear down the maplibre instance and remove the host div. Idempotent. */
     dispose(): void;
 }
@@ -183,9 +187,10 @@ export interface ExportMapSnapshotter {
  * pristine. The instance renders one style for its lifetime - a changed value
  * needs a rebuild, same as `theme`.
  */
-export interface ExportMapLabelOptions {
+export interface ExportMapRenderOptions {
     labelScalePct?: number;
     labelDensity?: StreetLabelDensity;
+    markerAppearance?: MapMarkerAppearance;
 }
 
 export async function createExportMapSnapshotter(
@@ -193,9 +198,14 @@ export async function createExportMapSnapshotter(
     source: MapLoadSource = "export",
     theme: MapStyleId = "light",
     targetSlotWidthPx?: number,
-    labelOptions: ExportMapLabelOptions = {},
+    renderOptions: ExportMapRenderOptions = {},
 ): Promise<ExportMapSnapshotter> {
-    const { labelScalePct = 100, labelDensity = "standard" } = labelOptions;
+    const {
+        labelScalePct = 100,
+        labelDensity = "standard",
+        markerAppearance = DEFAULT_MAP_MARKER_APPEARANCE,
+    } = renderOptions;
+    let activeMarkerAppearance = { ...markerAppearance };
     // Resolution policy: derive pixelRatio from the slot the snapshot lands in,
     // not the device. Undefined (no slot hint) leaves the maplibre default
     // (devicePixelRatio), preserving the preview's on-screen sharpness. The zoom
@@ -501,12 +511,35 @@ export async function createExportMapSnapshotter(
                 const ratioX = composite.width / SNAPSHOT_WIDTH;
                 const ratioY = composite.height / SNAPSHOT_HEIGHT;
                 const pt = map.project([req.lon, req.lat]);
-                drawCarMarker(cctx, pt.x * ratioX, pt.y * ratioY, 0);
+                await drawMapMarker(
+                    cctx,
+                    activeMarkerAppearance,
+                    pt.x * ratioX,
+                    pt.y * ratioY,
+                    0,
+                    Math.min(composite.width, composite.height) *
+                        0.105 *
+                        mapMarkerSizeScale(activeMarkerAppearance.size),
+                    pitch,
+                );
             } else {
-                drawCarMarker(cctx, composite.width / 2, composite.height / 2, req.bearingDeg);
+                await drawMapMarker(
+                    cctx,
+                    activeMarkerAppearance,
+                    composite.width / 2,
+                    composite.height / 2,
+                    req.bearingDeg,
+                    Math.min(composite.width, composite.height) *
+                        0.105 *
+                        mapMarkerSizeScale(activeMarkerAppearance.size),
+                    pitch,
+                );
             }
 
             return await createImageBitmap(composite);
+        },
+        setMarkerAppearance(appearance: MapMarkerAppearance): void {
+            activeMarkerAppearance = { ...appearance };
         },
         dispose(): void {
             isDisposed = true;
@@ -692,49 +725,4 @@ function addTrackLayer(map: maplibregl.Map, records: GpsRecord[]): void {
             "line-gradient": gradient as never,
         },
     });
-}
-
-/**
- * Paints the car marker (orange chevron arrow pointing forward) at (cx, cy)
- * rotated by bearingDeg. Same shape as the player mini-map marker (map.ts) so
- * the symbol is consistent across player and exported video.
- *
- * Sized as a fraction of the snapshot's shorter side, not an absolute px: the
- * marker is drawn at the snapshot's drawing-buffer resolution and then scaled
- * into the slot by the pipeline, so an absolute size read tiny in the final
- * frame. ~18% of the slot matches the player mini-map's proportion.
- *
- * A white halo OUTLINE (stroke under the orange fill) gives contrast on any
- * base map without the old filled white disc reading as a backing plate.
- */
-function drawCarMarker(
-    ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
-    cx: number,
-    cy: number,
-    bearingDeg: number,
-): void {
-    // Chevron unit: the player marker polygon spans -10..8 vertically; at this
-    // unit the arrow is ~9% of the slot tall. Fallback 480 guards a 0-sized
-    // canvas (degraded path) so the marker still draws.
-    const base = Math.min(ctx.canvas.width || 0, ctx.canvas.height || 0) || 480;
-    const unit = base * 0.005;
-    const t = themeColors();
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate((bearingDeg * Math.PI) / 180);
-    // Chevron pointing up = direction of travel after rotation. Points mirror
-    // map.ts's "0,-10 7,8 0,4 -7,8" polygon, scaled by unit.
-    ctx.beginPath();
-    ctx.moveTo(0, -10 * unit);
-    ctx.lineTo(7 * unit, 8 * unit);
-    ctx.lineTo(0, 4 * unit);
-    ctx.lineTo(-7 * unit, 8 * unit);
-    ctx.closePath();
-    ctx.lineJoin = "round";
-    ctx.lineWidth = Math.max(1.5, unit * 1.8);
-    ctx.strokeStyle = "rgba(255,255,255,0.95)";
-    ctx.stroke();
-    ctx.fillStyle = t.markerCar;
-    ctx.fill();
-    ctx.restore();
 }

@@ -281,6 +281,7 @@ export const dom = {
     // Gear popover with map view preferences (see src/ui/map-settings-popover.ts).
     mapSettingsToggle: $id<HTMLButtonElement>("map-settings-toggle"),
     mapSettingsPopover: $id<HTMLDivElement>("map-settings-popover"),
+    mapMarkerControl: $id<HTMLDivElement>("map-marker-control"),
     mapLabelScaleSegment: $id<HTMLDivElement>("map-label-scale-segment"),
     mapStreetNamesSegment: $id<HTMLDivElement>("map-street-names-segment"),
     mapGpsSyncBtn: $id<HTMLButtonElement>("map-gps-sync-btn"),

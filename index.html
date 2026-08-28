@@ -1672,6 +1672,10 @@
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
                             </button>
                             <div id="map-settings-popover" class="map-settings-popover" hidden>
+                                <div class="map-settings-row map-settings-row--marker">
+                                    <span class="map-settings-row-label" data-i18n="settings.map.marker.label">Map marker</span>
+                                    <div id="map-marker-control"></div>
+                                </div>
                                 <div class="map-settings-row">
                                     <span class="map-settings-row-label" data-i18n="settings.map.labelScale.label">Text size on the map</span>
                                     <div id="map-label-scale-segment" class="map-settings-segment" role="radiogroup"
@@ -2483,6 +2487,11 @@
                  src/ui/map.ts). The export overlay map has its own control. -->
             <div class="export-modal-section">
                 <h3 class="settings-section-title" data-i18n="settings.map.section">Map</h3>
+                <div class="settings-row">
+                    <span class="settings-select-label" data-i18n="settings.map.marker.label">Map marker</span>
+                    <div id="settings-map-marker-control"></div>
+                    <p class="settings-toggle-desc" data-i18n="settings.map.marker.description">Choose how your position appears on the map.</p>
+                </div>
                 <div class="settings-row">
                     <label class="settings-select-row">
                         <span class="settings-select-label" data-i18n="settings.map.labelScale.label">Text size on the map</span>

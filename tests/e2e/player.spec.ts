@@ -396,8 +396,26 @@ test.describe("player", () => {
 
         const scaleSeg = popover.locator("#map-label-scale-segment");
         const namesSeg = popover.locator("#map-street-names-segment");
+        const markerControl = popover.locator('[data-marker-control="map-popover"]');
         await toggle.click();
         await expect(popover).toBeVisible();
+        expect(
+            await popover.evaluate((element) => Math.ceil(element.getBoundingClientRect().height)),
+            "the point-of-use map settings should stay compact enough to avoid a tall flyout",
+        ).toBeLessThanOrEqual(320);
+        await expect(markerControl.locator('button[data-marker-shape="arrow"]')).toHaveAttribute(
+            "aria-pressed",
+            "true",
+        );
+        await expect(markerControl.locator('button[data-marker-shape="arrow"] canvas')).toHaveAttribute(
+            "data-marker-render-key",
+            /^arrow:/,
+        );
+        await expect(markerControl.locator('button[data-marker-shape="truck"] canvas')).toHaveAttribute(
+            "data-marker-render-key",
+            /^truck:/,
+        );
+        await shot(page, "player-10-map-marker-popover");
         await expect(scaleSeg.locator('button[aria-pressed="true"]'), "default size preset is pressed").toHaveText(
             "100%",
         );
@@ -409,14 +427,33 @@ test.describe("player", () => {
         // compares variants against the live map behind it.
         await scaleSeg.getByRole("button", { name: "150%" }).click();
         await namesSeg.getByRole("button", { name: "More" }).click();
+        await markerControl.locator('button[data-marker-shape="suv"]').click();
+        await markerControl.locator('button[data-marker-color="#2f7ee6"]').click();
+        await markerControl.locator('button[data-marker-size="large"]').click();
         await expect(popover).toBeVisible();
+        await expect(markerControl.locator('button[data-marker-shape="sedan"] canvas')).toHaveCSS("width", "52px");
         await expect(scaleSeg.locator('button[aria-pressed="true"]')).toHaveText("150%");
         await expect(namesSeg.locator('button[aria-pressed="true"]')).toHaveText("More");
-        const stored = await page.evaluate(() => [
-            localStorage.getItem("dashcamigo:mapLabelScale"),
-            localStorage.getItem("dashcamigo:streetLabelDensity"),
-        ]);
-        expect(stored, "preferences must survive to the next session").toEqual(["1.5", "more"]);
+        const stored = await page.evaluate(() => ({
+            labelScale: localStorage.getItem("dashcamigo:mapLabelScale"),
+            streetNames: localStorage.getItem("dashcamigo:streetLabelDensity"),
+            marker: JSON.parse(localStorage.getItem("dashcamigo:mapMarker") ?? "null"),
+        }));
+        expect(stored, "preferences must survive to the next session").toEqual({
+            labelScale: "1.5",
+            streetNames: "more",
+            marker: { shape: "suv", color: "#2f7ee6", size: "large" },
+        });
+        await expect(page.locator(".car-marker__canvas").first()).toHaveAttribute(
+            "data-marker-render-key",
+            "suv:#2f7ee6",
+        );
+        expect(
+            await page
+                .locator(".car-marker")
+                .first()
+                .evaluate((element) => element.style.getPropertyValue("--map-marker-size")),
+        ).toBe("52px");
 
         // Escape closes; reopening reflects the stored preferences.
         await page.keyboard.press("Escape");
@@ -424,10 +461,12 @@ test.describe("player", () => {
         await toggle.click();
         await expect(scaleSeg.locator('button[aria-pressed="true"]')).toHaveText("150%");
         await expect(namesSeg.locator('button[aria-pressed="true"]')).toHaveText("More");
+        await expect(markerControl.locator('button[data-marker-shape="suv"]')).toHaveAttribute("aria-pressed", "true");
+        await expect(markerControl.locator('button[data-marker-size="large"]')).toHaveAttribute("aria-pressed", "true");
 
         // A click on the map outside the popover closes it.
-        const map = await boxOf(page, "#map");
-        await page.mouse.click(map.x + map.width / 2, map.y + map.height - 20);
+        const video = await boxOf(page, ".video-frame");
+        await page.mouse.click(video.x + video.width / 2, video.y + video.height / 2);
         await expect(popover).toBeHidden();
     });
 
@@ -934,5 +973,24 @@ test.describe("player", () => {
         if (target === "metric") await expect(unit).toHaveText(/kph|km/i);
         else await expect(unit).toHaveText(/mph|mi/i);
         await shot(page, "player-07-units");
+    });
+
+    test("settings: map marker changes the same global preference", async ({ page }) => {
+        await page.locator("#settings-btn").click();
+        const control = page.locator('[data-marker-control="settings"]');
+        await expect(control).toBeVisible();
+        await control.locator('button[data-marker-shape="van"]').click();
+        await control.locator('button[data-marker-color="#e5484d"]').click();
+        await control.locator('button[data-marker-size="small"]').click();
+        await control.scrollIntoViewIfNeeded();
+        await shot(page, "player-11-map-marker-settings");
+        await page.locator("#settings-modal-close").click();
+
+        await expect(page.locator(".car-marker__canvas").first()).toHaveAttribute(
+            "data-marker-render-key",
+            "van:#e5484d",
+        );
+        const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("dashcamigo:mapMarker") ?? "null"));
+        expect(stored).toEqual({ shape: "van", color: "#e5484d", size: "small" });
     });
 });

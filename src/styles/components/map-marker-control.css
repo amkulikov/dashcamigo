@@ -1,0 +1,255 @@
+.map-marker-control {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-2);
+    width: min(320px, 100%);
+}
+
+.map-marker-control__shapes {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--dc-space-1);
+}
+
+.map-marker-control__shape {
+    display: grid;
+    grid-template-rows: 56px auto;
+    place-items: center;
+    min-width: 0;
+    min-height: 72px;
+    padding: var(--dc-space-1);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-sm);
+    background: var(--bg);
+    color: var(--fg);
+    cursor: pointer;
+    font: inherit;
+    transition:
+        border-color var(--dc-dur-fast) var(--dc-ease),
+        background var(--dc-dur-fast) var(--dc-ease);
+}
+
+.map-marker-control__shape:hover {
+    border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+    background: var(--bg-hover);
+}
+
+.map-marker-control__shape[aria-pressed="true"] {
+    border-color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.map-marker-control__shape span {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    color: var(--fg-dim);
+    font-size: var(--dc-text-xs);
+    line-height: 1.2;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.map-marker-control__shape[aria-pressed="true"] span {
+    color: var(--fg);
+}
+
+.map-marker-control__preview {
+    display: block;
+    width: var(--map-marker-preview-size, 44px);
+    height: var(--map-marker-preview-size, 44px);
+    transition:
+        width var(--dc-dur-fast) var(--dc-ease),
+        height var(--dc-dur-fast) var(--dc-ease);
+}
+
+.map-marker-control__colors {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--dc-space-2);
+}
+
+.map-marker-control__swatch {
+    width: 26px;
+    height: 26px;
+    flex: 0 0 auto;
+    padding: 0;
+    border: 2px solid var(--bg-elev);
+    border-radius: 50%;
+    background: var(--marker-swatch);
+    box-shadow: 0 0 0 1px var(--border);
+    cursor: pointer;
+}
+
+.map-marker-control__swatch[aria-pressed="true"] {
+    box-shadow:
+        0 0 0 2px var(--bg-elev),
+        0 0 0 4px var(--fg);
+}
+
+.map-marker-control__custom {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--dc-space-1);
+    color: var(--fg-dim);
+    font-size: var(--dc-text-xs);
+    white-space: nowrap;
+}
+
+.map-marker-control__color-input {
+    width: 36px;
+    height: 28px;
+    padding: 2px;
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-sm);
+    background: var(--bg-elev);
+    cursor: pointer;
+}
+
+.map-marker-control__size-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--dc-space-2);
+}
+
+.map-marker-control__size-label {
+    color: var(--fg-dim);
+    font-size: var(--dc-text-xs);
+}
+
+.map-marker-control__size-segment {
+    display: inline-flex;
+}
+
+.map-marker-control__size-segment button {
+    min-height: 30px;
+    padding: 0 var(--dc-space-2);
+    border: 1px solid var(--border);
+    background: var(--bg-elev);
+    color: var(--fg);
+    cursor: pointer;
+    font: inherit;
+    font-size: var(--dc-text-xs);
+}
+
+.map-marker-control__size-segment button:first-child {
+    border-radius: var(--dc-radius-sm) 0 0 var(--dc-radius-sm);
+}
+
+.map-marker-control__size-segment button:last-child {
+    border-radius: 0 var(--dc-radius-sm) var(--dc-radius-sm) 0;
+}
+
+.map-marker-control__size-segment button + button {
+    border-left: 0;
+}
+
+.map-marker-control__size-segment button:hover {
+    background: var(--bg-hover);
+}
+
+.map-marker-control__size-segment button[aria-pressed="true"] {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--dc-black);
+}
+
+/* The point-of-use map popover favors an icon-first, single-row picker. The
+   full settings and export controls keep the roomier labelled cards. */
+.map-marker-control--compact {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--dc-space-2) var(--dc-space-3);
+    width: min(410px, 100%);
+}
+
+.map-marker-control--compact .map-marker-control__shapes {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(6, minmax(52px, 1fr));
+}
+
+.map-marker-control--compact .map-marker-control__shape {
+    grid-template-rows: 1fr;
+    min-height: 58px;
+    padding: 2px;
+}
+
+.map-marker-control--compact .map-marker-control__shape span,
+.map-marker-control--compact .map-marker-control__custom span,
+.map-marker-control--compact .map-marker-control__size-label {
+    display: none;
+}
+
+.map-marker-control--compact .map-marker-control__colors {
+    flex-wrap: nowrap;
+    gap: 6px;
+}
+
+.map-marker-control--compact .map-marker-control__swatch {
+    width: 24px;
+    height: 24px;
+}
+
+.map-marker-control--compact .map-marker-control__color-input {
+    width: 32px;
+    height: 26px;
+}
+
+.map-marker-control--compact .map-marker-control__size-row {
+    flex-wrap: nowrap;
+    gap: 0;
+}
+
+.map-marker-control--compact .map-marker-control__size-segment button {
+    min-height: 28px;
+    padding-inline: 6px;
+}
+
+.map-settings-popover--compact .map-marker-control--compact {
+    display: flex;
+    width: 100%;
+}
+
+.map-settings-popover--compact .map-marker-control--compact .map-marker-control__shapes {
+    grid-template-columns: repeat(3, minmax(52px, 1fr));
+}
+
+.map-settings-popover--compact .map-marker-control--compact .map-marker-control__colors {
+    flex-wrap: wrap;
+}
+
+.map-marker-control__shape:focus-visible,
+.map-marker-control__swatch:focus-visible,
+.map-marker-control__color-input:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.map-marker-control__size-segment button:focus-visible {
+    position: relative;
+    z-index: 1;
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+#settings-map-marker-control .map-marker-control {
+    width: 100%;
+}
+
+#settings-map-marker-control .map-marker-control__shapes {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.map-settings-row--marker {
+    min-width: min(300px, 100%);
+}
+
+@media (max-width: 620px) {
+    #settings-map-marker-control .map-marker-control__shapes {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}

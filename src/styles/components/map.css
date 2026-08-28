@@ -187,8 +187,7 @@
 
 /* Gear popover: map view preferences anchored to the gear button in the
    controls column (position:relative wrapper so the flyout tracks the gear's
-   row regardless of what is visible above it). One row today (label size);
-   new map-scoped settings land as more .map-settings-row blocks. */
+   row regardless of what is visible above it). */
 .map-settings {
     position: relative;
 }
@@ -241,6 +240,17 @@
 .map-settings-row {
     display: flex;
     flex-direction: column;
+    gap: var(--dc-space-1);
+}
+.map-settings-popover .map-settings-row:not(.map-settings-row--marker) {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--dc-space-3);
+}
+.map-settings-popover--compact .map-settings-row:not(.map-settings-row--marker) {
+    flex-direction: column;
+    align-items: stretch;
     gap: var(--dc-space-1);
 }
 .map-settings-row-label {
@@ -841,8 +851,19 @@ body.map-unavailable #player-map {
 }
 
 .car-marker {
-    /* The SVG arrow rotates via the CSS variable --bearing, which
-       app.ts sets on every rAF. */
-    transform: rotate(var(--bearing, 0deg));
+    /* The canvas marker rotates via the CSS variable --bearing, which
+       map.ts sets on every rAF. Screen-space Y scaling gives tilted chase maps
+       a restrained perspective without MapLibre flattening the marker. */
+    transform: scaleY(var(--marker-pitch-scale, 1)) rotate(var(--bearing, 0deg));
+    transform-origin: center;
     transition: transform 60ms linear;
+}
+.car-marker__canvas {
+    display: block;
+    width: var(--map-marker-size, 44px);
+    height: var(--map-marker-size, 44px);
+}
+.mini-map .car-marker__canvas {
+    width: calc(var(--map-marker-size, 44px) * 0.84);
+    height: calc(var(--map-marker-size, 44px) * 0.84);
 }

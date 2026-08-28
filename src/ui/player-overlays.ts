@@ -38,6 +38,7 @@ import { isCoarsePointer } from "./media-queries.js";
 import { attachPointerDrag } from "./pointer-drag.js";
 import { activeFrame, activeTripHasGps, state } from "./state.js";
 import type { MapStyleId } from "./theme.js";
+import { mapMarkerAppearanceKey } from "./map-marker-pref.js";
 
 // The element the overlays are positioned/sized within - the OUTPUT-FRAME
 // reference, which is the full grid. All overlay geometry (drag clamping,
@@ -790,7 +791,7 @@ async function refreshMapSnapshot(
     // same playhead position) is not skipped by the early-return below. Speed is
     // included only when adaptive zoom is on (it changes the zoom then).
     const speedBucket = headingUp && om.adaptiveZoom ? Math.round(pos.speedMs) : 0;
-    const key = `${pos.lat.toFixed(4)}|${pos.lon.toFixed(4)}|${zoomKm}|${Math.round(pos.bearingDeg)}|${theme}|${om.labelScalePct}|${om.labelDensity}|${om.mode}|${om.pitchDeg}|${om.adaptiveZoom ? 1 : 0}|${speedBucket}`;
+    const key = `${pos.lat.toFixed(4)}|${pos.lon.toFixed(4)}|${zoomKm}|${Math.round(pos.bearingDeg)}|${theme}|${om.labelScalePct}|${om.labelDensity}|${om.mode}|${om.pitchDeg}|${om.adaptiveZoom ? 1 : 0}|${speedBucket}|${mapMarkerAppearanceKey(om.marker)}|${om.marker.size}`;
     if (key === mapLastRequestKey) return;
     mapLastRequestKey = key;
     const seqAtStart = ++mapSnapshotSeq;
@@ -813,7 +814,7 @@ async function refreshMapSnapshot(
             "preview",
             theme,
             undefined,
-            { labelScalePct: om.labelScalePct, labelDensity: om.labelDensity },
+            { labelScalePct: om.labelScalePct, labelDensity: om.labelDensity, markerAppearance: om.marker },
         ).then(
             (s) => {
                 if (myPromise !== mapSnapshotterPromise) {
@@ -833,6 +834,7 @@ async function refreshMapSnapshot(
     }
     const snap = await mapSnapshotterPromise;
     if (!snap) return;
+    snap.setMarkerAppearance(om.marker);
     if (!exportPanelState.overlayMap.enabled || seqAtStart !== mapSnapshotSeq) return;
 
     // Serialize the snapshot+draw on the tail: `snap` is ONE MapLibre instance

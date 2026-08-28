@@ -857,7 +857,9 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
     const withAudio = exportPanelState.withAudio;
     const watermarkAnchor = watermarkAnchorForExport();
     const overlays = buildOverlayPipelineArgs(trip);
-    const mapConfig = overlays?.map ? { ...exportPanelState.overlayMap } : null;
+    const mapConfig = overlays?.map
+        ? { ...exportPanelState.overlayMap, marker: { ...exportPanelState.overlayMap.marker } }
+        : null;
     const dims = resolveOutputDims();
     const desiredBitrate = resolveReencodeBitrate(trip, dims);
     const sourceUndecodable = undecodableSource(trip);

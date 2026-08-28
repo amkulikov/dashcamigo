@@ -152,6 +152,7 @@ function runInWorker(
         snapshotterPromise = createExportMapSnapshotter(records, "export", mapTheme, targetSlotWidthPx, {
             labelScalePct: overlayMap.labelScalePct,
             labelDensity: overlayMap.labelDensity,
+            markerAppearance: overlayMap.marker,
         }).then(async (snap) => {
             // Pre-warm tiles immediately so the very first per-frame snapshot
             // does not block on tile fetch. Aborted via the transcode signal:

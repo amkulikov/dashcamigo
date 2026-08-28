@@ -64,6 +64,8 @@ import { formatSpeedFromMs } from "../units-pref.js";
 import { currentMapTheme, getCssVar, themeColors } from "./theme.js";
 import type { MapStyleId, MapTheme } from "./theme.js";
 import { applyViewerLabelPrefs } from "./map-label-scale.js";
+import { getMapMarkerAppearance, MAP_MARKER_SIZE_PX, subscribeMapMarkerAppearance } from "./map-marker-pref.js";
+import { mapMarkerPitchScale, renderMapMarkerIntoCanvas } from "./map-marker-renderer.js";
 import { getMapProvider, reportMapProviderTileError, subscribeMapProvider, type MapProvider } from "./map-provider.js";
 import { registerSharedMapTileCache, transformMapTileRequest } from "./map-tile-cache.js";
 import {
@@ -674,6 +676,10 @@ export function ensureMap(): maplibregl.Map | null {
     }
     state.map = map;
 
+    // Markers stay viewport-aligned for legibility, then receive a deliberately
+    // milder manual foreshortening than MapLibre's full map-plane projection.
+    map.on("pitch", () => setMarkerPitch(state.marker, map.getPitch()));
+
     map.on("load", () => {
         state.mapReady = true;
     });
@@ -1019,24 +1025,38 @@ export function ensureMiniMap(): maplibregl.Map | null {
 }
 
 /**
- * Creates the car marker DOM element. The triangle arrow points up at bearing=0
- * (north). Rotation is via the --bearing CSS variable on the inner .car-marker
- * (see styles/components/map.css). A fresh element is created on each refreshMap because a
- * MapLibre Marker owns its element; recreating the marker is simpler than
- * detaching and reattaching.
+ * Creates the current-position marker. Every shape points up at bearing=0
+ * (north). Rotation is via the --bearing CSS variable on the inner .car-marker.
+ * The canvas is filled asynchronously for vehicle assets; the element can be
+ * handed to MapLibre immediately and paints in place when its asset is ready.
  */
 function buildCarMarkerElement(): HTMLDivElement {
     const wrap = document.createElement("div");
     wrap.className = "car-marker-wrap";
-    const tc = themeColors();
-    wrap.innerHTML = `
-        <div class="car-marker" style="--bearing:0deg">
-            <svg viewBox="-12 -12 24 24" width="28" height="28">
-                <polygon points="0,-10 7,8 0,4 -7,8" fill="${tc.markerCar}" stroke="${tc.markerStroke}" stroke-width="1.5" stroke-linejoin="round"/>
-            </svg>
-        </div>
-    `;
+    const marker = document.createElement("div");
+    marker.className = "car-marker";
+    marker.style.setProperty("--bearing", "0deg");
+    const appearance = getMapMarkerAppearance();
+    marker.style.setProperty("--map-marker-size", `${MAP_MARKER_SIZE_PX[appearance.size]}px`);
+    const canvas = document.createElement("canvas");
+    canvas.className = "car-marker__canvas";
+    canvas.width = 192;
+    canvas.height = 192;
+    marker.appendChild(canvas);
+    wrap.appendChild(marker);
+    void renderMapMarkerIntoCanvas(canvas, appearance);
     return wrap;
+}
+
+function refreshLiveMapMarkerAppearance(): void {
+    const appearance = getMapMarkerAppearance();
+    for (const marker of [state.marker, state.miniMapMarker]) {
+        const inner = marker?.getElement()?.querySelector<HTMLElement>(".car-marker");
+        const canvas = inner?.querySelector<HTMLCanvasElement>(".car-marker__canvas");
+        if (!inner || !canvas) continue;
+        inner.style.setProperty("--map-marker-size", `${MAP_MARKER_SIZE_PX[appearance.size]}px`);
+        void renderMapMarkerIntoCanvas(canvas, appearance);
+    }
 }
 
 /**
@@ -1337,10 +1357,9 @@ export function refreshMap(trip: Trip | null): void {
         // arrow always points the correct geographic direction. With "viewport"
         // in rotate mode the arrow would drift sideways relative to the map.
         rotationAlignment: "map",
-        // Keep the arrow an upright billboard under chase tilt: pitchAlignment
-        // "viewport" stops it from foreshortening into an unreadable sliver at
-        // high pitch. No effect at pitch 0 (the flat modes), so it is safe to
-        // set unconditionally. Bearing stays geographic via rotationAlignment.
+        // Keep it a viewport billboard, then apply a milder manual perspective
+        // scale in setMarkerPitch(). Full map alignment becomes an unreadable
+        // sliver at the 58-70° chase angles.
         pitchAlignment: "viewport",
         // Subpixel translate3d on the marker DOM. Without this the marker snaps
         // to whole pixels per frame - visible jitter at slow speeds where the
@@ -1349,6 +1368,7 @@ export function refreshMap(trip: Trip | null): void {
     })
         .setLngLat(coords[0]!)
         .addTo(map);
+    setMarkerPitch(state.marker, map.getPitch());
 
     // Fit camera to track bounding box.
     const bounds = coords.reduce((acc, c) => acc.extend(c), new mlg!.LngLatBounds(coords[0]!, coords[0]!));
@@ -1638,6 +1658,13 @@ function rotateMarker(marker: maplibregl.Marker | null, bearingDeg: number): voi
     const inner = marker.getElement()?.querySelector<HTMLElement>(".car-marker");
     if (!inner) return;
     inner.style.setProperty("--bearing", `${bearingDeg}deg`);
+}
+
+function setMarkerPitch(marker: maplibregl.Marker | null, pitchDeg: number): void {
+    if (!marker) return;
+    const inner = marker.getElement()?.querySelector<HTMLElement>(".car-marker");
+    if (!inner) return;
+    inner.style.setProperty("--marker-pitch-scale", mapMarkerPitchScale(pitchDeg).toFixed(3));
 }
 
 /**
@@ -3252,6 +3279,7 @@ function syncChaseControls(): void {
 export function initMap(cb: MapCallbacks): void {
     callbacks = cb;
     state.mapExpanded = getPreferredMapMode() === "large";
+    subscribeMapMarkerAppearance(refreshLiveMapMarkerAppearance);
 
     subscribeMapProvider((provider, previous) => {
         mapAttributionControl.setProvider(provider);

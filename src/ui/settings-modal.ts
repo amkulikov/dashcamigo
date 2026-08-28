@@ -48,6 +48,8 @@ import {
     setStreetLabelDensity,
     STREET_LABEL_DENSITY_VALUES,
 } from "./map-label-scale.js";
+import { renderMapMarkerControl } from "./map-marker-control.js";
+import { getMapMarkerAppearance, setMapMarkerAppearance } from "./map-marker-pref.js";
 import { activateModal, deactivateModal, wireBackdropDismiss } from "./modal-helper.js";
 import { notify } from "./notifications.js";
 import { resetOnboarding } from "./onboarding.js";
@@ -102,6 +104,7 @@ function openSettings(): void {
     syncCrashToggleFromState();
     syncUnitsSelect();
     syncMapLabelScaleSelect();
+    syncMapMarkerControl();
     syncSeekStepInputs();
     syncEventsThresholdInputs();
     syncTripGapInput();
@@ -157,6 +160,16 @@ function syncMapLabelScaleSelect(): void {
     if (sel) sel.value = String(getMapLabelScale());
     const density = document.getElementById("settings-map-street-names-select") as HTMLSelectElement | null;
     if (density) density.value = getStreetLabelDensity();
+}
+
+function syncMapMarkerControl(): void {
+    const host = document.getElementById("settings-map-marker-control");
+    if (!host) return;
+    renderMapMarkerControl(host, {
+        appearance: getMapMarkerAppearance(),
+        onChange: setMapMarkerAppearance,
+        idPrefix: "settings",
+    });
 }
 
 /**

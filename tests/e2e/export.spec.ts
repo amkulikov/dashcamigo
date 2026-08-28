@@ -868,6 +868,42 @@ test.describe("export", () => {
         await expect(page.locator("#player-map-overlay")).toBeVisible();
     });
 
+    test("map marker starts from settings and stays local to the export", async ({ page }) => {
+        await page.locator("#export-panel-close").click();
+        await page.locator("#settings-btn").click();
+        const settingsControl = page.locator('[data-marker-control="settings"]');
+        await settingsControl.locator('button[data-marker-shape="sedan"]').click();
+        await settingsControl.locator('button[data-marker-color="#30a46c"]').click();
+        await settingsControl.locator('button[data-marker-size="large"]').click();
+        await page.locator("#settings-modal-close").click();
+
+        await openExport(page);
+        await page.locator("#export-panel-ov-map").check();
+        const exportControl = page.locator('[data-marker-control="export"]');
+        await expect(exportControl.locator('button[data-marker-shape="sedan"]')).toHaveAttribute(
+            "aria-pressed",
+            "true",
+        );
+        await expect(exportControl.locator('button[data-marker-size="large"]')).toHaveAttribute("aria-pressed", "true");
+
+        await exportControl.locator('button[data-marker-shape="truck"]').click();
+        await exportControl.locator('button[data-marker-color="#e5484d"]').click();
+        await exportControl.locator('button[data-marker-size="small"]').click();
+        await exportControl.scrollIntoViewIfNeeded();
+        await shot(page, "export-22-map-marker");
+        const globalPreference = await page.evaluate(() =>
+            JSON.parse(localStorage.getItem("dashcamigo:mapMarker") ?? "null"),
+        );
+        expect(globalPreference).toEqual({ shape: "sedan", color: "#30a46c", size: "large" });
+
+        await page.locator("#export-panel-close").click();
+        await openExport(page);
+        await expect(page.locator('[data-marker-control="export"] button[data-marker-shape="sedan"]')).toHaveAttribute(
+            "aria-pressed",
+            "true",
+        );
+    });
+
     test("map overlay mode segment switches north/chase and reveals tilt + adaptive", async ({ page }) => {
         await page.locator("#export-panel-ov-map").check();
         const inspector = page.locator("#export-panel-overlay-inspector");
