@@ -9,6 +9,7 @@ release tag. Localized texts ship inside the app (the "What's new" panel).
 
 ## 2026-08-29
 
+- **Improved:** Improved storage and synchronization of trip notes, favorites, and markers.
 - **New:** Map markers can now use different vehicles, colors, and sizes.
 
 ## 2026-08-28

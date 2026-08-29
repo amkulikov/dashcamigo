@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-08-29.2",
+        category: "improvement",
+        text: {
+            en: "Improved storage and synchronization of trip notes, favorites, and markers.",
+            ru: "Улучшены хранение и синхронизация заметок, избранного и маркеров.",
+            de: "Die Speicherung und Synchronisierung von Fahrtnotizen, Favoriten und Markierungen wurde verbessert.",
+            es: "Se han mejorado el almacenamiento y la sincronización de notas de viaje, favoritos y marcadores.",
+            fr: "Le stockage et la synchronisation des notes de trajet, des favoris et des marqueurs ont été améliorés.",
+            pl: "Ulepszono przechowywanie i synchronizację notatek z przejazdów, ulubionych i znaczników.",
+            pt: "O armazenamento e a sincronização de notas de viagem, favoritos e marcadores foram aprimorados.",
+            zh: "改进了行程备注、收藏和标记的存储与同步方式。",
+            ja: "走行メモ、お気に入り、マーカーの保存と同期方法を改善しました。",
+            ko: "주행 메모, 즐겨찾기, 마커의 저장 및 동기화 방식을 개선했습니다.",
+        },
+    },
+    {
         id: "2026-08-29.1",
         category: "feature",
         text: {
