@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fileIdentityKey, fileIdentityOf } from "./identity.js";
+import { fileIdentityKey, fileIdentityOf, parseFileIdentityKey } from "./identity.js";
 
 describe("fileIdentityOf", () => {
     it("captures path, size and lastModified without reading bytes", () => {
@@ -31,5 +31,15 @@ describe("fileIdentityKey", () => {
         const a = fileIdentityKey({ relativePath: "x.mp4", size: 1, lastModified: 12 });
         const b = fileIdentityKey({ relativePath: "x.mp4", size: 11, lastModified: 2 });
         expect(a).not.toBe(b);
+    });
+
+    it("round-trips a key and rejects malformed keys", () => {
+        const identity = { relativePath: "CARD/DCIM/a.mp4", size: 42, lastModified: 1_700_000_000_000 };
+        expect(parseFileIdentityKey(fileIdentityKey(identity))).toEqual(identity);
+        expect(parseFileIdentityKey("legacy-key")).toBeNull();
+        expect(parseFileIdentityKey(["a.mp4", "-1", "2"].join(String.fromCharCode(0)))).toBeNull();
+        expect(parseFileIdentityKey(["a.mp4", "", "2"].join(String.fromCharCode(0)))).toBeNull();
+        expect(parseFileIdentityKey(["a.mp4", "1e2", "2"].join(String.fromCharCode(0)))).toBeNull();
+        expect(parseFileIdentityKey(["a.mp4", "01", "2"].join(String.fromCharCode(0)))).toBeNull();
     });
 });

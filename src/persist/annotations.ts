@@ -58,7 +58,14 @@ function annotationContentKey(record: AnnotationRecord): string {
             record.isFavorite ?? null,
         ]);
     }
-    return JSON.stringify([record.kind, record.utc, record.text]);
+    return JSON.stringify([
+        record.kind,
+        record.utc,
+        record.text,
+        record.anchor?.fileIdentityKey ?? null,
+        record.anchor?.startUtc ?? null,
+        record.anchor?.offsetSec ?? null,
+    ]);
 }
 
 /**
@@ -97,19 +104,42 @@ function isOptionalString(value: unknown): value is string | undefined {
     return value === undefined || typeof value === "string";
 }
 
+function hasOnlyKeys(value: Record<string, unknown>, allowed: ReadonlySet<string>): boolean {
+    return Object.keys(value).every((key) => allowed.has(key));
+}
+
+const TRIP_META_KEYS = new Set([
+    "id",
+    "folderId",
+    "updatedAt",
+    "deleted",
+    "kind",
+    "anchor",
+    "name",
+    "note",
+    "isFavorite",
+]);
+const TRIP_ANCHOR_KEYS = new Set(["fileIdentityKey", "startUtc"]);
+const MARKER_KEYS = new Set(["id", "folderId", "updatedAt", "deleted", "kind", "utc", "text", "anchor"]);
+const MARKER_ANCHOR_KEYS = new Set(["fileIdentityKey", "startUtc", "offsetSec"]);
+const SIDECAR_KEYS = new Set(["app", "format", "version", "savedAt", "annotations"]);
+
+export interface SidecarParseResult {
+    records: AnnotationRecord[];
+    /** Entries that could not be understood. A reader may recover the valid
+     * records, but a writer must not replace the file and erase these entries. */
+    rejectedEntries: number;
+}
+
 /**
- * Parses compatible v1 sidecar JSON into annotation records, or null when the
- * file is foreign, corrupt, or from an unsupported format version. Individual
- * malformed entries are skipped, never fatal - validation is per-kind and
- * strict, because a
- * record that passes lands in IndexedDB and in the render path: a tripMeta
- * without an anchor would throw at index time, an Infinity updatedAt would
- * pin itself against every future LWW edit, a non-string name would render
- * as "[object Object]". folderId is NOT validated or trusted - callers
- * restamp it with the local folder id.
+ * Parses compatible v1 notes JSON, or null when the whole file is foreign,
+ * corrupt, or from an unsupported format version. Validation stays per entry
+ * so readable records can still be recovered, while rejectedEntries makes
+ * that recovery explicitly read-only. folderId is not trusted; callers
+ * restamp it with their local folder id.
  */
-export function parseSidecarPayload(text: string): AnnotationRecord[] | null {
-    if (text.trim() === "") return [];
+export function parseSidecarPayload(text: string): SidecarParseResult | null {
+    if (text.trim() === "") return { records: [], rejectedEntries: 0 };
     let parsed: unknown;
     try {
         parsed = JSON.parse(text);
@@ -127,18 +157,44 @@ export function parseSidecarPayload(text: string): AnnotationRecord[] | null {
         return null;
     }
     const out: AnnotationRecord[] = [];
+    let rejectedEntries = hasOnlyKeys(obj, SIDECAR_KEYS) ? 0 : 1;
+    if (obj.savedAt !== undefined && !isSafeTimestamp(obj.savedAt)) rejectedEntries++;
     for (const entry of obj.annotations) {
-        if (typeof entry !== "object" || entry === null) continue;
+        if (typeof entry !== "object" || entry === null) {
+            rejectedEntries++;
+            continue;
+        }
         const record = entry as Record<string, unknown>;
-        if (typeof record.id !== "string" || record.id === "") continue;
-        if (!isSafeTimestamp(record.updatedAt)) continue;
-        if (typeof record.deleted !== "boolean") continue;
+        if (typeof record.id !== "string" || record.id === "") {
+            rejectedEntries++;
+            continue;
+        }
+        if (!isSafeTimestamp(record.updatedAt)) {
+            rejectedEntries++;
+            continue;
+        }
+        if (typeof record.deleted !== "boolean") {
+            rejectedEntries++;
+            continue;
+        }
         if (record.kind === "tripMeta") {
             const anchor = record.anchor as Record<string, unknown> | null | undefined;
-            if (typeof anchor !== "object" || anchor === null) continue;
-            if (typeof anchor.fileIdentityKey !== "string" || !isSafeTimestamp(anchor.startUtc)) continue;
-            if (!isOptionalString(record.name) || !isOptionalString(record.note)) continue;
-            if (record.isFavorite !== undefined && typeof record.isFavorite !== "boolean") continue;
+            if (typeof anchor !== "object" || anchor === null) {
+                rejectedEntries++;
+                continue;
+            }
+            if (typeof anchor.fileIdentityKey !== "string" || !isSafeTimestamp(anchor.startUtc)) {
+                rejectedEntries++;
+                continue;
+            }
+            if (!isOptionalString(record.name) || !isOptionalString(record.note)) {
+                rejectedEntries++;
+                continue;
+            }
+            if (record.isFavorite !== undefined && typeof record.isFavorite !== "boolean") {
+                rejectedEntries++;
+                continue;
+            }
             out.push({
                 id: record.id,
                 folderId: typeof record.folderId === "string" ? record.folderId : "",
@@ -150,8 +206,26 @@ export function parseSidecarPayload(text: string): AnnotationRecord[] | null {
                 ...(record.note !== undefined ? { note: record.note } : {}),
                 ...(record.isFavorite !== undefined ? { isFavorite: record.isFavorite } : {}),
             });
+            if (!hasOnlyKeys(record, TRIP_META_KEYS) || !hasOnlyKeys(anchor, TRIP_ANCHOR_KEYS)) rejectedEntries++;
         } else if (record.kind === "marker") {
-            if (!isSafeTimestamp(record.utc) || typeof record.text !== "string") continue;
+            if (!isSafeTimestamp(record.utc) || typeof record.text !== "string") {
+                rejectedEntries++;
+                continue;
+            }
+            const anchor = record.anchor as Record<string, unknown> | null | undefined;
+            if (
+                anchor !== undefined &&
+                (typeof anchor !== "object" ||
+                    anchor === null ||
+                    typeof anchor.fileIdentityKey !== "string" ||
+                    !isSafeTimestamp(anchor.startUtc) ||
+                    typeof anchor.offsetSec !== "number" ||
+                    !Number.isFinite(anchor.offsetSec) ||
+                    anchor.offsetSec < 0)
+            ) {
+                rejectedEntries++;
+                continue;
+            }
             out.push({
                 id: record.id,
                 folderId: typeof record.folderId === "string" ? record.folderId : "",
@@ -160,8 +234,22 @@ export function parseSidecarPayload(text: string): AnnotationRecord[] | null {
                 kind: "marker",
                 utc: record.utc,
                 text: record.text,
+                ...(anchor
+                    ? {
+                          anchor: {
+                              fileIdentityKey: anchor.fileIdentityKey as string,
+                              startUtc: anchor.startUtc as number,
+                              offsetSec: anchor.offsetSec as number,
+                          },
+                      }
+                    : {}),
             });
+            if (!hasOnlyKeys(record, MARKER_KEYS) || (anchor && !hasOnlyKeys(anchor, MARKER_ANCHOR_KEYS))) {
+                rejectedEntries++;
+            }
+        } else {
+            rejectedEntries++;
         }
     }
-    return out;
+    return { records: out, rejectedEntries };
 }

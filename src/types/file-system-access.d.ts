@@ -23,6 +23,12 @@ interface FilePickerAcceptType {
     accept: Record<string, string[]>;
 }
 
+interface FileSystemCreateWritableOptions {
+    /** Chromium 121+ writer lock. Other implementations ignore unknown
+     * dictionary members and keep their native locking behavior. */
+    mode?: "exclusive" | "siloed";
+}
+
 interface Window {
     showDirectoryPicker?(options?: {
         id?: string;
@@ -38,14 +44,4 @@ interface Window {
         excludeAcceptAllOption?: boolean;
         types?: FilePickerAcceptType[];
     }): Promise<FileSystemFileHandle[]>;
-    /** Grants `readwrite`, but EMPTIES the selected file before it resolves
-     *  (spec: "set entry's binary data to an empty byte sequence") - creating a
-     *  file only, never adopting one. */
-    showSaveFilePicker?(options?: {
-        id?: string;
-        suggestedName?: string;
-        startIn?: FileSystemHandle | string;
-        excludeAcceptAllOption?: boolean;
-        types?: FilePickerAcceptType[];
-    }): Promise<FileSystemFileHandle>;
 }

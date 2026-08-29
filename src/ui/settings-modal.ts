@@ -1,11 +1,7 @@
 // Settings modal. Opened by the gear icon #settings-btn in the header.
-// Contains two sections:
-//   - Privacy (crash-reports toggle), only wired if crash reporting is built
-//     into this bundle (VITE_SENTRY_DSN); the section element is hidden via
-//     .hidden when not.
-//   - Danger zone (reset all local data), always available - it's
-//     primarily a support/QA escape hatch and must work even on forks with
-//     no crash reporting.
+// Includes ordinary preferences, a portable notes-backup section, optional
+// crash-report privacy controls, diagnostics/cache actions and the destructive
+// reset section.
 //
 // Lifecycle:
 //  - settings-btn icon is always shown (Danger zone is universal).
@@ -37,6 +33,11 @@ import { clearIndexCache, getIndexCacheStats, pruneIndexCacheToLimit } from "../
 import { getUnits, setUnits, type Units } from "../units-pref.js";
 import { APP_VERSION } from "../version.js";
 import { rebuildChartFromTrip } from "./chart.js";
+import {
+    downloadPortableNotesBackup,
+    flushPendingSidecarWrites,
+    importPortableNotesBackup,
+} from "./annotations-sidecar.js";
 import { commitRecordingTripsWhilePreservingIngest } from "./ingest-regroup.js";
 import { formatBytes } from "./format.js";
 import { reapplyMapLabelPrefs, refreshMap } from "./map.js";
@@ -529,6 +530,22 @@ export function initSettingsModal(): void {
         regroupLoadedTrips();
     });
 
+    // --- Notes backup ---
+
+    document.getElementById("settings-notes-export-btn")?.addEventListener("click", downloadPortableNotesBackup);
+    const notesImportInput = document.getElementById("settings-notes-import-input") as HTMLInputElement | null;
+    const notesImportButton = document.getElementById("settings-notes-import-btn") as HTMLButtonElement | null;
+    notesImportButton?.addEventListener("click", () => notesImportInput?.click());
+    notesImportInput?.addEventListener("change", () => {
+        const file = notesImportInput.files?.[0];
+        notesImportInput.value = "";
+        if (!file) return;
+        if (notesImportButton) notesImportButton.disabled = true;
+        void importPortableNotesBackup(file).finally(() => {
+            if (notesImportButton) notesImportButton.disabled = false;
+        });
+    });
+
     // --- Recordings cache ---
     //
     // Limit input follows the seek-step pattern: empty / invalid restores the
@@ -617,7 +634,7 @@ export function initSettingsModal(): void {
         openSettings();
     });
 
-    document.getElementById("reset-confirm-go")?.addEventListener("click", () => {
+    document.getElementById("reset-confirm-go")?.addEventListener("click", async () => {
         // Disable the button so the user does not double-click during the
         // ~hundreds-of-ms wipe. The page is about to reload anyway, but a
         // second click could fire a parallel reset on the same caches/idb
@@ -626,8 +643,9 @@ export function initSettingsModal(): void {
         const cancelBtn = document.getElementById("reset-confirm-cancel") as HTMLButtonElement | null;
         if (goBtn) goBtn.disabled = true;
         if (cancelBtn) cancelBtn.disabled = true;
-        // Fire-and-forget: resetAllAppState ends with location.reload(),
-        // there is no continuation after it.
+        // The external backup is the recovery path after this destructive
+        // local wipe, so finish queued writes before deleting IndexedDB.
+        await flushPendingSidecarWrites();
         void resetAllAppState().catch((err) => {
             log.warn("reset failed, reloading anyway", err);
             location.reload();

@@ -11,8 +11,74 @@
     margin-bottom: var(--dc-space-3);
 }
 
-.sidebar-sources h2 {
+.sidebar-sources__heading {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-1);
     margin-bottom: var(--dc-space-2);
+}
+
+.sidebar-sources__heading h2 {
+    margin: 0;
+}
+
+.folder-sources-help {
+    /* The heading is the containing block, so the popup can start at the
+       sidebar's left edge instead of being clipped to the right of the icon. */
+    position: static;
+}
+
+.folder-sources-help summary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: var(--dc-radius-sm);
+    color: var(--fg-mute);
+    cursor: pointer;
+    list-style: none;
+}
+
+.folder-sources-help summary::-webkit-details-marker {
+    display: none;
+}
+
+.folder-sources-help summary:hover,
+.folder-sources-help summary:focus-visible,
+.folder-sources-help[open] summary {
+    color: var(--fg);
+    background: var(--bg-hover);
+}
+
+.folder-sources-help summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+
+.folder-sources-help__popup {
+    position: absolute;
+    z-index: var(--dc-z-popover);
+    top: calc(100% + var(--dc-space-1));
+    left: 0;
+    width: min(19rem, 100%);
+    padding: var(--dc-space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-md);
+    background: var(--bg-elev);
+    box-shadow: var(--dc-shadow-popup);
+    color: var(--fg-dim);
+    font-size: var(--dc-text-xs);
+    line-height: 1.45;
+}
+
+.folder-sources-help__popup p {
+    margin: 0;
+}
+
+.folder-sources-help__popup p + p {
+    margin-top: var(--dc-space-2);
 }
 
 .folder-sources {
@@ -33,7 +99,8 @@
 
 .folder-source {
     position: relative;
-    display: flex;
+    display: grid;
+    grid-template-columns: 7px minmax(0, 1fr) auto auto;
     align-items: center;
     gap: var(--dc-space-1);
     padding: 2px var(--dc-space-1);
@@ -46,6 +113,7 @@
    red = gone (unplugged/moved), amber = permission lapsed. Same meaning as on
    the landing chips. */
 .folder-source__status {
+    grid-column: 1;
     flex-shrink: 0;
     width: 7px;
     height: 7px;
@@ -68,7 +136,7 @@
 /* The name is the only shrinkable part of the row - the controls to its right
    keep their size, an SD-card folder name does not. */
 .folder-source__label {
-    flex: 1;
+    grid-column: 2;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -87,6 +155,7 @@
    compete with the trip cards. */
 .folder-source__load,
 .folder-source__remember {
+    grid-column: 3;
     flex-shrink: 0;
     background: transparent;
     border: none;
@@ -114,12 +183,14 @@
 /* Settled state - a label, not a control: forgetting lives in the menu, so a
    stray click on the row's right edge can never undo the memory. */
 .folder-source__state {
+    grid-column: 3;
     flex-shrink: 0;
     color: var(--fg-mute);
     white-space: nowrap;
 }
 
 .folder-source__menu-wrap {
+    grid-column: 4;
     position: relative;
     flex-shrink: 0;
     display: inline-flex;
@@ -173,8 +244,55 @@
     font-size: var(--dc-text-xs);
 }
 
+.folder-source__notes {
+    grid-column: 2 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 0;
+    color: var(--fg-mute);
+    line-height: 1.35;
+}
+
+.folder-source__notes[hidden] {
+    display: none;
+}
+
+.folder-source__notes-label {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.folder-source__notes.is-problem .folder-source__notes-label {
+    color: var(--warn);
+}
+
+.folder-source__notes-action {
+    flex-shrink: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--accent-ink);
+    font: inherit;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.folder-source__notes-action:hover {
+    color: var(--accent);
+}
+
+.folder-source__notes-action:disabled {
+    color: var(--fg-mute);
+    cursor: default;
+    text-decoration: none;
+}
+
 .folder-source__load:focus-visible,
 .folder-source__remember:focus-visible,
+.folder-source__notes-action:focus-visible,
 .folder-source__menu:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: -2px;

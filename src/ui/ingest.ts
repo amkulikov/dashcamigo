@@ -26,8 +26,8 @@ import { classifyFilenameTime } from "../parsers/filename/index.js";
 import { estimatePreciseClockOffsetByFingerprint, estimateTzByFingerprint, tripAllCandidates } from "../trips.js";
 import type { Trip, TzSample, VideoCandidate } from "../trips.js";
 
-import { registerIngestSource } from "./folder-sources.js";
-import { mergeNotesFilesFromBatch } from "./annotations-sidecar.js";
+import { registerIngestNotesFiles, registerIngestSource } from "./folder-sources.js";
+import { isNotesBackupName, mergeNotesFilesFromBatch } from "./annotations-sidecar.js";
 import {
     hideIngestOverlay,
     hideIngestProgress,
@@ -215,11 +215,9 @@ async function ingestFilesInternal(
         return;
     }
 
-    // The folder may carry its own notes file - merge it read-only right away,
-    // whatever path the files came in by. Fire-and-forget: annotations index
-    // synchronously ahead of the first card render in the common case, and a
-    // late merge repaints via renderTrips on its own.
-    void mergeNotesFilesFromBatch(kept, origin?.folderId ?? "");
+    // The folder may carry its own notes file. Read it in parallel with the
+    // dedup pass below, then expose whether it is writable on the source row.
+    const notesMerge = mergeNotesFilesFromBatch(kept, origin?.folderId ?? "");
     vfiles = kept;
 
     // Read failures belong to this batch; a later clean drop must not inherit
@@ -277,7 +275,15 @@ async function ingestFilesInternal(
     // cancelled or partially failed ingest still leaves those trips behind.
     // After the dedup on purpose - a re-drop of an already loaded card adds no
     // trips, so it must not add a row claiming otherwise.
-    registerIngestSource(vfiles, origin);
+    // A notes backup describes a source but is not itself a recording. Leaving
+    // it in this list makes a duplicate-only classic re-open manufacture a new
+    // folder row after every recording was correctly deduplicated away.
+    registerIngestSource(
+        vfiles.filter((vendorFile) => !isNotesBackupName(vendorFile.file.name)),
+        origin,
+        dedup.sourceMatches,
+    );
+    registerIngestNotesFiles(await notesMerge);
 
     // Sidecar classification looks at already-known videos (state.trips + newly classified) so the user can drop a GPX later for a previously loaded MP4.
     const existingVideoNames = new Set<string>(alreadyLoaded.map((vf) => vf.file.name));

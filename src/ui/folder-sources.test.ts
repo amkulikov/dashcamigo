@@ -16,6 +16,7 @@ vi.mock("../i18n/index.js", () => ({ t: (key: string) => key }));
 vi.mock("./icons.js", () => ({ buildLucideIcon: () => null }));
 vi.mock("./notifications.js", () => ({ notify: vi.fn() }));
 vi.mock("../persist/folders.js", () => ({
+    ensureDirectoryReadwritePermission: vi.fn(async () => true),
     forgetFolder: vi.fn(),
     getFolder: vi.fn(),
     listFolders: vi.fn(async () => []),
@@ -30,7 +31,9 @@ import {
     folderDisplayLabel,
     folderIdForFileKey,
     hasLiveSource,
+    connectWritableFolderToSource,
     registerFolderOpenedHook,
+    registerIngestNotesFiles,
     registerIngestSource,
     rememberLiveSource,
 } from "./folder-sources.js";
@@ -75,6 +78,44 @@ describe("registerIngestSource", () => {
         expect(hasLiveSource(null)).toBe(true);
     });
 
+    it("keeps same-named picker folders and identical file identities separate", () => {
+        const handleA = fakeHandle("DCIM");
+        const handleB = fakeHandle("DCIM");
+        const fileA = { ...vendorFile("DCIM/a.mp4"), sourceKey: "card-a" };
+        const fileB = { ...vendorFile("DCIM/a.mp4"), sourceKey: "card-b" };
+
+        registerIngestSource([fileA], { handle: handleA, folderId: "folder-a" });
+        registerIngestSource([fileB], { handle: handleB, folderId: "folder-b" });
+
+        expect(folderIdForFileKey(keyOf(fileA), "card-a")).toBe("folder-a");
+        expect(folderIdForFileKey(keyOf(fileB), "card-b")).toBe("folder-b");
+        expect(folderIdForFileKey(keyOf(fileA)), "an unscoped lookup refuses the ambiguous identity").toBe("");
+        expect(hasLiveSource(keyOf(fileA)), "an unscoped backup action refuses to guess between cards").toBe(false);
+    });
+
+    it("does not borrow a remembered owner for an identical file from an unremembered card", () => {
+        const fileA = { ...vendorFile("DCIM/a.mp4"), sourceKey: "card-a" };
+        const fileB = { ...vendorFile("DCIM/a.mp4"), sourceKey: "card-b" };
+
+        registerIngestSource([fileA], { handle: fakeHandle("DCIM"), folderId: "folder-a" });
+        registerIngestSource([fileB], { handle: fakeHandle("DCIM"), folderId: "" });
+
+        expect(folderIdForFileKey(keyOf(fileA), "card-a")).toBe("folder-a");
+        expect(folderIdForFileKey(keyOf(fileB), "card-b")).toBe("");
+    });
+
+    it("keeps one source row when the same remembered folder is picked again", () => {
+        const first = { ...vendorFile("CARD/a.mp4"), sourceKey: "first-open" };
+        const second = { ...vendorFile("CARD/b.mp4"), sourceKey: "second-open" };
+
+        registerIngestSource([first], { handle: fakeHandle("CARD"), folderId: "folder-a" });
+        registerIngestSource([second], { handle: fakeHandle("CARD"), folderId: "folder-a" });
+
+        expect(hasLiveSource(null), "the remembered folder remains one live source").toBe(true);
+        expect(folderIdForFileKey(keyOf(first), "first-open")).toBe("folder-a");
+        expect(folderIdForFileKey(keyOf(second), "second-open")).toBe("folder-a");
+    });
+
     it("groups a handle-less drop by each path's root folder", () => {
         const cardA = vendorFile("CARD/Normal/a.mp4");
         const cardB = vendorFile("CARD/Vlog/b.mp4");
@@ -113,6 +154,106 @@ describe("registerIngestSource", () => {
         expect(settled, "must not outrun auto-adoption").toBe(false);
         finishDiscovery?.();
         await expect(remembering).resolves.toBe(folder);
+    });
+
+    it("connects a read-only notes source only after the same folder is selected", async () => {
+        const file = vendorFile("CARD/Normal/a.mp4");
+        const notes = vendorFile("CARD/notes.dashcamigo");
+        registerIngestSource([file, notes], null);
+        registerIngestNotesFiles([
+            { sourceKey: "unscoped", root: "CARD", fileName: "notes.dashcamigo", state: "loaded" },
+        ]);
+
+        const handle = fakeHandle("CARD");
+        const folder = { ...fakeFolder("folder-4", "CARD", 1), handle, lastOpenedAt: 2 };
+        vi.mocked(rememberFolder).mockResolvedValue(folder);
+        const opened = vi.fn(async () => {});
+        registerFolderOpenedHook(opened);
+
+        await expect(
+            connectWritableFolderToSource("drop:unscoped:CARD", handle, [vendorFile("CARD/other.mp4")]),
+            "an unrelated folder must never receive the notes",
+        ).resolves.toBe(false);
+        await expect(
+            connectWritableFolderToSource("drop:unscoped:CARD", handle, [
+                vendorFile("CARD/other.mp4"),
+                vendorFile("CARD/notes.dashcamigo"),
+            ]),
+            "the notes file itself is not proof that the recordings folder matches",
+        ).resolves.toBe(false);
+        await expect(
+            connectWritableFolderToSource("drop:unscoped:CARD", handle, [
+                file,
+                vendorFile("CARD/nested/notes.dashcamigo"),
+            ]),
+            "auto-sync only watches the selected folder root",
+        ).resolves.toBe(false);
+        expect(rememberFolder).not.toHaveBeenCalled();
+
+        await expect(connectWritableFolderToSource("drop:unscoped:CARD", handle, [file, notes])).resolves.toBe(true);
+        expect(rememberFolder).toHaveBeenCalledWith(handle);
+        expect(opened).toHaveBeenCalledWith(folder);
+        expect(folderIdForFileKey(keyOf(file))).toBe("folder-4");
+    });
+
+    it("keeps notes status on the sole source row after a duplicate-only re-open", async () => {
+        const file = { ...vendorFile("CARD/Normal/a.mp4"), sourceKey: "first-open" };
+        const notes = vendorFile("CARD/notes.dashcamigo");
+        registerIngestSource([file], null);
+        registerIngestNotesFiles([
+            { sourceKey: "second-open", root: "CARD", fileName: "notes.dashcamigo", state: "loaded" },
+        ]);
+
+        const handle = fakeHandle("CARD");
+        const folder = { ...fakeFolder("folder-5", "CARD", 1), handle, lastOpenedAt: 2 };
+        vi.mocked(rememberFolder).mockResolvedValue(folder);
+        registerFolderOpenedHook(vi.fn(async () => {}));
+
+        await expect(
+            connectWritableFolderToSource("drop:first-open:CARD", handle, [file, notes]),
+            "the later notes-only pass annotates the existing source",
+        ).resolves.toBe(true);
+    });
+
+    it("does not attach a notes-only reopen when its duplicate recording matches two cards", async () => {
+        const loadedA = { ...vendorFile("CARD/Y.MP4"), sourceKey: "card-a" };
+        const loadedB = { ...vendorFile("CARD/Y.MP4"), sourceKey: "card-b" };
+        const incoming = { ...vendorFile("CARD/Y.MP4"), sourceKey: "card-c" };
+        registerIngestSource([loadedA], null);
+        registerIngestSource([loadedB], null);
+        registerIngestSource([], null, [
+            { incoming, loaded: loadedA },
+            { incoming, loaded: loadedB },
+        ]);
+        registerIngestNotesFiles([
+            { sourceKey: "card-c", root: "CARD", fileName: "notes.dashcamigo", state: "loaded" },
+        ]);
+
+        const handle = fakeHandle("CARD");
+        const selected = [incoming, { ...vendorFile("CARD/notes.dashcamigo"), sourceKey: "card-c" }];
+        await expect(connectWritableFolderToSource("drop:card-a:CARD", handle, selected)).resolves.toBe(false);
+        await expect(connectWritableFolderToSource("drop:card-b:CARD", handle, selected)).resolves.toBe(false);
+    });
+
+    it("attaches a drive-root notes file to its picker source despite the root-label mismatch", async () => {
+        const handle = fakeHandle("\\");
+        const file = { ...vendorFile("\\/Vlog/a.mp4"), sourceKey: "drive-open" };
+        const notes = { ...vendorFile("\\/notes.dashcamigo"), sourceKey: "drive-open" };
+        registerIngestSource([file, notes], { handle, folderId: "" });
+        // Path parsing sees the notes file at root "", while Chromium exposes
+        // the picked drive's handle name as "\\".
+        registerIngestNotesFiles([
+            { sourceKey: "drive-open", root: "", fileName: "notes.dashcamigo", state: "loaded" },
+        ]);
+
+        const folder = { ...fakeFolder("folder-6", "\\", 1), handle, lastOpenedAt: 2 };
+        vi.mocked(rememberFolder).mockResolvedValue(folder);
+        registerFolderOpenedHook(vi.fn(async () => {}));
+
+        await expect(
+            connectWritableFolderToSource("handle:1", handle, [file, notes]),
+            "the notes status must remain attached to the live drive-root row",
+        ).resolves.toBe(true);
     });
 });
 

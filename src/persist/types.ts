@@ -47,8 +47,8 @@ export interface RememberedFolder {
     addedAt: number;
     /** Orders the folder list and the landing chips, most recent first. */
     lastOpenedAt: number;
-    /** Annotations sidecar file inside (or near) the folder; absent until the
-     *  user completes the one-time save-picker flow. */
+    /** Connected annotations backup file; absent until creation in the folder
+     *  or explicit adoption of an existing file succeeds. */
     sidecarHandle?: FileSystemFileHandle;
 }
 
@@ -140,11 +140,21 @@ export interface TripMetaAnnotation extends AnnotationBase {
     isFavorite?: boolean;
 }
 
-/** A point on the timeline: pure UTC anchor + short text, click-to-seek. */
+/** A point on the timeline. UTC remains the legacy/fallback position; new
+ * records also carry a stable clip-relative anchor for restore and regroup. */
 export interface MarkerAnnotation extends AnnotationBase {
     kind: "marker";
     utc: number;
     text: string;
+    /** Stable clip-relative location for portable restore. Older v1 records
+     * omit it and continue to resolve by folder + UTC. */
+    anchor?: {
+        fileIdentityKey: string;
+        /** Anchored clip start when the marker was created, epoch ms UTC. */
+        startUtc: number;
+        /** Content seconds from the anchored clip's segment start. */
+        offsetSec: number;
+    };
 }
 
 export type AnnotationRecord = TripMetaAnnotation | MarkerAnnotation;

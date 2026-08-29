@@ -3,10 +3,10 @@
 // init (app.ts) - importing timeline-markers here would cycle.
 
 import { t } from "../i18n/index.js";
-import { annotationStorageHintKey } from "./annotations-sidecar.js";
+import { annotationStorageState } from "./annotations-sidecar.js";
 import { deleteMarker, markerById, updateMarkerText } from "./annotations.js";
 import { activateModal, deactivateModal, wireBackdropDismiss } from "./modal-helper.js";
-import { canConnectTripDataFile, connectTripDataFile } from "./notes-nudge.js";
+import { canConnectNotesBackup, connectNotesBackup } from "./notes-nudge.js";
 
 let modal: HTMLElement | null = null;
 let textInput: HTMLInputElement | null = null;
@@ -34,7 +34,7 @@ export function initMarkerModal(callbacks: { onChanged: () => void }): void {
 
     document.getElementById("marker-modal-cancel")?.addEventListener("click", close);
     document.getElementById("marker-modal-save")?.addEventListener("click", save);
-    storageAction?.addEventListener("click", backUpTripData);
+    storageAction?.addEventListener("click", connectBackup);
     document.getElementById("marker-modal-delete")?.addEventListener("click", () => {
         if (currentMarkerId) {
             deleteMarker(currentMarkerId);
@@ -70,38 +70,46 @@ export function openMarkerModal(markerId: string, opts: { createdNow?: boolean; 
     createdNow = opts.createdNow === true;
     onDismissed = opts.onClose ?? null;
     textInput.value = marker.text;
-    syncStorageHint(markerId, marker.folderId);
+    syncStorageHint(markerId);
     modal.hidden = false;
     activateModal(modal, { onClose: close, initialFocus: textInput });
 }
 
 /** Repaints the where-it-lives line for the marker's folder. The folder store
  *  answers async - guard against the editor moving to another marker. */
-function syncStorageHint(markerId: string, folderId: string): void {
+function syncStorageHint(markerId: string): void {
     const hint = storageHint;
     if (!hint) return;
+    const marker = markerById(markerId);
+    if (!marker) return;
+    const folderId = marker.folderId;
     hint.textContent = t("annotations.storageHint");
     if (storageAction) {
         storageAction.disabled = false;
         storageAction.hidden = true;
     }
-    void annotationStorageHintKey(folderId).then((key) => {
+    void annotationStorageState(folderId).then(async ({ hintKey, backupAction }) => {
+        const anchorKey = markerById(markerId)?.anchor?.fileIdentityKey ?? null;
+        const canConnect = backupAction !== null && (await canConnectNotesBackup(folderId, anchorKey));
         if (currentMarkerId !== markerId) return;
-        hint.textContent = t(key);
+        hint.textContent = t(hintKey);
         if (storageAction) {
-            storageAction.hidden = key === "annotations.storageHintFile" || !canConnectTripDataFile(folderId, null);
+            storageAction.textContent = t(
+                backupAction === "reconnect" ? "sidecar.reconnect" : "annotations.storageAction",
+            );
+            storageAction.hidden = !canConnect;
         }
     });
 }
 
-function backUpTripData(): void {
+function connectBackup(): void {
     const markerId = currentMarkerId;
     const marker = markerId ? markerById(markerId) : null;
     const action = storageAction;
     if (!markerId || !marker || !action) return;
     action.disabled = true;
-    void connectTripDataFile(marker.folderId, null).finally(() => {
-        if (currentMarkerId === markerId) syncStorageHint(markerId, marker.folderId);
+    void connectNotesBackup(marker.folderId, marker.anchor?.fileIdentityKey ?? null).finally(() => {
+        if (currentMarkerId === markerId) syncStorageHint(markerId);
     });
 }
 

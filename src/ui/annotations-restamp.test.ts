@@ -6,21 +6,24 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { fileIdentityKey } from "../persist/identity.js";
 import { tripAllCandidates, type Trip, type TripTimeline, type VideoCandidate } from "../trips.js";
 import { vendorFileKey } from "../vendor-file-key.js";
 
 // annotations.ts reaches folder-sources (-> icons/notifications, which want a
 // DOM). Only the file->folder lookup is touched here, so stub the module out
 // to keep this a node-environment unit test.
-vi.mock("./folder-sources.js", () => ({ folderIdForFileKey: () => "" }));
+vi.mock("./folder-sources.js", () => ({
+    folderIdForFileKey: (_identityKey: string, sourceKey?: string) => (sourceKey ? `folder-${sourceKey}` : ""),
+}));
 
-import { _resetForTests, addMarker, markerById, restampProvisionalMarkers } from "./annotations.js";
+import { _resetForTests, addMarker, markerById, markersForTrip, restampProvisionalMarkers } from "./annotations.js";
 import { state } from "./state.js";
 
 // One-frame trip whose single candidate carries the metadata read flag. The same
 // File object is reused across the provisional and metadata-ready builds - identity
 // (relativePath, size, lastModified) is what anchors the marker.
-function buildTrip(file: File, startUtc: number, metadataReady: boolean): Trip {
+function buildTrip(file: File, startUtc: number, metadataReady: boolean, sourceKey?: string): Trip {
     const durationSec = 60;
     const candidate = {
         file,
@@ -28,6 +31,7 @@ function buildTrip(file: File, startUtc: number, metadataReady: boolean): Trip {
         startUtc,
         durationSec,
         metadataReady,
+        ...(sourceKey === undefined ? {} : { sourceKey }),
     } as unknown as VideoCandidate;
     const timeline: TripTimeline = {
         contentDurationSec: durationSec,
@@ -48,6 +52,63 @@ function buildTrip(file: File, startUtc: number, metadataReady: boolean): Trip {
         startUtc,
         endUtc: startUtc + durationSec,
         durationSec,
+        timeline,
+    } as unknown as Trip;
+}
+
+function buildTwoFrameTrip(firstFile: File, secondFile: File, startUtc: number, secondStartOffsetSec = 60): Trip {
+    const durationSec = 60;
+    const first = {
+        file: firstFile,
+        relativePath: `CARD/${firstFile.name}`,
+        sourceKey: "a",
+        startUtc,
+        durationSec,
+        metadataReady: true,
+    } as unknown as VideoCandidate;
+    const second = {
+        file: secondFile,
+        relativePath: `CARD/${secondFile.name}`,
+        sourceKey: "b",
+        startUtc: startUtc + secondStartOffsetSec,
+        durationSec,
+        metadataReady: true,
+    } as unknown as VideoCandidate;
+    const timeline: TripTimeline = {
+        contentDurationSec: durationSec * 2,
+        segments: [
+            {
+                contentStart: 0,
+                contentEnd: durationSec,
+                wallStart: startUtc,
+                durationSec,
+                wallDurationSec: durationSec,
+                frameIndex: 0,
+            },
+            {
+                contentStart: durationSec,
+                contentEnd: durationSec * 2,
+                wallStart: startUtc + secondStartOffsetSec,
+                durationSec,
+                wallDurationSec: durationSec,
+                frameIndex: 1,
+            },
+        ],
+        gaps: [],
+    };
+    return {
+        frames: [
+            { startUtc, durationSec, wallDurationSec: durationSec, channels: { front: first } },
+            {
+                startUtc: startUtc + secondStartOffsetSec,
+                durationSec,
+                wallDurationSec: durationSec,
+                channels: { front: second },
+            },
+        ],
+        startUtc,
+        endUtc: startUtc + secondStartOffsetSec + durationSec,
+        durationSec: secondStartOffsetSec + durationSec,
         timeline,
     } as unknown as Trip;
 }
@@ -146,15 +207,57 @@ describe("restampProvisionalMarkers", () => {
         expect(markerById(marker.id)?.utc, "sub-threshold drift keeps the stored value").toBe(marker.utc);
     });
 
-    it("does not touch a marker placed on a fully ready trip", () => {
+    it("projects a restored marker's persistent anchor onto the current timeline", () => {
         const file = new File(["x"], "REC0005.MP4", { lastModified: 42 });
         state.trips = [buildTrip(file, PROVISIONAL_START, true)];
         const marker = addMarker(state.trips[0]!, (PROVISIONAL_START + 30) * 1000, "");
 
-        // Even if the trip is later rebuilt elsewhere, no anchor was captured.
-        state.trips = [buildTrip(file, PROVISIONAL_START + CLOCK_REFINEMENT_SHIFT_SEC, true)];
+        // A fully-ready marker has no provisional session entry. Its persistent
+        // anchor still has to survive a later restore/parser clock shift.
+        const shifted = buildTrip(file, PROVISIONAL_START + CLOCK_REFINEMENT_SHIFT_SEC, true);
+        state.trips = [shifted];
         expect(restampProvisionalMarkers()).toBe(0);
-        expect(markerById(marker.id)?.utc).toBe((PROVISIONAL_START + 30) * 1000);
+        expect(markersForTrip(shifted)[0]?.utc).toBe((PROVISIONAL_START + CLOCK_REFINEMENT_SHIFT_SEC + 30) * 1000);
+        expect(markerById(marker.id)?.utc, "stored UTC stays available as a legacy fallback").toBe(
+            (PROVISIONAL_START + 30) * 1000,
+        );
+    });
+
+    it("anchors an exact clip boundary to the following clip and its folder", () => {
+        const firstFile = new File(["a"], "REC0010.MP4", { lastModified: 42 });
+        const secondFile = new File(["b"], "REC0011.MP4", { lastModified: 43 });
+        const trip = buildTwoFrameTrip(firstFile, secondFile, PROVISIONAL_START);
+        state.trips = [trip];
+
+        const marker = addMarker(trip, (PROVISIONAL_START + 60) * 1000, "boundary");
+
+        expect(marker.anchor).toEqual({
+            fileIdentityKey: fileIdentityKey({
+                relativePath: `CARD/${secondFile.name}`,
+                size: secondFile.size,
+                lastModified: secondFile.lastModified,
+            }),
+            startUtc: (PROVISIONAL_START + 60) * 1000,
+            offsetSec: 0,
+        });
+        expect(marker.folderId, "the sidecar follows the clip under the playhead").toBe("folder-b");
+    });
+
+    it("recovers a later clip after regrouping and a recording-root rename", () => {
+        const firstFile = new File(["a"], "REC0013.MP4", { lastModified: 42 });
+        const secondFile = new File(["b"], "REC0014.MP4", { lastModified: 43 });
+        const original = buildTwoFrameTrip(firstFile, secondFile, PROVISIONAL_START, 600);
+        state.trips = [original];
+        const marker = addMarker(original, (PROVISIONAL_START + 630) * 1000, "later clip");
+        expect(marker.anchor?.startUtc, "the anchor stores its clip start, not the old trip start").toBe(
+            (PROVISIONAL_START + 600) * 1000,
+        );
+
+        const split = buildTrip(secondFile, PROVISIONAL_START + 600, true, "b");
+        tripAllCandidates(split)[0]!.relativePath = `RENAMED/${secondFile.name}`;
+        state.trips = [split];
+
+        expect(markersForTrip(split).map((item) => item.id)).toEqual([marker.id]);
     });
 
     it("keeps a clip anchor until deferred GPS clock evidence settles", () => {
@@ -170,6 +273,23 @@ describe("restampProvisionalMarkers", () => {
         state.trips = [refined];
         expect(restampProvisionalMarkers({ final: true, finalCandidates: tripAllCandidates(refined) })).toBe(1);
         expect(markerById(marker.id)?.utc).toBe((PROVISIONAL_START + CLOCK_REFINEMENT_SHIFT_SEC + 12) * 1000);
+    });
+
+    it("re-stamps against the physical source when two cards contain an identical clip", () => {
+        const file = new File(["same"], "REC0012.MP4", { lastModified: 42 });
+        const first = buildTrip(file, PROVISIONAL_START, false, "a");
+        const second = buildTrip(file, PROVISIONAL_START + 600, false, "b");
+        state.trips = [first, second];
+        const marker = addMarker(second, (PROVISIONAL_START + 630) * 1000, "second card");
+
+        const readyFirst = buildTrip(file, PROVISIONAL_START + 120, true, "a");
+        const readySecond = buildTrip(file, PROVISIONAL_START + 1200, true, "b");
+        state.trips = [readyFirst, readySecond];
+
+        expect(restampProvisionalMarkers({ final: true })).toBe(1);
+        expect(markerById(marker.id)?.utc, "must follow card B, not the first identical clip").toBe(
+            (PROVISIONAL_START + 1230) * 1000,
+        );
     });
 
     it("drops the anchor when the clip left the session", () => {

@@ -40,10 +40,19 @@ export interface DroppedDuplicate {
     keptPath: string;
 }
 
+/** A duplicate proven against a file already represented by a loaded source.
+ * The UI uses this evidence to keep a classic re-open on the existing source
+ * row even when only auxiliary files survive the dedup pass. */
+export interface DuplicateSourceMatch {
+    incoming: VendorFile;
+    loaded: VendorFile;
+}
+
 export interface DedupResult {
     // Surviving files, in the original incoming order.
     kept: VendorFile[];
     dropped: DroppedDuplicate[];
+    sourceMatches: DuplicateSourceMatch[];
 }
 
 /** Metadata grouping key. Only files agreeing on it are content-probed. */
@@ -212,6 +221,8 @@ export async function dropDuplicateFiles(
 
     const keep = new Set<VendorFile>();
     const dropped: DroppedDuplicate[] = [];
+    const sourceMatches: DuplicateSourceMatch[] = [];
+    const loadedFiles = new Set(alreadyLoaded);
     for (const [key, group] of groups) {
         const loaded = loadedByKey.get(key);
         if (group.length === 1 && !loaded) {
@@ -242,7 +253,15 @@ export async function dropDuplicateFiles(
                     }
                 }
                 if (equal) {
-                    duplicateOf = unique;
+                    duplicateOf ??= unique;
+                    if (loadedFiles.has(unique)) {
+                        // Report every already-loaded physical source that is
+                        // byte-identical. The folder layer must see the tie and
+                        // refuse to alias a later notes-only reopen to whichever
+                        // card happened to sort first.
+                        sourceMatches.push({ incoming: vf, loaded: unique });
+                        continue;
+                    }
                     break;
                 }
             }
@@ -255,5 +274,5 @@ export async function dropDuplicateFiles(
         }
     }
 
-    return { kept: incoming.filter((vf) => keep.has(vf)), dropped };
+    return { kept: incoming.filter((vf) => keep.has(vf)), dropped, sourceMatches };
 }

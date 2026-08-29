@@ -35,12 +35,14 @@ import { t } from "../i18n/index.js";
 import { dom } from "./dom.js";
 import {
     bindSourceToFolder,
+    connectWritableFolderToSource,
     disambiguatedLabels,
     folderDisplayLabel,
     notifyFolderOpened,
     purgeAllFolderSessionState,
     purgeFolderSessionState,
     registerIngestSource,
+    registerReadOnlyNotesFolderConnector,
     registerRememberedFolderOpener,
     setRememberedAvailability,
 } from "./folder-sources.js";
@@ -74,7 +76,43 @@ export async function initPersistentFolders(): Promise<void> {
     // enumerate + ingest). Registered, not imported - folder-sources is the
     // lower module.
     registerRememberedFolderOpener((folder) => void openRememberedFolder(folder));
+    registerReadOnlyNotesFolderConnector(connectReadOnlyNotesFolder);
     await refreshChips();
+}
+
+/** Upgrades a notes file that arrived through the classic picker from a
+ * read-only File snapshot to a writable folder-backed file. The selection is
+ * verified against unchanged files from the source row before anything is
+ * remembered or attached. */
+async function connectReadOnlyNotesFolder(sourceId: string): Promise<void> {
+    if (pickerInFlight || typeof window.showDirectoryPicker !== "function") return;
+    pickerInFlight = true;
+    beginPreIngestReading();
+    try {
+        let handle: FileSystemDirectoryHandle;
+        try {
+            handle = await window.showDirectoryPicker({ id: "recordings-notes", mode: "readwrite" });
+        } catch (err) {
+            if (!(err instanceof DOMException && err.name === "AbortError")) {
+                log.warn("notes folder picker failed", { err: err instanceof Error ? err.message : String(err) });
+            }
+            return;
+        }
+        let enumerated: Awaited<ReturnType<typeof enumerateFolder>>;
+        try {
+            enumerated = await enumerateFolder(handle);
+        } catch (err) {
+            log.warn("notes folder verification failed", { err: err instanceof Error ? err.message : String(err) });
+            notify({ severity: "warn", messageKey: "folderSources.notesFolderMismatch" });
+            return;
+        }
+        if (!(await connectWritableFolderToSource(sourceId, handle, enumerated.files))) {
+            notify({ severity: "warn", messageKey: "folderSources.notesFolderMismatch" });
+        }
+    } finally {
+        endPreIngestReading();
+        pickerInFlight = false;
+    }
 }
 
 /**

@@ -141,6 +141,9 @@ function isEgressAllowed(reqUrl: string, baseHost: string): boolean {
     }
     if (u.protocol !== "http:" && u.protocol !== "https:") return true;
     if (u.host === baseHost) return true;
+    // mockDirectoryPicker routes this synthetic host straight to local sample
+    // bytes; the separate origin keeps the app service worker out of the way.
+    if (u.hostname === "dashcamigo-fsa.test") return true;
     return (
         /(^|\.)openfreemap\.org$/i.test(u.hostname) ||
         u.hostname === "vector.openstreetmap.org" ||
@@ -687,100 +690,89 @@ export interface MockFolder {
  * at all - Playwright cannot drive the real OS picker.
  *
  * Each picker call hands back the next folder of the list (the last one repeats),
- * which is how a spec loads two different cards in one session. The fake handle
- * serves its files over a routed same-origin URL, so real bytes reach the
- * parsers. Its methods live on the prototype on purpose: structuredClone (what
- * IndexedDB stores a handle with) rejects own-property functions, and this way a
- * "remember" write behaves like the real thing.
- *
- * What it does NOT cover: a handle read BACK out of IndexedDB. The clone keeps
- * the data and drops the prototype, so restoring across a reload is still
- * manual-test territory.
+ * which is how a spec loads two different cards in one session. Files are copied
+ * into OPFS, so the returned handles are real browser FileSystemHandles: they
+ * survive IndexedDB structured clone and exercise writable notes files too.
  */
 export async function mockDirectoryPicker(page: Page, folders: MockFolder[]): Promise<void> {
-    const byLabel = new Map(folders.map((folder) => [folder.label, folder.dir]));
-    const listing = folders.map((folder) => ({
+    const listing = folders.map((folder, index) => ({
+        sourceId: String(index),
         label: folder.label,
-        relativePaths: listFilesRecursively(folder.dir),
+        files: listFilesRecursively(folder.dir),
     }));
+    const bySourceId = new Map(listing.map((folder, index) => [folder.sourceId, folders[index]!.dir]));
     await page.route("**/__fsa/**", async (route) => {
         const url = new URL(route.request().url());
-        const [label, ...rest] = url.pathname.replace(/^\/__fsa\//, "").split("/");
-        const dir = byLabel.get(decodeURIComponent(label ?? ""));
+        const [sourceId, ...rest] = url.pathname.replace(/^\/__fsa\//, "").split("/");
+        const dir = bySourceId.get(decodeURIComponent(sourceId ?? ""));
         const rel = rest.map(decodeURIComponent).join("/");
         if (!dir || !rel) {
             await route.fulfill({ status: 404, body: "" });
             return;
         }
-        await route.fulfill({ path: path.join(dir, rel) });
+        await route.fulfill({ path: path.join(dir, rel), headers: { "access-control-allow-origin": "*" } });
     });
-    await page.addInitScript((listing: { label: string; relativePaths: string[] }[]) => {
-        class MockFile {
-            kind = "file" as const;
-            constructor(
-                public name: string,
-                public url: string,
-            ) {}
-            async getFile(): Promise<File> {
-                const response = await fetch(this.url);
-                const bytes = await response.arrayBuffer();
-                // Fixed mtime: the file identity key (path, size, mtime) must stay
-                // stable across reloads inside one spec.
-                return new File([bytes], this.name, { lastModified: 1_767_225_600_000 });
+    await page.addInitScript((listing: { sourceId: string; label: string; files: MockListedFile[] }[]) => {
+        const roots: Array<Promise<FileSystemDirectoryHandle> | undefined> = [];
+        const exposed: FileSystemDirectoryHandle[] = [];
+        const buildRoot = async (index: number): Promise<FileSystemDirectoryHandle> => {
+            const { sourceId, label, files } = listing[index]!;
+            const storageRoot = await navigator.storage.getDirectory();
+            // Separate parents let two physical sources expose the same leaf
+            // name while remaining different entries for isSameEntry().
+            const sourceRoot = await storageRoot.getDirectoryHandle(`source-${sourceId}`, { create: true });
+            const root = await sourceRoot.getDirectoryHandle(label, { create: true });
+            let isSeeded = true;
+            try {
+                await sourceRoot.getFileHandle("seeded");
+            } catch {
+                isSeeded = false;
             }
-        }
-        class MockDir {
-            kind = "directory" as const;
-            constructor(
-                public name: string,
-                public children: (MockDir | MockFile)[],
-            ) {}
-            async *values(): AsyncGenerator<MockDir | MockFile> {
-                for (const child of this.children) yield child;
-            }
-            async isSameEntry(other: { name?: string }): Promise<boolean> {
-                return !!other && other.name === this.name;
-            }
-            async queryPermission(): Promise<string> {
-                return "granted";
-            }
-            async requestPermission(): Promise<string> {
-                return "granted";
-            }
-        }
-        const roots = listing.map(({ label, relativePaths }) => {
-            const root = new MockDir(label, []);
-            for (const rel of relativePaths) {
-                const segments = rel.split("/");
-                let dir = root;
-                for (const segment of segments.slice(0, -1)) {
-                    let next = dir.children.find((child) => child.kind === "directory" && child.name === segment) as
-                        | MockDir
-                        | undefined;
-                    if (!next) {
-                        next = new MockDir(segment, []);
-                        dir.children.push(next);
+            if (!isSeeded) {
+                for (const { relativePath } of files) {
+                    const segments = relativePath.split("/");
+                    let dir = root;
+                    for (const segment of segments.slice(0, -1)) {
+                        dir = await dir.getDirectoryHandle(segment, { create: true });
                     }
-                    dir = next;
+                    const handle = await dir.getFileHandle(segments.at(-1)!, { create: true });
+                    const writable = await handle.createWritable();
+                    const encoded = [sourceId, ...segments].map(encodeURIComponent).join("/");
+                    const response = await fetch(`https://dashcamigo-fsa.test/__fsa/${encoded}`);
+                    await writable.write(await response.arrayBuffer());
+                    await writable.close();
                 }
-                const encoded = [label, ...segments].map(encodeURIComponent).join("/");
-                dir.children.push(new MockFile(segments.at(-1)!, `/__fsa/${encoded}`));
+                // Keep OPFS mtimes and app-written notes stable across reloads.
+                // Re-seeding here would silently replace the very backup that
+                // persistence tests expect the stored handle to reopen.
+                await sourceRoot.getFileHandle("seeded", { create: true });
             }
+            exposed[index] = root;
             return root;
-        });
+        };
+        (window as unknown as { __e2eDirectoryPickerRoots: FileSystemDirectoryHandle[] }).__e2eDirectoryPickerRoots =
+            exposed;
         let picked = 0;
-        (window as unknown as { showDirectoryPicker: () => Promise<unknown> }).showDirectoryPicker = async () =>
-            roots[Math.min(picked++, roots.length - 1)];
+        (window as unknown as { showDirectoryPicker: () => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker =
+            async () => {
+                const index = Math.min(picked++, listing.length - 1);
+                roots[index] ??= buildRoot(index);
+                return roots[index];
+            };
     }, listing);
 }
 
-/** Folder-relative file list of a sample directory, "/"-joined, for the FSA mock. */
-function listFilesRecursively(dir: string, prefix = ""): string[] {
-    const out: string[] = [];
+interface MockListedFile {
+    relativePath: string;
+}
+
+/** Folder-relative file list for the OPFS-backed FSA mock. */
+function listFilesRecursively(dir: string, prefix = ""): MockListedFile[] {
+    const out: MockListedFile[] = [];
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
         const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
         if (entry.isDirectory()) out.push(...listFilesRecursively(path.join(dir, entry.name), rel));
-        else out.push(rel);
+        else out.push({ relativePath: rel });
     }
     return out;
 }

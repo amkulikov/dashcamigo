@@ -66,8 +66,8 @@ describe("parseSidecarPayload", () => {
         JSON.stringify({ app: "dashcamigo", format: "annotations", version: 1, annotations });
 
     it("returns an empty list for an empty file", () => {
-        expect(parseSidecarPayload("")).toEqual([]);
-        expect(parseSidecarPayload("   \n")).toEqual([]);
+        expect(parseSidecarPayload("")).toEqual({ records: [], rejectedEntries: 0 });
+        expect(parseSidecarPayload("   \n")).toEqual({ records: [], rejectedEntries: 0 });
     });
 
     it("returns null for a foreign or broken file", () => {
@@ -99,15 +99,15 @@ describe("parseSidecarPayload", () => {
         ];
         const parsed = parseSidecarPayload(wrap(records));
         expect(parsed).not.toBeNull();
-        expect(parsed!.map((r) => r.id).sort()).toEqual(["m1", "t1"]);
-        const meta = parsed!.find((r) => r.id === "t1") as TripMetaAnnotation;
+        expect(parsed!.records.map((r) => r.id).sort()).toEqual(["m1", "t1"]);
+        const meta = parsed!.records.find((r) => r.id === "t1") as TripMetaAnnotation;
         expect(meta.name, "name survives").toBe("trip");
         expect(meta.isFavorite, "favorite survives").toBe(true);
     });
 
     it("skips a tripMeta without an anchor instead of throwing later", () => {
         const parsed = parseSidecarPayload(wrap([{ id: "x", updatedAt: 1, deleted: false, kind: "tripMeta" }]));
-        expect(parsed).toEqual([]);
+        expect(parsed).toEqual({ records: [], rejectedEntries: 1 });
     });
 
     it("skips non-finite timestamps that would pin LWW forever", () => {
@@ -116,7 +116,7 @@ describe("parseSidecarPayload", () => {
         // JSON has no Infinity/NaN literal - emulate a hand-edited file.
         const text = wrap([infinite, nan]).replace(/null/g, "1e999");
         const parsed = parseSidecarPayload(text);
-        expect(parsed).toEqual([]);
+        expect(parsed).toEqual({ records: [], rejectedEntries: 2 });
     });
 
     it("skips unsafe, fractional, and negative timestamps", () => {
@@ -127,7 +127,7 @@ describe("parseSidecarPayload", () => {
                 tripMeta({ id: "negative", updatedAt: -1 }),
             ]),
         );
-        expect(parsed).toEqual([]);
+        expect(parsed).toEqual({ records: [], rejectedEntries: 3 });
     });
 
     it("skips a marker with a non-string text and non-number utc", () => {
@@ -137,12 +137,26 @@ describe("parseSidecarPayload", () => {
                 { id: "m2", updatedAt: 1, deleted: false, kind: "marker", utc: 5, text: { nested: true } },
             ]),
         );
-        expect(parsed).toEqual([]);
+        expect(parsed).toEqual({ records: [], rejectedEntries: 2 });
     });
 
-    it("drops unknown extra fields instead of storing them", () => {
+    it("recovers known fields but flags unknown fields so a writer preserves the file", () => {
         const parsed = parseSidecarPayload(wrap([{ ...tripMeta({}), evil: "payload" }]));
-        expect(parsed![0]).not.toHaveProperty("evil");
+        expect(parsed!.records[0]).not.toHaveProperty("evil");
+        expect(parsed!.rejectedEntries).toBe(1);
+    });
+
+    it("reports unknown entries so writers can preserve them", () => {
+        const parsed = parseSidecarPayload(wrap([tripMeta({}), { kind: "future", id: "f1" }]));
+        expect(parsed?.records).toHaveLength(1);
+        expect(parsed?.rejectedEntries).toBe(1);
+    });
+
+    it("flags unknown top-level data so it is not erased by a rewrite", () => {
+        const parsed = parseSidecarPayload(
+            JSON.stringify({ app: "dashcamigo", format: "annotations", version: 1, annotations: [], future: true }),
+        );
+        expect(parsed).toEqual({ records: [], rejectedEntries: 1 });
     });
 });
 
@@ -162,10 +176,11 @@ describe("buildSidecarPayload", () => {
                 kind: "marker",
                 utc: 1_753_900_500_000,
                 text: "deer",
+                anchor: { fileIdentityKey: "k1", startUtc: 1_753_900_000_000, offsetSec: 12.5 },
             },
             { id: "m2", folderId: "f1", updatedAt: 8, deleted: true, kind: "marker", utc: 1_753_900_900_000, text: "" },
         ];
         const parsed = parseSidecarPayload(JSON.stringify(buildSidecarPayload(records, 1_753_901_000_000)));
-        expect(parsed).toEqual(records);
+        expect(parsed).toEqual({ records, rejectedEntries: 0 });
     });
 });

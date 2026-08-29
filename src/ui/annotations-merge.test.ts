@@ -13,9 +13,13 @@ import type { AnnotationRecord, MarkerAnnotation, TripMetaAnnotation } from "../
 // annotations.ts resolves a record's folder through folder-sources, which pulls
 // in DOM-touching modules. Only the lookup matters here - back it with a map the
 // tests control.
-const { folderByKey } = vi.hoisted(() => ({ folderByKey: new Map<string, string>() }));
+const { folderByKey, folderScopeSeparator } = vi.hoisted(() => ({
+    folderByKey: new Map<string, string>(),
+    folderScopeSeparator: String.fromCharCode(1),
+}));
 vi.mock("./folder-sources.js", () => ({
-    folderIdForFileKey: (key: string) => folderByKey.get(key) ?? "",
+    folderIdForFileKey: (key: string, sourceKey?: string) =>
+        folderByKey.get(sourceKey === undefined ? key : `${sourceKey}${folderScopeSeparator}${key}`) ?? "",
 }));
 
 import {
@@ -26,6 +30,7 @@ import {
     markersForTrip,
     rebindFolderAnnotations,
     recordsForFolder,
+    scopeAnnotationRecordsToFolder,
     setTripMeta,
     tripMetaFor,
     updateMarkerText,
@@ -66,12 +71,13 @@ function marker(overrides: Partial<MarkerAnnotation> = {}): MarkerAnnotation {
     };
 }
 
-function buildCandidate(name: string, relativePath: string, startUtc: number): VideoCandidate {
+function buildCandidate(name: string, relativePath: string, startUtc: number, sourceKey?: string): VideoCandidate {
     const candidate = {
         file: new File(["x"], name, { lastModified: CLIP_MTIME }),
         relativePath,
         startUtc,
         durationSec: 60,
+        ...(sourceKey === undefined ? {} : { sourceKey }),
     } as unknown as VideoCandidate;
     Object.defineProperty(candidate.file, "size", { value: CLIP_SIZE });
     return candidate;
@@ -122,6 +128,23 @@ describe("applyMergedRecords", () => {
         const changed = applyMergedRecords([meta({ name: "remote", updatedAt: 200 })]);
         expect(changed, "one user-visible change").toBe(1);
         expect(recordsForFolder("folder-A")[0]).toMatchObject({ name: "remote" });
+    });
+
+    it("keeps a copied backup's shared record id in both remembered folders", () => {
+        const shared = meta({ id: "shared", folderId: "folder-A" });
+        applyMergedRecords([shared]);
+
+        const fromCopy = scopeAnnotationRecordsToFolder(
+            [{ ...shared, folderId: "folder-B" }],
+            "folder-B",
+            new Set(["folder-A", "folder-B"]),
+        );
+        applyMergedRecords(fromCopy);
+
+        expect(recordsForFolder("folder-A").map((record) => record.id)).toEqual(["shared"]);
+        expect(recordsForFolder("folder-B")).toEqual([
+            expect.objectContaining({ id: "copy:folder-B:shared", name: "Morning drive" }),
+        ]);
     });
 
     it("keeps the local record when it is newer, and reports nothing changed", () => {
@@ -193,6 +216,26 @@ describe("rebindFolderAnnotations", () => {
         expect(recordsForFolder("folder-A").map((r) => r.id)).toEqual(["meta-1"]);
     });
 
+    it("re-keys restored trip metadata after the recording root was renamed", () => {
+        const oldKey = fileIdentityKey({
+            relativePath: "OLD/Normal/REC0001.MP4",
+            size: CLIP_SIZE,
+            lastModified: CLIP_MTIME,
+        });
+        const candidate = buildCandidate("REC0001.MP4", "NEW/Normal/REC0001.MP4", TRIP_START, "card-a");
+        const currentKey = fileIdentityKey({
+            relativePath: candidate.relativePath,
+            size: candidate.file.size,
+            lastModified: candidate.file.lastModified,
+        });
+        state.trips = [buildTrip([candidate])];
+        folderByKey.set(`card-a${folderScopeSeparator}${currentKey}`, "folder-A");
+        applyMergedRecords([meta({ folderId: "", anchor: { fileIdentityKey: oldKey, startUtc: TRIP_START * 1000 } })]);
+
+        expect(rebindFolderAnnotations("folder-A", new Set(["folder-A"]))).toBe(1);
+        expect(recordsForFolder("folder-A").map((record) => record.id)).toEqual(["meta-1"]);
+    });
+
     it("leaves a record owned by another still-existing folder alone", () => {
         applyMergedRecords([meta({ folderId: "folder-B" })]);
         folderByKey.set(ANCHOR_KEY, "folder-A");
@@ -216,6 +259,51 @@ describe("rebindFolderAnnotations", () => {
         expect(markersForTrip(state.trips[0]!).map((m) => m.id)).toEqual(["marker-1"]);
     });
 
+    it("re-keys an anchored marker before trips have been built", () => {
+        folderByKey.set(ANCHOR_KEY, "folder-A");
+        applyMergedRecords([
+            marker({
+                anchor: { fileIdentityKey: ANCHOR_KEY, startUtc: TRIP_START * 1000, offsetSec: 30 },
+            }),
+        ]);
+
+        expect(rebindFolderAnnotations("folder-A", new Set(["folder-A"]))).toBe(1);
+        expect(recordsForFolder("folder-A").map((record) => record.id)).toEqual(["marker-1"]);
+    });
+
+    it("re-keys a recovered marker to its clip's folder inside a mixed-source trip", () => {
+        const first = buildCandidate("REC0001.MP4", CLIP_PATH, TRIP_START, "card-a");
+        const second = buildCandidate("REC0002.MP4", SECOND_CLIP_PATH, TRIP_START + 60, "card-b");
+        const firstKey = fileIdentityKey({
+            relativePath: first.relativePath,
+            size: first.file.size,
+            lastModified: first.file.lastModified,
+        });
+        const secondKey = fileIdentityKey({
+            relativePath: second.relativePath,
+            size: second.file.size,
+            lastModified: second.file.lastModified,
+        });
+        folderByKey.set(`card-a${folderScopeSeparator}${firstKey}`, "folder-A");
+        folderByKey.set(`card-b${folderScopeSeparator}${secondKey}`, "folder-B");
+        state.trips = [buildTrip([first, second])];
+        const oldSecondKey = fileIdentityKey({
+            relativePath: "OLD/Normal/REC0002.MP4",
+            size: CLIP_SIZE,
+            lastModified: CLIP_MTIME,
+        });
+        applyMergedRecords([
+            marker({
+                folderId: "",
+                anchor: { fileIdentityKey: oldSecondKey, startUtc: (TRIP_START + 60) * 1000, offsetSec: 10 },
+            }),
+        ]);
+
+        expect(rebindFolderAnnotations("folder-A", new Set(["folder-A", "folder-B"]))).toBe(0);
+        expect(rebindFolderAnnotations("folder-B", new Set(["folder-A", "folder-B"]))).toBe(1);
+        expect(markerById("marker-1")?.folderId).toBe("folder-B");
+    });
+
     it("does not show a marker from another folder at the same UTC", () => {
         state.trips = [buildTrip()];
         folderByKey.set(ANCHOR_KEY, "folder-A");
@@ -224,6 +312,44 @@ describe("rebindFolderAnnotations", () => {
             marker({ id: "wrong-folder", folderId: "folder-B" }),
         ]);
         expect(markersForTrip(state.trips[0]!).map((item) => item.id)).toEqual(["right-folder"]);
+    });
+
+    it("restores an anchored marker even when its old folder id is unavailable", () => {
+        const trip = buildTrip();
+        state.trips = [trip];
+        applyMergedRecords([
+            marker({
+                folderId: "",
+                anchor: { fileIdentityKey: ANCHOR_KEY, startUtc: TRIP_START * 1000, offsetSec: 30 },
+            }),
+        ]);
+
+        expect(markersForTrip(trip).map((item) => item.id)).toEqual(["marker-1"]);
+    });
+
+    it("does not show an unbound anchored marker on two identical open copies", () => {
+        const one = buildTrip();
+        const two = buildTrip();
+        state.trips = [one, two];
+        applyMergedRecords([
+            marker({
+                folderId: "",
+                anchor: { fileIdentityKey: ANCHOR_KEY, startUtc: TRIP_START * 1000, offsetSec: 30 },
+            }),
+        ]);
+
+        expect(markersForTrip(one)).toEqual([]);
+        expect(markersForTrip(two)).toEqual([]);
+    });
+
+    it("does not show an unbound legacy marker on two overlapping open copies", () => {
+        const one = buildTrip();
+        const two = buildTrip();
+        state.trips = [one, two];
+        applyMergedRecords([marker({ folderId: "", anchor: undefined })]);
+
+        expect(markersForTrip(one)).toEqual([]);
+        expect(markersForTrip(two)).toEqual([]);
     });
 
     it("leaves an orphaned marker outside every trip of this folder", () => {
@@ -277,6 +403,141 @@ describe("trip-meta anchor resolution", () => {
         applyMergedRecords([two, one]);
         const reverse = tripMetaFor(state.trips[0]!)?.id;
         expect(forward).toBe(reverse);
+    });
+
+    it("recovers a note after the recording folder is renamed", () => {
+        const oldKey = fileIdentityKey({
+            relativePath: "OLD/Normal/REC0001.MP4",
+            size: CLIP_SIZE,
+            lastModified: CLIP_MTIME,
+        });
+        applyMergedRecords([
+            meta({ anchor: { fileIdentityKey: oldKey, startUtc: TRIP_START * 1000 }, name: "Recovered" }),
+        ]);
+
+        const trip = buildTrip([buildCandidate("REC0001.MP4", "NEW/Normal/REC0001.MP4", TRIP_START)]);
+        folderByKey.set(
+            fileIdentityKey({ relativePath: "NEW/Normal/REC0001.MP4", size: CLIP_SIZE, lastModified: CLIP_MTIME }),
+            "folder-A",
+        );
+        expect(tripMetaFor(trip)?.name).toBe("Recovered");
+    });
+
+    it("moves a recovered note onto the current clip identity when edited", () => {
+        const oldKey = fileIdentityKey({
+            relativePath: "OLD/Normal/REC0001.MP4",
+            size: CLIP_SIZE,
+            lastModified: CLIP_MTIME,
+        });
+        applyMergedRecords([
+            meta({ anchor: { fileIdentityKey: oldKey, startUtc: TRIP_START * 1000 }, name: "Recovered" }),
+        ]);
+        const candidate = buildCandidate("REC0001.MP4", "NEW/Normal/REC0001.MP4", TRIP_START);
+        const currentKey = fileIdentityKey({
+            relativePath: candidate.relativePath,
+            size: candidate.file.size,
+            lastModified: candidate.file.lastModified,
+        });
+        folderByKey.set(currentKey, "folder-A");
+        const trip = buildTrip([candidate]);
+        state.trips = [trip];
+
+        setTripMeta(trip, { name: "Edited after restore" });
+
+        expect(recordsForFolder("folder-A").find((record) => record.id === "meta-1")).toMatchObject({
+            name: "Edited after restore",
+            anchor: { fileIdentityKey: currentKey },
+        });
+    });
+
+    it("recovers a note when a copy changed only the file modification time", () => {
+        applyMergedRecords([meta({ name: "Recovered" })]);
+        const candidate = buildCandidate("REC0001.MP4", CLIP_PATH, TRIP_START);
+        candidate.file = new File(["x"], "REC0001.MP4", { lastModified: CLIP_MTIME + 1 });
+        Object.defineProperty(candidate.file, "size", { value: CLIP_SIZE });
+        folderByKey.set(
+            fileIdentityKey({ relativePath: CLIP_PATH, size: CLIP_SIZE, lastModified: CLIP_MTIME + 1 }),
+            "folder-A",
+        );
+
+        expect(tripMetaFor(buildTrip([candidate]))?.name).toBe("Recovered");
+    });
+
+    it("does not recover a note onto a copied clip owned by another folder", () => {
+        const oldKey = fileIdentityKey({
+            relativePath: "OLD/Normal/REC0001.MP4",
+            size: CLIP_SIZE,
+            lastModified: CLIP_MTIME,
+        });
+        applyMergedRecords([
+            meta({ folderId: "folder-A", anchor: { fileIdentityKey: oldKey, startUtc: TRIP_START * 1000 } }),
+        ]);
+        const copied = buildCandidate("REC0001.MP4", "NEW/Normal/REC0001.MP4", TRIP_START, "card-b");
+        const copiedKey = fileIdentityKey({
+            relativePath: copied.relativePath,
+            size: copied.file.size,
+            lastModified: copied.file.lastModified,
+        });
+        folderByKey.set(`card-b${folderScopeSeparator}${copiedKey}`, "folder-B");
+
+        expect(tripMetaFor(buildTrip([copied]))).toBeNull();
+    });
+
+    it("keeps separate notes for byte-identical clips from two remembered folders", () => {
+        const one = buildTrip([buildCandidate("REC0001.MP4", CLIP_PATH, TRIP_START, "card-a")]);
+        const two = buildTrip([buildCandidate("REC0001.MP4", CLIP_PATH, TRIP_START, "card-b")]);
+        folderByKey.set(`card-a${folderScopeSeparator}${ANCHOR_KEY}`, "folder-A");
+        folderByKey.set(`card-b${folderScopeSeparator}${ANCHOR_KEY}`, "folder-B");
+        state.trips = [one, two];
+        applyMergedRecords([
+            meta({ id: "one", folderId: "folder-A", updatedAt: 100, name: "One" }),
+            meta({ id: "two", folderId: "folder-B", updatedAt: 200, name: "Two" }),
+        ]);
+
+        expect(tripMetaFor(one)?.name).toBe("One");
+        expect(tripMetaFor(two)?.name).toBe("Two");
+    });
+
+    it("does not guess when two old notes match the renamed recording", () => {
+        const oldKey = (root: string) =>
+            fileIdentityKey({
+                relativePath: `${root}/Normal/REC0001.MP4`,
+                size: CLIP_SIZE,
+                lastModified: CLIP_MTIME,
+            });
+        applyMergedRecords([
+            meta({ id: "one", anchor: { fileIdentityKey: oldKey("ONE"), startUtc: TRIP_START * 1000 } }),
+            meta({ id: "two", anchor: { fileIdentityKey: oldKey("TWO"), startUtc: TRIP_START * 1000 } }),
+        ]);
+
+        expect(
+            tripMetaFor(buildTrip([buildCandidate("REC0001.MP4", "NEW/Normal/REC0001.MP4", TRIP_START)])),
+        ).toBeNull();
+    });
+
+    it("does not show one recovered note on two identical open copies", () => {
+        const oldKey = fileIdentityKey({
+            relativePath: "OLD/Normal/REC0001.MP4",
+            size: CLIP_SIZE,
+            lastModified: CLIP_MTIME,
+        });
+        applyMergedRecords([meta({ anchor: { fileIdentityKey: oldKey, startUtc: TRIP_START * 1000 } })]);
+        const one = buildTrip([buildCandidate("REC0001.MP4", "ONE/Normal/REC0001.MP4", TRIP_START)]);
+        const two = buildTrip([buildCandidate("REC0001.MP4", "TWO/Normal/REC0001.MP4", TRIP_START)]);
+        state.trips = [one, two];
+
+        expect(tripMetaFor(one)).toBeNull();
+        expect(tripMetaFor(two)).toBeNull();
+    });
+
+    it("does not show an unbound exact note on two identical open copies", () => {
+        applyMergedRecords([meta({ folderId: "" })]);
+        const one = buildTrip();
+        const two = buildTrip();
+        state.trips = [one, two];
+
+        expect(tripMetaFor(one)).toBeNull();
+        expect(tripMetaFor(two)).toBeNull();
     });
 });
 

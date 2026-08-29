@@ -64,7 +64,7 @@ test.describe("folder sources, file-system picker", () => {
         await presetLocalStorage(page);
         await mockDirectoryPicker(page, [
             { label: "MOCKCARD", dir: SAMPLE_70MAI },
-            { label: "SECONDCARD", dir: SAMPLE_GOPRO },
+            { label: "MOCKCARD", dir: SAMPLE_GOPRO },
         ]);
         await gotoApp(page, "en");
     });
@@ -92,15 +92,17 @@ test.describe("folder sources, file-system picker", () => {
         const row = page.locator(sourceRow);
         await row.locator(".folder-source__remember").click();
         await expect(row.locator(".folder-source__state")).toBeVisible();
+        await expect(row.locator(".folder-source__notes")).toContainText("Notes: this browser only");
+        await expect(row.locator(".folder-source__notes-action")).toHaveText("Create notes backup");
 
         await row.locator(".folder-source__menu").click();
         const menu = row.locator(".folder-source__popup");
         await expect(menu).toBeVisible();
-        // Attaching a trip data file is an entry here, never an interrupting toast -
+        // Connecting a notes backup is an entry here, never an interrupting toast -
         // and both ways to do it are offered, because only one of the two
         // pickers can adopt a file that already holds notes.
-        await expect(menu).toContainText("Keep trip data in a new file");
-        await expect(menu).toContainText("Use an existing trip data file");
+        await expect(menu).toContainText("Create a notes backup in this folder");
+        await expect(menu).toContainText("Use an existing notes backup");
 
         await menu.getByRole("button", { name: "Forget this folder" }).click();
         // Back to an offer, and the trips it produced are untouched.
@@ -108,7 +110,7 @@ test.describe("folder sources, file-system picker", () => {
         await expect(page.locator("li.trip:not(.unindexed-note)").first()).toBeVisible();
     });
 
-    test("offers trip data backup where trip annotations are edited", async ({ page }) => {
+    test("offers a notes backup where trip annotations are edited", async ({ page }) => {
         await page.locator("#landing-cta").click();
         const card = page.locator("li.trip:not(.unindexed-note)").first();
         await expect(card).toBeVisible({ timeout: 30_000 });
@@ -119,7 +121,7 @@ test.describe("folder sources, file-system picker", () => {
         const modal = page.locator("#trip-meta-modal");
         await expect(modal).toBeVisible();
         await expect(modal.locator("#trip-meta-storage-action")).toBeVisible();
-        await expect(modal.locator("#trip-meta-storage-action")).toHaveText("Back up trip data…");
+        await expect(modal.locator("#trip-meta-storage-action")).toHaveText("Create notes backup…");
         await modal.locator("#trip-meta-cancel").click();
     });
 
@@ -128,11 +130,12 @@ test.describe("folder sources, file-system picker", () => {
         await expect(page.locator("li.trip:not(.unindexed-note)").first()).toBeVisible({ timeout: 30_000 });
         await expect(page.locator(sourceRow)).toHaveCount(1);
 
-        // The second picker call hands back the other card (see the mock): a
-        // different folder name AND different files, so nothing is deduped away.
+        // The second picker call hands back another physical card with the same
+        // display name. The source scope keeps its different files separate.
         await page.locator("#sidebar-cta").click();
         await expect(page.locator(sourceRow)).toHaveCount(2);
-        await expect(page.locator(sourceRow).nth(1)).toContainText("SECONDCARD");
+        await expect(page.locator(sourceRow).nth(0)).toContainText("MOCKCARD");
+        await expect(page.locator(sourceRow).nth(1)).toContainText("MOCKCARD (2)");
     });
     test("a remembered folder from an earlier session shows as a loadable row", async ({ page }) => {
         await page.locator("#landing-cta").click();

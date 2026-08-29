@@ -2,14 +2,15 @@
 // note just landed in browser storage, which a browser-data cleanup wipes -
 // so offer the notes file the folder menu already provides, right when the
 // user first has something to lose. Shown once ever (localStorage flag).
-// Browsers without the save picker never see it: there is nothing to offer,
-// and a nudge without a remedy is just worry.
+// Browsers without writable folder handles never see it: there is nothing to
+// offer from the toast, and a nudge without a remedy is just worry. The manual
+// Settings download remains available everywhere.
 
 import { createLogger } from "../log.js";
 import { getFolder } from "../persist/folders.js";
 import type { AnnotationRecord } from "../persist/types.js";
 import { registerUserAnnotationHook } from "./annotations.js";
-import { getNotesConnector, hasLiveSource, notifyFolderOpened, rememberLiveSource } from "./folder-sources.js";
+import { getNotesConnector, hasLiveSource, rememberLiveSource } from "./folder-sources.js";
 import { notify } from "./notifications.js";
 
 const log = createLogger("notes-nudge");
@@ -46,17 +47,17 @@ function onUserAnnotation(record: AnnotationRecord): void {
 }
 
 async function evaluate(record: AnnotationRecord): Promise<void> {
-    // A trip-meta record names its anchor file; a marker carries only a UTC,
-    // so its source can be resolved only when the session has a single one.
-    const anchorKey = record.kind === "tripMeta" ? record.anchor.fileIdentityKey : null;
+    const anchorKey = record.anchor?.fileIdentityKey ?? null;
     if (record.folderId) {
         const folder = await getFolder(record.folderId).catch(() => null);
-        if (!folder) return;
-        if (folder.sidecarHandle) {
+        if (folder?.sidecarHandle) {
             // Notes already live in a file - the user knows the feature.
             markSeen();
             return;
         }
+        // A forgotten folder leaves its old id behind. The clip anchor can
+        // still resolve the live source and let the action remember it again.
+        if (!folder && !hasLiveSource(anchorKey)) return;
     } else if (!hasLiveSource(anchorKey)) {
         // Ad-hoc drop / classic picker: no folder handle, nowhere to put a
         // file. Deliberately NOT marked seen - an annotation on a
@@ -68,45 +69,42 @@ async function evaluate(record: AnnotationRecord): Promise<void> {
         severity: "info",
         messageKey: "notesNudge.message",
         actionKey: "notesNudge.action",
-        onAction: () => void connectTripDataFile(record.folderId, anchorKey),
+        onAction: () => void connectNotesBackup(record.folderId, anchorKey),
     });
 }
 
 /** The toast action: resolve (remembering the folder first when needed) and
- *  hand off to the same create flow the folder menu uses. Runs inside the
- *  click, so the save picker still has its user activation. */
-export function canConnectTripDataFile(folderId: string, anchorKey: string | null): boolean {
-    return getNotesConnector() !== null && (folderId !== "" || hasLiveSource(anchorKey));
+ *  hand off to the same create flow the folder menu uses. */
+export async function canConnectNotesBackup(folderId: string, anchorKey: string | null): Promise<boolean> {
+    if (getNotesConnector() === null) return false;
+    if (hasLiveSource(anchorKey)) return true;
+    // An old annotation can retain the id of a folder the user has since
+    // forgotten. A non-empty id alone is not actionable: connectNotesBackup
+    // would find neither a stored handle nor a live source and the button
+    // would be a dead click.
+    return folderId !== "" && (await getFolder(folderId).catch(() => null)) !== null;
 }
 
-export async function connectTripDataFile(folderId: string, anchorKey: string | null): Promise<void> {
+export async function connectNotesBackup(folderId: string, anchorKey: string | null): Promise<void> {
     const connector = getNotesConnector();
     if (!connector) return;
-    const folder = folderId
-        ? ((await getFolder(folderId).catch(() => null)) ?? null)
-        : await rememberLiveSource(anchorKey);
+    const storedFolder = folderId ? await getFolder(folderId).catch(() => null) : null;
+    // A forgotten folder leaves its old id on the live annotation until it is
+    // remembered again. Fall back to the still-open source instead of turning
+    // the backup action into a dead click.
+    const folder = storedFolder ?? (await rememberLiveSource(anchorKey));
     if (!folder) {
         log.warn("notes nudge action found no folder to attach to");
         return;
     }
-    const hadSidecar = Boolean(folder.sidecarHandle);
-    // Finish (or repeat) discovery before offering to CREATE a file. This is
-    // the critical fresh-profile path: the notes file may already be sitting
-    // in the folder while IndexedDB has never stored its handle. Awaiting the
-    // folder hook makes attachment part of the decision instead of a detached
-    // race that could open the destructive Save-As picker beside that file.
-    let fresh = (await getFolder(folder.id).catch(() => null)) ?? folder;
-    if (!fresh.sidecarHandle) {
-        await notifyFolderOpened(fresh);
-        fresh = (await getFolder(folder.id).catch(() => null)) ?? fresh;
-    }
-    if (fresh.sidecarHandle) {
+    if (folder.sidecarHandle) {
         // A handle that was already persisted may be stale, so this explicit
-        // action is its non-destructive reconnect path. A file attached by the
-        // discovery immediately above is already connected: opening another
-        // picker here would make one click ask the user for the same file twice.
-        if (hadSidecar) await connector.useExisting(fresh);
+        // action is its non-destructive reconnect path.
+        await connector.useExisting(folder);
         return;
     }
-    await connector.create(fresh);
+    // create() performs non-destructive discovery and re-reads the latest
+    // folder record itself. Avoid another IndexedDB round trip here: write
+    // permission still needs the activation from this click.
+    await connector.create(folder);
 }

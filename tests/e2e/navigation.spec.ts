@@ -90,6 +90,8 @@ test.describe("navigation & shell", () => {
         await page.locator("#settings-btn").click();
         await expect(page.locator("#settings-modal")).toBeVisible();
         await expect(page.locator("#settings-units-select")).toBeVisible();
+        await expect(page.locator("#settings-notes-export-btn")).toBeVisible();
+        await expect(page.locator("#settings-notes-import-btn")).toBeVisible();
         await expect(page.locator("#settings-version-value")).toBeVisible();
         await shot(page, "nav-05-settings-modal");
     });

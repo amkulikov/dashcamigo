@@ -4,10 +4,10 @@
 
 import { t } from "../i18n/index.js";
 import type { Trip } from "../trips.js";
-import { annotationStorageHintKey } from "./annotations-sidecar.js";
+import { annotationStorageState } from "./annotations-sidecar.js";
 import { setTripMeta, tripAnchorFileIdentityKey, tripFolderId, tripMetaFor } from "./annotations.js";
 import { activateModal, deactivateModal, wireBackdropDismiss } from "./modal-helper.js";
-import { canConnectTripDataFile, connectTripDataFile } from "./notes-nudge.js";
+import { canConnectNotesBackup, connectNotesBackup } from "./notes-nudge.js";
 import { renderTrips } from "./sidebar.js";
 
 let modal: HTMLElement | null = null;
@@ -31,7 +31,7 @@ export function initTripMetaModal(): void {
 
     document.getElementById("trip-meta-cancel")?.addEventListener("click", close);
     document.getElementById("trip-meta-save")?.addEventListener("click", save);
-    storageAction?.addEventListener("click", backUpTripData);
+    storageAction?.addEventListener("click", connectBackup);
     wireBackdropDismiss(modal, close);
     // Escape/Tab live in modal-helper (activateModal); only Enter-to-save in
     // the single-line name field is ours. The textarea keeps Enter for
@@ -68,22 +68,25 @@ function syncStorageHint(trip: Trip): void {
         storageAction.disabled = false;
         storageAction.hidden = true;
     }
-    void annotationStorageHintKey(folderId).then((key) => {
+    void annotationStorageState(folderId).then(async ({ hintKey, backupAction }) => {
+        const canConnect = backupAction !== null && (await canConnectNotesBackup(folderId, anchorKey));
         if (currentTrip !== trip) return;
-        hint.textContent = t(key);
+        hint.textContent = t(hintKey);
         if (storageAction) {
-            storageAction.hidden =
-                key === "annotations.storageHintFile" || !canConnectTripDataFile(folderId, anchorKey);
+            storageAction.textContent = t(
+                backupAction === "reconnect" ? "sidecar.reconnect" : "annotations.storageAction",
+            );
+            storageAction.hidden = !canConnect;
         }
     });
 }
 
-function backUpTripData(): void {
+function connectBackup(): void {
     const trip = currentTrip;
     const action = storageAction;
     if (!trip || !action) return;
     action.disabled = true;
-    void connectTripDataFile(tripFolderId(trip), tripAnchorFileIdentityKey(trip)).finally(() => {
+    void connectNotesBackup(tripFolderId(trip), tripAnchorFileIdentityKey(trip)).finally(() => {
         if (currentTrip === trip) syncStorageHint(trip);
     });
 }

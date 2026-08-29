@@ -109,11 +109,29 @@ describe("dropDuplicateFiles", () => {
 
     it("drops a copy of an already-loaded file (cross-drop dedup)", async () => {
         const content = makeContent(LARGE_SIZE, 3);
-        const loaded = [vf("Normal/Front/Y.MP4", content)];
-        const incoming = [vf("Backup/Y.MP4", content)];
-        const { kept, dropped } = await dropDuplicateFiles(incoming, loaded);
+        const loaded = [vf("Normal/Front/Y.MP4", content, { sourceKey: "first-open" })];
+        const incoming = [vf("Backup/Y.MP4", content, { sourceKey: "second-open" })];
+        const { kept, dropped, sourceMatches } = await dropDuplicateFiles(incoming, loaded);
         expect(kept).toEqual([]);
         expect(dropped).toEqual([{ droppedPath: "Backup/Y.MP4", keptPath: "Normal/Front/Y.MP4" }]);
+        expect(sourceMatches).toEqual([{ incoming: incoming[0], loaded: loaded[0] }]);
+    });
+
+    it("reports every matching loaded source instead of inventing an owner for an identical copy", async () => {
+        const content = makeContent(LARGE_SIZE, 3);
+        const loaded = [
+            vf("CARD-A/Y.MP4", content, { sourceKey: "card-a" }),
+            vf("CARD-B/Y.MP4", content, { sourceKey: "card-b" }),
+        ];
+        const incoming = [vf("CARD-C/Y.MP4", content, { sourceKey: "card-c" })];
+
+        const { kept, sourceMatches } = await dropDuplicateFiles(incoming, loaded);
+
+        expect(kept).toEqual([]);
+        expect(sourceMatches).toEqual([
+            { incoming: incoming[0], loaded: loaded[0] },
+            { incoming: incoming[0], loaded: loaded[1] },
+        ]);
     });
 
     it("keeps a same-name same-size file whose content differs from the loaded one", async () => {

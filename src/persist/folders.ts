@@ -155,10 +155,27 @@ export async function requestFolderPermission(handle: FileSystemDirectoryHandle)
     }
 }
 
+/** Requests write access to a recordings folder from a user gesture. Reading
+ * recordings only needs the narrower grant; creating a notes backup asks for
+ * write access at the moment the user chooses that action. */
+export async function ensureDirectoryReadwritePermission(handle: FileSystemDirectoryHandle): Promise<boolean> {
+    if (typeof handle.queryPermission !== "function" || typeof handle.requestPermission !== "function") return true;
+    try {
+        const current = await handle.queryPermission({ mode: "readwrite" });
+        if (current === "granted") return true;
+        if (current !== "prompt") return false;
+        if (navigator.userActivation && !navigator.userActivation.isActive) return false;
+        return (await handle.requestPermission({ mode: "readwrite" })) === "granted";
+    } catch (err) {
+        log.warn("folder write permission failed", { err: err instanceof Error ? err.message : String(err) });
+        return false;
+    }
+}
+
 /**
  * Re-arms the readwrite grant on a stored file handle (the annotations
- * sidecar). The grant a save picker gives is session-scoped - after a
- * browser restart it reads "prompt", and the debounced gesture-less writes
+ * sidecar). The grant a picker or writable directory gives is session-scoped -
+ * after a browser restart it reads "prompt", and later gesture-less writes
  * can only skip. This must run while user activation is live (a click); it
  * may show the permission prompt, where Chromium offers "Allow on every
  * visit" to end the asking. Returns whether write access is available after

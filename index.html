@@ -763,7 +763,22 @@
                  has one permanent home (the landing chips disappear after the
                  first ingest). -->
             <div class="sidebar-sources">
-                <h2 data-i18n="folderSources.title">Recording folders</h2>
+                <div class="sidebar-sources__heading">
+                    <h2 data-i18n="folderSources.title">Recording folders</h2>
+                    <details class="folder-sources-help">
+                        <summary data-i18n-attr="aria-label:folderSources.helpAria,title:folderSources.helpAria"
+                                 aria-label="How notes backups work" title="How notes backups work">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 1 1 5.8 1c0 2-3 2-3 4"/><path d="M12 18h.01"/>
+                            </svg>
+                        </summary>
+                        <div class="folder-sources-help__popup">
+                            <p data-i18n="folderSources.helpBrowser">Trip names, notes, favorites and markers are saved in this browser.</p>
+                            <p data-i18n="folderSources.helpFile">A notes backup adds notes.dashcamigo to the recording folder and keeps it updated automatically. Your recordings never change. You can also download or restore all notes from Settings.</p>
+                        </div>
+                    </details>
+                </div>
                 <!-- Compact CTA button for adding files. label[for="folder-input"]
                      opens the system file picker, and also works as a drop target
                      (window-level DnD listeners pick it up anyway). Appears after
@@ -779,7 +794,7 @@
                     <span data-i18n="sidebar.cta.label">Add folder</span>
                 </label>
                 <!-- Folder rows: sources of this session (status, "remember this
-                     one", notes file) plus remembered folders that are not loaded
+                     one", notes backup) plus remembered folders that are not loaded
                      yet (click to load). Filled by src/ui/folder-sources.ts;
                      stays hidden until there is a row to show. -->
                 <!-- No aria-label: the visible SOURCES heading names the list,
@@ -2177,9 +2192,9 @@
                 <!-- Where the annotation lands; swapped per open to the
                      notes-file variant when the folder has one connected. -->
                 <div class="annotation-storage">
-                    <p class="annotation-storage-hint" id="trip-meta-storage-hint" data-i18n="annotations.storageHint">Saved in this browser on this device.</p>
+                    <p class="annotation-storage-hint" id="trip-meta-storage-hint" data-i18n="annotations.storageHint">Changes are saved in this browser on this device.</p>
                     <button id="trip-meta-storage-action" class="annotation-storage-action" type="button"
-                            data-i18n="annotations.storageAction" hidden>Back up trip data…</button>
+                            data-i18n="annotations.storageAction" hidden>Create notes backup…</button>
                 </div>
                 <div class="export-modal-actions">
                     <button id="trip-meta-cancel" class="dc-btn dc-btn--ghost" type="button" data-i18n="tripMeta.cancel">Cancel</button>
@@ -2200,9 +2215,9 @@
                     <input id="marker-modal-text" type="text" maxlength="200" autocomplete="off">
                 </label>
                 <div class="annotation-storage">
-                    <p class="annotation-storage-hint" id="marker-modal-storage-hint" data-i18n="annotations.storageHint">Saved in this browser on this device.</p>
+                    <p class="annotation-storage-hint" id="marker-modal-storage-hint" data-i18n="annotations.storageHint">Changes are saved in this browser on this device.</p>
                     <button id="marker-modal-storage-action" class="annotation-storage-action" type="button"
-                            data-i18n="annotations.storageAction" hidden>Back up trip data…</button>
+                            data-i18n="annotations.storageAction" hidden>Create notes backup…</button>
                 </div>
                 <div class="export-modal-actions">
                     <button id="marker-modal-delete" class="dc-btn dc-btn--ghost marker-modal-delete" type="button" data-i18n="markerModal.delete">Delete</button>
@@ -2584,6 +2599,17 @@
                        data-i18n="settings.privacy.policyLink">Privacy policy</a>
                 </div>
             </div>
+            <div class="export-modal-section">
+                <h3 class="settings-section-title" data-i18n="settings.notes.section">Trip notes</h3>
+                <div class="settings-row">
+                    <p class="settings-toggle-desc" data-i18n="settings.notes.description">Download a copy of every trip name, note, favorite and marker, or restore one you saved earlier. Recordings aren't included.</p>
+                    <button id="settings-notes-export-btn" class="dc-btn dc-btn--secondary" type="button"
+                            data-i18n="settings.notes.export">Download notes backup</button>
+                    <button id="settings-notes-import-btn" class="dc-btn dc-btn--secondary" type="button"
+                            data-i18n="settings.notes.import">Restore notes backup…</button>
+                    <input id="settings-notes-import-input" type="file" accept=".dashcamigo,application/json" hidden>
+                </div>
+            </div>
             <!-- Recordings cache: usage + limit + clear for the cross-session
                  index cache (src/persist/index-cache.ts). Usage is filled from
                  JS at open time; the limit input persists via
@@ -2672,7 +2698,7 @@
             <div class="export-modal-title" id="reset-confirm-modal-title" data-i18n="settings.danger.confirm.title">Reset all local data?</div>
             <div class="install-modal-body">
                 <p class="install-modal-intro" data-i18n="settings.danger.confirm.body">Local storage, cookies, offline cache and service worker will be wiped, then the page will reload. This cannot be undone.</p>
-                <p class="reset-confirm-note" data-i18n="settings.danger.confirm.note">An installed PWA shortcut and browser permissions are not touched.</p>
+                <p class="reset-confirm-note" data-i18n="settings.danger.confirm.note">An installed app shortcut, browser permissions and your notes backups aren't touched.</p>
             </div>
             <div class="export-modal-actions">
                 <button id="reset-confirm-cancel" class="dc-btn dc-btn--secondary" type="button"

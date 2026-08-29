@@ -9,8 +9,8 @@ const mocks = vi.hoisted(() => ({
     create: vi.fn(),
     useExisting: vi.fn(),
     getFolder: vi.fn(async () => mocks.folder),
+    hasLiveSource: vi.fn(() => true),
     notify: vi.fn<(input: NotifyInput) => void>(),
-    notifyFolderOpened: vi.fn<(folder: RememberedFolder) => Promise<void>>(),
 }));
 
 vi.mock("../persist/folders.js", () => ({ getFolder: mocks.getFolder }));
@@ -21,13 +21,12 @@ vi.mock("./annotations.js", () => ({
 }));
 vi.mock("./folder-sources.js", () => ({
     getNotesConnector: () => ({ create: mocks.create, useExisting: mocks.useExisting }),
-    hasLiveSource: () => true,
-    notifyFolderOpened: mocks.notifyFolderOpened,
+    hasLiveSource: mocks.hasLiveSource,
     rememberLiveSource: vi.fn(),
 }));
 vi.mock("./notifications.js", () => ({ notify: mocks.notify }));
 
-import { initNotesNudge } from "./notes-nudge.js";
+import { canConnectNotesBackup, initNotesNudge } from "./notes-nudge.js";
 
 function record(): AnnotationRecord {
     return {
@@ -44,6 +43,7 @@ function record(): AnnotationRecord {
 beforeEach(() => {
     vi.clearAllMocks();
     mocks.annotationHook = null;
+    mocks.hasLiveSource.mockReturnValue(true);
     const handle = { kind: "directory", name: "CARD" } as FileSystemDirectoryHandle;
     mocks.folder = { id: "folder-1", handle, label: "CARD", addedAt: 1, lastOpenedAt: 2 };
     const storage = new Map<string, string>();
@@ -59,32 +59,40 @@ afterEach(() => {
 });
 
 describe("notes-file nudge", () => {
-    it("does not offer creation when discovery attaches an existing file", async () => {
-        let finishDiscovery: (() => void) | undefined;
-        const discovery = new Promise<void>((resolve) => {
-            finishDiscovery = () => {
-                if (mocks.folder) {
-                    mocks.folder = {
-                        ...mocks.folder,
-                        sidecarHandle: { kind: "file", name: "notes.dashcamigo" } as FileSystemFileHandle,
-                    };
-                }
-                resolve();
-            };
-        });
-        mocks.notifyFolderOpened.mockReturnValue(discovery);
-
+    it("delegates discovery and creation to the connector once", async () => {
         mocks.annotationHook?.(record());
         await vi.waitFor(() => expect(mocks.notify).toHaveBeenCalled());
         const nudge = mocks.notify.mock.calls[0]![0];
         expect(nudge.messageKey).toBe("notesNudge.message");
         nudge.onAction?.();
 
-        await vi.waitFor(() => expect(mocks.notifyFolderOpened).toHaveBeenCalled());
-        expect(mocks.create, "creation must wait for discovery").not.toHaveBeenCalled();
-        finishDiscovery?.();
-        await vi.waitFor(() => expect(mocks.getFolder).toHaveBeenCalledTimes(4));
-        expect(mocks.create, "the discovered file is reused").not.toHaveBeenCalled();
-        expect(mocks.useExisting, "the discovered file is already connected").not.toHaveBeenCalled();
+        await vi.waitFor(() => expect(mocks.create).toHaveBeenCalledWith(mocks.folder));
+        expect(mocks.create).toHaveBeenCalledTimes(1);
+    });
+
+    it("uses a marker's clip anchor when its old folder record is gone", async () => {
+        mocks.folder = null;
+        const marker: AnnotationRecord = {
+            id: "marker-1",
+            folderId: "forgotten-folder",
+            updatedAt: 100,
+            deleted: false,
+            kind: "marker",
+            utc: 1_700_000_000_000,
+            text: "Turn",
+            anchor: { fileIdentityKey: "marker-clip-key", startUtc: 1_700_000_000_000, offsetSec: 5 },
+        };
+
+        mocks.annotationHook?.(marker);
+
+        await vi.waitFor(() => expect(mocks.notify).toHaveBeenCalled());
+        expect(mocks.hasLiveSource).toHaveBeenCalledWith("marker-clip-key");
+    });
+
+    it("hides a backup action when both the remembered folder and live source are gone", async () => {
+        mocks.folder = null;
+        mocks.hasLiveSource.mockReturnValue(false);
+
+        await expect(canConnectNotesBackup("forgotten-folder", "clip-key")).resolves.toBe(false);
     });
 });
