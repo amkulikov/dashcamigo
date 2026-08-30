@@ -72,9 +72,12 @@ import {
     applyPinchZoom,
     applyWheelPan,
     applyWheelZoom,
+    computeEffectiveMinViewSpan,
     computeFollowPan,
     computeMinViewSpan,
     normalizeWheelDelta,
+    resizeZoomViewEdge,
+    type ZoomViewState,
 } from "./strip-zoom.js";
 import { eventColors, subscribeThemeChange, themeColors } from "./theme.js";
 import { subscribeViewPanels } from "./view-menu.js";
@@ -192,121 +195,343 @@ function clearChartRulers(): void {
     if (dom.playerChartRulerTop) dom.playerChartRulerTop.innerHTML = "";
 }
 
+/** Keeps the navigator and its controls inert while there is no active trip. */
+function concealChartZoomReset(isConcealed: boolean): void {
+    dom.playerChartOverviewReset.classList.toggle("is-concealed", isConcealed);
+    dom.playerChartOverviewReset.disabled = isConcealed;
+    if (isConcealed) dom.playerChartOverviewReset.setAttribute("aria-hidden", "true");
+    else dom.playerChartOverviewReset.removeAttribute("aria-hidden");
+}
+
+function hideChartZoomNavigation(): void {
+    dom.playerChartZoomRow.hidden = true;
+    dom.playerChartOverview.hidden = true;
+    dom.playerChartZoomStatus.hidden = true;
+    concealChartZoomReset(true);
+    dom.playerChartZoomOut.disabled = true;
+    dom.playerChartZoomIn.disabled = true;
+}
+
+function setOverviewHandleValue(handle: HTMLDivElement, valueSec: number, minSec: number, maxSec: number): void {
+    const safeMin = Math.max(0, Math.min(minSec, maxSec));
+    const safeMax = Math.max(safeMin, maxSec);
+    const safeValue = Math.max(safeMin, Math.min(valueSec, safeMax));
+    handle.setAttribute("aria-valuemin", String(safeMin));
+    handle.setAttribute("aria-valuemax", String(safeMax));
+    handle.setAttribute("aria-valuenow", String(safeValue));
+    handle.setAttribute("aria-valuetext", formatTime(safeValue));
+}
+
+// Navigator drags sync on every pointer move. Reuse the locale formatters so
+// updating the compact status does not compile ICU patterns in that hot path.
+let chartZoomClockFormatter: Intl.DateTimeFormat | null = null;
+const chartZoomFactorFormatters: Array<Intl.NumberFormat | undefined> = [];
+
+function formatChartZoomClock(trip: Trip, contentSec: number): string {
+    chartZoomClockFormatter ??= new Intl.DateTimeFormat(getDateLocale(), {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+        timeZone: "UTC",
+    });
+    const unixSec = contentToWallUtc(trip.timeline, contentSec);
+    return chartZoomClockFormatter.format(displayClockDate(unixSec, trip.cameraTzSec));
+}
+
+function formatChartZoomFactor(factor: number, isFullView: boolean): string {
+    if (isFullView) return "1";
+    const precision = factor < 1.1 ? 3 : factor < 2 ? 2 : factor < 10 ? 1 : 0;
+    const formatter =
+        chartZoomFactorFormatters[precision] ??
+        new Intl.NumberFormat(getDateLocale(), {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: precision,
+        });
+    chartZoomFactorFormatters[precision] = formatter;
+    return formatter.format(factor);
+}
+
+function syncChartZoomStatus(trip: Trip, startSec: number, endSec: number, isFullView: boolean): void {
+    const visibleSpanSec = Math.max(Number.EPSILON, endSec - startSec);
+    const zoom = formatChartZoomFactor(trip.timeline.contentDurationSec / visibleSpanSec, isFullView);
+    const start = formatChartZoomClock(trip, startSec);
+    const end = formatChartZoomClock(trip, endSec);
+    const accessibleText = t("chart.zoomStatus", { zoom, start, end });
+
+    dom.playerChartZoomFactor.textContent = `${zoom}×`;
+    dom.playerChartZoomRange.textContent = `${start}–${end}`;
+    dom.playerChartZoomStatus.title = accessibleText;
+    dom.playerChartZoomStatus.setAttribute("aria-label", accessibleText);
+}
+
+// While one edge owns pointer capture, ARIA bounds keep the floor captured at
+// pointerdown. A programmatic export preview can be narrower than the normal
+// navigation floor, and reversing that same drag must remain possible.
+let overviewResizeMinSpanPct: number | null = null;
+
 /**
- * Mini-overview: viewport rect of the current visible window on a thin dark bar.
- * Visible only when zoomed (span < ~1).
+ * Full-trip navigator for the current visible window. It remains present at
+ * full view so its edge handles also provide a visible way to zoom in.
  *
- * Click centers the viewport on that point (via applyChartXRange).
- * Drag pans the viewport in real time.
- *
- * Works in no-gps mode too - overview shows viewport position within the trip;
- * GPS datasets are not needed.
- *
- * Frame thumbnails were previously rendered into the bar via stripCache; that
- * cost SD bandwidth (worker decodes) without real value at the 12-px bar
- * height. Export modal still draws frames into its own overview - see
- * export-modal-preview.ts.
+ * Works in no-gps mode too: it only depends on the trip duration and x scale.
  */
 function syncChartOverview(): void {
-    const overview = dom.playerChartOverview;
-    if (!overview) return;
-    // The reset chip tracks the overview's visibility (both mean "zoomed").
-    // Default hidden here so every early-return / not-zoomed path leaves it off;
-    // only the zoomed branch below un-hides it.
-    const resetBtn = dom.playerChartOverviewReset;
-    if (resetBtn) resetBtn.hidden = true;
     if (!state.chart || !state.active) {
-        overview.hidden = true;
+        hideChartZoomNavigation();
         return;
     }
     const trip = state.trips[state.active.trip];
     if (!trip) {
-        overview.hidden = true;
+        hideChartZoomNavigation();
         return;
     }
     const xScale = state.chart.scales.x;
-    if (!xScale) return;
-    const dur = trip.timeline.contentDurationSec;
-    if (dur <= 0) {
-        overview.hidden = true;
+    if (!xScale) {
+        hideChartZoomNavigation();
         return;
     }
-    const span = (xScale.max - xScale.min) / dur;
-    // Only show when zoomed (same rule as export-slider). At full overview the
-    // viewport rect would span 100% of the bar and convey nothing.
-    const isZoomed = span < 0.999;
-    overview.hidden = !isZoomed;
-    if (!isZoomed) return;
-    if (resetBtn) resetBtn.hidden = false;
-    const viewportEl = dom.playerChartOverviewViewport;
-    if (viewportEl) {
-        viewportEl.style.left = `${(xScale.min / dur) * 100}%`;
-        viewportEl.style.width = `${span * 100}%`;
+    const dur = trip.timeline.contentDurationSec;
+    if (dur <= 0) {
+        hideChartZoomNavigation();
+        return;
     }
+    const viewStartPct = Math.max(0, Math.min(1, xScale.min / dur));
+    const viewEndPct = Math.max(viewStartPct, Math.min(1, xScale.max / dur));
+    const span = viewEndPct - viewStartPct;
+    const normalMinSpan = computeMinViewSpan(dur);
+    const edgeMinSpan = overviewResizeMinSpanPct ?? computeEffectiveMinViewSpan(dur, span);
+    const isFullView = span >= 1 - 1e-6;
+
+    dom.playerChartZoomRow.hidden = false;
+    dom.playerChartOverview.hidden = false;
+    dom.playerChartZoomStatus.hidden = isFullView;
+    concealChartZoomReset(isFullView);
+    dom.playerChartZoomOut.disabled = isFullView;
+    dom.playerChartZoomIn.disabled = span <= normalMinSpan * (1 + 1e-3);
+    dom.playerChartOverviewViewport.style.left = `${viewStartPct * 100}%`;
+    dom.playerChartOverviewViewport.style.width = `${span * 100}%`;
+
+    // A long trip can make the visual viewport narrower than a pixel. Do not
+    // shrink its two edge controls with it: below two target widths they become
+    // adjacent clipped halves of one stable hit region. Clamp that region into
+    // the overview so both halves remain reachable at the trip edges too.
+    const overviewWidthPx = dom.playerChartOverview.clientWidth;
+    const targetSizePx = isCoarsePointer() ? 36 : 24;
+    const viewportWidthPx = span * overviewWidthPx;
+    const usesCompactHandles = overviewWidthPx >= targetSizePx * 2 && viewportWidthPx < targetSizePx * 2;
+    dom.playerChartOverviewViewport.classList.toggle("is-compact", usesCompactHandles);
+    if (usesCompactHandles) {
+        const viewportStartPx = viewStartPct * overviewWidthPx;
+        const viewportCenterPx = ((viewStartPct + viewEndPct) / 2) * overviewWidthPx;
+        const hitRegionCenterPx = Math.max(targetSizePx, Math.min(viewportCenterPx, overviewWidthPx - targetSizePx));
+        dom.playerChartOverviewViewport.style.setProperty(
+            "--compact-handle-center-x",
+            `${hitRegionCenterPx - viewportStartPx}px`,
+        );
+    } else {
+        dom.playerChartOverviewViewport.style.removeProperty("--compact-handle-center-x");
+    }
+
+    const minSpanSec = edgeMinSpan * dur;
+    const startSec = viewStartPct * dur;
+    const endSec = viewEndPct * dur;
+    syncChartZoomStatus(trip, startSec, endSec, isFullView);
+    setOverviewHandleValue(dom.playerChartOverviewStart, startSec, 0, endSec - minSpanSec);
+    setOverviewHandleValue(dom.playerChartOverviewEnd, endSec, startSec + minSpanSec, dur);
 }
 
 /**
- * Attaches overview click + drag-pan handlers. Called once from initChart.
- * Same logic as the export-slider but without a selection rect (main player has none).
+ * Applies a navigator gesture as inspection zoom. This deliberately breaks an
+ * export preview's playback clamp and pauses auto-follow, matching wheel, pinch,
+ * and drag-select gestures.
  */
+function applyNavigatorView(next: ZoomViewState, durationSec: number): void {
+    const fullView = next.viewStartPct <= 1e-6 && next.viewEndPct >= 1 - 1e-6;
+    state.isPreviewZoom = false;
+    noteUserTimelineInteraction();
+    applyChartXRange(next.viewStartPct * durationSec, next.viewEndPct * durationSec, fullView);
+}
+
+function overviewRatioAt(clientX: number): number | null {
+    const box = dom.playerChartOverview.getBoundingClientRect();
+    if (box.width <= 0) return null;
+    return Math.max(0, Math.min(1, (clientX - box.left) / box.width));
+}
+
+function currentOverviewView(): { durationSec: number; view: ZoomViewState } | null {
+    if (!state.chart || !state.active) return null;
+    const trip = state.trips[state.active.trip];
+    const xScale = state.chart.scales.x;
+    if (!trip || !xScale || trip.timeline.contentDurationSec <= 0) return null;
+    const durationSec = trip.timeline.contentDurationSec;
+    const viewStartPct = Math.max(0, Math.min(1, xScale.min / durationSec));
+    return {
+        durationSec,
+        view: {
+            viewStartPct,
+            viewEndPct: Math.max(viewStartPct, Math.min(1, xScale.max / durationSec)),
+        },
+    };
+}
+
+let overviewGesturePointerId: number | null = null;
+
+function attachOverviewHandleEvents(handle: HTMLDivElement, edge: "start" | "end"): void {
+    suppressEdgeSwipeNav(handle);
+    const resizeTo = (clientX: number, gestureMinSpan: number): void => {
+        const current = currentOverviewView();
+        const ratio = overviewRatioAt(clientX);
+        if (!current || ratio === null) return;
+        applyNavigatorView(
+            resizeZoomViewEdge(current.view, edge, ratio, current.durationSec, gestureMinSpan),
+            current.durationSec,
+        );
+    };
+
+    handle.addEventListener("pointerdown", (e: PointerEvent) => {
+        if (e.pointerType === "mouse" && e.button !== 0) return;
+        if (overviewGesturePointerId !== null) return;
+        const initial = currentOverviewView();
+        if (dom.playerChartOverview.hidden || !initial) return;
+        const gestureMinSpan = computeEffectiveMinViewSpan(
+            initial.durationSec,
+            initial.view.viewEndPct - initial.view.viewStartPct,
+        );
+        e.preventDefault();
+        e.stopPropagation();
+        handle.setPointerCapture(e.pointerId);
+        overviewGesturePointerId = e.pointerId;
+        overviewResizeMinSpanPct = gestureMinSpan;
+        handle.classList.add("is-dragging");
+        function onMove(event: PointerEvent): void {
+            if (event.pointerId === e.pointerId) resizeTo(event.clientX, gestureMinSpan);
+        }
+        function finish(event: PointerEvent, shouldRelease: boolean): void {
+            if (event.pointerId !== e.pointerId) return;
+            handle.removeEventListener("pointermove", onMove);
+            handle.removeEventListener("pointerup", onUp);
+            handle.removeEventListener("pointercancel", onUp);
+            handle.removeEventListener("lostpointercapture", onLostCapture);
+            handle.classList.remove("is-dragging");
+            overviewGesturePointerId = null;
+            overviewResizeMinSpanPct = null;
+            // During the drag, ARIA keeps the gesture-start floor so reversing
+            // direction cannot jump. Once the gesture ends, announce the
+            // current span as the floor for the next independent gesture.
+            syncChartOverview();
+            if (shouldRelease) {
+                try {
+                    handle.releasePointerCapture(event.pointerId);
+                } catch {
+                    /* pointer already released */
+                }
+            }
+            // Conditional export actions may change the trim-bar height. Their
+            // sync is deferred while this class is present so the timeline
+            // never moves under the pointer; settle them after the gesture.
+            callbacks.onSelectionChange?.();
+        }
+        function onUp(event: PointerEvent): void {
+            finish(event, true);
+        }
+        function onLostCapture(event: PointerEvent): void {
+            finish(event, false);
+        }
+        handle.addEventListener("pointermove", onMove);
+        handle.addEventListener("pointerup", onUp);
+        handle.addEventListener("pointercancel", onUp);
+        handle.addEventListener("lostpointercapture", onLostCapture);
+    });
+
+    handle.addEventListener("keydown", (e: KeyboardEvent) => {
+        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+        const current = currentOverviewView();
+        if (!current) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const minSpan = computeMinViewSpan(current.durationSec);
+        const gestureMinSpan = computeEffectiveMinViewSpan(
+            current.durationSec,
+            current.view.viewEndPct - current.view.viewStartPct,
+        );
+        const baseStep = Math.max(0.01, minSpan);
+        const step = Math.min(1, e.shiftKey ? baseStep * 5 : baseStep);
+        const value = edge === "start" ? current.view.viewStartPct : current.view.viewEndPct;
+        const target = value + (e.key === "ArrowLeft" ? -step : step);
+        applyNavigatorView(
+            resizeZoomViewEdge(current.view, edge, target, current.durationSec, gestureMinSpan),
+            current.durationSec,
+        );
+    });
+}
+
+/** Attaches track centering, viewport pan, and edge-resize handlers. */
 function attachOverviewEvents(): void {
     const overview = dom.playerChartOverview;
-    if (!overview) return;
-    // Full-row drag surface: a pan started at the screen edge is an iOS
-    // swipe-back candidate. Pan runs on pointerdown, not click, so cancelling
-    // the edge touchstart loses nothing.
     suppressEdgeSwipeNav(overview);
-    const moveViewportTo = (clientX: number): void => {
-        if (!state.chart || !state.active) return;
-        const trip = state.trips[state.active.trip];
-        if (!trip) return;
-        const xScale = state.chart.scales.x;
-        if (!xScale) return;
-        const dur = trip.timeline.contentDurationSec;
-        if (dur <= 0) return;
-        const box = overview.getBoundingClientRect();
-        const ratio = Math.max(0, Math.min(1, (clientX - box.left) / box.width));
-        const span = (xScale.max - xScale.min) / dur;
-        // Center the viewport on the click point.
-        let newStart = ratio - span / 2;
-        let newEnd = newStart + span;
-        if (newStart < 0) {
-            newStart = 0;
-            newEnd = span;
-        }
-        if (newEnd > 1) {
-            newEnd = 1;
-            newStart = 1 - span;
-        }
-        // Overview drag = manual pan: inspection window + pause auto-follow.
-        state.isPreviewZoom = false;
-        noteUserTimelineInteraction();
-        applyChartXRange(newStart * dur, newEnd * dur, span >= 1 - 1e-6);
-    };
-    // Click event on the overview is an artefact of pointerdown+pointerup
-    // without movement. Pan semantics already ran in pointerdown, click is
-    // not needed. Suppress the bubble so the shared seek-handler on
-    // .player-chart does not also run a player-seek on top of the pan.
-    overview.addEventListener("click", (e) => e.stopPropagation());
+    attachOverviewHandleEvents(dom.playerChartOverviewStart, "start");
+    attachOverviewHandleEvents(dom.playerChartOverviewEnd, "end");
+
+    // Pointerdown already applies track centering; swallow its synthetic click
+    // before the chart-wide seek handler sees it.
+    dom.playerChartZoomRow.addEventListener("click", (e) => e.stopPropagation());
     overview.addEventListener("pointerdown", (e: PointerEvent) => {
-        if (overview.hidden) return;
+        if (e.pointerType === "mouse" && e.button !== 0) return;
+        if (overviewGesturePointerId !== null) return;
+        if (overview.hidden || !(e.target instanceof Element)) return;
+        if (e.target.closest(".range-overview-handle")) return;
+        const current = currentOverviewView();
+        const pointerRatio = overviewRatioAt(e.clientX);
+        if (!current || pointerRatio === null) return;
         e.preventDefault();
+        const span = current.view.viewEndPct - current.view.viewStartPct;
+        const startsInsideViewport = Boolean(e.target.closest("#player-chart-overview-viewport"));
+        const grabOffset = startsInsideViewport ? pointerRatio - current.view.viewStartPct : span / 2;
+
+        const moveViewportTo = (clientX: number): void => {
+            const ratio = overviewRatioAt(clientX);
+            if (ratio === null) return;
+            const newStart = Math.max(0, Math.min(ratio - grabOffset, 1 - span));
+            applyNavigatorView({ viewStartPct: newStart, viewEndPct: newStart + span }, current.durationSec);
+        };
+
         overview.setPointerCapture(e.pointerId);
+        overviewGesturePointerId = e.pointerId;
+        overview.classList.add("is-panning");
         moveViewportTo(e.clientX);
-        const onMove = (ev: PointerEvent): void => moveViewportTo(ev.clientX);
-        const onUp = (ev: PointerEvent): void => {
+        function onMove(ev: PointerEvent): void {
+            if (ev.pointerId === e.pointerId) moveViewportTo(ev.clientX);
+        }
+        function finish(ev: PointerEvent, shouldRelease: boolean): void {
+            if (ev.pointerId !== e.pointerId) return;
             overview.removeEventListener("pointermove", onMove);
             overview.removeEventListener("pointerup", onUp);
             overview.removeEventListener("pointercancel", onUp);
-            try {
-                overview.releasePointerCapture(ev.pointerId);
-            } catch {
-                /* ignore */
+            overview.removeEventListener("lostpointercapture", onLostCapture);
+            overview.classList.remove("is-panning");
+            overviewGesturePointerId = null;
+            if (shouldRelease) {
+                try {
+                    overview.releasePointerCapture(ev.pointerId);
+                } catch {
+                    /* pointer already released */
+                }
             }
-        };
+            // See the handle path above: reveal any newly-relevant export
+            // action only after panning stops, not during pointer capture.
+            callbacks.onSelectionChange?.();
+        }
+        function onUp(ev: PointerEvent): void {
+            finish(ev, true);
+        }
+        function onLostCapture(ev: PointerEvent): void {
+            finish(ev, false);
+        }
         overview.addEventListener("pointermove", onMove);
         overview.addEventListener("pointerup", onUp);
         overview.addEventListener("pointercancel", onUp);
+        overview.addEventListener("lostpointercapture", onLostCapture);
     });
 }
 
@@ -467,9 +692,9 @@ export function followPlayheadInZoom(sec: number): void {
     callbacks.onSelectionChange?.();
 }
 
-/** Zooms the timeline one step in (direction=1) or out (-1) around the centre of
- *  the visible window. The keyboard counterpart of the wheel zoom; reuses the
- *  exact applyWheelZoom math (centre anchor since there is no cursor). */
+/** Zooms the timeline one step in (direction=1) or out (-1). The playhead is the
+ *  anchor while it is visible; otherwise the window centre is stable. Used by
+ *  both the explicit controls and the global +/- shortcuts. */
 export function zoomTimelineStep(direction: 1 | -1): void {
     if (!state.chart || !state.active) return;
     const trip = state.trips[state.active.trip];
@@ -479,8 +704,12 @@ export function zoomTimelineStep(direction: 1 | -1): void {
     const xScale = state.chart.scales.x;
     if (!xScale) return;
     const view = { viewStartPct: xScale.min / dur, viewEndPct: xScale.max / dur };
-    // dy < 0 zooms in; anchor at the window centre (cursorRatio 0.5).
-    const next = applyWheelZoom(view, 0.5, direction === 1 ? -240 : 240, dur);
+    const playheadSec = callbacks.getTripCurrentTime();
+    const spanSec = xScale.max - xScale.min;
+    const isPlayheadVisible = playheadSec >= xScale.min && playheadSec <= xScale.max && spanSec > 0;
+    const anchorRatio = isPlayheadVisible ? (playheadSec - xScale.min) / spanSec : 0.5;
+    // dy < 0 zooms in; applyWheelZoom keeps the chosen anchor stable.
+    const next = applyWheelZoom(view, anchorRatio, direction === 1 ? -240 : 240, dur);
     if (!next) return;
     const fullView = next.viewStartPct <= 1e-6 && next.viewEndPct >= 1 - 1e-6;
     // Keyboard zoom is inspection, not a preview - the window follows the
@@ -892,7 +1121,7 @@ export function initChart(cb: ChartCallbacks): void {
     //  - chart canvas: lands here directly (options.onClick removed).
     //  - strip canvas: its own onClick does the snap-to-event-start and stops
     //    propagation, so there is no second seek here.
-    //  - overview drag: also stops its own click below.
+    //  - navigator drag: also stops its own click below.
     //  - event-marker capture-click: already calls stopImmediatePropagation
     //    (see the canvas click handler in initEventPopupListeners), which keeps
     //    this handler from firing on top of the marker.
@@ -914,13 +1143,26 @@ export function initChart(cb: ChartCallbacks): void {
     // Double-click on the canvas resets zoom.
     // Double-click is the standard gesture for chartjs-plugin-zoom.
     dom.chartCanvas.addEventListener("dblclick", resetTimelineZoom);
-    // Visible reset affordance inside the overview (shown only while zoomed), so
+    // Keyboard activation has detail=0. When an action reaches its limit and
+    // disables itself, keep focus on the remaining usable zoom control.
+    dom.playerChartZoomOut.addEventListener("click", (e) => {
+        e.stopPropagation();
+        zoomTimelineStep(-1);
+        if (e.detail === 0 && dom.playerChartZoomOut.disabled) dom.playerChartZoomIn.focus();
+    });
+    dom.playerChartZoomIn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        zoomTimelineStep(1);
+        if (e.detail === 0 && dom.playerChartZoomIn.disabled) dom.playerChartZoomOut.focus();
+    });
+    // Visible reset affordance left of the stable -/+ pair (shown only while zoomed), so
     // returning to full view doesn't depend on the undiscoverable dblclick - and
     // works on touch, where dblclick-to-reset is unreliable. stopPropagation so
-    // the tap isn't also read by the overview's click-to-pan handler.
-    dom.playerChartOverviewReset?.addEventListener("click", (e) => {
+    // the tap isn't also read by the chart-wide seek handler.
+    dom.playerChartOverviewReset.addEventListener("click", (e) => {
         e.stopPropagation();
         resetTimelineZoom();
+        if (e.detail === 0) dom.playerChartZoomIn.focus();
     });
 
     // UX-15: hover/click on an event marker shows a popup with ±5/±10/±30 s buttons.
@@ -944,7 +1186,7 @@ export function initChart(cb: ChartCallbacks): void {
         }
     });
 
-    // Resize sync: ruler ticks and overview viewport rect depend on
+    // Resize sync: ruler ticks and navigator viewport rect depend on
     // chartArea.width; redraw on resize. Observes the host row, not the
     // canvas: a display:none canvas (no-GPS collapse / View menu) stops
     // resizing, but the ruler + the synthetic gutter (px-derived fractions in
@@ -962,7 +1204,7 @@ export function initChart(cb: ChartCallbacks): void {
         if (dom.playerChartEl) ro.observe(dom.playerChartEl);
     }
 
-    // Overview - click/drag pans the viewport.
+    // Overview - click centres, body drag pans, edge drag resizes.
     attachOverviewEvents();
 
     // Wheel: vertical → zoom around cursor, horizontal → pan view.
@@ -1065,7 +1307,7 @@ function chartSecAtClientX(clientX: number): number | null {
 // two-finger pinch. We track touch contacts on the whole .player-chart and
 // promote to a pinch on the second finger, anchoring the content under the
 // gesture-start centroid to the moving centroid (zoom + pan in one motion -
-// same model as the video pinch). The overview (pan) and mini-progress (seek)
+// same model as the video pinch). The navigator (pan) and mini-progress (seek)
 // keep their own single-finger drag, so a finger there is NOT counted toward a
 // pinch and we never fight their pointer capture.
 const chartTouchPointers = new Map<number, { x: number; y: number }>();
@@ -1099,15 +1341,15 @@ function initChartTouchZoom(): void {
     const host = dom.playerChartEl;
     if (!host) return;
 
-    // Overview, mini-progress and the export range pull-tabs own their
-    // single-finger drag; a contact there is not eligible to start a pinch.
+    // The zoom row, mini-progress and export pull-tabs own their pointers; a
+    // contact there is not eligible to start a pinch.
     // The pinch captures BOTH pointers on the host, which silently steals a
     // tab's capture mid-drag: the tab gets lostpointercapture (not
     // pointercancel), its own move/up listeners never fire again, and its
     // value bubble hangs around. Same list as the mouse drag-select below.
     const eligible = (target: EventTarget | null): boolean => {
         if (!(target instanceof Element)) return true;
-        return !target.closest("#player-chart-overview, #player-mini-progress, .timeline-range__tab");
+        return !target.closest(".chart-zoom-row, #player-mini-progress, .timeline-range__tab");
     };
 
     const startPinch = (): void => {
@@ -1216,7 +1458,7 @@ function initChartTouchZoom(): void {
 // Audacity-style: press on the timeline background, drag horizontally, release -
 // the selected span becomes the visible window (the same applyChartXRange path
 // as wheel/pinch, so chartZoomed/export-selection semantics are identical).
-// Mouse-only: touch keeps pinch, and the overview / mini-progress / export
+// Mouse-only: touch keeps pinch, and the navigator / mini-progress / export
 // pull-tabs own their pointers and never start a selection. A press that stays
 // under the threshold remains a plain seek-click.
 
@@ -1239,12 +1481,11 @@ function initChartDragSelectZoom(): void {
     let isSelecting = false;
     let selectRectEl: HTMLDivElement | null = null;
 
-    // The overview and mini-progress rows own their single-finger/mouse drags
-    // (pan and scrub); the export pull-tabs and any real button (overview
-    // reset) keep their native behavior.
+    // The zoom row and mini-progress own their drags; export pull-tabs and
+    // buttons keep their native behavior.
     const eligible = (target: EventTarget | null): boolean => {
         if (!(target instanceof Element)) return true;
-        return !target.closest("#player-chart-overview, #player-mini-progress, .timeline-range__tab, button");
+        return !target.closest(".chart-zoom-row, #player-mini-progress, .timeline-range__tab, button");
     };
 
     // Selection endpoints must resolve even when the mouse travels past the
@@ -1652,21 +1893,31 @@ function relSecToPlayerChartCssX(relSec: number, view: TimelineView | null = get
     return frac * dom.playerChartEl.clientWidth;
 }
 
-/** Updates the orange playhead overlay - one DOM element spanning chart
+/** Updates the playhead overlay - one DOM element spanning chart
  *  canvas + ruler + strip. Called from player.ts on timeupdate. Cheap:
  *  CSS left only, no canvas redraw. */
+const PLAYHEAD_VIEW_EDGE_EPSILON_SEC = 0.001;
+
 export function setPlayerCursorRelSec(relSec: number | null, view: TimelineView | null = getTimelineView()): void {
     const el = dom.playerChartPlayhead;
     if (!el) return;
     if (relSec == null) {
+        dom.playerChartEl.classList.remove("is-playhead-outside-view");
         el.hidden = true;
         return;
     }
     const x = relSecToPlayerChartCssX(relSec, view);
     if (x == null) {
+        dom.playerChartEl.classList.remove("is-playhead-outside-view");
         el.hidden = true;
         return;
     }
+    const isOutsideView = Boolean(
+        view &&
+            (relSec < view.startSec - PLAYHEAD_VIEW_EDGE_EPSILON_SEC ||
+                relSec > view.endSec + PLAYHEAD_VIEW_EDGE_EPSILON_SEC),
+    );
+    dom.playerChartEl.classList.toggle("is-playhead-outside-view", isOutsideView);
     // Center the 2px line on x (offset by half its width).
     el.style.left = `${x - 1}px`;
     el.hidden = false;
@@ -2560,8 +2811,8 @@ export function disposeChartHoverThumbs(): void {
     tooltipThumbLastKey = null;
     tooltipThumbDrawnKey = null;
     clearTooltipThumb();
-    // Trip change: drop ruler ticks of the old trip and hide the mini-overview
-    // until the new trip's chart has rendered + got zoomed.
+    // Trip change: drop the old-trip ruler and navigator state until the new
+    // trip's chart has rendered.
     clearChartRulers();
-    if (dom.playerChartOverview) dom.playerChartOverview.hidden = true;
+    hideChartZoomNavigation();
 }

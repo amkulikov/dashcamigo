@@ -12,17 +12,15 @@
 .player-chart:has(#player-chart-canvas[hidden]) > .chart-axis-label {
     display: none;
 }
-/* Cross-cutting cursor overlays sit on top of the whole .player-chart -
-   chart canvas, ruler and strip end up under one continuous vertical
-   line. position absolute relative to .player-chart (which is
-   position:relative below). Updated from JS via setPlayerCursorRelSec /
-   setHoverCursorRelSec in chart.ts. pointer-events:none so they do not
-   capture clicks meant for chart/strip. */
+/* Cross-cutting cursor overlays sit on top of the viewport-mapped timeline
+   rows: scrubber, ruler, chart and strip end up under one continuous vertical
+   line. The whole-trip navigator below them has a different coordinate basis,
+   so every viewport overlay stops at --chart-zoom-row-h. */
 .player-chart-playhead {
     position: absolute;
     top: 0;
+    bottom: var(--chart-zoom-row-h);
     width: 2px;
-    height: 100%;
     background: var(--accent);
     pointer-events: none;
     /* The single position indicator: a soft glow makes it read clearly over
@@ -37,11 +35,15 @@
 .player-chart-playhead[hidden] {
     display: none;
 }
+.player-chart.is-playhead-outside-view .player-chart-playhead {
+    background: var(--fg-mute);
+    box-shadow: 0 0 4px color-mix(in srgb, var(--fg-mute) 45%, transparent);
+}
 .player-chart-hover-cursor {
     position: absolute;
     top: 0;
+    bottom: var(--chart-zoom-row-h);
     width: 1px;
-    height: 100%;
     background: rgba(255, 255, 255, 0.35);
     pointer-events: none;
     z-index: 4;
@@ -62,13 +64,13 @@
     display: none;
 }
 /* Drag-select zoom rectangle (mouse): live preview of the span that becomes
-   the visible window on release. Spans the whole timeline stack like the
+   the visible window on release. Spans the viewport-mapped rows like the
    playhead; z5 sits over chart content and the hover cursor but under the
    export masks (z6) and the playhead (z7). */
 .chart-drag-select {
     position: absolute;
     top: 0;
-    bottom: 0;
+    bottom: var(--chart-zoom-row-h);
     z-index: 5;
     pointer-events: none;
     background: color-mix(in srgb, var(--accent) 14%, transparent);
@@ -76,11 +78,14 @@
 }
 
 .player-chart {
+    --chart-zoom-target-size: 24px;
+    --chart-zoom-row-h: calc(var(--chart-zoom-target-size) + var(--dc-space-1));
+
     position: relative;
     background: var(--bg-elev);
     border-top: 1px solid var(--border);
     /* Flex-column layout: scrubber on top (next to the transport bar), then
-       ruler, canvas in the middle (flex:1), strip + overview at the bottom.
+       ruler, canvas in the middle (flex:1), strip + zoom row at the bottom.
        Canvas stays flex:1, the fixed rows are auto. min-width:0 +
        overflow:hidden is the same chicken-egg fix as
        before: the Chart.js canvas gets an inline width=Npx, and without
@@ -123,10 +128,10 @@
 .player-chart-canvas-wrap:has(> canvas[hidden]) {
     flex: 0 0 0;
 }
-/* Ruler/overview do not grow with the canvas - they hold their own
+/* Ruler/zoom row do not grow with the canvas - they hold their own
    height inside the .player-chart flex column. */
 .player-chart > .range-ruler,
-.player-chart > .range-overview {
+.player-chart > .chart-zoom-row {
     flex: 0 0 auto;
 }
 
@@ -167,17 +172,53 @@
     left: auto;
 }
 
-/* Mini-overview under the chart - visible only while zoomed. position:relative
-   is required for the absolute viewport rect; .player-chart override above
-   re-skins background/border for the viewing context. */
+/* Dedicated bottom row keeps the navigator and explicit controls out of the
+   plotted data. The navigator yields width first; controls keep usable targets. */
+.chart-zoom-row {
+    /* Keep a useful navigator in the middle while the labelled reset action
+       grows into the available room. The two equal side slots still centre
+       the navigator, but unlike a breakpoint jump this changes continuously
+       as the player gets wider. */
+    --chart-zoom-compact-actions-width: calc(
+        var(--chart-zoom-target-size) +
+        var(--chart-zoom-target-size) +
+        var(--chart-zoom-target-size) +
+        4px
+    );
+    --chart-zoom-actions-width: clamp(var(--chart-zoom-compact-actions-width), calc((100cqi - 288px) / 2), 180px);
+
+    display: flex;
+    box-sizing: border-box;
+    align-items: center;
+    gap: var(--dc-space-1);
+    min-width: 0;
+    height: var(--chart-zoom-row-h);
+    padding-top: var(--dc-space-1);
+}
+.chart-zoom-row[hidden] {
+    display: none;
+}
+.chart-zoom-row::before {
+    content: "";
+    flex: 0 0 var(--chart-zoom-actions-width);
+}
+
+/* Full-trip zoom navigator. The highlighted viewport stays in the layout at
+   full view so its two edge handles are always discoverable. */
 .range-overview {
     position: relative;
-    height: 12px;
-    margin-top: var(--dc-space-1);
+    flex: 1 1 auto;
+    /* At least two adjacent control targets fit in the track. At extreme zoom
+       the visual viewport may be sub-pixel, but its two edge hit zones must
+       remain independently grabbable. */
+    min-width: calc(var(--chart-zoom-target-size) * 2 + 2px);
+    height: var(--chart-zoom-target-size);
     border-radius: var(--dc-radius-sm);
     overflow: hidden;
-    background: var(--dc-black);
+    background: var(--bg);
+    border: 1px solid var(--border);
     cursor: pointer;
+    user-select: none;
     /* Drag-to-pan surface: block the browser's native touch scroll so a finger
        drag pans the zoom window instead of scrolling the page (matches the other
        drag surfaces: .player-mini-progress, .mini-map, .timeline-range__tab). */
@@ -187,67 +228,222 @@
     display: none;
 }
 
-/* "Full view" reset chip - floats top-right of the chart, shown only while zoomed
-   (JS toggles [hidden] in syncChartOverview). Ephemeral, so it doesn't add a
-   persistent control to the bar. */
-.range-overview-reset {
+/* Keep status out of flex geometry: changing the navigator width during an
+   edge drag would change its pointer ratio and make the handle oscillate. */
+.chart-zoom-status {
     position: absolute;
-    top: var(--dc-space-1);
-    right: var(--dc-space-1);
-    z-index: 4;
+    top: 50%;
+    left: 50%;
+    z-index: 1;
+    display: flex;
+    align-items: baseline;
+    gap: var(--dc-space-1);
+    max-width: calc(100% - 48px);
+    min-width: 0;
+    padding: 1px var(--dc-space-1);
+    transform: translate(-50%, -50%);
+    border-radius: var(--dc-radius-xs);
+    background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
+    font-family: var(--dc-font-mono);
+    font-size: var(--dc-text-2xs);
+    font-variant-numeric: tabular-nums;
+    line-height: 14px;
+    color: var(--fg-mute);
+    white-space: nowrap;
+    pointer-events: none;
+}
+.chart-zoom-status[hidden] {
+    display: none;
+}
+.chart-zoom-status__factor {
+    flex: 0 0 auto;
+    color: var(--fg);
+    font-weight: 650;
+}
+.chart-zoom-status__separator {
+    flex: 0 0 auto;
+    color: var(--border-strong);
+}
+.chart-zoom-status__range {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Reset keeps its slot while concealed, so the navigator and trailing -/+
+   controls do not move when zoom first makes it visible. */
+.chart-zoom-controls {
+    display: flex;
+    flex: 0 0 var(--chart-zoom-actions-width);
+    align-items: center;
+    gap: 2px;
+    width: var(--chart-zoom-actions-width);
+    min-width: 0;
+}
+.chart-zoom-control,
+.range-overview-reset {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 24px;
-    height: 24px;
+    height: var(--chart-zoom-target-size);
+    margin: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-xs);
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+.chart-zoom-control {
+    flex: 0 0 var(--chart-zoom-target-size);
+    width: var(--chart-zoom-target-size);
+    padding: 0;
+    background: var(--bg-elev);
+    color: var(--fg);
+}
+.chart-zoom-control:hover:not(:disabled) {
+    background: var(--bg-hover);
+}
+.chart-zoom-control:active:not(:disabled) {
+    background: var(--bg-active);
+}
+.chart-zoom-control:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+.range-overview-reset {
+    flex: 1 1 auto;
+    min-width: var(--chart-zoom-target-size);
     padding: 0 var(--dc-space-2);
     gap: var(--dc-space-1);
-    border: 1px solid var(--accent);
-    border-radius: var(--dc-radius-xs);
+    overflow: hidden;
     background: var(--accent);
     color: var(--dc-black);
     font-size: var(--dc-text-xs);
     font-weight: 650;
-    cursor: pointer;
 }
-.range-overview-reset:hover {
+.range-overview-reset span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.range-overview-reset:hover:not(:disabled) {
     background: var(--accent-hot);
-    border-color: var(--accent-hot);
 }
-.range-overview-reset[hidden] {
-    display: none;
+.chart-zoom-control:focus-visible,
+.range-overview-reset:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+.range-overview-reset.is-concealed {
+    visibility: hidden;
+    pointer-events: none;
 }
 @media (pointer: coarse) {
-    .range-overview-reset {
-        min-width: 36px;
-        height: 36px;
+    .player-chart {
+        --chart-zoom-target-size: 36px;
+    }
+    .chart-zoom-row {
+        /* Touch never needs a text label beside the standard full-view icon.
+           Keeping the compact slot on tablets gives that width back to the
+           navigator and avoids a permanently truncated label. */
+        --chart-zoom-actions-width: var(--chart-zoom-compact-actions-width);
+    }
+    .range-overview-reset span {
+        display: none;
     }
 }
 .range-overview-viewport {
     position: absolute;
     top: 0;
     bottom: 0;
-    border: 2px solid var(--dc-white);
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
-    pointer-events: none;
+    background: color-mix(in srgb, var(--accent) 30%, transparent);
+    border-inline: 1.5px solid var(--accent);
+    cursor: grab;
+    pointer-events: auto;
+}
+.range-overview.is-panning .range-overview-viewport {
+    cursor: grabbing;
+}
+.range-overview-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 2;
+    width: var(--chart-zoom-target-size);
+    cursor: ew-resize;
+    touch-action: none;
+}
+.range-overview-handle--start {
+    left: 0;
+}
+.range-overview-handle--end {
+    right: 0;
+}
+.range-overview-handle::before {
+    content: "";
+    position: absolute;
+    top: 2px;
+    bottom: 2px;
+    width: 3px;
+    border-radius: 2px;
+    background: var(--accent);
+}
+.range-overview-handle--start::before {
+    left: 1px;
+}
+.range-overview-handle--end::before {
+    right: 1px;
+}
+.range-overview-handle:hover::before,
+.range-overview-handle.is-dragging::before {
+    background: var(--accent-hot);
+}
+.range-overview-handle:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
 }
 
-/* Player-mode overview re-skin. The base .range-overview above is a black
-   backdrop with a white viewport border (a leftover convention from when the
-   ruler was shared with strip thumbs). In viewing mode there are no thumbs, so
-   a black box with a white border looks alien against the bg-elev panel.
-   Re-style as an inset track: subtle dimmed bar + orange highlight viewport. */
-.player-chart .range-overview {
-    background: var(--bg);
-    border: 1px solid var(--border);
+/* Once the visual viewport is narrower than two edge targets, both handles
+   share a stable 2-target hit region around it: its left half owns the start,
+   its right half owns the end. clip-path affects pointer hit-testing, so the
+   later end handle cannot cover the start handle. JS clamps the region inside
+   the overview via --compact-handle-center-x. Exact range geometry remains on
+   the viewport's own border; the displaced hit zones add no false boundary. */
+.range-overview-viewport.is-compact .range-overview-handle {
+    left: var(--compact-handle-center-x);
+    right: auto;
+    width: calc(var(--chart-zoom-target-size) * 2);
+    transform: translateX(-50%);
 }
-.player-chart .range-overview-viewport {
-    background: color-mix(in srgb, var(--accent) 30%, transparent);
-    border-top: none;
-    border-bottom: none;
-    border-left: 1.5px solid var(--accent);
-    border-right: 1.5px solid var(--accent);
-    box-shadow: none;
+.range-overview-viewport.is-compact .range-overview-handle--start {
+    clip-path: inset(0 50% 0 0);
+}
+.range-overview-viewport.is-compact .range-overview-handle--end {
+    clip-path: inset(0 0 0 50%);
+}
+.range-overview-viewport.is-compact .range-overview-handle::before {
+    display: none;
+}
+.range-overview-viewport.is-compact:has(.range-overview-handle:hover),
+.range-overview-viewport.is-compact:has(.range-overview-handle.is-dragging) {
+    border-inline-color: var(--accent-hot);
+}
+.range-overview-viewport.is-compact:has(.range-overview-handle:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+.range-overview-viewport.is-compact .range-overview-handle:focus-visible {
+    outline: none;
+}
+
+@container pwrap (max-width: 647px) {
+    .chart-zoom-status__separator,
+    .chart-zoom-status__range {
+        display: none;
+    }
+    .range-overview-reset span {
+        display: none;
+    }
 }
 
 /* Keyframe kept for the map.css mini-map shimmer (shared name, shared util);
@@ -260,7 +456,7 @@
         transform: translateX(100%);
     }
 }
-/* We do NOT hide rulers and overview in no-gps: they show the time-scale +
+/* We do NOT hide rulers and navigator in no-gps: they show the time-scale +
    navigation, and work without GPS data. */
 
 /* UX-16: unit labels in the corners of the ruler row (top: 0..14 - outside
@@ -380,8 +576,8 @@
 .player-chart-flash {
     position: absolute;
     top: 0;
+    bottom: var(--chart-zoom-row-h);
     width: 24px;
-    height: 100%;
     background: radial-gradient(
         ellipse at 50% 50%,
         color-mix(in srgb, var(--accent) 45%, transparent),
@@ -535,17 +731,19 @@
     /* Route the two-finger pinch into our zoom handler instead of the browser's
        page zoom: pan-y still lets a single finger scroll the viewer vertically,
        but a pinch is no longer a recognised gesture here so both pointers reach
-       the JS pinch (chart.ts). Children that own a drag (overview, mini-progress)
+       the JS pinch (chart.ts). Children that own a drag (zoom row, mini-progress)
        keep their own touch-action:none. */
     .player-chart {
         --scrubber-h: 24px;
         touch-action: pan-y;
     }
-    /* The zoomed-timeline drag-pan bar is 12px - a thin touch handle. Grow the
-       grabbable height to match the mini-progress bump (the viewport rect inside
-       scales via top:0/bottom:0). Only present while zoomed, so no permanent cost. */
-    .range-overview {
-        height: 20px;
+    /* Keep the persistent navigator compact while widening its edge targets in
+       the drag direction. */
+    .chart-zoom-status {
+        max-width: calc(100% - 76px);
+    }
+    .range-overview-handle {
+        width: min(36px, 50%);
     }
 }
 .player-mini-progress__thumb {
@@ -564,6 +762,12 @@
     pointer-events: none;
     /* No position transition: the vertical playhead snaps on each timeupdate,
        so the thumb must snap too - an eased thumb drifted behind the playhead. */
+}
+.player-chart.is-playhead-outside-view .player-mini-progress__thumb {
+    background: var(--fg-mute);
+    box-shadow:
+        0 0 0 2px var(--bg),
+        0 0 4px color-mix(in srgb, var(--fg-mute) 45%, transparent);
 }
 .player-mini-progress:hover .player-mini-progress__thumb,
 .player-mini-progress.is-dragging .player-mini-progress__thumb {

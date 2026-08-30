@@ -257,6 +257,9 @@ export function initPlayerHotkeys(deps: HotkeyDeps): void {
                 deps.panTimelineToInclude(target);
                 deps.seekTripTime(target);
             } else {
+                // Save already snapshotted the clip. Do not flash a range edge
+                // as if it moved while the shared mutation boundary is locked.
+                if (exportPanelState.configurationLocked) return;
                 // Crossing the opposite edge is absorbed by the shared
                 // MIN_RANGE_SEC clamp; the flash marks which tab moved (the
                 // only other trace is the mask jumping).

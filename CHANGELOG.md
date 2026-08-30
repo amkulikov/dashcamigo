@@ -7,6 +7,10 @@ User-facing changes, newest first. Dates are when the change landed on
 [beta](https://beta.dashcamigo.app); production picks it up with the next
 release tag. Localized texts ship inside the app (the "What's new" panel).
 
+## 2026-08-30
+
+- **Improved:** The timeline zoom can now be adjusted with buttons and draggable handles.
+
 ## 2026-08-29
 
 - **Improved:** Improved storage and synchronization of trip notes, favorites, and markers.

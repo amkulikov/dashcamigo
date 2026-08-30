@@ -127,6 +127,7 @@ function buildTrimBar(): void {
     rangeResetBtn.textContent = t("export.range.reset");
     rangeResetBtn.hidden = true;
     rangeResetBtn.addEventListener("click", () => {
+        if (!isTrimEditingAllowed()) return;
         const trip = activeTrip();
         const range = exportPanelState.range;
         if (!trip || !range) return;
@@ -156,6 +157,7 @@ function buildTrimBar(): void {
     rangeUndoBtn.title = t("export.range.undoTitle");
     rangeUndoBtn.hidden = true;
     rangeUndoBtn.addEventListener("click", () => {
+        if (!isTrimEditingAllowed()) return;
         const saved = undoRange;
         if (!saved) return;
         undoRange = null;
@@ -180,6 +182,7 @@ function buildTrimBar(): void {
     rangeFromZoomBtn.title = t("export.range.fromZoomTitle");
     rangeFromZoomBtn.hidden = true;
     rangeFromZoomBtn.addEventListener("click", () => {
+        if (!isTrimEditingAllowed()) return;
         const sel = getSelectedRange();
         if (!sel) return;
         setRange(sel.startTripSec, sel.endTripSec);
@@ -193,6 +196,7 @@ function buildTrimBar(): void {
     rangePreviewBtn.textContent = t("export.range.zoomToClip");
     rangePreviewBtn.title = t("export.range.zoomToClipTitle");
     rangePreviewBtn.addEventListener("click", () => {
+        if (!isTrimEditingAllowed()) return;
         const range = exportPanelState.range;
         if (!range) return;
         // The preview action has one contract: show exactly the chosen window
@@ -260,7 +264,7 @@ function makeSetEdgeButton(which: "start" | "end", label: string): HTMLButtonEle
     text.textContent = label;
     btn.appendChild(text);
     btn.addEventListener("click", () => {
-        if (!exportPanelState.range) return;
+        if (!isTrimEditingAllowed() || !exportPanelState.range) return;
         const res = setRangeEdge(which, getPlayheadTripSec());
         flashRangeTab(which);
         if (res.clampedToMinLength) showRangeFeedback("minLength");
@@ -327,6 +331,23 @@ function clearInvalidRangeInput(input: HTMLInputElement): void {
     input.classList.remove("is-invalid");
 }
 
+/** Contextual actions are allowed to change the bar's layout between gestures,
+ *  but never while an export edge or navigator viewport owns pointer capture. */
+function isTimelineGestureActive(): boolean {
+    return Boolean(
+        dom.playerChartEl?.querySelector(
+            ".timeline-range__tab.is-dragging, .range-overview-handle.is-dragging, #player-chart-overview.is-panning",
+        ),
+    );
+}
+
+/** The trim bar is an editor only while the options snapshot is mutable. The
+ *  native disabled state handles ordinary input; event handlers repeat this
+ *  guard because synthetic events and global hotkeys can bypass the DOM state. */
+function isTrimEditingAllowed(): boolean {
+    return state.exportModeOpen && exportPanelState.phase === "options" && !exportPanelState.configurationLocked;
+}
+
 /**
  * Reconciles the from-zoom bridge button with the chart-zoom state. Split from
  * syncTrimBar because zoom changes do not tick the export-state bus - the
@@ -334,7 +355,10 @@ function clearInvalidRangeInput(input: HTMLInputElement): void {
  */
 export function syncRangeZoomBridge(): void {
     if (!rangeFromZoomBtn) return;
-    rangeFromZoomBtn.hidden = getSelectedRange() === null;
+    const hasSelectedRange = getSelectedRange() !== null;
+    rangeFromZoomBtn.disabled = !isTrimEditingAllowed() || !exportPanelState.range || !hasSelectedRange;
+    if (isTimelineGestureActive()) return;
+    rangeFromZoomBtn.hidden = !hasSelectedRange;
 }
 
 /** One range time <input>. Commits on Enter and blur; Escape reverts to the
@@ -353,6 +377,7 @@ function makeRangeInput(which: "start" | "end", ariaLabel: string): HTMLInputEle
     input.dataset.rangeEdge = which;
     input.setAttribute("aria-label", ariaLabel);
     input.addEventListener("keydown", (ev) => {
+        if (!isTrimEditingAllowed()) return;
         if (ev.key === "Enter") {
             ev.preventDefault();
             commitRangeInput(input, which);
@@ -418,7 +443,10 @@ function parseClipTime(text: string): number | null {
  *  and a min-length collision surface in the feedback line - the revert used
  *  to be fully silent, which read as the edit just vanishing. */
 function commitRangeInput(input: HTMLInputElement, which: "start" | "end"): void {
-    if (!exportPanelState.range) return;
+    if (!isTrimEditingAllowed() || !exportPanelState.range) {
+        input.value = formatEdge(which);
+        return;
+    }
     // Unchanged text is a true no-op. Without this guard a plain focus+blur (or
     // Escape, which resets the text before blurring) would re-parse the FLOORED
     // display value and silently shave the fractional seconds off the stored
@@ -474,6 +502,7 @@ function syncTrimBar(): void {
     const trip = activeTrip();
     const range = exportPanelState.range;
     const hasRange = !!(trip && range);
+    const isEditable = hasRange && isTrimEditingAllowed();
     // Trip switched under a focused input (auto-advance at trip end): its text
     // belongs to the PREVIOUS trip, and a later blur would commit it into the
     // new trip's range. Force-sync past the focus guard in that case.
@@ -491,9 +520,9 @@ function syncTrimBar(): void {
         [rangeEndInput, "end"],
     ] as const) {
         if (!input) continue;
-        input.disabled = !hasRange;
+        input.disabled = !isEditable;
         // Focus/dirty guard: skip the field the user is typing into.
-        if (!rangeReplaced && document.activeElement === input) continue;
+        if (isEditable && !rangeReplaced && document.activeElement === input) continue;
         input.value = hasRange ? formatEdge(which) : "";
     }
 
@@ -513,11 +542,21 @@ function syncTrimBar(): void {
     // very appearance signals "you have trimmed something". Preview hides
     // (not just disables) without a range so the whole actions cluster
     // collapses via the :has() rule instead of showing a lone dead button.
-    if (rangeSetStartBtn) rangeSetStartBtn.disabled = !hasRange;
-    if (rangeSetEndBtn) rangeSetEndBtn.disabled = !hasRange;
-    if (rangePreviewBtn) rangePreviewBtn.hidden = !hasRange;
-    if (rangeResetBtn) rangeResetBtn.hidden = !narrowed;
-    if (rangeUndoBtn) rangeUndoBtn.hidden = !hasRange || undoRange === null;
+    if (rangeSetStartBtn) rangeSetStartBtn.disabled = !isEditable;
+    if (rangeSetEndBtn) rangeSetEndBtn.disabled = !isEditable;
+    if (rangePreviewBtn) {
+        rangePreviewBtn.hidden = !hasRange;
+        rangePreviewBtn.disabled = !isEditable;
+    }
+    if (rangeResetBtn) rangeResetBtn.disabled = !isEditable || !narrowed;
+    if (rangeUndoBtn) rangeUndoBtn.disabled = !isEditable || undoRange === null;
+    // Showing reset/undo or the zoom bridge can add a wrapped action row on a
+    // narrow player. Keep their current visibility until pointer capture ends;
+    // timeline-range/chart trigger one final sync after removing the marker.
+    if (!isTimelineGestureActive()) {
+        if (rangeResetBtn) rangeResetBtn.hidden = !narrowed;
+        if (rangeUndoBtn) rangeUndoBtn.hidden = !hasRange || undoRange === null;
+    }
     syncRangeZoomBridge();
     syncTrimLength();
 }

@@ -35,12 +35,12 @@
     display: grid;
     /* Default grid: video full-width on top, chart + bar below.
        Chart-panel height is fixed (--chart-height) - resize removed (see
-       player-resize.ts): inside lives a fixed stack ruler 14 + canvas ~84
-       + strip 52. The 166px default is declared ONCE here; the :has()
-       rules below and the mobile blocks override the variable, every
-       usage reads the bare var with no per-usage fallback. When map is
-       expanded grid-template-areas change (see .map-expanded). */
-    --chart-height: 166px;
+       player-resize.ts): inside lives a fixed stack progress 14 + ruler 14 +
+       canvas ~90 + strip 52 + zoom row 28. The 200px default is declared
+       once here; the :has() rules below and mobile blocks override the
+       variable, and every usage reads the bare var with no per-usage fallback.
+       When map is expanded grid-template-areas change (see .map-expanded). */
+    --chart-height: 200px;
     grid-template-rows: minmax(0, 1fr) auto auto var(--chart-height);
     /* minmax(0, 1fr) instead of 1fr: a bare track falls back to min-content,
        and the chart-canvas with inline width=Npx would prevent the column from shrinking. */
@@ -110,39 +110,36 @@ body.export-mode .player-wrap:not(:fullscreen):not(.map-expanded) {
         "readout readout readout"
         "chart chart chart";
 }
-/* In no-gps trips the chart.js canvas is hidden (see chart.css), panel holds
-   only ruler 14 + strip 52 + paddings. 72 = 14 + 52 + ~6 - picked so the
-   strip with empty state and ruler with time-scale read without empty
-   space below them. */
+/* In no-gps trips the chart.js canvas is hidden (see chart.css); keep the
+   fixed timeline rows and navigator readable without reserving chart space. */
 .player-wrap.no-gps {
-    --chart-height: 88px;
+    --chart-height: 122px;
 }
 /* "View" menu now hides chart canvas and strip separately (not the whole
    .player-chart box), so --chart-height is recomputed via :has() based on
    what exactly is hidden:
 
    1) Strip only hidden - drop the 52px strip from total height, canvas
-      stays ~126px (same as with strip). This fixes the bug
+      keeps the same height as with strip. This fixes the bug
       "chart content shrinks when strip is enabled" - canvas size stays
       stable regardless of strip visibility.
-   2) Canvas only hidden - ruler + strip remain, total height 72 (same
+   2) Canvas only hidden - progress + ruler + strip + navigator remain (same
       as no-gps).
-   3) Both hidden - collapse the chart row entirely (see grid-template
-      override below).
+   3) Both hidden - keep only the progress, ruler, and navigator rows.
 
    :not(.no-gps) - in no-gps canvas is hidden via display:none (no
    hidden attribute), rule 2 must not match there. */
 .player-wrap:has(.chart-inferred-strip[hidden]):not(:has(#player-chart-canvas[hidden])):not(.no-gps) {
-    --chart-height: 114px;
+    --chart-height: 148px;
 }
 .player-wrap:has(#player-chart-canvas[hidden]):not(:has(.chart-inferred-strip[hidden])):not(.no-gps) {
-    --chart-height: 88px;
+    --chart-height: 122px;
 }
 /* Both chart canvas and strip hidden via the "View" menu: .player-chart no
-   longer collapses - it still holds the ruler + overview + always-on progress
+   longer collapses - it still holds the ruler + navigator + always-on progress
    bar, and shrinks to those rows via a small --chart-height. */
 .player-wrap:has(#player-chart-canvas[hidden]):has(.chart-inferred-strip[hidden]):not(.no-gps) {
-    --chart-height: 40px;
+    --chart-height: 74px;
 }
 .player-wrap .video-frame {
     grid-area: video;
@@ -164,15 +161,9 @@ body.export-mode .player-wrap:not(:fullscreen):not(.map-expanded) {
 .player-wrap .player-col-resize {
     grid-area: vmr;
 }
-/* Without a GPS track the chart shrinks to a thin timeline strip (cursor +
-   file boundaries + an x-axis with no datasets), but it does NOT hide - the
-   user must still be able to drag on it to select a range for export. We
-   change the height via --chart-height, used in grid-template-rows. 56px
-   leaves room for time x-ticks and doesn't look like a full-size chart. */
-/* In no-gps mode we don't shrink the height or hide the resize-handle: strip
-   thumbs are built straight from video frames (no GPS needed), rulers show
-   the trip's time-scale (also vendor-agnostic), and overview is mini-
-   navigation for long trips. The user should see it and be able to resize it. */
+/* Without a GPS track the data canvas disappears, but the recorded-time ruler,
+   inferred strip, scrubber and whole-trip navigator remain useful for seeking,
+   zooming and selecting an export range. */
 
 .player-wrap:not(.map-expanded) .map-wrap,
 .player-wrap:not(.map-expanded) .player-col-resize {
@@ -1060,8 +1051,8 @@ body.export-mode .tile-drag-handle {
         overflow-y: auto;
         overflow-x: hidden;
     }
-    /* Chart panel: 14 ruler + ~39 canvas + 52 strip = 105 total. Reduced
-       from 124/58 (1.5x on canvas) for a tighter mobile footprint.
+    /* Chart panel: 24 progress + 14 ruler + ~36 canvas + 52 strip + 40 zoom
+       row. The compact canvas keeps the mobile footprint tight.
        --mobile-bar-h mirrors the player-bar min-height in player-bar.css
        (60px base + env(safe-area-inset-bottom) for the iOS home indicator
        in landscape). Exposed as a var so the video-frame max-height calc
@@ -1070,7 +1061,7 @@ body.export-mode .tile-drag-handle {
     .player-wrap {
         flex: 0 0 auto;
         min-height: 100%;
-        --chart-height: 120px;
+        --chart-height: 166px;
         --mobile-bar-h: calc(60px + env(safe-area-inset-bottom, 0px));
     }
     /* Video-frame on mobile: 16:9, ALWAYS fully visible in the first viewport
@@ -1111,10 +1102,16 @@ body.export-mode .tile-drag-handle {
     /* On mobile we need separate :has overrides because desktop values
        (strip-hidden case) are excessive for the thin mobile panel. */
     .player-wrap:has(.chart-inferred-strip[hidden]):not(:has(#player-chart-canvas[hidden])):not(.no-gps) {
-        --chart-height: 68px; /* canvas ~39 + ruler 14 + progress 14, no strip */
+        --chart-height: 114px;
     }
     .player-wrap:has(#player-chart-canvas[hidden]):not(:has(.chart-inferred-strip[hidden])):not(.no-gps) {
-        --chart-height: 88px;
+        --chart-height: 134px;
+    }
+    .player-wrap:has(#player-chart-canvas[hidden]):has(.chart-inferred-strip[hidden]):not(.no-gps) {
+        --chart-height: 86px;
+    }
+    .player-wrap.no-gps {
+        --chart-height: 134px;
     }
     /* Stacked no-map grid: video, chart, a flexible spacer, then the bar.
        Same for portrait and landscape - landscape just overflows the viewport

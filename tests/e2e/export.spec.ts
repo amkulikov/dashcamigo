@@ -6,10 +6,12 @@ import { readFile } from "node:fs/promises";
 
 import {
     DESKTOP,
+    MOBILE,
     SAMPLE_70MAI,
     boxOf,
     expect,
     gotoApp,
+    installExportCapture,
     loadTrip,
     openExport,
     presetLocalStorage,
@@ -184,15 +186,247 @@ test.describe("export", () => {
     });
 
     test("range end pull-tab drag shrinks the selection", async ({ page }) => {
+        // At <=520px the contextual actions wrap and can change the trim-bar
+        // height, which is the geometry-sensitive case this gesture protects.
+        await page.setViewportSize(MOBILE);
         const tab = page.locator(".timeline-range__tab--end");
+        const reset = page.locator("#export-trim-reset");
+        await expect(reset).toBeHidden();
         const before = await boxOf(page, ".timeline-range__tab--end");
+        const chartBefore = await boxOf(page, "#player-chart");
+        const trimBefore = await boxOf(page, "#export-trim-bar");
         await page.mouse.move(before.x + before.width / 2, before.y + before.height / 2);
         await page.mouse.down();
         await page.mouse.move(before.x - 120, before.y + before.height / 2, { steps: 8 });
+
+        // Showing the newly-relevant reset action can reflow the trim bar. It is
+        // deferred until pointer capture ends, so the timeline never moves under
+        // the held pointer.
+        await expect(tab).toHaveClass(/is-dragging/);
+        await expect(reset).toBeHidden();
+        const chartHeld = await boxOf(page, "#player-chart");
+        const trimHeld = await boxOf(page, "#export-trim-bar");
+        for (const [actual, expected, label] of [
+            [chartHeld, chartBefore, "chart"],
+            [trimHeld, trimBefore, "trim bar"],
+        ] as const) {
+            expect(Math.abs(actual.y - expected.y), `${label} y during range drag`).toBeLessThanOrEqual(1);
+            expect(Math.abs(actual.height - expected.height), `${label} height during range drag`).toBeLessThanOrEqual(
+                1,
+            );
+        }
         await page.mouse.up();
         // The tab actually moved left (range narrowed).
         await expect.poll(async () => (await tab.boundingBox())?.x ?? before.x).toBeLessThan(before.x - 40);
+        await expect(reset).toBeVisible();
         await shot(page, "export-05-range-drag");
+    });
+
+    test("scrubber keeps the seek hit area above the export trim grip", async ({ page }) => {
+        const startInput = page.locator('.export-trim-bar__input[data-range-edge="start"]');
+        await startInput.fill("1");
+        await startInput.press("Enter");
+
+        const tab = await boxOf(page, ".timeline-range__tab--start");
+        const scrubber = await boxOf(page, "#player-mini-progress");
+        expect(tab.y, "trim hit area starts below the seek row").toBeGreaterThanOrEqual(
+            scrubber.y + scrubber.height - 1,
+        );
+        const x = tab.x + tab.width / 2;
+        const ownerAt = (y: number) =>
+            page.evaluate(
+                ({ px, py }) => {
+                    const hit = document.elementFromPoint(px, py);
+                    const owner = hit?.closest<HTMLElement>("#player-mini-progress, .timeline-range__tab");
+                    return owner?.id || owner?.className || null;
+                },
+                { px: x, py: y },
+            );
+
+        expect(await ownerAt(scrubber.y + scrubber.height / 2), "upper row owns seek").toBe("player-mini-progress");
+        expect(await ownerAt(tab.y + 8), "lower grip owns trim").toContain("timeline-range__tab--start");
+
+        // Space/Enter synthesize a click on a button, but a slider button has no
+        // click action of its own. That click must not bubble to chart seeking
+        // with the browser-generated clientX=0.
+        const play = page.locator("#player-play");
+        if ((await play.getAttribute("data-paused")) === "false") await play.click();
+        await page.keyboard.press("Digit5");
+        const current = page.locator("#player-current");
+        const before = await current.textContent();
+        await page.locator(".timeline-range__tab--start").focus();
+        await page.keyboard.press("Space");
+        await expect(current).toHaveText(before ?? "");
+        await page.keyboard.press("Enter");
+        await expect(current).toHaveText(before ?? "");
+    });
+
+    test("a fully offscreen clip leaves one nearest boundary pointing toward it", async ({ page }) => {
+        const startInput = page.locator('.export-trim-bar__input[data-range-edge="start"]');
+        const endInput = page.locator('.export-trim-bar__input[data-range-edge="end"]');
+        const startTab = page.locator(".timeline-range__tab--start");
+        const endTab = page.locator(".timeline-range__tab--end");
+        const preview = page.locator("#export-trim-preview");
+        const host = await boxOf(page, "#player-chart");
+        const fullSec = parseClock(await endInput.inputValue());
+        expect(fullSec, "fixture must fit two disjoint one-second windows").toBeGreaterThan(3);
+
+        // Keep the viewport on [0,1], then move the committed clip to [2,3].
+        await endInput.fill("1");
+        await endInput.press("Enter");
+        await preview.click();
+        await endInput.fill("3");
+        await endInput.press("Enter");
+        await startInput.fill("2");
+        await startInput.press("Enter");
+
+        // Both real boundaries are right of the viewport and map to the same
+        // pixel. The nearer start edge remains as one right-pointing control;
+        // the farther end edge cannot overlap or steal its hit target.
+        await expect(startTab).toBeVisible();
+        await expect(startTab).toHaveClass(/is-offscreen-right/);
+        await expect(startTab).toBeEnabled();
+        await expect(endTab).toBeHidden();
+        await expect(endTab).toBeDisabled();
+        await expect(endTab).toHaveAttribute("inert", "");
+        const startBox = await boxOf(page, ".timeline-range__tab--start");
+        expect(startBox.x + startBox.width / 2).toBeGreaterThan(host.x + host.width * 0.7);
+        expect(
+            await page.locator(".timeline-range__mask--left").evaluate((el) => el.getBoundingClientRect().width),
+        ).toBeGreaterThan(host.width * 0.7);
+
+        // Now keep the viewport on [2,3] and move the clip to [0,1]. The mirror
+        // contract applies: only the nearer end edge remains, pointing left.
+        await preview.click();
+        await startInput.fill("0");
+        await startInput.press("Enter");
+        await endInput.fill("1");
+        await endInput.press("Enter");
+        await expect(endTab).toBeVisible();
+        await expect(endTab).toHaveClass(/is-offscreen-left/);
+        await expect(endTab).toBeEnabled();
+        await expect(startTab).toBeHidden();
+        await expect(startTab).toBeDisabled();
+        await expect(startTab).toHaveAttribute("inert", "");
+        const endBox = await boxOf(page, ".timeline-range__tab--end");
+        expect(endBox.x + endBox.width / 2).toBeLessThan(host.x + host.width * 0.3);
+        expect(
+            await page.locator(".timeline-range__mask--right").evaluate((el) => el.getBoundingClientRect().width),
+        ).toBeGreaterThan(host.width * 0.7);
+    });
+
+    test("viewport navigator stays independent from the export clip range", async ({ page }) => {
+        const startInput = page.locator('.export-trim-bar__input[data-range-edge="start"]');
+        const endInput = page.locator('.export-trim-bar__input[data-range-edge="end"]');
+        const readClip = async (): Promise<string[]> => [await startInput.inputValue(), await endInput.inputValue()];
+        const clipBefore = await readClip();
+        const readWindow = () =>
+            page.evaluate(() => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const st = (window as any).__dashcamigo.state;
+                const trip = st.active ? st.trips[st.active.trip] : null;
+                if (!st.chart || !trip) throw new Error("chart window unavailable");
+                return {
+                    min: st.chart.scales.x.min as number,
+                    max: st.chart.scales.x.max as number,
+                    duration: trip.timeline.contentDurationSec as number,
+                    zoomed: st.chartZoomed as boolean,
+                };
+            });
+
+        // Export selection is mapped into the visible window; the navigator is
+        // mapped across the whole trip. Their overlay layers must meet at the
+        // row boundary, never cover one another.
+        const zoomRow = await boxOf(page, "#player-chart-zoom-row");
+        for (const [selector, label] of [
+            ["#timeline-range", "export range"],
+            ["#player-chart-playhead", "playhead"],
+            ["#player-chart-markers", "timeline markers"],
+        ] as const) {
+            const overlay = await boxOf(page, selector);
+            expect(
+                Math.abs(overlay.y + overlay.height - zoomRow.y),
+                `${label} stops at the whole-trip navigator`,
+            ).toBeLessThanOrEqual(1);
+        }
+
+        // A range tab used to span this row at z6 and could win hit-testing over
+        // a viewport handle or zoom button. Check the actual topmost owner, not
+        // merely that the intended controls are visible.
+        const hitOwnerAtCenter = async (selector: string): Promise<string | null> =>
+            page.locator(selector).evaluate((el) => {
+                const rect = el.getBoundingClientRect();
+                const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+                return hit?.closest<HTMLElement>("button, [role=slider]")?.id ?? null;
+            });
+        for (const id of [
+            "player-chart-overview-start",
+            "player-chart-overview-end",
+            "player-chart-zoom-out",
+            "player-chart-zoom-in",
+        ]) {
+            expect(await hitOwnerAtCenter(`#${id}`), `${id} owns its hit target in export mode`).toBe(id);
+        }
+
+        const reset = page.locator("#player-chart-overview-reset");
+        const fromZoom = page.locator("#export-trim-from-zoom");
+        await expect(fromZoom).toBeHidden();
+        const overview = await boxOf(page, "#player-chart-overview");
+        const initial = await readWindow();
+        const chartBeforeDrag = await boxOf(page, "#player-chart");
+        const trimBeforeDrag = await boxOf(page, "#export-trim-bar");
+
+        // Both viewport edges remain draggable in export mode, but neither one
+        // mutates the independently committed clip range.
+        const startHandleLocator = page.locator("#player-chart-overview-start");
+        const startHandle = await boxOf(page, "#player-chart-overview-start");
+        await page.mouse.move(startHandle.x + startHandle.width / 2, startHandle.y + startHandle.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(overview.x + overview.width * 0.25, startHandle.y + startHandle.height / 2, {
+            steps: 5,
+        });
+
+        // The zoom bridge becomes relevant on the first move, but stays hidden
+        // until release so its appearance cannot resize the trim/chart stack.
+        await expect(startHandleLocator).toHaveClass(/is-dragging/);
+        await expect.poll(async () => (await readWindow()).min).toBeGreaterThan(initial.duration * 0.15);
+        await expect(fromZoom).toBeHidden();
+        const chartHeld = await boxOf(page, "#player-chart");
+        const trimHeld = await boxOf(page, "#export-trim-bar");
+        for (const [actual, expected, label] of [
+            [chartHeld, chartBeforeDrag, "chart"],
+            [trimHeld, trimBeforeDrag, "trim bar"],
+        ] as const) {
+            expect(Math.abs(actual.y - expected.y), `${label} y during navigator drag`).toBeLessThanOrEqual(1);
+            expect(
+                Math.abs(actual.height - expected.height),
+                `${label} height during navigator drag`,
+            ).toBeLessThanOrEqual(1);
+        }
+        await page.mouse.up();
+        await expect(fromZoom).toBeVisible();
+        expect(await readClip()).toEqual(clipBefore);
+        await reset.click();
+        await expect.poll(async () => (await readWindow()).zoomed).toBe(false);
+
+        const endHandle = await boxOf(page, "#player-chart-overview-end");
+        await page.mouse.move(endHandle.x + endHandle.width / 2, endHandle.y + endHandle.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(overview.x + overview.width * 0.75, endHandle.y + endHandle.height / 2, { steps: 5 });
+        await page.mouse.up();
+        await expect.poll(async () => (await readWindow()).max).toBeLessThan(initial.duration * 0.85);
+        expect(await readClip()).toEqual(clipBefore);
+        await reset.click();
+        await expect.poll(async () => (await readWindow()).zoomed).toBe(false);
+
+        // The explicit controls use the same viewport state. A symmetric +/-
+        // step is reversible and still leaves clip selection untouched.
+        await page.locator("#player-chart-zoom-in").click();
+        await expect.poll(async () => (await readWindow()).zoomed).toBe(true);
+        expect(await readClip()).toEqual(clipBefore);
+        await page.locator("#player-chart-zoom-out").click();
+        await expect.poll(async () => (await readWindow()).zoomed).toBe(false);
+        expect(await readClip()).toEqual(clipBefore);
     });
 
     test("typing start/end times moves the range and the tabs follow", async ({ page }) => {
@@ -235,6 +469,42 @@ test.describe("export", () => {
         await endInput.press("Enter");
         await expect(endInput).toHaveValue(formatClock(full));
         await shot(page, "export-05b-range-typed");
+    });
+
+    test("range tabs expose live slider bounds and keyboard nudges", async ({ page }) => {
+        const start = page.locator(".timeline-range__tab--start");
+        const end = page.locator(".timeline-range__tab--end");
+        await expect(start).toHaveAttribute("role", "slider");
+        await expect(end).toHaveAttribute("role", "slider");
+        await expect(start).toHaveAttribute("aria-orientation", "horizontal");
+        await expect(end).toHaveAttribute("aria-orientation", "horizontal");
+
+        const duration = Number(await end.getAttribute("aria-valuemax"));
+        expect(duration, "fixture duration announced by the end tab").toBeGreaterThan(2);
+        expect(Number(await start.getAttribute("aria-valuemin"))).toBe(0);
+        expect(Number(await start.getAttribute("aria-valuemax"))).toBeCloseTo(duration - 1, 4);
+        expect(Number(await start.getAttribute("aria-valuenow"))).toBe(0);
+        await expect(start).toHaveAttribute("aria-valuetext", "0:00");
+
+        // Plain arrows move exactly one second; Shift uses the coarser ten-second
+        // step and therefore clamps this short fixture directly to the legal max.
+        await start.focus();
+        await start.press("ArrowRight");
+        expect(Number(await start.getAttribute("aria-valuenow"))).toBeCloseTo(1, 4);
+        await start.press("Shift+ArrowRight");
+        expect(Number(await start.getAttribute("aria-valuenow"))).toBeCloseTo(duration - 1, 4);
+        await start.press("ArrowLeft");
+        const movedStart = Number(await start.getAttribute("aria-valuenow"));
+        expect(movedStart).toBeCloseTo(duration - 2, 4);
+        await expect(start).toHaveAttribute("aria-valuetext", formatClock(movedStart));
+
+        // Moving one edge immediately updates the opposite edge's one-second
+        // floor; keyboard edits route through the same setRangeEdge clamp.
+        expect(Number(await end.getAttribute("aria-valuemin"))).toBeCloseTo(movedStart + 1, 4);
+        await end.focus();
+        await end.press("ArrowLeft");
+        expect(Number(await end.getAttribute("aria-valuenow"))).toBeCloseTo(movedStart + 1, 4);
+        expect(Number(await start.getAttribute("aria-valuemax"))).toBeCloseTo(movedStart, 4);
     });
 
     test("dragging a tab updates the numeric range inputs", async ({ page }) => {
@@ -994,6 +1264,133 @@ test.describe("export", () => {
         await page.locator("#export-panel-close").click();
         await expect(page.locator("#export-panel")).toBeHidden();
         await expect(page.locator("body")).not.toHaveClass(/export-mode/);
+    });
+});
+
+test.describe("export range lock", () => {
+    test.beforeEach(async ({ page }) => {
+        await presetLocalStorage(page);
+        await page.setViewportSize(DESKTOP);
+        // Hold the native picker open after Save has snapshotted and locked the
+        // configuration, without starting an encoder in this focused UI test.
+        await installExportCapture(page, undefined, { pickerDelayMs: 30_000 });
+        await gotoApp(page, "en");
+        await loadTrip(page, SAMPLE_70MAI);
+        await openExport(page);
+    });
+
+    test("locked export keeps the range visible and freezes every trim editor", async ({ page }) => {
+        const startInput = page.locator('.export-trim-bar__input[data-range-edge="start"]');
+        const endInput = page.locator('.export-trim-bar__input[data-range-edge="end"]');
+        const fullSec = parseClock(await endInput.inputValue());
+        expect(fullSec, "fixture must leave room for both masks").toBeGreaterThan(2);
+        await startInput.fill("1");
+        await startInput.press("Enter");
+        await endInput.fill(String(fullSec - 1));
+        await endInput.press("Enter");
+
+        // One source channel keeps this on the stream-copy path, so Save cannot
+        // be disabled by the runner's H.264 encoder capabilities.
+        const includes = page.locator(".top-panel__channel-include");
+        await includes.nth(2).click();
+        await includes.nth(1).click();
+        await expect(page.locator(".top-panel__channel-include:checked")).toHaveCount(1);
+
+        const start = page.locator(".timeline-range__tab--start");
+        const end = page.locator(".timeline-range__tab--end");
+        const readAnnouncedRange = async (): Promise<[number, number]> => {
+            const [startValue, endValue] = await Promise.all([
+                start.getAttribute("aria-valuenow"),
+                end.getAttribute("aria-valuenow"),
+            ]);
+            if (startValue === null || endValue === null) throw new Error("range sliders are missing values");
+            return [Number(startValue), Number(endValue)];
+        };
+        const rangeBefore = await readAnnouncedRange();
+
+        // Give the conditional "Use visible range" action a real, different
+        // chart window so the lock test covers it without a hidden-control no-op.
+        await page.locator("#player-chart-zoom-in").click();
+        const fromZoom = page.locator("#export-trim-from-zoom");
+        await expect(fromZoom).toBeVisible();
+        const viewBefore = await page.evaluate(() => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const st = (window as any).__dashcamigo.state;
+            return {
+                min: st.chart.scales.x.min as number,
+                max: st.chart.scales.x.max as number,
+                preview: st.isPreviewZoom as boolean,
+            };
+        });
+        const save = page.locator("#export-panel-save-btn");
+        await expect(save).toBeEnabled();
+        await save.click();
+        await expect
+            .poll(() =>
+                page.evaluate(
+                    () => (window as unknown as { __exportPickerOpened?: boolean }).__exportPickerOpened === true,
+                ),
+            )
+            .toBe(true);
+
+        // The immutable snapshot is still legible on the player while its edit
+        // affordances leave pointer hit-testing and the tab order.
+        await expect(page.locator("#timeline-range")).toBeVisible();
+        await expect(page.locator(".timeline-range__mask--left")).toBeVisible();
+        await expect(page.locator(".timeline-range__mask--right")).toBeVisible();
+        for (const tab of [start, end]) {
+            await expect(tab).toBeDisabled();
+            await expect(tab).toHaveAttribute("inert", "");
+            await expect(tab).toHaveAttribute("aria-disabled", "true");
+            await expect(tab).toHaveCSS("cursor", "default");
+            await expect(tab).toHaveCSS("pointer-events", "none");
+        }
+        expect(await readAnnouncedRange()).toEqual(rangeBefore);
+
+        const setStart = page.locator('.export-trim-bar__set[data-set-edge="start"]');
+        const setEnd = page.locator('.export-trim-bar__set[data-set-edge="end"]');
+        const reset = page.locator("#export-trim-reset");
+        const undo = page.locator("#export-trim-undo");
+        const preview = page.locator("#export-trim-preview");
+        for (const control of [startInput, endInput, setStart, setEnd, reset, undo, preview, fromZoom]) {
+            await expect(control).toBeDisabled();
+        }
+
+        // Native disabled controls reject real input. Dispatch synthetic events
+        // as a defense-in-depth check: every handler and the shared state setter
+        // must still leave the snapshotted range untouched.
+        const inputValuesBefore = [await startInput.inputValue(), await endInput.inputValue()];
+        await startInput.evaluate((el: HTMLInputElement) => {
+            el.value = "0";
+            el.dispatchEvent(new FocusEvent("blur"));
+        });
+        await endInput.evaluate((el: HTMLInputElement) => {
+            el.value = "999";
+            el.dispatchEvent(new FocusEvent("blur"));
+        });
+        expect([await startInput.inputValue(), await endInput.inputValue()]).toEqual(inputValuesBefore);
+        expect(await readAnnouncedRange()).toEqual(rangeBefore);
+
+        for (const control of [setStart, setEnd, reset, undo, fromZoom, preview]) {
+            await control.dispatchEvent("click");
+            expect(await readAnnouncedRange()).toEqual(rangeBefore);
+        }
+        // I/O hotkeys bypass the trim DOM, so the central export-state guard is
+        // what makes the immutable-range contract complete.
+        await page.keyboard.press("i");
+        expect(await readAnnouncedRange()).toEqual(rangeBefore);
+        expect(
+            await page.evaluate(() => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const st = (window as any).__dashcamigo.state;
+                return {
+                    min: st.chart.scales.x.min as number,
+                    max: st.chart.scales.x.max as number,
+                    preview: st.isPreviewZoom as boolean,
+                };
+            }),
+            "Play clip stays disabled too: it cannot replace the inspection window or start bounded playback",
+        ).toEqual(viewBefore);
     });
 });
 

@@ -140,6 +140,12 @@ export interface ExportRange {
  */
 const MIN_RANGE_SEC = 1;
 
+export interface ExportRangeEdgeBounds {
+    minTripSec: number;
+    maxTripSec: number;
+    valueTripSec: number;
+}
+
 export interface ExportPanelState {
     phase: ExportPhase;
     /** True from a video Save click until that flow settles, including the file
@@ -370,6 +376,33 @@ export function resetExportRangeForTrip(trip: Trip): void {
 }
 
 /**
+ * Returns the legal interval for one export-range edge. The timeline sliders
+ * use this same result for ARIA bounds that setRangeEdge enforces, so their
+ * announced limits cannot drift from pointer/input clamping.
+ */
+export function getExportRangeEdgeBounds(which: "start" | "end"): ExportRangeEdgeBounds | null {
+    const range = exportPanelState.range;
+    const trip = activeTrip();
+    if (!range || !trip) return null;
+    const durationSec = Math.max(0, trip.timeline.contentDurationSec);
+    // A sub-second trip cannot satisfy the normal floor. Its only valid range
+    // is the whole trip, matching setRange's defensive fallback.
+    const minSpanSec = Math.min(MIN_RANGE_SEC, durationSec);
+    if (which === "start") {
+        return {
+            minTripSec: 0,
+            maxTripSec: Math.max(0, Math.min(durationSec, range.endTripSec) - minSpanSec),
+            valueTripSec: range.startTripSec,
+        };
+    }
+    return {
+        minTripSec: Math.min(durationSec, Math.max(0, range.startTripSec) + minSpanSec),
+        maxTripSec: durationSec,
+        valueTripSec: range.endTripSec,
+    };
+}
+
+/**
  * Moves one edge of the export range to `tripSec` (content-axis seconds),
  * clamped so the range stays inside [0, contentDuration] and keeps
  * end - start >= MIN_RANGE_SEC. The single choke point every range edit funnels
@@ -384,21 +417,19 @@ export function resetExportRangeForTrip(trip: Trip): void {
  * not reported.
  */
 export function setRangeEdge(which: "start" | "end", tripSec: number): { clampedToMinLength: boolean } {
+    // Save snapshots the whole export configuration before opening the native
+    // picker. Keep that snapshot's visible range immutable even if a keyboard
+    // shortcut or a synthetic event reaches this shared mutation boundary.
+    if (exportPanelState.configurationLocked) return { clampedToMinLength: false };
     const range = exportPanelState.range;
-    if (!range) return { clampedToMinLength: false };
-    let clampedToMinLength = false;
+    const bounds = getExportRangeEdgeBounds(which);
+    if (!range || !bounds) return { clampedToMinLength: false };
+    const next = Math.max(bounds.minTripSec, Math.min(tripSec, bounds.maxTripSec));
+    const clampedToMinLength = which === "start" ? tripSec > bounds.maxTripSec : tripSec < bounds.minTripSec;
     if (which === "start") {
-        // start is bounded above by end - MIN_RANGE_SEC (itself <= contentDuration),
-        // so it never needs an explicit contentDuration cap of its own.
-        const maxStart = range.endTripSec - MIN_RANGE_SEC;
-        clampedToMinLength = tripSec > maxStart;
-        range.startTripSec = Math.max(0, Math.min(tripSec, maxStart));
+        range.startTripSec = next;
     } else {
-        const trip = activeTrip();
-        const max = trip ? trip.timeline.contentDurationSec : tripSec;
-        const minEnd = range.startTripSec + MIN_RANGE_SEC;
-        clampedToMinLength = tripSec < minEnd;
-        range.endTripSec = Math.min(max, Math.max(tripSec, minEnd));
+        range.endTripSec = next;
     }
     notifyExportStateChanged();
     return { clampedToMinLength };
@@ -415,6 +446,7 @@ export function setRangeEdge(which: "start" | "end", tripSec: number): { clamped
  * reads as "trip switched under me". No-op when no range or no active trip.
  */
 export function setRange(startTripSec: number, endTripSec: number): void {
+    if (exportPanelState.configurationLocked) return;
     const range = exportPanelState.range;
     const trip = activeTrip();
     if (!range || !trip) return;

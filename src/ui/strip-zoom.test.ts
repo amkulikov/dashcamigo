@@ -1,6 +1,92 @@
 import { describe, expect, it } from "vitest";
 
-import { applyPinchZoom, computeFollowPan, type ZoomViewState } from "./strip-zoom.js";
+import {
+    applyPinchZoom,
+    applyWheelZoom,
+    computeEffectiveMinViewSpan,
+    computeFollowPan,
+    resizeZoomViewEdge,
+    type ZoomViewState,
+} from "./strip-zoom.js";
+
+describe("resizeZoomViewEdge", () => {
+    const dur = 10; // minSpan = 0.1
+
+    it("moves the start while keeping the end fixed", () => {
+        expect(resizeZoomViewEdge({ viewStartPct: 0, viewEndPct: 0.8 }, "start", 0.25, dur)).toEqual({
+            viewStartPct: 0.25,
+            viewEndPct: 0.8,
+        });
+    });
+
+    it("moves the end while keeping the start fixed", () => {
+        expect(resizeZoomViewEdge({ viewStartPct: 0.2, viewEndPct: 1 }, "end", 0.65, dur)).toEqual({
+            viewStartPct: 0.2,
+            viewEndPct: 0.65,
+        });
+    });
+
+    it("clamps edges to the trip bounds", () => {
+        expect(resizeZoomViewEdge({ viewStartPct: 0.2, viewEndPct: 0.8 }, "start", -1, dur)).toEqual({
+            viewStartPct: 0,
+            viewEndPct: 0.8,
+        });
+        expect(resizeZoomViewEdge({ viewStartPct: 0.2, viewEndPct: 0.8 }, "end", 2, dur)).toEqual({
+            viewStartPct: 0.2,
+            viewEndPct: 1,
+        });
+    });
+
+    it("expands either edge back to the full view", () => {
+        expect(resizeZoomViewEdge({ viewStartPct: 0.2, viewEndPct: 1 }, "start", 0, dur)).toEqual({
+            viewStartPct: 0,
+            viewEndPct: 1,
+        });
+        expect(resizeZoomViewEdge({ viewStartPct: 0, viewEndPct: 0.8 }, "end", 1, dur)).toEqual({
+            viewStartPct: 0,
+            viewEndPct: 1,
+        });
+    });
+
+    it("preserves the minimum duration-aware span when an edge crosses the other", () => {
+        const start = resizeZoomViewEdge({ viewStartPct: 0.2, viewEndPct: 0.6 }, "start", 0.9, dur);
+        expect(start.viewStartPct).toBeCloseTo(0.5, 6);
+        expect(start.viewEndPct).toBeCloseTo(0.6, 6);
+
+        const end = resizeZoomViewEdge({ viewStartPct: 0.4, viewEndPct: 0.8 }, "end", 0.1, dur);
+        expect(end.viewStartPct).toBeCloseTo(0.4, 6);
+        expect(end.viewEndPct).toBeCloseTo(0.5, 6);
+    });
+
+    it("preserves a narrower programmatic span without jumping to the normal floor", () => {
+        const view = { viewStartPct: 0.4, viewEndPct: 0.45 };
+        const gestureMinSpan = computeEffectiveMinViewSpan(dur, view.viewEndPct - view.viewStartPct);
+        expect(gestureMinSpan).toBeCloseTo(0.05, 6);
+
+        const expanded = resizeZoomViewEdge(view, "start", 0.38, dur, gestureMinSpan);
+        expect(expanded.viewStartPct).toBeCloseTo(0.38, 6);
+        expect(expanded.viewEndPct - expanded.viewStartPct).toBeCloseTo(0.07, 6);
+
+        const crossed = resizeZoomViewEdge(expanded, "start", 0.44, dur, gestureMinSpan);
+        expect(crossed.viewStartPct).toBeCloseTo(0.4, 6);
+        expect(crossed.viewEndPct - crossed.viewStartPct).toBeCloseTo(0.05, 6);
+    });
+});
+
+describe("applyWheelZoom", () => {
+    it("zooms out smoothly from a view below the normal floor", () => {
+        const view = { viewStartPct: 0.4, viewEndPct: 0.45 };
+        const next = applyWheelZoom(view, 0.5, 240, 10);
+        expect(next).not.toBeNull();
+        const span = next!.viewEndPct - next!.viewStartPct;
+        expect(span).toBeGreaterThan(0.05);
+        expect(span).toBeLessThan(0.1);
+    });
+
+    it("does not zoom farther in from a view below the normal floor", () => {
+        expect(applyWheelZoom({ viewStartPct: 0.4, viewEndPct: 0.45 }, 0.5, -240, 10)).toBeNull();
+    });
+});
 
 // applyPinchZoom is pure + deterministic - no DOM, safe to run in parallel.
 describe("applyPinchZoom", () => {
@@ -53,6 +139,15 @@ describe("applyPinchZoom", () => {
         const start: ZoomViewState = { viewStartPct: 0, viewEndPct: 0.1 }; // span 0.1 (already min)
         const next = applyPinchZoom(start, 0.5, 0.5, 100, shortDur);
         expect(next.viewEndPct - next.viewStartPct).toBeCloseTo(0.1, 6);
+    });
+
+    it("preserves a narrower programmatic span as the pinch floor", () => {
+        const start: ZoomViewState = { viewStartPct: 0.4, viewEndPct: 0.45 };
+        const inward = applyPinchZoom(start, 0.5, 0.5, 2, 10);
+        expect(inward.viewEndPct - inward.viewStartPct).toBeCloseTo(0.05, 6);
+
+        const outward = applyPinchZoom(start, 0.5, 0.5, 0.8, 10);
+        expect(outward.viewEndPct - outward.viewStartPct).toBeCloseTo(0.0625, 6);
     });
 
     it("does not produce NaN when fingers report zero distance ratio", () => {

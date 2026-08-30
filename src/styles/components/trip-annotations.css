@@ -251,18 +251,18 @@
 
 /* --- Timeline marker pins ------------------------------------------------ */
 
-/* Overlay layer over the whole timeline host (chart + ruler + strip), same
-   coordinate space as the playhead. The layer itself must not eat clicks. */
+/* Overlay layer over the viewport-mapped timeline rows (chart + ruler + strip),
+   same coordinate space as the playhead. The whole-trip zoom row is excluded. */
 .timeline-markers {
     position: absolute;
-    inset: 0;
+    inset: 0 0 var(--chart-zoom-row-h);
     pointer-events: none;
     z-index: 3;
 }
 
 /* One pin: an inert full-height wrapper draws the hairline; only the flag
    head is a button. A full-height interactive column would sit over the
-   seek scrubber above and the pan overview below and steal their drags. */
+   seek scrubber above and steal its drags. */
 .timeline-marker {
     position: absolute;
     top: 0;

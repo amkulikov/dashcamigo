@@ -405,14 +405,13 @@ body.letterbox-blur .video-tile > video:not(.tile-blur-bg) {
 }
 
 /* === Timeline range overlay (export-mode) ===
- * Lives inside #player-chart-canvas-wrap; spans full wrap area. Tabs and
- * masks are positioned absolutely in chart-canvas pixel space (so the
- * timeline-range.ts module can read chart.scales.x.getPixelForValue and
- * write the result directly into left/width).
+ * Lives inside #player-chart and spans only its viewport-mapped rows. The
+ * whole-trip navigator below uses a different coordinate basis, so selection
+ * masks and tabs stop above it instead of covering or intercepting its controls.
  */
 .timeline-range {
     position: absolute;
-    inset: 0;
+    inset: 0 0 var(--chart-zoom-row-h);
     pointer-events: none;
     z-index: 6;
 }
@@ -431,7 +430,9 @@ body.letterbox-blur .video-tile > video:not(.tile-blur-bg) {
 
 .timeline-range__tab {
     position: absolute;
-    top: 0;
+    /* The scrubber owns the top row for seek. Range editing begins immediately
+       below it, where the grip and analytics trim surface live. */
+    top: var(--scrubber-h, 0px);
     bottom: 0;
     width: 16px;
     padding: 0;
@@ -441,6 +442,9 @@ body.letterbox-blur .video-tile > video:not(.tile-blur-bg) {
     cursor: ew-resize;
     pointer-events: auto;
     touch-action: none;
+}
+.timeline-range__tab[hidden] {
+    display: none;
 }
 
 /* Per-edge tab color (green start / red end - see tokens.css rationale):
@@ -466,12 +470,10 @@ body.letterbox-blur .video-tile > video:not(.tile-blur-bg) {
 }
 
 .timeline-range__tab::after {
-    /* Pull-handle "grip" hint at the top of the ANALYTICS block, i.e. just
-       below the scrubber row - the grip is a drag target and must not overlap
-       the seek surface above (--scrubber-h inherited from .player-chart). */
+    /* Pull-handle grip at the top of the analytics trim surface. */
     content: "";
     position: absolute;
-    top: calc(var(--scrubber-h, 0px) + 4px);
+    top: 4px;
     left: 50%;
     transform: translateX(-50%);
     width: 10px;
@@ -481,11 +483,10 @@ body.letterbox-blur .video-tile > video:not(.tile-blur-bg) {
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
 }
 
-/* Boundary beyond the visible zoom window (timeline-range.ts toggles the
-   class): the tab is only PINNED to the viewport edge, the real edge is
-   off-screen. Dim the spine and swap the grip for an outward chevron so it
-   reads "further this way", not "the boundary is here" - zooming never moves
-   the range. The tab stays draggable (pulling it into the window is valid). */
+/* A boundary beyond the visible zoom window is only pinned to an edge. Dim the
+   spine and point its grip toward the boundary's actual side. When the whole
+   clip is outside, timeline-range.ts hides the farther of the two coincident
+   tabs, leaving one unambiguous, draggable direction signal. */
 .timeline-range__tab.is-offscreen::before {
     opacity: 0.35;
 }
@@ -496,16 +497,29 @@ body.letterbox-blur .video-tile > video:not(.tile-blur-bg) {
     box-shadow: none;
     opacity: 0.85;
 }
-.timeline-range__tab--start.is-offscreen::after {
+.timeline-range__tab.is-offscreen-left::after {
     clip-path: polygon(100% 0, 100% 100%, 0 50%);
 }
-.timeline-range__tab--end.is-offscreen::after {
+.timeline-range__tab.is-offscreen-right::after {
     clip-path: polygon(0 0, 0 100%, 100% 50%);
 }
 
 .timeline-range__tab:hover::after,
 .timeline-range__tab:focus-visible::after {
     filter: brightness(1.15);
+}
+
+/* The export snapshot is immutable once Save starts. Keep the committed range
+   visible, but remove every drag cue while its tabs are disabled. */
+.timeline-range__tab:disabled {
+    cursor: default;
+    pointer-events: none;
+}
+.timeline-range__tab:disabled::before,
+.timeline-range__tab:disabled::after {
+    background: var(--fg-mute);
+    filter: none;
+    opacity: 0.55;
 }
 
 /* One-shot highlight after an indirect edit (the I/O set-to-playhead paths):

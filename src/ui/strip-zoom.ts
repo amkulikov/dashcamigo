@@ -14,6 +14,17 @@ export function computeMinViewSpan(durationSec: number): number {
     return Math.max(MIN_VIEW_WIDTH, Math.min(0.5, oneSecPct));
 }
 
+/** Returns the zoom floor for a gesture that starts from `initialSpan`.
+ *  Programmatic views such as a one-second export preview may legitimately be
+ *  narrower than the normal navigation floor on a long trip. Preserve that
+ *  starting span instead of making the first outward gesture jump to the
+ *  normal floor; the gesture still cannot make the view any narrower. */
+export function computeEffectiveMinViewSpan(durationSec: number, initialSpan: number): number {
+    const normalMin = computeMinViewSpan(durationSec);
+    if (!Number.isFinite(initialSpan) || initialSpan <= 0) return normalMin;
+    return Math.min(normalMin, Math.min(1, initialSpan));
+}
+
 /** Nice tick intervals in seconds: 1, 2, 5, 10, 15, 30 s, then 1, 2, 5, 10, 15, 30, 60, 120, 240 min. */
 const RULER_NICE_INTERVALS_SEC = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400];
 
@@ -41,6 +52,32 @@ export interface ZoomViewState {
     viewEndPct: number;
 }
 
+/** Moves one viewport boundary while keeping the opposite boundary fixed.
+ *  The result stays inside the trip and never becomes narrower than the
+ *  captured gesture floor. The default is the normal duration-aware floor;
+ *  callers can preserve a narrower programmatic view by passing its start span. */
+export function resizeZoomViewEdge(
+    view: ZoomViewState,
+    edge: "start" | "end",
+    edgePct: number,
+    durationSec: number,
+    gestureMinSpan = computeMinViewSpan(durationSec),
+): ZoomViewState {
+    const minSpan = computeEffectiveMinViewSpan(durationSec, gestureMinSpan);
+    const start = Math.max(0, Math.min(1, view.viewStartPct));
+    const end = Math.max(start, Math.min(1, view.viewEndPct));
+    if (edge === "start") {
+        return {
+            viewStartPct: Math.max(0, Math.min(edgePct, end - minSpan)),
+            viewEndPct: end,
+        };
+    }
+    return {
+        viewStartPct: start,
+        viewEndPct: Math.min(1, Math.max(edgePct, start + minSpan)),
+    };
+}
+
 /**
  * Applies zoom around the cursor. dy < 0 = zoom in (scroll up), dy > 0 = zoom out.
  * cursorRatio in [0, 1] is the cursor's position within the slider (0 = left edge, 1 = right).
@@ -56,11 +93,12 @@ export function applyWheelZoom(
     durationSec: number,
 ): ZoomViewState | null {
     const viewSpan = view.viewEndPct - view.viewStartPct;
-    const minSpan = computeMinViewSpan(durationSec);
+    const normalMinSpan = computeMinViewSpan(durationSec);
+    const minSpan = computeEffectiveMinViewSpan(durationSec, viewSpan);
     const wantsZoomIn = deltaY < 0;
     const wantsZoomOut = deltaY > 0;
     if (wantsZoomOut && viewSpan >= 1 - 1e-6) return null;
-    if (wantsZoomIn && viewSpan <= minSpan * (1 + 1e-3)) return null;
+    if (wantsZoomIn && viewSpan <= normalMinSpan * (1 + 1e-3)) return null;
 
     const cursorTripPct = view.viewStartPct + cursorRatio * viewSpan;
     const zoomFactor = Math.exp(deltaY * 0.0015);
@@ -100,7 +138,7 @@ export function applyPinchZoom(
     durationSec: number,
 ): ZoomViewState {
     const startSpan = startView.viewEndPct - startView.viewStartPct;
-    const minSpan = computeMinViewSpan(durationSec);
+    const minSpan = computeEffectiveMinViewSpan(durationSec, startSpan);
     // Trip fraction under the centroid when the gesture started - the anchor we
     // keep under the finger centroid as it moves.
     const contentPct = startView.viewStartPct + startCentroidRatio * startSpan;

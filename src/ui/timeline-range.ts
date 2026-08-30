@@ -1,13 +1,12 @@
-// Timeline range overlay: pull-tabs + masks that span the WHOLE timeline stack
-// (chart + event strip + overview + the always-on progress bar) and let the
-// user pick the export clip range. Visible only in export-mode.
+// Timeline range overlay: pull-tabs + masks span the viewport-mapped timeline
+// rows (chart, event strip and progress bar) and let the user pick the export
+// clip range. The whole-trip navigator below remains a separate control with a
+// separate coordinate basis. Visible only in export-mode.
 //
-// Coordinate basis. The overlay lives inside #player-chart (spanning every
-// row), so the masks dim the out-of-range portion across all of them at once,
-// the same way the playhead crosses them. Trip-seconds <-> x goes through
-// getTimelineView() (the shared window + gutter), so it tracks chart zoom AND
-// keeps working when the chart canvas is hidden (gutter 0 -> full width). This
-// is what makes range selection available even with the chart toggled off.
+// Coordinate basis. The overlay lives inside #player-chart but stops above the
+// navigator, so the masks dim only rows mapped through the visible window. The
+// same getTimelineView() transform keeps it aligned with chart zoom and working
+// when the chart canvas is hidden.
 //
 // Drag model. Pointer-events on the tab elements; pointermove/up are captured
 // on the tab so the user can drag past the edge without losing the grab. A drag
@@ -19,7 +18,13 @@
 import { getTimelineView, timelineFracToSec, timelineSecToFracInView } from "./chart.js";
 import { t } from "../i18n/index.js";
 import { dom } from "./dom.js";
-import { exportPanelState, setRangeEdge, subscribeExportState } from "./export-state.js";
+import {
+    exportPanelState,
+    getExportRangeEdgeBounds,
+    notifyExportStateChanged,
+    setRangeEdge,
+    subscribeExportState,
+} from "./export-state.js";
 import { formatTime } from "./format.js";
 import { suppressEdgeSwipeNav } from "./pointer-drag.js";
 import { state } from "./state.js";
@@ -60,12 +65,16 @@ export function initTimelineRange(): void {
     tabStart = document.createElement("button");
     tabStart.type = "button";
     tabStart.className = "timeline-range__tab timeline-range__tab--start";
+    tabStart.setAttribute("role", "slider");
+    tabStart.setAttribute("aria-orientation", "horizontal");
     tabStart.setAttribute("aria-label", t("export.range.tabStart"));
     container.appendChild(tabStart);
 
     tabEnd = document.createElement("button");
     tabEnd.type = "button";
     tabEnd.className = "timeline-range__tab timeline-range__tab--end";
+    tabEnd.setAttribute("role", "slider");
+    tabEnd.setAttribute("aria-orientation", "horizontal");
     tabEnd.setAttribute("aria-label", t("export.range.tabEnd"));
     container.appendChild(tabEnd);
 
@@ -104,13 +113,18 @@ export function syncTimelineRange(): void {
     if (!container) return;
     const range = exportPanelState.range;
     const host = dom.playerChartEl;
+    const isEditable = isRangeEditable();
     if (!state.exportModeOpen || !range || !host) {
+        syncTabState(tabStart, "start", false, false, 0);
+        syncTabState(tabEnd, "end", false, false, 0);
         container.hidden = true;
         hideBubble();
         return;
     }
     const view = getTimelineView();
     if (!view) {
+        syncTabState(tabStart, "start", false, false, 0);
+        syncTabState(tabEnd, "end", false, false, 0);
         container.hidden = true;
         hideBubble();
         return;
@@ -124,6 +138,16 @@ export function syncTimelineRange(): void {
     }
     const startX = startFrac * w;
     const endX = endFrac * w;
+    const startSide = offscreenSide(range.startTripSec, view);
+    const endSide = offscreenSide(range.endTripSec, view);
+    // When the whole clip is beyond one side of the viewport both boundaries
+    // clamp to the same pixel. Keep only the nearer boundary actionable: end
+    // for a clip to the left, start for a clip to the right. One directional
+    // chevron says "the clip is over there" without stacked, ambiguous tabs.
+    const suppressStart = endSide < 0;
+    const suppressEnd = startSide > 0;
+    syncTabState(tabStart, "start", isEditable, suppressStart, startSide);
+    syncTabState(tabEnd, "end", isEditable, suppressEnd, endSide);
 
     container.hidden = false;
     // Center each tab on its boundary using its ACTUAL rendered width (16px on
@@ -132,15 +156,8 @@ export function syncTimelineRange(): void {
     // exactly on the boundary regardless of the touch-widened hit area.
     if (tabStart) tabStart.style.left = `${startX - tabStart.offsetWidth / 2}px`;
     if (tabEnd) tabEnd.style.left = `${endX - tabEnd.offsetWidth / 2}px`;
-    // A boundary outside the zoom window clamps to the viewport edge
-    // (timelineSecToFrac) - visually identical to a boundary sitting ON the
-    // edge, which read as "zooming moved my range". Flag the pinned state so
-    // CSS can restyle the tab as an off-screen pointer. The epsilon keeps the
-    // exact window==range case (the "Preview clip" zoom) in the normal style.
-    tabStart?.classList.toggle("is-offscreen", range.startTripSec < view.startSec - OFFSCREEN_EPSILON_SEC);
-    tabEnd?.classList.toggle("is-offscreen", range.endTripSec > view.endSec + OFFSCREEN_EPSILON_SEC);
     // Masks dim everything left/right of the range (incl. the axis gutters)
-    // across the full stacked height.
+    // across the viewport-mapped rows above the whole-trip navigator.
     if (maskLeft) {
         maskLeft.style.left = "0";
         maskLeft.style.width = `${Math.max(0, startX)}px`;
@@ -151,16 +168,68 @@ export function syncTimelineRange(): void {
     }
 }
 
+type OffscreenSide = -1 | 0 | 1;
+
+function offscreenSide(valueSec: number, view: { startSec: number; endSec: number }): OffscreenSide {
+    if (valueSec < view.startSec - OFFSCREEN_EPSILON_SEC) return -1;
+    if (valueSec > view.endSec + OFFSCREEN_EPSILON_SEC) return 1;
+    return 0;
+}
+
+function syncTabState(
+    tab: HTMLButtonElement | null,
+    which: "start" | "end",
+    isEditable: boolean,
+    isSuppressed: boolean,
+    offscreen: OffscreenSide,
+): void {
+    if (!tab) return;
+    const bounds = getExportRangeEdgeBounds(which);
+    const isDisabled = !isEditable || bounds === null || isSuppressed;
+    tab.hidden = isSuppressed;
+    tab.disabled = isDisabled;
+    tab.inert = isDisabled;
+    tab.setAttribute("aria-disabled", String(isDisabled));
+    tab.classList.toggle("is-offscreen", offscreen !== 0);
+    tab.classList.toggle("is-offscreen-left", offscreen < 0);
+    tab.classList.toggle("is-offscreen-right", offscreen > 0);
+    if (!bounds) {
+        tab.removeAttribute("aria-valuemin");
+        tab.removeAttribute("aria-valuemax");
+        tab.removeAttribute("aria-valuenow");
+        tab.removeAttribute("aria-valuetext");
+        return;
+    }
+    const value = Math.max(bounds.minTripSec, Math.min(bounds.valueTripSec, bounds.maxTripSec));
+    tab.setAttribute("aria-valuemin", String(bounds.minTripSec));
+    tab.setAttribute("aria-valuemax", String(bounds.maxTripSec));
+    tab.setAttribute("aria-valuenow", String(value));
+    tab.setAttribute("aria-valuetext", formatTime(value));
+}
+
+function isRangeEditable(): boolean {
+    return state.exportModeOpen && exportPanelState.phase === "options" && !exportPanelState.configurationLocked;
+}
+
 function attachTabDrag(tab: HTMLButtonElement, which: "start" | "end"): void {
     // The tabs park at the timeline gutter, which is close to the screen edge
     // when the range covers the whole trip - exactly where iOS arms swipe-back.
     suppressEdgeSwipeNav(tab);
+    // A button synthesizes click for Space/Enter with no meaningful pointer X.
+    // Never let that bubble into the chart's delegated seek handler.
+    tab.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+    });
     tab.addEventListener("pointerdown", (ev) => {
+        if (!isRangeEditable() || (ev.pointerType === "mouse" && ev.button !== 0)) return;
         ev.preventDefault();
         tab.setPointerCapture(ev.pointerId);
+        tab.classList.add("is-dragging");
         showBubbleFor(tab, which);
 
         const onMove = (mv: PointerEvent) => {
+            if (mv.pointerId !== ev.pointerId) return;
             updateRangeFromPointer(mv.clientX, which);
             // Re-anchor AFTER the range edit: setRangeEdge notified
             // synchronously, so the tab's left already reflects the clamped
@@ -168,21 +237,52 @@ function attachTabDrag(tab: HTMLButtonElement, which: "start" | "end"): void {
             // the 1s floor is visible as the number simply stopping.
             showBubbleFor(tab, which);
         };
-        const onUp = (up: PointerEvent) => {
-            try {
-                tab.releasePointerCapture(up.pointerId);
-            } catch {
-                // pointer already released by browser - ignore.
-            }
+        let finished = false;
+        const finish = (event: PointerEvent, shouldRelease: boolean) => {
+            if (event.pointerId !== ev.pointerId || finished) return;
+            finished = true;
             tab.removeEventListener("pointermove", onMove);
             tab.removeEventListener("pointerup", onUp);
             tab.removeEventListener("pointercancel", onUp);
+            tab.removeEventListener("lostpointercapture", onLostCapture);
+            tab.classList.remove("is-dragging");
+            if (shouldRelease) {
+                try {
+                    tab.releasePointerCapture(event.pointerId);
+                } catch {
+                    // pointer already released by browser - ignore.
+                }
+            }
             // Short linger so the final value is readable after the finger lifts.
             hideBubbleSoon();
+            // Range subscribers stayed live during the drag, except for
+            // geometry-changing contextual actions. Settle those once the
+            // timeline can no longer move under the captured pointer.
+            notifyExportStateChanged();
+        };
+        const onUp = (up: PointerEvent) => {
+            finish(up, true);
+        };
+        const onLostCapture = (lost: PointerEvent) => {
+            finish(lost, false);
         };
         tab.addEventListener("pointermove", onMove);
         tab.addEventListener("pointerup", onUp);
         tab.addEventListener("pointercancel", onUp);
+        tab.addEventListener("lostpointercapture", onLostCapture);
+    });
+
+    tab.addEventListener("keydown", (ev) => {
+        if (!isRangeEditable() || (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight")) return;
+        const bounds = getExportRangeEdgeBounds(which);
+        if (!bounds) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        const stepSec = ev.shiftKey ? 10 : 1;
+        const direction = ev.key === "ArrowLeft" ? -1 : 1;
+        setRangeEdge(which, bounds.valueTripSec + direction * stepSec);
+        showBubbleFor(tab, which);
+        hideBubbleSoon();
     });
 }
 
@@ -248,7 +348,7 @@ const flashTimers: Record<"start" | "end", ReturnType<typeof setTimeout> | null>
  */
 export function flashRangeTab(which: "start" | "end"): void {
     const tab = which === "start" ? tabStart : tabEnd;
-    if (!tab || container?.hidden) return;
+    if (!tab || tab.hidden || container?.hidden) return;
     tab.classList.remove("is-flash");
     // Force a reflow so re-adding the class restarts the animation on rapid repeats.
     void tab.offsetWidth;
@@ -264,7 +364,7 @@ export function flashRangeTab(which: "start" | "end"): void {
 
 function updateRangeFromPointer(clientX: number, which: "start" | "end"): void {
     const host = dom.playerChartEl;
-    if (!exportPanelState.range || !host) return;
+    if (!isRangeEditable() || !exportPanelState.range || !host) return;
     const rect = host.getBoundingClientRect();
     if (rect.width <= 0) return;
     const tripSec = timelineFracToSec((clientX - rect.left) / rect.width);

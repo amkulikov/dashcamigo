@@ -601,6 +601,12 @@ export type I18nKey =
     // Chart
     | "chart.canvas.label"
     | "chart.zoomReset"
+    | "chart.zoomOut"
+    | "chart.zoomIn"
+    | "chart.zoomNavigator"
+    | "chart.zoomStatus"
+    | "chart.zoomRangeStart"
+    | "chart.zoomRangeEnd"
     | "chart.axis.speed"
     | "chart.axis.accel"
     | "chart.pause"

@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-08-30.1",
+        category: "improvement",
+        text: {
+            en: "The timeline zoom can now be adjusted with buttons and draggable handles.",
+            ru: "Масштаб шкалы времени теперь можно менять кнопками и перетаскиванием границ.",
+            de: "Der Zeitleisten-Zoom lässt sich jetzt mit Schaltflächen und ziehbaren Griffen anpassen.",
+            es: "El zoom de la línea de tiempo ahora se puede ajustar con botones y controles que se pueden arrastrar.",
+            fr: "Le zoom de la chronologie peut désormais être réglé avec des boutons et des poignées à faire glisser.",
+            pl: "Powiększenie osi czasu można teraz zmieniać przyciskami i przeciąganymi uchwytami.",
+            pt: "O zoom da linha do tempo agora pode ser ajustado com botões e alças arrastáveis.",
+            zh: "现在可以使用按钮和可拖动手柄调整时间线缩放。",
+            ja: "タイムラインのズームを、ボタンとドラッグ可能なハンドルで調整できるようになりました。",
+            ko: "이제 버튼과 드래그 가능한 핸들로 타임라인 확대/축소를 조절할 수 있습니다.",
+        },
+    },
+    {
         id: "2026-08-29.2",
         category: "improvement",
         text: {

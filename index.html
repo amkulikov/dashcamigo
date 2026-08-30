@@ -1516,22 +1516,22 @@
                     </div>
                 </div>
                 <div class="player-chart" id="player-chart">
-                    <!-- Cross-cutting pointers for the current moment (orange) and the
-                         hover position (neutral) run through chart-canvas, ruler and strip
-                         as a single visual element - both absolute over .player-chart.
-                         Position is updated from src/ui/chart.ts on playback and hover. -->
+                    <!-- Cross-cutting pointers for the current moment and hover position
+                         run through the viewport-mapped rows as single visual elements.
+                         The playhead is orange while visible and neutral when its moment
+                         lies outside the zoom window; neither pointer crosses the separate
+                         whole-trip navigator. Position is updated from src/ui/chart.ts. -->
                     <div id="player-chart-playhead" class="player-chart-playhead" hidden></div>
                     <div id="player-chart-hover-cursor" class="player-chart-hover-cursor" hidden></div>
                     <!-- Timeline-marker pins (annotations). Populated by
                          src/ui/timeline-markers.ts via the chart overlay-sync
                          hook; empty when the trip has no markers. -->
                     <div id="player-chart-markers" class="timeline-markers"></div>
-                    <!-- Always-on progress scrubber: time-labelled seek bar that
-                         also carries the playhead + export-range overlays for the
-                         whole timeline stack. Visible in every mode (chart / strip
-                         are optional via the View menu). Top row of the stack, so
-                         it sits next to the transport bar; the chart/strip below
-                         are the analytics block. Click/drag to seek; updated from
+                    <!-- Always-on progress scrubber: time-labelled seek bar in the
+                         viewport-mapped stack. Visible in every mode (chart / strip are
+                         optional via the View menu). It sits next to the transport bar;
+                         the chart/strip below are the analytics block and the separate
+                         whole-trip navigator is last. Click/drag to seek; updated from
                          updatePlayerProgressUi. -->
                     <div class="player-mini-progress" id="player-mini-progress" role="slider"
                          aria-label="Trip progress"
@@ -1585,23 +1585,55 @@
                         <span class="chart-inferred-strip__axis-label chart-inferred-strip__axis-label--brk"
                               data-i18n="chart.inferredStrip.axis.brk">↓BRK</span>
                     </div>
-                    <!-- Mini-overview: full-trip minimap with the zoom viewport
-                         rect. Sits below the event strip; shown when the timeline
-                         is zoomed. Click/drag pans/centers the window. -->
-                    <div class="range-overview" id="player-chart-overview" hidden>
-                        <div class="range-overview-viewport" id="player-chart-overview-viewport"></div>
+                    <div class="chart-zoom-row" id="player-chart-zoom-row" hidden>
+                        <!-- Full-trip zoom navigator. The highlighted viewport stays visible
+                             at every zoom level: drag its body to pan, drag either edge to
+                             resize, or click the track to centre the window. -->
+                        <div class="range-overview" id="player-chart-overview" role="group" hidden
+                             data-i18n-attr="aria-label:chart.zoomNavigator"
+                             aria-label="Timeline zoom navigator">
+                            <div class="range-overview-viewport" id="player-chart-overview-viewport">
+                                <div class="range-overview-handle range-overview-handle--start"
+                                     id="player-chart-overview-start" role="slider" tabindex="0"
+                                     aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="100"
+                                     aria-valuenow="0" data-i18n-attr="aria-label:chart.zoomRangeStart"
+                                     aria-label="Visible range start"></div>
+                                <div class="range-overview-handle range-overview-handle--end"
+                                     id="player-chart-overview-end" role="slider" tabindex="0"
+                                     aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="100"
+                                     aria-valuenow="100" data-i18n-attr="aria-label:chart.zoomRangeEnd"
+                                     aria-label="Visible range end"></div>
+                            </div>
+                            <div class="chart-zoom-status" id="player-chart-zoom-status" role="group" hidden>
+                                <span class="chart-zoom-status__factor" id="player-chart-zoom-factor"
+                                      aria-hidden="true">1×</span>
+                                <span class="chart-zoom-status__separator" aria-hidden="true">·</span>
+                                <span class="chart-zoom-status__range" id="player-chart-zoom-range"
+                                      aria-hidden="true"></span>
+                            </div>
+                        </div>
+                        <!-- Explicit zoom controls mirror the keyboard shortcuts and keep
+                             zoom reversible on devices without a wheel. -->
+                        <div class="chart-zoom-controls">
+                            <button class="range-overview-reset is-concealed" id="player-chart-overview-reset"
+                                    type="button" disabled aria-hidden="true"
+                                    data-i18n-attr="aria-label:chart.zoomReset,title:chart.zoomReset"
+                                    aria-label="Full view" title="Full view">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/></svg>
+                                <span data-i18n="chart.zoomReset">Full view</span>
+                            </button>
+                            <button class="chart-zoom-control" id="player-chart-zoom-out" type="button" disabled
+                                    data-i18n-attr="aria-label:chart.zoomOut,title:chart.zoomOut"
+                                    aria-label="Zoom out" title="Zoom out">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg>
+                            </button>
+                            <button class="chart-zoom-control" id="player-chart-zoom-in" type="button" disabled
+                                    data-i18n-attr="aria-label:chart.zoomIn,title:chart.zoomIn"
+                                    aria-label="Zoom in" title="Zoom in">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                            </button>
+                        </div>
                     </div>
-                    <!-- Visible "back to full view" affordance, shown only while the
-                         timeline is zoomed (toggled with the overview in syncChartOverview).
-                         Replaces the undiscoverable dblclick-only reset; works on touch.
-                         Floats in the chart's top-right corner (ephemeral, not a persistent
-                         bar chip). -->
-                    <button class="range-overview-reset" id="player-chart-overview-reset" type="button" hidden
-                            data-i18n-attr="aria-label:chart.zoomReset,title:chart.zoomReset"
-                            aria-label="Full view" title="Full view">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/></svg>
-                        <span data-i18n="chart.zoomReset">Full view</span>
-                    </button>
                 </div>
                 <div id="video-map-resize" class="player-col-resize" role="separator" aria-orientation="vertical"
                      data-i18n-attr="aria-label:resize.videoMap"

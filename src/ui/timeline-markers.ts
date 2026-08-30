@@ -79,7 +79,7 @@ export function refreshTimelineMarkers(): void {
     for (const v of visible) {
         // Wrapper (full height, inert): the hairline. Hit button (flag head
         // only): a full-height interactive column would sit over the seek
-        // strip and the pan overview and steal their pointerdowns.
+        // strip and steal its pointerdowns.
         const pin = document.createElement("span");
         pin.className = "timeline-marker";
         pin.style.left = `${(v.frac * 100).toFixed(3)}%`;

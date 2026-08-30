@@ -5,6 +5,7 @@ import type { Page } from "@playwright/test";
 
 import {
     DESKTOP,
+    MOBILE,
     SAMPLE_70MAI,
     boxOf,
     expect,
@@ -22,6 +23,21 @@ import {
 // suite stays black-box against the built app.
 const MINIMAP_FRAME_PADDING_PX = 16;
 const MINIMAP_DRAG_THRESHOLD_PX = 5;
+
+async function chartWindow(page: Page): Promise<{ min: number; max: number; duration: number; zoomed: boolean }> {
+    return page.evaluate(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const st = (window as any).__dashcamigo.state;
+        const trip = st.active ? st.trips[st.active.trip] : null;
+        if (!st.chart || !trip) throw new Error("chart window unavailable");
+        return {
+            min: st.chart.scales.x.min as number,
+            max: st.chart.scales.x.max as number,
+            duration: trip.timeline.contentDurationSec as number,
+            zoomed: st.chartZoomed as boolean,
+        };
+    });
+}
 
 /** Seek through the public scrubber and wait for the media seek itself, not
  * merely for currentTime to read zero. A cross-file seek swaps in a fresh
@@ -558,6 +574,509 @@ test.describe("player", () => {
         await expect.poll(() => playhead.evaluate((el) => (el as HTMLElement).style.left)).not.toBe(before);
     });
 
+    test("timeline zoom controls show both directions and reflect their limits", async ({ page }) => {
+        const overview = page.locator("#player-chart-overview");
+        const zoomOut = page.locator("#player-chart-zoom-out");
+        const zoomIn = page.locator("#player-chart-zoom-in");
+        const reset = page.locator("#player-chart-overview-reset");
+        const status = page.locator("#player-chart-zoom-status");
+        const factor = page.locator("#player-chart-zoom-factor");
+        const range = page.locator("#player-chart-zoom-range");
+
+        // The navigator is a persistent map of the trip, including at full view.
+        await expect(overview).toBeVisible();
+        const overviewAtFull = await boxOf(page, "#player-chart-overview");
+        const playerChartAtFull = await boxOf(page, "#player-chart");
+        const desktopRowOverflow = await page.locator("#player-chart-zoom-row").evaluate((el) => ({
+            clientWidth: el.clientWidth,
+            scrollWidth: el.scrollWidth,
+        }));
+        expect(overviewAtFull.height, "fine-pointer navigator height").toBeCloseTo(24, 0);
+        expect(
+            Math.abs(overviewAtFull.x + overviewAtFull.width / 2 - (playerChartAtFull.x + playerChartAtFull.width / 2)),
+            "desktop navigator stays centered on the whole chart",
+        ).toBeLessThanOrEqual(1);
+        expect(overviewAtFull.width, "desktop navigator keeps a usable width").toBeGreaterThan(40);
+        expect(desktopRowOverflow.scrollWidth, "desktop zoom row has no horizontal overflow").toBeLessThanOrEqual(
+            desktopRowOverflow.clientWidth + 1,
+        );
+        await expect(zoomOut).toBeVisible();
+        await expect(zoomIn).toBeVisible();
+        await expect(zoomOut, "full view cannot zoom out any farther").toBeDisabled();
+        await expect(zoomIn).toBeEnabled();
+        await expect(reset).toBeHidden();
+        await expect(reset).toBeDisabled();
+        await expect(reset).toHaveAttribute("aria-hidden", "true");
+        await expect(status).toBeHidden();
+
+        const fullRangeText = (await range.textContent())?.trim() ?? "";
+        expect(fullRangeText, "the hidden full-view status is already synchronized").toMatch(
+            /^\d{2}:\d{2}:\d{2}–\d{2}:\d{2}:\d{2}$/,
+        );
+
+        const zoomOutAtFull = await boxOf(page, "#player-chart-zoom-out");
+        const zoomInAtFull = await boxOf(page, "#player-chart-zoom-in");
+
+        const full = await chartWindow(page);
+        expect(full.zoomed).toBe(false);
+        await zoomIn.click();
+        await expect
+            .poll(async () => {
+                const view = await chartWindow(page);
+                return view.max - view.min;
+            })
+            .toBeLessThan(full.max - full.min);
+        await expect(zoomOut).toBeEnabled();
+        await expect(reset).toBeVisible();
+        await expect(reset).toHaveAccessibleName("Full view");
+        await expect(reset).toHaveText("Full view");
+        await expect(reset).toBeEnabled();
+        await expect(reset).not.toHaveAttribute("aria-hidden", "true");
+        await expect(status).toBeVisible();
+
+        const factorText = (await factor.textContent())?.trim() ?? "";
+        const rangeText = (await range.textContent())?.trim() ?? "";
+        expect(factorText).toMatch(/^\d+(?:\.\d+)?×$/);
+        expect(Number.parseFloat(factorText), "zoom status reports magnification above full view").toBeGreaterThan(1);
+        expect(rangeText, "zoom status reports the visible clock range").toMatch(
+            /^\d{2}:\d{2}:\d{2}–\d{2}:\d{2}:\d{2}$/,
+        );
+        expect(rangeText, "zooming changes the visible clock range").not.toBe(fullRangeText);
+        const statusTitle = (await status.getAttribute("title")) ?? "";
+        const statusAria = (await status.getAttribute("aria-label")) ?? "";
+        for (const value of [statusTitle, statusAria]) {
+            expect(value).toContain(factorText);
+            expect(value).toContain(rangeText);
+        }
+
+        // Reset owns a concealed slot at full view. Revealing it must not resize
+        // the navigator or move the two zoom buttons under the pointer.
+        const overviewZoomed = await boxOf(page, "#player-chart-overview");
+        const resetZoomed = await boxOf(page, "#player-chart-overview-reset");
+        const zoomOutZoomed = await boxOf(page, "#player-chart-zoom-out");
+        const zoomInZoomed = await boxOf(page, "#player-chart-zoom-in");
+        expect(Math.abs(overviewZoomed.x - overviewAtFull.x), "overview keeps its x position").toBeLessThanOrEqual(1);
+        expect(Math.abs(overviewZoomed.width - overviewAtFull.width), "overview keeps its width").toBeLessThanOrEqual(
+            1,
+        );
+        expect(Math.abs(zoomOutZoomed.x - zoomOutAtFull.x), "zoom-out keeps its x position").toBeLessThanOrEqual(1);
+        expect(Math.abs(zoomInZoomed.x - zoomInAtFull.x), "zoom-in keeps its x position").toBeLessThanOrEqual(1);
+        expect(resetZoomed.x + resetZoomed.width, "Full view sits before zoom-out").toBeLessThanOrEqual(
+            zoomOutZoomed.x + 1,
+        );
+
+        // Narrow layouts keep the factor visible and collapse only the visual
+        // range. Assistive text and the native tooltip retain the full context.
+        await page.setViewportSize(MOBILE);
+        try {
+            await expect(status).toBeVisible();
+            await expect(factor).toBeVisible();
+            await expect(range).toBeHidden();
+            await expect(status).toHaveAttribute("title", statusTitle);
+            await expect(status).toHaveAttribute("aria-label", statusAria);
+        } finally {
+            await page.setViewportSize(DESKTOP);
+        }
+
+        await reset.focus();
+        await page.keyboard.press("Enter");
+        await expect.poll(async () => (await chartWindow(page)).zoomed).toBe(false);
+        await expect(status).toBeHidden();
+        await expect(reset).toBeHidden();
+        await expect(reset).toBeDisabled();
+        await expect(reset).toHaveAttribute("aria-hidden", "true");
+        await expect(zoomIn, "keyboard reset keeps focus in the zoom controls").toBeFocused();
+
+        // A matching step in the other direction is reversible, without needing
+        // the separate Full view reset.
+        await page.keyboard.press("Enter");
+        await zoomOut.focus();
+        await page.keyboard.press("Enter");
+        await expect.poll(async () => (await chartWindow(page)).zoomed).toBe(false);
+        await expect(zoomOut).toBeDisabled();
+        await expect(zoomIn).toBeEnabled();
+        await expect(zoomIn, "keyboard zoom-out keeps focus when it reaches full view").toBeFocused();
+        await expect(reset).toBeHidden();
+        await expect(overview).toBeVisible();
+
+        // The other limit is communicated too: once the shortest useful window
+        // is reached, further zoom-in is unavailable while zoom-out remains so.
+        await zoomIn.focus();
+        for (let i = 0; i < 12 && (await zoomIn.isEnabled()); i++) await page.keyboard.press("Enter");
+        await expect(zoomIn).toBeDisabled();
+        await expect(zoomOut).toBeEnabled();
+        await expect(zoomOut, "keyboard zoom-in keeps focus when it reaches the minimum span").toBeFocused();
+
+        const viewportAtMinimum = await boxOf(page, "#player-chart-overview-viewport");
+        const startAtMinimum = await boxOf(page, "#player-chart-overview-start");
+        const endAtMinimum = await boxOf(page, "#player-chart-overview-end");
+        expect(startAtMinimum.width).toBeGreaterThan(0);
+        expect(endAtMinimum.width).toBeGreaterThan(0);
+        expect(
+            startAtMinimum.x + startAtMinimum.width,
+            "fine-pointer edge hit targets do not overlap at minimum zoom",
+        ).toBeLessThanOrEqual(endAtMinimum.x + 1);
+        expect(startAtMinimum.width).toBeLessThanOrEqual(viewportAtMinimum.width / 2 + 1);
+        expect(endAtMinimum.width).toBeLessThanOrEqual(viewportAtMinimum.width / 2 + 1);
+    });
+
+    test("zoom-out grows a programmatic below-floor view without jumping", async ({ page }) => {
+        const play = page.locator("#player-play");
+        if ((await play.getAttribute("data-paused")) === "false") await play.click();
+        await expect(play).toHaveAttribute("data-paused", "true");
+
+        // Export/event previews may intentionally create a window narrower than
+        // the ordinary one-second navigation floor. Seed that valid state
+        // directly: this regression is about how the shared navigator adopts an
+        // already-created programmatic view, not about the preview entry point.
+        const seeded = await page.evaluate(() => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const st = (window as any).__dashcamigo.state;
+            const trip = st.active ? st.trips[st.active.trip] : null;
+            if (!st.chart || !trip) throw new Error("chart window unavailable");
+            const duration = trip.timeline.contentDurationSec as number;
+            const normalFloorPct = Math.max(0.001, Math.min(0.5, 1 / duration));
+            const normalFloorSec = normalFloorPct * duration;
+            const span = normalFloorSec / 4;
+            const min = duration * 0.4;
+            st.chart.zoomScale("x", { min, max: min + span }, "none");
+            st.chartZoomed = true;
+            st.isPreviewZoom = true;
+            return { min, span, normalFloorSec };
+        });
+        const before = await chartWindow(page);
+        expect(before.max - before.min, "seeded view really is below the ordinary floor").toBeCloseTo(seeded.span, 4);
+        expect(before.max - before.min).toBeLessThan(seeded.normalFloorSec);
+
+        // A real programmatic preview runs the same timeline sync immediately.
+        // Our direct seed bypassed it, so let ResizeObserver reconcile the
+        // navigator before asserting the initial ARIA contract and controls.
+        await page.setViewportSize({ width: DESKTOP.width - 1, height: DESKTOP.height });
+        const start = page.locator("#player-chart-overview-start");
+        const end = page.locator("#player-chart-overview-end");
+        await expect.poll(async () => Number(await start.getAttribute("aria-valuenow"))).toBeCloseTo(seeded.min, 4);
+        expect(Number(await end.getAttribute("aria-valuenow"))).toBeCloseTo(seeded.min + seeded.span, 4);
+        expect(Number(await start.getAttribute("aria-valuemax"))).toBeCloseTo(seeded.min, 4);
+        expect(Number(await end.getAttribute("aria-valuemin"))).toBeCloseTo(seeded.min + seeded.span, 4);
+        const zoomIn = page.locator("#player-chart-zoom-in");
+        const zoomOut = page.locator("#player-chart-zoom-out");
+        await expect(zoomIn).toBeDisabled();
+        await expect(zoomOut).toBeEnabled();
+
+        // One explicit outward step should grow from the actual view. The old
+        // clamp jumped straight to normalFloorSec on this first interaction.
+        await zoomOut.click();
+        await expect
+            .poll(async () => {
+                const view = await chartWindow(page);
+                return view.max - view.min;
+            })
+            .toBeGreaterThan(seeded.span);
+        const after = await chartWindow(page);
+        const grownSpan = after.max - after.min;
+        expect(grownSpan, "outward zoom stays below the ordinary floor instead of jumping").toBeLessThan(
+            seeded.normalFloorSec,
+        );
+        expect(after.zoomed).toBe(true);
+        expect(await page.evaluate(() => (window as any).__dashcamigo.state.isPreviewZoom)).toBe(false);
+
+        // The handles announce the same effective floor the next independent
+        // edge gesture will enforce: at a below-floor view neither edge can
+        // make the viewport narrower, while both can still expand it.
+        expect(Number(await start.getAttribute("aria-valuenow"))).toBeCloseTo(after.min, 4);
+        expect(Number(await end.getAttribute("aria-valuenow"))).toBeCloseTo(after.max, 4);
+        expect(Number(await start.getAttribute("aria-valuemax"))).toBeCloseTo(after.min, 4);
+        expect(Number(await end.getAttribute("aria-valuemin"))).toBeCloseTo(after.max, 4);
+        await expect(zoomIn).toBeDisabled();
+        await expect(zoomOut).toBeEnabled();
+    });
+
+    test("timeline zoom row preserves the chart stack at 390px", async ({ page }) => {
+        await page.setViewportSize(MOBILE);
+        try {
+            await expect(page.locator("#player-chart-zoom-row")).toBeVisible();
+            const playerChart = await boxOf(page, "#player-chart");
+            const canvas = await boxOf(page, "#player-chart-canvas");
+            const strip = await boxOf(page, "#player-chart-inferred-strip-wrap");
+            const zoomRow = await boxOf(page, "#player-chart-zoom-row");
+            const overview = await boxOf(page, "#player-chart-overview");
+            const rowOverflow = await page.locator("#player-chart-zoom-row").evaluate((el) => ({
+                clientWidth: el.clientWidth,
+                scrollWidth: el.scrollWidth,
+            }));
+
+            expect(zoomRow.y, "zoom row starts below the chart canvas").toBeGreaterThanOrEqual(
+                canvas.y + canvas.height - 1,
+            );
+            expect(zoomRow.y, "zoom row starts below the event strip").toBeGreaterThanOrEqual(
+                strip.y + strip.height - 1,
+            );
+            expect(zoomRow.x, "zoom row stays inside the chart on the left").toBeGreaterThanOrEqual(playerChart.x - 1);
+            expect(zoomRow.x + zoomRow.width, "zoom row stays inside the chart on the right").toBeLessThanOrEqual(
+                playerChart.x + playerChart.width + 1,
+            );
+            expect(zoomRow.y + zoomRow.height, "zoom row stays inside the chart at the bottom").toBeLessThanOrEqual(
+                playerChart.y + playerChart.height + 1,
+            );
+            expect(
+                Math.abs(overview.x + overview.width / 2 - (playerChart.x + playerChart.width / 2)),
+                "390px navigator stays centered on the whole chart",
+            ).toBeLessThanOrEqual(1);
+            expect(overview.x, "navigator stays inside the chart on the left").toBeGreaterThanOrEqual(
+                playerChart.x - 1,
+            );
+            expect(overview.x + overview.width, "navigator stays inside the chart on the right").toBeLessThanOrEqual(
+                playerChart.x + playerChart.width + 1,
+            );
+            expect(rowOverflow.scrollWidth, "zoom row has no horizontal overflow at 390px").toBeLessThanOrEqual(
+                rowOverflow.clientWidth + 1,
+            );
+            expect(overview.width, "navigator keeps a usable width beside the controls").toBeGreaterThan(40);
+            expect(canvas.height, "mobile chart keeps a readable plot area").toBeGreaterThan(24);
+        } finally {
+            await page.setViewportSize(DESKTOP);
+        }
+    });
+
+    test("timeline zoom row stays stable across the former 520px breakpoint", async ({ page }) => {
+        await page.locator("#player-chart-zoom-in").click();
+        await expect(page.locator("#player-chart-overview-reset")).toBeVisible();
+
+        const geometryAt = async (width: number) => {
+            await page.setViewportSize({ width, height: MOBILE.height });
+            await expect.poll(async () => (await boxOf(page, "#player-chart-zoom-row")).width).toBeCloseTo(width, 0);
+            const overview = await boxOf(page, "#player-chart-overview");
+            const controls = await boxOf(page, ".chart-zoom-controls");
+            const playerChart = await boxOf(page, "#player-chart");
+            const rowOverflow = await page.locator("#player-chart-zoom-row").evaluate((el) => ({
+                clientWidth: el.clientWidth,
+                scrollWidth: el.scrollWidth,
+            }));
+            const resetLabelDisplay = await page
+                .locator("#player-chart-overview-reset span")
+                .evaluate((el) => getComputedStyle(el).display);
+            const rangeDisplay = await page
+                .locator("#player-chart-zoom-range")
+                .evaluate((el) => getComputedStyle(el).display);
+            return { overview, controls, playerChart, rowOverflow, resetLabelDisplay, rangeDisplay };
+        };
+
+        try {
+            const at520 = await geometryAt(520);
+            const at521 = await geometryAt(521);
+            expect(
+                Math.abs(at521.overview.width - at520.overview.width),
+                "navigator has no breakpoint width jump",
+            ).toBeLessThanOrEqual(2);
+            expect(
+                Math.abs(at521.controls.width - at520.controls.width),
+                "controls grow continuously",
+            ).toBeLessThanOrEqual(2);
+            for (const [sample, width] of [
+                [at520, 520],
+                [at521, 521],
+            ] as const) {
+                expect(
+                    Math.abs(
+                        sample.overview.x +
+                            sample.overview.width / 2 -
+                            (sample.playerChart.x + sample.playerChart.width / 2),
+                    ),
+                    `${width}px navigator stays centred`,
+                ).toBeLessThanOrEqual(1);
+                expect(sample.rowOverflow.scrollWidth, `${width}px row does not overflow`).toBeLessThanOrEqual(
+                    sample.rowOverflow.clientWidth + 1,
+                );
+                expect(sample.resetLabelDisplay, `${width}px reset stays icon-only`).toBe("none");
+                expect(sample.rangeDisplay, `${width}px status does not reveal a clipped range`).toBe("none");
+            }
+
+            // The text returns only once its continuously-grown slot can show
+            // the full English label; revealing it does not resize the row.
+            const at647 = await geometryAt(647);
+            const at648 = await geometryAt(648);
+            expect(
+                Math.abs(at648.overview.width - at647.overview.width),
+                "label reveal keeps navigator width",
+            ).toBeLessThanOrEqual(2);
+            expect(at647.resetLabelDisplay).toBe("none");
+            expect(at648.resetLabelDisplay).not.toBe("none");
+            const labelOverflow = await page.locator("#player-chart-overview-reset span").evaluate((el) => ({
+                clientWidth: el.clientWidth,
+                scrollWidth: el.scrollWidth,
+            }));
+            expect(labelOverflow.scrollWidth, "expanded Full view label is not truncated").toBeLessThanOrEqual(
+                labelOverflow.clientWidth + 1,
+            );
+        } finally {
+            await page.setViewportSize(DESKTOP);
+        }
+    });
+
+    test("playhead turns neutral at an excluded zoom edge and restores inside", async ({ page }) => {
+        const play = page.locator("#player-play");
+        if ((await play.getAttribute("data-paused")) === "false") await play.click();
+        await expect(play).toHaveAttribute("data-paused", "true");
+        await seekToTripStart(page);
+
+        const playerChart = page.locator("#player-chart");
+        const playhead = page.locator("#player-chart-playhead");
+        const thumb = page.locator("#player-mini-progress-thumb");
+        const cursorColors = () =>
+            page.evaluate(() => {
+                const line = document.querySelector<HTMLElement>("#player-chart-playhead");
+                const progressThumb = document.querySelector<HTMLElement>("#player-mini-progress-thumb");
+                if (!line || !progressThumb) throw new Error("timeline cursor unavailable");
+                return {
+                    line: getComputedStyle(line).backgroundColor,
+                    thumb: getComputedStyle(progressThumb).backgroundColor,
+                };
+            });
+
+        await expect(playerChart).not.toHaveClass(/is-playhead-outside-view/);
+        await expect(playhead).toBeVisible();
+        await expect(thumb).toBeVisible();
+        const accent = await cursorColors();
+        expect(accent.line, "line and thumb share the accent in range").toBe(accent.thumb);
+
+        // Keep the paused playhead at trip start and inspect only the right-hand
+        // part of the trip. Drag-select changes the view without seeking.
+        const canvas = await boxOf(page, "#player-chart-canvas");
+        const selectY = canvas.y + canvas.height * 0.4;
+        await page.mouse.move(canvas.x + canvas.width * 0.6, selectY);
+        await page.mouse.down();
+        await page.mouse.move(canvas.x + canvas.width * 0.75, selectY, { steps: 3 });
+        await page.mouse.move(canvas.x + canvas.width * 0.9, selectY, { steps: 3 });
+        await page.mouse.up();
+
+        await expect(playerChart).toHaveClass(/is-playhead-outside-view/);
+        const outside = await cursorColors();
+        expect(outside.line, "outside line and thumb share the neutral color").toBe(outside.thumb);
+        expect(outside.line, "outside color differs from the active accent").not.toBe(accent.line);
+
+        const lineAtEdge = await boxOf(page, "#player-chart-playhead");
+        const thumbAtEdge = await boxOf(page, "#player-mini-progress-thumb");
+        const progress = await boxOf(page, "#player-mini-progress");
+        const lineCenter = lineAtEdge.x + lineAtEdge.width / 2;
+        const thumbCenter = thumbAtEdge.x + thumbAtEdge.width / 2;
+        expect(Math.abs(lineCenter - thumbCenter), "line and thumb clamp to the same edge").toBeLessThanOrEqual(1);
+        expect(lineCenter, "excluded trip start clamps at the left edge").toBeLessThan(
+            progress.x + progress.width * 0.2,
+        );
+
+        // The scrubber maps to the visible inspection window, so its midpoint
+        // is an unambiguous seek back inside without resetting the zoom.
+        await page.mouse.click(progress.x + progress.width * 0.5, progress.y + progress.height / 2);
+        await expect(playerChart).not.toHaveClass(/is-playhead-outside-view/);
+        await expect.poll(cursorColors).toEqual(accent);
+        const lineInside = await boxOf(page, "#player-chart-playhead");
+        const thumbInside = await boxOf(page, "#player-mini-progress-thumb");
+        expect(
+            Math.abs(lineInside.x + lineInside.width / 2 - (thumbInside.x + thumbInside.width / 2)),
+            "line and thumb stay aligned after the seek",
+        ).toBeLessThanOrEqual(1);
+    });
+
+    test("timeline overview edge drag narrows and restores the visible window", async ({ page }) => {
+        const overview = await boxOf(page, "#player-chart-overview");
+        const startHandle = page.locator("#player-chart-overview-start");
+        await expect(startHandle).toBeVisible();
+
+        const initial = await chartWindow(page);
+        const start = await boxOf(page, "#player-chart-overview-start");
+        const y = start.y + start.height / 2;
+        await page.mouse.move(start.x + start.width / 2, y);
+        await page.mouse.down();
+        await page.mouse.move(overview.x + overview.width * 0.25, y, { steps: 5 });
+        await page.mouse.up();
+
+        await expect
+            .poll(async () => (await chartWindow(page)).min, { message: "start edge drag must narrow the window" })
+            .toBeGreaterThan(initial.duration * 0.15);
+        const narrowed = await chartWindow(page);
+        expect(narrowed.zoomed).toBe(true);
+        expect(narrowed.max).toBeCloseTo(initial.duration, 2);
+
+        const movedStart = await boxOf(page, "#player-chart-overview-start");
+        const movedY = movedStart.y + movedStart.height / 2;
+        await page.mouse.move(movedStart.x + movedStart.width / 2, movedY);
+        await page.mouse.down();
+        await page.mouse.move(overview.x, movedY, { steps: 5 });
+        await page.mouse.up();
+
+        await expect.poll(async () => (await chartWindow(page)).zoomed).toBe(false);
+        const restored = await chartWindow(page);
+        expect(restored.min).toBeCloseTo(0, 4);
+        expect(restored.max).toBeCloseTo(initial.duration, 4);
+
+        // A captured right edge keeps resizing throughout the gesture. Status
+        // and reset updates must not feed back into navigator width mid-drag.
+        const end = await boxOf(page, "#player-chart-overview-end");
+        const endY = end.y + end.height / 2;
+        const maxByStep = [restored.max];
+        await page.mouse.move(end.x + end.width / 2, endY);
+        await page.mouse.down();
+        for (const ratio of [0.9, 0.8, 0.7]) {
+            await page.mouse.move(overview.x + overview.width * ratio, endY, { steps: 3 });
+            maxByStep.push((await chartWindow(page)).max);
+            const overviewAtStep = await boxOf(page, "#player-chart-overview");
+            expect(
+                Math.abs(overviewAtStep.width - overview.width),
+                `overview width stays fixed at ${ratio}`,
+            ).toBeLessThanOrEqual(1);
+        }
+        await page.mouse.move(overview.x + overview.width, endY, { steps: 3 });
+        await page.mouse.up();
+
+        for (let i = 1; i < maxByStep.length; i++) {
+            expect(maxByStep[i]!, `right-edge step ${i} narrows the window`).toBeLessThan(maxByStep[i - 1]!);
+        }
+        await expect.poll(async () => (await chartWindow(page)).zoomed).toBe(false);
+    });
+
+    test("timeline overview edges expose slider values and resize by keyboard", async ({ page }) => {
+        const start = page.locator("#player-chart-overview-start");
+        const end = page.locator("#player-chart-overview-end");
+        const initial = await chartWindow(page);
+
+        await expect(start).toHaveAttribute("role", "slider");
+        await expect(end).toHaveAttribute("role", "slider");
+        await expect(start).toHaveAccessibleName(/start/i);
+        await expect(end).toHaveAccessibleName(/end/i);
+        const startMin = Number(await start.getAttribute("aria-valuemin"));
+        const startMax = Number(await start.getAttribute("aria-valuemax"));
+        const endMin = Number(await end.getAttribute("aria-valuemin"));
+        const endMax = Number(await end.getAttribute("aria-valuemax"));
+        expect(startMin).toBe(0);
+        expect(startMax).toBeGreaterThan(0);
+        expect(startMax).toBeLessThan(initial.duration);
+        expect(endMin).toBeGreaterThan(0);
+        expect(endMax).toBeCloseTo(initial.duration, 4);
+        expect(startMax + endMin, "both handles expose the same minimum span").toBeCloseTo(initial.duration, 4);
+        expect(Number(await start.getAttribute("aria-valuenow"))).toBeCloseTo(0, 4);
+        expect(Number(await end.getAttribute("aria-valuenow"))).toBeCloseTo(initial.duration, 4);
+
+        await start.press("ArrowRight");
+        await expect
+            .poll(async () => (await chartWindow(page)).min, { message: "ArrowRight moves the start later" })
+            .toBeGreaterThan(0);
+        const narrowedStart = await chartWindow(page);
+        expect(Number(await start.getAttribute("aria-valuenow"))).toBeCloseTo(narrowedStart.min, 2);
+        expect(Number(await end.getAttribute("aria-valuemin"))).toBeCloseTo(narrowedStart.min + endMin, 2);
+        await start.press("ArrowLeft");
+        await expect.poll(async () => (await chartWindow(page)).zoomed).toBe(false);
+
+        await end.press("ArrowLeft");
+        await expect
+            .poll(async () => (await chartWindow(page)).max, { message: "ArrowLeft moves the end earlier" })
+            .toBeLessThan(initial.duration);
+        const narrowedEnd = await chartWindow(page);
+        expect(Number(await end.getAttribute("aria-valuenow"))).toBeCloseTo(narrowedEnd.max, 2);
+        expect(Number(await start.getAttribute("aria-valuemax"))).toBeCloseTo(narrowedEnd.max - endMin, 2);
+        await end.press("ArrowRight");
+        await expect.poll(async () => (await chartWindow(page)).zoomed).toBe(false);
+    });
+
     test("sidebar collapse button hides the trip list and the edge tab restores it", async ({ page }) => {
         const sidebar = page.locator(".sidebar").first();
         await expect(sidebar).toBeVisible();
@@ -720,7 +1239,9 @@ test.describe("player", () => {
         // double-click gesture.
         const reset = page.locator("#player-chart-overview-reset");
         await expect(reset).toBeVisible();
+        await expect(reset).toHaveAccessibleName("Full view");
         await expect(reset).toHaveText("Full view");
+        await expect(reset).toBeEnabled();
         await shot(page, "player-05b-timeline-zoom-reset");
         await reset.click();
         await expect
@@ -729,6 +1250,7 @@ test.describe("player", () => {
                 page.evaluate(() => (window as any).__dashcamigo.state.chartZoomed),
             )
             .toBe(false);
+        await expect(reset).toBeHidden();
     });
 
     test("small pointer wobble on the chart does not zoom the timeline", async ({ page }) => {
@@ -1012,5 +1534,62 @@ test.describe("player", () => {
         );
         const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("dashcamigo:mapMarker") ?? "null"));
         expect(stored).toEqual({ shape: "van", color: "#e5484d", size: "small" });
+    });
+});
+
+test.describe("player timeline with a coarse pointer", () => {
+    test.use({ hasTouch: true, isMobile: true });
+
+    test.beforeEach(async ({ page }) => {
+        await presetLocalStorage(page);
+        await page.setViewportSize(MOBILE);
+        await gotoApp(page, "en");
+        await loadTrip(page, SAMPLE_70MAI);
+    });
+
+    test("navigator keeps coarse edge targets separate at minimum zoom", async ({ page }) => {
+        const overview = await boxOf(page, "#player-chart-overview");
+        expect(overview.height, "coarse-pointer navigator height").toBeCloseTo(36, 0);
+        expect(overview.width, "real phone keeps useful navigator width").toBeGreaterThan(140);
+        await expect(page.locator("#player-chart-overview-reset span")).toBeHidden();
+        await expect(page.locator("#player-chart-zoom-out")).toHaveCSS("width", "36px");
+        await expect(page.locator("#player-chart-zoom-in")).toHaveCSS("width", "36px");
+
+        const zoomIn = page.locator("#player-chart-zoom-in");
+        for (let i = 0; i < 12 && (await zoomIn.isEnabled()); i++) await zoomIn.click();
+        await expect(zoomIn).toBeDisabled();
+
+        const viewport = await boxOf(page, "#player-chart-overview-viewport");
+        const start = await boxOf(page, "#player-chart-overview-start");
+        const end = await boxOf(page, "#player-chart-overview-end");
+        expect(viewport.width, "fixture reaches a viewport narrower than two full touch targets").toBeLessThan(72);
+        await expect(page.locator("#player-chart-overview-viewport")).toHaveClass(/is-compact/);
+        expect(start.width, "start keeps a two-half hit region").toBeCloseTo(72, 0);
+        expect(end.width, "end keeps a two-half hit region").toBeCloseTo(72, 0);
+        expect(Math.abs(start.x - end.x)).toBeLessThanOrEqual(1);
+
+        const hitY = start.y + start.height / 2;
+        const leftHitX = start.x + start.width * 0.25;
+        const rightHitX = start.x + start.width * 0.75;
+        const owners = await page.evaluate(
+            ({ leftHitX, rightHitX, hitY }) =>
+                [leftHitX, rightHitX].map(
+                    (x) => document.elementFromPoint(x, hitY)?.closest<HTMLElement>("[role=slider]")?.id ?? null,
+                ),
+            { leftHitX, rightHitX, hitY },
+        );
+        expect(owners, "the clipped halves expose different edge controls").toEqual([
+            "player-chart-overview-start",
+            "player-chart-overview-end",
+        ]);
+
+        const before = await chartWindow(page);
+        await page.mouse.move(rightHitX, hitY);
+        await page.mouse.down();
+        await page.mouse.move(rightHitX + 30, hitY, { steps: 3 });
+        await page.mouse.up();
+        await expect
+            .poll(async () => (await chartWindow(page)).max, { message: "coarse end target remains draggable" })
+            .toBeGreaterThan(before.max);
     });
 });
