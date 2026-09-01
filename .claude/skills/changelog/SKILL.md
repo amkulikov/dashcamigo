@@ -44,12 +44,25 @@ Coarse strokes are the point: merge related commits into ONE entry ("Improved tr
 - Categories: `support` (new cameras/formats), `feature` (new capability or setting), `improvement` (existing flow got better), `fix`.
 - Write English and Russian first. English is the source of truth for meaning.
 - Use the shortest factual sentence that still identifies the change. Prefer
-  one clause, usually no more than about 15 English words. Keep a condition only
-  when the result would be unclear without it.
+  one clause and aim for 6-12 English words; go longer only when a condition is
+  needed to identify the behavior.
 - Describe the visible result, not the implementation, sequencing, safeguards,
   or every sub-fix behind it. If a draft chains details with "and", remove the
   secondary detail unless both outcomes independently deserve changelog entries.
 - Treat the changelog as a release ledger, not a marketing surface. State the changed behavior literally and stop. Do not add reassurance, benefit framing, product promises, or adjectives such as "cleaner", "clearer", "smoother", "better", or "more reliable". Use "faster" only when the entry can name the concrete operation that became faster and the change is supported by evidence.
+- Before translating, do a compression pass over both English and Russian:
+  1. Remove release-time filler such as "now", "currently", "теперь", and
+     "сейчас" unless time itself is part of the change.
+  2. Replace evaluative wording such as "works correctly", "stays smooth",
+     "работает правильно", or "остаётся плавным" with the observable behavior
+     or former failure: "restarts", "no longer stalls", "перезапускается",
+     "больше не зависает".
+  3. Delete every modifier whose removal leaves the same fact.
+  4. Read the English line with its generated category prefix (`Fixed:`,
+     `Improved:`, `New camera support:`); the entry must not repeat the prefix.
+- Use the terse version as the translation source. Example: prefer "Playback no
+  longer stalls between clips at higher speeds" over "Playback now stays smooth
+  when moving between clips, including at higher speeds."
 - Do not re-announce an unchanged product property (privacy, local processing, offline use, and so on) merely because landing copy now emphasizes it.
 - `.claude/rules/voice.md` still governs plain vocabulary, product terms, locale register, and typography. Its outcome-first rule does not require promotional wording: include enough mechanics to identify the changed behavior precisely.
 - Prefer a factual condition and result. For example: "The map now switches to a backup source when the primary source is unavailable." Do not inflate it to "The map keeps working through outages" or add a landing-copy entry saying privacy is now explained more clearly.
