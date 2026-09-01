@@ -89,6 +89,7 @@ import {
     resetVideoZoom,
 } from "./player-zoom.js";
 import { initPlayerMetrics, refreshMetricsFromActiveFrame, resyncMetricsForTrip } from "./player-metrics.js";
+import { isPreloadReadyForPromotion } from "./player-preload.js";
 import { syncExportButton } from "./player-export-button.js";
 import { initPlayerFullscreen, syncFullscreenButton, toggleFullscreen } from "./player-fullscreen.js";
 import { persistCurrentLayout, restoreLayoutForTrip } from "./player-layout-pref.js";
@@ -302,8 +303,8 @@ function schedulePreloadNext(): void {
  * Success conditions:
  *  - next-frame master channel matches the current master;
  *  - preload slot holds exactly that file (videoAttachedFile match);
- *  - preload slot has reached readyState >= HAVE_METADATA so play() starts
- *    immediately rather than waiting hundreds of ms.
+ *  - preload slot has reached HAVE_FUTURE_DATA so play() can advance rather
+ *    than stalling on a metadata-only or single-frame buffer.
  */
 function tryPromotePreloadAsActive(nextFrameIdx: number): boolean {
     if (!state.active) return false;
@@ -319,7 +320,7 @@ function tryPromotePreloadAsActive(nextFrameIdx: number): boolean {
 
     const newActive = preloadPlayer(masterCh);
     if (videoAttachedFile.get(newActive) !== cand.file) return false;
-    if (newActive.readyState < 1 /* HAVE_METADATA */) return false;
+    if (!isPreloadReadyForPromotion(newActive.readyState)) return false;
     // Decoder error - don't promote (fall back to playFrame, which handles the codec-overlay).
     if (newActive.error) return false;
 
