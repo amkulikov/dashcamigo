@@ -43,6 +43,9 @@
     --dc-stone-1: #eceae3;
     --dc-stone-2: #dcd8cd;
     --dc-stone-3: #bdb7a6;
+    /* Muted text needs its own darker cut: stone-3 is suitable for borders and
+       decoration, but only reaches 2:1 against the elevated white surface. */
+    --dc-stone-3-ink: #756f61;
     --dc-stone-4: #6f6a5c;
     --dc-stone-5: #2d2a23;
 
@@ -290,7 +293,7 @@
         --bg-active: var(--dc-stone-2);
         --fg: var(--dc-ink);
         --fg-dim: var(--dc-stone-4);
-        --fg-mute: var(--dc-stone-3);
+        --fg-mute: var(--dc-stone-3-ink);
         --accent-ink: var(--dc-orange-ink);
         --border: var(--dc-stone-2);
         --border-strong: var(--dc-stone-3);
@@ -312,7 +315,7 @@ html.dc-light {
     --bg-active: var(--dc-stone-2);
     --fg: var(--dc-ink);
     --fg-dim: var(--dc-stone-4);
-    --fg-mute: var(--dc-stone-3);
+    --fg-mute: var(--dc-stone-3-ink);
     --accent-ink: var(--dc-orange-ink);
     --border: var(--dc-stone-2);
     --border-strong: var(--dc-stone-3);

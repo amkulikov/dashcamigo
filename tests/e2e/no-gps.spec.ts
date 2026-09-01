@@ -78,6 +78,37 @@ test.describe("no-GPS export gate", () => {
         await expect(page.locator('[data-map-mode="large"]')).toBeDisabled();
     });
 
+    test("light theme keeps the no-GPS status readable", async ({ page }) => {
+        await page.locator('.theme-toggle-btn[data-theme="light"]').click();
+        await expect(page.locator("html")).toHaveClass(/dc-light/);
+
+        const label = page.locator("#readout-fix-label");
+        await expect(label).toBeVisible();
+        await expect(label).toHaveText("No GPS data");
+        const contrast = await label.evaluate((element) => {
+            const parseRgb = (color: string): number[] => {
+                const channels = color
+                    .match(/[\d.]+/g)
+                    ?.slice(0, 3)
+                    .map(Number);
+                if (channels?.length !== 3) throw new Error(`unsupported color: ${color}`);
+                return channels;
+            };
+            const luminance = (color: string): number => {
+                const [r, g, b] = parseRgb(color).map((channel) => {
+                    const value = channel / 255;
+                    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+                });
+                return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+            };
+
+            const foreground = luminance(getComputedStyle(element).color);
+            const background = luminance(getComputedStyle(element.closest("#player-readout")!).backgroundColor);
+            return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
+        });
+        expect(contrast, "small muted status text meets WCAG AA contrast").toBeGreaterThanOrEqual(4.5);
+    });
+
     test("pipeline: a stale 'keep GPS' default does NOT inject a gpmd track", async ({ page }) => {
         // withGpmf defaults true, but
         // the trip has no fix, so export-flow's `withGpmf && hasGps` gate must keep
