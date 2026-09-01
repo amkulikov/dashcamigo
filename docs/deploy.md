@@ -28,9 +28,10 @@ personal or internal installation, use [the self-hosting guide](self-hosting.md)
    env var.) For readable crash stacks in
    Sentry, set the three build secrets `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` /
    `SENTRY_PROJECT` (Production only, unless you also want maps for a preview
-   branch) - the build then uploads hidden source maps to Sentry and removes them
-   from `dist`. Without them the build still works, stacks just stay minified. See
-   `.env.example` for the full contract and the other optional variables.
+   branch) - the workflow then uploads hidden source maps to Sentry in a bounded,
+   non-fatal step and removes them from `dist` before deploy. Without them the
+   build still works, stacks just stay minified. See `.env.example` for the full
+   contract and the other optional variables.
    `INDEXNOW_KEY` (Production only, type **Secret**) makes the build emit the
    IndexNow proof-of-ownership file; unset, IndexNow is simply off. Why it is a
    secret and how to rotate it: `docs/seo.md`,

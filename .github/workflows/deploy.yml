@@ -78,6 +78,29 @@ jobs:
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT_STAGING }}
         run: npm run build
 
+      # Keep sentry-cli outside Vite: Sentry API outages have previously left
+      # the plugin's writeBundle hook waiting until the whole deploy timed out.
+      # Source maps improve diagnostics but must never block a site deploy.
+      - name: Upload source maps to Sentry
+        if: steps.gate.outputs.deploy == 'true'
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT_STAGING }}
+        run: |
+          if [ -z "${SENTRY_AUTH_TOKEN}" ] || [ -z "${SENTRY_ORG}" ] || [ -z "${SENTRY_PROJECT}" ]; then
+            echo "::notice::Sentry source-map upload is not configured, skipping"
+            exit 0
+          fi
+          release="$(git describe --tags --exact-match HEAD 2>/dev/null || git rev-parse --short HEAD)"
+          npx --no-install sentry-cli sourcemaps upload --release="${release}" dist
+
+      - name: Remove source maps from deploy
+        if: always() && steps.gate.outputs.deploy == 'true'
+        run: find dist -type f -name '*.map' -delete
+
       - name: Deploy to Cloudflare Pages (branch alias main)
         if: steps.gate.outputs.deploy == 'true'
         env:

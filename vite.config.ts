@@ -132,15 +132,13 @@ const NO_INDEX =
     process.env.VITE_NO_INDEX === "true" ||
     profileRequiresGlobalNoIndex(SEO_DEPLOYMENT);
 
-// Source-map upload to Sentry runs ONLY when all three build-time secrets are
-// present (set on the CF Pages project env). Gating on presence keeps local dev,
-// CI and self-hosted forks free of any Sentry build step: no token => no upload,
-// no maps emitted (see build.sourcemap). sentryVitePlugin injects a debugId into
-// each chunk and uploads the matching hidden .map, so it MUST run inside the same
-// build that produces the deployed assets (CF Pages), not out-of-band - local
-// hashes/debugIds would not match what got deployed. The auth token is a build
-// secret, never shipped to the client.
-const SENTRY_UPLOAD = Boolean(
+// Sentry source maps are generated only when all three build-time secrets are
+// present. The plugin injects release/debug IDs in the exact build that produces
+// the deployed assets, but the network upload runs as a bounded, non-fatal
+// workflow step after Vite exits. Keeping sentry-cli out of Vite's writeBundle
+// hook prevents a Sentry API outage from hanging the entire deploy. No token =>
+// no maps or plugin at all (local dev, CI and self-hosted artifacts).
+const SENTRY_SOURCE_MAPS = Boolean(
     process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT,
 );
 
@@ -278,28 +276,28 @@ export default defineConfig(({ command }) => {
         // of noIndex - the file lists production URLs, so even on staging
         // it points agents at the canonical site. See vite-plugins/llms-txt.ts.
         llmsTxtPlugin(),
-        // Source maps -> Sentry (prod CF build only, gated by SENTRY_UPLOAD).
-        // Injects a debugId into every emitted chunk and uploads the matching
-        // hidden .map, then deletes all .map from dist (filesToDeleteAfterUpload)
-        // so nothing reaches the client. errorHandler swallows upload failures -
-        // a Sentry outage must never fail a production deploy. release.name =
-        // APP_VERSION (git SHA) matches the runtime `release` in sentry-init.ts,
-        // so crash events line up with the uploaded maps. It only mangles chunk
-        // assets, not the inline bootstrap, so the CSP hash above stays valid.
-        ...(SENTRY_UPLOAD
+        // Source-map preparation for the hosted builds. The plugin injects a
+        // debug ID into every chunk, but deliberately performs no Sentry API
+        // calls: deploy/release workflows upload with a step timeout and remove
+        // every .map before Cloudflare sees dist. release.name = APP_VERSION
+        // (tag or short git SHA) matches the runtime release in sentry-init.ts.
+        // The plugin only mangles chunk assets, not the inline bootstrap, so
+        // the CSP hash above stays valid.
+        ...(SENTRY_SOURCE_MAPS
             ? [
                   sentryVitePlugin({
                       org: process.env.SENTRY_ORG,
                       project: process.env.SENTRY_PROJECT,
                       authToken: process.env.SENTRY_AUTH_TOKEN,
-                      release: { name: APP_VERSION },
-                      telemetry: false,
-                      errorHandler: (err) => {
-                          // Build tooling, not shipped code - console is the CF build log.
-                          console.warn("[sentry] source map upload failed (non-fatal):", err.message);
+                      release: {
+                          name: APP_VERSION,
+                          create: false,
+                          finalize: false,
+                          setCommits: false,
                       },
+                      telemetry: false,
                       sourcemaps: {
-                          filesToDeleteAfterUpload: ["./dist/**/*.map"],
+                          disable: "disable-upload",
                       },
                   }),
               ]
@@ -307,11 +305,11 @@ export default defineConfig(({ command }) => {
     ],
     build: {
         target: "es2022",
-        // Hidden source maps ONLY on the prod CF build (SENTRY_UPLOAD): emitted
-        // WITHOUT a `//# sourceMappingURL` comment, uploaded to Sentry, then
-        // deleted from dist by sentryVitePlugin - so they never ship to the
-        // client. No token (local/CI/fork) => no maps at all.
-        sourcemap: SENTRY_UPLOAD ? "hidden" : false,
+        // Hidden source maps only on hosted builds with Sentry credentials.
+        // Workflow steps upload them with a hard timeout and delete them before
+        // deployment, so they never ship to the client. No credentials
+        // (local/CI/fork/self-host artifact) => no maps at all.
+        sourcemap: SENTRY_SOURCE_MAPS ? "hidden" : false,
         outDir: "dist",
         // SVG icons and small assets up to 8KB get inlined into JS/CSS - fewer HTTP requests.
         assetsInlineLimit: 8192,
