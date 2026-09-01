@@ -233,42 +233,37 @@
     min-width: 12rem;
 }
 
-/* A state line, not an action: same metrics as a menu button so the list does
-   not jump, but inert and muted. */
-.folder-source__menu-state {
-    display: flex;
-    align-items: center;
-    gap: var(--dc-space-2);
-    padding: var(--dc-space-1) var(--dc-space-3);
-    color: var(--fg-mute);
-    font-size: var(--dc-text-xs);
+.notes-file {
+    margin-top: var(--dc-space-3);
 }
 
-.folder-source__notes {
-    grid-column: 2 / -1;
+.notes-file__heading {
+    margin-bottom: var(--dc-space-1);
+}
+
+.notes-file-status {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 2px;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--dc-space-1) var(--dc-space-2);
     min-width: 0;
+    padding: 0 var(--dc-space-1);
     color: var(--fg-mute);
+    font-size: var(--dc-text-xs);
     line-height: 1.35;
 }
 
-.folder-source__notes[hidden] {
-    display: none;
-}
-
-.folder-source__notes-label {
+.notes-file-status__label {
+    flex-basis: 100%;
     min-width: 0;
     overflow-wrap: anywhere;
 }
 
-.folder-source__notes.is-problem .folder-source__notes-label {
+.notes-file-status.is-problem .notes-file-status__label {
     color: var(--warn);
 }
 
-.folder-source__notes-action {
+.notes-file-status__action {
     flex-shrink: 0;
     padding: 0;
     border: 0;
@@ -280,11 +275,11 @@
     text-underline-offset: 2px;
 }
 
-.folder-source__notes-action:hover {
+.notes-file-status__action:hover {
     color: var(--accent);
 }
 
-.folder-source__notes-action:disabled {
+.notes-file-status__action:disabled {
     color: var(--fg-mute);
     cursor: default;
     text-decoration: none;
@@ -292,7 +287,7 @@
 
 .folder-source__load:focus-visible,
 .folder-source__remember:focus-visible,
-.folder-source__notes-action:focus-visible,
+.notes-file-status__action:focus-visible,
 .folder-source__menu:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: -2px;

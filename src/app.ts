@@ -552,8 +552,8 @@ registerTimelineOverlaySync(refreshTimelineMarkers);
 // Progressive clock refinement can move a provisional marker's UTC; repaint
 // timeline pins after it is re-stamped.
 registerMarkersRestampedHook(refreshTimelineMarkers);
-// Notes-file replica of the annotations inside the user's folder (Chromium):
-// connected from the folder row, then auto-synced.
+// Notes-file replica of all annotations (Chromium): a file discovered in the
+// opened recording folder takes priority, otherwise the last-used file stays.
 initAnnotationsSidecar();
 // One-shot offer of that notes file at the user's first annotation.
 initNotesNudge();

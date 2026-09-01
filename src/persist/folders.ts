@@ -68,46 +68,10 @@ export async function forgetAllFolders(): Promise<void> {
     await db.clear("folders");
 }
 
-/** Attaches (or replaces) the annotations-sidecar file handle on a folder. */
-export async function setFolderSidecarHandle(id: string, sidecarHandle: FileSystemFileHandle): Promise<void> {
-    const db = await openPersistDb();
-    // Single transaction: a separate get+put would re-insert the record if a
-    // "forget" deleted it between the two (async gap spans a picker dialog).
-    const tx = db.transaction("folders", "readwrite");
-    const folder = await tx.store.get(id);
-    if (folder) {
-        folder.sidecarHandle = sidecarHandle;
-        folder.sidecarAccess = "file";
-        delete folder.notesStorage;
-        await tx.store.put(folder);
-    }
-    await tx.done;
-}
-
-/** Remembers whether this folder should keep notes only in browser storage.
- * Connecting a file clears the choice in setFolderSidecarHandle. */
-export async function setFolderNotesStorage(id: string, storage: "browser" | null): Promise<void> {
-    const db = await openPersistDb();
-    const tx = db.transaction("folders", "readwrite");
-    const folder = await tx.store.get(id);
-    if (folder) {
-        if (storage === "browser") folder.notesStorage = storage;
-        else delete folder.notesStorage;
-        await tx.store.put(folder);
-    }
-    await tx.done;
-}
-
-/** A folder by id, or null. */
-export async function getFolder(id: string): Promise<RememberedFolder | null> {
-    const db = await openPersistDb();
-    return (await db.get("folders", id)) ?? null;
-}
-
 /** Stamps the folder as most recently opened; drives the chip ordering. */
 export async function markFolderOpened(id: string): Promise<void> {
     const db = await openPersistDb();
-    // Same single-transaction reasoning as setFolderSidecarHandle.
+    // Keep the read and write atomic so a concurrent Forget cannot be undone.
     const tx = db.transaction("folders", "readwrite");
     const folder = await tx.store.get(id);
     if (folder) {

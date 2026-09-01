@@ -765,19 +765,6 @@
             <div class="sidebar-sources">
                 <div class="sidebar-sources__heading">
                     <h2 data-i18n="folderSources.title">Recording folders</h2>
-                    <details class="folder-sources-help">
-                        <summary data-i18n-attr="aria-label:folderSources.helpAria,title:folderSources.helpAria"
-                                 aria-label="How notes backups work" title="How notes backups work">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                <circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 1 1 5.8 1c0 2-3 2-3 4"/><path d="M12 18h.01"/>
-                            </svg>
-                        </summary>
-                        <div class="folder-sources-help__popup">
-                            <p data-i18n="folderSources.helpBrowser">Trip names, notes, favorites and markers are saved in this browser.</p>
-                            <p data-i18n="folderSources.helpFile">A notes backup adds notes.dashcamigo to the recording folder and keeps it updated automatically. Your recordings never change. You can also download or restore all notes from Settings.</p>
-                        </div>
-                    </details>
                 </div>
                 <!-- Compact CTA button for adding files. label[for="folder-input"]
                      opens the system file picker, and also works as a drop target
@@ -793,13 +780,31 @@
                     </svg>
                     <span data-i18n="sidebar.cta.label">Add folder</span>
                 </label>
-                <!-- Folder rows: sources of this session (status, "remember this
-                     one", notes backup) plus remembered folders that are not loaded
-                     yet (click to load). Filled by src/ui/folder-sources.ts;
-                     stays hidden until there is a row to show. -->
-                <!-- No aria-label: the visible SOURCES heading names the list,
-                     and its rows are no longer only "this session's" folders. -->
+                <!-- Folder rows: sources of this session plus remembered folders
+                     that are not loaded yet. Filled by folder-sources.ts. -->
                 <ul id="folder-sources" class="folder-sources" hidden></ul>
+
+                <section class="notes-file" aria-labelledby="notes-file-title">
+                    <div class="sidebar-sources__heading notes-file__heading">
+                        <h2 id="notes-file-title" data-i18n="notesFile.title">Notes file</h2>
+                        <details class="folder-sources-help">
+                            <summary data-i18n-attr="aria-label:notesFile.helpAria,title:notesFile.helpAria"
+                                     aria-label="How the notes file works" title="How the notes file works">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 1 1 5.8 1c0 2-3 2-3 4"/><path d="M12 18h.01"/>
+                                </svg>
+                            </summary>
+                            <div class="folder-sources-help__popup">
+                                <p data-i18n="notesFile.helpBrowser">Trip names, notes, favorites and markers are saved in this browser.</p>
+                                <p data-i18n="notesFile.helpFile">One notes file can hold changes from several recording folders. A file in the folder you open takes priority; otherwise the last-used file stays selected. Your recordings never change.</p>
+                            </div>
+                        </details>
+                    </div>
+                    <div id="notes-file-status" class="notes-file-status" aria-live="polite">
+                        <span class="notes-file-status__label" data-i18n="notesFile.browser">Notes are saved in this browser.</span>
+                    </div>
+                </section>
             </div>
             <div class="sidebar-header">
                 <h2 data-i18n="sidebar.title">Trips</h2>
@@ -2216,7 +2221,7 @@
         <div class="export-modal-card modal-card">
             <div class="export-modal-title" id="notes-storage-modal-title" data-i18n="notesStorageModal.title">Where should your notes be saved?</div>
             <div class="export-modal-section">
-                <p class="export-modal-body" id="notes-storage-modal-body" data-i18n="notesStorageModal.body">This change is saved in this browser. Save notes beside your recordings to keep them with the trip and open them in another browser.</p>
+                <p class="export-modal-body" id="notes-storage-modal-body" data-i18n="notesStorageModal.body">This change is saved in this browser. One notes file can keep a copy of all your changes, so you can open them in another browser.</p>
                 <p class="export-modal-warn" id="notes-storage-modal-error" role="alert" hidden data-i18n="notesStorageModal.error">Couldn't save to the notes file. Try again or keep this change in the browser.</p>
                 <div class="export-modal-actions">
                     <button id="notes-storage-browser" class="dc-btn dc-btn--ghost" type="button" data-i18n="notesStorageModal.browserOnly">Only in this browser</button>
@@ -2240,8 +2245,8 @@
                     <span data-i18n="tripMeta.noteLabel">Note</span>
                     <textarea id="trip-meta-note" rows="4" maxlength="2000"></textarea>
                 </label>
-                <!-- Where the annotation lands; swapped per open to the
-                     notes-file variant when the folder has one connected. -->
+                <!-- Where annotations are stored; updated from the current
+                     notes-file connection independently of folder settings. -->
                 <div class="annotation-storage">
                     <p class="annotation-storage-hint" id="trip-meta-storage-hint" data-i18n="annotations.storageHint">Changes are saved in this browser on this device.</p>
                     <button id="trip-meta-storage-action" class="annotation-storage-action" type="button"

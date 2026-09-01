@@ -9,6 +9,7 @@ release tag. Localized texts ship inside the app (the "What's new" panel).
 
 ## 2026-09-01
 
+- **Improved:** A notes file in the opened recording folder takes priority; otherwise dashcamigo uses the last-used file.
 - **Improved:** On the first change to trip notes, favorites, or markers, you can now choose browser storage or a notes file.
 - **Fixed:** Looping and replay work for single-clip trips.
 - **Fixed:** Playback no longer stalls between clips at higher speeds.

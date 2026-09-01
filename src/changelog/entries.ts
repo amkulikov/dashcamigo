@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-09-01.5",
+        category: "improvement",
+        text: {
+            en: "A notes file in the opened recording folder takes priority; otherwise dashcamigo uses the last-used file.",
+            ru: "Файл заметок в открытой папке с записями имеет приоритет; иначе dashcamigo использует последний файл.",
+            de: "Eine Notizdatei im geöffneten Aufnahmeordner hat Vorrang; ist keine vorhanden, verwendet dashcamigo weiterhin die zuletzt verwendete Datei.",
+            es: "El archivo de notas de la carpeta de grabaciones abierta tiene prioridad; si no hay uno, dashcamigo sigue usando el último archivo.",
+            fr: "Le fichier de notes du dossier de vidéos ouvert est prioritaire ; s’il n’y en a pas, dashcamigo continue d’utiliser le dernier fichier.",
+            pl: "Plik notatek w otwartym folderze nagrań ma pierwszeństwo; jeśli go nie ma, dashcamigo nadal używa ostatniego pliku.",
+            pt: "O arquivo de anotações da pasta de gravações aberta tem prioridade; se não houver um, o dashcamigo continua usando o último arquivo.",
+            zh: "打开的录像文件夹中的备注文件会优先使用；如果没有，dashcamigo 会继续使用上次的文件。",
+            ja: "開いた録画フォルダにあるメモファイルが優先され、ない場合は dashcamigo が最後に使ったファイルを引き続き使用します。",
+            ko: "연 녹화 폴더의 메모 파일을 우선 사용하며, 없으면 dashcamigo가 마지막으로 사용한 파일을 계속 사용합니다.",
+        },
+    },
+    {
         id: "2026-09-01.4",
         category: "improvement",
         text: {

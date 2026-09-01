@@ -75,22 +75,20 @@ export function openMarkerModal(markerId: string, opts: { createdNow?: boolean; 
     activateModal(modal, { onClose: close, initialFocus: textInput });
 }
 
-/** Repaints the where-it-lives line for the marker's folder. The folder store
- *  answers async - guard against the editor moving to another marker. */
+/** Repaints the app-wide storage line; guard against the editor moving to
+ * another marker while the async state check settles. */
 function syncStorageHint(markerId: string): void {
     const hint = storageHint;
     if (!hint) return;
     const marker = markerById(markerId);
     if (!marker) return;
-    const folderId = marker.folderId;
     hint.textContent = t("annotations.storageHint");
     if (storageAction) {
         storageAction.disabled = false;
         storageAction.hidden = true;
     }
-    void annotationStorageState(folderId).then(async ({ hintKey, backupAction }) => {
-        const anchorKey = markerById(markerId)?.anchor?.fileIdentityKey ?? null;
-        const canConnect = backupAction !== null && (await canConnectNotesBackup(folderId, anchorKey));
+    void annotationStorageState().then(({ hintKey, backupAction }) => {
+        const canConnect = backupAction !== null && canConnectNotesBackup();
         if (currentMarkerId !== markerId) return;
         hint.textContent = t(hintKey);
         if (storageAction) {
@@ -108,7 +106,7 @@ function connectBackup(): void {
     const action = storageAction;
     if (!markerId || !marker || !action) return;
     action.disabled = true;
-    void connectNotesBackup(marker.folderId, marker.anchor?.fileIdentityKey ?? null).finally(() => {
+    void connectNotesBackup().finally(() => {
         if (currentMarkerId === markerId) syncStorageHint(markerId);
     });
 }

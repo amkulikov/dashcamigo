@@ -8,13 +8,14 @@
 // session-only", never as a crash.
 
 import { type DBSchema, type IDBPDatabase, openDB } from "idb";
-import type { AnnotationRecord, CachedFileIndex, RememberedFolder } from "./types.js";
+import type { AnnotationRecord, CachedFileIndex, NotesFileRecord, RememberedFolder } from "./types.js";
 
 const DB_NAME = "dashcamigo";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 interface PersistDbSchema extends DBSchema {
     folders: { key: string; value: RememberedFolder };
+    notesFile: { key: string; value: NotesFileRecord };
     annotations: {
         key: string;
         value: AnnotationRecord;
@@ -63,6 +64,7 @@ export function openPersistDb(): Promise<PersistDb> {
                     transaction.objectStore("indexCache").clear();
                     transaction.objectStore("meta").put("0", "indexCacheBytes");
                 }
+                if (oldVersion < 4) db.createObjectStore("notesFile", { keyPath: "id" });
             },
             blocking(_currentVersion, _blockedVersion, _event) {
                 // Another context wants a version change (schema bump in a

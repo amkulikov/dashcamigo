@@ -26,7 +26,7 @@ import { classifyFilenameTime } from "../parsers/filename/index.js";
 import { estimatePreciseClockOffsetByFingerprint, estimateTzByFingerprint, tripAllCandidates } from "../trips.js";
 import type { Trip, TzSample, VideoCandidate } from "../trips.js";
 
-import { registerIngestNotesFiles, registerIngestSource } from "./folder-sources.js";
+import { registerIngestSource } from "./folder-sources.js";
 import { isNotesBackupName, mergeNotesFilesFromBatch } from "./annotations-sidecar.js";
 import {
     hideIngestOverlay,
@@ -215,9 +215,9 @@ async function ingestFilesInternal(
         return;
     }
 
-    // The folder may carry its own notes file. Read it in parallel with the
-    // dedup pass below, then expose whether it is writable on the source row.
-    const notesMerge = mergeNotesFilesFromBatch(kept, origin?.folderId ?? "");
+    // A notes file in the opened folder takes priority over the last-used
+    // fallback. Discovery is read-only; a later user edit owns any file prompt.
+    const notesMerge = mergeNotesFilesFromBatch(kept, origin);
     vfiles = kept;
 
     // Read failures belong to this batch; a later clean drop must not inherit
@@ -283,7 +283,7 @@ async function ingestFilesInternal(
         origin,
         dedup.sourceMatches,
     );
-    registerIngestNotesFiles(await notesMerge);
+    await notesMerge;
 
     // Sidecar classification looks at already-known videos (state.trips + newly classified) so the user can drop a GPX later for a previously loaded MP4.
     const existingVideoNames = new Set<string>(alreadyLoaded.map((vf) => vf.file.name));

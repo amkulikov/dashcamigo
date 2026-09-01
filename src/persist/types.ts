@@ -47,14 +47,17 @@ export interface RememberedFolder {
     addedAt: number;
     /** Orders the folder list and the landing chips, most recent first. */
     lastOpenedAt: number;
-    /** Connected annotations backup file. Legacy records may hold a handle
-     *  derived from the directory grant; sidecarAccess distinguishes those
-     *  from a narrowly scoped handle returned by a file picker. */
-    sidecarHandle?: FileSystemFileHandle;
-    sidecarAccess?: "file";
-    /** The user explicitly chose to keep annotation changes in browser
-     *  storage for this folder instead of connecting a notes file. */
-    notesStorage?: "browser";
+}
+
+/** Last notes file used by the app, independently of remembered folders.
+ * A discovered handle is read-only until a file picker returns an independent
+ * handle for it, keeping every write grant scoped to one file. */
+export interface NotesFileRecord {
+    id: "global";
+    handle?: FileSystemFileHandle;
+    access?: "file" | "derived";
+    /** The user explicitly chose browser storage instead of a notes file. */
+    storage?: "browser";
 }
 
 export interface CachedRecordingMetadata {

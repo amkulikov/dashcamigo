@@ -5,7 +5,7 @@
 import { t } from "../i18n/index.js";
 import type { Trip } from "../trips.js";
 import { annotationStorageState } from "./annotations-sidecar.js";
-import { setTripMeta, tripAnchorFileIdentityKey, tripFolderId, tripMetaFor } from "./annotations.js";
+import { setTripMeta, tripMetaFor } from "./annotations.js";
 import { activateModal, deactivateModal, wireBackdropDismiss } from "./modal-helper.js";
 import { canConnectNotesBackup, connectNotesBackup } from "./notes-nudge.js";
 import { renderTrips } from "./sidebar.js";
@@ -55,21 +55,18 @@ export function openTripMetaModal(trip: Trip): void {
     activateModal(modal, { onClose: close, initialFocus: nameInput });
 }
 
-/** Repaints the where-it-lives line for this trip's folder. The folder store
- *  answers async - a stale answer for a modal reopened on another trip must
- *  not land, hence the currentTrip guard. */
+/** Repaints the app-wide storage line. A stale answer for a modal reopened on
+ * another trip must not land, hence the currentTrip guard. */
 function syncStorageHint(trip: Trip): void {
     const hint = storageHint;
     if (!hint) return;
-    const folderId = tripFolderId(trip);
-    const anchorKey = tripAnchorFileIdentityKey(trip);
     hint.textContent = t("annotations.storageHint");
     if (storageAction) {
         storageAction.disabled = false;
         storageAction.hidden = true;
     }
-    void annotationStorageState(folderId).then(async ({ hintKey, backupAction }) => {
-        const canConnect = backupAction !== null && (await canConnectNotesBackup(folderId, anchorKey));
+    void annotationStorageState().then(({ hintKey, backupAction }) => {
+        const canConnect = backupAction !== null && canConnectNotesBackup();
         if (currentTrip !== trip) return;
         hint.textContent = t(hintKey);
         if (storageAction) {
@@ -86,7 +83,7 @@ function connectBackup(): void {
     const action = storageAction;
     if (!trip || !action) return;
     action.disabled = true;
-    void connectNotesBackup(tripFolderId(trip), tripAnchorFileIdentityKey(trip)).finally(() => {
+    void connectNotesBackup().finally(() => {
         if (currentTrip === trip) syncStorageHint(trip);
     });
 }

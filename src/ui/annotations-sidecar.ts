@@ -1,33 +1,22 @@
-// Annotations backup: a notes file living beside the user's recordings, so
-// notes survive browser data cleanup and travel with the card. The recordings
-// directory is always read-only. Writing is scoped to one independently picked
-// file; legacy handles inherited from a directory grant are read but never
-// written until the user reconnects that file explicitly.
-//
-// folderId in the file is never trusted: it is a per-profile UUID, so every
-// record read from a folder's sidecar is restamped with the LOCAL folder id
-// (see mergeFromSidecar). Without that, records written by another machine
-// would be excluded from this machine's writes and the two profiles would
-// endlessly erase each other's notes from the file.
+// Notes-file selection follows the folder the user is working in without
+// storing a folder -> file association: one notes file discovered in the
+// opened folder wins, otherwise the last-used file remains active. Recording
+// folders stay read-only. A discovered child handle is read-only too; only a
+// handle returned by a file picker is ever asked for write permission.
 
 import { t } from "../i18n/index.js";
 import type { I18nKey } from "../i18n/keys.js";
 import { createLogger } from "../log.js";
 import type { VendorFile } from "../parsers/types.js";
-import {
-    buildSidecarPayload,
-    compareAnnotationVersions,
-    mergeAnnotationLists,
-    parseSidecarPayload,
-} from "../persist/annotations.js";
-import { ensureFileReadwritePermission, getFolder, listFolders, setFolderSidecarHandle } from "../persist/folders.js";
-import type { AnnotationRecord, RememberedFolder } from "../persist/types.js";
+import { buildSidecarPayload, compareAnnotationVersions, parseSidecarPayload } from "../persist/annotations.js";
+import { ensureFileReadwritePermission, listFolders } from "../persist/folders.js";
+import { getNotesFileState, setNotesFileHandle, setNotesStorage } from "../persist/notes-file.js";
+import type { AnnotationRecord, NotesFileRecord, RememberedFolder } from "../persist/types.js";
 import {
     annotationStoreAvailable,
     allAnnotationRecords,
     applyMergedRecords,
     rebindFolderAnnotations,
-    recordsForFolder,
     registerAnnotationPersistenceStatusHook,
     registerAnnotationsChangedHook,
     scopeAnnotationRecordsToFolder,
@@ -35,68 +24,46 @@ import {
 } from "./annotations.js";
 import { notify } from "./notifications.js";
 import {
-    type IngestNotesFileStatus,
     refreshFolderSources,
     registerFolderOpenedHook,
     registerNotesConnector,
+    type NotesBackupStatus,
+    type NotesConnectResult,
+    type NotesWriteAction,
 } from "./folder-sources.js";
 import { renderTrips } from "./sidebar.js";
 import { refreshTimelineMarkers } from "./timeline-markers.js";
+import type { IngestOrigin } from "./state.js";
 
 const log = createLogger("annotations-sidecar");
-
-// Our own extension plus excludeAcceptAllOption keeps ordinary JSON files out
-// of the non-destructive picker used to connect an existing backup.
 const SIDECAR_SUGGESTED_NAME = "notes.dashcamigo";
 const SIDECAR_EXTENSION = ".dashcamigo";
 const WRITE_DEBOUNCE_MS = 1500;
+const WRITE_LOCK_NAME = "dashcamigo:active-notes-file";
+
+let activeHandle: FileSystemFileHandle | null = null;
+let activeAccess: NotesFileRecord["access"];
+let currentFolderHandle: FileSystemDirectoryHandle | null = null;
+let connectionGeneration = 0;
+let stateLoad: Promise<void> | null = null;
+let writeTimer: number | null = null;
+let writeQueue: Promise<void> = Promise.resolve();
+let pendingStateChecks = new Set<Promise<void>>();
+let suppressAutomaticWrites = 0;
+let readFailed = false;
+let partialFile = false;
+let writeFailed = false;
+let readFailureNotified = false;
+let writeAttentionHook: (() => void) | null = null;
+
 function sidecarFileType(): FilePickerAcceptType {
     return {
         description: t("sidecar.fileDescription"),
-        accept: { "application/json": [".dashcamigo"] },
+        accept: { "application/json": [SIDECAR_EXTENSION] },
     };
 }
-type SidecarDiscovery = "none" | "found" | "blocked";
 
-// File writes are full replacements. Serialize them in this tab, then take a
-// cross-tab Web Lock where available so two dashcamigo tabs cannot both read
-// the same old snapshot and close competing writable streams over each other.
-const writeQueues = new Map<string, Promise<void>>();
-// A burst (rebind, marker re-stamp, multi-field clear) becomes one full-file
-// replacement. Besides latency, this avoids needless writes to removable media.
-const writeTimers = new Map<string, number>();
-// Includes the async folder/permission lookup that happens before a write
-// reaches writeQueues. A reset must wait for this stage too, or it can wipe the
-// folder record while the latest edit is still deciding where to save.
-const pendingChangeWrites = new Set<Promise<void>>();
-// Remember/open paths can converge on the same folder. Sharing the in-flight
-// task prevents two scans from racing to attach the same discovered file.
-const folderOpenTasks = new Map<string, Promise<void>>();
-
-// Folder ids whose sidecar file was most recently READ and recognized as ours.
-// A failed or foreign-file read clears the flag immediately. Every write still
-// re-reads under its lock; this set is the safety gate for replacing the file,
-// not a connection-health flag. Its absence just after a page reload means
-// "not checked yet", not "broken".
-const sidecarReadFolders = new Set<string>();
-// A persisted handle that has not been touched in this page is still a saved
-// connection. Keep actual read failures separate so a reload does not invent a
-// red reconnect state, while a handle that really failed remains honest in UI.
-const sidecarReadFailures = new Set<string>();
-// Recognized files with at least one malformed/unknown record stay strictly
-// read-only. Valid records are recovered, but replacing the file would turn a
-// partial recovery into permanent data loss.
-const partialSidecarFolders = new Set<string>();
-// One warning toast (unwritable or foreign file) per folder per session - the
-// retry below runs on every edit, and the user can only act on the message once.
-const unreadableWarned = new Set<string>();
-const writeFailureWarned = new Set<string>();
-const discoveredSidecarFolders = new Set<string>();
-let writeAttentionHook: ((folderId: string) => void) | null = null;
-
-/** Lets the blocking storage-choice UI react when an automatic write loses
- * its file grant, without importing the UI controller into this module. */
-export function registerNotesWriteAttentionHook(callback: (folderId: string) => void): void {
+export function registerNotesWriteAttentionHook(callback: () => void): void {
     writeAttentionHook = callback;
 }
 
@@ -107,48 +74,79 @@ export function initAnnotationsSidecar(): void {
         if (!available) notify({ severity: "error", messageKey: "annotations.browserSaveFailed" });
     });
     registerFolderOpenedHook(onFolderOpened);
-    // Folder sources exist only on the directory-handle path. The open picker
-    // is needed for adopting a backup outside the selected folder.
-    if (typeof window.showOpenFilePicker === "function" && typeof window.showSaveFilePicker === "function") {
-        registerNotesConnector({
-            create: createSidecarFile,
-            useExisting: adoptSidecarFile,
-            connectPicked: connectPickedSidecar,
-            authorize: authorizeSidecarFile,
-            prepareWrite: prepareSidecarWrite,
-            status: sidecarStatus,
-            browserStorageReady: annotationStoreAvailable,
-        });
-    }
+    registerNotesConnector({
+        create: createSidecarFile,
+        useExisting: useExistingSidecarFile,
+        authorize: authorizeSidecarFile,
+        chooseBrowser: chooseBrowserStorage,
+        prepareWrite: prepareSidecarWrite,
+        status: sidecarStatus,
+        browserStorageReady: annotationStoreAvailable,
+        canSelectFile: filePickersAvailable,
+    });
+    void loadSavedConnection();
     window.addEventListener("pagehide", () => void flushPendingSidecarWrites());
     document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "hidden") void flushPendingSidecarWrites();
     });
 }
 
-/**
- * Read-only merge of the notes files that arrived INSIDE an ingest batch. The
- * file travels with the recordings, so every open path sees it as a plain
- * File - the classic picker, drag-and-drop, a browser without the folder
- * pickers, a fresh profile. Nothing here writes back or binds a handle: the
- * write side stays behind an explicit or auto attach, so this cannot touch
- * the file on disk. folderId from the file is restamped to the batch's local
- * id ("" for an unremembered folder - a later Remember re-keys via rebind).
- * An unremembered import does not steal an existing live local binding for a
- * record already known in this profile.
- */
-export async function mergeNotesFilesFromBatch(
-    files: VendorFile[],
-    folderId: string,
-): Promise<IngestNotesFileStatus[]> {
+function filePickersAvailable(): boolean {
+    return typeof window.showOpenFilePicker === "function" && typeof window.showSaveFilePicker === "function";
+}
+
+async function loadSavedConnection(): Promise<void> {
+    if (stateLoad) return stateLoad;
+    const generation = connectionGeneration;
+    stateLoad = (async () => {
+        await waitForAnnotationsReady();
+        try {
+            const saved = await getNotesFileState();
+            if (generation === connectionGeneration) {
+                activeHandle = saved.handle ?? null;
+                activeAccess = saved.access;
+            }
+        } catch (err) {
+            log.warn("notes-file state unavailable", { err: err instanceof Error ? err.message : String(err) });
+            refreshFolderSources();
+            return;
+        }
+        refreshFolderSources();
+    })();
+    return stateLoad;
+}
+
+/** Resolves the notes file for one opened batch. A readable file in an FSA
+ * folder becomes the last-used connection without acquiring write access. If
+ * that folder has none, the previous connection is restored. Handle-less
+ * drops retain the compatibility path: their single notes file is imported
+ * read-only but cannot become a writable connection. */
+export async function mergeNotesFilesFromBatch(files: VendorFile[], origin: IngestOrigin | null): Promise<void> {
+    await loadSavedConnection();
+    currentFolderHandle = origin?.handle ?? null;
+    if (origin) {
+        const discovered = await discoverFolderNotesFile(origin.handle);
+        if (discovered === "multiple") {
+            log.warn("multiple notes files in folder root, keeping last-used file", { folder: origin.handle.name });
+            notify({ severity: "warn", messageKey: "sidecar.multipleFound" });
+        } else if (discovered) {
+            const attached = await attachSidecar(discovered, false, false, "derived", origin.folderId);
+            if (attached) return;
+        }
+        if (activeHandle && (await filePermissionState(activeHandle, "read")) === "granted") {
+            await mergeFromActiveFile();
+        }
+        return;
+    }
+
     const notesFiles = files.filter((vendorFile) => isNotesBackupName(vendorFile.file.name));
     if (notesFiles.length > 1) {
         log.warn("multiple notes files in ingest batch, none merged", { files: notesFiles.length });
         notify({ severity: "warn", messageKey: "sidecar.multipleFound" });
-        return notesFiles.map((vendorFile) => ingestNotesStatus(vendorFile, "multiple"));
+        return;
     }
     const vendorFile = notesFiles[0];
-    if (!vendorFile) return [];
+    if (!vendorFile) return;
     await waitForAnnotationsReady();
     let parsed: ReturnType<typeof parseSidecarPayload>;
     try {
@@ -156,25 +154,13 @@ export async function mergeNotesFilesFromBatch(
     } catch (err) {
         log.warn("notes file in batch unreadable", { err: err instanceof Error ? err.message : String(err) });
         notify({ severity: "error", messageKey: "sidecar.importFailed" });
-        return [ingestNotesStatus(vendorFile, "unreadable")];
+        return;
     }
-    if (parsed === null) {
-        log.warn("notes-like file in batch is not ours, skipped", { name: vendorFile.file.name });
+    if (!parsed) {
         notify({ severity: "error", messageKey: "sidecar.notOurFile" });
-        return [ingestNotesStatus(vendorFile, "invalid")];
+        return;
     }
-    const restamped = folderId
-        ? await folderScopedSidecarRecords(parsed.records, folderId)
-        : parsed.records.map((record) => (record.folderId === "" ? record : { ...record, folderId: "" }));
-    let preserveFolderIds: ReadonlySet<string> | undefined;
-    if (!folderId) {
-        // Do not detach a record already owned by a still-remembered folder
-        // merely because the same batch arrived through a handle-less picker.
-        // Dead ids are deliberately absent so reopening after Forget can move
-        // the record back to "" and make its markers visible again.
-        preserveFolderIds = new Set((await listFolders().catch(() => [])).map((folder) => folder.id));
-    }
-    const changed = applyMergedRecords(restamped, { preserveFolderIds });
+    await mergePortableRecords(parsed.records);
     if (parsed.rejectedEntries > 0) {
         notify({
             severity: "error",
@@ -182,30 +168,37 @@ export async function mergeNotesFilesFromBatch(
             messageParams: { n: parsed.rejectedEntries },
         });
     }
-    if (changed > 0) {
-        log.info("notes file merged from batch", { name: vendorFile.file.name, records: changed });
-        renderTrips();
-        refreshTimelineMarkers();
-    }
-    return [ingestNotesStatus(vendorFile, parsed.rejectedEntries > 0 ? "partial" : "loaded")];
 }
 
-function ingestNotesStatus(vendorFile: VendorFile, state: IngestNotesFileStatus["state"]): IngestNotesFileStatus {
-    const segments = vendorFile.relativePath.split(/[/\\]/).filter(Boolean);
-    return {
-        sourceKey: vendorFile.sourceKey ?? "unscoped",
-        root: segments.length > 1 ? segments[0]! : "",
-        fileName: vendorFile.file.name,
-        state,
-    };
+/** The conventional notes.dashcamigo wins when present. Otherwise exactly one
+ * *.dashcamigo file in the folder root is unambiguous. Nested backups are not
+ * candidates: opening a recordings folder must not make an unrelated archive
+ * writable. */
+async function discoverFolderNotesFile(
+    folder: FileSystemDirectoryHandle,
+): Promise<FileSystemFileHandle | "multiple" | null> {
+    const conventional: FileSystemFileHandle[] = [];
+    const candidates: FileSystemFileHandle[] = [];
+    try {
+        for await (const child of folder.values()) {
+            if (child.kind !== "file" || !isNotesBackupName(child.name)) continue;
+            candidates.push(child);
+            if (child.name.toLowerCase() === SIDECAR_SUGGESTED_NAME) conventional.push(child);
+        }
+    } catch (err) {
+        log.warn("notes-file discovery failed", { err: err instanceof Error ? err.message : String(err) });
+        return null;
+    }
+    if (conventional.length === 1) return conventional[0]!;
+    if (conventional.length > 1) return "multiple";
+    if (candidates.length === 1) return candidates[0]!;
+    return candidates.length > 1 ? "multiple" : null;
 }
 
 export function isNotesBackupName(name: string): boolean {
     return name.toLowerCase().endsWith(SIDECAR_EXTENSION);
 }
 
-/** Downloads one portable snapshot for browsers that cannot keep a writable
- * file connected. It uses the same validated format as folder auto-sync. */
 export async function downloadPortableNotesBackup(): Promise<void> {
     await waitForAnnotationsReady();
     const records = allAnnotationRecords();
@@ -223,9 +216,6 @@ export async function downloadPortableNotesBackup(): Promise<void> {
     notify({ severity: "info", messageKey: "sidecar.exported" });
 }
 
-/** Imports a portable snapshot without ever writing back to the selected file.
- * Unknown folder ids are cleared; open folders can then reclaim records by
- * clip identity, and marker anchors make new backups portable too. */
 export async function importPortableNotesBackup(file: File): Promise<void> {
     await waitForAnnotationsReady();
     let parsed: ReturnType<typeof parseSidecarPayload>;
@@ -240,91 +230,57 @@ export async function importPortableNotesBackup(file: File): Promise<void> {
         notify({ severity: "error", messageKey: "sidecar.notOurFile" });
         return;
     }
-    const folders = await listFolders().catch(() => []);
-    const liveFolderIds = new Set(folders.map((folder) => folder.id));
-    const recordsBefore = new Map(
-        folders.map((folder) => [folder.id, new Map(recordsForFolder(folder.id).map((record) => [record.id, record]))]),
-    );
-    const portable = parsed.records.map((record) =>
-        liveFolderIds.has(record.folderId) ? record : { ...record, folderId: "" },
-    );
-    const changed = applyMergedRecords(portable, { preserveFolderIds: liveFolderIds });
-    let rebound = 0;
-    for (const folder of folders) rebound += rebindFolderAnnotations(folder.id, liveFolderIds);
-    for (const folder of folders) {
-        if (!folder.sidecarHandle) continue;
-        const before = recordsBefore.get(folder.id) ?? new Map<string, AnnotationRecord>();
-        const after = recordsForFolder(folder.id);
-        const didChange = before.size !== after.length || after.some((record) => before.get(record.id) !== record);
-        if (didChange) onAnnotationsChanged(folder.id);
-    }
-    if (changed > 0 || rebound > 0) {
-        renderTrips();
-        refreshTimelineMarkers();
-    }
-    notify({
-        severity: "info",
-        messageKey: "sidecar.imported",
-        messageParams: { n: parsed.records.length },
-    });
+    const changed = await mergePortableRecords(parsed.records);
+    notify({ severity: "info", messageKey: "sidecar.imported", messageParams: { n: parsed.records.length } });
     if (parsed.rejectedEntries > 0) {
         notify({
             severity: "error",
             messageKey: "sidecar.partialReadOnly",
             messageParams: { n: parsed.rejectedEntries },
         });
+    } else if (changed && activeHandle && activeAccess === "file" && (await hasFileReadwritePermission(activeHandle))) {
+        scheduleWrite(0);
     }
 }
 
-/**
- * Where this folder's annotations actually land right now, plus the honest
- * next action for the editor modal. "" means there is no remembered folder.
- */
 export interface AnnotationStorageState {
     hintKey: I18nKey;
     backupAction: "create" | "reconnect" | null;
 }
 
-export async function annotationStorageState(folderId: string): Promise<AnnotationStorageState> {
+async function readNotesFileState(): Promise<NotesFileRecord> {
+    return getNotesFileState().catch(() => ({ id: "global" }));
+}
+
+export async function annotationStorageState(): Promise<AnnotationStorageState> {
+    await loadSavedConnection();
     const browserReady = annotationStoreAvailable();
-    if (!folderId) {
-        return {
-            hintKey: browserReady ? "annotations.storageHint" : "annotations.storageHintSession",
-            backupAction: browserReady ? "create" : null,
-        };
-    }
-    const folder = await getFolder(folderId).catch(() => null);
-    if (folder?.notesStorage === "browser") {
+    const state = await readNotesFileState();
+    if (state.storage === "browser") {
         return {
             hintKey: browserReady ? "annotations.storageHint" : "annotations.storageHintSession",
             backupAction: "create",
         };
     }
-    if (partialSidecarFolders.has(folderId)) {
+    if (!activeHandle) {
         return {
-            hintKey: browserReady ? "annotations.storageHintReconnect" : "annotations.storageHintSession",
-            backupAction: "reconnect",
+            hintKey: browserReady ? "annotations.storageHint" : "annotations.storageHintSession",
+            backupAction: filePickersAvailable() ? "create" : null,
         };
     }
-    if (!folder?.sidecarHandle || folder.sidecarAccess !== "file") {
-        const needsReconnect = partialSidecarFolders.has(folderId) || writeFailureWarned.has(folderId);
-        return {
-            hintKey: browserReady
-                ? needsReconnect
-                    ? "annotations.storageHintReconnect"
-                    : "annotations.storageHint"
-                : "annotations.storageHintSession",
-            backupAction: needsReconnect ? "reconnect" : folder || browserReady ? "create" : null,
-        };
-    }
-    if (sidecarReadFailures.has(folderId) || partialSidecarFolders.has(folderId) || writeFailureWarned.has(folderId)) {
-        return {
-            hintKey: browserReady ? "annotations.storageHintReconnect" : "annotations.storageHintSession",
-            backupAction: "reconnect",
-        };
-    }
-    const fileReady = await hasFileReadwritePermission(folder.sidecarHandle);
-    if (!fileReady) {
+    if (
+        activeAccess !== "file" ||
+        partialFile ||
+        readFailed ||
+        writeFailed ||
+        !(await hasFileReadwritePermission(activeHandle))
+    ) {
+        if (!filePickersAvailable()) {
+            return {
+                hintKey: browserReady ? "annotations.storageHint" : "annotations.storageHintSession",
+                backupAction: null,
+            };
+        }
         return {
             hintKey: browserReady ? "annotations.storageHintReconnect" : "annotations.storageHintSession",
             backupAction: "reconnect",
@@ -336,309 +292,124 @@ export async function annotationStorageState(folderId: string): Promise<Annotati
     };
 }
 
-async function sidecarStatus(folder: RememberedFolder): Promise<"missing" | "connected" | "ready" | "needsAttention"> {
-    if (folder.notesStorage === "browser") return "missing";
-    if (!folder.sidecarHandle) {
-        if (partialSidecarFolders.has(folder.id) || writeFailureWarned.has(folder.id)) return "needsAttention";
-        if (discoveredSidecarFolders.has(folder.id)) return "needsAttention";
-        return "missing";
-    }
-    if (folder.sidecarAccess !== "file") return "needsAttention";
-    if (
-        sidecarReadFailures.has(folder.id) ||
-        partialSidecarFolders.has(folder.id) ||
-        writeFailureWarned.has(folder.id)
-    ) {
-        return "needsAttention";
-    }
-    const permission = await fileReadwritePermissionState(folder.sidecarHandle);
-    // A stored handle commonly returns "prompt" after reload. The connection
-    // still exists; loading the remembered folder supplies the user gesture
-    // that resumes access. Only an explicit denial is a broken connection.
-    return permission === "granted" ? "ready" : permission === "prompt" ? "connected" : "needsAttention";
+async function sidecarStatus(): Promise<NotesBackupStatus> {
+    await loadSavedConnection();
+    const state = await readNotesFileState();
+    if (state.storage === "browser") return { state: annotationStoreAvailable() ? "browser" : "session" };
+    if (!activeHandle) return { state: annotationStoreAvailable() ? "browser" : "session" };
+    if (partialFile || readFailed || writeFailed) return { state: "needsAttention", fileName: activeHandle.name };
+    if (activeAccess !== "file") return { state: "connected", fileName: activeHandle.name };
+    const permission = await filePermissionState(activeHandle, "readwrite");
+    return {
+        state: permission === "granted" ? "ready" : permission === "prompt" ? "connected" : "needsAttention",
+        fileName: activeHandle.name,
+    };
 }
 
-function onFolderOpened(folder: RememberedFolder): Promise<void> {
-    const existing = folderOpenTasks.get(folder.id);
-    if (existing) return existing;
-    const task = openFolderSidecar(folder).catch((err: unknown) => {
-        log.warn("sidecar open-merge failed", { err: err instanceof Error ? err.message : String(err) });
-    });
-    folderOpenTasks.set(folder.id, task);
-    void task.finally(() => {
-        if (folderOpenTasks.get(folder.id) === task) folderOpenTasks.delete(folder.id);
-    });
-    return task;
-}
-
-async function openFolderSidecar(folder: RememberedFolder): Promise<void> {
-    // Another open path may have attached the file while this one was waiting
-    // on IndexedDB. Always make the decision from the latest stored record.
-    const current = (await getFolder(folder.id).catch(() => null)) ?? folder;
-    // Adopt records stranded on "" or on a dead folder id BEFORE the merge,
-    // so they participate in the write-back below.
-    await rebindAnnotationsToFolder(current.id);
-    if (!current.sidecarHandle) {
-        // A notes file found through the directory grant is read-only. Merge
-        // it, but never persist that derived handle as writable.
-        await autoAdoptSidecar(current);
-        return;
-    }
-    await mergeFromSidecar(current);
-}
-
-/**
- * Scans the folder root for exactly one notes file and merges it read-only.
- * The handle came from the directory, so persisting it as writable would
- * silently widen the grant back to the whole folder. A later write asks the
- * user to reconnect this exact file through the file picker.
- */
-async function autoAdoptSidecar(folder: RememberedFolder): Promise<SidecarDiscovery> {
-    let found: FileSystemFileHandle | null = null;
+async function onFolderOpened(folder: RememberedFolder): Promise<void> {
+    await waitForAnnotationsReady();
+    const liveFolderIds = await liveFolderIdSet(folder.id);
+    suppressAutomaticWrites++;
     try {
-        for await (const child of folder.handle.values()) {
-            if (child.kind !== "file" || !child.name.toLowerCase().endsWith(SIDECAR_EXTENSION)) continue;
-            if (found) {
-                log.warn("multiple notes files in folder root, not auto-attaching", { folder: folder.label });
-                return "blocked";
-            }
-            found = child;
-        }
-    } catch (err) {
-        // Folder unreadable right now (unplugged mid-open, permission lapsed).
-        log.warn("notes auto-adopt scan failed", { err: err instanceof Error ? err.message : String(err) });
-        return "blocked";
+        const changed = rebindFolderAnnotations(folder.id, liveFolderIds);
+        if (changed > 0) refreshAnnotationUi();
+    } finally {
+        suppressAutomaticWrites--;
     }
-    if (!found) return "none";
-    discoveredSidecarFolders.add(folder.id);
-    try {
-        const parsed = parseSidecarPayload(await (await found.getFile()).text());
-        if (parsed === null) {
-            log.warn("notes-like file in folder root is not ours, not auto-attaching", { name: found.name });
-            return "blocked";
-        }
-        const records = await folderScopedSidecarRecords(parsed.records, folder.id);
-        const changed = applyMergedRecords(mergeAnnotationLists(recordsForFolder(folder.id), records));
-        if (changed > 0) {
-            renderTrips();
-            refreshTimelineMarkers();
-        }
-        if (parsed.rejectedEntries > 0) {
-            partialSidecarFolders.add(folder.id);
-            if (!unreadableWarned.has(folder.id)) {
-                unreadableWarned.add(folder.id);
-                notify({
-                    severity: "error",
-                    messageKey: "sidecar.partialReadOnly",
-                    messageParams: { n: parsed.rejectedEntries },
-                });
-            }
-            refreshFolderSources();
-            return "blocked";
-        }
-    } catch (err) {
-        log.warn("notes auto-adopt read failed", { err: err instanceof Error ? err.message : String(err) });
-        return "blocked";
-    }
-    refreshFolderSources();
-    return "found";
 }
 
-function onAnnotationsChanged(folderId: string): void {
-    // "" = the annotated trip's root folder is not remembered - nowhere to
-    // put a notes file. The record still lives in IndexedDB.
-    if (!folderId) return;
-    const task = getFolder(folderId)
-        .then(async (folder): Promise<void> => {
-            // Permission prompts belong to the blocking modal driven by the
-            // user-edit hook. This lower-level hook only writes when an
-            // independently picked file is still granted.
-            if (
-                !folder?.sidecarHandle ||
-                folder.sidecarAccess !== "file" ||
-                folder.notesStorage === "browser" ||
-                !(await hasFileReadwritePermission(folder.sidecarHandle))
-            )
-                return;
-            scheduleWrite(folderId);
-        })
-        .catch(() => {});
-    pendingChangeWrites.add(task);
-    void task.finally(() => pendingChangeWrites.delete(task));
+function onAnnotationsChanged(): void {
+    if (suppressAutomaticWrites > 0) return;
+    const task = (async () => {
+        await loadSavedConnection();
+        const state = await readNotesFileState();
+        if (
+            state.storage === "browser" ||
+            !activeHandle ||
+            activeAccess !== "file" ||
+            !(await hasFileReadwritePermission(activeHandle))
+        )
+            return;
+        scheduleWrite();
+    })();
+    pendingStateChecks.add(task);
+    void task.finally(() => pendingStateChecks.delete(task));
 }
 
-/**
- * Creates one explicitly selected backup file. showSaveFilePicker scopes the
- * grant to that file; the browser owns overwrite confirmation if a file with
- * the suggested name already exists.
- */
-async function createSidecarFile(folder: RememberedFolder): Promise<"connected" | "cancelled" | "failed"> {
-    // Manual UI can call create from a stale render. If this session already
-    // knows about a file, reconnect it non-destructively instead of opening a
-    // Save dialog that could replace it.
-    if (folder.sidecarHandle || discoveredSidecarFolders.has(folder.id)) return adoptSidecarFile(folder);
+async function createSidecarFile(): Promise<NotesConnectResult> {
     if (typeof window.showSaveFilePicker !== "function") return "failed";
-    let picked: Promise<FileSystemFileHandle>;
+    let handle: FileSystemFileHandle;
     try {
-        // Start the picker before any IndexedDB or directory scan can consume
-        // the click's transient activation.
-        picked = window.showSaveFilePicker({
+        handle = await window.showSaveFilePicker({
             id: "annotations-sidecar",
-            startIn: folder.handle,
+            ...(currentFolderHandle ? { startIn: currentFolderHandle } : {}),
             suggestedName: SIDECAR_SUGGESTED_NAME,
             excludeAcceptAllOption: true,
             types: [sidecarFileType()],
         });
     } catch (err) {
-        log.warn("sidecar save picker failed", { err: err instanceof Error ? err.message : String(err) });
-        return "failed";
-    }
-    let handle: FileSystemFileHandle;
-    try {
-        handle = await picked;
-    } catch (err) {
         if (isPickerDismissal(err)) return "cancelled";
-        log.warn("sidecar save picker failed", { err: err instanceof Error ? err.message : String(err) });
+        log.warn("notes save picker failed", { err: err instanceof Error ? err.message : String(err) });
         return "failed";
     }
-    const current = (await getFolder(folder.id).catch(() => null)) ?? folder;
-    if (current.sidecarHandle && current.sidecarAccess === "file") return "connected";
-    // A portable import can have found this trip only after ingest rebuilt the
-    // timeline (for example after a root rename). Re-run ownership recovery at
-    // the actual create gesture so those visible notes are included in the new
-    // folder backup rather than silently left in browser-only storage.
-    await rebindAnnotationsToFolder(current.id);
-    return (await attachSidecar(current, handle)) ? "connected" : "failed";
+    if (!(await ensureFileReadwritePermission(handle))) return "failed";
+    // A Save picker may target an existing file. Merge before replacement.
+    return (await attachSidecar(handle, true, true, "file")) ? "connected" : "failed";
 }
 
-async function rebindAnnotationsToFolder(folderId: string): Promise<void> {
-    try {
-        const existingIds = new Set((await listFolders()).map((folder) => folder.id));
-        rebindFolderAnnotations(folderId, existingIds);
-    } catch {
-        // No DB - session-only mode, nothing to rebind against.
-    }
-}
-
-/**
- * Adopts a notes file that already exists - the one that came along on the card
- * from another machine. The open picker leaves it intact, so its records are
- * still there to be read and merged.
- */
-async function adoptSidecarFile(folder: RememberedFolder): Promise<"connected" | "cancelled" | "failed"> {
+async function useExistingSidecarFile(forWrite = false): Promise<NotesConnectResult> {
     if (typeof window.showOpenFilePicker !== "function") return "failed";
     let handle: FileSystemFileHandle | undefined;
     try {
         [handle] = await window.showOpenFilePicker({
             id: "annotations-sidecar",
-            startIn: folder.handle,
+            ...(currentFolderHandle ? { startIn: currentFolderHandle } : {}),
             multiple: false,
             excludeAcceptAllOption: true,
             types: [sidecarFileType()],
         });
     } catch (err) {
-        if (!isPickerDismissal(err)) {
-            log.warn("sidecar open picker failed", { err: err instanceof Error ? err.message : String(err) });
-        }
-        return isPickerDismissal(err) ? "cancelled" : "failed";
+        if (isPickerDismissal(err)) return "cancelled";
+        log.warn("notes open picker failed", { err: err instanceof Error ? err.message : String(err) });
+        return "failed";
     }
     if (!handle) return "cancelled";
-    // requestPermission is gesture-gated as well. Do it immediately after the
-    // picker returns, before parsing and merge bookkeeping; attachSidecar will
-    // verify the resulting grant again before it persists anything writable.
-    await ensureFileReadwritePermission(handle);
-    return (await attachSidecar(folder, handle)) ? "connected" : "failed";
+    if (forWrite && !(await ensureFileReadwritePermission(handle))) return "failed";
+    return (await attachSidecar(handle, forWrite, forWrite, "file")) ? "connected" : "failed";
 }
 
-async function connectPickedSidecar(
-    folder: RememberedFolder,
+async function attachSidecar(
     handle: FileSystemFileHandle,
-): Promise<"connected" | "cancelled" | "failed"> {
-    await ensureFileReadwritePermission(handle);
-    await rebindAnnotationsToFolder(folder.id);
-    return (await attachSidecar(folder, handle)) ? "connected" : "failed";
-}
-
-async function authorizeSidecarFile(folder: RememberedFolder): Promise<"connected" | "cancelled" | "failed"> {
-    if (!folder.sidecarHandle || folder.sidecarAccess !== "file") return "failed";
-    // requestPermission needs the modal button's live user activation. Start
-    // it before any IndexedDB lookup can consume that activation window.
-    if (!(await ensureFileReadwritePermission(folder.sidecarHandle))) return "failed";
-    const written = await withSidecarWriteLock(folder.id, () => writeSidecar(folder.id));
-    return written ? "connected" : "failed";
-}
-
-async function prepareSidecarWrite(
-    folder: RememberedFolder,
-    force = false,
-): Promise<"create" | "connect" | "authorize" | null> {
-    const current = (await getFolder(folder.id).catch(() => null)) ?? folder;
-    if (!force && current.notesStorage === "browser") return null;
-    if (force && current.notesStorage === "browser" && current.sidecarHandle) return "connect";
-    if (current.sidecarHandle) {
-        if (
-            current.sidecarAccess !== "file" ||
-            sidecarReadFailures.has(current.id) ||
-            partialSidecarFolders.has(current.id) ||
-            writeFailureWarned.has(current.id)
-        )
-            return "connect";
-        const permission = await fileReadwritePermissionState(current.sidecarHandle);
-        if (permission === "granted") return null;
-        return permission === "prompt" ? "authorize" : "connect";
-    }
-    if (discoveredSidecarFolders.has(current.id)) return "connect";
-    const discovery = await autoAdoptSidecar(current);
-    return discovery === "none" ? "create" : "connect";
-}
-
-function isPickerDismissal(err: unknown): boolean {
-    // AbortError = dismissed the dialog; the offer stays in the menu.
-    return err instanceof DOMException && err.name === "AbortError";
-}
-
-/**
- * Validates a picked file and, only if it is fully readable and writable,
- * binds it to the folder. A partial file still contributes every valid record,
- * but is not bound and therefore cannot be overwritten later.
- */
-async function attachSidecar(folder: RememberedFolder, handle: FileSystemFileHandle): Promise<boolean> {
-    let text: string;
+    writeNow: boolean,
+    writePermissionReady = false,
+    access: NonNullable<NotesFileRecord["access"]> = "file",
+    legacyFolderId = "",
+): Promise<boolean> {
+    // Finish edits destined for the previous file before any records from the
+    // new file enter memory. Otherwise a pending debounce could serialize the
+    // newly discovered folder's notes back into the old destination.
+    if (activeHandle && activeHandle !== handle) await flushPendingSidecarWrites();
+    const generation = ++connectionGeneration;
+    let parsed: ReturnType<typeof parseSidecarPayload>;
     try {
-        text = await (await handle.getFile()).text();
+        parsed = parseSidecarPayload(await (await handle.getFile()).text());
     } catch (err) {
-        // Unreadable now means unwritable later - binding it would only produce
-        // a folder wired to a file nothing can use.
-        log.warn("sidecar read failed at attach", { err: err instanceof Error ? err.message : String(err) });
-        notify({ severity: "error", messageKey: "sidecar.writeFailed" });
+        log.warn("notes file read failed at attach", { err: err instanceof Error ? err.message : String(err) });
+        notify({ severity: "error", messageKey: "sidecar.importFailed" });
         return false;
     }
-    const parsed = parseSidecarPayload(text);
-    if (parsed === null) {
-        // Someone else's file: hands off. It keeps its contents and the folder
-        // keeps no handle, so nothing here can touch it later either.
-        log.warn("picked file is not a dashcamigo notes file, not attaching");
+    if (!parsed) {
         notify({ severity: "error", messageKey: "sidecar.notOurFile" });
         return false;
     }
-    const isAlreadyUsed = await isSidecarUsedByAnotherFolder(folder.id, handle);
-    if (isAlreadyUsed === null) {
-        notify({ severity: "error", messageKey: "sidecar.handleSaveFailed" });
-        return false;
-    }
-    if (isAlreadyUsed) {
-        notify({ severity: "error", messageKey: "sidecar.alreadyConnected" });
-        return false;
-    }
-    const restamped = await folderScopedSidecarRecords(parsed.records, folder.id);
-    const changed = applyMergedRecords(mergeAnnotationLists(recordsForFolder(folder.id), restamped));
-    if (changed > 0) {
-        renderTrips();
-        refreshTimelineMarkers();
+    if (parsed.version === 1 && legacyFolderId) {
+        const liveFolderIds = await liveFolderIdSet(legacyFolderId);
+        const records = scopeAnnotationRecordsToFolder(parsed.records, legacyFolderId, liveFolderIds);
+        applyIncomingRecords(records, liveFolderIds);
+    } else {
+        await mergePortableRecords(parsed.records);
     }
     if (parsed.rejectedEntries > 0) {
-        partialSidecarFolders.add(folder.id);
-        refreshFolderSources();
         notify({
             severity: "error",
             messageKey: "sidecar.partialReadOnly",
@@ -646,327 +417,278 @@ async function attachSidecar(folder: RememberedFolder, handle: FileSystemFileHan
         });
         return false;
     }
-    if (!(await ensureFileReadwritePermission(handle))) {
-        notifyWriteFailure(folder.id);
-        return false;
-    }
+    if (writeNow && access !== "file") return false;
+    if (writeNow && !writePermissionReady && !(await ensureFileReadwritePermission(handle))) return false;
+    // A slow startup read of the previously saved connection must not replace
+    // the file the user just picked.
+    if (generation !== connectionGeneration) return false;
+    activeHandle = handle;
+    activeAccess = access;
+    readFailed = false;
+    partialFile = false;
+    writeFailed = false;
+    readFailureNotified = false;
     try {
-        await setFolderSidecarHandle(folder.id, handle);
+        await setNotesFileHandle(handle, access);
+        await setNotesStorage(null);
     } catch (err) {
-        log.warn("sidecar handle save failed", { err: err instanceof Error ? err.message : String(err) });
-        notify({ severity: "error", messageKey: "sidecar.handleSaveFailed" });
-        return false;
-    }
-    // A different file from here on - whatever was read for the previous one
-    // says nothing about this one's contents.
-    sidecarReadFolders.delete(folder.id);
-    sidecarReadFailures.delete(folder.id);
-    partialSidecarFolders.delete(folder.id);
-    discoveredSidecarFolders.delete(folder.id);
-    unreadableWarned.delete(folder.id);
-    writeFailureWarned.delete(folder.id);
-    // The open picker grants read only. Buy the write while the picker's
-    // gesture may still count; if activation is already spent this is a no-op
-    // and the next annotation edit re-arms it through the same helper.
-    const updated = await getFolder(folder.id).catch(() => null);
-    let readable = false;
-    if (updated?.sidecarHandle) {
-        // The explicit write below seeds/converges the file. Scheduling a push
-        // here as well would replace it twice when local records are newer.
-        readable = await mergeFromSidecar(updated, false).catch((err: unknown) => {
-            log.warn("sidecar first merge failed", { err: err instanceof Error ? err.message : String(err) });
-            return false;
+        // The picked handle still works in this tab when IndexedDB cannot
+        // remember it; annotation persistence already reports session mode.
+        log.warn("notes-file handle could not be remembered", {
+            err: err instanceof Error ? err.message : String(err),
         });
     }
-    const enabled = readable && (await withSidecarWriteLock(folder.id, () => writeSidecar(folder.id)));
-    if (enabled) {
-        refreshFolderSources();
+    const written = !writeNow || (await enqueueWrite());
+    refreshFolderSources();
+    if (writeNow && written && access === "file") {
         notify({ severity: "info", messageKey: "sidecar.enabled", messageParams: { file: handle.name } });
-    } else notifyWriteFailure(folder.id);
-    return enabled;
+    }
+    return written;
 }
 
-async function isSidecarUsedByAnotherFolder(folderId: string, handle: FileSystemFileHandle): Promise<boolean | null> {
-    let folders: RememberedFolder[];
+async function authorizeSidecarFile(): Promise<NotesConnectResult> {
+    const handle = activeHandle;
+    if (!handle || activeAccess !== "file") return "failed";
+    if (!(await ensureFileReadwritePermission(handle))) return "failed";
+    return (await enqueueWrite()) ? "connected" : "failed";
+}
+
+async function chooseBrowserStorage(): Promise<void> {
     try {
-        folders = await listFolders();
+        await setNotesStorage("browser");
     } catch (err) {
-        log.warn("sidecar ownership check failed", { err: err instanceof Error ? err.message : String(err) });
-        return null;
-    }
-    for (const other of folders) {
-        if (other.id === folderId || !other.sidecarHandle) continue;
-        try {
-            if (await handle.isSameEntry(other.sidecarHandle)) return true;
-        } catch (err) {
-            // Failing open would permit one physical file to back two logical
-            // folders and cross-pollinate their notes on the next write.
-            log.warn("sidecar identity check failed", { err: err instanceof Error ? err.message : String(err) });
-            return null;
-        }
-    }
-    return false;
-}
-
-async function folderScopedSidecarRecords(
-    records: readonly AnnotationRecord[],
-    folderId: string,
-): Promise<AnnotationRecord[]> {
-    await waitForAnnotationsReady();
-    const liveFolderIds = await listFolders()
-        .then((folders) => new Set(folders.map((folder) => folder.id)))
-        .catch(() => undefined);
-    return scopeAnnotationRecordsToFolder(records, folderId, liveFolderIds);
-}
-
-function scheduleWrite(folderId: string, delayMs: number = WRITE_DEBOUNCE_MS): void {
-    const pending = writeTimers.get(folderId);
-    if (pending !== undefined) clearTimeout(pending);
-    writeTimers.set(
-        folderId,
-        window.setTimeout(() => {
-            writeTimers.delete(folderId);
-            void enqueueWrite(folderId);
-        }, delayMs),
-    );
-}
-
-function flushScheduledWrites(): void {
-    for (const [folderId, timer] of [...writeTimers]) {
-        clearTimeout(timer);
-        writeTimers.delete(folderId);
-        void enqueueWrite(folderId);
-    }
-}
-
-function enqueueWrite(folderId: string): Promise<void> {
-    const previous = writeQueues.get(folderId) ?? Promise.resolve();
-    const queued = previous
-        .catch(() => {})
-        .then(() => withSidecarWriteLock(folderId, async () => void (await writeSidecar(folderId))))
-        .catch((err: unknown) => {
-            log.warn("sidecar queued write failed", { err: err instanceof Error ? err.message : String(err) });
+        log.warn("browser-only notes choice could not be remembered", {
+            err: err instanceof Error ? err.message : String(err),
         });
-    writeQueues.set(folderId, queued);
-    void queued.finally(() => {
-        if (writeQueues.get(folderId) === queued) writeQueues.delete(folderId);
-    });
-    return queued;
+    }
+    refreshFolderSources();
 }
 
-/** Waits until every write already requested in this tab has settled. Used
- * before destructive local reset and as a best-effort page-hide flush. */
+async function prepareSidecarWrite(force = false): Promise<NotesWriteAction | null> {
+    await loadSavedConnection();
+    const state = await readNotesFileState();
+    if (state.storage === "browser") {
+        if (!force) return null;
+        return activeHandle ? "connect" : "create";
+    }
+    if (!activeHandle) return "create";
+    if (activeAccess !== "file") return "connect";
+    if (partialFile || readFailed || writeFailed) return "connect";
+    const permission = await filePermissionState(activeHandle, "readwrite");
+    if (permission === "granted") return null;
+    return permission === "prompt" ? "authorize" : "connect";
+}
+
+async function mergeFromActiveFile(): Promise<boolean> {
+    const handle = activeHandle;
+    if (!handle) return false;
+    let parsed: ReturnType<typeof parseSidecarPayload>;
+    try {
+        parsed = parseSidecarPayload(await (await handle.getFile()).text());
+    } catch (err) {
+        readFailed = true;
+        refreshFolderSources();
+        log.warn("notes file read failed", { err: err instanceof Error ? err.message : String(err) });
+        return false;
+    }
+    if (!parsed) {
+        readFailed = true;
+        refreshFolderSources();
+        notifyOnceForReadFailure("sidecar.notOurFile");
+        return false;
+    }
+    if (parsed.rejectedEntries > 0) {
+        partialFile = true;
+        await mergePortableRecords(parsed.records);
+        refreshFolderSources();
+        notifyOnceForReadFailure("sidecar.partialReadOnly", { n: parsed.rejectedEntries });
+        return false;
+    }
+    await mergePortableRecords(parsed.records);
+    readFailed = false;
+    partialFile = false;
+    readFailureNotified = false;
+    return true;
+}
+
+function notifyOnceForReadFailure(
+    messageKey: "sidecar.notOurFile" | "sidecar.partialReadOnly",
+    params?: { n: number },
+): void {
+    if (readFailureNotified) return;
+    readFailureNotified = true;
+    notify({ severity: "error", messageKey, ...(params ? { messageParams: params } : {}) });
+}
+
+async function mergePortableRecords(records: readonly AnnotationRecord[]): Promise<boolean> {
+    const liveFolderIds = await liveFolderIdSet();
+    const portable = records.map((record) =>
+        liveFolderIds.has(record.folderId) ? record : record.folderId === "" ? record : { ...record, folderId: "" },
+    );
+    return applyIncomingRecords(portable, liveFolderIds);
+}
+
+function applyIncomingRecords(records: AnnotationRecord[], liveFolderIds: ReadonlySet<string>): boolean {
+    suppressAutomaticWrites++;
+    try {
+        let changed = applyMergedRecords(records, { preserveFolderIds: liveFolderIds });
+        for (const folderId of liveFolderIds) changed += rebindFolderAnnotations(folderId, liveFolderIds);
+        if (changed > 0) refreshAnnotationUi();
+        return changed > 0;
+    } finally {
+        suppressAutomaticWrites--;
+    }
+}
+
+async function liveFolderIdSet(extraFolderId?: string): Promise<Set<string>> {
+    let ids: Set<string>;
+    try {
+        ids = new Set((await listFolders()).map((folder) => folder.id));
+    } catch {
+        // A transient IndexedDB failure must not detach otherwise valid local
+        // ownership while importing a file. Dead ids can be cleaned up the
+        // next time the folder store is available.
+        ids = new Set(
+            allAnnotationRecords()
+                .map((record) => record.folderId)
+                .filter(Boolean),
+        );
+    }
+    if (extraFolderId) ids.add(extraFolderId);
+    return ids;
+}
+
+function refreshAnnotationUi(): void {
+    renderTrips();
+    refreshTimelineMarkers();
+}
+
+function scheduleWrite(delayMs = WRITE_DEBOUNCE_MS): void {
+    if (writeTimer !== null) clearTimeout(writeTimer);
+    writeTimer = window.setTimeout(() => {
+        writeTimer = null;
+        void enqueueWrite();
+    }, delayMs);
+}
+
+function enqueueWrite(): Promise<boolean> {
+    let result = false;
+    const queued = writeQueue
+        .catch(() => {})
+        .then(() =>
+            withSidecarWriteLock(async () => {
+                result = await writeSidecar();
+            }),
+        )
+        .catch((err: unknown) => {
+            log.warn("queued notes-file write failed", { err: err instanceof Error ? err.message : String(err) });
+        });
+    writeQueue = queued;
+    return queued.then(() => result);
+}
+
 export async function flushPendingSidecarWrites(): Promise<void> {
-    while (pendingChangeWrites.size > 0 || writeTimers.size > 0 || writeQueues.size > 0) {
-        if (pendingChangeWrites.size > 0) await Promise.allSettled([...pendingChangeWrites]);
-        flushScheduledWrites();
-        if (writeQueues.size > 0) await Promise.allSettled([...writeQueues.values()]);
+    if (pendingStateChecks.size > 0) await Promise.allSettled([...pendingStateChecks]);
+    if (writeTimer !== null) {
+        clearTimeout(writeTimer);
+        writeTimer = null;
+        void enqueueWrite();
     }
+    await writeQueue.catch(() => {});
 }
 
-async function withSidecarWriteLock<T>(folderId: string, write: () => Promise<T>): Promise<T> {
-    if (typeof navigator !== "undefined" && navigator.locks) {
-        return navigator.locks.request(`dashcamigo:annotations-sidecar:${folderId}`, write);
-    }
+async function withSidecarWriteLock<T>(write: () => Promise<T>): Promise<T> {
+    if (typeof navigator !== "undefined" && navigator.locks) return navigator.locks.request(WRITE_LOCK_NAME, write);
     return write();
 }
 
-async function writeSidecar(folderId: string): Promise<boolean> {
-    const folder = await getFolder(folderId).catch(() => null);
-    if (!folder?.sidecarHandle || folder.sidecarAccess !== "file" || folder.notesStorage === "browser") return false;
-    const handle = folder.sidecarHandle;
-    // Queued writes may outlive the edit gesture, so only a still-granted
-    // permission works. Recovery paths:
-    // ensureFileReadwritePermission re-arms the grant inside the next
-    // annotation edit's gesture, and the chip-open flow re-arms it too.
-    if (!(await hasFileReadwritePermission(handle))) {
-        log.info("sidecar write skipped, permission not granted", { folder: folder.label });
-        notifyWriteFailure(folderId);
+async function writeSidecar(): Promise<boolean> {
+    const handle = activeHandle;
+    if (!handle || activeAccess !== "file" || !(await hasFileReadwritePermission(handle))) {
+        notifyWriteFailure();
         return false;
     }
     let writable: FileSystemWritableFileStream | null = null;
     try {
-        // Acquire the file lock BEFORE the merge read. Otherwise two origins or
-        // browser profiles can both read the old snapshot, then take turns
-        // replacing it and let the second one erase the first one's edit.
-        writable = await handle.createWritable({ mode: "exclusive" });
-        const readable = await mergeFromSidecar(folder, false);
+        const readable = await mergeFromActiveFile();
         if (!readable) {
-            await writable.abort().catch(() => {});
-            writable = null;
-            if (!unreadableWarned.has(folderId)) {
-                unreadableWarned.add(folderId);
-                log.warn("sidecar write skipped, file unreadable", { folder: folder.label });
-                notifyWriteFailure(folderId);
-            }
+            // The edit that queued this write has already completed. Surface
+            // the blocking recovery choice now; waiting for another edit would
+            // leave the first failed save easy to miss.
+            notifyWriteFailure();
             return false;
         }
-        const records = recordsForFolder(folderId);
-        const payload = buildSidecarPayload(records, Date.now());
-        await writable.write(JSON.stringify(payload));
+        const records = allAnnotationRecords();
+        // Open the replacement stream only after the current file has been
+        // parsed successfully. Some implementations lock reads once a writer
+        // exists, and there is no reason to touch an invalid/partial file.
+        writable = await handle.createWritable({ mode: "exclusive" });
+        await writable.write(JSON.stringify(buildSidecarPayload(records, Date.now())));
         await writable.close();
         writable = null;
-        const verifiedText = await (await handle.getFile()).text();
-        // An empty file is accepted at attach time as a safe creation target,
-        // but it cannot verify a completed JSON replacement (especially when
-        // this folder currently has zero records to check one-by-one).
-        const verified = verifiedText.trim() ? parseSidecarPayload(verifiedText) : null;
+        const verified = parseSidecarPayload(await (await handle.getFile()).text());
         const verifiedById = new Map(verified?.records.map((record) => [record.id, record]) ?? []);
         if (
-            !verified ||
+            verified?.version !== 2 ||
             verified.rejectedEntries > 0 ||
             records.some((record) => {
                 const saved = verifiedById.get(record.id);
                 return !saved || compareAnnotationVersions(saved, record) < 0;
             })
         ) {
-            throw new Error("backup verification failed");
+            throw new Error("notes-file verification failed");
         }
-        const recovered = writeFailureWarned.delete(folderId);
-        if (recovered) refreshFolderSources();
-        log.info("sidecar written", { folder: folder.label, records: records.length });
+        writeFailed = false;
+        readFailureNotified = false;
+        refreshFolderSources();
+        log.info("notes file written", { records: records.length });
         return true;
     } catch (err) {
         await writable?.abort().catch(() => {});
-        log.warn("sidecar write failed", { err: err instanceof Error ? err.message : String(err) });
-        notifyWriteFailure(folderId);
+        log.warn("notes-file write failed", { err: err instanceof Error ? err.message : String(err) });
+        notifyWriteFailure();
         return false;
     }
-}
-
-/**
- * Reads the folder's sidecar (if attached) and merges it with the local
- * records both ways: newer sidecar entries land in IndexedDB and refresh the
- * UI; a local side holding anything the file lacks triggers a converging
- * rewrite. An unreadable or malformed file is an expected local failure -
- * logged, never surfaced as an error (the IndexedDB copy still stands).
- */
-async function mergeFromSidecar(folder: RememberedFolder, schedulePush = true): Promise<boolean> {
-    const handle = folder.sidecarHandle;
-    if (!handle) return false;
-    let text: string;
-    try {
-        const file = await handle.getFile();
-        text = await file.text();
-    } catch (err) {
-        // Not readable -> not writable either (see writeSidecar): the local
-        // copy stands and nothing touches the file until a read succeeds.
-        log.warn("sidecar read failed", { err: err instanceof Error ? err.message : String(err) });
-        const changed = sidecarReadFolders.delete(folder.id) || !sidecarReadFailures.has(folder.id);
-        sidecarReadFailures.add(folder.id);
-        if (changed) refreshFolderSources();
-        return false;
-    }
-    const parsed = parseSidecarPayload(text);
-    if (parsed === null) {
-        // Foreign or corrupt. Attach-time validation keeps this out of the
-        // normal path, so the file changed underneath us - swapped by hand, or
-        // torn by something else writing it. Deliberately NOT marked as read:
-        // that is the flag writeSidecar needs before it replaces the contents,
-        // so leaving it unset means nothing here can overwrite whatever is in
-        // there now. The IndexedDB copy stays authoritative meanwhile.
-        log.warn("sidecar file is not a dashcamigo annotations file, leaving it alone");
-        sidecarReadFolders.delete(folder.id);
-        sidecarReadFailures.add(folder.id);
-        if (!unreadableWarned.has(folder.id)) {
-            unreadableWarned.add(folder.id);
-            refreshFolderSources();
-            notify({ severity: "warn", messageKey: "sidecar.notOurFile" });
-        }
-        return false;
-    }
-    if (parsed.rejectedEntries > 0) {
-        const sidecarRecords = await folderScopedSidecarRecords(parsed.records, folder.id);
-        const changedLocally = applyMergedRecords(mergeAnnotationLists(recordsForFolder(folder.id), sidecarRecords));
-        if (changedLocally > 0) {
-            renderTrips();
-            refreshTimelineMarkers();
-        }
-        sidecarReadFolders.delete(folder.id);
-        sidecarReadFailures.delete(folder.id);
-        partialSidecarFolders.add(folder.id);
-        refreshFolderSources();
-        if (!unreadableWarned.has(folder.id)) {
-            unreadableWarned.add(folder.id);
-            notify({
-                severity: "error",
-                messageKey: "sidecar.partialReadOnly",
-                messageParams: { n: parsed.rejectedEntries },
-            });
-        }
-        return false;
-    }
-    // The file's contents are known from here on.
-    sidecarReadFolders.add(folder.id);
-    const recoveredFromReadFailure = sidecarReadFailures.delete(folder.id);
-    const recoveredFromPartial = partialSidecarFolders.delete(folder.id);
-    if (recoveredFromReadFailure || recoveredFromPartial) refreshFolderSources();
-    unreadableWarned.delete(folder.id);
-    // Restamp: records arriving through THIS folder's sidecar belong to this
-    // folder locally, whatever per-profile UUID the writing side used.
-    const sidecarRecords = await folderScopedSidecarRecords(parsed.records, folder.id);
-    const local = recordsForFolder(folder.id);
-    const merged = mergeAnnotationLists(local, sidecarRecords);
-    const changedLocally = applyMergedRecords(merged);
-    if (changedLocally > 0) {
-        log.info("sidecar merged in", { records: changedLocally });
-        renderTrips();
-        refreshTimelineMarkers();
-    }
-    // Push back only when the local side holds something the file lacks: an
-    // id missing from the file, a strictly newer version, or a different
-    // winner at an equal timestamp (tombstone tie). An in-sync pair skips
-    // the write entirely - rewriting an untouched file on every open churns
-    // its mtime for nothing.
-    const sidecarById = new Map(sidecarRecords.map((record) => [record.id, record]));
-    const needsPush = recordsForFolder(folder.id).some((record) => {
-        const inFile = sidecarById.get(record.id);
-        return !inFile || compareAnnotationVersions(record, inFile) > 0;
-    });
-    if (
-        needsPush &&
-        schedulePush &&
-        folder.sidecarAccess === "file" &&
-        folder.notesStorage !== "browser" &&
-        (await hasFileReadwritePermission(handle))
-    )
-        scheduleWrite(folder.id);
-    else if (!needsPush && writeFailureWarned.delete(folder.id)) refreshFolderSources();
-    return true;
 }
 
 async function hasFileReadwritePermission(handle: FileSystemFileHandle): Promise<boolean> {
-    return (await fileReadwritePermissionState(handle)) === "granted";
+    return (await filePermissionState(handle, "readwrite")) === "granted";
 }
 
-async function fileReadwritePermissionState(handle: FileSystemFileHandle): Promise<PermissionState> {
+async function filePermissionState(handle: FileSystemFileHandle, mode: "read" | "readwrite"): Promise<PermissionState> {
     if (typeof handle.queryPermission !== "function") return "granted";
     try {
-        return await handle.queryPermission({ mode: "readwrite" });
+        return await handle.queryPermission({ mode });
     } catch {
         return "denied";
     }
 }
 
-function notifyWriteFailure(folderId: string): void {
-    if (writeFailureWarned.has(folderId)) return;
-    writeFailureWarned.add(folderId);
+function notifyWriteFailure(): void {
+    if (writeFailed) return;
+    writeFailed = true;
     refreshFolderSources();
-    writeAttentionHook?.(folderId);
+    writeAttentionHook?.();
 }
 
-/** Clears session-only coordination state between unit tests. */
+function isPickerDismissal(err: unknown): boolean {
+    return err instanceof DOMException && err.name === "AbortError";
+}
+
 export function _resetForTests(): void {
-    for (const timer of writeTimers.values()) clearTimeout(timer);
-    writeTimers.clear();
-    writeQueues.clear();
-    pendingChangeWrites.clear();
-    folderOpenTasks.clear();
-    sidecarReadFolders.clear();
-    sidecarReadFailures.clear();
-    partialSidecarFolders.clear();
-    unreadableWarned.clear();
-    writeFailureWarned.clear();
-    discoveredSidecarFolders.clear();
+    if (writeTimer !== null) clearTimeout(writeTimer);
+    activeHandle = null;
+    activeAccess = undefined;
+    currentFolderHandle = null;
+    connectionGeneration++;
+    stateLoad = null;
+    writeTimer = null;
+    writeQueue = Promise.resolve();
+    pendingStateChecks = new Set();
+    suppressAutomaticWrites = 0;
+    readFailed = false;
+    partialFile = false;
+    writeFailed = false;
+    readFailureNotified = false;
     writeAttentionHook = null;
 }

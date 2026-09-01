@@ -22,22 +22,28 @@ let tempRoot: string;
 let sampleCopy: string;
 let syncCopy: string;
 let liveCopy: string;
+let priorityFirst: string;
+let prioritySecond: string;
 
 test.beforeAll(async () => {
     tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "dashcamigo-notes-e2e-"));
     sampleCopy = path.join(tempRoot, "gopro-notes");
     syncCopy = path.join(tempRoot, "gopro-notes-sync");
     liveCopy = path.join(tempRoot, "gopro-notes-live");
+    priorityFirst = path.join(tempRoot, "gopro-notes-priority-first");
+    prioritySecond = path.join(tempRoot, "gopro-notes-priority-second");
     await fs.cp(SAMPLE_GOPRO, sampleCopy, { recursive: true });
     await fs.cp(SAMPLE_GOPRO, syncCopy, { recursive: true });
     await fs.cp(SAMPLE_GOPRO, liveCopy, { recursive: true });
+    await fs.cp(SAMPLE_GOPRO, priorityFirst, { recursive: true });
+    await fs.cp(SAMPLE_GOPRO, prioritySecond, { recursive: true });
 });
 
 test.afterAll(async () => {
     await fs.rm(tempRoot, { recursive: true, force: true });
 });
 
-test.describe("notes file in the recordings folder", () => {
+test.describe("old and portable notes files", () => {
     test.beforeEach(async ({ page }) => {
         await presetLocalStorage(page);
         await page.setViewportSize(DESKTOP);
@@ -108,18 +114,17 @@ test.describe("notes file in the recordings folder", () => {
             page.locator("li.trip", { hasText: TRIP_NAME }),
             "the name from the notes file must land on its trip's card",
         ).toBeVisible({ timeout: 15_000 });
-        const notesState = page.locator("#folder-sources .folder-source__notes", {
-            hasText: "new changes aren't written to this file",
-        });
-        await expect(notesState, "the source row must disclose that the loaded file is read-only").toBeVisible();
-        await expect(notesState).toContainText("notes.dashcamigo");
+        await expect(
+            page.locator("#notes-file-status"),
+            "reading a travelling old file must not bind it to a folder or make it writable",
+        ).toContainText("Notes are saved in this browser");
         await expect(
             page.locator("#folder-sources .folder-source"),
             "a notes-only duplicate pass must reuse the recording source row",
         ).toHaveCount(1);
     });
 
-    test("upgrades a read-only notes file and writes the next change to it", async ({ page }) => {
+    test("opens v1 read-only, then upgrades it on the first writing action", async ({ page }) => {
         await fs.writeFile(
             path.join(syncCopy, "notes.dashcamigo"),
             JSON.stringify({ app: "dashcamigo", format: "annotations", version: 1, annotations: [] }),
@@ -132,19 +137,23 @@ test.describe("notes file in the recordings folder", () => {
         await page.locator("#folder-input").setInputFiles(syncCopy);
         const card = page.locator("li.trip:not(.unindexed-note)").first();
         await expect(card).toBeVisible({ timeout: 30_000 });
-        const row = page.locator("#folder-sources .folder-source", { hasText: label });
-        await expect(row.locator(".folder-source__notes")).toContainText("new changes aren't written to this file");
+        const notesStatus = page.locator("#notes-file-status");
+        await expect(notesStatus).toContainText("Notes are saved in this browser");
+        await notesStatus.getByRole("button", { name: "Choose existing…" }).click();
+        await expect(notesStatus).toContainText("notes.dashcamigo is connected");
 
-        await row.getByRole("button", { name: "Enable file syncing…" }).click();
+        const beforeWrite = await page.evaluate(async () => {
+            const handle = (window as unknown as { __e2eNotesFileHandle?: FileSystemFileHandle }).__e2eNotesFileHandle;
+            return handle ? await (await handle.getFile()).text() : "";
+        });
+        expect(JSON.parse(beforeWrite).version, "choosing an old file itself stays read-only").toBe(1);
+
+        await card.locator(".trip-fav").click();
         const storageModal = page.locator("#notes-storage-modal");
         await expect(storageModal).toBeVisible();
         await storageModal.getByRole("button", { name: "Save to a file" }).click();
         await expect(storageModal).toBeHidden();
-        await expect(row.locator(".folder-source__notes")).toHaveText(
-            "Notes backup is on — changes are saved to the file notes.dashcamigo",
-        );
-
-        await card.locator(".trip-fav").click();
+        await expect(notesStatus).toContainText("Saving to notes.dashcamigo");
         await expect
             .poll(
                 () =>
@@ -164,11 +173,13 @@ test.describe("notes file in the recordings folder", () => {
                         const notes = roots?.[0] ? await findNotes(roots[0]) : null;
                         if (!notes) return false;
                         const payload = JSON.parse(await (await notes.getFile()).text()) as {
+                            version?: number;
                             annotations?: Array<{ kind?: string; isFavorite?: boolean }>;
                         };
                         return (
-                            payload.annotations?.some((record) => record.kind === "tripMeta" && record.isFavorite) ??
-                            false
+                            payload.version === 2 &&
+                            (payload.annotations?.some((record) => record.kind === "tripMeta" && record.isFavorite) ??
+                                false)
                         );
                     }),
                 { message: "the first edit after connecting must reach notes.dashcamigo" },
@@ -176,11 +187,85 @@ test.describe("notes file in the recordings folder", () => {
             .toBe(true);
 
         await page.reload();
-        const reloadedRow = page.locator("#folder-sources .folder-source", { hasText: label });
         await expect(
-            reloadedRow.locator(".folder-source__notes"),
+            page.locator("#notes-file-status"),
             "a saved connection must not turn into a backup failure merely because the page reloaded",
-        ).toHaveText("Notes backup is on — changes are saved to the file notes.dashcamigo");
+        ).toContainText("Saving to notes.dashcamigo");
+    });
+
+    test("a notes file in the newly opened folder replaces the previous fallback", async ({ page }) => {
+        await fs.writeFile(
+            path.join(prioritySecond, "notes.dashcamigo"),
+            JSON.stringify({ app: "dashcamigo", format: "annotations", version: 1, annotations: [] }),
+            "utf8",
+        );
+        await mockDirectoryPicker(page, [
+            { label: "FIRST-CARD", dir: priorityFirst },
+            { label: "SECOND-CARD", dir: prioritySecond },
+        ]);
+        await gotoApp(page, "en");
+        await page.evaluate(() => {
+            (window as unknown as { __e2eSaveNotesAs?: string }).__e2eSaveNotesAs =
+                "dashcamigo-report-2026-08-26-0745.dashcamigo";
+        });
+
+        await page.locator("#landing-cta").click();
+        const card = page.locator("li.trip:not(.unindexed-note)").first();
+        await expect(card).toBeVisible({ timeout: 30_000 });
+        await card.locator(".trip-fav").click();
+        const decision = page.locator("#notes-storage-modal");
+        await expect(decision).toBeVisible();
+        await decision.getByRole("button", { name: "Save to a file" }).click();
+        await expect(decision).toBeHidden();
+
+        const status = page.locator("#notes-file-status");
+        await expect(status).toContainText("Saving to dashcamigo-report-2026-08-26-0745.dashcamigo");
+        await expect(status.getByRole("button")).toHaveCount(1);
+        await expect(status.getByRole("button", { name: "Change file…" })).toBeVisible();
+        const previousText = await page.evaluate(async () => {
+            const state = window as unknown as {
+                __e2eNotesFileHandle?: FileSystemFileHandle;
+                __e2ePreviousNotesFileHandle?: FileSystemFileHandle;
+            };
+            if (!state.__e2eNotesFileHandle) throw new Error("custom notes file was not created");
+            state.__e2ePreviousNotesFileHandle = state.__e2eNotesFileHandle;
+            return (await state.__e2eNotesFileHandle.getFile()).text();
+        });
+
+        await page.locator("#sidebar-cta").click();
+        await expect(
+            status,
+            "the conventional notes file in the latest folder must replace the previous fallback",
+        ).toContainText("notes.dashcamigo is connected");
+        await expect(status.getByRole("button")).toHaveCount(1);
+        await expect(status.getByRole("button", { name: "Change file…" })).toBeVisible();
+
+        await card.locator(".trip-fav").click();
+        await expect(decision).toBeVisible();
+        await decision.getByRole("button", { name: "Save to a file" }).click();
+        await expect(decision).toBeHidden();
+        await expect(status).toContainText("Saving to notes.dashcamigo");
+
+        await expect
+            .poll(
+                () =>
+                    page.evaluate(async () => {
+                        const handle = (window as unknown as { __e2eNotesFileHandle?: FileSystemFileHandle })
+                            .__e2eNotesFileHandle;
+                        if (!handle) return 0;
+                        return (JSON.parse(await (await handle.getFile()).text()) as { version?: number }).version ?? 0;
+                    }),
+                { message: "the newly opened folder's file must receive the next edit" },
+            )
+            .toBe(2);
+        expect(
+            await page.evaluate(async () => {
+                const handle = (window as unknown as { __e2ePreviousNotesFileHandle?: FileSystemFileHandle })
+                    .__e2ePreviousNotesFileHandle;
+                return handle ? await (await handle.getFile()).text() : "";
+            }),
+            "switching folders must not write the discovered file's merge back into the previous fallback",
+        ).toBe(previousText);
     });
 
     test("shows a loaded notes file on an unremembered live folder", async ({ page }) => {
@@ -198,16 +283,11 @@ test.describe("notes file in the recordings folder", () => {
 
         const row = page.locator("#folder-sources .folder-source", { hasText: label });
         await expect(row.locator(".folder-source__remember"), "the folder must still be session-only").toBeVisible();
-        const notes = row.locator(".folder-source__notes");
-        await expect(notes, "the row must disclose the notes file already used during ingest").toBeVisible();
-        await expect(notes).toContainText("Notes loaded from notes.dashcamigo");
-
-        await notes.getByRole("button", { name: "Enable file syncing…" }).click();
-        await expect(row.locator(".folder-source__state")).toHaveText("Remembered");
-        await expect(
-            row.locator(".folder-source__notes"),
-            "syncing should adopt the file from the already-open folder without another selection",
-        ).toHaveText("Notes backup is on — changes are saved to the file notes.dashcamigo");
+        const notes = page.locator("#notes-file-status");
+        await expect(notes, "the folder's notes file must become current without becoming writable").toContainText(
+            "notes.dashcamigo is connected",
+        );
+        await expect(row.locator(".folder-source__remember")).toBeVisible();
     });
 });
 

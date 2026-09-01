@@ -1,22 +1,13 @@
 // Blocking storage choice shown only after a user changes an annotation and
-// there is no usable, narrowly scoped notes-file connection. The annotation
-// is already in the in-memory/browser store by then, so cancelling a native
-// picker never loses the edit. The dialog itself cannot be dismissed: the
-// user either connects one file or explicitly chooses browser-only storage.
+// the active notes file is not writable. The edit already exists in
+// browser/session state, so a dismissed native picker never loses it; the
+// modal itself stays blocking until the user explicitly chooses where it goes.
 
 import { t } from "../i18n/index.js";
 import { createLogger } from "../log.js";
-import { getFolder, setFolderNotesStorage } from "../persist/folders.js";
-import type { AnnotationRecord, RememberedFolder } from "../persist/types.js";
 import { registerNotesWriteAttentionHook } from "./annotations-sidecar.js";
 import { registerUserAnnotationHook } from "./annotations.js";
-import {
-    getNotesConnector,
-    hasLiveSource,
-    refreshFolderSources,
-    rememberLiveSource,
-    type NotesWriteAction,
-} from "./folder-sources.js";
+import { getNotesConnector, refreshFolderSources, type NotesWriteAction } from "./folder-sources.js";
 import { activateModal, deactivateModal } from "./modal-helper.js";
 
 const log = createLogger("notes-storage-choice");
@@ -26,10 +17,9 @@ let body: HTMLElement | null = null;
 let error: HTMLElement | null = null;
 let browserButton: HTMLButtonElement | null = null;
 let fileButton: HTMLButtonElement | null = null;
-let pending: { folder: RememberedFolder; action: NotesWriteAction } | null = null;
-const browserOnlyThisSession = new Set<string>();
+let pending: { action: NotesWriteAction } | null = null;
+let browserOnlyThisSession = false;
 
-/** Wires the mandatory choice to real user edits and write failures. */
 export function initNotesNudge(): void {
     modal = document.getElementById("notes-storage-modal");
     body = document.getElementById("notes-storage-modal-body");
@@ -38,30 +28,18 @@ export function initNotesNudge(): void {
     fileButton = document.getElementById("notes-storage-file") as HTMLButtonElement | null;
     browserButton?.addEventListener("click", chooseBrowserStorage);
     fileButton?.addEventListener("click", chooseFileStorage);
-    registerUserAnnotationHook(onUserAnnotation);
-    registerNotesWriteAttentionHook((folderId) => void requestStorageDecision(folderId, null));
+    registerUserAnnotationHook(() => void requestStorageDecision());
+    registerNotesWriteAttentionHook(() => void requestStorageDecision());
 }
 
-function onUserAnnotation(record: AnnotationRecord): void {
-    const anchorKey = record.anchor?.fileIdentityKey ?? null;
-    void requestStorageDecision(record.folderId, anchorKey).catch((err: unknown) => {
-        log.warn("notes storage choice evaluation failed", {
-            err: err instanceof Error ? err.message : String(err),
-        });
-    });
-}
-
-async function requestStorageDecision(folderId: string, anchorKey: string | null, force = false): Promise<void> {
+async function requestStorageDecision(force = false): Promise<void> {
     const connector = getNotesConnector();
-    if (!connector || !modal || !browserButton || !fileButton) return;
+    if (!connector?.canSelectFile() || !modal || !browserButton || !fileButton) return;
     if (pending && !modal.hidden) return;
-    const storedFolder = folderId ? await getFolder(folderId).catch(() => null) : null;
-    const folder = storedFolder ?? (await rememberLiveSource(anchorKey));
-    if (!folder) return;
-    if (!force && (folder.notesStorage === "browser" || browserOnlyThisSession.has(folder.id))) return;
-    const action = await connector.prepareWrite(folder, force);
+    if (!force && browserOnlyThisSession) return;
+    const action = await connector.prepareWrite(force);
     if (action === null) return;
-    pending = { folder, action };
+    pending = { action };
     if (body) {
         body.textContent = t(
             connector.browserStorageReady() ? "notesStorageModal.body" : "notesStorageModal.bodySession",
@@ -77,15 +55,13 @@ async function requestStorageDecision(folderId: string, anchorKey: string | null
 }
 
 function chooseBrowserStorage(): void {
-    const choice = pending;
-    if (!choice) return;
-    browserOnlyThisSession.add(choice.folder.id);
+    const connector = getNotesConnector();
+    if (!pending || !connector) return;
+    browserOnlyThisSession = true;
     setBusy(true);
-    void setFolderNotesStorage(choice.folder.id, "browser")
+    void connector
+        .chooseBrowser()
         .catch((err: unknown) => {
-            // The in-session choice still holds. A private/storage-disabled
-            // browser may ask again after reload, which is safer than silently
-            // claiming the preference was persisted.
             log.warn("browser-only notes choice could not be saved", {
                 err: err instanceof Error ? err.message : String(err),
             });
@@ -104,14 +80,14 @@ function chooseFileStorage(): void {
     if (error) error.hidden = true;
     const operation =
         choice.action === "create"
-            ? connector.create(choice.folder)
+            ? connector.create()
             : choice.action === "authorize"
-              ? connector.authorize(choice.folder)
-              : connector.useExisting(choice.folder);
+              ? connector.authorize()
+              : connector.useExisting(true);
     void operation
         .then((result) => {
             if (result === "connected") {
-                browserOnlyThisSession.delete(choice.folder.id);
+                browserOnlyThisSession = false;
                 closeModal();
                 return;
             }
@@ -127,14 +103,13 @@ function chooseFileStorage(): void {
         });
 }
 
-async function refreshPendingAction(choice: { folder: RememberedFolder; action: NotesWriteAction }): Promise<void> {
+async function refreshPendingAction(choice: { action: NotesWriteAction }): Promise<void> {
     const connector = getNotesConnector();
     if (!connector || pending !== choice) return;
-    const folder = (await getFolder(choice.folder.id).catch(() => null)) ?? choice.folder;
-    const action = await connector.prepareWrite(folder, true);
+    const action = await connector.prepareWrite(true);
     if (pending !== choice) return;
     if (action === null) closeModal();
-    else pending = { folder, action };
+    else pending = { action };
 }
 
 function setBusy(busy: boolean): void {
@@ -154,18 +129,14 @@ function closeModal(): void {
     deactivateModal(modal);
 }
 
-export async function canConnectNotesBackup(folderId: string, anchorKey: string | null): Promise<boolean> {
-    if (getNotesConnector() === null) return false;
-    if (hasLiveSource(anchorKey)) return true;
-    return folderId !== "" && (await getFolder(folderId).catch(() => null)) !== null;
+export function canConnectNotesBackup(): boolean {
+    return getNotesConnector()?.canSelectFile() === true;
 }
 
-/** Opens the same explicit storage decision from an editor's storage link. */
-export async function connectNotesBackup(folderId: string, anchorKey: string | null): Promise<void> {
-    await requestStorageDecision(folderId, anchorKey, true);
+export async function connectNotesBackup(): Promise<void> {
+    await requestStorageDecision(true);
 }
 
-/** Test-only reset for module-level DOM and choice state. */
 export function _resetForTests(): void {
     if (modal && !modal.hidden) {
         modal.hidden = true;
@@ -177,5 +148,5 @@ export function _resetForTests(): void {
     browserButton = null;
     fileButton = null;
     pending = null;
-    browserOnlyThisSession.clear();
+    browserOnlyThisSession = false;
 }

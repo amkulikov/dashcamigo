@@ -84,16 +84,23 @@ export function mergeAnnotationLists(a: AnnotationRecord[], b: AnnotationRecord[
 }
 
 /** Wire format marker of the notes file. Read by parseSidecarPayload, written
- *  by buildSidecarPayload - the two must agree, which is why they live here. */
+ * by buildSidecarPayload - the two must agree, which is why they live here. */
 const SIDECAR_FORMAT = "annotations";
+const SIDECAR_VERSION = 2;
 
 /**
- * The exact object written into a folder's notes file. `savedAt` is a human
- * courtesy (nothing reads it back); the records travel as-is, folderId
- * included, and the reader restamps it with its own local id.
+ * The exact object written into the portable notes file. `folderId` is browser
+ * bookkeeping and never leaves the profile; clip anchors carry the portable
+ * recording identity instead. v1 readers remain supported below.
  */
 export function buildSidecarPayload(records: AnnotationRecord[], savedAt: number): object {
-    return { app: "dashcamigo", format: SIDECAR_FORMAT, version: 1, savedAt, annotations: records };
+    return {
+        app: "dashcamigo",
+        format: SIDECAR_FORMAT,
+        version: SIDECAR_VERSION,
+        savedAt,
+        annotations: records.map(({ folderId: _folderId, ...record }) => record),
+    };
 }
 
 function isSafeTimestamp(value: unknown): value is number {
@@ -121,25 +128,27 @@ const TRIP_META_KEYS = new Set([
 ]);
 const TRIP_ANCHOR_KEYS = new Set(["fileIdentityKey", "startUtc"]);
 const MARKER_KEYS = new Set(["id", "folderId", "updatedAt", "deleted", "kind", "utc", "text", "anchor"]);
+const PORTABLE_TRIP_META_KEYS = new Set([...TRIP_META_KEYS].filter((key) => key !== "folderId"));
+const PORTABLE_MARKER_KEYS = new Set([...MARKER_KEYS].filter((key) => key !== "folderId"));
 const MARKER_ANCHOR_KEYS = new Set(["fileIdentityKey", "startUtc", "offsetSec"]);
 const SIDECAR_KEYS = new Set(["app", "format", "version", "savedAt", "annotations"]);
 
 export interface SidecarParseResult {
     records: AnnotationRecord[];
+    version: 1 | 2;
     /** Entries that could not be understood. A reader may recover the valid
      * records, but a writer must not replace the file and erase these entries. */
     rejectedEntries: number;
 }
 
 /**
- * Parses compatible v1 notes JSON, or null when the whole file is foreign,
- * corrupt, or from an unsupported format version. Validation stays per entry
- * so readable records can still be recovered, while rejectedEntries makes
- * that recovery explicitly read-only. folderId is not trusted; callers
- * restamp it with their local folder id.
+ * Parses v1 folder backups and v2 portable notes files, or null when the whole
+ * file is foreign, corrupt, or from an unsupported version. Validation stays
+ * per entry so readable records can still be recovered, while
+ * rejectedEntries makes that recovery explicitly read-only.
  */
 export function parseSidecarPayload(text: string): SidecarParseResult | null {
-    if (text.trim() === "") return { records: [], rejectedEntries: 0 };
+    if (text.trim() === "") return { records: [], rejectedEntries: 0, version: SIDECAR_VERSION };
     let parsed: unknown;
     try {
         parsed = JSON.parse(text);
@@ -151,11 +160,12 @@ export function parseSidecarPayload(text: string): SidecarParseResult | null {
     if (
         obj.app !== "dashcamigo" ||
         obj.format !== SIDECAR_FORMAT ||
-        obj.version !== 1 ||
+        (obj.version !== 1 && obj.version !== SIDECAR_VERSION) ||
         !Array.isArray(obj.annotations)
     ) {
         return null;
     }
+    const version = obj.version;
     const out: AnnotationRecord[] = [];
     let rejectedEntries = hasOnlyKeys(obj, SIDECAR_KEYS) ? 0 : 1;
     if (obj.savedAt !== undefined && !isSafeTimestamp(obj.savedAt)) rejectedEntries++;
@@ -197,7 +207,7 @@ export function parseSidecarPayload(text: string): SidecarParseResult | null {
             }
             out.push({
                 id: record.id,
-                folderId: typeof record.folderId === "string" ? record.folderId : "",
+                folderId: version === 1 && typeof record.folderId === "string" ? record.folderId : "",
                 updatedAt: record.updatedAt,
                 deleted: record.deleted,
                 kind: "tripMeta",
@@ -206,7 +216,8 @@ export function parseSidecarPayload(text: string): SidecarParseResult | null {
                 ...(record.note !== undefined ? { note: record.note } : {}),
                 ...(record.isFavorite !== undefined ? { isFavorite: record.isFavorite } : {}),
             });
-            if (!hasOnlyKeys(record, TRIP_META_KEYS) || !hasOnlyKeys(anchor, TRIP_ANCHOR_KEYS)) rejectedEntries++;
+            const allowedKeys = version === 1 ? TRIP_META_KEYS : PORTABLE_TRIP_META_KEYS;
+            if (!hasOnlyKeys(record, allowedKeys) || !hasOnlyKeys(anchor, TRIP_ANCHOR_KEYS)) rejectedEntries++;
         } else if (record.kind === "marker") {
             if (!isSafeTimestamp(record.utc) || typeof record.text !== "string") {
                 rejectedEntries++;
@@ -228,7 +239,7 @@ export function parseSidecarPayload(text: string): SidecarParseResult | null {
             }
             out.push({
                 id: record.id,
-                folderId: typeof record.folderId === "string" ? record.folderId : "",
+                folderId: version === 1 && typeof record.folderId === "string" ? record.folderId : "",
                 updatedAt: record.updatedAt,
                 deleted: record.deleted,
                 kind: "marker",
@@ -244,12 +255,13 @@ export function parseSidecarPayload(text: string): SidecarParseResult | null {
                       }
                     : {}),
             });
-            if (!hasOnlyKeys(record, MARKER_KEYS) || (anchor && !hasOnlyKeys(anchor, MARKER_ANCHOR_KEYS))) {
+            const allowedKeys = version === 1 ? MARKER_KEYS : PORTABLE_MARKER_KEYS;
+            if (!hasOnlyKeys(record, allowedKeys) || (anchor && !hasOnlyKeys(anchor, MARKER_ANCHOR_KEYS))) {
                 rejectedEntries++;
             }
         } else {
             rejectedEntries++;
         }
     }
-    return { records: out, rejectedEntries };
+    return { records: out, rejectedEntries, version };
 }

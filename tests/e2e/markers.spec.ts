@@ -14,7 +14,8 @@ async function pausePlayback(page: import("@playwright/test").Page): Promise<voi
     await expect.poll(isPaused, { message: "playback must be paused" }).toBe(true);
 }
 
-/** Drops a marker at the playhead and dismisses the editor that opens with it. */
+/** Drops a marker and explicitly keeps notes in the browser when the first
+ * completed write opens the mandatory app-wide storage decision. */
 async function addMarker(page: import("@playwright/test").Page, text: string): Promise<void> {
     await page.locator("#player-add-marker").click();
     const modal = page.locator("#marker-modal");
@@ -22,6 +23,10 @@ async function addMarker(page: import("@playwright/test").Page, text: string): P
     await page.locator("#marker-modal-text").fill(text);
     await page.locator("#marker-modal-save").click();
     await expect(modal).toBeHidden();
+    const storage = page.locator("#notes-storage-modal");
+    await expect(storage).toBeVisible();
+    await storage.getByRole("button", { name: "Only in this browser" }).click();
+    await expect(storage).toBeHidden();
 }
 
 test.describe("timeline markers", () => {
@@ -116,6 +121,10 @@ test.describe("timeline markers", () => {
 
         await page.locator("#marker-modal-save").click();
         await expect(page.locator("#marker-modal")).toBeHidden();
+        const storage = page.locator("#notes-storage-modal");
+        await expect(storage).toBeVisible();
+        await storage.getByRole("button", { name: "Only in this browser" }).click();
+        await expect(storage).toBeHidden();
         await expect.poll(isPaused, { message: "closing the editor resumes playback" }).toBe(false);
     });
 

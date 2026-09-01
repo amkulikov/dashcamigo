@@ -387,8 +387,8 @@ export function setTripMeta(trip: Trip, patch: TripMetaPatch): void {
         : {
               id: crypto.randomUUID(),
               // "" when the trip's files did not come out of a remembered
-              // folder (ad-hoc drop) - the annotation still works, it just
-              // has no sidecar home.
+              // folder (ad-hoc drop). The annotation still works; ownership
+              // can be adopted if that source is remembered later.
               folderId: folderIdForFileKey(candidateIdentityKey(firstCandidate), firstCandidate.sourceKey),
               updatedAt: 0,
               deleted: false,
@@ -820,15 +820,15 @@ function persistRecord(record: AnnotationRecord): void {
             log.warn("annotation save failed", { err: err instanceof Error ? err.message : String(err) });
             markPersistenceFailure();
         });
-    annotationsChangedHook?.(record.folderId);
+    annotationsChangedHook?.();
 }
 
 // The sidecar layer (annotations-sidecar.ts) hangs off this hook - a direct
 // import here would cycle (it reads records back through this module).
-let annotationsChangedHook: ((folderId: string) => void) | null = null;
+let annotationsChangedHook: (() => void) | null = null;
 
-/** Registers the after-change hook (called with the record's folderId). */
-export function registerAnnotationsChangedHook(callback: (folderId: string) => void): void {
+/** Registers the app-wide after-change hook. */
+export function registerAnnotationsChangedHook(callback: () => void): void {
     annotationsChangedHook = callback;
 }
 
@@ -842,31 +842,12 @@ export function registerUserAnnotationHook(callback: (record: AnnotationRecord) 
     userAnnotationHook = callback;
 }
 
-/** RememberedFolder id this trip's next annotation would resolve to: the id
- *  already carried by its live annotation, else the id of the remembered
- *  folder its first file came out of, else "". */
-export function tripFolderId(trip: Trip): string {
-    const existing = tripMetaFor(trip);
-    if (existing?.folderId) return existing.folderId;
-    const first = tripAllCandidates(trip)[0];
-    return first ? folderIdForFileKey(candidateIdentityKey(first), first.sourceKey) : "";
-}
-
-/** Identity used to anchor this trip's metadata, and to resolve its live
- *  source before that source has been remembered. */
-export function tripAnchorFileIdentityKey(trip: Trip): string | null {
-    const first = tripAllCandidates(trip)[0];
-    return first ? candidateIdentityKey(first) : null;
-}
-
-/** Every record of a folder, tombstones included - the sidecar file must
- *  carry deletions or they resurrect from an older copy on merge. */
+/** Every record currently owned by one local folder, tombstones included. */
 export function recordsForFolder(folderId: string): AnnotationRecord[] {
     return [...recordsById.values()].filter((record) => record.folderId === folderId);
 }
 
-/** Every annotation, tombstones included, for a user-requested portable
- * backup. Folder-specific auto-sync continues to use recordsForFolder. */
+/** Every annotation, tombstones included, for a portable notes file. */
 export function allAnnotationRecords(): AnnotationRecord[] {
     return [...recordsById.values()];
 }
@@ -915,7 +896,7 @@ export function scopeAnnotationRecordsToFolder(
  * id silently: folderId is per-profile bookkeeping (restamped by the sidecar
  * reader), and without adoption a record imported on another machine - or
  * kept through a forget/re-remember cycle - would stay keyed to a dead id
- * and vanish from every future sidecar write. A handle-less batch can pass
+ * and stop attaching to that folder. A portable import passes
  * preserveFolderIds to keep bindings that still refer to remembered folders;
  * dead bindings remain adoptable.
  */

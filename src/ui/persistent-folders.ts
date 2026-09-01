@@ -8,8 +8,8 @@
 //
 // This is the LANDING half of the folder feature - "what can I open". Once
 // trips are loaded the landing is gone for good, and the session half
-// (ui/folder-sources.ts) takes over: which folder the open trips came from,
-// remembering it, its notes file.
+// (ui/folder-sources.ts) takes over: which folder the open trips came from and
+// whether it should be remembered.
 //
 // IndexedDB unavailability (private mode, storage off) quietly degrades the
 // whole module to "picker without memory" - never a user-facing error.
@@ -34,20 +34,17 @@ import { t } from "../i18n/index.js";
 import { dom } from "./dom.js";
 import {
     bindSourceToFolder,
-    connectReadableFolderToSource,
     disambiguatedLabels,
     folderDisplayLabel,
     notifyFolderOpened,
     purgeAllFolderSessionState,
     purgeFolderSessionState,
     registerIngestSource,
-    registerReadOnlyNotesFolderConnector,
     registerRememberedFolderOpener,
     setRememberedAvailability,
 } from "./folder-sources.js";
 import { beginPreIngestReading, endPreIngestReading } from "./ingest-overlay.js";
 import { ingestFiles } from "./ingest.js";
-import { connectNotesBackup } from "./notes-nudge.js";
 import { notify } from "./notifications.js";
 
 const log = createLogger("persistent-folders");
@@ -76,48 +73,7 @@ export async function initPersistentFolders(): Promise<void> {
     // enumerate + ingest). Registered, not imported - folder-sources is the
     // lower module.
     registerRememberedFolderOpener((folder) => void openRememberedFolder(folder));
-    registerReadOnlyNotesFolderConnector(connectReadOnlyNotesFolder);
     await refreshChips();
-}
-
-/** Connects a notes file that arrived through the classic picker. The folder
- * is selected read-only and verified against the source; a second picker
- * grants write access only to the notes file itself. */
-async function connectReadOnlyNotesFolder(sourceId: string): Promise<void> {
-    if (pickerInFlight || typeof window.showDirectoryPicker !== "function") return;
-    pickerInFlight = true;
-    beginPreIngestReading();
-    try {
-        let handle: FileSystemDirectoryHandle;
-        try {
-            handle = await window.showDirectoryPicker({ id: "recordings-notes", mode: "read" });
-        } catch (err) {
-            if (!(err instanceof DOMException && err.name === "AbortError")) {
-                log.warn("notes folder picker failed", { err: err instanceof Error ? err.message : String(err) });
-            }
-            return;
-        }
-        let enumerated: Awaited<ReturnType<typeof enumerateFolder>>;
-        try {
-            enumerated = await enumerateFolder(handle);
-        } catch (err) {
-            log.warn("notes folder verification failed", { err: err instanceof Error ? err.message : String(err) });
-            notify({ severity: "warn", messageKey: "folderSources.notesFolderMismatch" });
-            return;
-        }
-        const folder = await connectReadableFolderToSource(sourceId, handle, enumerated.files);
-        if (!folder) {
-            notify({ severity: "warn", messageKey: "folderSources.notesFolderMismatch" });
-            return;
-        }
-        // The first picker only proves which read-only source this is. The
-        // blocking decision supplies a fresh click for the file picker, so no
-        // write prompt depends on stale activation from the directory picker.
-        await connectNotesBackup(folder.id, null);
-    } finally {
-        endPreIngestReading();
-        pickerInFlight = false;
-    }
 }
 
 /**

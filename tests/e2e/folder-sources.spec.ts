@@ -1,5 +1,6 @@
 // The folder rows above the trip list: where the loaded trips came from, and
-// (on the FSA path) remembering that folder, its notes file, forgetting it.
+// (on the FSA path) remembering and forgetting that folder. The notes file is
+// a separate app-wide section below the folder list.
 //
 // Two halves, deliberately separate: the classic <input webkitdirectory> path
 // runs everywhere and gets an informational row, the FSA path gets the
@@ -92,17 +93,12 @@ test.describe("folder sources, file-system picker", () => {
         const row = page.locator(sourceRow);
         await row.locator(".folder-source__remember").click();
         await expect(row.locator(".folder-source__state")).toBeVisible();
-        await expect(row.locator(".folder-source__notes")).toContainText("Notes: this browser only");
-        await expect(row.locator(".folder-source__notes-action")).toHaveText("Create notes backup");
+        await expect(page.locator("#notes-file-status")).toContainText("Notes are saved in this browser");
 
         await row.locator(".folder-source__menu").click();
         const menu = row.locator(".folder-source__popup");
         await expect(menu).toBeVisible();
-        // Connecting a notes backup is an entry here, never an interrupting toast -
-        // and both ways to do it are offered, because only one of the two
-        // pickers can adopt a file that already holds notes.
-        await expect(menu).toContainText("Create a notes backup in this folder");
-        await expect(menu).toContainText("Use an existing notes backup");
+        await expect(menu, "folder actions do not configure the current notes file").not.toContainText("notes");
 
         await menu.getByRole("button", { name: "Forget this folder" }).click();
         // Back to an offer, and the trips it produced are untouched.
@@ -138,17 +134,13 @@ test.describe("folder sources, file-system picker", () => {
         await decision.getByRole("button", { name: "Save to a file" }).click();
         await expect(decision).toBeHidden();
 
-        const row = page.locator(sourceRow);
-        await expect(row.locator(".folder-source__notes")).toContainText(
-            "changes are saved to the file notes.dashcamigo",
-        );
+        await expect(page.locator("#notes-file-status")).toContainText("Saving to notes.dashcamigo");
         await expect
             .poll(
                 () =>
                     page.evaluate(async () => {
-                        const roots = (window as unknown as { __e2eDirectoryPickerRoots?: FileSystemDirectoryHandle[] })
-                            .__e2eDirectoryPickerRoots;
-                        const handle = await roots?.[0]?.getFileHandle("notes.dashcamigo");
+                        const handle = (window as unknown as { __e2eNotesFileHandle?: FileSystemFileHandle })
+                            .__e2eNotesFileHandle;
                         if (!handle) return false;
                         const payload = JSON.parse(await (await handle.getFile()).text()) as {
                             annotations?: Array<{ name?: string }>;
@@ -216,10 +208,10 @@ test.describe("folder sources, file-system picker", () => {
         await storageModal.getByRole("button", { name: "Only in this browser" }).click();
         await expect(storageModal).toBeHidden();
         await expect
-            .poll(() => storedAnnotationFolderIds(page), { message: "the local edit stays attached to its folder" })
-            .toEqual([expect.not.stringMatching(/^$/)]);
+            .poll(() => storedAnnotationFolderIds(page), { message: "the local edit remains stored" })
+            .toEqual([""]);
 
-        // The per-folder choice is remembered; another write does not nag.
+        // The app-wide browser choice is remembered; another write does not nag.
         await card.locator(".trip-fav").click();
         await expect(card.locator(".trip-fav.is-on")).toHaveCount(0);
         await expect(storageModal).toBeHidden();

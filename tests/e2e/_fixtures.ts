@@ -686,13 +686,15 @@ export interface MockFolder {
 
 /**
  * Stands in for the File System Access directory picker, so the FSA half of the
- * folder feature (remember / notes file / status dot) is reachable from a spec
+ * folder feature (remember / status dot) is reachable from a spec
  * at all - Playwright cannot drive the real OS picker.
  *
  * Each picker call hands back the next folder of the list (the last one repeats),
  * which is how a spec loads two different cards in one session. Files are copied
  * into OPFS, so the returned handles are real browser FileSystemHandles: they
- * survive IndexedDB structured clone and exercise writable notes files too.
+ * survive IndexedDB structured clone. Independently picked notes files live in
+ * a separate OPFS directory; a notes file already in a mocked folder remains
+ * discoverable through that folder's read-only handle.
  */
 export async function mockDirectoryPicker(page: Page, folders: MockFolder[]): Promise<void> {
     const listing = folders.map((folder, index) => ({
@@ -736,6 +738,7 @@ export async function mockDirectoryPicker(page: Page, folders: MockFolder[]): Pr
                         dir = await dir.getDirectoryHandle(segment, { create: true });
                     }
                     const handle = await dir.getFileHandle(segments.at(-1)!, { create: true });
+                    withPickerPermissions(handle);
                     const writable = await handle.createWritable();
                     const encoded = [sourceId, ...segments].map(encodeURIComponent).join("/");
                     const response = await fetch(`https://dashcamigo-fsa.test/__fsa/${encoded}`);
@@ -759,24 +762,82 @@ export async function mockDirectoryPicker(page: Page, folders: MockFolder[]): Pr
                 roots[index] ??= buildRoot(index);
                 return roots[index];
             };
+        let lastSavedNotesName = "notes.dashcamigo";
+        const globalNotesHandle = async (name: string, create: boolean): Promise<FileSystemFileHandle> => {
+            const storageRoot = await navigator.storage.getDirectory();
+            const notesRoot = await storageRoot.getDirectoryHandle("global-notes", { create: true });
+            const handle = await notesRoot.getFileHandle(name, { create });
+            (window as unknown as { __e2eNotesFileHandle?: FileSystemFileHandle }).__e2eNotesFileHandle = handle;
+            return handle;
+        };
+        const writeGranted = new WeakSet<FileSystemFileHandle>();
+        const withPickerPermissions = (handle: FileSystemFileHandle): FileSystemFileHandle => {
+            const prototype = Object.getPrototypeOf(handle) as {
+                queryPermission?: (options?: FileSystemHandlePermissionDescriptor) => Promise<PermissionState>;
+                requestPermission?: (options?: FileSystemHandlePermissionDescriptor) => Promise<PermissionState>;
+            };
+            Object.defineProperty(prototype, "queryPermission", {
+                configurable: true,
+                value: async function (this: FileSystemFileHandle, options?: FileSystemHandlePermissionDescriptor) {
+                    return options?.mode === "readwrite" && !writeGranted.has(this) ? "prompt" : "granted";
+                },
+            });
+            Object.defineProperty(prototype, "requestPermission", {
+                configurable: true,
+                value: async function (this: FileSystemFileHandle) {
+                    writeGranted.add(this);
+                    return "granted";
+                },
+            });
+            return handle;
+        };
         (
             window as unknown as {
-                showSaveFilePicker: (options: {
-                    startIn: FileSystemDirectoryHandle;
-                    suggestedName: string;
-                }) => Promise<FileSystemFileHandle>;
+                showSaveFilePicker: (options: { suggestedName: string }) => Promise<FileSystemFileHandle>;
             }
-        ).showSaveFilePicker = async ({ startIn, suggestedName }) =>
-            startIn.getFileHandle(suggestedName, { create: true });
+        ).showSaveFilePicker = async ({ suggestedName }) => {
+            const requested = (window as unknown as { __e2eSaveNotesAs?: string }).__e2eSaveNotesAs;
+            lastSavedNotesName = requested || suggestedName;
+            return withPickerPermissions(await globalNotesHandle(lastSavedNotesName, true));
+        };
         (
             window as unknown as {
-                showOpenFilePicker: (options: {
-                    startIn: FileSystemDirectoryHandle;
+                showOpenFilePicker: (options?: {
+                    startIn?: FileSystemDirectoryHandle;
                 }) => Promise<FileSystemFileHandle[]>;
             }
-        ).showOpenFilePicker = async ({ startIn }) => {
-            for await (const child of startIn.values()) {
-                if (child.kind === "file" && child.name.toLowerCase().endsWith(".dashcamigo")) return [child];
+        ).showOpenFilePicker = async ({ startIn } = {}) => {
+            const notesFromFolder = async (folder: FileSystemDirectoryHandle): Promise<FileSystemFileHandle | null> => {
+                let only: FileSystemFileHandle | null = null;
+                for await (const child of folder.values()) {
+                    if (child.kind !== "file" || !child.name.toLowerCase().endsWith(".dashcamigo")) continue;
+                    if (child.name.toLowerCase() === "notes.dashcamigo") return child;
+                    if (only) return null;
+                    only = child;
+                }
+                return only;
+            };
+            if (startIn) {
+                const local = await notesFromFolder(startIn);
+                if (local) {
+                    (window as unknown as { __e2eNotesFileHandle?: FileSystemFileHandle }).__e2eNotesFileHandle = local;
+                    return [withPickerPermissions(local)];
+                }
+            }
+            try {
+                return [withPickerPermissions(await globalNotesHandle(lastSavedNotesName, false))];
+            } catch {
+                // No standalone file yet: let compatibility specs pick the old
+                // notes file that arrived with a recording folder.
+            }
+            for (let index = 0; index < listing.length; index++) {
+                roots[index] ??= buildRoot(index);
+                const root = await roots[index]!;
+                const local = await notesFromFolder(root);
+                if (local) {
+                    (window as unknown as { __e2eNotesFileHandle?: FileSystemFileHandle }).__e2eNotesFileHandle = local;
+                    return [withPickerPermissions(local)];
+                }
             }
             throw new DOMException("No notes file selected", "AbortError");
         };
