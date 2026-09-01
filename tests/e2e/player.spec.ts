@@ -7,6 +7,7 @@ import {
     DESKTOP,
     MOBILE,
     SAMPLE_70MAI,
+    SAMPLE_NOGPS,
     boxOf,
     expect,
     gotoApp,
@@ -1591,5 +1592,97 @@ test.describe("player timeline with a coarse pointer", () => {
         await expect
             .poll(async () => (await chartWindow(page)).max, { message: "coarse end target remains draggable" })
             .toBeGreaterThan(before.max);
+    });
+});
+
+test.describe("single-clip playback endings", () => {
+    test.beforeEach(async ({ page }) => {
+        await presetLocalStorage(page);
+        await page.setViewportSize(DESKTOP);
+        await gotoApp(page, "en");
+        await loadTrip(page, SAMPLE_NOGPS);
+    });
+
+    async function parkNearEnd(page: Page): Promise<void> {
+        const play = page.locator("#player-play");
+        if ((await play.getAttribute("data-paused")) === "false") await play.click();
+        await expect(play).toHaveAttribute("data-paused", "true");
+
+        const master = page.locator(".video-tile.active video:not(.preload-slot):not(.tile-blur-bg)");
+        await expect
+            .poll(() => master.evaluate((video: HTMLVideoElement) => video.readyState))
+            .toBeGreaterThanOrEqual(2);
+        const target = await master.evaluate((video: HTMLVideoElement) => {
+            video.playbackRate = 8;
+            const next = Math.max(0, video.duration - Math.min(1, video.duration / 2));
+            video.currentTime = next;
+            return next;
+        });
+        await expect
+            .poll(() =>
+                master.evaluate(
+                    (video: HTMLVideoElement, targetSec) =>
+                        !video.seeking && Math.abs(video.currentTime - targetSec) < 0.05,
+                    target,
+                ),
+            )
+            .toBe(true);
+    }
+
+    test("looping restarts a single native clip after it ends", async ({ page }) => {
+        await parkNearEnd(page);
+        const loop = page.locator("#player-loop");
+        await loop.click();
+        await expect(loop).toHaveAttribute("aria-pressed", "true");
+
+        const master = page.locator(".video-tile.active video:not(.preload-slot):not(.tile-blur-bg)");
+        await master.evaluate((video: HTMLVideoElement) => {
+            delete document.body.dataset.loopEnded;
+            delete document.body.dataset.loopRestartTime;
+            video.addEventListener("ended", () => {
+                document.body.dataset.loopEnded = "true";
+            });
+            video.addEventListener("play", () => {
+                if (document.body.dataset.loopEnded === "true") {
+                    document.body.dataset.loopRestartTime = String(video.currentTime);
+                }
+            });
+        });
+        await page.locator("#player-play").click();
+        await expect(page.locator("body")).toHaveAttribute("data-loop-ended", "true");
+        await expect(page.locator("body")).toHaveAttribute("data-loop-restart-time", /.+/);
+        const restart = Number(await page.locator("body").getAttribute("data-loop-restart-time"));
+        const duration = await master.evaluate((video: HTMLVideoElement) => video.duration);
+        expect(restart, "loop resumes near the start").toBeLessThan(duration / 2);
+    });
+
+    test("Play restarts a finished single native clip", async ({ page }) => {
+        await parkNearEnd(page);
+        const play = page.locator("#player-play");
+        const master = page.locator(".video-tile.active video:not(.preload-slot):not(.tile-blur-bg)");
+
+        await master.evaluate((video: HTMLVideoElement) => {
+            delete document.body.dataset.nativeEnded;
+            video.addEventListener("ended", () => {
+                document.body.dataset.nativeEnded = "true";
+            });
+        });
+        await play.click();
+        await expect(page.locator("body")).toHaveAttribute("data-native-ended", "true");
+        await master.evaluate((video: HTMLVideoElement) => {
+            delete document.body.dataset.restartPlayTime;
+            video.addEventListener(
+                "play",
+                () => {
+                    document.body.dataset.restartPlayTime = String(video.currentTime);
+                },
+                { once: true },
+            );
+        });
+        await play.click();
+        await expect(page.locator("body")).toHaveAttribute("data-restart-play-time", /.+/);
+        const restart = Number(await page.locator("body").getAttribute("data-restart-play-time"));
+        const duration = await master.evaluate((video: HTMLVideoElement) => video.duration);
+        expect(restart, "Play resumes near the start").toBeLessThan(duration / 2);
     });
 });

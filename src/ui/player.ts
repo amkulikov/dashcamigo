@@ -596,9 +596,39 @@ export function playFrame(
     }
     hideCodecUnsupportedOverlay();
 
+    // Re-activating an already loaded native file changes no src, so there will
+    // be no loadedmetadata event to consume pendingPlay/pendingFileOffset below.
+    // Handle that path directly. This is what trip loop and Play-at-EOF hit for
+    // a one-frame trip; without the explicit seek the ended element stays parked
+    // at duration forever. A source still loading keeps the ordinary pending
+    // path so its first loadedmetadata applies the request.
+    const master = channelPlayers[picked.channel];
+    const isReusableNativeMaster =
+        !requiresMseBackend(video) &&
+        videoAttachedFile.get(master) === video.file &&
+        master.readyState >= master.HAVE_METADATA;
+
     pendingPlay = autoPlay;
     pendingFileOffset = startOffsetSec;
     syncFrameToGrid(frame, picked.channel, startOffsetSec);
+    if (isReusableNativeMaster) {
+        pendingPlay = false;
+        pendingFileOffset = 0;
+        if (!autoPlay) master.pause();
+        if (autoPlay) {
+            const segment = trip.timeline.segments[frameIdx];
+            armResumeAfterSeek((segment?.contentStart ?? 0) + startOffsetSec);
+        }
+        if (master.currentTime !== startOffsetSec || master.ended) master.currentTime = startOffsetSec;
+        // Setting currentTime on an ended element starts a real media seek.
+        // Resume only after it lands; an immediate play() can be interrupted by
+        // the decoder's seek under load. A no-op seek has no event, so settle it
+        // synchronously through the same latch.
+        if (autoPlay && !master.seeking) resumePlaybackIfSeekLanded();
+        // playFrame invalidated the old preload above. No metadata event will
+        // arrive to rebuild it on this same-src path, so warm the next frame now.
+        schedulePreloadNext();
+    }
     syncCaptureButton();
 
     // Readouts are NOT resynced on a file change - they keep flowing from
