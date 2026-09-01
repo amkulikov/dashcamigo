@@ -7,6 +7,12 @@ User-facing changes, newest first. Dates are when the change landed on
 [beta](https://beta.dashcamigo.app); production picks it up with the next
 release tag. Localized texts ship inside the app (the "What's new" panel).
 
+## 2026-09-01
+
+- **Fixed:** Looping and replay work for single-clip trips.
+- **Fixed:** Playback no longer stalls between clips at higher speeds.
+- **New camera support:** Added GPS track and speed for RedTiger F7NP-4K recordings.
+
 ## 2026-08-30
 
 - **Improved:** The timeline zoom can now be adjusted with buttons and draggable handles.

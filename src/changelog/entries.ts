@@ -28,6 +28,54 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-09-01.3",
+        category: "fix",
+        text: {
+            en: "Looping and replay work for single-clip trips.",
+            ru: "Исправлены зацикливание и повторный запуск поездок из одного фрагмента.",
+            de: "Wiederholen und erneutes Abspielen funktionieren bei Fahrten mit nur einem Clip.",
+            es: "La repetición y el reinicio funcionan en trayectos de un solo clip.",
+            fr: "La boucle et la relecture fonctionnent pour les trajets à un seul clip.",
+            pl: "Zapętlanie i ponowne odtwarzanie działają w przejazdach z jednym klipem.",
+            pt: "A repetição e o reinício funcionam em viagens com um único clipe.",
+            zh: "修复了单片段行程的循环和重新播放。",
+            ja: "1 クリップだけの走行で、ループ再生と終了後の再生が機能するようになりました。",
+            ko: "클립이 하나인 주행의 반복 및 다시 재생 문제를 수정했습니다.",
+        },
+    },
+    {
+        id: "2026-09-01.2",
+        category: "fix",
+        text: {
+            en: "Playback no longer stalls between clips at higher speeds.",
+            ru: "Воспроизведение больше не зависает между фрагментами на повышенной скорости.",
+            de: "Die Wiedergabe stockt bei höherer Geschwindigkeit nicht mehr zwischen Clips.",
+            es: "La reproducción ya no se bloquea entre clips a mayor velocidad.",
+            fr: "La lecture ne se bloque plus entre les clips à vitesse accélérée.",
+            pl: "Odtwarzanie nie zacina się już między klipami przy większej prędkości.",
+            pt: "A reprodução não trava mais entre clipes em velocidades mais altas.",
+            zh: "高倍速播放时，片段之间不再卡顿。",
+            ja: "高速再生時にクリップの切り替わりで止まらなくなりました。",
+            ko: "고속 재생 시 클립 사이에서 더 이상 멈추지 않습니다.",
+        },
+    },
+    {
+        id: "2026-09-01.1",
+        category: "support",
+        text: {
+            en: "Added GPS track and speed for RedTiger F7NP-4K recordings.",
+            ru: "Добавлены GPS-трек и скорость для записей RedTiger F7NP-4K.",
+            de: "GPS-Track und Geschwindigkeit für RedTiger F7NP-4K-Aufnahmen hinzugefügt.",
+            es: "Se añadieron el track GPS y la velocidad para las grabaciones de la RedTiger F7NP-4K.",
+            fr: "Ajout de la trace GPS et de la vitesse pour les enregistrements RedTiger F7NP-4K.",
+            pl: "Dodano ślad GPS i prędkość dla nagrań z RedTiger F7NP-4K.",
+            pt: "Trajeto GPS e velocidade adicionados às gravações da RedTiger F7NP-4K.",
+            zh: "RedTiger F7NP-4K 录像新增 GPS 轨迹和速度。",
+            ja: "RedTiger F7NP-4K の録画に GPS 軌跡と速度を追加しました。",
+            ko: "RedTiger F7NP-4K 녹화에 GPS 트랙과 속도를 추가했습니다.",
+        },
+    },
+    {
         id: "2026-08-30.1",
         category: "improvement",
         text: {
