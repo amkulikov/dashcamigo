@@ -1,6 +1,7 @@
 // Novatek freeGPS - registry of variants for different vendors on the same
-// chipset. Format source of truth: ExifTool QuickTimeStream.pl
-// (https://github.com/exiftool/exiftool/blob/master/lib/Image/ExifTool/QuickTimeStream.pl).
+// chipset. The primary foreign source is ExifTool QuickTimeStream.pl
+// (https://github.com/exiftool/exiftool/blob/master/lib/Image/ExifTool/QuickTimeStream.pl);
+// real-sample-derived additions cite their format note at the variant.
 //
 // Covers: VIOFO, Vantrue, Akaso, Azdome, Kenwood, Nextbase 512GW, and many
 // no-name Chinese clones. ExifTool distinguishes 12+ variants by magic
@@ -21,8 +22,8 @@
 // Kenwood MN-shift) plus the IQS Type-16 int32 sub-variant of the default
 // layout; and a batch of ExifTool-derived variants (Azdome XOR Type 1,
 // Vantrue S1 horsontech Type 10, sub-16 RMC cipher Type 7/9, XGODY ASCII
-// Type 18, E-ACE RC4 Type 4, Akaso plain-float Type 6, Novatek doubles
-// Type 12, Nextbase 512G '$S' Type 20) - see the foreign-source banner
+// Type 18, E-ACE RC4 Type 4, Akaso plain-float Type 6, YOUQINGGPS,
+// Novatek doubles Type 12, Nextbase 512G '$S' Type 20) - see the foreign-source banner
 // further down. Blocks no variant claims can additionally go through the
 // backward anchor-scan fallback (createFreeGpsBlockParser) that discovers
 // non-standard Type-3 base offsets dynamically. The registry architecture
@@ -678,6 +679,61 @@ const variantViofoType3: FreeGpsVariant = {
             boxSizeDword,
         });
         return record ? [record] : [];
+    },
+};
+
+/**
+ * YOUQINGGPS plaintext layout. Its datetime/status geometry is a byte-exact
+ * Type-8/Type-3 alias, so the 10-byte banner is the ownership gate and this
+ * variant must stay before both of those registry entries.
+ *
+ * The receiver clock at [44..67] is UTC. A second clock near the block tail
+ * mirrors the camera-local OSD time; using it here would bake the camera's
+ * timezone into the track. Coordinates are DDmm.mmmm floats, speed is knots.
+ * Full evidence and layout notes: docs/format-youqing.md.
+ */
+const variantYouqing: FreeGpsVariant = {
+    name: "YOUQINGGPS",
+    matches(payload) {
+        return startsWithMagic(payload) && hasAsciiAt(payload, 12, "YOUQINGGPS");
+    },
+    parse(payload, mp4Filename) {
+        if (payload.byteLength < 100) return [];
+
+        const fix = payload.getUint8(68);
+        if (fix !== 0x41) return []; // 'V' = void/no fix
+        const nsByte = payload.getUint8(69);
+        const ewByte = payload.getUint8(70);
+        if ((nsByte !== 0x4e && nsByte !== 0x53) || (ewByte !== 0x45 && ewByte !== 0x57)) return [];
+
+        const datetime = readType3Datetime(payload, LAYOUT_DEFAULT);
+        if (datetime === null) return [];
+
+        const latRaw = payload.getFloat32(36, true);
+        const lonRaw = payload.getFloat32(40, true);
+        const speedKnots = payload.getFloat32(92, true);
+        const heading = payload.getFloat32(96, true);
+        if (![latRaw, lonRaw, speedKnots, heading].every(Number.isFinite)) return [];
+        if (latRaw < 0 || lonRaw < 0 || speedKnots < 0 || heading < 0 || heading > 360) return [];
+
+        const lat = ddmmToDegrees(latRaw) * (nsByte === 0x4e ? 1 : -1);
+        const lon = ddmmToDegrees(lonRaw) * (ewByte === 0x45 ? 1 : -1);
+        if (!isCoordinateInRange(lat, "lat") || !isCoordinateInRange(lon, "lon")) return [];
+
+        return [
+            {
+                unixSeconds: datetime.unixSeconds,
+                active: true,
+                lat,
+                lon,
+                bearingDeg: heading,
+                speedMs: speedKnots * KNOTS_TO_MS,
+                accelXg: 0,
+                accelYg: 0,
+                accelZg: 0,
+                mp4Filename,
+            },
+        ];
     },
 };
 
@@ -1971,6 +2027,7 @@ const FREE_GPS_VARIANTS: readonly FreeGpsVariant[] = [
     variantXgodyText,
     variantEaceRc4,
     variantAkasoType6,
+    variantYouqing,
     variantAkasoType8Encrypted,
     variantVantrueNmea,
     variantViofoType3,

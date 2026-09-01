@@ -1151,8 +1151,7 @@ describe("ligogps-trailer-ts suffix techniques", () => {
 });
 
 // RedTiger F7NP-4K 2-channel: `<14-digit>_<6-digit><F|R>.MP4` under
-// `CARDV/<Mode>_<channel letter>/` folders. Filename-only corpus (diagnostic
-// report); GPS extraction is a separate concern pending real samples.
+// `CARDV/<Mode>_<channel letter>/` folders.
 describe("redtiger techniques", () => {
     const path = "NO NAME/CARDV/Movie_F/20260708073453_000002F.MP4";
 

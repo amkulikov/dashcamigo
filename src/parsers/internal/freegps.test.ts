@@ -333,6 +333,33 @@ function setAscii(dv: DataView, offset: number, text: string): void {
     for (let i = 0; i < text.length; i++) dv.setUint8(offset + i, text.charCodeAt(i));
 }
 
+function buildYouqingBlock(
+    overrides: {
+        active?: "A" | "V";
+        ns?: "N" | "S";
+        ew?: "E" | "W";
+        latRaw?: number;
+        lonRaw?: number;
+        speedKnots?: number;
+        course?: number;
+    } = {},
+): DataView {
+    const bytes = new Uint8Array(160);
+    bytes.set(_internal.FREE_GPS_MAGIC_BYTES, 0);
+    const dv = new DataView(bytes.buffer);
+    dv.setUint32(8, 0x90, true);
+    setAscii(dv, 12, "YOUQINGGPS");
+    dv.setFloat32(36, overrides.latRaw ?? 4806, true); // 48.1°
+    dv.setFloat32(40, overrides.lonRaw ?? 3003, true); // 30.05°
+    [7, 35, 13, 26, 8, 25].forEach((value, i) => {
+        dv.setUint32(44 + i * 4, value, true);
+    });
+    setAscii(dv, 68, `${overrides.active ?? "A"}${overrides.ns ?? "N"}${overrides.ew ?? "E"}`);
+    dv.setFloat32(92, overrides.speedKnots ?? 20, true);
+    dv.setFloat32(96, overrides.course ?? 108.5, true);
+    return dv;
+}
+
 describe("parseFreeGpsBlock: variant registry (multi-record contract)", () => {
     it("LAYOUT_DEFAULT block parses to a one-element array", () => {
         const records = parseFreeGpsBlock(buildCanonicalType3Block({ anchor: 68 }), "a.mp4");
@@ -415,6 +442,45 @@ describe("Type-8 recognize-and-bail (Akaso V1 / Redtiger F7N, encrypted upstream
         const records = parseFreeGpsBlock(buildCanonicalType3Block({ anchor: 68 }), "a.mp4");
         expect(records).toHaveLength(1);
         expect(records[0]!.lat).toBeCloseTo(50.1, 6);
+    });
+});
+
+describe("YOUQINGGPS plaintext variant", () => {
+    it("parses UTC, DDmm coordinates, knot speed and course", () => {
+        const records = parseFreeGpsBlock(
+            buildYouqingBlock({ ns: "S", ew: "W", speedKnots: 30, course: 142.5 }),
+            "redtiger.mp4",
+        );
+
+        expect(records).toHaveLength(1);
+        const record = records[0]!;
+        expect(record.unixSeconds).toBe(Date.UTC(2026, 7, 25, 7, 35, 13) / 1000);
+        expect(record.lat).toBeCloseTo(-48.1, 6);
+        expect(record.lon).toBeCloseTo(-30.05, 6);
+        expect(record.speedMs).toBeCloseTo(30 * KNOTS_TO_MS, 6);
+        expect(record.bearingDeg).toBeCloseTo(142.5, 6);
+        expect(record.mp4Filename).toBe("redtiger.mp4");
+        expect(record.timeUnsynced).toBeUndefined();
+    });
+
+    it("claims void and malformed banner-matched blocks without emitting garbage", () => {
+        expect(parseFreeGpsBlock(buildYouqingBlock({ active: "V" }), "a.mp4")).toEqual([]);
+        expect(parseFreeGpsBlock(buildYouqingBlock({ latRaw: 4861 }), "a.mp4")).toEqual([]);
+        expect(parseFreeGpsBlock(buildYouqingBlock({ course: 361 }), "a.mp4")).toEqual([]);
+
+        const truncated = buildYouqingBlock();
+        expect(parseFreeGpsBlock(new DataView(truncated.buffer, 0, 64), "a.mp4")).toEqual([]);
+    });
+
+    it("wins before the encrypted Type-8 and generic Type-3 aliases", () => {
+        const block = buildYouqingBlock();
+        const matching = _internal.FREE_GPS_VARIANTS.filter((variant) => variant.matches(block));
+        expect(matching.map((variant) => variant.name)).toEqual([
+            "YOUQINGGPS",
+            "Akaso/Redtiger Type 8 (encrypted, recognize-and-bail)",
+            "VIOFO Type 3",
+        ]);
+        expect(_internal.FREE_GPS_VARIANTS.find((variant) => variant.matches(block))?.name).toBe("YOUQINGGPS");
     });
 });
 
@@ -1509,6 +1575,14 @@ describe("variant cross-matrix: each fixture is claimed only by its owner", () =
             owner: "Akaso/Redtiger Type 8 (encrypted, recognize-and-bail)",
             // Type-8 is a byte-exact LAYOUT_DEFAULT alias - ordering guard.
             alsoMatches: ["VIOFO Type 3"],
+        },
+        {
+            name: "youqing",
+            view: () => buildYouqingBlock(),
+            owner: "YOUQINGGPS",
+            // Its datetime/status bytes also satisfy the older Type-8 and
+            // generic Type-3 gates; the banner-specific owner must run first.
+            alsoMatches: ["Akaso/Redtiger Type 8 (encrypted, recognize-and-bail)", "VIOFO Type 3"],
         },
         { name: "vantrue-nmea", view: vantrueNmeaBlock, owner: "Vantrue NMEA-embedded" },
     ];

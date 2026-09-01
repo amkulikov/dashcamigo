@@ -56,6 +56,7 @@ describe("classifyGpsSource", () => {
         expect(classifyGpsSource(vf("180919_100959_001_FH.MP4"))).toBe("embedded");
         expect(classifyGpsSource(vf("20211011_141314_0001_N_A.MP4"))).toBe("embedded"); // Vantrue
         expect(classifyGpsSource(vf("20260429_182640F.ts"))).toBe("embedded"); // Juscar
+        expect(classifyGpsSource(vf("20260825093511_001359F.MP4"))).toBe("embedded"); // RedTiger YOUQINGGPS
         expect(classifyGpsSource(vf("REC_20210101_120000_F.mp4"))).toBe("embedded"); // Thinkware
         // 70mai: embedded for newer 4K models (A810/M500). Older $V02-CSV models
         // are handled first by the csv-70mai log-sidecar pass.
@@ -168,6 +169,13 @@ describe("shouldTryEmbeddedGps", () => {
     it("embedded source with records - skip (avoid duplicates)", () => {
         const carcam = vf("REC20250607-180617-527-A.mp4");
         expect(shouldTryEmbeddedGps(carcam, true)).toBe(false);
+    });
+
+    it("redtiger uses embedded YOUQINGGPS", () => {
+        const redtiger = vf("20260825093511_001359F.MP4");
+        expect(classifyGpsSource(redtiger)).toBe("embedded");
+        expect(shouldTryEmbeddedGps(redtiger, false)).toBe(true);
+        expect(shouldTryEmbeddedGps(redtiger, true)).toBe(false);
     });
 
     it("70mai - embedded probe when no CSV records, skipped once CSV records exist", () => {

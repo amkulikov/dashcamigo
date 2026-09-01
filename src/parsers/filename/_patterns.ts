@@ -262,9 +262,7 @@ export const RX_NEOLINE = /^INF(\d{8})-(\d{6})-(\d+)-([FR])\.mp4$/i;
 // corpus-confirmed; Parking_* is the conventional CarDV third). The .mp4
 // extension keeps it off RX_FITCAMX (the same stamp+counter+letter language
 // in .ts), and the mandatory trailing letter keeps it off RX_DDPAI_NORMAL
-// twins. Filename-only corpus (573-file diagnostic report): name
-// classification only - where the GPS lives is unknown, the default embedded
-// probe stays on.
+// twins. GPS lives in plaintext YOUQINGGPS/freeGPS blocks on the F7NP-4K.
 export const RX_REDTIGER = /^(\d{14})_(\d{6})([FR])\.mp4$/i;
 // Recording-mode folder stems on a RedTiger card (the folder name is
 // `<stem>_<channel letter>`). Single source for the path-mode regex and

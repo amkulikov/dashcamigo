@@ -42,6 +42,7 @@ import {
     RX_NEOLINE,
     RX_NEXTBASE,
     RX_NOVATEK_TS,
+    RX_REDTIGER,
     RX_TESLA_PATH,
     RX_THINKWARE,
     RX_VUEROID,
@@ -306,6 +307,13 @@ const GPS_SOURCE_HINTS: readonly GpsSourceHint[] = [
     {
         id: "novatek-ts",
         matches: (f) => RX_NOVATEK_TS.test(f.file.name),
+        source: "embedded",
+    },
+    // RedTiger F7NP-4K: plaintext YOUQINGGPS blocks referenced by the
+    // container's Novatek `gps ` table (freegps primitive).
+    {
+        id: "redtiger",
+        matches: (f) => RX_REDTIGER.test(f.file.name),
         source: "embedded",
     },
     // Tesla SEI-based telemetry (firmware 2025.44.25+) is not yet parsed.
