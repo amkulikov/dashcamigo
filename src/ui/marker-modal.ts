@@ -128,7 +128,7 @@ function close(): void {
     // mind" - it takes the pin with it. An existing marker is never removed by
     // a dismissal; only its own Delete button does that.
     if (createdNow && currentMarkerId) {
-        deleteMarker(currentMarkerId);
+        deleteMarker(currentMarkerId, false);
         onChanged?.();
     }
     createdNow = false;

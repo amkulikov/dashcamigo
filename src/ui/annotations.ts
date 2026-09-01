@@ -435,9 +435,8 @@ export function setTripMeta(trip: Trip, patch: TripMetaPatch): void {
         delete base.isFavorite;
     }
     persistRecord(base);
-    // A clear is not a moment to talk about keeping annotations - only a
-    // record the user wants to keep goes to the user-edit hook.
-    if (!base.deleted) userAnnotationHook?.(base);
+    // Clearing is still a deliberate change that must reach the notes file.
+    userAnnotationHook?.(base);
     // Clearing the card means "this trip has no annotation" - so the leftovers
     // it was hiding go with it, or the next render uncovers one of them.
     // Anything short of a clear leaves them alone: they still belong to the
@@ -603,7 +602,6 @@ export function addMarker(trip: Trip, utcMs: number, text: string): MarkerAnnota
     };
     captureMarkerAnchor(trip, record, utcMs);
     persistRecord(record);
-    userAnnotationHook?.(record);
     return record;
 }
 
@@ -787,11 +785,15 @@ export function updateMarkerText(id: string, text: string): void {
     userAnnotationHook?.(updated);
 }
 
-/** Tombstones a marker - the record survives for merge, the pin disappears. */
-export function deleteMarker(id: string): void {
+/** Tombstones a marker - the record survives for merge, the pin disappears.
+ * A just-created marker cancelled from its editor is not a user write choice,
+ * so that caller suppresses the user-edit hook. */
+export function deleteMarker(id: string, userInitiated = true): void {
     const marker = markersById.get(id);
     if (!marker) return;
-    persistRecord({ ...marker, text: "", deleted: true, updatedAt: nextUpdatedAt(marker) });
+    const deleted = { ...marker, text: "", deleted: true, updatedAt: nextUpdatedAt(marker) };
+    persistRecord(deleted);
+    if (userInitiated) userAnnotationHook?.(deleted);
 }
 
 function nextUpdatedAt(record: AnnotationRecord): number {
@@ -830,12 +832,9 @@ export function registerAnnotationsChangedHook(callback: (folderId: string) => v
     annotationsChangedHook = callback;
 }
 
-// Fired ONLY by the user-invoked edit paths (setTripMeta, addMarker,
-// updateMarkerText) - never by re-keying, re-stamping or merge bookkeeping,
-// which replay records the user wrote some other time. The notes-file nudge
-// hangs off this: it must mean "the user just wrote something they care
-// about", or it fires on a folder open. Registered hook, not an import - the
-// nudge lives in the UI layer above this module.
+// Fired ONLY by completed user-invoked edit paths - never by re-keying,
+// re-stamping, a cancelled new marker, or merge bookkeeping. The blocking
+// notes-storage choice hangs off this, so folder opens stay prompt-free.
 let userAnnotationHook: ((record: AnnotationRecord) => void) | null = null;
 
 /** Registers the after-user-edit hook. */

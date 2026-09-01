@@ -1,14 +1,8 @@
-// Annotations backup: a notes file living in the user's own recordings folder
-// (Chromium-only - needs a writable directory handle), so notes survive browser
-// data cleanup and travel with the recordings. IndexedDB stays the working copy;
-// the sidecar is an auto-synced replica merged per record (LWW + tombstones)
-// whenever the folder opens.
-//
-// Creating uses directoryHandle.getFileHandle({ create: true }), which returns
-// an existing file intact instead of the destructive Save-As picker behavior.
-// Both create and adopt read and validate before persisting the file handle. A
-// partially readable file is imported read-only: valid records are recovered,
-// but the file is never replaced because that would erase unknown records.
+// Annotations backup: a notes file living beside the user's recordings, so
+// notes survive browser data cleanup and travel with the card. The recordings
+// directory is always read-only. Writing is scoped to one independently picked
+// file; legacy handles inherited from a directory grant are read but never
+// written until the user reconnects that file explicitly.
 //
 // folderId in the file is never trusted: it is a per-profile UUID, so every
 // record read from a folder's sidecar is restamped with the LOCAL folder id
@@ -26,13 +20,7 @@ import {
     mergeAnnotationLists,
     parseSidecarPayload,
 } from "../persist/annotations.js";
-import {
-    ensureDirectoryReadwritePermission,
-    ensureFileReadwritePermission,
-    getFolder,
-    listFolders,
-    setFolderSidecarHandle,
-} from "../persist/folders.js";
+import { ensureFileReadwritePermission, getFolder, listFolders, setFolderSidecarHandle } from "../persist/folders.js";
 import type { AnnotationRecord, RememberedFolder } from "../persist/types.js";
 import {
     annotationStoreAvailable,
@@ -68,7 +56,7 @@ function sidecarFileType(): FilePickerAcceptType {
         accept: { "application/json": [".dashcamigo"] },
     };
 }
-type SidecarDiscovery = "none" | "attached" | "blocked";
+type SidecarDiscovery = "none" | "found" | "blocked";
 
 // File writes are full replacements. Serialize them in this tab, then take a
 // cross-tab Web Lock where available so two dashcamigo tabs cannot both read
@@ -103,6 +91,14 @@ const partialSidecarFolders = new Set<string>();
 // retry below runs on every edit, and the user can only act on the message once.
 const unreadableWarned = new Set<string>();
 const writeFailureWarned = new Set<string>();
+const discoveredSidecarFolders = new Set<string>();
+let writeAttentionHook: ((folderId: string) => void) | null = null;
+
+/** Lets the blocking storage-choice UI react when an automatic write loses
+ * its file grant, without importing the UI controller into this module. */
+export function registerNotesWriteAttentionHook(callback: (folderId: string) => void): void {
+    writeAttentionHook = callback;
+}
 
 export function initAnnotationsSidecar(): void {
     registerAnnotationsChangedHook(onAnnotationsChanged);
@@ -113,10 +109,13 @@ export function initAnnotationsSidecar(): void {
     registerFolderOpenedHook(onFolderOpened);
     // Folder sources exist only on the directory-handle path. The open picker
     // is needed for adopting a backup outside the selected folder.
-    if (typeof window.showOpenFilePicker === "function") {
+    if (typeof window.showOpenFilePicker === "function" && typeof window.showSaveFilePicker === "function") {
         registerNotesConnector({
             create: createSidecarFile,
             useExisting: adoptSidecarFile,
+            connectPicked: connectPickedSidecar,
+            authorize: authorizeSidecarFile,
+            prepareWrite: prepareSidecarWrite,
             status: sidecarStatus,
             browserStorageReady: annotationStoreAvailable,
         });
@@ -295,13 +294,19 @@ export async function annotationStorageState(folderId: string): Promise<Annotati
         };
     }
     const folder = await getFolder(folderId).catch(() => null);
+    if (folder?.notesStorage === "browser") {
+        return {
+            hintKey: browserReady ? "annotations.storageHint" : "annotations.storageHintSession",
+            backupAction: "create",
+        };
+    }
     if (partialSidecarFolders.has(folderId)) {
         return {
             hintKey: browserReady ? "annotations.storageHintReconnect" : "annotations.storageHintSession",
             backupAction: "reconnect",
         };
     }
-    if (!folder?.sidecarHandle) {
+    if (!folder?.sidecarHandle || folder.sidecarAccess !== "file") {
         const needsReconnect = partialSidecarFolders.has(folderId) || writeFailureWarned.has(folderId);
         return {
             hintKey: browserReady
@@ -332,9 +337,13 @@ export async function annotationStorageState(folderId: string): Promise<Annotati
 }
 
 async function sidecarStatus(folder: RememberedFolder): Promise<"missing" | "connected" | "ready" | "needsAttention"> {
+    if (folder.notesStorage === "browser") return "missing";
     if (!folder.sidecarHandle) {
-        return partialSidecarFolders.has(folder.id) || writeFailureWarned.has(folder.id) ? "needsAttention" : "missing";
+        if (partialSidecarFolders.has(folder.id) || writeFailureWarned.has(folder.id)) return "needsAttention";
+        if (discoveredSidecarFolders.has(folder.id)) return "needsAttention";
+        return "missing";
     }
+    if (folder.sidecarAccess !== "file") return "needsAttention";
     if (
         sidecarReadFailures.has(folder.id) ||
         partialSidecarFolders.has(folder.id) ||
@@ -366,20 +375,12 @@ async function openFolderSidecar(folder: RememberedFolder): Promise<void> {
     // Another open path may have attached the file while this one was waiting
     // on IndexedDB. Always make the decision from the latest stored record.
     const current = (await getFolder(folder.id).catch(() => null)) ?? folder;
-    // The grant on a stored file handle is session-scoped, so after a browser
-    // restart even READING the notes file fails. Every open path lands here,
-    // and some of them still hold user activation (the folder row's Remember
-    // click) - a no-op when activation is spent or the grant is live, and the
-    // difference between merging and not merging when it is not.
-    if (current.sidecarHandle) await ensureFileReadwritePermission(current.sidecarHandle);
     // Adopt records stranded on "" or on a dead folder id BEFORE the merge,
     // so they participate in the write-back below.
     await rebindAnnotationsToFolder(current.id);
     if (!current.sidecarHandle) {
-        // No file bound in THIS profile, but the folder itself may carry one
-        // (written by another machine/profile - that is the whole point of the
-        // file living next to the recordings). Complete adoption before the
-        // caller offers to create a file, so it cannot race past discovery.
+        // A notes file found through the directory grant is read-only. Merge
+        // it, but never persist that derived handle as writable.
         await autoAdoptSidecar(current);
         return;
     }
@@ -387,12 +388,10 @@ async function openFolderSidecar(folder: RememberedFolder): Promise<void> {
 }
 
 /**
- * Scans the folder ROOT (where the create path puts the file) for exactly one
- * notes file and attaches it as if the user had picked it. Zero found: the
- * common case, silence. Two or more: no honest guess, leave it to the manual
- * menu. A file that does not parse as ours is skipped with a log only - the
- * every-open cadence of this path would turn attachSidecar's warning toast
- * into a nag.
+ * Scans the folder root for exactly one notes file and merges it read-only.
+ * The handle came from the directory, so persisting it as writable would
+ * silently widen the grant back to the whole folder. A later write asks the
+ * user to reconnect this exact file through the file picker.
  */
 async function autoAdoptSidecar(folder: RememberedFolder): Promise<SidecarDiscovery> {
     let found: FileSystemFileHandle | null = null;
@@ -411,17 +410,38 @@ async function autoAdoptSidecar(folder: RememberedFolder): Promise<SidecarDiscov
         return "blocked";
     }
     if (!found) return "none";
+    discoveredSidecarFolders.add(folder.id);
     try {
         const parsed = parseSidecarPayload(await (await found.getFile()).text());
         if (parsed === null) {
             log.warn("notes-like file in folder root is not ours, not auto-attaching", { name: found.name });
             return "blocked";
         }
+        const records = await folderScopedSidecarRecords(parsed.records, folder.id);
+        const changed = applyMergedRecords(mergeAnnotationLists(recordsForFolder(folder.id), records));
+        if (changed > 0) {
+            renderTrips();
+            refreshTimelineMarkers();
+        }
+        if (parsed.rejectedEntries > 0) {
+            partialSidecarFolders.add(folder.id);
+            if (!unreadableWarned.has(folder.id)) {
+                unreadableWarned.add(folder.id);
+                notify({
+                    severity: "error",
+                    messageKey: "sidecar.partialReadOnly",
+                    messageParams: { n: parsed.rejectedEntries },
+                });
+            }
+            refreshFolderSources();
+            return "blocked";
+        }
     } catch (err) {
         log.warn("notes auto-adopt read failed", { err: err instanceof Error ? err.message : String(err) });
         return "blocked";
     }
-    return (await attachSidecar(folder, found)) ? "attached" : "blocked";
+    refreshFolderSources();
+    return "found";
 }
 
 function onAnnotationsChanged(folderId: string): void {
@@ -430,17 +450,16 @@ function onAnnotationsChanged(folderId: string): void {
     if (!folderId) return;
     const task = getFolder(folderId)
         .then(async (folder): Promise<void> => {
-            // No file connected yet: nothing to write, and asking for one is
-            // the folder row's job, not this hook's.
-            if (!folder?.sidecarHandle) return;
-            // Annotation edits happen inside clicks/keys - re-arm the
-            // session-scoped readwrite grant while activation is live, or the
-            // later gesture-less writes can only skip.
-            const writable = await ensureFileReadwritePermission(folder.sidecarHandle);
-            if (!writable) {
-                notifyWriteFailure(folderId);
+            // Permission prompts belong to the blocking modal driven by the
+            // user-edit hook. This lower-level hook only writes when an
+            // independently picked file is still granted.
+            if (
+                !folder?.sidecarHandle ||
+                folder.sidecarAccess !== "file" ||
+                folder.notesStorage === "browser" ||
+                !(await hasFileReadwritePermission(folder.sidecarHandle))
+            )
                 return;
-            }
             scheduleWrite(folderId);
         })
         .catch(() => {});
@@ -449,44 +468,47 @@ function onAnnotationsChanged(folderId: string): void {
 }
 
 /**
- * Creates the fixed-name backup inside the recordings folder. getFileHandle
- * never truncates an existing entry: a file appearing between discovery and
- * creation is returned intact and goes through the same validation as an
- * explicitly adopted file.
+ * Creates one explicitly selected backup file. showSaveFilePicker scopes the
+ * grant to that file; the browser owns overwrite confirmation if a file with
+ * the suggested name already exists.
  */
-async function createSidecarFile(folder: RememberedFolder): Promise<void> {
-    if (folder.sidecarHandle) return;
-    // Permission prompts require transient user activation. Ask before the
-    // potentially long root scan / IndexedDB recovery below can consume the
-    // click's activation window.
-    if (!(await ensureDirectoryReadwritePermission(folder.handle))) {
-        notify({ severity: "warn", messageKey: "sidecar.folderWriteDenied" });
-        return;
+async function createSidecarFile(folder: RememberedFolder): Promise<"connected" | "cancelled" | "failed"> {
+    // Manual UI can call create from a stale render. If this session already
+    // knows about a file, reconnect it non-destructively instead of opening a
+    // Save dialog that could replace it.
+    if (folder.sidecarHandle || discoveredSidecarFolders.has(folder.id)) return adoptSidecarFile(folder);
+    if (typeof window.showSaveFilePicker !== "function") return "failed";
+    let picked: Promise<FileSystemFileHandle>;
+    try {
+        // Start the picker before any IndexedDB or directory scan can consume
+        // the click's transient activation.
+        picked = window.showSaveFilePicker({
+            id: "annotations-sidecar",
+            startIn: folder.handle,
+            suggestedName: SIDECAR_SUGGESTED_NAME,
+            excludeAcceptAllOption: true,
+            types: [sidecarFileType()],
+        });
+    } catch (err) {
+        log.warn("sidecar save picker failed", { err: err instanceof Error ? err.message : String(err) });
+        return "failed";
+    }
+    let handle: FileSystemFileHandle;
+    try {
+        handle = await picked;
+    } catch (err) {
+        if (isPickerDismissal(err)) return "cancelled";
+        log.warn("sidecar save picker failed", { err: err instanceof Error ? err.message : String(err) });
+        return "failed";
     }
     const current = (await getFolder(folder.id).catch(() => null)) ?? folder;
-    if (current.sidecarHandle) return;
+    if (current.sidecarHandle && current.sidecarAccess === "file") return "connected";
     // A portable import can have found this trip only after ingest rebuilt the
     // timeline (for example after a root rename). Re-run ownership recovery at
     // the actual create gesture so those visible notes are included in the new
     // folder backup rather than silently left in browser-only storage.
     await rebindAnnotationsToFolder(current.id);
-    // A found file is adopted; ambiguity or an unreadable/foreign file routes
-    // to the explicit non-destructive picker.
-    const discovery = await autoAdoptSidecar(current);
-    if (discovery === "attached") return;
-    if (discovery === "blocked") {
-        await adoptSidecarFile(current);
-        return;
-    }
-    let handle: FileSystemFileHandle;
-    try {
-        handle = await current.handle.getFileHandle(SIDECAR_SUGGESTED_NAME, { create: true });
-    } catch (err) {
-        log.warn("sidecar create failed", { err: err instanceof Error ? err.message : String(err) });
-        notify({ severity: "error", messageKey: "sidecar.createFailed" });
-        return;
-    }
-    await attachSidecar(current, handle);
+    return (await attachSidecar(current, handle)) ? "connected" : "failed";
 }
 
 async function rebindAnnotationsToFolder(folderId: string): Promise<void> {
@@ -503,8 +525,8 @@ async function rebindAnnotationsToFolder(folderId: string): Promise<void> {
  * from another machine. The open picker leaves it intact, so its records are
  * still there to be read and merged.
  */
-async function adoptSidecarFile(folder: RememberedFolder): Promise<void> {
-    if (typeof window.showOpenFilePicker !== "function") return;
+async function adoptSidecarFile(folder: RememberedFolder): Promise<"connected" | "cancelled" | "failed"> {
+    if (typeof window.showOpenFilePicker !== "function") return "failed";
     let handle: FileSystemFileHandle | undefined;
     try {
         [handle] = await window.showOpenFilePicker({
@@ -518,14 +540,56 @@ async function adoptSidecarFile(folder: RememberedFolder): Promise<void> {
         if (!isPickerDismissal(err)) {
             log.warn("sidecar open picker failed", { err: err instanceof Error ? err.message : String(err) });
         }
-        return;
+        return isPickerDismissal(err) ? "cancelled" : "failed";
     }
-    if (!handle) return;
+    if (!handle) return "cancelled";
     // requestPermission is gesture-gated as well. Do it immediately after the
     // picker returns, before parsing and merge bookkeeping; attachSidecar will
     // verify the resulting grant again before it persists anything writable.
     await ensureFileReadwritePermission(handle);
-    await attachSidecar(folder, handle);
+    return (await attachSidecar(folder, handle)) ? "connected" : "failed";
+}
+
+async function connectPickedSidecar(
+    folder: RememberedFolder,
+    handle: FileSystemFileHandle,
+): Promise<"connected" | "cancelled" | "failed"> {
+    await ensureFileReadwritePermission(handle);
+    await rebindAnnotationsToFolder(folder.id);
+    return (await attachSidecar(folder, handle)) ? "connected" : "failed";
+}
+
+async function authorizeSidecarFile(folder: RememberedFolder): Promise<"connected" | "cancelled" | "failed"> {
+    if (!folder.sidecarHandle || folder.sidecarAccess !== "file") return "failed";
+    // requestPermission needs the modal button's live user activation. Start
+    // it before any IndexedDB lookup can consume that activation window.
+    if (!(await ensureFileReadwritePermission(folder.sidecarHandle))) return "failed";
+    const written = await withSidecarWriteLock(folder.id, () => writeSidecar(folder.id));
+    return written ? "connected" : "failed";
+}
+
+async function prepareSidecarWrite(
+    folder: RememberedFolder,
+    force = false,
+): Promise<"create" | "connect" | "authorize" | null> {
+    const current = (await getFolder(folder.id).catch(() => null)) ?? folder;
+    if (!force && current.notesStorage === "browser") return null;
+    if (force && current.notesStorage === "browser" && current.sidecarHandle) return "connect";
+    if (current.sidecarHandle) {
+        if (
+            current.sidecarAccess !== "file" ||
+            sidecarReadFailures.has(current.id) ||
+            partialSidecarFolders.has(current.id) ||
+            writeFailureWarned.has(current.id)
+        )
+            return "connect";
+        const permission = await fileReadwritePermissionState(current.sidecarHandle);
+        if (permission === "granted") return null;
+        return permission === "prompt" ? "authorize" : "connect";
+    }
+    if (discoveredSidecarFolders.has(current.id)) return "connect";
+    const discovery = await autoAdoptSidecar(current);
+    return discovery === "none" ? "create" : "connect";
 }
 
 function isPickerDismissal(err: unknown): boolean {
@@ -598,6 +662,7 @@ async function attachSidecar(folder: RememberedFolder, handle: FileSystemFileHan
     sidecarReadFolders.delete(folder.id);
     sidecarReadFailures.delete(folder.id);
     partialSidecarFolders.delete(folder.id);
+    discoveredSidecarFolders.delete(folder.id);
     unreadableWarned.delete(folder.id);
     writeFailureWarned.delete(folder.id);
     // The open picker grants read only. Buy the write while the picker's
@@ -708,7 +773,7 @@ async function withSidecarWriteLock<T>(folderId: string, write: () => Promise<T>
 
 async function writeSidecar(folderId: string): Promise<boolean> {
     const folder = await getFolder(folderId).catch(() => null);
-    if (!folder?.sidecarHandle) return false;
+    if (!folder?.sidecarHandle || folder.sidecarAccess !== "file" || folder.notesStorage === "browser") return false;
     const handle = folder.sidecarHandle;
     // Queued writes may outlive the edit gesture, so only a still-granted
     // permission works. Recovery paths:
@@ -858,7 +923,14 @@ async function mergeFromSidecar(folder: RememberedFolder, schedulePush = true): 
         const inFile = sidecarById.get(record.id);
         return !inFile || compareAnnotationVersions(record, inFile) > 0;
     });
-    if (needsPush && schedulePush) scheduleWrite(folder.id);
+    if (
+        needsPush &&
+        schedulePush &&
+        folder.sidecarAccess === "file" &&
+        folder.notesStorage !== "browser" &&
+        (await hasFileReadwritePermission(handle))
+    )
+        scheduleWrite(folder.id);
     else if (!needsPush && writeFailureWarned.delete(folder.id)) refreshFolderSources();
     return true;
 }
@@ -880,16 +952,7 @@ function notifyWriteFailure(folderId: string): void {
     if (writeFailureWarned.has(folderId)) return;
     writeFailureWarned.add(folderId);
     refreshFolderSources();
-    notify({
-        severity: "error",
-        messageKey: "sidecar.writeFailed",
-        actionKey: "sidecar.reconnect",
-        onAction: () => {
-            void getFolder(folderId).then((folder) => {
-                if (folder) void adoptSidecarFile(folder);
-            });
-        },
-    });
+    writeAttentionHook?.(folderId);
 }
 
 /** Clears session-only coordination state between unit tests. */
@@ -904,4 +967,6 @@ export function _resetForTests(): void {
     partialSidecarFolders.clear();
     unreadableWarned.clear();
     writeFailureWarned.clear();
+    discoveredSidecarFolders.clear();
+    writeAttentionHook = null;
 }

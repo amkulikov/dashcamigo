@@ -1,110 +1,181 @@
-// One-shot nudge at the moment the user writes their first annotation: the
-// note just landed in browser storage, which a browser-data cleanup wipes -
-// so offer the notes file the folder menu already provides, right when the
-// user first has something to lose. Shown once ever (localStorage flag).
-// Browsers without writable folder handles never see it: there is nothing to
-// offer from the toast, and a nudge without a remedy is just worry. The manual
-// Settings download remains available everywhere.
+// Blocking storage choice shown only after a user changes an annotation and
+// there is no usable, narrowly scoped notes-file connection. The annotation
+// is already in the in-memory/browser store by then, so cancelling a native
+// picker never loses the edit. The dialog itself cannot be dismissed: the
+// user either connects one file or explicitly chooses browser-only storage.
 
+import { t } from "../i18n/index.js";
 import { createLogger } from "../log.js";
-import { getFolder } from "../persist/folders.js";
-import type { AnnotationRecord } from "../persist/types.js";
+import { getFolder, setFolderNotesStorage } from "../persist/folders.js";
+import type { AnnotationRecord, RememberedFolder } from "../persist/types.js";
+import { registerNotesWriteAttentionHook } from "./annotations-sidecar.js";
 import { registerUserAnnotationHook } from "./annotations.js";
-import { getNotesConnector, hasLiveSource, rememberLiveSource } from "./folder-sources.js";
-import { notify } from "./notifications.js";
+import {
+    getNotesConnector,
+    hasLiveSource,
+    refreshFolderSources,
+    rememberLiveSource,
+    type NotesWriteAction,
+} from "./folder-sources.js";
+import { activateModal, deactivateModal } from "./modal-helper.js";
 
-const log = createLogger("notes-nudge");
+const log = createLogger("notes-storage-choice");
 
-const SEEN_KEY = "dashcamigo:notes-nudge";
+let modal: HTMLElement | null = null;
+let body: HTMLElement | null = null;
+let error: HTMLElement | null = null;
+let browserButton: HTMLButtonElement | null = null;
+let fileButton: HTMLButtonElement | null = null;
+let pending: { folder: RememberedFolder; action: NotesWriteAction } | null = null;
+const browserOnlyThisSession = new Set<string>();
 
-function wasSeen(): boolean {
-    try {
-        return localStorage.getItem(SEEN_KEY) === "1";
-    } catch {
-        return false;
-    }
-}
-
-function markSeen(): void {
-    try {
-        localStorage.setItem(SEEN_KEY, "1");
-    } catch {
-        // Private mode - the nudge may repeat next session, harmless.
-    }
-}
-
-/** Wires the nudge to the user-edit hook. Call once from app.ts. */
+/** Wires the mandatory choice to real user edits and write failures. */
 export function initNotesNudge(): void {
+    modal = document.getElementById("notes-storage-modal");
+    body = document.getElementById("notes-storage-modal-body");
+    error = document.getElementById("notes-storage-modal-error");
+    browserButton = document.getElementById("notes-storage-browser") as HTMLButtonElement | null;
+    fileButton = document.getElementById("notes-storage-file") as HTMLButtonElement | null;
+    browserButton?.addEventListener("click", chooseBrowserStorage);
+    fileButton?.addEventListener("click", chooseFileStorage);
     registerUserAnnotationHook(onUserAnnotation);
+    registerNotesWriteAttentionHook((folderId) => void requestStorageDecision(folderId, null));
 }
 
 function onUserAnnotation(record: AnnotationRecord): void {
-    if (wasSeen()) return;
-    if (getNotesConnector() === null) return;
-    void evaluate(record).catch((err: unknown) => {
-        log.warn("notes nudge evaluation failed", { err: err instanceof Error ? err.message : String(err) });
-    });
-}
-
-async function evaluate(record: AnnotationRecord): Promise<void> {
     const anchorKey = record.anchor?.fileIdentityKey ?? null;
-    if (record.folderId) {
-        const folder = await getFolder(record.folderId).catch(() => null);
-        if (folder?.sidecarHandle) {
-            // Notes already live in a file - the user knows the feature.
-            markSeen();
-            return;
-        }
-        // A forgotten folder leaves its old id behind. The clip anchor can
-        // still resolve the live source and let the action remember it again.
-        if (!folder && !hasLiveSource(anchorKey)) return;
-    } else if (!hasLiveSource(anchorKey)) {
-        // Ad-hoc drop / classic picker: no folder handle, nowhere to put a
-        // file. Deliberately NOT marked seen - an annotation on a
-        // picker-opened folder later can still be offered.
-        return;
-    }
-    markSeen();
-    notify({
-        severity: "info",
-        messageKey: "notesNudge.message",
-        actionKey: "notesNudge.action",
-        onAction: () => void connectNotesBackup(record.folderId, anchorKey),
+    void requestStorageDecision(record.folderId, anchorKey).catch((err: unknown) => {
+        log.warn("notes storage choice evaluation failed", {
+            err: err instanceof Error ? err.message : String(err),
+        });
     });
 }
 
-/** The toast action: resolve (remembering the folder first when needed) and
- *  hand off to the same create flow the folder menu uses. */
+async function requestStorageDecision(folderId: string, anchorKey: string | null, force = false): Promise<void> {
+    const connector = getNotesConnector();
+    if (!connector || !modal || !browserButton || !fileButton) return;
+    if (pending && !modal.hidden) return;
+    const storedFolder = folderId ? await getFolder(folderId).catch(() => null) : null;
+    const folder = storedFolder ?? (await rememberLiveSource(anchorKey));
+    if (!folder) return;
+    if (!force && (folder.notesStorage === "browser" || browserOnlyThisSession.has(folder.id))) return;
+    const action = await connector.prepareWrite(folder, force);
+    if (action === null) return;
+    pending = { folder, action };
+    if (body) {
+        body.textContent = t(
+            connector.browserStorageReady() ? "notesStorageModal.body" : "notesStorageModal.bodySession",
+        );
+    }
+    browserButton.textContent = t(
+        connector.browserStorageReady() ? "notesStorageModal.browserOnly" : "notesStorageModal.sessionOnly",
+    );
+    setBusy(false);
+    if (error) error.hidden = true;
+    modal.hidden = false;
+    activateModal(modal, { onClose: () => {}, initialFocus: fileButton });
+}
+
+function chooseBrowserStorage(): void {
+    const choice = pending;
+    if (!choice) return;
+    browserOnlyThisSession.add(choice.folder.id);
+    setBusy(true);
+    void setFolderNotesStorage(choice.folder.id, "browser")
+        .catch((err: unknown) => {
+            // The in-session choice still holds. A private/storage-disabled
+            // browser may ask again after reload, which is safer than silently
+            // claiming the preference was persisted.
+            log.warn("browser-only notes choice could not be saved", {
+                err: err instanceof Error ? err.message : String(err),
+            });
+        })
+        .finally(() => {
+            refreshFolderSources();
+            closeModal();
+        });
+}
+
+function chooseFileStorage(): void {
+    const choice = pending;
+    const connector = getNotesConnector();
+    if (!choice || !connector) return;
+    setBusy(true);
+    if (error) error.hidden = true;
+    const operation =
+        choice.action === "create"
+            ? connector.create(choice.folder)
+            : choice.action === "authorize"
+              ? connector.authorize(choice.folder)
+              : connector.useExisting(choice.folder);
+    void operation
+        .then((result) => {
+            if (result === "connected") {
+                browserOnlyThisSession.delete(choice.folder.id);
+                closeModal();
+                return;
+            }
+            if (result === "failed") {
+                if (error) error.hidden = false;
+                void refreshPendingAction(choice).finally(() => setBusy(false));
+            } else setBusy(false);
+        })
+        .catch((err: unknown) => {
+            log.warn("notes file connection failed", { err: err instanceof Error ? err.message : String(err) });
+            if (error) error.hidden = false;
+            void refreshPendingAction(choice).finally(() => setBusy(false));
+        });
+}
+
+async function refreshPendingAction(choice: { folder: RememberedFolder; action: NotesWriteAction }): Promise<void> {
+    const connector = getNotesConnector();
+    if (!connector || pending !== choice) return;
+    const folder = (await getFolder(choice.folder.id).catch(() => null)) ?? choice.folder;
+    const action = await connector.prepareWrite(folder, true);
+    if (pending !== choice) return;
+    if (action === null) closeModal();
+    else pending = { folder, action };
+}
+
+function setBusy(busy: boolean): void {
+    if (browserButton) browserButton.disabled = busy;
+    if (fileButton) {
+        fileButton.disabled = busy;
+        if (busy) fileButton.setAttribute("aria-busy", "true");
+        else fileButton.removeAttribute("aria-busy");
+    }
+}
+
+function closeModal(): void {
+    pending = null;
+    setBusy(false);
+    if (!modal) return;
+    modal.hidden = true;
+    deactivateModal(modal);
+}
+
 export async function canConnectNotesBackup(folderId: string, anchorKey: string | null): Promise<boolean> {
     if (getNotesConnector() === null) return false;
     if (hasLiveSource(anchorKey)) return true;
-    // An old annotation can retain the id of a folder the user has since
-    // forgotten. A non-empty id alone is not actionable: connectNotesBackup
-    // would find neither a stored handle nor a live source and the button
-    // would be a dead click.
     return folderId !== "" && (await getFolder(folderId).catch(() => null)) !== null;
 }
 
+/** Opens the same explicit storage decision from an editor's storage link. */
 export async function connectNotesBackup(folderId: string, anchorKey: string | null): Promise<void> {
-    const connector = getNotesConnector();
-    if (!connector) return;
-    const storedFolder = folderId ? await getFolder(folderId).catch(() => null) : null;
-    // A forgotten folder leaves its old id on the live annotation until it is
-    // remembered again. Fall back to the still-open source instead of turning
-    // the backup action into a dead click.
-    const folder = storedFolder ?? (await rememberLiveSource(anchorKey));
-    if (!folder) {
-        log.warn("notes nudge action found no folder to attach to");
-        return;
+    await requestStorageDecision(folderId, anchorKey, true);
+}
+
+/** Test-only reset for module-level DOM and choice state. */
+export function _resetForTests(): void {
+    if (modal && !modal.hidden) {
+        modal.hidden = true;
+        deactivateModal(modal);
     }
-    if (folder.sidecarHandle) {
-        // A handle that was already persisted may be stale, so this explicit
-        // action is its non-destructive reconnect path.
-        await connector.useExisting(folder);
-        return;
-    }
-    // create() performs non-destructive discovery and re-reads the latest
-    // folder record itself. Avoid another IndexedDB round trip here: write
-    // permission still needs the activation from this click.
-    await connector.create(folder);
+    modal = null;
+    body = null;
+    error = null;
+    browserButton = null;
+    fileButton = null;
+    pending = null;
+    browserOnlyThisSession.clear();
 }

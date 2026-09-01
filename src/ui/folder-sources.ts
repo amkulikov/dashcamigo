@@ -19,7 +19,6 @@ import type { DuplicateSourceMatch } from "../ingest-dedup.js";
 import { createLogger } from "../log.js";
 import type { VendorFile } from "../parsers/types.js";
 import {
-    ensureDirectoryReadwritePermission,
     type FolderAvailability,
     forgetFolder,
     getFolder,
@@ -53,7 +52,7 @@ interface FolderSource {
     /** Opaque per-ingest scopes contributed by this physical source. */
     sourceKeys: Set<string>;
     /** Cheap path-independent identities used only to verify that a folder
-     *  re-selected for write access is the folder behind this read-only row. */
+     *  re-selected for reading is the folder behind this read-only row. */
     fileFingerprints: Set<string>;
     /** A notes file merged from the ingest batch but not yet attached as a
      *  writable backup. This also applies to a live, unremembered folder: its
@@ -170,11 +169,16 @@ export async function notifyFolderOpened(folder: RememberedFolder): Promise<void
 }
 
 export type NotesBackupStatus = "missing" | "connected" | "ready" | "needsAttention";
+export type NotesConnectResult = "connected" | "cancelled" | "failed";
+export type NotesWriteAction = "create" | "connect" | "authorize";
 
 /** Actions and live status for the notes backup. */
 export interface NotesConnector {
-    create(folder: RememberedFolder): Promise<void>;
-    useExisting(folder: RememberedFolder): Promise<void>;
+    create(folder: RememberedFolder): Promise<NotesConnectResult>;
+    useExisting(folder: RememberedFolder): Promise<NotesConnectResult>;
+    connectPicked(folder: RememberedFolder, handle: FileSystemFileHandle): Promise<NotesConnectResult>;
+    authorize(folder: RememberedFolder): Promise<NotesConnectResult>;
+    prepareWrite(folder: RememberedFolder, force?: boolean): Promise<NotesWriteAction | null>;
     status(folder: RememberedFolder): Promise<NotesBackupStatus>;
     browserStorageReady(): boolean;
 }
@@ -222,13 +226,6 @@ export async function rememberLiveSource(identityKey: string | null): Promise<Re
     const source = liveSourceFor(identityKey);
     if (!source?.handle) return null;
     if (source.folderId) return (await getFolder(source.folderId).catch(() => null)) ?? null;
-    // This path runs from the notes-backup action. Acquire the gesture-gated
-    // write grant before IndexedDB work and automatic discovery can consume
-    // the click's transient activation.
-    if (!(await ensureDirectoryReadwritePermission(source.handle))) {
-        notify({ severity: "warn", messageKey: "sidecar.folderWriteDenied" });
-        return null;
-    }
     try {
         const record = await rememberFolder(source.handle);
         bindSourceToFolder(source.handle, record);
@@ -254,8 +251,8 @@ export function registerRememberedFolderOpener(callback: (folder: RememberedFold
 }
 
 // A plain <input webkitdirectory> gives us only File snapshots. Chromium can
-// upgrade that row after the user explicitly re-selects the folder with write
-// access; persistent-folders owns the picker and registers that flow here.
+// upgrade that row after the user re-selects the folder for read access and
+// separately picks the notes file; persistent-folders owns that flow.
 let readOnlyNotesFolderConnector: ((sourceId: string) => Promise<void>) | null = null;
 
 export function registerReadOnlyNotesFolderConnector(callback: (sourceId: string) => Promise<void>): void {
@@ -518,13 +515,14 @@ export function registerIngestNotesFiles(statuses: readonly IngestNotesFileStatu
 /** Safely upgrades a read-only source after the user re-selects its folder.
  * At least one unchanged file must overlap, otherwise an unrelated folder can
  * never be remembered or receive this source's notes. */
-export async function connectWritableFolderToSource(
+export async function connectReadableFolderToSource(
     sourceId: string,
     handle: FileSystemDirectoryHandle,
     files: VendorFile[],
-): Promise<boolean> {
+    notesHandle?: FileSystemFileHandle,
+): Promise<RememberedFolder | null> {
     const source = sourcesByKey.get(sourceId);
-    if (!source?.readOnlyNotes) return false;
+    if (!source?.readOnlyNotes) return null;
     const notesFileName = source.readOnlyNotes.fileName;
     const hasNotesFile = files.some((vendorFile) => isRootFile(vendorFile, notesFileName));
     const matches =
@@ -538,7 +536,21 @@ export async function connectWritableFolderToSource(
             sourceFiles: source.fileFingerprints.size,
             selectedFiles: files.length,
         });
-        return false;
+        return null;
+    }
+    if (notesHandle) {
+        try {
+            const discovered = await handle.getFileHandle(notesFileName);
+            if (!(await notesHandle.isSameEntry(discovered))) {
+                log.warn("selected notes file does not belong to selected source folder");
+                return null;
+            }
+        } catch (err) {
+            log.warn("selected notes file identity check failed", {
+                err: err instanceof Error ? err.message : String(err),
+            });
+            return null;
+        }
     }
     try {
         const folder = await rememberFolder(handle);
@@ -552,11 +564,15 @@ export async function connectWritableFolderToSource(
         }
         bindSourceToFolder(handle, folder);
         await notifyFolderOpened(folder);
+        if (notesHandle) {
+            const connected = await notesConnector?.connectPicked(folder, notesHandle);
+            if (connected !== "connected") return null;
+        }
         refreshRememberedFolders();
-        return true;
+        return folder;
     } catch (err) {
         log.warn("read-only notes folder connection failed", { err: err instanceof Error ? err.message : String(err) });
-        return false;
+        return null;
     }
 }
 
@@ -865,7 +881,8 @@ async function fillInlineNotesStatus(notes: HTMLElement, folderId: string, folde
             notesConnector.browserStorageReady() ? "folderSources.notesBrowserOnly" : "folderSources.notesSessionOnly",
         );
         action = notesAction(t("notesNudge.action"), folderLabelId, async () => {
-            await notesConnector?.create(folder);
+            if (folder.sidecarHandle) await notesConnector?.useExisting(folder);
+            else await notesConnector?.create(folder);
             renderSources();
         });
     } else if (folder.sidecarHandle && (backupStatus === "ready" || backupStatus === "connected")) {
@@ -993,17 +1010,44 @@ async function onRemember(source: FolderSource, button: HTMLButtonElement): Prom
     }
 }
 
-/** Upgrades the already-open folder's ingest-time notes snapshot without
- *  asking the user to select the same folder a second time. Unlike plain
- *  Remember, this action promises file syncing, so acquire its write grant
- *  while the click's transient activation is still live. */
+/** Remembers the already-open folder, then asks for the one notes file that
+ * should be writable. The directory handle itself remains read-only. */
 async function enableLiveNotesSync(source: FolderSource, rememberButton: HTMLButtonElement): Promise<void> {
-    if (!source.handle) return;
-    if (!(await ensureDirectoryReadwritePermission(source.handle))) {
-        notify({ severity: "warn", messageKey: "sidecar.folderWriteDenied" });
+    if (!source.handle || !notesConnector || typeof window.showOpenFilePicker !== "function") return;
+    let picked: Promise<FileSystemFileHandle[]>;
+    try {
+        // Open before remembering: IndexedDB work would otherwise consume the
+        // click activation required by the file picker.
+        picked = window.showOpenFilePicker({
+            id: "annotations-sidecar",
+            startIn: source.handle,
+            multiple: false,
+            excludeAcceptAllOption: true,
+            types: [
+                {
+                    description: t("sidecar.fileDescription"),
+                    accept: { "application/json": [".dashcamigo"] },
+                },
+            ],
+        });
+    } catch (err) {
+        log.warn("notes file picker failed", { err: err instanceof Error ? err.message : String(err) });
         return;
     }
+    let handle: FileSystemFileHandle | undefined;
+    try {
+        [handle] = await picked;
+    } catch (err) {
+        if (!(err instanceof DOMException && err.name === "AbortError")) {
+            log.warn("notes file picker failed", { err: err instanceof Error ? err.message : String(err) });
+        }
+        return;
+    }
+    if (!handle) return;
     await onRemember(source, rememberButton);
+    if (!source.folderId) return;
+    const folder = await getFolder(source.folderId).catch(() => null);
+    if (folder) await notesConnector.connectPicked(folder, handle);
 }
 
 /** The per-row overflow menu: the notes file and forgetting. Only remembered

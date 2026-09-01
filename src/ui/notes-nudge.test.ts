@@ -1,37 +1,86 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AnnotationRecord, RememberedFolder } from "../persist/types.js";
-import type { NotifyInput } from "./notifications.js";
+
+type Listener = () => void;
+interface FakeElement {
+    hidden: boolean;
+    disabled: boolean;
+    textContent: string;
+    listeners: Record<string, Listener>;
+    addEventListener(name: string, listener: Listener): void;
+    setAttribute(name: string, value: string): void;
+    removeAttribute(name: string): void;
+}
+
+function fakeElement(hidden = false): FakeElement {
+    return {
+        hidden,
+        disabled: false,
+        textContent: "",
+        listeners: {},
+        addEventListener(name, listener) {
+            this.listeners[name] = listener;
+        },
+        setAttribute: vi.fn(),
+        removeAttribute: vi.fn(),
+    };
+}
 
 const mocks = vi.hoisted(() => ({
     annotationHook: null as ((record: AnnotationRecord) => void) | null,
+    attentionHook: null as ((folderId: string) => void) | null,
     folder: null as RememberedFolder | null,
-    create: vi.fn(),
-    useExisting: vi.fn(),
-    getFolder: vi.fn(async () => mocks.folder),
-    hasLiveSource: vi.fn(() => true),
-    notify: vi.fn<(input: NotifyInput) => void>(),
+    prepareWrite: vi.fn<() => Promise<"create" | null>>(async () => "create"),
+    create: vi.fn<() => Promise<"connected" | "cancelled" | "failed">>(async () => "connected"),
+    useExisting: vi.fn(async () => "connected" as const),
+    authorize: vi.fn(async () => "connected" as const),
+    setFolderNotesStorage: vi.fn(async () => {}),
+    rememberLiveSource: vi.fn(async () => null as RememberedFolder | null),
+    activate: vi.fn(),
+    deactivate: vi.fn(),
 }));
 
-vi.mock("../persist/folders.js", () => ({ getFolder: mocks.getFolder }));
+vi.mock("../i18n/index.js", () => ({ t: (key: string) => key }));
+vi.mock("../persist/folders.js", () => ({
+    getFolder: vi.fn(async () => mocks.folder),
+    setFolderNotesStorage: mocks.setFolderNotesStorage,
+}));
+vi.mock("./annotations-sidecar.js", () => ({
+    registerNotesWriteAttentionHook: (hook: (folderId: string) => void) => {
+        mocks.attentionHook = hook;
+    },
+}));
 vi.mock("./annotations.js", () => ({
     registerUserAnnotationHook: (hook: (record: AnnotationRecord) => void) => {
         mocks.annotationHook = hook;
     },
 }));
 vi.mock("./folder-sources.js", () => ({
-    getNotesConnector: () => ({ create: mocks.create, useExisting: mocks.useExisting }),
-    hasLiveSource: mocks.hasLiveSource,
-    rememberLiveSource: vi.fn(),
+    getNotesConnector: () => ({
+        create: mocks.create,
+        useExisting: mocks.useExisting,
+        connectPicked: vi.fn(),
+        authorize: mocks.authorize,
+        prepareWrite: mocks.prepareWrite,
+        status: vi.fn(),
+        browserStorageReady: () => true,
+    }),
+    hasLiveSource: vi.fn(() => true),
+    refreshFolderSources: vi.fn(),
+    rememberLiveSource: mocks.rememberLiveSource,
 }));
-vi.mock("./notifications.js", () => ({ notify: mocks.notify }));
+vi.mock("./modal-helper.js", () => ({
+    activateModal: mocks.activate,
+    deactivateModal: mocks.deactivate,
+}));
 
-import { canConnectNotesBackup, initNotesNudge } from "./notes-nudge.js";
+import { _resetForTests, canConnectNotesBackup, initNotesNudge } from "./notes-nudge.js";
 
-function record(): AnnotationRecord {
+function record(folderId = "folder-1"): AnnotationRecord {
     return {
         id: "meta-1",
-        folderId: "folder-1",
+        folderId,
         updatedAt: 100,
         deleted: false,
         kind: "tripMeta",
@@ -40,58 +89,99 @@ function record(): AnnotationRecord {
     };
 }
 
+let elements: Record<string, FakeElement>;
+
 beforeEach(() => {
     vi.clearAllMocks();
     mocks.annotationHook = null;
-    mocks.hasLiveSource.mockReturnValue(true);
+    mocks.attentionHook = null;
+    mocks.prepareWrite.mockResolvedValue("create");
+    mocks.create.mockResolvedValue("connected");
     const handle = { kind: "directory", name: "CARD" } as FileSystemDirectoryHandle;
     mocks.folder = { id: "folder-1", handle, label: "CARD", addedAt: 1, lastOpenedAt: 2 };
-    const storage = new Map<string, string>();
-    vi.stubGlobal("localStorage", {
-        getItem: (key: string) => storage.get(key) ?? null,
-        setItem: (key: string, value: string) => storage.set(key, value),
+    elements = {
+        "notes-storage-modal": fakeElement(true),
+        "notes-storage-modal-body": fakeElement(),
+        "notes-storage-modal-error": fakeElement(true),
+        "notes-storage-browser": fakeElement(),
+        "notes-storage-file": fakeElement(),
+    };
+    vi.stubGlobal("document", {
+        getElementById: (id: string) => elements[id] ?? null,
     });
     initNotesNudge();
 });
 
 afterEach(() => {
+    _resetForTests();
     vi.unstubAllGlobals();
 });
 
-describe("notes-file nudge", () => {
-    it("delegates discovery and creation to the connector once", async () => {
+describe("notes storage choice", () => {
+    it("opens a blocking modal only after a user edit needs a file", async () => {
         mocks.annotationHook?.(record());
-        await vi.waitFor(() => expect(mocks.notify).toHaveBeenCalled());
-        const nudge = mocks.notify.mock.calls[0]![0];
-        expect(nudge.messageKey).toBe("notesNudge.message");
-        nudge.onAction?.();
 
-        await vi.waitFor(() => expect(mocks.create).toHaveBeenCalledWith(mocks.folder));
-        expect(mocks.create).toHaveBeenCalledTimes(1);
+        await vi.waitFor(() => expect(elements["notes-storage-modal"]!.hidden).toBe(false));
+        expect(mocks.activate).toHaveBeenCalledWith(
+            elements["notes-storage-modal"],
+            expect.objectContaining({ initialFocus: elements["notes-storage-file"] }),
+        );
+        const onClose = mocks.activate.mock.calls[0]![1].onClose as () => void;
+        onClose();
+        expect(elements["notes-storage-modal"]!.hidden, "Escape cannot dismiss the decision").toBe(false);
     });
 
-    it("uses a marker's clip anchor when its old folder record is gone", async () => {
+    it("stays open when the file picker is cancelled and closes after a retry succeeds", async () => {
+        mocks.create.mockResolvedValueOnce("cancelled").mockResolvedValueOnce("connected");
+        mocks.annotationHook?.(record());
+        await vi.waitFor(() => expect(elements["notes-storage-modal"]!.hidden).toBe(false));
+
+        elements["notes-storage-file"]!.listeners.click?.();
+        await vi.waitFor(() => expect(mocks.create).toHaveBeenCalledOnce());
+        expect(elements["notes-storage-modal"]!.hidden).toBe(false);
+
+        elements["notes-storage-file"]!.listeners.click?.();
+        await vi.waitFor(() => expect(elements["notes-storage-modal"]!.hidden).toBe(true));
+        expect(mocks.create).toHaveBeenCalledTimes(2);
+    });
+
+    it("persists an explicit browser-only choice and does not ask again", async () => {
+        mocks.annotationHook?.(record());
+        await vi.waitFor(() => expect(elements["notes-storage-modal"]!.hidden).toBe(false));
+
+        elements["notes-storage-browser"]!.listeners.click?.();
+        await vi.waitFor(() => expect(elements["notes-storage-modal"]!.hidden).toBe(true));
+        expect(mocks.setFolderNotesStorage).toHaveBeenCalledWith("folder-1", "browser");
+
+        mocks.annotationHook?.(record());
+        await Promise.resolve();
+        expect(mocks.activate).toHaveBeenCalledTimes(1);
+    });
+
+    it("does nothing when the connected file is already writable", async () => {
+        mocks.prepareWrite.mockResolvedValue(null);
+        mocks.annotationHook?.(record());
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(mocks.activate).not.toHaveBeenCalled();
+        expect(elements["notes-storage-modal"]!.hidden).toBe(true);
+    });
+
+    it("uses the live source when an old folder record is gone", async () => {
+        const live = { ...mocks.folder!, id: "folder-new" };
         mocks.folder = null;
-        const marker: AnnotationRecord = {
-            id: "marker-1",
-            folderId: "forgotten-folder",
-            updatedAt: 100,
-            deleted: false,
-            kind: "marker",
-            utc: 1_700_000_000_000,
-            text: "Turn",
-            anchor: { fileIdentityKey: "marker-clip-key", startUtc: 1_700_000_000_000, offsetSec: 5 },
-        };
+        mocks.rememberLiveSource.mockResolvedValue(live);
+        mocks.annotationHook?.(record("forgotten-folder"));
 
-        mocks.annotationHook?.(marker);
-
-        await vi.waitFor(() => expect(mocks.notify).toHaveBeenCalled());
-        expect(mocks.hasLiveSource).toHaveBeenCalledWith("marker-clip-key");
+        await vi.waitFor(() => expect(mocks.prepareWrite).toHaveBeenCalledWith(live, false));
+        expect(mocks.rememberLiveSource).toHaveBeenCalledWith("clip-key");
     });
 
     it("hides a backup action when both the remembered folder and live source are gone", async () => {
         mocks.folder = null;
-        mocks.hasLiveSource.mockReturnValue(false);
+        const folderSources = await import("./folder-sources.js");
+        vi.mocked(folderSources.hasLiveSource).mockReturnValue(false);
 
         await expect(canConnectNotesBackup("forgotten-folder", "clip-key")).resolves.toBe(false);
     });

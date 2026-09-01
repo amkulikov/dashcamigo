@@ -759,6 +759,27 @@ export async function mockDirectoryPicker(page: Page, folders: MockFolder[]): Pr
                 roots[index] ??= buildRoot(index);
                 return roots[index];
             };
+        (
+            window as unknown as {
+                showSaveFilePicker: (options: {
+                    startIn: FileSystemDirectoryHandle;
+                    suggestedName: string;
+                }) => Promise<FileSystemFileHandle>;
+            }
+        ).showSaveFilePicker = async ({ startIn, suggestedName }) =>
+            startIn.getFileHandle(suggestedName, { create: true });
+        (
+            window as unknown as {
+                showOpenFilePicker: (options: {
+                    startIn: FileSystemDirectoryHandle;
+                }) => Promise<FileSystemFileHandle[]>;
+            }
+        ).showOpenFilePicker = async ({ startIn }) => {
+            for await (const child of startIn.values()) {
+                if (child.kind === "file" && child.name.toLowerCase().endsWith(".dashcamigo")) return [child];
+            }
+            throw new DOMException("No notes file selected", "AbortError");
+        };
     }, listing);
 }
 

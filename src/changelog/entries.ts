@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-09-01.4",
+        category: "improvement",
+        text: {
+            en: "On the first change to trip notes, favorites, or markers, you can now choose browser storage or a notes file.",
+            ru: "При первом изменении заметок, избранного или маркеров теперь можно выбрать хранение в браузере или в файле пометок.",
+            de: "Bei der ersten Änderung an Fahrtnotizen, Favoriten oder Markierungen kannst du jetzt zwischen Browserspeicher und einer Notizdatei wählen.",
+            es: "Al cambiar por primera vez las notas, los favoritos o los marcadores de un viaje, ahora puedes elegir entre guardarlos en el navegador o en un archivo de notas.",
+            fr: "À la première modification des notes, favoris ou marqueurs d’un trajet, tu peux désormais choisir entre le navigateur et un fichier de notes.",
+            pl: "Przy pierwszej zmianie notatek, ulubionych lub znaczników przejazdu możesz teraz wybrać zapis w przeglądarce albo w pliku notatek.",
+            pt: "Na primeira alteração de notas, favoritos ou marcadores de uma viagem, agora você pode escolher entre o navegador e um arquivo de anotações.",
+            zh: "首次更改行程备注、收藏或标记时，现在可以选择保存在浏览器中或备注文件中。",
+            ja: "走行メモ、お気に入り、マーカーを初めて変更するときに、ブラウザまたはメモファイルへの保存を選べるようになりました。",
+            ko: "주행 메모, 즐겨찾기 또는 마커를 처음 변경할 때 브라우저 저장과 메모 파일 중에서 선택할 수 있습니다.",
+        },
+    },
+    {
         id: "2026-09-01.3",
         category: "fix",
         text: {

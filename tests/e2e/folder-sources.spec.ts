@@ -125,6 +125,41 @@ test.describe("folder sources, file-system picker", () => {
         await modal.locator("#trip-meta-cancel").click();
     });
 
+    test("connects only a notes file from the blocking first-write choice", async ({ page }) => {
+        await page.locator("#landing-cta").click();
+        const card = page.locator("li.trip:not(.unindexed-note)").first();
+        await expect(card).toBeVisible({ timeout: 30_000 });
+
+        await card.locator(".trip-edit").click();
+        await page.locator("#trip-meta-name").fill("File-backed trip");
+        await page.locator("#trip-meta-save").click();
+        const decision = page.locator("#notes-storage-modal");
+        await expect(decision).toBeVisible();
+        await decision.getByRole("button", { name: "Save to a file" }).click();
+        await expect(decision).toBeHidden();
+
+        const row = page.locator(sourceRow);
+        await expect(row.locator(".folder-source__notes")).toContainText(
+            "changes are saved to the file notes.dashcamigo",
+        );
+        await expect
+            .poll(
+                () =>
+                    page.evaluate(async () => {
+                        const roots = (window as unknown as { __e2eDirectoryPickerRoots?: FileSystemDirectoryHandle[] })
+                            .__e2eDirectoryPickerRoots;
+                        const handle = await roots?.[0]?.getFileHandle("notes.dashcamigo");
+                        if (!handle) return false;
+                        const payload = JSON.parse(await (await handle.getFile()).text()) as {
+                            annotations?: Array<{ name?: string }>;
+                        };
+                        return payload.annotations?.some((record) => record.name === "File-backed trip") ?? false;
+                    }),
+                { message: "the first edit must be written through the selected notes-file handle" },
+            )
+            .toBe(true);
+    });
+
     test("a second folder gets its own row", async ({ page }) => {
         await page.locator("#landing-cta").click();
         await expect(page.locator("li.trip:not(.unindexed-note)").first()).toBeVisible({ timeout: 30_000 });
@@ -163,24 +198,31 @@ test.describe("folder sources, file-system picker", () => {
         await expect(page.locator("li.trip:not(.unindexed-note)").first()).toBeVisible();
     });
 
-    test("a note taken before remembering re-attaches to the folder", async ({ page }) => {
+    test("the first annotation change requires an explicit storage choice", async ({ page }) => {
         await page.locator("#landing-cta").click();
         const card = page.locator("li.trip:not(.unindexed-note)").first();
         await expect(card).toBeVisible({ timeout: 30_000 });
 
-        // Star the trip while the folder is still session-only: the record is
-        // stored with no folder on it.
+        // The edit lands locally first, then the non-dismissible decision asks
+        // whether one file should also receive it.
         await card.locator(".trip-fav").click();
         await expect(card.locator(".trip-fav.is-on")).toBeVisible();
-        expect(await storedAnnotationFolderIds(page), "the note starts unattached").toEqual([""]);
+        const storageModal = page.locator("#notes-storage-modal");
+        await expect(storageModal).toBeVisible();
+        await page.keyboard.press("Escape");
+        await expect(storageModal, "Escape must not skip the storage decision").toBeVisible();
+        await expect(page.locator(".dc-toast")).toHaveCount(0);
 
-        await page.locator(`${sourceRow} .folder-source__remember`).click();
-        await expect(page.locator(".folder-source__state")).toBeVisible();
-        // Remembering adopts what was noted before it - otherwise those notes
-        // would never reach the folder's notes file.
+        await storageModal.getByRole("button", { name: "Only in this browser" }).click();
+        await expect(storageModal).toBeHidden();
         await expect
-            .poll(() => storedAnnotationFolderIds(page), { message: "the note moves onto the folder" })
+            .poll(() => storedAnnotationFolderIds(page), { message: "the local edit stays attached to its folder" })
             .toEqual([expect.not.stringMatching(/^$/)]);
+
+        // The per-folder choice is remembered; another write does not nag.
+        await card.locator(".trip-fav").click();
+        await expect(card.locator(".trip-fav.is-on")).toHaveCount(0);
+        await expect(storageModal).toBeHidden();
     });
 });
 

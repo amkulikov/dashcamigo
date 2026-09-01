@@ -9,6 +9,7 @@ release tag. Localized texts ship inside the app (the "What's new" panel).
 
 ## 2026-09-01
 
+- **Improved:** On the first change to trip notes, favorites, or markers, you can now choose browser storage or a notes file.
 - **Fixed:** Looping and replay work for single-clip trips.
 - **Fixed:** Playback no longer stalls between clips at higher speeds.
 - **New camera support:** Added GPS track and speed for RedTiger F7NP-4K recordings.

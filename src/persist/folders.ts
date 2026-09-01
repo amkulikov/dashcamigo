@@ -77,6 +77,22 @@ export async function setFolderSidecarHandle(id: string, sidecarHandle: FileSyst
     const folder = await tx.store.get(id);
     if (folder) {
         folder.sidecarHandle = sidecarHandle;
+        folder.sidecarAccess = "file";
+        delete folder.notesStorage;
+        await tx.store.put(folder);
+    }
+    await tx.done;
+}
+
+/** Remembers whether this folder should keep notes only in browser storage.
+ * Connecting a file clears the choice in setFolderSidecarHandle. */
+export async function setFolderNotesStorage(id: string, storage: "browser" | null): Promise<void> {
+    const db = await openPersistDb();
+    const tx = db.transaction("folders", "readwrite");
+    const folder = await tx.store.get(id);
+    if (folder) {
+        if (storage === "browser") folder.notesStorage = storage;
+        else delete folder.notesStorage;
         await tx.store.put(folder);
     }
     await tx.done;
@@ -155,26 +171,9 @@ export async function requestFolderPermission(handle: FileSystemDirectoryHandle)
     }
 }
 
-/** Requests write access to a recordings folder from a user gesture. Reading
- * recordings only needs the narrower grant; creating a notes backup asks for
- * write access at the moment the user chooses that action. */
-export async function ensureDirectoryReadwritePermission(handle: FileSystemDirectoryHandle): Promise<boolean> {
-    if (typeof handle.queryPermission !== "function" || typeof handle.requestPermission !== "function") return true;
-    try {
-        const current = await handle.queryPermission({ mode: "readwrite" });
-        if (current === "granted") return true;
-        if (current !== "prompt") return false;
-        if (navigator.userActivation && !navigator.userActivation.isActive) return false;
-        return (await handle.requestPermission({ mode: "readwrite" })) === "granted";
-    } catch (err) {
-        log.warn("folder write permission failed", { err: err instanceof Error ? err.message : String(err) });
-        return false;
-    }
-}
-
 /**
  * Re-arms the readwrite grant on a stored file handle (the annotations
- * sidecar). The grant a picker or writable directory gives is session-scoped -
+ * sidecar). The grant from a file picker can be session-scoped -
  * after a browser restart it reads "prompt", and later gesture-less writes
  * can only skip. This must run while user activation is live (a click); it
  * may show the permission prompt, where Chromium offers "Allow on every

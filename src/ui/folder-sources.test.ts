@@ -16,7 +16,6 @@ vi.mock("../i18n/index.js", () => ({ t: (key: string) => key }));
 vi.mock("./icons.js", () => ({ buildLucideIcon: () => null }));
 vi.mock("./notifications.js", () => ({ notify: vi.fn() }));
 vi.mock("../persist/folders.js", () => ({
-    ensureDirectoryReadwritePermission: vi.fn(async () => true),
     forgetFolder: vi.fn(),
     getFolder: vi.fn(),
     listFolders: vi.fn(async () => []),
@@ -31,10 +30,11 @@ import {
     folderDisplayLabel,
     folderIdForFileKey,
     hasLiveSource,
-    connectWritableFolderToSource,
+    connectReadableFolderToSource,
     registerFolderOpenedHook,
     registerIngestNotesFiles,
     registerIngestSource,
+    registerNotesConnector,
     rememberLiveSource,
 } from "./folder-sources.js";
 import type { IngestOrigin } from "./state.js";
@@ -53,6 +53,17 @@ function fakeHandle(name: string): FileSystemDirectoryHandle {
     return { name } as FileSystemDirectoryHandle;
 }
 
+function connectReadOnlySource(sourceId: string, handle: FileSystemDirectoryHandle, files: VendorFile[]) {
+    const discovered = { kind: "file", name: "notes.dashcamigo" } as FileSystemFileHandle;
+    Object.assign(handle, { getFileHandle: vi.fn(async () => discovered) });
+    const picked = {
+        kind: "file",
+        name: "notes.dashcamigo",
+        isSameEntry: vi.fn(async (other: FileSystemHandle) => other === discovered),
+    } as unknown as FileSystemFileHandle;
+    return connectReadableFolderToSource(sourceId, handle, files, picked);
+}
+
 function fakeFolder(id: string, label: string, addedAt: number): RememberedFolder {
     return { id, label, addedAt } as RememberedFolder;
 }
@@ -61,6 +72,15 @@ describe("registerIngestSource", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         _resetForTests();
+        registerNotesConnector({
+            create: vi.fn(async () => "connected" as const),
+            useExisting: vi.fn(async () => "connected" as const),
+            connectPicked: vi.fn(async () => "connected" as const),
+            authorize: vi.fn(async () => "connected" as const),
+            prepareWrite: vi.fn(async () => null),
+            status: vi.fn(async () => "ready" as const),
+            browserStorageReady: () => true,
+        });
     });
 
     it("keeps a picker batch on the handle's single row when the handle is a drive root", () => {
@@ -171,26 +191,23 @@ describe("registerIngestSource", () => {
         registerFolderOpenedHook(opened);
 
         await expect(
-            connectWritableFolderToSource("drop:unscoped:CARD", handle, [vendorFile("CARD/other.mp4")]),
+            connectReadOnlySource("drop:unscoped:CARD", handle, [vendorFile("CARD/other.mp4")]),
             "an unrelated folder must never receive the notes",
-        ).resolves.toBe(false);
+        ).resolves.toBeNull();
         await expect(
-            connectWritableFolderToSource("drop:unscoped:CARD", handle, [
+            connectReadOnlySource("drop:unscoped:CARD", handle, [
                 vendorFile("CARD/other.mp4"),
                 vendorFile("CARD/notes.dashcamigo"),
             ]),
             "the notes file itself is not proof that the recordings folder matches",
-        ).resolves.toBe(false);
+        ).resolves.toBeNull();
         await expect(
-            connectWritableFolderToSource("drop:unscoped:CARD", handle, [
-                file,
-                vendorFile("CARD/nested/notes.dashcamigo"),
-            ]),
+            connectReadOnlySource("drop:unscoped:CARD", handle, [file, vendorFile("CARD/nested/notes.dashcamigo")]),
             "auto-sync only watches the selected folder root",
-        ).resolves.toBe(false);
+        ).resolves.toBeNull();
         expect(rememberFolder).not.toHaveBeenCalled();
 
-        await expect(connectWritableFolderToSource("drop:unscoped:CARD", handle, [file, notes])).resolves.toBe(true);
+        await expect(connectReadOnlySource("drop:unscoped:CARD", handle, [file, notes])).resolves.toBe(folder);
         expect(rememberFolder).toHaveBeenCalledWith(handle);
         expect(opened).toHaveBeenCalledWith(folder);
         expect(folderIdForFileKey(keyOf(file))).toBe("folder-4");
@@ -210,9 +227,9 @@ describe("registerIngestSource", () => {
         registerFolderOpenedHook(vi.fn(async () => {}));
 
         await expect(
-            connectWritableFolderToSource("drop:first-open:CARD", handle, [file, notes]),
+            connectReadOnlySource("drop:first-open:CARD", handle, [file, notes]),
             "the later notes-only pass annotates the existing source",
-        ).resolves.toBe(true);
+        ).resolves.toBe(folder);
     });
 
     it("does not attach a notes-only reopen when its duplicate recording matches two cards", async () => {
@@ -231,8 +248,8 @@ describe("registerIngestSource", () => {
 
         const handle = fakeHandle("CARD");
         const selected = [incoming, { ...vendorFile("CARD/notes.dashcamigo"), sourceKey: "card-c" }];
-        await expect(connectWritableFolderToSource("drop:card-a:CARD", handle, selected)).resolves.toBe(false);
-        await expect(connectWritableFolderToSource("drop:card-b:CARD", handle, selected)).resolves.toBe(false);
+        await expect(connectReadOnlySource("drop:card-a:CARD", handle, selected)).resolves.toBeNull();
+        await expect(connectReadOnlySource("drop:card-b:CARD", handle, selected)).resolves.toBeNull();
     });
 
     it("attaches a drive-root notes file to its picker source despite the root-label mismatch", async () => {
@@ -251,9 +268,9 @@ describe("registerIngestSource", () => {
         registerFolderOpenedHook(vi.fn(async () => {}));
 
         await expect(
-            connectWritableFolderToSource("handle:1", handle, [file, notes]),
+            connectReadOnlySource("handle:1", handle, [file, notes]),
             "the notes status must remain attached to the live drive-root row",
-        ).resolves.toBe(true);
+        ).resolves.toBe(folder);
     });
 });
 

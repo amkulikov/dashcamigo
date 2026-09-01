@@ -2207,6 +2207,25 @@
         </div>
     </div>
 
+    <!-- Mandatory decision shown only after an annotation-changing action.
+         There is intentionally no close button or backdrop dismissal: the
+         edit is already safe locally, but the user must choose whether that
+         local copy is enough or connect one narrowly scoped notes file. -->
+    <div id="notes-storage-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true"
+         aria-labelledby="notes-storage-modal-title" aria-describedby="notes-storage-modal-body">
+        <div class="export-modal-card modal-card">
+            <div class="export-modal-title" id="notes-storage-modal-title" data-i18n="notesStorageModal.title">Where should your notes be saved?</div>
+            <div class="export-modal-section">
+                <p class="export-modal-body" id="notes-storage-modal-body" data-i18n="notesStorageModal.body">This change is saved in this browser. Save notes beside your recordings to keep them with the trip and open them in another browser.</p>
+                <p class="export-modal-warn" id="notes-storage-modal-error" role="alert" hidden data-i18n="notesStorageModal.error">Couldn't save to the notes file. Try again or keep this change in the browser.</p>
+                <div class="export-modal-actions">
+                    <button id="notes-storage-browser" class="dc-btn dc-btn--ghost" type="button" data-i18n="notesStorageModal.browserOnly">Only in this browser</button>
+                    <button id="notes-storage-file" class="dc-btn dc-btn--primary" type="button" data-i18n="notesStorageModal.file">Save to a file</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Trip name & note editor (annotations). Opened by the pencil on a trip
          card; the favorite star toggles on the card itself. -->
     <div id="trip-meta-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="trip-meta-modal-title">

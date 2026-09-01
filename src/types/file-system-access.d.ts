@@ -44,4 +44,13 @@ interface Window {
         excludeAcceptAllOption?: boolean;
         types?: FilePickerAcceptType[];
     }): Promise<FileSystemFileHandle[]>;
+    /** Creates or replaces one user-selected file and grants access only to
+     *  that file, never to the directory supplied through startIn. */
+    showSaveFilePicker?(options?: {
+        id?: string;
+        startIn?: FileSystemHandle | string;
+        suggestedName?: string;
+        excludeAcceptAllOption?: boolean;
+        types?: FilePickerAcceptType[];
+    }): Promise<FileSystemFileHandle>;
 }

@@ -136,6 +136,10 @@ test.describe("notes file in the recordings folder", () => {
         await expect(row.locator(".folder-source__notes")).toContainText("new changes aren't written to this file");
 
         await row.getByRole("button", { name: "Enable file syncing…" }).click();
+        const storageModal = page.locator("#notes-storage-modal");
+        await expect(storageModal).toBeVisible();
+        await storageModal.getByRole("button", { name: "Save to a file" }).click();
+        await expect(storageModal).toBeHidden();
         await expect(row.locator(".folder-source__notes")).toHaveText(
             "Notes backup is on — changes are saved to the file notes.dashcamigo",
         );

@@ -2,20 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { VendorFile } from "../parsers/types.js";
 import type { AnnotationRecord, RememberedFolder, TripMetaAnnotation } from "../persist/types.js";
+import type { NotesConnector } from "./folder-sources.js";
 
 const mocks = vi.hoisted(() => ({
     annotationHook: null as ((folderId: string) => void) | null,
-    connector: null as {
-        create(folder: RememberedFolder): Promise<void>;
-        useExisting(folder: RememberedFolder): Promise<void>;
-        status(folder: RememberedFolder): Promise<"missing" | "connected" | "ready" | "needsAttention">;
-        browserStorageReady(): boolean;
-    } | null,
+    connector: null as NotesConnector | null,
     folderHook: null as ((folder: RememberedFolder) => void | Promise<void>) | null,
     folder: null as RememberedFolder | null,
     otherFolders: [] as RememberedFolder[],
     getFolder: vi.fn(async () => mocks.folder),
-    ensureDirectoryReadwritePermission: vi.fn(async () => true),
     ensureFileReadwritePermission: vi.fn(async () => true),
     rebindFolderAnnotations: vi.fn(() => 0),
     records: new Map<string, AnnotationRecord>(),
@@ -33,12 +28,11 @@ const mocks = vi.hoisted(() => ({
     refreshTimelineMarkers: vi.fn(),
     savePicker: vi.fn(),
     setFolderSidecarHandle: vi.fn(async (_id: string, handle: FileSystemFileHandle) => {
-        if (mocks.folder) mocks.folder = { ...mocks.folder, sidecarHandle: handle };
+        if (mocks.folder) mocks.folder = { ...mocks.folder, sidecarHandle: handle, sidecarAccess: "file" };
     }),
 }));
 
 vi.mock("../persist/folders.js", () => ({
-    ensureDirectoryReadwritePermission: mocks.ensureDirectoryReadwritePermission,
     ensureFileReadwritePermission: mocks.ensureFileReadwritePermission,
     getFolder: mocks.getFolder,
     listFolders: vi.fn(async () => [...(mocks.folder ? [mocks.folder] : []), ...mocks.otherFolders]),
@@ -64,12 +58,7 @@ vi.mock("./folder-sources.js", () => ({
     registerFolderOpenedHook: (hook: (folder: RememberedFolder) => void | Promise<void>) => {
         mocks.folderHook = hook;
     },
-    registerNotesConnector: (connector: {
-        create(folder: RememberedFolder): Promise<void>;
-        useExisting(folder: RememberedFolder): Promise<void>;
-        status(folder: RememberedFolder): Promise<"missing" | "connected" | "ready" | "needsAttention">;
-        browserStorageReady(): boolean;
-    }) => {
+    registerNotesConnector: (connector: NotesConnector) => {
         mocks.connector = connector;
     },
 }));
@@ -171,7 +160,7 @@ function folderWith(children: FileSystemHandle[], sidecarHandle?: FileSystemFile
         label: "CARD",
         addedAt: 1,
         lastOpenedAt: 2,
-        ...(sidecarHandle ? { sidecarHandle } : {}),
+        ...(sidecarHandle ? { sidecarHandle, sidecarAccess: "file" as const } : {}),
     };
 }
 
@@ -186,7 +175,6 @@ beforeEach(() => {
     mocks.folder = null;
     mocks.otherFolders = [];
     mocks.records.clear();
-    mocks.ensureDirectoryReadwritePermission.mockResolvedValue(true);
     mocks.ensureFileReadwritePermission.mockResolvedValue(true);
     documentListeners = {};
     vi.stubGlobal("window", {
@@ -210,7 +198,7 @@ afterEach(() => {
 });
 
 describe("folder discovery", () => {
-    it("attaches and merges the existing notes file before the open hook resolves", async () => {
+    it("merges an existing notes file without treating the directory-derived handle as writable", async () => {
         const remote = tripMeta("remote", "other-profile-folder");
         const sidecar = fakeSidecar(payload([remote]));
         const folder = folderWith([sidecar.handle]);
@@ -218,15 +206,11 @@ describe("folder discovery", () => {
 
         await mocks.folderHook?.(folder);
 
-        expect(mocks.setFolderSidecarHandle).toHaveBeenCalledWith(FOLDER_ID, sidecar.handle);
-        expect(mocks.folder?.sidecarHandle).toBe(sidecar.handle);
+        expect(mocks.setFolderSidecarHandle).not.toHaveBeenCalled();
+        expect(mocks.folder?.sidecarHandle).toBeUndefined();
         expect(mocks.records.get("remote")).toMatchObject({ folderId: FOLDER_ID, name: "remote" });
-        expect(mocks.notify).toHaveBeenCalledWith({
-            severity: "info",
-            messageKey: "sidecar.enabled",
-            messageParams: { file: "notes.dashcamigo" },
-        });
-        expect(sidecar.createWritableOptions()).toEqual({ mode: "exclusive" });
+        expect(sidecar.writes()).toBe(0);
+        await expect(mocks.connector?.prepareWrite(folder)).resolves.toBe("connect");
     });
 
     it("does not attach a sidecar from a future format version", async () => {
@@ -240,60 +224,47 @@ describe("folder discovery", () => {
         expect(mocks.folder?.sidecarHandle).toBeUndefined();
     });
 
-    it("routes creation through the safe open picker when a notes-like file blocks adoption", async () => {
+    it("routes a discovered notes file to the open picker", async () => {
         const sidecar = fakeSidecar(payload([tripMeta("future")], 2));
         const folder = folderWith([sidecar.handle]);
         mocks.folder = folder;
-        vi.mocked(window.showOpenFilePicker!).mockResolvedValue([sidecar.handle]);
+        await mocks.folderHook?.(folder);
 
-        void mocks.connector?.create(folder);
-
-        await vi.waitFor(() => expect(window.showOpenFilePicker).toHaveBeenCalled());
-        await vi.waitFor(() =>
-            expect(mocks.notify).toHaveBeenCalledWith({ severity: "error", messageKey: "sidecar.notOurFile" }),
-        );
-        expect(mocks.savePicker, "must never open the destructive picker").not.toHaveBeenCalled();
+        await expect(mocks.connector?.prepareWrite(folder)).resolves.toBe("connect");
+        expect(window.showOpenFilePicker).not.toHaveBeenCalled();
+        expect(mocks.savePicker).not.toHaveBeenCalled();
         expect(mocks.folder?.sidecarHandle).toBeUndefined();
     });
 
-    it("creates the fixed-name backup without opening destructive Save As", async () => {
+    it("creates a backup through the narrowly scoped save picker", async () => {
         const sidecar = fakeSidecar("");
         const folder = folderWith([]);
-        Object.assign(folder.handle, {
-            getFileHandle: vi.fn(async (name: string, options?: { create?: boolean }) => {
-                expect(name).toBe("notes.dashcamigo");
-                expect(options).toEqual({ create: true });
-                return sidecar.handle;
-            }),
-        });
         mocks.folder = folder;
+        mocks.savePicker.mockResolvedValue(sidecar.handle);
 
-        await mocks.connector?.create(folder);
+        await expect(mocks.connector?.create(folder)).resolves.toBe("connected");
 
-        expect(mocks.savePicker).not.toHaveBeenCalled();
-        expect(mocks.ensureDirectoryReadwritePermission).toHaveBeenCalledWith(folder.handle);
+        expect(mocks.savePicker).toHaveBeenCalledWith(
+            expect.objectContaining({ startIn: folder.handle, suggestedName: "notes.dashcamigo" }),
+        );
         expect(mocks.rebindFolderAnnotations).toHaveBeenCalledWith(FOLDER_ID, new Set([FOLDER_ID]));
         expect(mocks.folder?.sidecarHandle).toBe(sidecar.handle);
+        expect(mocks.folder?.sidecarAccess).toBe("file");
         expect(sidecar.writes()).toBe(1);
         expect(JSON.parse(sidecar.read())).toMatchObject({ app: "dashcamigo", format: "annotations", version: 1 });
     });
 
-    it("requests folder write permission before scanning for an existing backup", async () => {
-        const values = vi.fn(() => {
-            throw new Error("scan must not run after permission denial");
-        });
+    it("never requests directory write permission when creating a backup", async () => {
+        const sidecar = fakeSidecar("");
         const folder = folderWith([]);
-        Object.assign(folder.handle, { values });
         mocks.folder = folder;
-        mocks.ensureDirectoryReadwritePermission.mockResolvedValue(false);
+        mocks.savePicker.mockResolvedValue(sidecar.handle);
 
         await mocks.connector?.create(folder);
 
-        expect(values).not.toHaveBeenCalled();
-        expect(mocks.notify).toHaveBeenCalledWith({
-            severity: "warn",
-            messageKey: "sidecar.folderWriteDenied",
-        });
+        expect(folder.handle.queryPermission).toBeUndefined();
+        expect(folder.handle.requestPermission).toBeUndefined();
+        expect(mocks.savePicker).toHaveBeenCalledOnce();
     });
 
     it("recovers valid records but never attaches a partially unreadable backup", async () => {
@@ -302,7 +273,7 @@ describe("folder discovery", () => {
         const folder = folderWith([sidecar.handle]);
         mocks.folder = folder;
 
-        await mocks.folderHook?.(folder);
+        await mocks.connector?.connectPicked(folder, sidecar.handle);
 
         expect(mocks.records.get("valid")).toMatchObject({ folderId: FOLDER_ID });
         expect(mocks.setFolderSidecarHandle).not.toHaveBeenCalled();
@@ -322,7 +293,7 @@ describe("folder discovery", () => {
         mocks.folder = folder;
         mocks.otherFolders = [{ ...folder, id: "folder-2", label: "OTHER", sidecarHandle: sidecar.handle }];
 
-        await mocks.folderHook?.(folder);
+        await mocks.connector?.connectPicked(folder, sidecar.handle);
 
         expect(mocks.setFolderSidecarHandle).not.toHaveBeenCalled();
         expect(sidecar.writes()).toBe(0);
@@ -335,7 +306,7 @@ describe("folder discovery", () => {
         mocks.folder = folder;
         mocks.ensureFileReadwritePermission.mockResolvedValue(false);
 
-        await mocks.folderHook?.(folder);
+        await mocks.connector?.connectPicked(folder, sidecar.handle);
 
         await expect(mocks.connector?.status(folder)).resolves.toBe("needsAttention");
         await expect(annotationStorageState(FOLDER_ID)).resolves.toMatchObject({ backupAction: "reconnect" });
@@ -421,9 +392,48 @@ describe("writes", () => {
             backupAction: null,
         });
         await mocks.folderHook?.(folder);
+        expect(
+            mocks.ensureFileReadwritePermission,
+            "opening is read-only and must not prompt for write",
+        ).not.toHaveBeenCalled();
         await expect(annotationStorageState(FOLDER_ID)).resolves.toEqual({
             hintKey: "annotations.storageHintFile",
             backupAction: null,
+        });
+    });
+
+    it("never writes through a legacy directory-derived handle until the file is reconnected", async () => {
+        const sidecar = fakeSidecar(payload([]));
+        const folder = folderWith([], sidecar.handle);
+        delete folder.sidecarAccess;
+        mocks.folder = folder;
+
+        await mocks.folderHook?.(folder);
+        mocks.records.set("local", tripMeta("local"));
+        mocks.annotationHook?.(FOLDER_ID);
+        await flushPendingSidecarWrites();
+
+        expect(sidecar.writes()).toBe(0);
+        expect(mocks.ensureFileReadwritePermission).not.toHaveBeenCalled();
+        await expect(mocks.connector?.prepareWrite(folder)).resolves.toBe("connect");
+    });
+
+    it("honours browser-only storage until a manual reconnect", async () => {
+        const sidecar = fakeSidecar(payload([]));
+        const folder = { ...folderWith([], sidecar.handle), notesStorage: "browser" as const };
+        mocks.folder = folder;
+
+        mocks.records.set("local", tripMeta("local"));
+        mocks.annotationHook?.(FOLDER_ID);
+        await flushPendingSidecarWrites();
+
+        expect(sidecar.writes()).toBe(0);
+        await expect(mocks.connector?.status(folder)).resolves.toBe("missing");
+        await expect(mocks.connector?.prepareWrite(folder)).resolves.toBeNull();
+        await expect(mocks.connector?.prepareWrite(folder, true)).resolves.toBe("connect");
+        await expect(annotationStorageState(FOLDER_ID)).resolves.toEqual({
+            hintKey: "annotations.storageHint",
+            backupAction: "create",
         });
     });
 
@@ -467,25 +477,27 @@ describe("writes", () => {
         await expect(annotationStorageState(FOLDER_ID)).resolves.toMatchObject({ backupAction: "reconnect" });
     });
 
-    it("clears a stale write warning after a clean in-sync reopen", async () => {
+    it("waits for the explicit authorize action instead of prompting from the edit hook", async () => {
         const sidecar = fakeSidecar(payload([]));
-        const folder = folderWith([], sidecar.handle);
+        const promptHandle = {
+            ...sidecar.handle,
+            async queryPermission() {
+                return "prompt" as const;
+            },
+        } as unknown as FileSystemFileHandle;
+        const folder = folderWith([], promptHandle);
         mocks.folder = folder;
         await mocks.folderHook?.(folder);
 
-        mocks.ensureFileReadwritePermission.mockResolvedValue(false);
         mocks.annotationHook?.(FOLDER_ID);
-        await vi.waitFor(async () => {
-            await expect(annotationStorageState(FOLDER_ID)).resolves.toMatchObject({ backupAction: "reconnect" });
-        });
+        await flushPendingSidecarWrites();
 
-        mocks.ensureFileReadwritePermission.mockResolvedValue(true);
-        await mocks.folderHook?.(folder);
+        expect(mocks.ensureFileReadwritePermission).not.toHaveBeenCalled();
+        expect(sidecar.writes()).toBe(0);
+        await expect(mocks.connector?.prepareWrite(folder)).resolves.toBe("authorize");
 
-        await expect(annotationStorageState(FOLDER_ID)).resolves.toEqual({
-            hintKey: "annotations.storageHintFile",
-            backupAction: null,
-        });
+        await mocks.connector?.authorize(folder);
+        expect(mocks.ensureFileReadwritePermission).toHaveBeenCalledWith(promptHandle);
     });
 });
 
