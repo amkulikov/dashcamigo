@@ -193,6 +193,10 @@
     gap: var(--dc-space-1);
     min-width: 0;
     height: var(--chart-zoom-row-h);
+    /* The chart canvas normally consumes the remaining height. When GPS-dependent
+       rows collapse, keep this row at the panel bottom so the playhead's matching
+       bottom inset still ends exactly above the navigator. */
+    margin-top: auto;
     padding-top: var(--dc-space-1);
 }
 .chart-zoom-row[hidden] {
