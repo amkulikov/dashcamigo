@@ -1,7 +1,7 @@
 // Use-case ("how to do X") landing pages. Each targets a high-intent search
 // task that the homepage's generic "dashcam player" framing buries: combining
 // a dashcam's cameras into one video, and burning a speed/GPS/map overlay onto
-// the export. Static HTML at /<lang>/<slug>/ for all 12 locales - the same
+// the export. Static HTML at /<lang>/<slug>/ for all 10 locales - the same
 // machinery as vendor-pages.ts / alternative-pages.ts (see those files'
 // headers for the prerender / dev-middleware / sitemap rationale), one concern
 // per plugin.
@@ -578,7 +578,7 @@ const SHARED_LABELS: Partial<Record<Lang, FeatureSharedLabels>> = {
 
 // Non-affiliation disclaimer - the brandsBody names third-party cameras
 // (BlackVue, Viofo, ...) nominatively. Mirrors ALT_DISCLAIMER in
-// alternative-pages.ts (kept inline, all 12 locales, must never silently
+// alternative-pages.ts (kept inline, all 10 locales, must never silently
 // fall back). NOT legal advice; wording is conservative.
 const FEATURE_DISCLAIMER: Record<Lang, string> = {
     en: "All product names are trademarks of their respective owners. dashcamigo is independent and not affiliated with, endorsed by or sponsored by them.",

@@ -8,8 +8,8 @@
 // It needs this small standalone set instead.
 //
 // The per-locale dictionaries (langBanner.* keys) remain the source of truth.
-// This map duplicates just those 4 keys × 12 locales (~1 KB) so the banner does
-// NOT pull all 12 full dictionaries into the bundle (which would defeat the
+// This map duplicates just those 4 keys × 10 locales (~1 KB) so the banner does
+// NOT pull all 10 full dictionaries into the bundle (which would defeat the
 // baked-island optimization). banner-copy.test.ts asserts every value here
 // equals the dictionary's, so any drift fails the test.
 

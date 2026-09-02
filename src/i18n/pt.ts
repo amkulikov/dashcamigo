@@ -181,7 +181,8 @@ export const ptDict = {
     "landing.faq.q9": "Minha dashcam corta a gravação em clipes de 1‑3 minutos — dá para assistir como uma viagem só?",
     "landing.faq.a9": "Sim — automaticamente. Solte a pasta do cartão SD e os clipes se juntam em viagens contínuas: uma linha do tempo, uma rota no mapa, e a reprodução não para na troca de arquivo. Precisa de um arquivo só? Selecione um trecho — mesmo atravessando vários clipes — e salve como um único MP4.",
     "landing.faq.q2": "Quais câmeras veiculares são suportadas?",
-    "landing.faq.a2.after": ", Nextbase, FitCamX, Vueroid, Neoline, Juscar, Escort, Carcam, Navitel, SilverStone F1, Roadgid, iBOX, RVMI e outras. Qualquer uma que grave .mp4, .mov ou .ts padrão no cartão SD abre sem configurar nada.",
+    "landing.faq.a2.after":
+        ", Nextbase, RedTiger, FitCamX, Vueroid, Botslab, Mio MiVue, Navman MiVue, Neoline, Juscar, Escort, Carcam, Beferich, DATAKAM, 2E Drive, Aspiring, Sony, JOOYFACT, HP, Navitel, SilverStone F1, Roadgid e iBOX. Vídeos .mp4, .mov e .ts padrão também abrem sem configuração; o GPS depende do formato.",
     "landing.faq.q3": "Minhas gravações são enviadas para algum lugar?",
     "landing.faq.a3": "Não. O dashcamigo abre suas gravações diretamente no seu dispositivo — elas não são enviadas para lugar nenhum.",
     "landing.faq.q4": "Em quais dispositivos roda?",
@@ -197,9 +198,9 @@ export const ptDict = {
     "landing.faq.a10": "Sim. Desenhe uma caixa sobre a placa ou o rosto — pixelização, preenchimento sólido ou um desfoque leve — e ela acompanha sozinha o objeto em movimento. Como todo o resto, isso acontece no seu dispositivo.",
     "landing.faq.q7": "Qual navegador funciona melhor?",
     "landing.faq.a7": "Para o editor completo — recorte com sobreposições, corte, mudança de resolução — o Chrome, o Edge ou outro navegador baseado em Chromium é o melhor. Firefox e Safari reproduzem suas gravações, mostram o mapa e exportam o original sem configurar nada.",
-    "landing.faq.q8": "Vindo do RegistratorViewer, Dashcam Viewer ou VLC?",
+    "landing.faq.q8": "Vindo do Dashcam Viewer, CamGeoPlayer ou Telemetry Overlay?",
     "landing.faq.a8.before": "Sim — o dashcamigo é uma alternativa gratuita, no navegador, às ferramentas comuns de dashcam. Veja como ele se ",
-    "landing.faq.a8.link": "compara ao RegistratorViewer, Dashcam Viewer, VLC e outros",
+    "landing.faq.a8.link": "compara ao Dashcam Viewer, CamGeoPlayer e Telemetry Overlay",
     "landing.faq.a8.after": " — sem instalação e com um mapa que não quebra.",
 
     "status.filesNotSelected": "nenhum arquivo selecionado",

@@ -8,7 +8,7 @@ import { dynamicBaselinePlugin } from "../../vite-plugins/dynamic-baseline.js";
 import { stringifyJsonLd } from "../../vite-plugins/html-utils.js";
 import { applyLocale, getPrerenderLocales, getSeoLocales } from "../../vite-plugins/seo-prerender.js";
 import { SUPPORTED_BRANDS, getAllBrandsCommaSeparated } from "../../vite-plugins/supported-brands.js";
-import { assertCommunityFaqParity, getVendorSitemapEntries, matchVendorRoute } from "../../vite-plugins/vendor-pages.js";
+import { getVendorSitemapEntries, matchVendorRoute } from "../../vite-plugins/vendor-pages.js";
 import { SEO_LOCALES, getHreflangCodes, getIndexableSeoLocales } from "./seo-config.js";
 
 afterEach(() => {
@@ -52,14 +52,14 @@ describe("vendor sitemap entries", () => {
     });
 
     it("includes /cameras/ index entry for every indexable locale", () => {
-        // 12 indexable locales × 1 /cameras/ index = 12 entries.
+        // 10 indexable locales × 1 /cameras/ index = 10 entries.
         const indexEntries = entries.filter((e) => /\/cameras\/$/.test(e.loc));
         expect(indexEntries.length).toBe(indexable.length);
     });
 
-    it("includes 7 vendor pages × every indexable locale (84 entries)", () => {
+    it("includes 7 vendor pages × every indexable locale (70 entries)", () => {
         const vendorEntries = entries.filter((e) => /\/cameras\/[^/]+\/$/.test(e.loc));
-        // 7 vendors × 12 locales = 84.
+        // 7 vendors × 10 locales = 70.
         expect(vendorEntries.length).toBe(7 * indexable.length);
     });
 
@@ -97,16 +97,6 @@ describe("vendor sitemap entries", () => {
         expect(enVendor).toBeDefined();
         expect(enVendor?.alternates.de).toMatch(/\/de\/cameras\/70mai\/$/);
         expect(enVendor?.alternates.ja).toBe("https://dashcamigo.app/ja/cameras/70mai/");
-    });
-});
-
-describe("community vendor FAQ parity (T4)", () => {
-    it("has a count-matching FAQ translation for every vendor × community locale", () => {
-        // Same guard the build runs in closeBundle: every indexable locale that
-        // falls back to VENDOR_TEMPLATES must have a COMMUNITY_FAQ block whose
-        // item count matches the en source. Throws with the offending
-        // vendor/lang list otherwise.
-        expect(() => assertCommunityFaqParity()).not.toThrow();
     });
 });
 
@@ -255,8 +245,8 @@ describe("applyLocale", () => {
         expect(payload.featureList).toContain("x");
         const vendorLine = payload.featureList.find((s: unknown) => typeof s === "string" && s.endsWith("vendor support"));
         expect(vendorLine).toBeDefined();
-        // Vendor line must include the full SUPPORTED_BRANDS list (13 names).
-        expect(vendorLine).toMatch(/70mai.*Viofo.*BlackVue.*Vantrue.*Thinkware.*RVMI/);
+        // Vendor line must include the full SUPPORTED_BRANDS list.
+        expect(vendorLine).toMatch(/70mai.*Viofo.*BlackVue.*Vantrue.*Thinkware.*RedTiger.*Botslab.*DATAKAM/);
     });
 
     it("keeps WebSite JSON-LD on the locale's canonical origin", () => {

@@ -13,7 +13,7 @@
 //    with no app bundle), the island's locale always equals detectInitialLang()
 //    (URL wins) - the two cannot disagree.
 //  - In `vite dev` there is no prerender, so the island is empty; the DEV branch
-//    below imports all 12 dictionaries instead (dev bundle size is irrelevant,
+//    below imports all 10 dictionaries instead (dev bundle size is irrelevant,
 //    and that branch is tree-shaken from production via import.meta.env.DEV).
 //  - t(key, params?) returns the localized string. Compiled IntlMessageFormats
 //    are cached by key - the parse happens once, later .format() calls are fast.

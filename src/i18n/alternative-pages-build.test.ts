@@ -52,11 +52,11 @@ describe("alternative sitemap entries", () => {
     });
 
     it("alternates for a competitor page target the SAME competitor across locales", () => {
-        const enVlc = entries.find((e) => e.loc === "https://dashcamigo.app/en/alternatives/vlc/");
-        expect(enVlc).toBeDefined();
-        expect(enVlc?.alternates.de).toMatch(/\/de\/alternatives\/vlc\/$/);
-        expect(enVlc?.alternates.ja).toBe("https://dashcamigo.app/ja/alternatives/vlc/");
-        expect(enVlc?.xDefaultUrl).toBe("https://dashcamigo.app/en/alternatives/vlc/");
+        const enTelemetry = entries.find((e) => e.loc === "https://dashcamigo.app/en/alternatives/telemetry-overlay/");
+        expect(enTelemetry).toBeDefined();
+        expect(enTelemetry?.alternates.de).toMatch(/\/de\/alternatives\/telemetry-overlay\/$/);
+        expect(enTelemetry?.alternates.ja).toBe("https://dashcamigo.app/ja/alternatives/telemetry-overlay/");
+        expect(enTelemetry?.xDefaultUrl).toBe("https://dashcamigo.app/en/alternatives/telemetry-overlay/");
     });
 });
 
@@ -71,19 +71,25 @@ describe("matchAlternativeRoute", () => {
     });
 
     it("matches a competitor page and resolves the competitor", () => {
-        const m = matchAlternativeRoute("/ru/alternatives/registratorviewer/");
+        const m = matchAlternativeRoute("/ru/alternatives/camgeoplayer/");
         expect(m?.kind).toBe("competitor");
         expect(m && m.kind === "competitor" && m.lang).toBe("ru");
-        expect(m && m.kind === "competitor" && m.competitor.slug).toBe("registratorviewer");
+        expect(m && m.kind === "competitor" && m.competitor.slug).toBe("camgeoplayer");
     });
 
     it("returns null for an unknown competitor slug", () => {
         expect(matchAlternativeRoute("/en/alternatives/does-not-exist/")).toBeNull();
     });
 
+    it("does not route the pruned competitor pages", () => {
+        for (const slug of ["registratorviewer", "vlc", "navitel-dvr-player", "dashware", "racerender"]) {
+            expect(matchAlternativeRoute(`/en/alternatives/${slug}/`), slug).toBeNull();
+        }
+    });
+
     it("returns null for paths outside the /alternatives/ space and for too-deep paths", () => {
         expect(matchAlternativeRoute("/en/cameras/70mai/")).toBeNull();
-        expect(matchAlternativeRoute("/en/alternatives/vlc/extra/")).toBeNull();
+        expect(matchAlternativeRoute("/en/alternatives/dashcam-viewer/extra/")).toBeNull();
         expect(matchAlternativeRoute("/")).toBeNull();
     });
 });
@@ -92,8 +98,8 @@ describe("alternative-pages locale parity", () => {
     it("has labels, index and every competitor's content for every indexable locale", () => {
         // Same guard the build runs in closeBundle: every indexable locale must
         // have chrome labels, hub copy, and per-competitor content (hand-written
-        // en/ru or machine-translated community), with matching FAQ and
-        // comparison-row counts. Throws with the offending list otherwise.
+        // en/ru or machine-translated community), with matching comparison-row
+        // counts. Throws with the offending list otherwise.
         expect(() => assertAltLocaleParity()).not.toThrow();
     });
 });

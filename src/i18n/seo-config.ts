@@ -69,7 +69,7 @@ export interface SeoLocale {
     contentLanguage: string;
     // Whether this locale should be referenced from hreflang clusters,
     // included in sitemap.xml, and indexed by search engines. Currently
-    // true for all 12 - we ship LLM-quality translations and accept that
+    // true for all 10 - community translations are indexable and we accept that
     // tradeoff. Flag stays in the contract so a future locale can be
     // temporarily excluded without ripping out the SEO pipeline.
     indexable: boolean;
@@ -81,7 +81,7 @@ export interface SeoLocale {
     ogImage: string;
 }
 
-// All 12 locales we ship. Order: alphabetical by lang code - lookup is by
+// All 10 locales we ship. Order: alphabetical by lang code - lookup is by
 // code, not order; keeping this stable makes diffs in PRs readable.
 export const SEO_LOCALES: ReadonlyArray<SeoLocale> = [
     {

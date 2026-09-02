@@ -762,7 +762,7 @@ export function ensureMap(): maplibregl.Map | null {
 
     // Scale bar. ScaleControl.setUnit switches the unit SYSTEM
     // (metric/imperial/nautical) but not the label language - the "m"/"km" text
-    // is Latin textContent with no setLocale API. All 12 locales use metric, so
+    // is Latin textContent with no setLocale API. All 10 locales use metric, so
     // the Latin defaults stand and the translation value is low.
     map.addControl(new mlg!.ScaleControl({ maxWidth: 120, unit: "metric" }), "bottom-left");
 

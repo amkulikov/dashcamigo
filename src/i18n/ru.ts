@@ -186,7 +186,8 @@ export const ruDict = {
     "landing.faq.q9": "Регистратор режет запись на файлы по 1‑3 минуты — можно смотреть их как одну поездку?",
     "landing.faq.a9": "Да — автоматически. Брось папку с SD‑карты — ролики склеятся в непрерывные поездки: одна шкала времени, один маршрут на карте, без пауз между файлами. Нужен один файл? Выдели отрезок — хоть через несколько роликов — и сохрани одним MP4.",
     "landing.faq.q2": "Какие регистраторы поддерживаются?",
-    "landing.faq.a2.after": ", Nextbase, FitCamX, Vueroid, Neoline, Juscar, Escort, Carcam, Navitel, SilverStone F1, Roadgid, iBOX, RVMI и другие. Всё, что пишет на SD‑карту стандартные .mp4, .mov или .ts — открывается без настройки.",
+    "landing.faq.a2.after":
+        ", Nextbase, RedTiger, FitCamX, Vueroid, Botslab, Mio MiVue, Navman MiVue, Neoline, Juscar, Escort, Carcam, Beferich, DATAKAM, 2E Drive, Aspiring, Sony, JOOYFACT, HP, Navitel, SilverStone F1, Roadgid и iBOX. Стандартные .mp4, .mov и .ts тоже открываются без настройки; GPS зависит от формата записи.",
     "landing.faq.q3": "Мои видеозаписи куда‑то загружаются?",
     "landing.faq.a3": "Нет. dashcamigo открывает записи прямо у тебя на устройстве — они никуда не загружаются.",
     "landing.faq.q4": "На каких устройствах работает?",
@@ -202,9 +203,9 @@ export const ruDict = {
     "landing.faq.a10": "Да. Обведи номер или лицо — пиксели, сплошная заливка или лёгкое размытие — и рамка сама следует за объектом в кадре. Как и всё остальное, это происходит на твоём устройстве.",
     "landing.faq.q7": "В каком браузере лучше всего?",
     "landing.faq.a7": "Для всех возможностей редактора — обрезки, кадрирования, смены разрешения и надписей поверх видео — лучше Chrome, Edge или другой браузер на Chromium. Firefox и Safari проигрывают записи, показывают карту и сохраняют исходное видео без настройки.",
-    "landing.faq.q8": "Переходишь с RegistratorViewer, Dashcam Viewer или VLC?",
+    "landing.faq.q8": "Переходишь с Dashcam Viewer, CamGeoPlayer или Telemetry Overlay?",
     "landing.faq.a8.before": "Да — dashcamigo бесплатная браузерная альтернатива привычным программам для регистратора. Посмотри, как он ",
-    "landing.faq.a8.link": "сравнивается с RegistratorViewer, Dashcam Viewer, VLC и другими",
+    "landing.faq.a8.link": "сравнивается с Dashcam Viewer, CamGeoPlayer и Telemetry Overlay",
     "landing.faq.a8.after": " — без установки, и с картой, которая не ломается.",
 
     "status.filesNotSelected": "файлы не выбраны",

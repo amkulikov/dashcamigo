@@ -77,7 +77,7 @@ export function llmsTxtPlugin(): Plugin {
             lines.push("");
             lines.push(`- [Main app (English)](${defaultLocaleHome}): drop the SD-card folder into the browser to watch recordings as continuous trips with a GPS map and speed chart`);
             lines.push(`- [Supported cameras](${canonicalLocaleUrl(defaultLocale, "cameras/")}): list of supported dashcam brands with per-vendor format details`);
-            lines.push(`- [Alternatives](${canonicalLocaleUrl(defaultLocale, "alternatives/")}): how dashcamigo compares to other dashcam tools (RegistratorViewer, Dashcam Viewer, VLC)`);
+            lines.push(`- [Alternatives](${canonicalLocaleUrl(defaultLocale, "alternatives/")}): how dashcamigo compares to Dashcam Viewer, CamGeoPlayer and Telemetry Overlay`);
             lines.push(`- [Privacy policy](${PRIMARY_SITE_ORIGIN}/privacy): data handling, analytics opt-out, GDPR / CCPA stance`);
             lines.push(`- [Terms of use](${PRIMARY_SITE_ORIGIN}/terms): hosted-service terms - free, as-is / no warranty, recordings stay the user's`);
             lines.push(
@@ -89,7 +89,7 @@ export function llmsTxtPlugin(): Plugin {
             lines.push("");
             for (const vendor of VENDOR_LIST) {
                 lines.push(
-                    `- [${vendor.displayName}](${canonicalLocaleUrl(defaultLocale, `cameras/${vendor.slug}/`)}): models, file format, FAQ for ${vendor.displayName} dashcams`,
+                    `- [${vendor.displayName}](${canonicalLocaleUrl(defaultLocale, `cameras/${vendor.slug}/`)}): supported model families, local playback and recording details for ${vendor.displayName} dashcams`,
                 );
             }
             lines.push("");

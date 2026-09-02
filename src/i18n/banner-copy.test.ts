@@ -1,7 +1,7 @@
 // Parity guard for BANNER_COPY. The lang-suggestion banner needs its 4 strings
 // in EVERY locale (it offers a switch in the suggested language), but a
 // prerendered page carries only the active locale's dictionary. BANNER_COPY
-// duplicates those 4 keys × 12 locales so the banner does not import all 12
+// duplicates those 4 keys × 10 locales so the banner does not import all 10
 // full dictionaries. This test pins that the duplicate stays in sync with the
 // dictionaries (the source of truth) - drift here fails CI, not production.
 

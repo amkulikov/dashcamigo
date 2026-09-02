@@ -17,14 +17,14 @@
 //
 // Used by:
 //  - vite-plugins/seo-prerender.ts: WebApplication JSON-LD featureList (rich
-//    snippet), FAQ JSON-LD top-5 mention.
+//    snippet), FAQ JSON-LD landing-brand mention.
 //  - vite-plugins/llms-txt.ts: opening summary of dist/llms.txt.
 //  - vite-plugins/vendor-pages.ts: subset with hasLandingPage=true gets the
 //    dedicated /cameras/<slug>/ pages (high-volume search terms).
 //
 // Adding a brand: append below. Set hasLandingPage=true ONLY if there's a
 // matching VendorContent in vendor-pages.ts ready to render. Order is meant
-// to be importance-descending (top-5 first), not alphabetical - SERP
+// to be importance-descending (landing-page brands first), not alphabetical - SERP
 // scanners pick up the early items more often.
 
 // Discriminated union: when hasLandingPage=true the slug is mandatory, when
@@ -50,22 +50,32 @@ export const SUPPORTED_BRANDS: ReadonlyArray<SupportedBrand> = [
     { displayName: "Vantrue", slug: "vantrue", hasLandingPage: true },
     { displayName: "Thinkware", slug: "thinkware", hasLandingPage: true },
     { displayName: "Nextbase", hasLandingPage: false },
+    { displayName: "RedTiger", hasLandingPage: false },
     { displayName: "FitCamX", hasLandingPage: false },
     { displayName: "Vueroid", hasLandingPage: false },
+    { displayName: "Botslab", hasLandingPage: false },
+    { displayName: "Mio MiVue", hasLandingPage: false },
+    { displayName: "Navman MiVue", hasLandingPage: false },
     { displayName: "Neoline", hasLandingPage: false },
     { displayName: "Juscar", hasLandingPage: false },
     { displayName: "Escort", hasLandingPage: false },
     { displayName: "Carcam", hasLandingPage: false },
+    { displayName: "Beferich", hasLandingPage: false },
+    { displayName: "DATAKAM", hasLandingPage: false },
+    { displayName: "2E Drive", hasLandingPage: false },
+    { displayName: "Aspiring", hasLandingPage: false },
+    { displayName: "Sony", hasLandingPage: false },
+    { displayName: "JOOYFACT", hasLandingPage: false },
+    { displayName: "HP", hasLandingPage: false },
     { displayName: "Navitel", hasLandingPage: false },
     { displayName: "SilverStone F1", hasLandingPage: false },
     { displayName: "Roadgid", hasLandingPage: false },
     { displayName: "iBOX", hasLandingPage: false },
-    { displayName: "RVMI", hasLandingPage: false },
 ];
 
 // Brands with a dedicated landing page. Used by vendor-pages.ts to enumerate
 // what to render, and by buildFaqJsonLd as the "top vendors" shortlist in
-// the FAQ-rich-snippet (full SUPPORTED_BRANDS is too long for a SERP answer).
+// the homepage FAQ answer (full SUPPORTED_BRANDS is too long for its linked prefix).
 // The discriminated union on SupportedBrand guarantees `slug` is present in
 // the true branch.
 export function getLandingBrands(): ReadonlyArray<SupportedBrand & { hasLandingPage: true }> {
@@ -81,8 +91,8 @@ export function getAllBrandsCommaSeparated(): string {
     return SUPPORTED_BRANDS.map((b) => b.displayName).join(", ");
 }
 
-// Comma-separated list of just the landing-page brands. Used in the FAQ
-// JSON-LD's "which dashcams are supported?" answer - kept short for SERP
+// Comma-separated list of just the landing-page brands. Used in the homepage
+// "which dashcams are supported?" answer - kept short for SERP
 // readability ("the long tail" is acknowledged in the answer copy through
 // the locale-specific landing.faq.a2.after key).
 export function getLandingBrandsCommaSeparated(): string {

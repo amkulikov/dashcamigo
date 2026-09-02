@@ -208,7 +208,7 @@ export default defineConfig(({ command }) => {
         // SEO build pipeline. All three plugins run in closeBundle, AFTER vite
         // has written dist/index.html and html-minifier has minified it. See
         // vite-plugins/seo-prerender.ts for the rationale (hreflang, two
-        // static URLs for en + ru, FAQ-rich-snippets, sitemap). Vendor pages
+        // per-locale static URLs, structured data, sitemap). Vendor pages
         // emit per-vendor /cameras/<slug>/ static HTML for SERP long-tail.
         // noIndex flips staging deploys to noindex+Disallow without changing
         // production behavior.
@@ -216,8 +216,8 @@ export default defineConfig(({ command }) => {
         vendorPagesPlugin({ noIndex: NO_INDEX }),
         // Competitor "alternative-to" landing pages: /<lang>/alternatives/<slug>/
         // + the /<lang>/alternatives/ hub. Same machinery as vendor pages,
-        // captures navigational demand for named dashcam tools (RegistratorViewer,
-        // Dashcam Viewer, VLC). See vite-plugins/alternative-pages.ts.
+        // captures navigational demand for the retained dashcam tools (Dashcam
+        // Viewer, CamGeoPlayer, Telemetry Overlay). See alternative-pages.ts.
         alternativePagesPlugin({ noIndex: NO_INDEX }),
         // Use-case landing pages: /<lang>/<feature-slug>/ (slug list =
         // FeatureSlug in vite-plugins/feature-pages.ts). Same machinery as the

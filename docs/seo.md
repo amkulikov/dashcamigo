@@ -63,7 +63,7 @@ Google `Indexing API` (closed to non-JobPosting / non-BroadcastEvent). Google `F
 
 - **SEO config (locales, hreflang, og:locale)** - `src/i18n/seo-config.ts`.
 - **Sitemap + per-locale prerender** - `vite-plugins/seo-prerender.ts`.
-- **Vendor pages (per-vendor landing)** - `vite-plugins/vendor-pages.ts`, `vite-plugins/supported-brands.ts`; community-locale FAQ translations in `vite-plugins/vendor-community-faq.ts`.
+- **Vendor pages (per-vendor landing)** - `vite-plugins/vendor-pages.ts`, `vite-plugins/supported-brands.ts`; public copy targets model-family searches, while parser evidence stays in `docs/gps-format-coverage.md`.
 - **Competitor pages (`/alternatives/`)** - `vite-plugins/alternative-pages.ts` (+ community translations in `vite-plugins/alternative-pages-content.ts`).
 - **Feature/guide pages** - `vite-plugins/feature-pages.ts`.
 - **Legacy `/cameras/` 301 redirects** - `vite-plugins/redirects.ts` (writes `dist/_redirects`).
