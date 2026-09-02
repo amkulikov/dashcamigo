@@ -28,7 +28,7 @@
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Plugin } from "vite";
-import { getDefaultSeoLocale } from "../src/i18n/seo-config.js";
+import { getDefaultSeoLocale, getIndexableSeoLocales } from "../src/i18n/seo-config.js";
 import { getAlternativeSlugs } from "./alternative-pages.js";
 import { VENDOR_LIST } from "./vendor-list.js";
 
@@ -94,6 +94,45 @@ export function redirectsPlugin(): Plugin {
                 );
             }
             pushBothSlashVariants("/alternatives", `/${defaultSegment}/alternatives/`);
+            lines.push("");
+            // NAVITEL used to live under the alternatives section as a
+            // competitor page. It is now a supported-camera page; preserve
+            // indexed URLs and send each old locale to the matching new page
+            // where it exists, otherwise to the English canonical.
+            lines.push("# Retired NAVITEL alternative page -> supported-camera page.");
+            const navitel = VENDOR_LIST.find((vendor) => vendor.slug === "navitel");
+            if (!navitel) {
+                throw new Error("redirects: NAVITEL landing page is missing");
+            }
+            pushBothSlashVariants(
+                "/alternatives/navitel-dvr-player",
+                `/${defaultSegment}/cameras/navitel/`,
+            );
+            for (const locale of getIndexableSeoLocales()) {
+                const destinationSegment = navitel.locales.includes(locale.lang)
+                    ? locale.urlSegment
+                    : defaultSegment;
+                pushBothSlashVariants(
+                    `/${locale.urlSegment}/alternatives/navitel-dvr-player`,
+                    `/${destinationSegment}/cameras/navitel/`,
+                );
+            }
+            lines.push("");
+            // These pages existed before locale coverage became explicit but
+            // had no meaningful search visibility. Redirect instead of
+            // leaving indexed URLs as 404s after the build stops emitting them.
+            lines.push("# Retired low-signal vendor locales -> English canonical.");
+            for (const retiredPage of [
+                { source: "/pt/cameras/blackvue", slug: "blackvue" },
+                { source: "/ko/cameras/garmin", slug: "garmin" },
+                { source: "/pt/cameras/vantrue", slug: "vantrue" },
+                { source: "/pt/cameras/thinkware", slug: "thinkware" },
+            ]) {
+                pushBothSlashVariants(
+                    retiredPage.source,
+                    `/${defaultSegment}/cameras/${retiredPage.slug}/`,
+                );
+            }
             lines.push("");
             // Retired locales: kk and uk pages no longer build, but their URLs
             // sit in search indexes and bookmarks. 301 to the English

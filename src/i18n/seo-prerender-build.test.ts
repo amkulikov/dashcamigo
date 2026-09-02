@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { dynamicBaselinePlugin } from "../../vite-plugins/dynamic-baseline.js";
 import { stringifyJsonLd } from "../../vite-plugins/html-utils.js";
 import { applyLocale, getPrerenderLocales, getSeoLocales } from "../../vite-plugins/seo-prerender.js";
-import { SUPPORTED_BRANDS, getAllBrandsCommaSeparated } from "../../vite-plugins/supported-brands.js";
+import { SUPPORTED_BRANDS, getAllBrandsCommaSeparated, getLandingBrands } from "../../vite-plugins/supported-brands.js";
 import { getVendorSitemapEntries, matchVendorRoute } from "../../vite-plugins/vendor-pages.js";
 import { SEO_LOCALES, getHreflangCodes, getIndexableSeoLocales } from "./seo-config.js";
 
@@ -57,10 +57,10 @@ describe("vendor sitemap entries", () => {
         expect(indexEntries.length).toBe(indexable.length);
     });
 
-    it("includes 7 vendor pages × every indexable locale (70 entries)", () => {
+    it("includes exactly the configured locale set for every vendor", () => {
         const vendorEntries = entries.filter((e) => /\/cameras\/[^/]+\/$/.test(e.loc));
-        // 7 vendors × 10 locales = 70.
-        expect(vendorEntries.length).toBe(7 * indexable.length);
+        const expectedCount = getLandingBrands().reduce((count, brand) => count + brand.locales.length, 0);
+        expect(vendorEntries.length).toBe(expectedCount);
     });
 
     it("every entry URL ends with '/' (Cloudflare Pages trailing-slash invariant)", () => {
@@ -72,21 +72,43 @@ describe("vendor sitemap entries", () => {
         }
     });
 
-    it("every entry has alternates for every hreflang code incl. generic aliases (bidirectional complete graph)", () => {
+    it("camera hubs have the complete hreflang graph", () => {
         const expectedHreflangs = new Set(indexable.flatMap((l) => getHreflangCodes(l)));
-        for (const entry of entries) {
+        for (const entry of entries.filter((candidate) => /\/cameras\/$/.test(candidate.loc))) {
             const got = new Set(Object.keys(entry.alternates));
             expect(got, `alternates for ${entry.loc}`).toEqual(expectedHreflangs);
         }
     });
 
-    it("generic pt alias targets the same URL as pt-BR in every entry", () => {
+    it("vendor hreflang graphs contain only that brand's published locales", () => {
+        for (const brand of getLandingBrands()) {
+            const expectedHreflangs = new Set(indexable.filter((locale) => brand.locales.includes(locale.lang)).flatMap((locale) => getHreflangCodes(locale)));
+            const vendorEntries = entries.filter((entry) => entry.loc.endsWith(`/cameras/${brand.slug}/`));
+            expect(vendorEntries.length).toBe(brand.locales.length);
+            for (const entry of vendorEntries) {
+                expect(new Set(Object.keys(entry.alternates)), `alternates for ${entry.loc}`).toEqual(expectedHreflangs);
+            }
+        }
+    });
+
+    it("generic pt alias targets the same URL as pt-BR whenever Portuguese is published", () => {
         // pt-BR carries the extraHreflangs ["pt"] alias - both codes must
         // resolve to the /pt/ variant of the SAME page, never diverge.
         for (const entry of entries) {
-            expect(entry.alternates.pt, `pt alias for ${entry.loc}`).toBeDefined();
-            expect(entry.alternates.pt).toBe(entry.alternates["pt-BR"]);
+            if (entry.alternates["pt-BR"]) {
+                expect(entry.alternates.pt, `pt alias for ${entry.loc}`).toBe(entry.alternates["pt-BR"]);
+            } else {
+                expect(entry.alternates.pt, `unexpected pt alias for ${entry.loc}`).toBeUndefined();
+            }
         }
+    });
+
+    it("omits retired low-signal locale pages", () => {
+        const urls = new Set(entries.map((entry) => entry.loc));
+        expect(urls.has("https://dashcamigo.app/pt/cameras/blackvue/")).toBe(false);
+        expect(urls.has("https://dashcamigo.app/ko/cameras/garmin/")).toBe(false);
+        expect(urls.has("https://dashcamigo.app/pt/cameras/vantrue/")).toBe(false);
+        expect(urls.has("https://dashcamigo.app/pt/cameras/thinkware/")).toBe(false);
     });
 
     it("alternates for vendor pages target the SAME vendor across locales (not site root)", () => {
@@ -246,7 +268,7 @@ describe("applyLocale", () => {
         const vendorLine = payload.featureList.find((s: unknown) => typeof s === "string" && s.endsWith("vendor support"));
         expect(vendorLine).toBeDefined();
         // Vendor line must include the full SUPPORTED_BRANDS list.
-        expect(vendorLine).toMatch(/70mai.*Viofo.*BlackVue.*Vantrue.*Thinkware.*RedTiger.*Botslab.*DATAKAM/);
+        expect(vendorLine).toMatch(/70mai.*Viofo.*BlackVue.*Vantrue.*Thinkware.*REDTIGER.*Botslab.*DATAKAM/);
     });
 
     it("keeps WebSite JSON-LD on the locale's canonical origin", () => {
@@ -631,6 +653,24 @@ describe("matchVendorRoute", () => {
         }
     });
 
+    it("matches new vendor pages only in their configured locales", () => {
+        expect(matchVendorRoute("/en/cameras/nextbase/")?.kind).toBe("vendor");
+        expect(matchVendorRoute("/pl/cameras/navitel/")?.kind).toBe("vendor");
+        expect(matchVendorRoute("/de/cameras/mio/")?.kind).toBe("vendor");
+        expect(matchVendorRoute("/ru/cameras/navman/")?.kind).toBe("vendor");
+        expect(matchVendorRoute("/es/cameras/nextbase/")).toBeNull();
+        expect(matchVendorRoute("/de/cameras/navitel/")).toBeNull();
+        expect(matchVendorRoute("/de/cameras/navman/")).toBeNull();
+        expect(matchVendorRoute("/en/cameras/mivue/")).toBeNull();
+    });
+
+    it("does not match retired locale variants of existing vendors", () => {
+        expect(matchVendorRoute("/pt/cameras/blackvue/")).toBeNull();
+        expect(matchVendorRoute("/ko/cameras/garmin/")).toBeNull();
+        expect(matchVendorRoute("/pt/cameras/vantrue/")).toBeNull();
+        expect(matchVendorRoute("/pt/cameras/thinkware/")).toBeNull();
+    });
+
     it("returns null for unknown vendor slugs", () => {
         expect(matchVendorRoute("/cameras/unknown-vendor/")).toBeNull();
         expect(matchVendorRoute("/de/cameras/random/")).toBeNull();
@@ -699,6 +739,13 @@ describe("SUPPORTED_BRANDS landing brands match VENDORS", () => {
             if (!brand.hasLandingPage) continue;
             const expectedUrl = `https://dashcamigo.app/en/cameras/${brand.slug}/`;
             expect(entries.some((e) => e.loc === expectedUrl)).toBe(true);
+        }
+    });
+
+    it("publishes every dedicated brand page in English and Russian", () => {
+        for (const brand of getLandingBrands()) {
+            expect(brand.locales, `${brand.slug} English baseline`).toContain("en");
+            expect(brand.locales, `${brand.slug} Russian baseline`).toContain("ru");
         }
     });
 });

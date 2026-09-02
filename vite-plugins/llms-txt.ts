@@ -132,7 +132,9 @@ export function llmsTxtPlugin(): Plugin {
 
             lines.push("## Available languages");
             lines.push("");
-            lines.push("Each language has a localized version of the homepage and the vendor pages.");
+            lines.push(
+                "Each language has a localized homepage. Dedicated brand pages are available in the languages most relevant to each camera community.",
+            );
             lines.push("");
             for (const loc of indexableLocales) {
                 const home = canonicalLocaleUrl(loc);

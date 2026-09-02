@@ -1,3 +1,5 @@
+import type { Lang } from "../src/i18n/index.js";
+
 // SEO-facing list of supported dashcam brands. Pure SEO surface - this is
 // what we want crawlers, AI agents, and SERP rich snippets to see when they
 // ask "which dashcams does dashcamigo support?".
@@ -33,29 +35,84 @@
 // got silently filtered out by getLandingBrands(), and no landing page was
 // rendered for it. The union below makes the invariant typechecked.
 export type SupportedBrand =
-    | { displayName: string; hasLandingPage: true; slug: VendorSlug }
+    | { displayName: string; hasLandingPage: true; slug: VendorSlug; locales: readonly Lang[] }
     | { displayName: string; hasLandingPage: false; slug?: never };
 
 // VendorSlug enumerates the brands that have a dedicated landing page. Used
 // as a type narrowing in vendor-pages.ts where the VendorContent records are
 // keyed by slug.
-export type VendorSlug = "70mai" | "viofo" | "blackvue" | "gopro" | "garmin" | "vantrue" | "thinkware";
+export type VendorSlug =
+    | "70mai"
+    | "viofo"
+    | "blackvue"
+    | "gopro"
+    | "garmin"
+    | "vantrue"
+    | "thinkware"
+    | "nextbase"
+    | "redtiger"
+    | "navitel"
+    | "mio"
+    | "navman"
+    | "fitcamx";
+
+// A new product locale must not silently multiply every vendor page. The
+// rollout list is explicit per brand so only useful, reviewed translations
+// enter the sitemap and hreflang graph.
+const ALL_VENDOR_LOCALES = ["en", "ru", "de", "es", "fr", "pl", "pt", "zh", "ja", "ko"] as const satisfies readonly Lang[];
+const ALL_EXCEPT_PT = ["en", "ru", "de", "es", "fr", "pl", "zh", "ja", "ko"] as const satisfies readonly Lang[];
 
 export const SUPPORTED_BRANDS: ReadonlyArray<SupportedBrand> = [
-    { displayName: "70mai", slug: "70mai", hasLandingPage: true },
-    { displayName: "Viofo", slug: "viofo", hasLandingPage: true },
-    { displayName: "BlackVue", slug: "blackvue", hasLandingPage: true },
-    { displayName: "GoPro", slug: "gopro", hasLandingPage: true },
-    { displayName: "Garmin", slug: "garmin", hasLandingPage: true },
-    { displayName: "Vantrue", slug: "vantrue", hasLandingPage: true },
-    { displayName: "Thinkware", slug: "thinkware", hasLandingPage: true },
-    { displayName: "Nextbase", hasLandingPage: false },
-    { displayName: "RedTiger", hasLandingPage: false },
-    { displayName: "FitCamX", hasLandingPage: false },
+    { displayName: "70mai", slug: "70mai", hasLandingPage: true, locales: ALL_VENDOR_LOCALES },
+    { displayName: "Viofo", slug: "viofo", hasLandingPage: true, locales: ALL_VENDOR_LOCALES },
+    { displayName: "BlackVue", slug: "blackvue", hasLandingPage: true, locales: ALL_EXCEPT_PT },
+    { displayName: "GoPro", slug: "gopro", hasLandingPage: true, locales: ALL_VENDOR_LOCALES },
+    {
+        displayName: "Garmin",
+        slug: "garmin",
+        hasLandingPage: true,
+        locales: ["en", "ru", "de", "es", "fr", "pl", "pt", "zh", "ja"],
+    },
+    { displayName: "Vantrue", slug: "vantrue", hasLandingPage: true, locales: ALL_EXCEPT_PT },
+    { displayName: "Thinkware", slug: "thinkware", hasLandingPage: true, locales: ALL_EXCEPT_PT },
+    {
+        displayName: "Nextbase",
+        slug: "nextbase",
+        hasLandingPage: true,
+        locales: ["en", "ru", "de", "fr", "pl"],
+    },
+    {
+        displayName: "REDTIGER",
+        slug: "redtiger",
+        hasLandingPage: true,
+        locales: ["en", "ru", "de", "es"],
+    },
+    {
+        displayName: "NAVITEL",
+        slug: "navitel",
+        hasLandingPage: true,
+        locales: ["en", "ru", "pl"],
+    },
+    {
+        displayName: "Mio MiVue",
+        slug: "mio",
+        hasLandingPage: true,
+        locales: ["en", "ru", "de", "fr", "pl"],
+    },
+    {
+        displayName: "Navman MiVue",
+        slug: "navman",
+        hasLandingPage: true,
+        locales: ["en", "ru"],
+    },
+    {
+        displayName: "FITCAMX",
+        slug: "fitcamx",
+        hasLandingPage: true,
+        locales: ["en", "ru", "de", "pl"],
+    },
     { displayName: "Vueroid", hasLandingPage: false },
     { displayName: "Botslab", hasLandingPage: false },
-    { displayName: "Mio MiVue", hasLandingPage: false },
-    { displayName: "Navman MiVue", hasLandingPage: false },
     { displayName: "Neoline", hasLandingPage: false },
     { displayName: "Juscar", hasLandingPage: false },
     { displayName: "Escort", hasLandingPage: false },
@@ -67,7 +124,6 @@ export const SUPPORTED_BRANDS: ReadonlyArray<SupportedBrand> = [
     { displayName: "Sony", hasLandingPage: false },
     { displayName: "JOOYFACT", hasLandingPage: false },
     { displayName: "HP", hasLandingPage: false },
-    { displayName: "Navitel", hasLandingPage: false },
     { displayName: "SilverStone F1", hasLandingPage: false },
     { displayName: "Roadgid", hasLandingPage: false },
     { displayName: "iBOX", hasLandingPage: false },

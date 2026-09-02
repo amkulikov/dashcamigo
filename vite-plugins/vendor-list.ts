@@ -9,4 +9,5 @@ import { getLandingBrands } from "./supported-brands.js";
 export const VENDOR_LIST = getLandingBrands().map((b) => ({
     slug: b.slug,
     displayName: b.displayName,
+    locales: b.locales,
 }));

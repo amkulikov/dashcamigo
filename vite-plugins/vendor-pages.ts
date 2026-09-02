@@ -1,8 +1,7 @@
 // Vendor landing pages for the top dashcam brands - every SUPPORTED_BRANDS
-// entry with hasLandingPage=true (currently 70mai, Viofo, BlackVue, GoPro,
-// Garmin, Vantrue, Thinkware; see supported-brands.ts for the source of
-// truth). Each gets static HTML at /<lang>/cameras/<slug>/ for every
-// indexable locale. Purpose: capture long-tail SERP traffic
+// entry with hasLandingPage=true (see supported-brands.ts for the source of
+// truth). Each gets static HTML at /<lang>/cameras/<slug>/ for its explicit
+// set of useful, reviewed locales. Purpose: capture long-tail SERP traffic
 // like "70mai player online", "blackvue dashcam viewer" etc., where the
 // main /, /ru/ landing pages have to fight on the generic "dashcam player"
 // term with no brand specificity.
@@ -23,8 +22,8 @@
 // user-facing boundary that video opens locally while GPS depends on the data
 // stored by the camera.
 //
-// Adding a new vendor: append to VENDORS, fill the same locale fields,
-// re-build. No other code change needed.
+// Adding a new vendor: promote it in SUPPORTED_BRANDS with an explicit locale
+// set, then append the matching content block to VENDORS.
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -107,11 +106,9 @@ interface VendorContent {
         sdLayout: string; // "/Normal/, /Event/, /Parking/"
         filenamePattern: string; // example filename
     };
-    // Hand-written per-locale content. Currently populated for en + ru
-    // (native-quality copy). For the
-    // other 8 indexable locales the renderer falls back to VENDOR_TEMPLATES
-    // below - one generic localized template per language with displayName
-    // substituted in.
+    // Hand-written per-locale content. The renderer can fall back to
+    // VENDOR_TEMPLATES for established community pages; new locale rollouts
+    // should carry reviewed direct copy before entering the published set.
     locales: Partial<Record<Lang, VendorLocaleContent>>;
 }
 
@@ -464,7 +461,494 @@ const VENDORS: VendorContent[] = [
             },
         },
     },
+    {
+        slug: "nextbase",
+        displayName: "Nextbase",
+        models: [
+            "122 / 222",
+            "322GW / 422GW / 522GW",
+            "622GW",
+            "512GW",
+            "Series 2 Rear Camera Modules",
+        ],
+        format: {
+            container: "MP4",
+            codec: "H.264 / H.265",
+            gpsStorage: "Built into the recording on GPS models",
+            sdLayout: "/DCIM/, /PROTECTED/",
+            filenamePattern: "240821_180010_001_FH.MP4",
+        },
+        locales: {
+            en: {
+                title: "Nextbase Dash Cam Player — 322GW, 522GW, 622GW | dashcamigo",
+                metaDescription:
+                    "Open Nextbase 322GW, 422GW, 522GW, 622GW and other recordings in your browser. GPS map, front/rear playback, trim and export. No upload.",
+                ogTitle: "Nextbase Dash Cam Player — 322GW, 522GW, 622GW",
+                ogDescription:
+                    "Open Nextbase recordings from the SD card, review front and rear cameras with GPS, then trim and export a clip. Nothing is uploaded.",
+                h1: "Nextbase dash cam player — open recordings in your browser",
+                lead: "Open Nextbase recordings straight from the SD card on a PC or Mac. Review front and rear cameras, see the route and speed when GPS is present, then trim and export the part you need. No MyNextbase Player install, upload or account.",
+                ctaPrimary: "Open Nextbase recordings folder",
+                modelsCompat:
+                    "Covers common Nextbase recording layouts across the Series 2 range and recent generations. Standard video opens locally; the map and camera pairing depend on what the model saved.",
+                formatIntro:
+                    "Nextbase cameras split a drive into short MP4 recordings and mark the camera and quality in each filename. dashcamigo joins the matching files into trips and keeps front, rear, map and speed on one timeline.",
+            },
+            ru: {
+                title: "Плеер Nextbase — 322GW, 522GW, 622GW | dashcamigo",
+                metaDescription:
+                    "Открывай записи Nextbase 322GW, 422GW, 522GW, 622GW и других моделей в браузере. Карта GPS, фронт и тыл, обрезка и экспорт.",
+                ogTitle: "Плеер Nextbase — 322GW, 522GW, 622GW",
+                ogDescription:
+                    "Открывай записи Nextbase с SD-карты, смотри фронт и тыл с GPS, обрезай и экспортируй нужный фрагмент. Без загрузки на сервер.",
+                h1: "Плеер Nextbase — записи с регистратора прямо в браузере",
+                lead: "Открывай записи Nextbase прямо с SD-карты на ПК или Mac. Смотри фронт и тыл, маршрут и скорость, когда в записи есть GPS, затем обрезай и экспортируй нужный фрагмент. Без MyNextbase Player, загрузки на сервер и аккаунта.",
+                ctaPrimary: "Открыть папку с записями Nextbase",
+                modelsCompat:
+                    "Покрывает распространённые форматы Nextbase Series 2 и недавних поколений. Обычное видео открывается локально; карта и объединение камер зависят от данных конкретной модели.",
+                formatIntro:
+                    "Nextbase делит поездку на короткие MP4-записи и отмечает камеру и качество в имени файла. dashcamigo собирает парные записи в поездки и держит фронт, тыл, карту и скорость на одной шкале времени.",
+            },
+            de: {
+                title: "Nextbase Dashcam-Player — 322GW, 522GW, 622GW | dashcamigo",
+                metaDescription:
+                    "Öffne Aufnahmen von Nextbase 322GW, 422GW, 522GW und 622GW im Browser. GPS-Karte, Front und Heck, Zuschneiden und Export ohne Upload.",
+                ogTitle: "Nextbase Player — 322GW, 522GW, 622GW",
+                ogDescription:
+                    "Nextbase-Aufnahmen direkt von der SD-Karte öffnen, Front und Heck mit GPS prüfen und den wichtigen Ausschnitt exportieren.",
+                h1: "Nextbase Dashcam-Player — Aufnahmen direkt im Browser öffnen",
+                lead: "Öffne Nextbase-Aufnahmen direkt von der SD-Karte auf PC oder Mac. Prüfe Front- und Heckkamera, Route und Geschwindigkeit, wenn GPS gespeichert ist, und exportiere anschließend den wichtigen Ausschnitt. Ohne MyNextbase Player, Upload oder Konto.",
+                ctaPrimary: "Nextbase-Aufnahmen öffnen",
+                modelsCompat:
+                    "Deckt gängige Aufnahmearten der Nextbase Series 2 und neuerer Generationen ab. Normale Videos öffnen lokal; Karte und Kamerazuordnung hängen von den gespeicherten Daten ab.",
+                formatIntro:
+                    "Nextbase teilt eine Fahrt in kurze MP4-Aufnahmen und kennzeichnet Kamera und Qualität im Dateinamen. dashcamigo setzt passende Dateien zu Fahrten zusammen und hält Front, Heck, Karte und Tempo auf einer Zeitleiste.",
+            },
+            fr: {
+                title: "Lecteur Nextbase — 322GW, 522GW, 622GW | dashcamigo",
+                metaDescription:
+                    "Ouvrez les vidéos Nextbase 322GW, 422GW, 522GW et 622GW dans le navigateur. Carte GPS, avant/arrière, découpe et export, sans envoi.",
+                ogTitle: "Lecteur Nextbase — 322GW, 522GW, 622GW",
+                ogDescription:
+                    "Ouvrez les vidéos Nextbase depuis la carte SD, contrôlez les vues avant et arrière avec le GPS, puis exportez le passage utile.",
+                h1: "Lecteur Nextbase — ouvrez vos enregistrements dans le navigateur",
+                lead: "Ouvrez les enregistrements Nextbase directement depuis la carte SD sur PC ou Mac. Regardez les caméras avant et arrière, le trajet et la vitesse lorsque le GPS est présent, puis découpez et exportez le passage utile. Sans installer MyNextbase Player, sans envoi ni compte.",
+                ctaPrimary: "Ouvrir les enregistrements Nextbase",
+                modelsCompat:
+                    "Couvre les formats courants de la gamme Nextbase Series 2 et des générations récentes. La vidéo s’ouvre localement ; la carte et l’association des caméras dépendent des données enregistrées.",
+                formatIntro:
+                    "Les caméras Nextbase découpent le trajet en courtes vidéos MP4 et indiquent la caméra et la qualité dans le nom du fichier. dashcamigo regroupe les fichiers correspondants et synchronise l’avant, l’arrière, la carte et la vitesse.",
+            },
+            pl: {
+                title: "Odtwarzacz Nextbase — 322GW, 522GW, 622GW | dashcamigo",
+                metaDescription:
+                    "Otwieraj nagrania Nextbase 322GW, 422GW, 522GW i 622GW w przeglądarce. Mapa GPS, przód i tył, przycinanie i eksport bez wysyłania.",
+                ogTitle: "Odtwarzacz Nextbase — 322GW, 522GW, 622GW",
+                ogDescription:
+                    "Otwórz nagrania Nextbase z karty SD, sprawdź przód i tył z GPS, a potem przytnij i wyeksportuj potrzebny fragment.",
+                h1: "Odtwarzacz Nextbase — nagrania prosto w przeglądarce",
+                lead: "Otwieraj nagrania Nextbase bezpośrednio z karty SD na PC lub Macu. Oglądaj przód i tył, trasę oraz prędkość, gdy zapisano GPS, a potem przytnij i wyeksportuj potrzebny fragment. Bez MyNextbase Player, wysyłania plików i konta.",
+                ctaPrimary: "Otwórz folder z nagraniami Nextbase",
+                modelsCompat:
+                    "Obsługuje popularne układy nagrań Nextbase Series 2 i nowszych generacji. Zwykłe wideo otwiera się lokalnie; mapa i łączenie kamer zależą od danych zapisanych przez model.",
+                formatIntro:
+                    "Nextbase dzieli przejazd na krótkie nagrania MP4 i oznacza kamerę oraz jakość w nazwie pliku. dashcamigo łączy pasujące pliki w przejazdy i synchronizuje przód, tył, mapę i prędkość.",
+            },
+        },
+    },
+    {
+        slug: "redtiger",
+        displayName: "REDTIGER",
+        models: ["F7NP / F7N", "F7NP-4K", "F9 / F9 4K", "F17 / F17 Elite", "F77"],
+        format: {
+            container: "MP4",
+            codec: "H.264 / H.265",
+            gpsStorage: "Built into the recording on compatible models",
+            sdLayout: "/Movie_F/, /Movie_R/, /Event_F/, /Event_R/, /Parking_F/, /Parking_R/",
+            filenamePattern: "20260825093511_001359F.MP4",
+        },
+        locales: {
+            en: {
+                title: "REDTIGER Dash Cam Player — F7NP, F9, F17 | dashcamigo",
+                metaDescription:
+                    "Open REDTIGER F7NP, F9, F17 and F77 recordings in your browser. Front/rear playback, GPS map, speed chart, trim and export. No upload.",
+                ogTitle: "REDTIGER Player — F7NP, F9, F17",
+                ogDescription:
+                    "Open REDTIGER front and rear recordings with GPS in your browser, then trim and export the clip you need. Nothing is uploaded.",
+                h1: "REDTIGER dash cam player — watch recordings in your browser",
+                lead: "Open REDTIGER recordings directly from the SD card on a PC or Mac. Watch front and rear cameras together, review the route and speed when GPS is present, then trim and export a clip. No REDTIGER Player install, upload or account.",
+                ctaPrimary: "Open REDTIGER recordings folder",
+                modelsCompat:
+                    "Covers common REDTIGER recording layouts across the F7, F9, F17 and F77 families. Video opens locally; GPS and automatic camera pairing depend on the model and recording settings.",
+                formatIntro:
+                    "REDTIGER cameras keep front, rear, event and parking recordings in separate folders. dashcamigo reads the whole card, joins matching views into trips and shows the route when GPS was saved.",
+            },
+            ru: {
+                title: "Плеер REDTIGER — F7NP, F9, F17 | dashcamigo",
+                metaDescription:
+                    "Открывай записи REDTIGER F7NP, F9, F17 и F77 в браузере. Фронт и тыл, карта GPS, скорость, обрезка и экспорт. Без загрузки.",
+                ogTitle: "Плеер REDTIGER — F7NP, F9, F17",
+                ogDescription:
+                    "Открывай фронтальные и задние записи REDTIGER с GPS в браузере, обрезай и экспортируй нужный фрагмент. Ничего не загружается.",
+                h1: "Плеер REDTIGER — записи с регистратора в браузере",
+                lead: "Открывай записи REDTIGER прямо с SD-карты на ПК или Mac. Смотри фронт и тыл вместе, проверяй маршрут и скорость, когда в записи есть GPS, затем обрезай и экспортируй нужный фрагмент. Без REDTIGER Player, загрузки на сервер и аккаунта.",
+                ctaPrimary: "Открыть папку с записями REDTIGER",
+                modelsCompat:
+                    "Покрывает распространённые форматы семейств REDTIGER F7, F9, F17 и F77. Видео открывается локально; GPS и автоматическое объединение камер зависят от модели и настроек записи.",
+                formatIntro:
+                    "REDTIGER раскладывает фронтальные, задние, событийные и парковочные записи по отдельным папкам. dashcamigo читает всю карту, объединяет совпадающие виды в поездки и показывает маршрут, когда GPS сохранён.",
+            },
+            de: {
+                title: "REDTIGER Dashcam-Player — F7NP, F9, F17 | dashcamigo",
+                metaDescription:
+                    "Öffne REDTIGER F7NP-, F9-, F17- und F77-Aufnahmen im Browser. Front und Heck, GPS-Karte, Tempo, Zuschneiden und Export ohne Upload.",
+                ogTitle: "REDTIGER Player — F7NP, F9, F17",
+                ogDescription:
+                    "REDTIGER-Aufnahmen von Front und Heck mit GPS im Browser öffnen und den wichtigen Ausschnitt exportieren. Kein Upload.",
+                h1: "REDTIGER Dashcam-Player — Aufnahmen im Browser ansehen",
+                lead: "Öffne REDTIGER-Aufnahmen direkt von der SD-Karte auf PC oder Mac. Sieh dir Front- und Heckkamera gemeinsam an, prüfe Route und Geschwindigkeit bei vorhandenem GPS und exportiere den wichtigen Ausschnitt. Ohne REDTIGER Player, Upload oder Konto.",
+                ctaPrimary: "REDTIGER-Aufnahmen öffnen",
+                modelsCompat:
+                    "Deckt gängige Aufnahmearten der REDTIGER-Familien F7, F9, F17 und F77 ab. Videos öffnen lokal; GPS und automatische Kamerazuordnung hängen von Modell und Einstellungen ab.",
+                formatIntro:
+                    "REDTIGER legt Front-, Heck-, Ereignis- und Parkaufnahmen in getrennten Ordnern ab. dashcamigo liest die ganze Karte, verbindet passende Ansichten zu Fahrten und zeigt die Route, wenn GPS gespeichert wurde.",
+            },
+            es: {
+                title: "Reproductor REDTIGER — F7NP, F9, F17 | dashcamigo",
+                metaDescription:
+                    "Abre grabaciones REDTIGER F7NP, F9, F17 y F77 en el navegador. Cámaras delantera y trasera, mapa GPS, recorte y exportación sin subir archivos.",
+                ogTitle: "Reproductor REDTIGER — F7NP, F9, F17",
+                ogDescription:
+                    "Abre las cámaras delantera y trasera de REDTIGER con GPS, recorta y exporta el fragmento que necesitas. Sin subir nada.",
+                h1: "Reproductor REDTIGER — mira tus grabaciones en el navegador",
+                lead: "Abre las grabaciones REDTIGER directamente desde la tarjeta SD en PC o Mac. Mira juntas las cámaras delantera y trasera, revisa la ruta y la velocidad cuando haya GPS y exporta el fragmento que necesites. Sin instalar REDTIGER Player, subir archivos ni crear una cuenta.",
+                ctaPrimary: "Abrir grabaciones REDTIGER",
+                modelsCompat:
+                    "Cubre los formatos habituales de las familias REDTIGER F7, F9, F17 y F77. El vídeo se abre localmente; el GPS y la unión automática de cámaras dependen del modelo y los ajustes.",
+                formatIntro:
+                    "REDTIGER separa las grabaciones delanteras, traseras, de eventos y de aparcamiento en distintas carpetas. dashcamigo lee toda la tarjeta, une las vistas de un mismo viaje y muestra la ruta cuando se guardó el GPS.",
+            },
+        },
+    },
+    {
+        slug: "navitel",
+        displayName: "NAVITEL",
+        models: [
+            "R600 / R600 GPS",
+            "R700 GPS Dual",
+            "R1000",
+            "RS-series",
+            "MR-series",
+        ],
+        format: {
+            container: "MP4 / MOV / TS",
+            codec: "H.264 / H.265",
+            gpsStorage: "Inside the recording or in a matching .NMEA file, depending on model",
+            sdLayout: "/DCIM/, /Movie/, /Event/",
+            filenamePattern: "FILE201104-163014-000429F.mov",
+        },
+        locales: {
+            en: {
+                title: "NAVITEL DVR Player Online — R600, R700, RS series | dashcamigo",
+                metaDescription:
+                    "Open NAVITEL R600, R700, R1000 and RS-series recordings in your browser. GPS map, speed chart, front/rear playback, trim and export.",
+                ogTitle: "NAVITEL DVR Player Online — R600, R700, RS series",
+                ogDescription:
+                    "Open NAVITEL dash cam recordings with GPS in your browser. Review the trip, trim the useful part and export it without installing software.",
+                h1: "NAVITEL DVR player — open recordings in your browser",
+                lead: "Open NAVITEL dash cam recordings directly from the SD card. Review front and rear cameras, the route and speed when GPS is present, then trim and export a clip. Works on PC and Mac without installing NAVITEL DVR Player, uploading files or creating an account.",
+                ctaPrimary: "Open NAVITEL recordings folder",
+                modelsCompat:
+                    "Covers common NAVITEL R, RS and MR recording layouts. Standard video opens locally; the map appears when the camera saved compatible GPS data with the recording.",
+                formatIntro:
+                    "NAVITEL cameras can record MP4, MOV or TS files and may keep GPS inside the video or in a matching NMEA file. Open the whole card so dashcamigo can keep the cameras, route and speed together.",
+            },
+            ru: {
+                title: "NAVITEL DVR Player онлайн — R600, R700, серии RS | dashcamigo",
+                metaDescription:
+                    "Открывай записи NAVITEL R600, R700, R1000 и серии RS в браузере. Карта GPS, скорость, фронт и тыл, обрезка и экспорт.",
+                ogTitle: "NAVITEL DVR Player онлайн — R600, R700, серии RS",
+                ogDescription:
+                    "Открывай записи NAVITEL с GPS в браузере, проверяй поездку, обрезай нужный фрагмент и экспортируй без установки программ.",
+                h1: "Плеер NAVITEL — записи с регистратора прямо в браузере",
+                lead: "Открывай записи NAVITEL прямо с SD-карты. Смотри фронт и тыл, маршрут и скорость, когда в записи есть GPS, затем обрезай и экспортируй нужный фрагмент. Работает на ПК и Mac без NAVITEL DVR Player, загрузки на сервер и аккаунта.",
+                ctaPrimary: "Открыть папку с записями NAVITEL",
+                modelsCompat:
+                    "Покрывает распространённые форматы NAVITEL серий R, RS и MR. Обычное видео открывается локально; карта появляется, когда регистратор сохранил совместимые GPS-данные рядом с записью.",
+                formatIntro:
+                    "NAVITEL может писать MP4, MOV или TS и хранить GPS внутри видео либо в парном файле NMEA. Открывай всю карту памяти, чтобы dashcamigo держал камеры, маршрут и скорость вместе.",
+            },
+            pl: {
+                title: "NAVITEL DVR Player online — R600, R700, seria RS | dashcamigo",
+                metaDescription:
+                    "Otwieraj nagrania NAVITEL R600, R700, R1000 i serii RS w przeglądarce. Mapa GPS, prędkość, przód i tył, przycinanie oraz eksport.",
+                ogTitle: "NAVITEL DVR Player online — R600, R700, seria RS",
+                ogDescription:
+                    "Otwórz nagrania NAVITEL z GPS w przeglądarce, sprawdź przejazd, przytnij potrzebny fragment i wyeksportuj go bez instalowania programu.",
+                h1: "Odtwarzacz NAVITEL — nagrania prosto w przeglądarce",
+                lead: "Otwieraj nagrania NAVITEL bezpośrednio z karty SD. Oglądaj przód i tył, trasę oraz prędkość, gdy zapisano GPS, a następnie przytnij i wyeksportuj potrzebny fragment. Działa na PC i Macu bez NAVITEL DVR Player, wysyłania plików i konta.",
+                ctaPrimary: "Otwórz folder z nagraniami NAVITEL",
+                modelsCompat:
+                    "Obsługuje popularne układy nagrań serii NAVITEL R, RS i MR. Zwykłe wideo otwiera się lokalnie; mapa pojawia się, gdy kamera zapisała zgodne dane GPS razem z nagraniem.",
+                formatIntro:
+                    "NAVITEL może zapisywać pliki MP4, MOV lub TS, a dane GPS trzymać w filmie albo w pasującym pliku NMEA. Otwórz całą kartę, aby dashcamigo połączył kamery, trasę i prędkość.",
+            },
+        },
+    },
+    {
+        slug: "mio",
+        displayName: "Mio MiVue",
+        models: [
+            "MiVue 985W / 985WD",
+            "MiVue 955WD Pro / 956WD",
+            "MiVue 903WD Pro",
+            "MiVue 945W",
+            "MiVue 803W Pro / 803WD Pro",
+            "MiVue 7 / 8 / 9 series",
+        ],
+        format: {
+            container: "MP4 / MOV",
+            codec: "H.264 / H.265",
+            gpsStorage: "A matching .NMEA file on compatible GPS models",
+            sdLayout: "/Normal/, /Event/, /Parking/ (+ F/R folders on dual-camera models)",
+            filenamePattern: "FILE260819-071804F.mp4",
+        },
+        locales: {
+            en: {
+                title: "Mio MiVue Player — 985, 955, 903, 945 | dashcamigo",
+                metaDescription:
+                    "Open Mio MiVue 985, 955, 956, 903 and other recordings in your browser. GPS map, speed, front/rear playback, trim and export. No upload.",
+                ogTitle: "Mio MiVue Player — 985, 955, 903, 945",
+                ogDescription:
+                    "Open Mio MiVue recordings and GPS files in your browser. Review front and rear cameras, trim a clip and export it without an install.",
+                h1: "Mio MiVue player — open recordings in your browser",
+                lead: "Open Mio MiVue recordings straight from the SD card. Review front and rear cameras, the GPS route and speed, then trim and export the part you need. No Mio MiVue Manager install, upload or account.",
+                ctaPrimary: "Open Mio MiVue recordings folder",
+                modelsCompat:
+                    "Covers common Mio MiVue recording layouts across recent 9-series and earlier generations. Standard video opens locally; keep matching NMEA files beside the recordings when your model saves them.",
+                formatIntro:
+                    "Mio MiVue cameras organize normal, event and parking recordings in separate folders. GPS models may save a matching NMEA file beside each video. Open the whole folder so dashcamigo can join the trip, cameras and map correctly.",
+            },
+            ru: {
+                title: "Плеер Mio MiVue — 985, 955, 903, 945 | dashcamigo",
+                metaDescription:
+                    "Открывай записи Mio MiVue 985, 955, 956, 903 и других моделей в браузере. Карта GPS, скорость, фронт и тыл, обрезка и экспорт.",
+                ogTitle: "Плеер Mio MiVue — 985, 955, 903, 945",
+                ogDescription:
+                    "Открывай записи Mio MiVue и файлы GPS в браузере, смотри фронт и тыл, обрезай и экспортируй нужный фрагмент без установки.",
+                h1: "Плеер Mio MiVue — записи прямо в браузере",
+                lead: "Открывай записи Mio MiVue прямо с SD-карты. Смотри фронт и тыл, маршрут GPS и скорость, затем обрезай и экспортируй нужный фрагмент. Без Mio MiVue Manager, загрузки на сервер и аккаунта.",
+                ctaPrimary: "Открыть папку с записями Mio MiVue",
+                modelsCompat:
+                    "Покрывает распространённые форматы новых Mio MiVue серии 9 и предыдущих поколений. Обычное видео открывается локально; если модель создаёт парные файлы NMEA, оставляй их рядом с записями.",
+                formatIntro:
+                    "Mio MiVue раскладывает обычные, событийные и парковочные записи по отдельным папкам. Модели с GPS могут сохранять рядом с видео парный файл NMEA. Открывай всю папку, чтобы dashcamigo правильно собрал поездку, камеры и карту.",
+            },
+            de: {
+                title: "Mio MiVue Dashcam-Player — 985, 955, 903 | dashcamigo",
+                metaDescription:
+                    "Öffne Aufnahmen von Mio MiVue 985, 955, 956 und 903 im Browser. GPS-Karte, Tempo, Front und Heck, Zuschneiden und Export ohne Upload.",
+                ogTitle: "Mio MiVue Player — 985, 955, 903, 945",
+                ogDescription:
+                    "Mio-MiVue-Aufnahmen samt GPS-Dateien im Browser öffnen, Front und Heck prüfen und den wichtigen Ausschnitt ohne Installation exportieren.",
+                h1: "Mio MiVue Player — Aufnahmen direkt im Browser öffnen",
+                lead: "Öffne Mio-MiVue-Aufnahmen direkt von der SD-Karte. Prüfe Front und Heck, GPS-Route und Geschwindigkeit und exportiere anschließend den wichtigen Ausschnitt. Ohne Mio MiVue Manager, Upload oder Konto.",
+                ctaPrimary: "Mio-MiVue-Aufnahmen öffnen",
+                modelsCompat:
+                    "Deckt gängige Aufnahmearten neuer Mio-MiVue-Modelle der 9er-Serie und früherer Generationen ab. Normale Videos öffnen lokal; passende NMEA-Dateien sollten neben den Aufnahmen bleiben.",
+                formatIntro:
+                    "Mio MiVue sortiert normale, Ereignis- und Parkaufnahmen in getrennte Ordner. GPS-Modelle können zu jedem Video eine passende NMEA-Datei speichern. Öffne den ganzen Ordner, damit dashcamigo Fahrt, Kameras und Karte richtig zusammensetzt.",
+            },
+            fr: {
+                title: "Lecteur Mio MiVue — 985, 955, 903, 945 | dashcamigo",
+                metaDescription:
+                    "Ouvrez les vidéos Mio MiVue 985, 955, 956 et 903 dans le navigateur. Carte GPS, vitesse, vues avant/arrière, découpe et export sans envoi.",
+                ogTitle: "Lecteur Mio MiVue — 985, 955, 903, 945",
+                ogDescription:
+                    "Ouvrez les vidéos Mio MiVue et leurs fichiers GPS, contrôlez l’avant et l’arrière, puis exportez le passage utile sans installation.",
+                h1: "Lecteur Mio MiVue — ouvrez vos vidéos dans le navigateur",
+                lead: "Ouvrez les enregistrements Mio MiVue directement depuis la carte SD. Regardez les caméras avant et arrière, le trajet GPS et la vitesse, puis découpez et exportez le passage utile. Sans Mio MiVue Manager, sans envoi ni compte.",
+                ctaPrimary: "Ouvrir les enregistrements Mio MiVue",
+                modelsCompat:
+                    "Couvre les formats courants des Mio MiVue récents de série 9 et des générations précédentes. La vidéo s’ouvre localement ; gardez les fichiers NMEA associés à côté des enregistrements.",
+                formatIntro:
+                    "Mio MiVue range les enregistrements normaux, événementiels et de stationnement dans des dossiers séparés. Les modèles GPS peuvent créer un fichier NMEA associé à chaque vidéo. Ouvrez le dossier entier pour que dashcamigo assemble correctement le trajet, les caméras et la carte.",
+            },
+            pl: {
+                title: "Odtwarzacz Mio MiVue — 985, 955, 903, 945 | dashcamigo",
+                metaDescription:
+                    "Otwieraj nagrania Mio MiVue 985, 955, 956 i 903 w przeglądarce. Mapa GPS, prędkość, przód i tył, przycinanie oraz eksport bez wysyłania.",
+                ogTitle: "Odtwarzacz Mio MiVue — 985, 955, 903, 945",
+                ogDescription:
+                    "Otwórz nagrania Mio MiVue z plikami GPS, sprawdź przód i tył, a potem wyeksportuj potrzebny fragment bez instalowania programu.",
+                h1: "Odtwarzacz Mio MiVue — nagrania w przeglądarce",
+                lead: "Otwieraj nagrania Mio MiVue bezpośrednio z karty SD. Oglądaj przód i tył, trasę GPS oraz prędkość, a następnie przytnij i wyeksportuj potrzebny fragment. Bez Mio MiVue Manager, wysyłania plików i konta.",
+                ctaPrimary: "Otwórz folder z nagraniami Mio MiVue",
+                modelsCompat:
+                    "Obsługuje popularne układy nagrań nowych Mio MiVue serii 9 i wcześniejszych generacji. Zwykłe wideo otwiera się lokalnie; pasujące pliki NMEA zostaw obok nagrań.",
+                formatIntro:
+                    "Mio MiVue rozdziela nagrania zwykłe, zdarzenia i parkingowe do osobnych folderów. Modele GPS mogą zapisywać obok filmu pasujący plik NMEA. Otwórz cały folder, aby dashcamigo prawidłowo połączył przejazd, kamery i mapę.",
+            },
+        },
+    },
+    {
+        slug: "navman",
+        displayName: "Navman MiVue",
+        models: [
+            "MiVue True 4K / True 4K DC",
+            "MiVue 170 / 270 Safety",
+            "MiVue 930 Dual Camera",
+            "MiVue 100 / 110 / 160 GPS Tag",
+            "MiVue 300",
+            "MiVue 150 Safety and earlier series",
+        ],
+        format: {
+            container: "MP4 / MOV",
+            codec: "H.264 / H.265",
+            gpsStorage: "A matching .NMEA file on compatible GPS models",
+            sdLayout: "/Normal/, /Event/, /Parking/ (+ F/R folders on dual-camera models)",
+            filenamePattern: "FILE260819-071804F.mp4",
+        },
+        locales: {
+            en: {
+                title: "Navman MiVue Player — True 4K, 270, 930 | dashcamigo",
+                metaDescription:
+                    "Open Navman MiVue True 4K, 270, 930 and other recordings in your browser. GPS map, speed, front/rear playback, trim and export.",
+                ogTitle: "Navman MiVue Player — True 4K, 270, 930",
+                ogDescription:
+                    "Open Navman MiVue recordings from the SD card, review the trip with GPS, then trim and export the part you need. Nothing is uploaded.",
+                h1: "Navman MiVue player — view dash cam recordings in your browser",
+                lead: "Open Navman MiVue recordings straight from the SD card on a PC or Mac. Review front and rear cameras, the route and speed when GPS is present, then trim and export a clip. No Navman MiVue Manager install, upload or account.",
+                ctaPrimary: "Open Navman MiVue recordings folder",
+                modelsCompat:
+                    "Covers common Navman MiVue layouts used by current Australian and New Zealand models and earlier series. Standard video opens locally; the map and camera pairing depend on the data saved by the model.",
+                formatIntro:
+                    "Navman MiVue cameras split normal, event and parking recordings into separate folders, with paired front and rear files on dual-camera models. Open the whole card so dashcamigo can keep each trip, both cameras and available GPS together.",
+            },
+            ru: {
+                title: "Плеер Navman MiVue — True 4K, 270, 930 | dashcamigo",
+                metaDescription:
+                    "Открывай записи Navman MiVue True 4K, 270, 930 и других моделей в браузере. Карта GPS, скорость, фронт и тыл, обрезка и экспорт.",
+                ogTitle: "Плеер Navman MiVue — True 4K, 270, 930",
+                ogDescription:
+                    "Открывай записи Navman MiVue с SD-карты, проверяй поездку с GPS, обрезай и экспортируй нужный фрагмент. Ничего не загружается.",
+                h1: "Плеер Navman MiVue — записи с регистратора в браузере",
+                lead: "Открывай записи Navman MiVue прямо с SD-карты на ПК или Mac. Смотри фронт и тыл, маршрут и скорость, когда в записи есть GPS, затем обрезай и экспортируй нужный фрагмент. Без Navman MiVue Manager, загрузки на сервер и аккаунта.",
+                ctaPrimary: "Открыть папку с записями Navman MiVue",
+                modelsCompat:
+                    "Покрывает распространённые форматы актуальных моделей Navman MiVue для Австралии и Новой Зеландии и предыдущих серий. Обычное видео открывается локально; карта и объединение камер зависят от данных модели.",
+                formatIntro:
+                    "Navman MiVue раскладывает обычные, событийные и парковочные записи по отдельным папкам, а в моделях с двумя камерами сохраняет парные файлы фронта и тыла. Открывай всю карту памяти, чтобы dashcamigo держал поездку, обе камеры и доступный GPS вместе.",
+            },
+        },
+    },
+    {
+        slug: "fitcamx",
+        displayName: "FITCAMX",
+        models: [
+            "Toyota / Lexus systems",
+            "Volvo / Polestar systems",
+            "BMW / MINI systems",
+            "Audi / Volkswagen systems",
+            "Ford / RAM / GMC systems",
+            "Honda / Mazda / Nissan systems",
+        ],
+        format: {
+            container: "TS / MP4",
+            codec: "H.264 / H.265",
+            gpsStorage: "GPS depends on the model; many recordings contain video only",
+            sdLayout: "/Movie/, /Movie_E/, /EMR/, /EMR_E/",
+            filenamePattern: "20260807191037_000922AAE.MP4",
+        },
+        locales: {
+            en: {
+                title: "FITCAMX Dash Cam Player for PC & Mac | dashcamigo",
+                metaDescription:
+                    "Open FITCAMX front and rear recordings in your browser on PC or Mac. Trips stay grouped, with trim and export. No phone app or upload.",
+                ogTitle: "FITCAMX Dash Cam Player for PC & Mac",
+                ogDescription:
+                    "Open FITCAMX recordings from the SD card, keep front and rear views together, then trim and export a clip. No phone app or upload.",
+                h1: "FITCAMX dash cam player — watch recordings on PC or Mac",
+                lead: "Open FITCAMX recordings directly from the SD card in your browser. dashcamigo keeps front and rear cameras together, separates normal and saved events, and lets you trim and export the part you need. No phone app, cable transfer, upload or account.",
+                ctaPrimary: "Open FITCAMX recordings folder",
+                modelsCompat:
+                    "Covers common FITCAMX TS and MP4 layouts used across vehicle-specific front and front/rear systems. Many models do not record GPS, so video playback and camera grouping remain available without a map.",
+                formatIntro:
+                    "FITCAMX cameras usually separate ordinary and saved recordings into Movie and EMR folders, with rear-camera files in matching folders. Open the whole card so dashcamigo can keep each drive and both views together.",
+            },
+            ru: {
+                title: "Плеер FITCAMX для ПК и Mac | dashcamigo",
+                metaDescription:
+                    "Открывай фронтальные и задние записи FITCAMX в браузере на ПК или Mac. Поездки остаются вместе, есть обрезка и экспорт. Без приложения.",
+                ogTitle: "Плеер FITCAMX для ПК и Mac",
+                ogDescription:
+                    "Открывай записи FITCAMX с SD-карты, смотри фронт и тыл вместе, обрезай и экспортируй нужный фрагмент. Без приложения и загрузки.",
+                h1: "Плеер FITCAMX — записи с регистратора на ПК или Mac",
+                lead: "Открывай записи FITCAMX прямо с SD-карты в браузере. dashcamigo держит фронт и тыл вместе, отделяет обычные записи от сохранённых событий и позволяет обрезать и экспортировать нужный фрагмент. Без приложения на телефоне, загрузки на сервер и аккаунта.",
+                ctaPrimary: "Открыть папку с записями FITCAMX",
+                modelsCompat:
+                    "Покрывает распространённые форматы FITCAMX в TS и MP4 для штатных систем с одной или двумя камерами. Многие модели не записывают GPS, поэтому видео и группировка камер работают без карты.",
+                formatIntro:
+                    "FITCAMX обычно раскладывает обычные и сохранённые записи по папкам Movie и EMR, а заднюю камеру — по парным папкам. Открывай всю карту памяти, чтобы dashcamigo держал поездку и оба вида вместе.",
+            },
+            de: {
+                title: "FITCAMX Dashcam-Player für PC & Mac | dashcamigo",
+                metaDescription:
+                    "Öffne FITCAMX-Aufnahmen von Front und Heck im Browser auf PC oder Mac. Fahrten bleiben gruppiert, mit Zuschneiden und Export ohne App.",
+                ogTitle: "FITCAMX Dashcam-Player für PC & Mac",
+                ogDescription:
+                    "FITCAMX-Aufnahmen von der SD-Karte öffnen, Front und Heck zusammenhalten und den wichtigen Ausschnitt ohne App exportieren.",
+                h1: "FITCAMX Dashcam-Player — Aufnahmen auf PC oder Mac ansehen",
+                lead: "Öffne FITCAMX-Aufnahmen direkt von der SD-Karte im Browser. dashcamigo hält Front und Heck zusammen, trennt normale Aufnahmen von gespeicherten Ereignissen und exportiert den wichtigen Ausschnitt. Ohne Handy-App, Upload oder Konto.",
+                ctaPrimary: "FITCAMX-Aufnahmen öffnen",
+                modelsCompat:
+                    "Deckt gängige FITCAMX-Formate in TS und MP4 für fahrzeugspezifische Systeme mit einer oder zwei Kameras ab. Viele Modelle speichern kein GPS; Video und Kamerazuordnung funktionieren dann ohne Karte.",
+                formatIntro:
+                    "FITCAMX sortiert normale und gespeicherte Aufnahmen meist in Movie- und EMR-Ordner, Heckaufnahmen liegen in den entsprechenden Ordnern. Öffne die ganze Karte, damit dashcamigo jede Fahrt und beide Ansichten zusammenhält.",
+            },
+            pl: {
+                title: "Odtwarzacz FITCAMX na PC i Mac | dashcamigo",
+                metaDescription:
+                    "Otwieraj nagrania FITCAMX z przodu i z tyłu w przeglądarce na PC lub Macu. Obie kamery, przycinanie i eksport bez aplikacji.",
+                ogTitle: "Odtwarzacz FITCAMX na PC i Mac",
+                ogDescription:
+                    "Otwórz nagrania FITCAMX z karty SD, oglądaj przód i tył razem, a potem przytnij i wyeksportuj fragment bez aplikacji.",
+                h1: "Odtwarzacz FITCAMX — nagrania na PC lub Macu",
+                lead: "Otwieraj nagrania FITCAMX bezpośrednio z karty SD w przeglądarce. dashcamigo łączy nagrania z przodu i z tyłu, oddziela zwykłe nagrania od zapisanych zdarzeń oraz pozwala przyciąć i wyeksportować potrzebny fragment. Bez aplikacji w telefonie, wysyłania plików i konta.",
+                ctaPrimary: "Otwórz folder z nagraniami FITCAMX",
+                modelsCompat:
+                    "Obsługuje popularne układy FITCAMX w TS i MP4 dla samochodowych systemów z jedną lub dwiema kamerami. Wiele modeli nie zapisuje GPS, więc filmy i łączenie kamer działają bez mapy.",
+                formatIntro:
+                    "FITCAMX zwykle rozdziela zwykłe i zapisane nagrania do folderów Movie i EMR, a tylną kamerę do pasujących folderów. Otwórz całą kartę, aby dashcamigo zebrał każdy przejazd i oba widoki razem.",
+            },
+        },
+    },
 ];
+
+const LANDING_BRANDS_BY_SLUG = new Map(
+    getLandingBrands().map((brand) => [brand.slug, brand] as const),
+);
+
+function getVendorLangs(vendor: VendorContent): readonly Lang[] {
+    const brand = LANDING_BRANDS_BY_SLUG.get(vendor.slug);
+    if (!brand) {
+        throw new Error(`vendor-pages: vendor "${vendor.slug}" is missing from SUPPORTED_BRANDS`);
+    }
+    return brand.locales;
+}
+
+function isVendorAvailableInLang(vendor: VendorContent, lang: Lang): boolean {
+    return getVendorLangs(vendor).includes(lang);
+}
+
+function getVendorSeoLocales(vendor: VendorContent): SeoLocale[] {
+    const publishedLangs = new Set(getVendorLangs(vendor));
+    return getIndexableSeoLocales().filter((locale) => publishedLangs.has(locale.lang));
+}
+
+function getVendorsForLang(lang: Lang): VendorContent[] {
+    return VENDORS.filter((vendor) => isVendorAvailableInLang(vendor, lang));
+}
 
 // Index page copy. /cameras/ is a section landing - lists every vendor
 // page with short blurbs. Exists primarily to make the BreadcrumbList
@@ -1087,10 +1571,15 @@ export function pathPrefixFor(lang: Lang): string {
 // indexable locale to produce that locale's URL for THIS page. x-default
 // for sub-pages (not the site root) targets the English variant of the same
 // page - there is no page-specific neutral landing.
-export function buildHreflangLinksHtml(makeUrl: (loc: SeoLocale) => string): string {
-    const indexable = getIndexableSeoLocales();
+export function buildHreflangLinksHtml(
+    makeUrl: (loc: SeoLocale) => string,
+    locales: readonly SeoLocale[] = getIndexableSeoLocales(),
+): string {
     const defaultLocale = getDefaultSeoLocale();
-    const lines = indexable.flatMap((loc) =>
+    if (!locales.some((locale) => locale.lang === defaultLocale.lang)) {
+        throw new Error("vendor-pages: hreflang set must include the default locale");
+    }
+    const lines = locales.flatMap((loc) =>
         getHreflangCodes(loc).map(
             (code) => `<link rel="alternate" hreflang="${code}" href="${makeUrl(loc)}">`,
         ),
@@ -1102,8 +1591,11 @@ export function buildHreflangLinksHtml(makeUrl: (loc: SeoLocale) => string): str
 // og:locale:alternate meta tags for every locale OTHER than the page's own
 // (Facebook / OG spec says og:locale lists self, og:locale:alternate lists
 // the others).
-export function buildOgLocaleAlternatesHtml(selfLang: Lang): string {
-    return getIndexableSeoLocales()
+export function buildOgLocaleAlternatesHtml(
+    selfLang: Lang,
+    locales: readonly SeoLocale[] = getIndexableSeoLocales(),
+): string {
+    return locales
         .filter((loc) => loc.lang !== selfLang)
         .map((loc) => `<meta property="og:locale:alternate" content="${loc.ogLocale}">`)
         .join("\n");
@@ -1115,6 +1607,9 @@ export function buildOgLocaleAlternatesHtml(selfLang: Lang): string {
 function renderVendorPage(vendor: VendorContent, lang: Lang, options: SeoBuildOptions): string {
     const seoLocale = getSeoLocaleByLang(lang);
     if (!seoLocale) throw new Error(`vendor-pages: lang "${lang}" not in SEO_LOCALES`);
+    if (!isVendorAvailableInLang(vendor, lang)) {
+        throw new Error(`vendor-pages: ${vendor.slug} is not published in lang="${lang}"`);
+    }
 
     const content = resolveVendorContent(vendor, lang);
     const labels = SHARED_LABELS[lang];
@@ -1125,14 +1620,15 @@ function renderVendorPage(vendor: VendorContent, lang: Lang, options: SeoBuildOp
     const homeUrl = canonicalLocaleUrl(seoLocale);
     const camerasUrl = canonicalLocaleUrl(seoLocale, "cameras/");
     const ctaHref = `${pathPrefix}/?vendor=${vendor.slug}`;
-    const otherVendors = VENDORS.filter((v) => v.slug !== vendor.slug);
+    const otherVendors = getVendorsForLang(lang).filter((v) => v.slug !== vendor.slug);
+    const vendorLocales = getVendorSeoLocales(vendor);
     const ogImageUrl = `${canonicalOriginForLocale(seoLocale)}/${seoLocale.ogImage}`;
 
-    const hreflangBlock = buildHreflangLinksHtml((loc) => {
-        // Every locale has a non-empty urlSegment now - /en/, /de/, etc.
-        return canonicalLocaleUrl(loc, `cameras/${vendor.slug}/`);
-    });
-    const ogLocaleAlternatesBlock = buildOgLocaleAlternatesHtml(lang);
+    const hreflangBlock = buildHreflangLinksHtml(
+        (loc) => canonicalLocaleUrl(loc, `cameras/${vendor.slug}/`),
+        vendorLocales,
+    );
+    const ogLocaleAlternatesBlock = buildOgLocaleAlternatesHtml(lang, vendorLocales);
 
     const breadcrumb = {
         "@context": "https://schema.org",
@@ -1253,9 +1749,10 @@ ${otherVendors
 `;
 }
 
-// Build the /cameras/ section index page. Hub for the 7 vendor pages, listing
-// each as a card with displayName + 1-line format hint. Same chrome as vendor
-// pages (header, footer, vendor-page.css). Loads no JS app bundle.
+// Build the /cameras/ section index page. The hub lists only the vendor pages
+// published in its language, so every card resolves to a real localized page.
+// Same chrome as vendor pages (header, footer, vendor-page.css). Loads no JS
+// app bundle.
 function renderCamerasIndexPage(lang: Lang, options: SeoBuildOptions): string {
     const seoLocale = getSeoLocaleByLang(lang);
     if (!seoLocale) throw new Error(`vendor-pages: lang "${lang}" not in SEO_LOCALES`);
@@ -1267,6 +1764,7 @@ function renderCamerasIndexPage(lang: Lang, options: SeoBuildOptions): string {
     const url = canonicalLocaleUrl(seoLocale, "cameras/");
     const homeUrl = canonicalLocaleUrl(seoLocale);
     const ogImageUrl = `${canonicalOriginForLocale(seoLocale)}/${seoLocale.ogImage}`;
+    const localeVendors = getVendorsForLang(lang);
 
     const hreflangBlock = buildHreflangLinksHtml((loc) => {
         return canonicalLocaleUrl(loc, "cameras/");
@@ -1292,8 +1790,8 @@ function renderCamerasIndexPage(lang: Lang, options: SeoBuildOptions): string {
         inLanguage: seoLocale.contentLanguage,
         mainEntity: {
             "@type": "ItemList",
-            numberOfItems: VENDORS.length,
-            itemListElement: VENDORS.map((v, idx) => ({
+            numberOfItems: localeVendors.length,
+            itemListElement: localeVendors.map((v, idx) => ({
                 "@type": "ListItem",
                 position: idx + 1,
                 url: canonicalLocaleUrl(seoLocale, `cameras/${v.slug}/`),
@@ -1351,7 +1849,7 @@ ${BRAND_ICON_SVG}
 <h1 class="vp-h1">${escapeText(content.h1)}</h1>
 <p class="vp-lead">${escapeText(content.lead)}</p>
 <ul class="vp-vendor-grid">
-${VENDORS.map(
+${localeVendors.map(
     (v) => `<li><a class="vp-vendor-card" href="${pathPrefix}/cameras/${v.slug}/">
 <span class="vp-vendor-card-name">${escapeText(v.displayName)}</span>
 <span class="vp-vendor-card-hint">${escapeText(content.cardHintPrefix)} ${escapeText(v.format.container)} · ${escapeText(v.format.gpsStorage)}</span>
@@ -1383,9 +1881,8 @@ ${renderHubCta(lang, pathPrefix)}
 // promises a vendor page that doesn't exist, or a vendor page with no
 // SUPPORTED_BRANDS metadata.
 function assertVendorListsAligned(): void {
-    // Late import to avoid pulling supported-brands into the module-init path
-    // (this function is only called from the build closeBundle hook).
-    const landingSlugs = new Set(getLandingBrands().map((b) => b.slug));
+    const landingBrands = getLandingBrands();
+    const landingSlugs = new Set(landingBrands.map((b) => b.slug));
     const vendorSlugs = new Set(VENDORS.map((v) => v.slug));
     const missingVendors: string[] = [];
     for (const slug of landingSlugs) {
@@ -1410,6 +1907,29 @@ function assertVendorListsAligned(): void {
             );
         }
         throw new Error(lines.join("\n"));
+    }
+
+    const indexableLangs = new Set(getIndexableSeoLocales().map((locale) => locale.lang));
+    const vendorBySlug = new Map(VENDORS.map((vendor) => [vendor.slug, vendor] as const));
+    for (const brand of landingBrands) {
+        const uniqueLocales = new Set(brand.locales);
+        if (uniqueLocales.size !== brand.locales.length) {
+            throw new Error(`vendor-pages: duplicate locale configured for ${brand.slug}`);
+        }
+        if (!uniqueLocales.has("en") || !uniqueLocales.has("ru")) {
+            throw new Error(`vendor-pages: ${brand.slug} must ship in English and Russian`);
+        }
+        for (const lang of uniqueLocales) {
+            if (!indexableLangs.has(lang)) {
+                throw new Error(`vendor-pages: ${brand.slug} uses non-indexable locale "${lang}"`);
+            }
+        }
+        const vendor = vendorBySlug.get(brand.slug);
+        if (vendor && vendor.displayName !== brand.displayName) {
+            throw new Error(
+                `vendor-pages: displayName mismatch for ${brand.slug}: "${brand.displayName}" vs "${vendor.displayName}"`,
+            );
+        }
     }
 }
 
@@ -1442,7 +1962,7 @@ export function vendorPagesPlugin(options: SeoBuildOptions = {}): Plugin {
                 mkdirSync(indexDir, { recursive: true });
                 writeFileSync(resolve(indexDir, "index.html"), renderCamerasIndexPage(lang, options));
                 // Per-vendor pages under that index.
-                for (const vendor of VENDORS) {
+                for (const vendor of getVendorsForLang(lang)) {
                     const targetDir = resolve(distDir, `${prefix}cameras/${vendor.slug}`);
                     mkdirSync(targetDir, { recursive: true });
                     writeFileSync(resolve(targetDir, "index.html"), renderVendorPage(vendor, lang, options));
@@ -1525,7 +2045,7 @@ export function matchVendorRoute(path: string): VendorRouteMatch | null {
         // /<lang>/cameras/<slug>/ - vendor page. Find the vendor by slug.
         const slug = segments[i];
         const vendor = VENDORS.find((v) => v.slug === slug);
-        if (!vendor) return null;
+        if (!vendor || !isVendorAvailableInLang(vendor, lang)) return null;
         return { kind: "vendor", lang, vendor };
     }
     // Deeper path - not part of vendor-pages URL space.
@@ -1577,15 +2097,21 @@ export function getVendorSitemapEntries(): VendorSitemapEntry[] {
         });
     }
 
-    // Individual vendor pages: one entry per vendor × indexable locale
-    // (7 vendors × 10 locales = 70 today). Each vendor has its own alternates
-    // map (different from /cameras/ siblings).
+    // Individual vendor pages: one entry per vendor and configured locale.
+    // Each vendor has its own partial alternates graph, containing only pages
+    // that actually exist for that brand.
     for (const vendor of VENDORS) {
-        const vendorAlternates = buildHreflangAlternatesMap((loc) =>
-            canonicalLocaleUrl(loc, `cameras/${vendor.slug}/`),
+        const vendorLocales = getVendorSeoLocales(vendor);
+        const vendorAlternates = Object.fromEntries(
+            vendorLocales.flatMap((loc) =>
+                getHreflangCodes(loc).map((code) => [
+                    code,
+                    canonicalLocaleUrl(loc, `cameras/${vendor.slug}/`),
+                ]),
+            ),
         );
         const vendorXDefault = canonicalLocaleUrl(defaultLocale, `cameras/${vendor.slug}/`);
-        for (const loc of indexable) {
+        for (const loc of vendorLocales) {
             entries.push({
                 loc: canonicalLocaleUrl(loc, `cameras/${vendor.slug}/`),
                 changefreq: "monthly",

@@ -67,6 +67,20 @@ test.describe("navigation & shell", () => {
         await shot(page, "nav-03-vendor-70mai");
     });
 
+    test("Mio and Navman have distinct vendor pages and canonicals", async ({ page }) => {
+        const mioResponse = await page.goto("/en/cameras/mio/");
+        expect(mioResponse?.status(), "Mio page must be 200").toBe(200);
+        await expect(page.locator("h1")).toContainText("Mio MiVue");
+        await expect(page.locator("h1")).not.toContainText("Navman");
+        await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", /\/en\/cameras\/mio\/$/);
+
+        const navmanResponse = await page.goto("/en/cameras/navman/");
+        expect(navmanResponse?.status(), "Navman page must be 200").toBe(200);
+        await expect(page.locator("h1")).toContainText("Navman MiVue");
+        await expect(page.locator("h1")).not.toContainText("Mio MiVue");
+        await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", /\/en\/cameras\/navman\/$/);
+    });
+
     test("root / redirects to a locale home", async ({ page }) => {
         await page.goto("/");
         await page.waitForURL(/\/(en|ru|de|es|fr|pt|zh|ja|ko|pl)\/$/, { timeout: 5000 });
