@@ -181,8 +181,7 @@ export const ptDict = {
     "landing.faq.q9": "Minha dashcam corta a gravação em clipes de 1‑3 minutos — dá para assistir como uma viagem só?",
     "landing.faq.a9": "Sim — automaticamente. Solte a pasta do cartão SD e os clipes se juntam em viagens contínuas: uma linha do tempo, uma rota no mapa, e a reprodução não para na troca de arquivo. Precisa de um arquivo só? Selecione um trecho — mesmo atravessando vários clipes — e salve como um único MP4.",
     "landing.faq.q2": "Quais câmeras veiculares são suportadas?",
-    "landing.faq.a2.after":
-        ", Nextbase, RedTiger, FitCamX, Vueroid, Botslab, Mio MiVue, Navman MiVue, Neoline, Juscar, Escort, Carcam, Beferich, DATAKAM, 2E Drive, Aspiring, Sony, JOOYFACT, HP, Navitel, SilverStone F1, Roadgid e iBOX. Vídeos .mp4, .mov e .ts padrão também abrem sem configuração; o GPS depende do formato.",
+    "landing.faq.a2.after": ", Vueroid, Botslab, Neoline, Juscar, Escort, Carcam, Beferich, DATAKAM, 2E Drive, Aspiring, Sony, JOOYFACT, HP, SilverStone F1, Roadgid e iBOX. Vídeos .mp4, .mov e .ts padrão também abrem sem configuração; o GPS depende do formato.",
     "landing.faq.q3": "Minhas gravações são enviadas para algum lugar?",
     "landing.faq.a3": "Não. O dashcamigo abre suas gravações diretamente no seu dispositivo — elas não são enviadas para lugar nenhum.",
     "landing.faq.q4": "Em quais dispositivos roda?",

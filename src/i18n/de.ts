@@ -181,8 +181,7 @@ export const deDict = {
     "landing.faq.a9":
         "Ja — automatisch. Leg den SD‑Karten-Ordner ab, und die Clips verbinden sich zu durchgehenden Fahrten: eine Zeitleiste, eine Route auf der Karte, Wiedergabe ohne Stopp an Dateigrenzen. Brauchst du eine einzelne Datei? Wähle einen Bereich — auch über mehrere Clips hinweg — und speichere ihn als ein MP4.",
     "landing.faq.q2": "Welche Dashcams werden unterstützt?",
-    "landing.faq.a2.after":
-        ", Nextbase, RedTiger, FitCamX, Vueroid, Botslab, Mio MiVue, Navman MiVue, Neoline, Juscar, Escort, Carcam, Beferich, DATAKAM, 2E Drive, Aspiring, Sony, JOOYFACT, HP, Navitel, SilverStone F1, Roadgid und iBOX. Standardmäßige .mp4-, .mov- und .ts-Videos öffnen sich ebenfalls ohne Setup; GPS hängt vom Aufnahmeformat ab.",
+    "landing.faq.a2.after": ", Vueroid, Botslab, Neoline, Juscar, Escort, Carcam, Beferich, DATAKAM, 2E Drive, Aspiring, Sony, JOOYFACT, HP, SilverStone F1, Roadgid und iBOX. Standardmäßige .mp4-, .mov- und .ts-Videos öffnen sich ebenfalls ohne Setup; GPS hängt vom Aufnahmeformat ab.",
     "landing.faq.q3": "Werden meine Aufnahmen irgendwohin hochgeladen?",
     "landing.faq.a3": "Nein. dashcamigo öffnet deine Aufnahmen direkt auf deinem Gerät — sie werden nirgendwo hochgeladen.",
     "landing.faq.q4": "Auf welchen Geräten läuft das?",

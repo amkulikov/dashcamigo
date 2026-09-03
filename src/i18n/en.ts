@@ -182,8 +182,7 @@ export const enDict = {
     "landing.faq.q9": "My dashcam splits every drive into 1‑3 minute clips — can I watch them as one trip?",
     "landing.faq.a9": "Yes — automatically. Drop the SD‑card folder and the clips join into continuous trips: one timeline, one route on the map, playback that doesn't stop at file boundaries. Need a single file? Select a range — even one spanning several clips — and save it as one MP4.",
     "landing.faq.q2": "Which dashcams are supported?",
-    "landing.faq.a2.after":
-        ", Nextbase, RedTiger, FitCamX, Vueroid, Botslab, Mio MiVue, Navman MiVue, Neoline, Juscar, Escort, Carcam, Beferich, DATAKAM, 2E Drive, Aspiring, Sony, JOOYFACT, HP, Navitel, SilverStone F1, Roadgid and iBOX. Standard .mp4, .mov and .ts video also opens without setup; GPS depends on the recording format.",
+    "landing.faq.a2.after": ", Vueroid, Botslab, Neoline, Juscar, Escort, Carcam, Beferich, DATAKAM, 2E Drive, Aspiring, Sony, JOOYFACT, HP, SilverStone F1, Roadgid and iBOX. Standard .mp4, .mov and .ts video also opens without setup; GPS depends on the recording format.",
     "landing.faq.q3": "Are my recordings uploaded anywhere?",
     "landing.faq.a3": "No. dashcamigo opens your recordings right on your device — they are never uploaded anywhere.",
     "landing.faq.q4": "Which devices does it run on?",

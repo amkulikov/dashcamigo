@@ -191,7 +191,7 @@ export const jaDict = {
     "landing.faq.q9": "ドラレコの録画は 1〜3 分のクリップに分かれています。ひとつの走行として見られますか？",
     "landing.faq.a9": "はい、自動でつながります。SD カードのフォルダーをドロップすると、クリップが連続した走行にまとまります。タイムラインもルートもひとつで、ファイルの境目でも再生は止まりません。1 本のファイルが必要なら、複数のクリップにまたがる範囲を選んで、ひとつの MP4 として保存できます。",
     "landing.faq.q2": "どんなドラレコに対応していますか？",
-    "landing.faq.a2.after": "、Nextbase、RedTiger、FitCamX、Vueroid、Botslab、Mio MiVue、Navman MiVue、Neoline、Juscar、Escort、Carcam、Beferich、DATAKAM、2E Drive、Aspiring、Sony、JOOYFACT、HP、Navitel、SilverStone F1、Roadgid、iBOX。標準的な .mp4・.mov・.ts 動画も設定なしで開けますが、GPS は録画形式によります。",
+    "landing.faq.a2.after": "、Vueroid、Botslab、Neoline、Juscar、Escort、Carcam、Beferich、DATAKAM、2E Drive、Aspiring、Sony、JOOYFACT、HP、SilverStone F1、Roadgid、iBOX。標準的な .mp4・.mov・.ts 動画も設定なしで開けますが、GPS は録画形式によります。",
     "landing.faq.q3": "録画はどこかにアップロードされますか？",
     "landing.faq.a3": "いいえ。dashcamigo は録画をこの端末上で直接開き、どこにもアップロードしません。",
     "landing.faq.q4": "どんな端末で動きますか？",

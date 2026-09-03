@@ -190,7 +190,7 @@ export const koDict = {
     "landing.faq.q9": "블랙박스가 영상을 1‑3분짜리 클립으로 나눠서 저장해요 — 하나의 주행으로 볼 수 있나요?",
     "landing.faq.a9": "네 — 자동으로 이어져요. SD 카드 폴더를 끌어다 놓으면 클립이 연속된 주행으로 합쳐져요. 타임라인도 하나, 지도 위 경로도 하나, 파일 경계에서 재생이 끊기지 않아요. 파일 하나로 저장하고 싶다면 구간을 선택해서 — 여러 클립에 걸쳐 있어도 — MP4 한 파일로 저장할 수 있어요.",
     "landing.faq.q2": "어떤 블랙박스를 지원하나요?",
-    "landing.faq.a2.after": ", Nextbase, RedTiger, FitCamX, Vueroid, Botslab, Mio MiVue, Navman MiVue, Neoline, Juscar, Escort, Carcam, Beferich, DATAKAM, 2E Drive, Aspiring, Sony, JOOYFACT, HP, Navitel, SilverStone F1, Roadgid, iBOX. 표준 .mp4, .mov, .ts 영상도 설정 없이 열리며 GPS는 녹화 형식에 따라 달라요.",
+    "landing.faq.a2.after": ", Vueroid, Botslab, Neoline, Juscar, Escort, Carcam, Beferich, DATAKAM, 2E Drive, Aspiring, Sony, JOOYFACT, HP, SilverStone F1, Roadgid, iBOX. 표준 .mp4, .mov, .ts 영상도 설정 없이 열리며 GPS는 녹화 형식에 따라 달라요.",
     "landing.faq.q3": "내 녹화가 어디로 업로드되나요?",
     "landing.faq.a3": "아니요. dashcamigo는 녹화 영상을 이 기기에서 바로 열며, 어디에도 업로드하지 않아요.",
     "landing.faq.q4": "어떤 기기에서 동작하나요?",

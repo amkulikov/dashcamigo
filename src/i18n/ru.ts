@@ -186,8 +186,7 @@ export const ruDict = {
     "landing.faq.q9": "Регистратор режет запись на файлы по 1‑3 минуты — можно смотреть их как одну поездку?",
     "landing.faq.a9": "Да — автоматически. Брось папку с SD‑карты — ролики склеятся в непрерывные поездки: одна шкала времени, один маршрут на карте, без пауз между файлами. Нужен один файл? Выдели отрезок — хоть через несколько роликов — и сохрани одним MP4.",
     "landing.faq.q2": "Какие регистраторы поддерживаются?",
-    "landing.faq.a2.after":
-        ", Nextbase, RedTiger, FitCamX, Vueroid, Botslab, Mio MiVue, Navman MiVue, Neoline, Juscar, Escort, Carcam, Beferich, DATAKAM, 2E Drive, Aspiring, Sony, JOOYFACT, HP, Navitel, SilverStone F1, Roadgid и iBOX. Стандартные .mp4, .mov и .ts тоже открываются без настройки; GPS зависит от формата записи.",
+    "landing.faq.a2.after": ", Vueroid, Botslab, Neoline, Juscar, Escort, Carcam, Beferich, DATAKAM, 2E Drive, Aspiring, Sony, JOOYFACT, HP, SilverStone F1, Roadgid и iBOX. Стандартные .mp4, .mov и .ts тоже открываются без настройки; GPS зависит от формата записи.",
     "landing.faq.q3": "Мои видеозаписи куда‑то загружаются?",
     "landing.faq.a3": "Нет. dashcamigo открывает записи прямо у тебя на устройстве — они никуда не загружаются.",
     "landing.faq.q4": "На каких устройствах работает?",

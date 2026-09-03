@@ -180,7 +180,7 @@ export const zhDict = {
     "landing.faq.q9": "行车记录仪把录像切成 1‑3 分钟的片段 — 能当成一段行程来看吗？",
     "landing.faq.a9": "能，而且是自动的。把 SD 卡文件夹拖进来，片段就会拼成连续的行程：一条时间线、地图上一条路线，播放到文件衔接处也不会中断。想要单个文件？选一个区间 — 跨多个片段也可以 — 保存为一个 MP4。",
     "landing.faq.q2": "支持哪些行车记录仪？",
-    "landing.faq.a2.after": "、Nextbase、RedTiger、FitCamX、Vueroid、Botslab、Mio MiVue、Navman MiVue、Neoline、Juscar、Escort、Carcam、Beferich、DATAKAM、2E Drive、Aspiring、Sony、JOOYFACT、HP、Navitel、SilverStone F1、Roadgid、iBOX。标准 .mp4、.mov 和 .ts 视频也能直接打开；GPS 是否可用取决于录像格式。",
+    "landing.faq.a2.after": "、Vueroid、Botslab、Neoline、Juscar、Escort、Carcam、Beferich、DATAKAM、2E Drive、Aspiring、Sony、JOOYFACT、HP、SilverStone F1、Roadgid、iBOX。标准 .mp4、.mov 和 .ts 视频也能直接打开；GPS 是否可用取决于录像格式。",
     "landing.faq.q3": "我的录像会被上传到哪里吗？",
     "landing.faq.a3": "不会。dashcamigo 直接在你的设备上打开录像，不会上传到任何地方。",
     "landing.faq.q4": "在哪些设备上能用？",

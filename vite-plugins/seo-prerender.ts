@@ -80,6 +80,7 @@ import { getGitMtimeIso, maxGitMtimeIso } from "./git-mtime.js";
 import { escapeAttr, escapeText, stringifyJsonLd } from "./html-utils.js";
 import {
     getAllBrandsCommaSeparated,
+    getLandingBrands,
     getLandingBrandsCommaSeparated,
 } from "./supported-brands.js";
 import { getAlternativeSitemapEntries } from "./alternative-pages.js";
@@ -629,7 +630,7 @@ export function applyLocale(html: string, locale: LocalePrerenderConfig, options
 
     // og:image / twitter:image - per-locale 1200x630 cover. Source HTML ships
     // with EN cover; we have hand-designed Russian cover at og-cover-ru.png;
-    // other 10 locales fall back to EN cover (seo-config.ts decides per locale).
+    // other locales fall back to the EN cover (seo-config.ts decides per locale).
     const ogImage = `${canonicalOrigin}/${locale.seo.ogImage}`;
     out = replaceAttr(out, /<meta\b[^>]*\bproperty="og:image"/i, "content", ogImage);
     out = replaceAttr(out, /<meta\b[^>]*\bname="twitter:image"/i, "content", ogImage);
@@ -704,16 +705,23 @@ export function applyLocale(html: string, locale: LocalePrerenderConfig, options
     out = rewriteWebApplicationJsonLd(out, locale, selfUrl, canonicalOrigin);
     out = rewriteWebsiteJsonLd(out, canonicalOrigin);
 
-    // Vendor-chip hrefs and any internal /cameras/<slug>/ links must point
-    // at the locale-prefixed vendor pages. Rewrite href="/cameras/..." to
-    // href="/<segment>/cameras/..." so users on /de/ stay in /de/ when they
-    // click through to a vendor page. The match is anchored to href="/cameras/
-    // which is only used by these chip links; absolute canonical / hreflang /
-    // og:url values are untouched. This now applies to
-    // English too (urlSegment="en") - the source HTML keeps the bare form
-    // "/cameras/..." as a baseline, and every prerendered locale rewrites
-    // it including /en/.
-    out = out.replace(/href="\/cameras\//g, `href="/${locale.seo.urlSegment}/cameras/`);
+    // Camera links prefer the current locale, but each brand has an explicit
+    // publication set. Falling back to English keeps homepage links valid when
+    // a localized brand page does not exist. The cameras hub exists everywhere.
+    const defaultSegment = getDefaultSeoLocale().urlSegment;
+    for (const brand of getLandingBrands()) {
+        const segment = brand.locales.includes(locale.seo.lang)
+            ? locale.seo.urlSegment
+            : defaultSegment;
+        out = out.replaceAll(
+            `href="/cameras/${brand.slug}/"`,
+            `href="/${segment}/cameras/${brand.slug}/"`,
+        );
+    }
+    out = out.replaceAll(
+        'href="/cameras/"',
+        `href="/${locale.seo.urlSegment}/cameras/"`,
+    );
 
     // Same per-locale rewrite for the landing FAQ's /alternatives/ link, so a
     // visitor on /de/ stays on /de/ when they open the competitor comparison.
@@ -953,11 +961,9 @@ function rewriteFeatureList(existing: unknown): unknown[] {
 // artifact, so for the JSON-LD we re-stitch the fragments back together and
 // inject the same literal vendor list that the DOM shows.
 //
-// a2 ("which dashcams are supported?") lists only the top-N brands that have
-// dedicated landing pages - the dict["landing.faq.a2.after"] tail completes
-// the answer with "and others. Anything with .mp4/.mov/.ts works...". Full
-// 13-brand list lives in the WebApplication featureList instead, where SERP
-// scanners look for exhaustive lists.
+// a2 ("which dashcams are supported?") starts with every brand that has a
+// dedicated landing page. The dict["landing.faq.a2.after"] tail completes the
+// inventory with supported brands that do not have their own page.
 
 function buildFaqJsonLd(dict: Record<I18nKey, string>): string {
     // a12 stitches the GitHub anchor text between its surrounding copy.

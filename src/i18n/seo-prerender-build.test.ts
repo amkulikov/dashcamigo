@@ -154,7 +154,7 @@ describe("hreflang graph completeness", () => {
 
 // Minimal HTML fragment that mimics the post-minification baseline. Mirrors
 // the structure index.html ships: <html lang>, canonical, content-language,
-// 12 hreflang + x-default, og:locale + 11 og:locale:alternate, og:* / twitter:*
+// hreflang + x-default, og:locale + og:locale:alternate, og:* / twitter:*
 // meta with content tags, WebApplication JSON-LD anchored by id, FAQ JSON-LD,
 // one data-i18n element, one data-i18n-attr element, one /cameras/ link.
 // Kept here (not in a fixture file) so a single test can verify all rewrites.
@@ -187,6 +187,8 @@ function buildMinimalBaseline(): string {
         '<script id="faq-jsonld" type="application/ld+json">{"@type":"FAQPage","mainEntity":[]}</script>',
         "</head><body>",
         '<a href="/cameras/70mai/">vendor chip</a>',
+        '<a href="/cameras/blackvue/">partially localized vendor</a>',
+        '<a href="/cameras/">camera hub</a>',
         '<h1 data-i18n="page.title">EN literal</h1>',
         '<meta content="EN-only-fallback" data-i18n-attr="content:meta.description" name="description">',
         // i18n dictionary data island - empty in the baseline, filled per locale.
@@ -295,7 +297,21 @@ describe("applyLocale", () => {
 
     it("rewrites internal /cameras/ links to /ru/cameras/", () => {
         expect(out).toContain('href="/ru/cameras/70mai/"');
+        expect(out).toContain('href="/ru/cameras/blackvue/"');
+        expect(out).toContain('href="/ru/cameras/"');
         expect(out).not.toContain('href="/cameras/70mai/"');
+    });
+
+    it("lists every dedicated camera brand once in FAQ JSON-LD", () => {
+        const match = /<script[^>]*id="faq-jsonld"[^>]*>([\s\S]*?)<\/script>/.exec(out);
+        expect(match).not.toBeNull();
+        const payload = JSON.parse(match![1]!);
+        const item = payload.mainEntity.find((candidate: { name?: string }) => candidate.name === ru.dict["landing.faq.q2"]);
+        const answer = item?.acceptedAnswer?.text;
+        expect(typeof answer).toBe("string");
+        for (const brand of getLandingBrands()) {
+            expect(answer.split(brand.displayName).length - 1, brand.displayName).toBe(1);
+        }
     });
 
     it("applies the OG description override to og:description / twitter:description", () => {
@@ -353,6 +369,23 @@ describe("applyLocale on default (en) locale", () => {
         // at "/", which is a content-less redirect stub and a poor
         // fallback target for crawlers that follow x-default.
         expect(out).toMatch(/<link[^>]*hreflang="x-default"[^>]*href="https:\/\/dashcamigo\.app\/en\/"/);
+    });
+});
+
+describe("applyLocale camera link fallbacks", () => {
+    const pt = getPrerenderLocales().find((locale) => locale.seo.lang === "pt");
+    if (!pt) throw new Error("test setup: pt locale missing");
+
+    const out = applyLocale(buildMinimalBaseline(), pt, {});
+
+    it("keeps available brands in the current locale", () => {
+        expect(out).toContain('href="/pt/cameras/70mai/"');
+        expect(out).toContain('href="/pt/cameras/"');
+    });
+
+    it("routes brands without a localized page to English", () => {
+        expect(out).toContain('href="/en/cameras/blackvue/"');
+        expect(out).not.toContain('href="/pt/cameras/blackvue/"');
     });
 });
 

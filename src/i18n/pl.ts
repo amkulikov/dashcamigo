@@ -181,8 +181,7 @@ export const plDict = {
     "landing.faq.q9": "Wideorejestrator tnie nagranie na klipy po 1‑3 minuty — czy mogę je oglądać jako jeden przejazd?",
     "landing.faq.a9": "Tak — automatycznie. Upuść folder z karty SD, a klipy połączą się w ciągłe przejazdy: jedna oś czasu, jedna trasa na mapie, odtwarzanie bez zatrzymań na granicach plików. Potrzebujesz jednego pliku? Zaznacz zakres — nawet przez kilka klipów — i zapisz go jako jeden plik MP4.",
     "landing.faq.q2": "Jakie wideorejestratory są obsługiwane?",
-    "landing.faq.a2.after":
-        ", Nextbase, RedTiger, FitCamX, Vueroid, Botslab, Mio MiVue, Navman MiVue, Neoline, Juscar, Escort, Carcam, Beferich, DATAKAM, 2E Drive, Aspiring, Sony, JOOYFACT, HP, Navitel, SilverStone F1, Roadgid i iBOX. Standardowe wideo .mp4, .mov i .ts też otwiera się bez konfiguracji; GPS zależy od formatu nagrania.",
+    "landing.faq.a2.after": ", Vueroid, Botslab, Neoline, Juscar, Escort, Carcam, Beferich, DATAKAM, 2E Drive, Aspiring, Sony, JOOYFACT, HP, SilverStone F1, Roadgid i iBOX. Standardowe wideo .mp4, .mov i .ts też otwiera się bez konfiguracji; GPS zależy od formatu nagrania.",
     "landing.faq.q3": "Czy moje nagrania są gdzieś wysyłane?",
     "landing.faq.a3": "Nie. dashcamigo otwiera nagrania bezpośrednio na twoim urządzeniu — nie przesyła ich nigdzie.",
     "landing.faq.q4": "Na jakich urządzeniach to działa?",
