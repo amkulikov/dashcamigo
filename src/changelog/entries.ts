@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-09-03.1",
+        category: "improvement",
+        text: {
+            en: "Export overlay settings persist between visits and can be reset.",
+            ru: "Настройки наложений для экспорта сохраняются между посещениями; их можно сбросить.",
+            de: "Die Einstellungen für Export-Einblendungen bleiben zwischen Besuchen erhalten und lassen sich zurücksetzen.",
+            es: "La configuración de las superposiciones de exportación se conserva entre visitas y se puede restablecer.",
+            fr: "Les réglages des incrustations d’export restent enregistrés entre les visites et peuvent être réinitialisés.",
+            pl: "Ustawienia nakładek eksportu są zachowywane między wizytami i można je przywrócić.",
+            pt: "As configurações das sobreposições de exportação são mantidas entre visitas e podem ser repostas.",
+            zh: "导出叠加层设置会在下次访问时保留，也可重置。",
+            ja: "書き出し用オーバーレイの設定は次回の利用時にも保持され、リセットできます。",
+            ko: "내보내기 오버레이 설정은 다음 방문에도 유지되며 초기화할 수 있습니다.",
+        },
+    },
+    {
         id: "2026-09-01.5",
         category: "improvement",
         text: {

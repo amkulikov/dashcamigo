@@ -4,4 +4,4 @@
 // modal. entries.test.ts fails when this constant drifts from
 // CHANGELOG_ENTRIES[0].id; the changelog skill updates both together.
 
-export const LATEST_CHANGELOG_ID = "2026-09-01.5";
+export const LATEST_CHANGELOG_ID = "2026-09-03.1";

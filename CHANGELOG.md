@@ -7,6 +7,10 @@ User-facing changes, newest first. Dates are when the change landed on
 [beta](https://beta.dashcamigo.app); production picks it up with the next
 release tag. Localized texts ship inside the app (the "What's new" panel).
 
+## 2026-09-03
+
+- **Improved:** Export overlay settings persist between visits and can be reset.
+
 ## 2026-09-01
 
 - **Improved:** A notes file in the opened recording folder takes priority; otherwise dashcamigo uses the last-used file.
