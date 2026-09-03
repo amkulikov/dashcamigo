@@ -875,6 +875,7 @@ export type I18nKey =
     | "export.opt.watermark"
     | "export.opt.watermark.plea"
     | "export.overlays.legend"
+    | "export.overlays.reset"
     | "export.overlays.speed"
     | "export.overlays.coords"
     | "export.overlays.map"

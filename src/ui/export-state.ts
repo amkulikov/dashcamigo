@@ -1,8 +1,7 @@
-// Ephemeral export-mode state. Lives only while the export-panel is open;
-// reset on close so a fresh open starts clean (except for in-session user
-// preferences mirrored here intentionally). Composition (layout / channels /
-// audio / per-slot crops) lives in state.composition - it is shared between
-// casual playback and export, and persists across mode toggles.
+// Export-mode state. Most fields live for the page session; the Overlay slice
+// additionally persists across reloads. Composition (layout / channels / audio /
+// per-slot crops) lives in state.composition - it is shared between casual
+// playback and export, and persists across mode toggles.
 //
 // This module owns the open/close transition: openExportMode flips
 // state.exportModeOpen and notifies subscribers; closeExportMode reverses.
@@ -18,6 +17,12 @@ import type { StreetLabelDensity } from "./map-label-scale.js";
 import { getMapMarkerAppearance, type MapMarkerAppearance } from "./map-marker-pref.js";
 import { activeTrip, state } from "./state.js";
 import type { MapStyleId } from "./theme.js";
+import {
+    cloneOverlayPreferences,
+    overlayPreferencesKey,
+    persistOverlayPreferences,
+    readStoredOverlayPreferences,
+} from "./export-overlay-pref.js";
 
 /**
  * Bitrate quality preset. "original" is the top tier: stream-copy (lossless)
@@ -87,13 +92,9 @@ export interface OverlayMapState {
     yPct: number;
     scalePct: number;
     zoomKm: number;
-    /** Clip shape of the mini-map slot. Default "rect" (legacy rounded box). */
+    /** Clip shape of the mini-map slot. */
     shape: MapShape;
-    /** Base-layer style of the mini-map. Default "light" (the snapshotter's
-     *  historical choice: higher contrast against the orange car marker and the
-     *  typical daytime recording). The user can switch to "dark" or "neon" (a
-     *  semi-transparent black slot with orange-glowing features). Independent of
-     *  the app UI theme. */
+    /** Base-layer style of the mini-map, independent of the app UI theme. */
     theme: MapStyleId;
     /** Label size of the burned-in map's street/place names, percent of the
      *  style's own sizes (one of the MAP_LABEL_SIZE_PCT_VALUES presets). A
@@ -105,8 +106,8 @@ export interface OverlayMapState {
      *  and how early by zoom they turn on). Same lifecycle as labelScalePct;
      *  independent of the viewer's density preference. */
     labelDensity: StreetLabelDensity;
-    /** Current-position marker for this export. Seeded from the global map
-     * preference when export mode opens, then edited independently. */
+    /** Current-position marker for exported overlays. The first default comes
+     *  from the global map preference, then the overlay choice is independent. */
     marker: MapMarkerAppearance;
     /** Camera view. "north" = north-up (the legacy look); "chase" = tilted,
      *  heading-up (the car points up, road ahead in view). Default "north". */
@@ -117,6 +118,26 @@ export interface OverlayMapState {
      *  The whole zoom range stays above the tile source maxzoom, so it never
      *  refetches tiles. Ignored when mode === "north". */
     adaptiveZoom: boolean;
+}
+
+/** The complete Overlay fieldset configuration. It is independent of the
+ *  active trip and survives reloads; everything outside this interface keeps
+ *  the export panel's existing session or trip lifecycle. */
+export interface OverlayPreferences {
+    /** Visual style applied to every overlay widget. */
+    overlayStyle: OverlayStyleId;
+    /** Accent color (hex) for units / dials / brackets. */
+    overlayAccent: string;
+    /** Dark scrim behind the widgets for legibility on bright footage. */
+    overlayScrim: boolean;
+    overlaySpeed: OverlayTextState;
+    overlayCoords: OverlayTextState;
+    overlayMap: OverlayMapState;
+    overlayClock: OverlayTextState;
+    overlayCompass: OverlayTextState;
+    overlayGforce: OverlayTextState;
+    overlayDistance: OverlayTextState;
+    overlayGraph: OverlayTextState;
 }
 
 /**
@@ -146,7 +167,7 @@ export interface ExportRangeEdgeBounds {
     valueTripSec: number;
 }
 
-export interface ExportPanelState {
+export interface ExportPanelState extends OverlayPreferences {
     phase: ExportPhase;
     /** True from a video Save click until that flow settles, including the file
      *  picker and encode preflight while phase is still `options`. The form and
@@ -184,21 +205,6 @@ export interface ExportPanelState {
      *  from withGpx (a separate sidecar file, genuinely additive / default off). */
     withGpmf: boolean;
     withGpx: boolean;
-    /** Visual style applied to every overlay widget. Default "min" reproduces
-     *  the pre-telemetry plate-less look (text + drop shadow). */
-    overlayStyle: OverlayStyleId;
-    /** Accent color (hex) for units / dials / brackets. Default brand orange. */
-    overlayAccent: string;
-    /** Dark scrim behind the widgets for legibility on bright footage. */
-    overlayScrim: boolean;
-    overlaySpeed: OverlayTextState;
-    overlayCoords: OverlayTextState;
-    overlayMap: OverlayMapState;
-    overlayClock: OverlayTextState;
-    overlayCompass: OverlayTextState;
-    overlayGforce: OverlayTextState;
-    overlayDistance: OverlayTextState;
-    overlayGraph: OverlayTextState;
     /** Redaction style for privacy blur zones. One style for all zones (kept
      *  per-region in the data model for a future per-zone override); changing
      *  it in the panel re-styles every zone of the active trip. */
@@ -215,10 +221,48 @@ export const OVERLAY_ACCENT_DEFAULT = "#FF9000";
 /** Accent swatches offered in the constructor (brand + 5 common alternates). */
 export const OVERLAY_ACCENT_SWATCHES = ["#FF9000", "#FFFFFF", "#1AA7EC", "#1FA463", "#E5102B", "#F5C518"] as const;
 
+/** Initial / reset values for the Overlay fieldset. Kept separate from the
+ *  rest of the export form because this is the only cross-reload slice. */
+function freshOverlayPreferences(): OverlayPreferences {
+    return {
+        overlayStyle: "min",
+        overlayAccent: OVERLAY_ACCENT_DEFAULT,
+        overlayScrim: false,
+        // Default positions form collision-free corner slots: speed + coords
+        // stacked bottom-left, clock top-right, map top-left. The advanced
+        // dials/graph/distance occupy plausible empty spots on the right/bottom.
+        overlaySpeed: { enabled: false, xPct: 0.035, yPct: 0.78, scalePct: 100 },
+        overlayCoords: { enabled: false, xPct: 0.035, yPct: 0.9, scalePct: 100 },
+        overlayMap: {
+            enabled: false,
+            xPct: 0.045,
+            yPct: 0.05,
+            scalePct: 100,
+            zoomKm: 1,
+            shape: "circle",
+            theme: "neon",
+            labelScalePct: 100,
+            labelDensity: "standard",
+            marker: getMapMarkerAppearance(),
+            mode: "chase",
+            pitchDeg: 58,
+            adaptiveZoom: true,
+        },
+        overlayClock: { enabled: false, xPct: 0.8, yPct: 0.045, scalePct: 100 },
+        overlayCompass: { enabled: false, xPct: 0.81, yPct: 0.28, scalePct: 100 },
+        overlayGforce: { enabled: false, xPct: 0.81, yPct: 0.56, scalePct: 100 },
+        overlayDistance: { enabled: false, xPct: 0.035, yPct: 0.68, scalePct: 100 },
+        overlayGraph: { enabled: false, xPct: 0.32, yPct: 0.86, scalePct: 100 },
+    };
+}
+
+const defaultOverlayPreferences = freshOverlayPreferences();
+
 /** Initial / reset values for the export panel. See field semantics on
  *  ExportPanelState. Kept as a function so callers always get a fresh object
  *  (mutating the defaults would silently leak across opens). */
 function freshExportPanelState(): ExportPanelState {
+    const overlays = readStoredOverlayPreferences(defaultOverlayPreferences);
     return {
         phase: "options",
         configurationLocked: false,
@@ -238,40 +282,7 @@ function freshExportPanelState(): ExportPanelState {
         withAudio: true,
         withGpmf: true,
         withGpx: false,
-        overlayStyle: "min",
-        overlayAccent: OVERLAY_ACCENT_DEFAULT,
-        overlayScrim: false,
-        // Default positions form collision-free corner slots (the design
-        // handoff's slot model as a starting layout): speed + coords stacked
-        // bottom-left, clock top-right, map top-left; the user drags from there.
-        // The advanced dials/graph/distance get plausible empty spots on the
-        // right and bottom so enabling one does not land on another.
-        overlaySpeed: { enabled: false, xPct: 0.035, yPct: 0.78, scalePct: 100 },
-        overlayCoords: { enabled: false, xPct: 0.035, yPct: 0.9, scalePct: 100 },
-        overlayMap: {
-            enabled: false,
-            xPct: 0.045,
-            yPct: 0.05,
-            scalePct: 100,
-            zoomKm: 1,
-            // Default look: a neon circle in the tilted "chase" view - the most
-            // cinematic combination, shown as soon as the user enables the map
-            // overlay. Still fully switchable (rect/light/dark, north-up) in the
-            // inspector.
-            shape: "circle",
-            theme: "neon",
-            labelScalePct: 100,
-            labelDensity: "standard",
-            marker: getMapMarkerAppearance(),
-            mode: "chase",
-            pitchDeg: 58,
-            adaptiveZoom: true,
-        },
-        overlayClock: { enabled: false, xPct: 0.8, yPct: 0.045, scalePct: 100 },
-        overlayCompass: { enabled: false, xPct: 0.81, yPct: 0.28, scalePct: 100 },
-        overlayGforce: { enabled: false, xPct: 0.81, yPct: 0.56, scalePct: 100 },
-        overlayDistance: { enabled: false, xPct: 0.035, yPct: 0.68, scalePct: 100 },
-        overlayGraph: { enabled: false, xPct: 0.32, yPct: 0.86, scalePct: 100 },
+        ...overlays,
         blurStyle: "pixelate",
     };
 }
@@ -282,6 +293,46 @@ function freshExportPanelState(): ExportPanelState {
  * subscribers.
  */
 export const exportPanelState: ExportPanelState = freshExportPanelState();
+
+function currentOverlayPreferences(): OverlayPreferences {
+    return cloneOverlayPreferences(exportPanelState);
+}
+
+function applyOverlayPreferences(preferences: OverlayPreferences): void {
+    exportPanelState.overlayStyle = preferences.overlayStyle;
+    exportPanelState.overlayAccent = preferences.overlayAccent;
+    exportPanelState.overlayScrim = preferences.overlayScrim;
+    Object.assign(exportPanelState.overlaySpeed, preferences.overlaySpeed);
+    Object.assign(exportPanelState.overlayCoords, preferences.overlayCoords);
+    Object.assign(exportPanelState.overlayMap, preferences.overlayMap, {
+        marker: { ...preferences.overlayMap.marker },
+    });
+    Object.assign(exportPanelState.overlayClock, preferences.overlayClock);
+    Object.assign(exportPanelState.overlayCompass, preferences.overlayCompass);
+    Object.assign(exportPanelState.overlayGforce, preferences.overlayGforce);
+    Object.assign(exportPanelState.overlayDistance, preferences.overlayDistance);
+    Object.assign(exportPanelState.overlayGraph, preferences.overlayGraph);
+}
+
+let lastOverlayPreferencesKey = overlayPreferencesKey(currentOverlayPreferences());
+
+/** Whether Reset has anything to do in the Overlay fieldset. */
+export function hasCustomOverlayPreferences(): boolean {
+    return overlayPreferencesKey(currentOverlayPreferences()) !== overlayPreferencesKey(defaultOverlayPreferences);
+}
+
+function refreshDefaultOverlayMarker(): void {
+    defaultOverlayPreferences.overlayMap.marker = getMapMarkerAppearance();
+}
+
+/** Restores only the Overlay fieldset; output, trim, cameras and privacy zones
+ *  are deliberately left untouched. The following notification removes the
+ *  persisted entry and refreshes the preview. */
+export function resetOverlayPreferences(): void {
+    refreshDefaultOverlayMarker();
+    applyOverlayPreferences(defaultOverlayPreferences);
+    notifyExportStateChanged();
+}
 
 /** Stable id for each overlay widget. Single source shared by the panel UI, the
  *  stream-copy gate and the pipeline args, so adding a widget touches one list. */
@@ -320,6 +371,11 @@ export function subscribeExportState(listener: Listener): () => void {
  *  UI module that batched a state change. */
 export function notifyExportStateChanged(): void {
     for (const l of listeners) l();
+    const current = currentOverlayPreferences();
+    const key = overlayPreferencesKey(current);
+    if (key === lastOverlayPreferencesKey) return;
+    lastOverlayPreferencesKey = key;
+    persistOverlayPreferences(current, defaultOverlayPreferences);
 }
 
 /**
@@ -327,14 +383,20 @@ export function notifyExportStateChanged(): void {
  * from the active trip if no range survives from a prior open, and wakes
  * subscribers. No-op if already open.
  *
- * Preserved across opens within a session: quality, output preset, watermark
- * anchor + opt-out, audio/gpmf/gpx toggles, overlay enabled+position. Reset on
- * page reload (the singleton lives only in memory).
+ * Overlay settings survive page reloads. Other preferences keep their existing
+ * in-session lifecycle: quality, output preset, watermark anchor + opt-out and
+ * audio/gpmf/gpx toggles survive panel closes only.
  */
 export function openExportMode(): void {
     if (state.exportModeOpen) return;
     state.exportModeOpen = true;
-    exportPanelState.overlayMap.marker = getMapMarkerAppearance();
+    // Until the overlay constructor is customized, its marker follows the main
+    // map preference just as a fresh export does. Once any overlay setting is
+    // saved, that complete layout (including its marker) stays independent.
+    if (!hasCustomOverlayPreferences()) {
+        refreshDefaultOverlayMarker();
+        exportPanelState.overlayMap.marker = { ...defaultOverlayPreferences.overlayMap.marker };
+    }
     if (!exportPanelState.range) {
         const trip = activeTrip();
         if (trip) {

@@ -259,7 +259,9 @@ Before a change is presented (or committed) as finished:
 - UI copy touched -> `ru` and `en` land together in the same change.
 - New `TODO:`s in the diff -> the commit/PR message lists them (what is deferred and
   why).
-- UI layout/visual changes -> regenerate the README screenshots; see
+- Regenerate README screenshots only when a change is visible in their
+  open-trip viewer surface. Changes limited to the landing page, export mode,
+  modals, or other UI absent from those screenshots do not require it. See
   `scripts/generate-readme-screenshots.mjs` (source frames are committed under
   `docs/screenshots/frames/`).
 

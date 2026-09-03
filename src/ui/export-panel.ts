@@ -18,6 +18,7 @@ import {
     closeExportMode,
     type ExportOutputKind,
     exportPanelState,
+    hasCustomOverlayPreferences,
     MAP_LABEL_SIZE_PCT_VALUES,
     type MapViewMode,
     notifyExportStateChanged,
@@ -27,6 +28,7 @@ import {
     type OutputPresetId,
     type OverlayWidgetId,
     type Quality,
+    resetOverlayPreferences,
     subscribeExportState,
 } from "./export-state.js";
 import type { MapShape, OverlayStyleId } from "../transcode/types.js";
@@ -212,6 +214,7 @@ function syncExportPanel(): void {
     // Reflect the output kind (video controls shown/hidden, Save label, summary).
     // Cheap and idempotent; keeps the panel honest after any external state change.
     syncOutputKindUi();
+    syncOverlayReset();
     const videoMode = exportPanelState.outputKind === "video";
     // Everything below configures the video pipeline - skip it entirely in
     // gpx-only mode (the controls are hidden and there is no encode to size). In
@@ -2116,10 +2119,31 @@ function renderOverlaysGroup(): HTMLElement {
     legend.textContent = t("export.overlays.legend");
     wrap.appendChild(legend);
 
+    const top = document.createElement("div");
+    top.className = "export-panel__ov-top";
+    top.appendChild(overlaySubhead(t("export.overlays.widgets")));
+    const reset = document.createElement("button");
+    reset.type = "button";
+    reset.id = "export-panel-overlays-reset";
+    reset.className = "export-panel__ov-reset";
+    reset.textContent = t("export.overlays.reset");
+    reset.hidden = !hasCustomOverlayPreferences();
+    reset.addEventListener("click", () => {
+        selectedOverlayKey = null;
+        resetOverlayPreferences();
+        const replacement = renderOverlaysGroup();
+        wrap.replaceWith(replacement);
+        syncMapOverlayAvailability();
+        syncGpsOptionsAvailability();
+        syncOverlayExtras();
+    });
+    top.appendChild(reset);
+    wrap.appendChild(top);
+    overlayResetButtonEl = reset;
+
     // The widget list owns the inline inspector: a widget's settings expand
     // directly under its row (accordion), so there is no separate bottom
     // inspector block any more.
-    wrap.appendChild(overlaySubhead(t("export.overlays.widgets")));
     wrap.appendChild(renderWidgetList());
 
     // Style / accent / scrim configure widgets that are on - with zero widgets
@@ -2150,6 +2174,11 @@ function renderOverlaysGroup(): HTMLElement {
 
 // Appearance block (style + accent + scrim), toggled by syncOverlayExtras.
 let overlayExtrasEl: HTMLElement | null = null;
+let overlayResetButtonEl: HTMLButtonElement | null = null;
+
+function syncOverlayReset(): void {
+    if (overlayResetButtonEl) overlayResetButtonEl.hidden = !hasCustomOverlayPreferences();
+}
 
 /**
  * Shows the overlay style / accent / scrim block only when it configures

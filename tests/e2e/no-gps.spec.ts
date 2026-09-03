@@ -14,6 +14,7 @@
 
 import {
     DESKTOP,
+    SAMPLE_70MAI,
     SAMPLE_NOGPS,
     boxOf,
     expect,
@@ -77,6 +78,41 @@ test.describe("no-GPS export gate", () => {
         });
         expect(storedMode).toBe("large");
         await expect(page.locator('[data-map-mode="large"]')).toBeDisabled();
+    });
+
+    test("saved overlays pause on a no-GPS trip and return on the next GPS trip", async ({ page }) => {
+        await page.locator("#export-panel-close").click();
+        await page.reload();
+        await loadTrip(page, SAMPLE_70MAI);
+        await openExport(page);
+        await page.locator("#export-panel-ov-map").check();
+        await expect(page.locator("#player-map-overlay")).toBeVisible();
+
+        await page.locator("#export-panel-close").click();
+        await page.reload();
+        await loadTrip(page, SAMPLE_NOGPS);
+        await openExport(page);
+        await expect(page.locator("#export-panel-ov-map")).toBeDisabled();
+        await expect(page.locator("#export-panel-ov-map")).not.toBeChecked();
+        await expect(page.locator("#player-map-overlay")).toBeHidden();
+        await expect(page.locator("#export-panel-overlays-reset")).toBeVisible();
+        await expect
+            .poll(() =>
+                page.evaluate(() => {
+                    const stored = JSON.parse(localStorage.getItem("dashcamigo:export:overlays") ?? "null") as {
+                        overlayMap?: { enabled?: boolean };
+                    } | null;
+                    return stored?.overlayMap?.enabled;
+                }),
+            )
+            .toBe(true);
+
+        await page.locator("#export-panel-close").click();
+        await page.reload();
+        await loadTrip(page, SAMPLE_70MAI);
+        await openExport(page);
+        await expect(page.locator("#export-panel-ov-map")).toBeChecked();
+        await expect(page.locator("#player-map-overlay")).toBeVisible();
     });
 
     test("timeline navigator stays at the bottom below the playhead", async ({ page }) => {

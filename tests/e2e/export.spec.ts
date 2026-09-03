@@ -1059,6 +1059,48 @@ test.describe("export", () => {
         await shot(page, "export-15-overlays");
     });
 
+    test("overlay layout survives reload and Reset restores every default", async ({ page }) => {
+        const reset = page.locator("#export-panel-overlays-reset");
+        await expect(reset).toBeHidden();
+
+        await page.locator("#export-panel-ov-speed").check();
+        await page.locator('.export-panel__segment button[data-style="card"]').click();
+        const slider = page.locator('#export-panel-overlay-inspector input[type="range"]').first();
+        await slider.evaluate((el) => {
+            const input = el as HTMLInputElement;
+            input.value = "140";
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        const speed = page.locator("#player-speed-overlay");
+        const box = await boxOf(page, "#player-speed-overlay");
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(box.x + 120, box.y - 60, { steps: 6 });
+        await page.mouse.up();
+        const savedLeft = await speed.evaluate((el) => (el as HTMLElement).style.left);
+        await expect(reset).toBeVisible();
+        await expect.poll(() => page.evaluate(() => localStorage.getItem("dashcamigo:export:overlays"))).not.toBeNull();
+
+        await page.reload();
+        await loadTrip(page, SAMPLE_70MAI);
+        await openExport(page);
+
+        await expect(page.locator("#export-panel-ov-speed")).toBeChecked();
+        await expect(page.locator('.export-panel__segment button[data-style="card"]')).toHaveClass(/is-active/);
+        await expect
+            .poll(() => page.locator("#player-speed-overlay").evaluate((el) => (el as HTMLElement).style.left))
+            .toBe(savedLeft);
+        await page.locator('.export-panel__ov-row[data-widget="speed"] .export-panel__ov-name').click();
+        await expect(page.locator('#export-panel-overlay-inspector input[type="range"]').first()).toHaveValue("140");
+        await expect(reset).toBeVisible();
+
+        await reset.click();
+        await expect(page.locator("#export-panel-ov-speed")).not.toBeChecked();
+        await expect(page.locator('.export-panel__segment button[data-style="min"]')).toHaveClass(/is-active/);
+        await expect(reset).toBeHidden();
+        await expect.poll(() => page.evaluate(() => localStorage.getItem("dashcamigo:export:overlays"))).toBeNull();
+    });
+
     test("map overlay is draggable (pointer-events guard)", async ({ page }) => {
         await page.locator("#export-panel-ov-map").check();
         const map = page.locator("#player-map-overlay");
@@ -1138,7 +1180,7 @@ test.describe("export", () => {
         await expect(page.locator("#player-map-overlay")).toBeVisible();
     });
 
-    test("map marker starts from settings and stays local to the export", async ({ page }) => {
+    test("map marker starts from settings, stays separate, and persists with overlays", async ({ page }) => {
         await page.locator("#export-panel-close").click();
         await page.locator("#settings-btn").click();
         const settingsControl = page.locator('[data-marker-control="settings"]');
@@ -1168,7 +1210,7 @@ test.describe("export", () => {
 
         await page.locator("#export-panel-close").click();
         await openExport(page);
-        await expect(page.locator('[data-marker-control="export"] button[data-marker-shape="sedan"]')).toHaveAttribute(
+        await expect(page.locator('[data-marker-control="export"] button[data-marker-shape="truck"]')).toHaveAttribute(
             "aria-pressed",
             "true",
         );

@@ -776,6 +776,42 @@ fieldset.export-panel__group {
 
 /* ===================== Overlay constructor ===================== */
 
+.export-panel__ov-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--dc-space-2);
+    margin: var(--dc-space-2) 0 var(--dc-space-1);
+}
+
+.export-panel__ov-top .export-panel__ov-subhead {
+    margin: 0;
+}
+
+.export-panel__ov-reset {
+    padding: var(--dc-space-1) var(--dc-space-2);
+    border: 1px solid transparent;
+    border-radius: var(--dc-radius-sm);
+    background: transparent;
+    color: var(--accent);
+    font: inherit;
+    font-size: var(--dc-text-sm);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.export-panel__ov-reset:hover {
+    background: var(--bg-hover);
+}
+
+.export-panel__ov-reset:active {
+    background: var(--bg-active);
+}
+
+.export-panel__ov-reset[hidden] {
+    display: none;
+}
+
 /* Sub-heading above each control cluster (Style / Preset / Widgets / Accent). */
 .export-panel__ov-subhead {
     margin: var(--dc-space-3) 0 var(--dc-space-1);
@@ -942,6 +978,7 @@ fieldset.export-panel__group {
    these new controls fell back to the browser default outline, out of step
    with every other focusable control here. */
 .export-panel__segment button:focus-visible,
+.export-panel__ov-reset:focus-visible,
 .export-panel__ov-name:focus-visible,
 .export-panel__ov-swatch:focus-visible,
 .export-panel__ov-row input[type="checkbox"]:focus-visible {
@@ -978,6 +1015,9 @@ fieldset.export-panel__group {
         min-height: 44px;
         display: flex;
         align-items: center;
+    }
+    .export-panel__ov-reset {
+        min-height: 44px;
     }
     .export-panel__ov-row input[type="checkbox"] {
         width: 22px;
