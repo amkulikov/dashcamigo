@@ -15,6 +15,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { getLandingBrandsCommaSeparated } from "../vite-plugins/supported-brands.js";
 import { enDict } from "./i18n/en.js";
 import { REPO_URL } from "./i18n/seo-config.js";
 
@@ -34,11 +35,6 @@ function extractBaselineFaq(html: string): FaqEntry[] {
     };
     return parsed.mainEntity.map((q) => ({ name: q.name, text: q.acceptedAnswer.text }));
 }
-
-// Vendor brand list that the DOM weaves between i18n fragments for a2 and the
-// hero-lead. Must stay in sync with index.html and with buildFaqJsonLd in
-// vite-plugins/seo-prerender.ts.
-const VENDOR_BRANDS_TAIL = "70mai, Viofo, BlackVue, GoPro, Garmin, Vantrue, Thinkware";
 
 describe("faq-jsonld baseline parity", () => {
     const baseline = extractBaselineFaq(baselineHtml);
@@ -72,7 +68,7 @@ describe("faq-jsonld baseline parity", () => {
 
     it("entry 3 (q2) stitches vendor brands between dict fragments", () => {
         const entry = baseline[3];
-        const expected = `${VENDOR_BRANDS_TAIL}${enDict["landing.faq.a2.after"]}`;
+        const expected = `${getLandingBrandsCommaSeparated()}${enDict["landing.faq.a2.after"]}`;
         expect(entry?.name).toBe(enDict["landing.faq.q2"]);
         expect(entry?.text).toBe(expected);
     });
