@@ -1342,27 +1342,17 @@ test.describe("player", () => {
     });
 
     test("playhead re-anchors when the chart resizes while paused", async ({ page }) => {
-        // Regression for "the export player puts the current position in the
-        // wrong place": the playhead is positioned in absolute px
-        // (frac * chart width). Entering export-mode resizes the chart (sidebar
-        // vacates, the panel reserves margin) AND pauses playback, so no
-        // timeupdate refreshes the px - a stale playhead freezes at the old
-        // width, mispositioned by an amount proportional to how far into the
-        // trip we are (invisible at t=0, off everywhere else). The chart
-        // ResizeObserver must re-anchor it. Driven here through a large viewport
-        // resize - the same resize-while-paused code path export-mode hits, with
-        // an unambiguous width delta that a stale px cannot survive.
+        // Export mode resizes the chart while playback is paused. The playhead
+        // must retain its timeline fraction without another timeupdate.
         const play = page.locator("#player-play");
         if ((await play.getAttribute("data-paused")) !== "true") await play.click();
         await expect(play).toHaveAttribute("data-paused", "true");
 
         const playhead = page.locator("#player-chart-playhead");
-        // playerChartEl.clientWidth is exactly the basis setPlayerCursorRelSec
-        // multiplies by, so left/clientWidth recovers the trip-time fraction.
-        // It is invariant under resize for a fixed playback position (the zoom
-        // window is unchanged), bar a tiny Y-axis-gutter shift.
+        // Read the resolved CSS position so the assertion measures rendered
+        // geometry regardless of whether positioning uses pixels or percentages.
         const playheadFraction = async (): Promise<number> => {
-            const left = await playhead.evaluate((el) => Number.parseFloat((el as HTMLElement).style.left));
+            const left = await playhead.evaluate((el) => Number.parseFloat(getComputedStyle(el).left));
             const width = await page.locator("#player-chart").evaluate((el) => (el as HTMLElement).clientWidth);
             expect(width, "chart must have a width").toBeGreaterThan(0);
             return left / width;

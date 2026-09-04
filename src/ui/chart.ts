@@ -1906,8 +1906,8 @@ export function setPlayerCursorRelSec(relSec: number | null, view: TimelineView 
         el.hidden = true;
         return;
     }
-    const x = relSecToPlayerChartCssX(relSec, view);
-    if (x == null) {
+    const frac = view ? timelineSecToFracInView(relSec, view) : null;
+    if (frac == null) {
         dom.playerChartEl.classList.remove("is-playhead-outside-view");
         el.hidden = true;
         return;
@@ -1918,8 +1918,8 @@ export function setPlayerCursorRelSec(relSec: number | null, view: TimelineView 
                 relSec > view.endSec + PLAYHEAD_VIEW_EDGE_EPSILON_SEC),
     );
     dom.playerChartEl.classList.toggle("is-playhead-outside-view", isOutsideView);
-    // Center the 2px line on x (offset by half its width).
-    el.style.left = `${x - 1}px`;
+    // A percentage follows resizing without reading layout after text updates.
+    el.style.left = `calc(${frac * 100}% - 1px)`;
     el.hidden = false;
 }
 

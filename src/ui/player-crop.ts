@@ -298,7 +298,10 @@ function exitCropEdit(): void {
     editingAspect = null;
     // Refresh previews from state - the edited channel keeps its zoomed crop.
     // No-op outside export-mode.
-    if (ch) syncCropPreviews();
+    if (ch) {
+        syncCropPreviews();
+        notifyExportStateChanged();
+    }
 }
 
 /**

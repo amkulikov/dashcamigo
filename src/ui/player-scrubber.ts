@@ -8,7 +8,7 @@
 // (scrubber -> player), so the player module never has to know about scrubber
 // internals.
 
-import { t } from "../i18n/index.js";
+import { getDateLocale, t } from "../i18n/index.js";
 import { contentToFrame, pickFrameChannel } from "../trips.js";
 import {
     getTimelineView,
@@ -39,15 +39,7 @@ let seekTripTimeFn: (sec: number) => void = () => {
     throw new Error("player-scrubber: initPlayerScrubber not called before use");
 };
 
-/**
- * Updates the progress bar text and chart cursor. Called on every timeupdate
- * (up to 30 Hz). chart.draw() repaints the canvas without recomputing
- * scales/axes/decimation (~1-2ms on decimated datasets). Previously
- * chart.update("none") was used here - that runs the full lifecycle
- * (~50-100ms on long trips). The cursor line is drawn by cursorPlugin inside
- * afterDatasetsDraw which fires on draw() - no update needed while data is
- * unchanged. No throttle: chart.draw() is cheap enough at 30 Hz.
- */
+/** Updates the progress text and DOM playhead on each timeupdate. */
 export function updatePlayerProgressUi(): void {
     if (!state.active) {
         dom.playerBar.current.textContent = "0:00";
@@ -58,13 +50,18 @@ export function updatePlayerProgressUi(): void {
     }
     const cur = getTripCurrentTimeFn();
     const view = getTimelineView();
-    dom.playerBar.current.textContent = formatTime(cur);
+    const currentTime = formatTime(cur);
+    if (dom.playerBar.current.textContent !== currentTime) dom.playerBar.current.textContent = currentTime;
     // Single playhead DOM overlay spans chart canvas + ruler + strip; one
     // visual element, no risk of misalignment between chart-drawn line and
     // strip DOM line.
     setPlayerCursorRelSec(cur, view);
-    updateMiniProgress(cur, view);
+    updateMiniProgress(cur, view, currentTime);
 }
+
+let shownProgressTime: string | null = null;
+let shownProgressTotal: string | null = null;
+let shownProgressLocale: string | null = null;
 
 /**
  * Updates the seek thumb position. null resets to 0. The bar maps the current
@@ -77,13 +74,20 @@ export function updatePlayerProgressUi(): void {
  * (the single position indicator) and the two drifted on each timeupdate. The
  * thumb sits exactly on the playhead via the shared timelineSecToFrac mapping.
  */
-function updateMiniProgress(curSec: number | null, view: TimelineView | null = getTimelineView()): void {
+function updateMiniProgress(
+    curSec: number | null,
+    view: TimelineView | null = getTimelineView(),
+    currentTime: string | null = null,
+): void {
     if (!dom.miniProgress) return;
     const curFrac = curSec === null || !view ? null : timelineSecToFracInView(curSec, view);
     if (!view || curFrac === null) {
         dom.miniProgressThumb.style.left = "0";
         dom.miniProgress.setAttribute("aria-valuenow", "0");
         dom.miniProgress.removeAttribute("aria-valuetext");
+        shownProgressTime = null;
+        shownProgressTotal = null;
+        shownProgressLocale = null;
         return;
     }
     const content = 1 - view.leftFrac - view.rightFrac;
@@ -91,17 +95,22 @@ function updateMiniProgress(curSec: number | null, view: TimelineView | null = g
     const posPct = content > 0 ? Math.round(((curFrac - view.leftFrac) / content) * 100) : 0;
     dom.miniProgress.setAttribute("aria-valuenow", String(posPct));
     // The bare percentage is meaningless to a screen reader; announce a human
-    // time instead ("4:03 of 12:40"). Built from CONTENT time (curSec is already
-    // content seconds), so it stays correct even when the chart is zoomed and
-    // valuenow is window-relative. Recomputed every tick, so it re-localizes on
-    // the next update after a language switch - no extra subscription needed.
+    // time instead ("4:03 of 12:40"). Its second-resolution text changes less
+    // often than the subsecond playhead and needs no formatting between ticks.
     const trip = activeTrip();
     if (trip && curSec !== null) {
+        const cur = currentTime ?? formatTime(curSec);
+        const total = formatTime(trip.timeline.contentDurationSec);
+        const locale = getDateLocale();
+        if (cur === shownProgressTime && total === shownProgressTotal && locale === shownProgressLocale) return;
+        shownProgressTime = cur;
+        shownProgressTotal = total;
+        shownProgressLocale = locale;
         dom.miniProgress.setAttribute(
             "aria-valuetext",
             t("player.progress.position", {
-                cur: formatTime(curSec),
-                total: formatTime(trip.timeline.contentDurationSec),
+                cur,
+                total,
             }),
         );
     }

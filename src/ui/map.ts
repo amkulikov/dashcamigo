@@ -55,7 +55,7 @@ const seenMapErrors = new Set<string>();
 const seenMiniMapErrors = new Set<string>();
 
 import { reportMapTileNetworkError, reportMapTilesOk } from "./connectivity.js";
-import { dom } from "./dom.js";
+import { dom, onActivePlayerEvent } from "./dom.js";
 import { subscribeExportState } from "./export-state.js";
 import { formatTime } from "./format.js";
 import { activeFrame, activeTrip, state } from "./state.js";
@@ -1802,9 +1802,9 @@ export function buildRecordPopupHtml(rec: GpsRecord, trip: Trip): string {
  * backends present file-relative currentTime (0..frame.durationSec), so we
  * always add it to frame.startUtc.
  */
-function currentRealUtc(af: { trip: Trip; frame: TripFrame }): number {
+function currentRealUtc(frame: TripFrame): number {
     const ct = dom.player.currentTime || 0;
-    return af.frame.startUtc + ct;
+    return frame.startUtc + ct;
 }
 
 /**
@@ -1819,7 +1819,7 @@ function currentInterpolatedPosition(): {
 } | null {
     const af = activeFrame();
     if (!af || af.trip.records.length === 0) return null;
-    return interpolatePosition(af.trip.records, currentRealUtc(af));
+    return interpolatePosition(af.trip.records, currentRealUtc(af.frame));
 }
 
 export function syncMapFollowButton(): void {
@@ -1994,6 +1994,7 @@ export function applyMapLayout(): void {
     dom.playerWrap.classList.toggle("map-expanded", showBigMap);
 
     dom.miniMap.hidden = !showMini;
+    ensureMarkerLoop();
     // Close-X follows the mini-map - if there's no map to close, no button.
     dom.miniMapClose.hidden = !showMini;
     dom.mapCollapseBtn.hidden = !showBigMap;
@@ -2511,14 +2512,10 @@ function initMiniMapHover(): void {
 // tabs (CPU savings). Text metrics are updated via timeupdate instead - no point
 // writing to the DOM at 60 Hz.
 //
-// Two lanes inside the tick:
-//   fast (every frame): marker DOM + follow camera. Marker.setLngLat is a pure
-//        DOM transform in maplibre v6 (no map repaint), and the camera jumpTo
-//        is change-gated, so the per-frame lane costs ~a binary search while
-//        the playhead is static.
-//   slow (200 ms): master/slave drift sync (onAfterTick) + the post-interaction
-//        grace-window countdown. Neither needs frame rate.
+// Visible motion uses rAF; idle/hidden maps only need the drift-sync cadence.
+// Media events wake a sleeping loop immediately for playback and paused seeks.
 let markerRafHandle: number | null = null;
+let markerTimerHandle: ReturnType<typeof setTimeout> | null = null;
 
 const DRIFT_SYNC_INTERVAL_MS = 200;
 let slowLaneLastMs = 0;
@@ -2736,52 +2733,35 @@ let markerLoopOnAfterTick: (() => void) | undefined;
  */
 export function ensureMarkerLoop(): void {
     if (markerRafHandle !== null) return;
+    if (markerTimerHandle !== null) {
+        clearTimeout(markerTimerHandle);
+        markerTimerHandle = null;
+    }
     if (!state.active) return;
     startMarkerLoop({ onAfterTick: markerLoopOnAfterTick });
 }
 
 export function startMarkerLoop(opts: { onAfterTick?: () => void } = {}): void {
-    if (markerRafHandle !== null) return;
-    markerLoopOnAfterTick = opts.onAfterTick;
-    const onAfterTick = opts.onAfterTick;
-
-    // No WebGL: there is no car marker (refreshMapless never creates one), so the
-    // marker tick below would self-terminate on its `!state.marker` guard and
-    // never reach onAfterTick. But onAfterTick (driftSyncSlaves) is the ONLY
-    // continuous master/slave resync during steady multichannel playback - the
-    // event-based corrections only fire on seek/play/pause. Run a minimal loop
-    // that just drives onAfterTick so slaves don't drift on a map-less browser.
-    if (!isMapAvailable()) {
-        const driftTick = (): void => {
-            if (!state.active) {
-                markerRafHandle = null;
-                return;
-            }
-            markerRafHandle = requestAnimationFrame(driftTick);
-            if (state.transcodeInProgress) return;
-            const now = performance.now();
-            if (now - slowLaneLastMs < DRIFT_SYNC_INTERVAL_MS) return;
-            slowLaneLastMs = now;
-            onAfterTick?.();
-        };
-        markerRafHandle = requestAnimationFrame(driftTick);
-        return;
-    }
+    if (opts.onAfterTick) markerLoopOnAfterTick = opts.onAfterTick;
+    if (markerRafHandle !== null || markerTimerHandle !== null) return;
 
     // Marker/camera work for one frame. Separate from the rAF tick so its
     // early-returns (no trip / no frame / GPS window ended) skip ONLY the map
     // work - onAfterTick in the rAF tick below must still run.
-    const markerTick = (now: number, frameDtMs: number): void => {
-        if (!state.active || !state.marker) return;
+    const markerTick = (now: number, frameDtMs: number): boolean => {
+        if (!state.active || !state.marker) return false;
+        const mainMapVisible = state.hasTrack && state.mapExpanded && getViewPanels().map && !state.exportModeOpen;
+        const miniMapVisible = state.hasTrack && !state.mapExpanded && !dom.miniMap.hidden;
+        if (!mainMapVisible && !miniMapVisible) return false;
         const trip = state.trips[state.active.trip];
-        if (!trip || trip.records.length === 0) return;
+        if (!trip || trip.records.length === 0) return false;
         // The marker always reflects the actual currentTime of the video.
         // chartHoverX is only for the chart cursor (cursorPlugin) - graph hover
         // must not move the marker, otherwise the user loses track of where the
         // car actually is during playback.
         const frame = trip.frames[state.active.frame];
-        if (!frame) return;
-        const targetUnix = currentRealUtc({ trip, frame });
+        if (!frame) return false;
+        const targetUnix = currentRealUtc(frame);
         const pos = interpolatePosition(trip.records, targetUnix);
         if (!pos) {
             // GPS window ended before video (Vantrue drops GPS on long stops;
@@ -2790,19 +2770,12 @@ export function startMarkerLoop(opts: { onAfterTick?: () => void } = {}): void {
             // hidden in sync via the timeupdate handler.
             setMarkerHidden(state.marker, true);
             if (state.miniMapMarker) setMarkerHidden(state.miniMapMarker, true);
-            return;
+            return false;
         }
         setMarkerHidden(state.marker, false);
         if (state.miniMapMarker) setMarkerHidden(state.miniMapMarker, false);
 
-        // Skip work for invisible maps. jumpTo repaints (and fires move events)
-        // even when the container is display:none, and the marker DOM writes
-        // would be pure waste on a hidden map. mainMapVisible must mirror the
-        // FULL showBigMap condition from applyMapLayout - the map container is
-        // also display:none when the View menu hides the map panel or export
-        // mode is open, while state.mapExpanded stays true.
-        const mainMapVisible = state.hasTrack && state.mapExpanded && getViewPanels().map && !state.exportModeOpen;
-        const miniMapVisible = state.hasTrack && !state.mapExpanded && !dom.miniMap.hidden;
+        let cameraSettling = false;
 
         if (mainMapVisible) {
             const map = state.map;
@@ -2899,6 +2872,7 @@ export function startMarkerLoop(opts: { onAfterTick?: () => void } = {}): void {
             // fires move events and forces a repaint).
             if (map && following && !followFilterConverged) {
                 stepFollowCamera(map, pos, zoomTarget, headingUp, frameDtMs);
+                cameraSettling = !followFilterConverged;
             }
         }
 
@@ -2934,9 +2908,18 @@ export function startMarkerLoop(opts: { onAfterTick?: () => void } = {}): void {
                 }
             }
         }
+        return !dom.player.paused || cameraSettling;
+    };
+
+    const scheduleTick = (isAnimating: boolean): void => {
+        // rAF also preserves the browser's background-tab suspension.
+        if (isAnimating || document.hidden) markerRafHandle = requestAnimationFrame(tick);
+        else markerTimerHandle = setTimeout(tick, DRIFT_SYNC_INTERVAL_MS);
     };
 
     const tick = (): void => {
+        markerRafHandle = null;
+        markerTimerHandle = null;
         // Early exit ONLY when no trip is active (idle before first trip
         // selection) - do not reschedule; ensureMarkerLoop() restarts when
         // state.active appears. Eliminates 60 Hz idle wake-ups.
@@ -2951,11 +2934,13 @@ export function startMarkerLoop(opts: { onAfterTick?: () => void } = {}): void {
             markerRafHandle = null;
             return;
         }
-        markerRafHandle = requestAnimationFrame(tick);
         // During export the main thread handles worker ack messages from the
         // proxy sink (see writable-bridge.ts). Any rAF work here steals main-
         // thread time from those acks, stalling the worker in await.
-        if (state.transcodeInProgress) return;
+        if (state.transcodeInProgress || document.hidden) {
+            scheduleTick(false);
+            return;
+        }
         const now = performance.now();
         // Clamp the frame delta: after a background-tab span rAF resumes with a
         // huge gap, and an unclamped dt would make the filter alphas ~1 (hard
@@ -2977,9 +2962,9 @@ export function startMarkerLoop(opts: { onAfterTick?: () => void } = {}): void {
             // Player hook for master/slave drift sync in multi-channel trips.
             // No-op on single-channel. Runs even when markerTick skips its map
             // work (no GPS / GPS window ended) - drift sync needs no marker.
-            if (onAfterTick) onAfterTick();
+            markerLoopOnAfterTick?.();
         }
-        markerTick(now, frameDtMs);
+        scheduleTick(markerTick(now, frameDtMs));
     };
     lastFrameMs = performance.now();
     markerRafHandle = requestAnimationFrame(tick);
@@ -3278,6 +3263,9 @@ function syncChaseControls(): void {
  */
 export function initMap(cb: MapCallbacks): void {
     callbacks = cb;
+    onActivePlayerEvent("play", ensureMarkerLoop);
+    onActivePlayerEvent("seeking", ensureMarkerLoop);
+    onActivePlayerEvent("seeked", ensureMarkerLoop);
     state.mapExpanded = getPreferredMapMode() === "large";
     subscribeMapMarkerAppearance(refreshLiveMapMarkerAppearance);
 

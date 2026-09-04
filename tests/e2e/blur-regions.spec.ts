@@ -143,6 +143,89 @@ test.describe("blur regions", () => {
         await expect.poll(async () => (await zoneSourceRect(page)).w).toBeGreaterThan(moved.w);
     });
 
+    test("paused blur preview sleeps and wakes for seeks, playback and resize", async ({ page }, testInfo) => {
+        await drawZone(page, 0.4, 0.4, 0.6, 0.6);
+        const canvas = page.locator('.video-tile[data-channel="front"] .blur-preview-canvas');
+        await expect(page.locator('.video-tile[data-channel="front"] .blur-box:not([hidden])')).toBeVisible();
+        const work = await canvas.evaluate(async (el: HTMLCanvasElement) => {
+            const video = el.parentElement?.querySelector<HTMLVideoElement>(
+                "video:not(.preload-slot):not(.tile-blur-bg)",
+            );
+            const ctx = el.getContext("2d");
+            const descriptor = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "currentTime");
+            if (!video || !ctx || !descriptor?.get || !descriptor.set) throw new Error("preview unavailable");
+            const read = descriptor.get;
+            const write = descriptor.set;
+            const clear = ctx.clearRect;
+            let reads = 0;
+            let paints = 0;
+            const settle = async (): Promise<void> => {
+                await new Promise<void>((resolve) =>
+                    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+                );
+            };
+            video.pause();
+            await settle();
+            Object.defineProperty(video, "currentTime", {
+                configurable: true,
+                get() {
+                    reads++;
+                    return read.call(video);
+                },
+                set(value: number) {
+                    write.call(video, value);
+                },
+            });
+            ctx.clearRect = (...args) => {
+                paints++;
+                clear.apply(ctx, args);
+            };
+            try {
+                await new Promise((resolve) => setTimeout(resolve, 1000));
+                const idleReads = reads;
+                const idlePaints = paints;
+                const seeked = new Promise<void>((resolve) =>
+                    video.addEventListener("seeked", () => resolve(), { once: true }),
+                );
+                video.currentTime = Math.min(video.duration / 2, video.currentTime + 0.5);
+                await seeked;
+                await settle();
+                const seekPaints = paints - idlePaints;
+                const beforePlay = paints;
+                await video.play();
+                await new Promise((resolve) => setTimeout(resolve, 250));
+                video.pause();
+                await settle();
+                return { idleReads, idlePaints, seekPaints, playbackPaints: paints - beforePlay };
+            } finally {
+                Reflect.deleteProperty(video, "currentTime");
+                ctx.clearRect = clear;
+            }
+        });
+        expect(work.idleReads, "paused blur does not poll the media clock at display refresh rate").toBeLessThanOrEqual(
+            20,
+        );
+        expect(work.idlePaints, "paused preview keeps the painted pixels").toBeLessThanOrEqual(1);
+        expect(work.seekPaints, "a paused seek redraws the decoded frame").toBeGreaterThan(0);
+        expect(work.playbackPaints, "playback resumes continuous redraws").toBeGreaterThan(1);
+
+        const before = await zoneSourceRect(page);
+        const oldWidth = await canvas.evaluate((el: HTMLCanvasElement) => el.width);
+        await page.setViewportSize({ width: 1100, height: DESKTOP.height });
+        await expect.poll(() => canvas.evaluate((el: HTMLCanvasElement) => el.width)).not.toBe(oldWidth);
+        const resized = await zoneSourceRect(page);
+        expect(resized.x).toBeCloseTo(before.x, 2);
+        expect(resized.w).toBeCloseTo(before.w, 2);
+
+        await page.locator(".export-panel__crop-btn").click();
+        await expect(page.locator(".crop-editor")).toBeVisible();
+        await expect(page.locator(".blur-box-layer")).toBeHidden();
+        await page.locator(".crop-done-btn").click();
+        await expect(page.locator(".crop-editor")).toHaveCount(0);
+        await expect(page.locator('.video-tile[data-channel="front"] .blur-box:not([hidden])')).toBeVisible();
+        await testInfo.attach("blur-preview-work", { body: JSON.stringify(work), contentType: "application/json" });
+    });
+
     test("escape cancels drawing without creating a zone", async ({ page }) => {
         await page.locator(".export-panel__blur-add-btn").click();
         await expect(page.locator(".blur-draw-layer").first()).toBeVisible();

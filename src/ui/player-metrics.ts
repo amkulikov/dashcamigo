@@ -9,7 +9,7 @@ import { getDateLocale, t } from "../i18n/index.js";
 import { cumulativeDistanceKm, findNearestIndex } from "../parser.js";
 import { contentToFrame, contentToWallUtc, displayClockDate, type Trip } from "../trips.js";
 import type { GpsRecord } from "../parser.js";
-import { formatDistanceFromKm, formatSpeedFromMs, subscribeUnitsChange, toggleUnits } from "../units-pref.js";
+import { formatDistanceFromKm, formatSpeedFromMs, getUnits, subscribeUnitsChange, toggleUnits } from "../units-pref.js";
 import { dom } from "./dom.js";
 import { syncGpsSyncLaunchers } from "./gps-sync-controls.js";
 import { activeCandidate, activeFrame } from "./state.js";
@@ -85,7 +85,48 @@ function showPlaceholders(): void {
     dom.metrics.distanceUnit.textContent = t(formatDistanceFromKm(0).unitKey);
 }
 
+let shownRecord: GpsRecord | null | undefined;
+let shownUnixSeconds: number | undefined;
+let shownActive: boolean | undefined;
+let shownLat: number | undefined;
+let shownLon: number | undefined;
+let shownSpeedMs: number | undefined;
+let shownCameraTzSec: number | null = null;
+let shownDistanceKm: number | null = null;
+let shownUnits: ReturnType<typeof getUnits> | null = null;
+let shownLocale: string | null = null;
+
 function refreshMetrics(rec: GpsRecord | null, cameraTzSec: number | null, distanceKm: number | null): void {
+    const units = getUnits();
+    const locale = getDateLocale();
+    // The readout uses the nearest GPS sample, which often stays unchanged
+    // across many timeupdates. Preserve its DOM and formatted strings until
+    // a sample, distance, timezone or formatting preference changes. Metadata
+    // enrichment can correct the same record in place, so retain its scalars.
+    if (
+        rec === shownRecord &&
+        Object.is(rec?.unixSeconds, shownUnixSeconds) &&
+        rec?.active === shownActive &&
+        Object.is(rec?.lat, shownLat) &&
+        Object.is(rec?.lon, shownLon) &&
+        Object.is(rec?.speedMs, shownSpeedMs) &&
+        cameraTzSec === shownCameraTzSec &&
+        distanceKm === shownDistanceKm &&
+        units === shownUnits &&
+        locale === shownLocale
+    )
+        return;
+    shownRecord = rec;
+    shownUnixSeconds = rec?.unixSeconds;
+    shownActive = rec?.active;
+    shownLat = rec?.lat;
+    shownLon = rec?.lon;
+    shownSpeedMs = rec?.speedMs;
+    shownCameraTzSec = cameraTzSec;
+    shownDistanceKm = distanceKm;
+    shownUnits = units;
+    if (locale !== shownLocale) shownFixState = null;
+    shownLocale = locale;
     if (rec === null) {
         applyFixState("none");
         showPlaceholders();
@@ -231,6 +272,7 @@ let readTripCurrentSec: (() => number) | null = null;
  * trip that carries a full track.
  */
 export function resyncMetricsForTrip(): void {
+    shownRecord = undefined;
     syncGpsSyncLaunchers();
     if (readTripCurrentSec === null) return;
     refreshMetricsFromActiveFrame(readTripCurrentSec());

@@ -18,11 +18,9 @@
 // blur UI on it is hidden (the crop editor's drag view breaks the mapping and
 // owning the same surface would fight over pointer events).
 //
-// Redraw: one rAF loop, gated on export-mode + regions present. rVFC per video
-// would be cheaper while paused, but the preload-slot swap (dom.ts) makes
-// per-element callback registration churn-prone; the loop reads the live
-// channelPlayers proxy every tick instead and skips repaint work when neither
-// time nor geometry changed. No logging here - hot path.
+// Redraw: rAF while visible videos play; media events and geometry edits wake
+// a paused preview. Listeners cover both preload slots so promotion preserves
+// redraws. No logging here - hot path.
 
 import { t } from "../i18n/index.js";
 import type { Channel } from "../parsers/types.js";
@@ -52,7 +50,7 @@ import {
 } from "./blur-regions-state.js";
 import { activeEffectiveBlurRegions } from "./blur-effective.js";
 import { detectRegions, subscribeBlurDetect } from "./blur-detect.js";
-import { ALL_CHANNELS, channelPlayers, channelTileFor, dom } from "./dom.js";
+import { ALL_CHANNELS, channelPlayers, channelTileFor, dom, forEachVideoSlot } from "./dom.js";
 import { exportPanelState, notifyExportStateChanged, subscribeExportState } from "./export-state.js";
 import { channelDisplayLabel } from "./format.js";
 import { exitCropEditIfOpen } from "./player-crop.js";
@@ -78,7 +76,13 @@ interface TileUi {
     /** region id -> box element, rebuilt on region list changes. */
     boxes: Map<string, HTMLDivElement>;
     /** Last painted state, to skip idle repaints. */
-    lastSig: string;
+    lastVideo: HTMLVideoElement | null;
+    lastTime: number;
+    lastContentSec: number;
+    lastEpoch: number;
+    lastWidth: number;
+    lastHeight: number;
+    lastDpr: number;
 }
 
 const tileUis = new Map<Channel, TileUi>();
@@ -89,6 +93,7 @@ let drawLayerEls: HTMLDivElement[] = [];
 // Bumped by anything that changes geometry (resize, crop, layout) so the rAF
 // loop repaints even at an unchanged playhead.
 let geometryEpoch = 0;
+let previewRegions: readonly BlurRegion[] = [];
 
 let lastSeenTrip: ReturnType<typeof activeTrip> = null;
 
@@ -118,6 +123,22 @@ export function initPlayerBlur(): void {
         geometryEpoch++;
         syncLifecycle();
     });
+    forEachVideoSlot((video, ch) => {
+        const schedule = (): void => {
+            if (video === channelPlayers[ch]) schedulePaint();
+        };
+        const invalidate = (): void => {
+            if (video !== channelPlayers[ch]) return;
+            geometryEpoch++;
+            schedulePaint();
+        };
+        for (const event of ["play", "pause", "timeupdate", "seeking"]) video.addEventListener(event, schedule);
+        // seeked may supply decoded pixels after a seeking tick already saw
+        // the target currentTime. Repaint even when its timestamp is unchanged.
+        for (const event of ["seeked", "loadeddata", "emptied", "resize"]) {
+            video.addEventListener(event, invalidate);
+        }
+    });
     // Escape cancels draw-arming before anything else (capture phase, same
     // pattern as the crop editor's Escape).
     document.addEventListener(
@@ -134,8 +155,10 @@ export function initPlayerBlur(): void {
     if (typeof ResizeObserver !== "undefined" && dom.videoGrid) {
         const ro = new ResizeObserver(() => {
             geometryEpoch++;
+            schedulePaint();
         });
         ro.observe(dom.videoGrid);
+        for (const ch of ALL_CHANNELS) ro.observe(channelTileFor(ch));
     }
 }
 
@@ -158,6 +181,7 @@ function blurEditorActive(): boolean {
 function syncLifecycle(): void {
     const active = blurUiActive();
     if (active) {
+        previewRegions = activeEffectiveBlurRegions();
         for (const ch of ALL_CHANNELS) {
             if (state.composition.channelOrder.indexOf(ch) >= 0) ensureTileUi(ch);
         }
@@ -169,8 +193,9 @@ function syncLifecycle(): void {
             }
         }
         rebuildBoxes();
-        if (!rafId) rafId = requestAnimationFrame(tick);
+        schedulePaint();
     } else {
+        previewRegions = [];
         if (rafId) {
             cancelAnimationFrame(rafId);
             rafId = 0;
@@ -192,7 +217,19 @@ function ensureTileUi(ch: Channel): TileUi {
     boxLayer.className = "blur-box-layer";
     tile.appendChild(canvas);
     tile.appendChild(boxLayer);
-    ui = { canvas, ctx, boxLayer, boxes: new Map(), lastSig: "" };
+    ui = {
+        canvas,
+        ctx,
+        boxLayer,
+        boxes: new Map(),
+        lastVideo: null,
+        lastTime: Number.NaN,
+        lastContentSec: Number.NaN,
+        lastEpoch: -1,
+        lastWidth: 0,
+        lastHeight: 0,
+        lastDpr: 0,
+    };
     tileUis.set(ch, ui);
     return ui;
 }
@@ -208,10 +245,19 @@ function destroyTileUi(ui: TileUi): void {
  *  Mirrors the export mapping: view = crop window, dest = keep-aspect fit of
  *  the view in the tile (see player-crop's resultContentRect). Null when the
  *  video has no dimensions yet. */
-function tileMapping(ch: Channel): { vw: number; vh: number; view: CropRect; dest: Rect } | null {
+interface TileMapping {
+    vw: number;
+    vh: number;
+    view: CropRect;
+    dest: Rect;
+}
+
+function tileMapping(ch: Channel, width?: number, height?: number): TileMapping | null {
     const v = channelPlayers[ch];
     const tile = channelTileFor(ch);
-    if (!v || v.videoWidth <= 0 || v.videoHeight <= 0 || tile.clientWidth <= 0) return null;
+    const tileWidth = width ?? tile.clientWidth;
+    const tileHeight = height ?? tile.clientHeight;
+    if (!v || v.videoWidth <= 0 || v.videoHeight <= 0 || tileWidth <= 0) return null;
     const slotIdx = state.composition.channelOrder.indexOf(ch);
     const crop = (slotIdx >= 0 ? state.composition.perSlotCrops[slotIdx] : null) ?? {
         xPct: 0,
@@ -220,14 +266,12 @@ function tileMapping(ch: Channel): { vw: number; vh: number; view: CropRect; des
         hPct: 1,
     };
     const viewAspect = (v.videoWidth / v.videoHeight) * (crop.wPct / Math.max(1e-6, crop.hPct));
-    const dest = containRect(viewAspect, tile.clientWidth, tile.clientHeight);
+    const dest = containRect(viewAspect, tileWidth, tileHeight);
     return { vw: v.videoWidth, vh: v.videoHeight, view: crop, dest };
 }
 
 /** Region rect (normalized source) -> tile px, honoring the crop view. */
-function regionRectToTile(ch: Channel, rect: CropRect): { x: number; y: number; w: number; h: number } | null {
-    const m = tileMapping(ch);
-    if (!m) return null;
+function regionRectToTile(m: TileMapping, rect: CropRect): { x: number; y: number; w: number; h: number } | null {
     return mapRegionRectToDest(
         rect,
         m.vw,
@@ -254,18 +298,23 @@ function tilePointToSource(ch: Channel, px: number, py: number): { x: number; y:
 
 // --- preview loop ------------------------------------------------------------
 
+function schedulePaint(): void {
+    if (!rafId && tileUis.size > 0) rafId = requestAnimationFrame(tick);
+}
+
 function tick(): void {
     rafId = 0;
-    if (!blurUiActive()) return;
+    if (!state.exportModeOpen || previewRegions.length === 0) return;
     const contentSec = getTripCurrentTime();
     // Manual zones + auto-detected regions paint identically; only manual ones
     // get editor boxes (rebuildBoxes reads activeBlurRegions alone - dozens of
     // non-editable auto boxes would bury the drag handles).
-    const regions = activeEffectiveBlurRegions();
+    let isPlaying = false;
     for (const [ch, ui] of tileUis) {
-        paintTile(ch, ui, regions, contentSec);
+        paintTile(ch, ui, previewRegions, contentSec);
+        if (!channelTileFor(ch).hidden && !channelPlayers[ch].paused) isPlaying = true;
     }
-    rafId = requestAnimationFrame(tick);
+    if (isPlaying) schedulePaint();
 }
 
 function paintTile(ch: Channel, ui: TileUi, regions: readonly BlurRegion[], contentSec: number): void {
@@ -275,23 +324,41 @@ function paintTile(ch: Channel, ui: TileUi, regions: readonly BlurRegion[], cont
     const v = channelPlayers[ch];
     // Repaint only when something could have changed: time moved, geometry
     // epoch bumped, or the region list was edited (epoch covers that too).
-    const sig = `${cropEditing ? "c" : ""}|${v?.currentTime ?? -1}|${geometryEpoch}|${tile.clientWidth}x${tile.clientHeight}`;
-    if (sig === ui.lastSig) return;
-    ui.lastSig = sig;
-
+    const currentTime = v.currentTime;
+    const tileWidth = tile.clientWidth;
+    const tileHeight = tile.clientHeight;
     const dpr = window.devicePixelRatio || 1;
-    const w = Math.max(1, Math.round(tile.clientWidth * dpr));
-    const h = Math.max(1, Math.round(tile.clientHeight * dpr));
+    if (
+        v === ui.lastVideo &&
+        currentTime === ui.lastTime &&
+        contentSec === ui.lastContentSec &&
+        geometryEpoch === ui.lastEpoch &&
+        tileWidth === ui.lastWidth &&
+        tileHeight === ui.lastHeight &&
+        dpr === ui.lastDpr
+    )
+        return;
+    ui.lastVideo = v;
+    ui.lastTime = currentTime;
+    ui.lastContentSec = contentSec;
+    ui.lastEpoch = geometryEpoch;
+    ui.lastWidth = tileWidth;
+    ui.lastHeight = tileHeight;
+    ui.lastDpr = dpr;
+
+    const w = Math.max(1, Math.round(tileWidth * dpr));
+    const h = Math.max(1, Math.round(tileHeight * dpr));
     if (ui.canvas.width !== w || ui.canvas.height !== h) {
         ui.canvas.width = w;
         ui.canvas.height = h;
     }
     const ctx = ui.ctx;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, tile.clientWidth, tile.clientHeight);
+    ctx.clearRect(0, 0, tileWidth, tileHeight);
     ui.boxLayer.hidden = cropEditing || !blurEditorActive();
     if (cropEditing || !v || tile.hidden) return;
 
+    const mapping = tileMapping(ch, tileWidth, tileHeight);
     previewHelper ??= createRegionBlurHelper();
     for (const region of regions) {
         if (region.channel !== ch) continue;
@@ -301,7 +368,7 @@ function paintTile(ch: Channel, ui: TileUi, regions: readonly BlurRegion[], cont
             if (box) box.hidden = true;
             continue;
         }
-        const tileRect = regionRectToTile(ch, rect);
+        const tileRect = mapping && regionRectToTile(mapping, rect);
         if (!tileRect) {
             if (box) box.hidden = true;
             continue;
@@ -313,16 +380,15 @@ function paintTile(ch: Channel, ui: TileUi, regions: readonly BlurRegion[], cont
         let patchRect = rect;
         let grid: { cols: number; rows: number } | undefined;
         if (region.style === "pixelate") {
-            const m = tileMapping(ch);
-            const snapped = m
+            const snapped = mapping
                 ? snapRegionToMosaicGrid(
                       rect,
                       v.videoWidth,
                       v.videoHeight,
-                      m.view.xPct * v.videoWidth,
-                      m.view.yPct * v.videoHeight,
-                      m.view.wPct * v.videoWidth,
-                      m.view.hPct * v.videoHeight,
+                      mapping.view.xPct * v.videoWidth,
+                      mapping.view.yPct * v.videoHeight,
+                      mapping.view.wPct * v.videoWidth,
+                      mapping.view.hPct * v.videoHeight,
                   )
                 : null;
             if (!snapped) {
@@ -332,7 +398,7 @@ function paintTile(ch: Channel, ui: TileUi, regions: readonly BlurRegion[], cont
             patchRect = snapped.rect;
             grid = { cols: snapped.cols, rows: snapped.rows };
         }
-        const patchTileRect = patchRect === rect ? tileRect : regionRectToTile(ch, patchRect);
+        const patchTileRect = patchRect === rect ? tileRect : mapping && regionRectToTile(mapping, patchRect);
         if (patchTileRect) {
             paintRegionBlur(
                 ctx,
