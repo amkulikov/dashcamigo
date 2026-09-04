@@ -84,6 +84,15 @@ test.describe("ingest", () => {
             const control = page.locator(`li.trip [data-action="${action}"]`).first();
             await expect(control).toBeVisible();
 
+            if (action === "trip-fav") {
+                // First-edit storage selection owns focus until it is settled.
+                await control.click();
+                const storage = page.locator("#notes-storage-modal");
+                await expect(storage).toBeVisible();
+                await storage.getByRole("button", { name: "Only in this browser" }).click();
+                await expect(storage).toBeHidden();
+            }
+
             await control.focus();
             await expect(control).toBeFocused();
             await page.keyboard.press("Enter");
