@@ -80,10 +80,10 @@ export function blackvueChannelGroupKey(name: string): string | null {
 
 // CarCam 4CH 360-WiFi: REC + date - time - sequence - A/B/C/D channel.
 export const RX_CARCAM = /^REC(\d{8})-(\d{6})-(\d{1,5})-([ABCD])\.mp4$/i;
-// Unbranded single-channel SigmaStar cam: REC + date - time - sequence and
-// NOTHING after it - the missing channel letter is exactly what keeps it
-// disjoint from RX_CARCAM (the -A..D suffix is mandatory there). No GPS data
-// in the corpus sample; name classification only.
+// SigmaStar REC family: REC + date - time - sequence and NOTHING after it.
+// Some cameras are single-channel; iZEEKER puts same-named channels in
+// Normal/A and Normal/B folders. The missing filename channel letter keeps
+// this disjoint from RX_CARCAM (where -A..D is mandatory).
 export const RX_REC_SINGLE = /^REC(\d{8})-(\d{6})-(\d{1,5})\.mp4$/i;
 export const RX_CARCAM_PATH_FRONT = /(?:^|\/)normal\/a\//i;
 export const RX_CARCAM_PATH_REAR = /(?:^|\/)normal\/b\//i;

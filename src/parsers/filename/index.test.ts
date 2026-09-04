@@ -100,8 +100,8 @@ describe("matchFilenameChannel", () => {
     });
 
     it("Carcam path Normal/A -> front, confident (named folder is a deliberate signal)", () => {
-        // No A/B/C/D suffix in the name, so the path-based branch decides.
-        const r = matchFilenameChannel(vf("REC20250607-180617-527.mp4", "Normal/A/REC20250607-180617-527.mp4"));
+        // Unknown filename, so the unscoped path fallback decides.
+        const r = matchFilenameChannel(vf("clip.mp4", "Normal/A/clip.mp4"));
         expect(r.matchedId).toBe("carcam-channel");
         expect(r.value).toEqual({ channel: "front", confident: true });
     });
@@ -946,12 +946,30 @@ describe("rec-single techniques", () => {
     });
 
     it("camera-key converges matching clips from A/B channel folders", () => {
-        const front = cameraFingerprint(vf("REC20260101-120000-228.mp4", "card/Normal/A/REC20260101-120000-228.mp4"));
-        const rear = cameraFingerprint(vf("REC20260101-120000-228.mp4", "card/Normal/B/REC20260101-120000-228.mp4"));
-        expect(front).toBe(rear);
-        expect(front).not.toBe(
+        const name = "REC20260101-120000-228.mp4";
+        const frontFile = vf(name, `card/Normal/A/${name}`);
+        const rearFile = vf(name, `card/Normal/B/${name}`);
+        expect(matchFilenameChannel(frontFile)).toEqual({
+            value: { channel: "front", confident: false },
+            matchedId: "rec-single-channel",
+        });
+        expect(matchFilenameChannel(rearFile)).toEqual({
+            value: { channel: "rear", confident: false },
+            matchedId: "rec-single-channel",
+        });
+        expect(cameraFingerprint(frontFile)).toBe(cameraFingerprint(rearFile));
+        expect(cameraFingerprint(frontFile)).not.toBe(
             cameraFingerprint(vf("REC20260101-120000-228.mp4", "other/Normal/A/REC20260101-120000-228.mp4")),
         );
+    });
+
+    it("camera-key keeps arbitrary bare A/B directories separate", () => {
+        const name = "REC20260101-120000-228.mp4";
+        const cameraA = vf(name, `card/A/${name}`);
+        const cameraB = vf(name, `card/B/${name}`);
+        expect(matchFilenameChannel(cameraA).matchedId).toBeNull();
+        expect(matchFilenameChannel(cameraB).matchedId).toBeNull();
+        expect(cameraFingerprint(cameraA)).not.toBe(cameraFingerprint(cameraB));
     });
 
     it("negative: a REC name WITH a channel letter is still carcam, not rec-single", () => {

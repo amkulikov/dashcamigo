@@ -43,6 +43,7 @@ import {
     RX_NEXTBASE,
     RX_NOVATEK_TS,
     RX_REDTIGER,
+    RX_REC_SINGLE,
     RX_TESLA_PATH,
     RX_THINKWARE,
     RX_VUEROID,
@@ -121,6 +122,14 @@ const GPS_SOURCE_HINTS: readonly GpsSourceHint[] = [
     {
         id: "carcam",
         matches: (f) => RX_CARCAM.test(f.file.name),
+        source: "embedded",
+    },
+    // SigmaStar REC family: iZEEKER iD300 carries KTRX records in an ssmd
+    // meta track. A known single-channel variant with the same name shape has
+    // no GPS, but probing it is safe and preserves support for embedded variants.
+    {
+        id: "rec-single",
+        matches: (f) => RX_REC_SINGLE.test(f.file.name),
         source: "embedded",
     },
     // DDPai: NMEA-in-.gpx sidecar with same basename (nmea-sidecar handler).

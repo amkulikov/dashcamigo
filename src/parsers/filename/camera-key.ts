@@ -28,6 +28,8 @@ import {
     RX_BEFERICH,
     RX_BLACKVUE,
     RX_CARCAM,
+    RX_CARCAM_PATH_FRONT,
+    RX_CARCAM_PATH_REAR,
     RX_DDPAI_EVENT,
     RX_DDPAI_NORMAL,
     RX_DDPAI_TIMELAPSE,
@@ -219,9 +221,13 @@ const recSingleCameraKey: FilenameCameraKeyTechnique = {
     id: "rec-single-camera-key",
     extract(file: VendorFile): string | null {
         if (!RX_REC_SINGLE.test(file.file.name)) return null;
-        // Some 2-channel SigmaStar cameras use the same REC name in A/B
-        // folders. The letter is a channel marker, not camera identity.
-        const dir = strippedParentDir(file.relativePath, ["a", "b", "c", "d"]);
+        // Some dual-channel SigmaStar cameras use the same REC name in
+        // Normal/A and Normal/B folders. Only strip a letter when the channel matcher
+        // recognises that full card layout: a user-created bare A/B directory
+        // may hold a separate physical camera and must remain part of its key.
+        const hasChannelPath =
+            RX_CARCAM_PATH_FRONT.test(file.relativePath) || RX_CARCAM_PATH_REAR.test(file.relativePath);
+        const dir = strippedParentDir(file.relativePath, hasChannelPath ? ["a", "b"] : []);
         return `rec-single|${dir}|${maskName(file.file.name)}`;
     },
 };

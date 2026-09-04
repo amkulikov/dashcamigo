@@ -46,6 +46,7 @@ import {
     RX_NOVATEK_VANTRUE,
     RX_NOVATEK_VIOFO,
     RX_REDTIGER,
+    RX_REC_SINGLE,
     RX_SSTAR_CHN,
     RX_TESLA_EVENT_FILENAME,
     RX_TESLA_PATH,
@@ -163,6 +164,20 @@ const carcamChannel: FilenameChannelTechnique = {
         if (RX_CARCAM_PATH_REAR.test(lower)) return sure("rear");
         if (RX_CARCAM_PATH_INTERIOR.test(lower)) return sure("interior");
         if (RX_CARCAM_PATH_SIDE.test(lower)) return sure("side");
+        return null;
+    },
+};
+
+const recSingleChannel: FilenameChannelTechnique = {
+    id: "rec-single-channel",
+    extract(file: VendorFile): ChannelMatch | null {
+        if (!RX_REC_SINGLE.test(file.file.name)) return null;
+        // iZEEKER separates same-named channels into Normal/A and Normal/B.
+        // The letters are positional indices, so keep the mount labels
+        // unconfirmed while still assigning distinct channel slots.
+        const lower = file.relativePath.toLowerCase();
+        if (RX_CARCAM_PATH_FRONT.test(lower)) return guess("front");
+        if (RX_CARCAM_PATH_REAR.test(lower)) return guess("rear");
         return null;
     },
 };
@@ -549,6 +564,7 @@ export const FILENAME_CHANNEL: readonly FilenameChannelTechnique[] = [
     mai70Channel,
     beferichChannel,
     blackvueChannel,
+    recSingleChannel,
     carcamChannel,
     sstarChnChannel,
     ddpaiChannel,
