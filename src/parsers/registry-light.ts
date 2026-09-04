@@ -117,57 +117,70 @@ export function mergeAccelSamples(
 
         // Per-file gravity removal: mean values of each drift axis are
         // subtracted so GpsRecord.accel*g is gravity-removed (~0 at rest).
-        type AbsAccelSample = AccelSample & { unixSeconds: number };
         const n = samples.length;
-        const absSamples = new Array<AbsAccelSample>(n);
         let sx = 0;
         let sy = 0;
         let sz = 0;
+        let isSorted = true;
+        let previousTime = Number.NEGATIVE_INFINITY;
         for (let i = 0; i < n; i++) {
             const s = samples[i]!;
             sx += s.accelXg;
             sy += s.accelYg;
             sz += s.accelZg;
-            absSamples[i] = { ...s, unixSeconds: startUtc + s.msSinceStart / 1000 };
+            const time = startUtc + s.msSinceStart / 1000;
+            if (!(time >= previousTime)) isSorted = false;
+            previousTime = time;
         }
-        absSamples.sort((a, b) => a.unixSeconds - b.unixSeconds);
+        // Preserve absolute-time rounding and stable ties without cloning each IMU row.
+        const orderedSamples = isSorted
+            ? samples
+            : [...samples].sort((a, b) => startUtc + a.msSinceStart / 1000 - (startUtc + b.msSinceStart / 1000));
 
         const offsets = n > 0 ? { x: sx / n, y: sy / n, z: sz / n } : { x: 0, y: 0, z: 0 };
 
-        // Gravity-removed magnitude of a sample - the comparison metric.
-        const windowMag = (s: AbsAccelSample): number =>
-            accelMagnitude(s.accelXg - offsets.x, s.accelYg - offsets.y, s.accelZg - offsets.z);
+        // Overlapping GPS windows share samples; compute only magnitudes a window visits.
+        const magnitudes = new Float64Array(n).fill(-1);
+        const windowMag = (index: number): number => {
+            let magnitude = magnitudes[index]!;
+            if (magnitude < 0) {
+                const s = orderedSamples[index]!;
+                magnitude = accelMagnitude(s.accelXg - offsets.x, s.accelYg - offsets.y, s.accelZg - offsets.z);
+                magnitudes[index] = magnitude;
+            }
+            return magnitude;
+        };
 
         for (const r of recs) {
-            const idx = nearestSampleIndex(absSamples, r.unixSeconds);
+            const idx = nearestSampleIndex(orderedSamples, startUtc, r.unixSeconds);
             if (idx === -1) continue;
             // Walk outward from the nearest sample keeping the strongest sample
-            // within +-0.5 s. absSamples is sorted, so the signed time delta is
+            // within +-0.5 s. Samples are sorted, so the signed time delta is
             // monotonic in each direction - stop as soon as it clears the bound.
             let bestIdx = -1;
             let bestMag = -1;
             for (let j = idx; j < n; j++) {
-                const dt = absSamples[j]!.unixSeconds - r.unixSeconds;
+                const dt = startUtc + orderedSamples[j]!.msSinceStart / 1000 - r.unixSeconds;
                 if (dt > WINDOW_SEC) break;
                 if (dt < -WINDOW_SEC) continue;
-                const mag = windowMag(absSamples[j]!);
+                const mag = windowMag(j);
                 if (mag > bestMag) {
                     bestMag = mag;
                     bestIdx = j;
                 }
             }
             for (let j = idx - 1; j >= 0; j--) {
-                const dt = r.unixSeconds - absSamples[j]!.unixSeconds;
+                const dt = r.unixSeconds - (startUtc + orderedSamples[j]!.msSinceStart / 1000);
                 if (dt > WINDOW_SEC) break;
                 if (dt < -WINDOW_SEC) continue;
-                const mag = windowMag(absSamples[j]!);
+                const mag = windowMag(j);
                 if (mag > bestMag) {
                     bestMag = mag;
                     bestIdx = j;
                 }
             }
             if (bestIdx === -1) continue;
-            const s = absSamples[bestIdx]!;
+            const s = orderedSamples[bestIdx]!;
             r.accelXg = s.accelXg - offsets.x;
             r.accelYg = s.accelYg - offsets.y;
             r.accelZg = s.accelZg - offsets.z;
@@ -177,18 +190,18 @@ export function mergeAccelSamples(
     return mutated;
 }
 
-function nearestSampleIndex(samples: ReadonlyArray<{ unixSeconds: number }>, target: number): number {
+function nearestSampleIndex(samples: readonly AccelSample[], startUtc: number, target: number): number {
     if (samples.length === 0) return -1;
     let lo = 0;
     let hi = samples.length - 1;
     while (lo < hi) {
         const mid = (lo + hi) >>> 1;
-        if (samples[mid]!.unixSeconds < target) lo = mid + 1;
+        if (startUtc + samples[mid]!.msSinceStart / 1000 < target) lo = mid + 1;
         else hi = mid;
     }
     if (lo > 0) {
-        const prevDist = target - samples[lo - 1]!.unixSeconds;
-        const curDist = samples[lo]!.unixSeconds - target;
+        const prevDist = target - (startUtc + samples[lo - 1]!.msSinceStart / 1000);
+        const curDist = startUtc + samples[lo]!.msSinceStart / 1000 - target;
         if (prevDist < curDist) return lo - 1;
     }
     return lo;

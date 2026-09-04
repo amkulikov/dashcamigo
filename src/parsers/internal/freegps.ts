@@ -33,6 +33,7 @@ import { extendArray } from "../../array-extend.js";
 import { concat } from "../../bytes.js";
 import { type GpsRecord, KMH_TO_MS, KNOTS_TO_MS, type ParsedRecords, type SkippedLine } from "../types.js";
 import { utcMillisecondsFromParts } from "./calendar.js";
+import { findByteSequence } from "./byte-search.js";
 import { ddmmToDegrees, isCoordinateInRange } from "./ddmm.js";
 import { decodeXorAsciiGpsText, decryptXorAscii } from "./xor-ascii-gps.js";
 import type { Mp4Index } from "./mp4-index.js";
@@ -2834,16 +2835,13 @@ function medianDeltas(offsets: number[]): number {
  * Returns start offsets. Used by streamScanFreeGps on the workspace buffer and
  * by hasFreeGpsMarker for quick sniffing.
  */
-function findFreeGpsOffsetsInRange(buf: Uint8Array, from: number, to: number): number[] {
+function findFreeGpsOffsetsInRange(buf: Uint8Array, from: number, to: number, limit = Infinity): number[] {
     const offsets: number[] = [];
-    const m = FREE_GPS_MAGIC_BYTES;
-    const end = Math.min(to, buf.length) - m.length;
-    outer: for (let i = from; i <= end; i++) {
-        for (let j = 0; j < m.length; j++) {
-            if (buf[i + j] !== m[j]) continue outer;
-        }
-        offsets.push(i);
-        i += m.length - 1;
+    while (offsets.length < limit) {
+        const offset = findByteSequence(buf, FREE_GPS_MAGIC_BYTES, from, to);
+        if (offset < 0) break;
+        offsets.push(offset);
+        from = offset + FREE_GPS_MAGIC_BYTES.length;
     }
     return offsets;
 }
@@ -2855,8 +2853,7 @@ function findFreeGpsOffsetsInRange(buf: Uint8Array, from: number, to: number): n
  * essentially free.
  */
 export function hasFreeGpsMarker(buf: Uint8Array, scanLimit = SCAN_PROBE_LIMIT): boolean {
-    const limit = Math.min(buf.length, scanLimit);
-    return findFreeGpsOffsetsInRange(buf, 0, limit).length > 0;
+    return findByteSequence(buf, FREE_GPS_MAGIC_BYTES, 0, scanLimit) >= 0;
 }
 
 /**
@@ -2865,8 +2862,7 @@ export function hasFreeGpsMarker(buf: Uint8Array, scanLimit = SCAN_PROBE_LIMIT):
  * to collect jump-scan seed offsets.
  */
 export function findFreeGpsOffsets(buf: Uint8Array, from: number, to: number, limit: number): number[] {
-    const all = findFreeGpsOffsetsInRange(buf, from, to);
-    return all.length <= limit ? all : all.slice(0, limit);
+    return findFreeGpsOffsetsInRange(buf, from, to, limit);
 }
 
 // ===== Structural `gps ` atom table path =====

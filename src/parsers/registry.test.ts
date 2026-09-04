@@ -16,6 +16,7 @@ import {
     mergeAccelSamples,
 } from "./registry.js";
 import { combineAccelSources } from "./registry-light.js";
+import { parse3gfBuffer } from "./sidecars/blackvue-3gf.js";
 import { gpxSidecar } from "./sidecars/gpx.js";
 import { ddpaiGpxSidecar } from "./sidecars/nmea-sidecar.js";
 import type { AccelSample, AccelSidecarHandler, GpsRecord, SidecarHandler, VendorFile } from "./types.js";
@@ -578,6 +579,67 @@ describe("mergeAccelSamples: windowed max-|G| over 1 Hz GPS", () => {
         const mutated = mergeAccelSamples(records, new Map([["a.mp4", samples]]), new Map([["a.mp4", 1000]]));
         expect(mutated).toBe(0);
         expect(records[0]!.accelXg).toBe(0);
+    });
+
+    it("retains the later nearest sample when equal peaks straddle a GPS row", () => {
+        const records = [gpsRec(1000)];
+        const samples: AccelSample[] = [
+            { msSinceStart: 500, accelXg: 1, accelYg: 0, accelZg: 0 },
+            { msSinceStart: -500, accelXg: -1, accelYg: 0, accelZg: 0 },
+        ];
+        mergeAccelSamples(records, new Map([["a.mp4", samples]]), new Map([["a.mp4", 1000]]));
+        expect(records[0]!.accelXg).toBe(1);
+        expect(samples.map((sample) => sample.msSinceStart)).toEqual([500, -500]);
+    });
+
+    it("preserves source order when absolute timestamps round to the same instant", () => {
+        const startUtc = 1_700_000_000;
+        const records = [gpsRec(startUtc)];
+        const samples: AccelSample[] = [
+            { msSinceStart: 0.00001, accelXg: 1, accelYg: 0, accelZg: 0 },
+            { msSinceStart: 0, accelXg: -1, accelYg: 0, accelZg: 0 },
+        ];
+        mergeAccelSamples(records, new Map([["a.mp4", samples]]), new Map([["a.mp4", startUtc]]));
+        expect(records[0]!.accelXg).toBe(1);
+    });
+
+    it("preserves every real IMU window peak across dense and unordered GPS rows", () => {
+        const bytes = readFileSync(resolve(BLACKVUE_FIXTURES, "real-anonymized.3gf"));
+        const samples = parse3gfBuffer(Uint8Array.from(bytes).buffer).reverse();
+        const original = structuredClone(samples);
+        const startUtc = 1_700_000_000;
+        const firstMs = Math.min(...samples.map((sample) => sample.msSinceStart));
+        const lastMs = Math.max(...samples.map((sample) => sample.msSinceStart));
+        const records: GpsRecord[] = [];
+        for (let ms = firstMs; ms <= lastMs; ms += 200) records.push(gpsRec(startUtc + ms / 1000));
+        records.reverse();
+        const offsets = samples.reduce(
+            (sum, sample) => ({
+                x: sum.x + sample.accelXg / samples.length,
+                y: sum.y + sample.accelYg / samples.length,
+                z: sum.z + sample.accelZg / samples.length,
+            }),
+            { x: 0, y: 0, z: 0 },
+        );
+        expect(samples.length).toBeGreaterThan(10);
+        expect(mergeAccelSamples(records, new Map([["a.mp4", samples]]), new Map([["a.mp4", startUtc]]))).toBe(
+            records.length,
+        );
+        for (const record of records) {
+            const window = samples.filter(
+                (sample) => Math.abs(startUtc + sample.msSinceStart / 1000 - record.unixSeconds) <= 0.5,
+            );
+            const maximum = Math.max(
+                ...window.map((sample) =>
+                    Math.hypot(sample.accelXg - offsets.x, sample.accelYg - offsets.y, sample.accelZg - offsets.z),
+                ),
+            );
+            expect(Math.hypot(record.accelXg, record.accelYg, record.accelZg), String(record.unixSeconds)).toBeCloseTo(
+                maximum,
+                12,
+            );
+        }
+        expect(samples).toEqual(original);
     });
 });
 

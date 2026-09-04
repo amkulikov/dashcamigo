@@ -27,10 +27,12 @@ import { findTsGpsTrailer, isTsGpsTrailerTerminator, TS_TRAILER_SLOTS_OFFSET } f
 import type { GpsRecord, ParsedRecords, SkippedLine, VendorFile } from "../types.js";
 import { KNOTS_TO_MS, WrongFormatError } from "../types.js";
 import { utcMillisecondsFromParts } from "./calendar.js";
+import { findByteSequence } from "./byte-search.js";
 import { loadSamples, readSampleTable } from "./mp4-walker.js";
 import type { Mp4Index } from "./mp4-index.js";
 
 const LIGO_MAGIC = "LIGOGPSINFO";
+const LIGO_MAGIC_BYTES = new TextEncoder().encode(LIGO_MAGIC);
 
 /**
  * The one carrier whose fuzz state is settled by a real sample: LigoGPS in an
@@ -251,11 +253,8 @@ function parseLigoGpsRecord(text: string, mp4Filename: string, speedUnit: LigoSp
  * 4 spare; CARCAM stores scale/version info there, which we don't need).
  */
 export function findLigoGpsChunkOffset(payload: Uint8Array): number | null {
-    const magicBytes = new TextEncoder().encode(LIGO_MAGIC);
-    outer: for (let i = 0; i + magicBytes.length <= payload.length; i++) {
-        for (let j = 0; j < magicBytes.length; j++) {
-            if (payload[i + j] !== magicBytes[j]) continue outer;
-        }
+    const i = findByteSequence(payload, LIGO_MAGIC_BYTES);
+    if (i >= 0) {
         // Found "LIGOGPSINFO". Chunk start = LIGOGPSINFO + 0x14.
         const chunkStart = i + 0x14;
         if (chunkStart + 8 > payload.length) return null;
@@ -409,15 +408,14 @@ const LIGO_DIR_HEADER = 0x14;
 /** Sanity cap on the declared record count (24 h at 1 Hz). */
 const LIGO_MAX_RECORDS = 86400;
 
-const LIGO_MAGIC_BYTES = new TextEncoder().encode(LIGO_MAGIC);
-
 function findLigoMagicOffsets(payload: Uint8Array): number[] {
     const hits: number[] = [];
-    outer: for (let i = 0; i + LIGO_MAGIC_BYTES.length <= payload.length; i++) {
-        for (let j = 0; j < LIGO_MAGIC_BYTES.length; j++) {
-            if (payload[i + j] !== LIGO_MAGIC_BYTES[j]) continue outer;
-        }
-        hits.push(i);
+    let from = 0;
+    while (from < payload.length) {
+        const offset = findByteSequence(payload, LIGO_MAGIC_BYTES, from);
+        if (offset < 0) break;
+        hits.push(offset);
+        from = offset + LIGO_MAGIC_BYTES.length;
     }
     return hits;
 }
@@ -425,7 +423,7 @@ function findLigoMagicOffsets(payload: Uint8Array): number[] {
 /** Whether the buffer holds a LIGOGPSINFO literal - the trailer marker check
  *  over the probe window read from `lastTopLevelBoxEnd`. */
 export function hasLigoTrailerMarker(head: Uint8Array): boolean {
-    return findLigoMagicOffsets(head).length > 0;
+    return findByteSequence(head, LIGO_MAGIC_BYTES) >= 0;
 }
 
 function isHashMarker(buf: Uint8Array, offset: number): boolean {

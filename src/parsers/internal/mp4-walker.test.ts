@@ -610,6 +610,24 @@ class CountingFile {
 }
 
 describe("loadSamples: adaptive strategy", () => {
+    it("preserves dense real byte ranges in requested order with independent output buffers", async () => {
+        const bytes = readFileSync(resolve(REPO_ROOT, "tests/testdata/gopro-gpmf/hero8-trimmed.mp4"));
+        const file = new File([bytes], "samples.mp4");
+        const samples = Array.from({ length: 2000 }, (_, index) => ({
+            offset: index * 257,
+            size: 257,
+            index: index + 1,
+        })).reverse();
+        const buffers = await loadSamples(file, samples, 10);
+        for (let index = 0; index < samples.length; index++) {
+            const sample = samples[index]!;
+            expect(Buffer.from(buffers[index]!), `sample ${index}`).toEqual(
+                bytes.subarray(sample.offset, sample.offset + sample.size),
+            );
+        }
+        expect(new Set(buffers).size).toBe(buffers.length);
+    });
+
     function makeSamples(offsets: number[], size: number): SampleEntry[] {
         return offsets.map((offset, i) => ({ offset, size, index: i + 1 }));
     }

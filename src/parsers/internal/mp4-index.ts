@@ -47,7 +47,7 @@ import {
     readSampleFormat,
     readSampleTable,
 } from "./mp4-walker.js";
-import { hasFreeGpsMarker, findFreeGpsOffsets } from "./freegps.js";
+import { findFreeGpsOffsets } from "./freegps.js";
 import { findLigoGpsChunkOffset } from "./ligogps.js";
 import { createLogger } from "../../log.js";
 import { findTsGpsTrailer, type TsGpsTrailer } from "../../ts-trailer.js";
@@ -638,12 +638,12 @@ export async function probeMarkers(file: File, index: Mp4Index, bytes: number): 
         const u8 = new Uint8Array(buf);
         index.headerBytes = u8;
         index.headerView = new DataView(buf);
-        index.hasFreeGpsMarker = hasFreeGpsMarker(u8, want);
         index.hasLigoGpsMarker = findLigoGpsChunkOffset(u8) !== null;
         // Collect up to 8 freeGPS hit offsets as seeds for jump-scan. More
         // than 8 wastes a tiny bit of CPU for diminishing accuracy - median
         // of the first 3-5 deltas is already stable on Novatek samples.
-        index.freeGpsSeedOffsets = index.hasFreeGpsMarker ? findFreeGpsOffsets(u8, 0, u8.length, 8) : [];
+        index.freeGpsSeedOffsets = findFreeGpsOffsets(u8, 0, u8.length, 8);
+        index.hasFreeGpsMarker = index.freeGpsSeedOffsets.length > 0;
     } catch {
         // IO failure - leave markers undefined, primitives degrade by trying
         // their full parse path (which can self-detect format and bail).

@@ -1353,7 +1353,8 @@ async function loadSamplesStreamed(file: File, samples: SampleEntry[]): Promise<
             if (t.s.offset > bufStartOff) {
                 const drop = t.s.offset - bufStartOff;
                 if (drop < buf.length) {
-                    buf = buf.slice(drop);
+                    // Keep the unread chunk by reference; only returned samples need copies.
+                    buf = buf.subarray(drop);
                     bufStartOff = t.s.offset;
                 } else {
                     // Target is past current buffer end - discard buffer and
@@ -1368,7 +1369,7 @@ async function loadSamplesStreamed(file: File, samples: SampleEntry[]): Promise<
                         if (bufStartOff + buf.length > t.s.offset) {
                             const overshoot = t.s.offset - bufStartOff;
                             if (overshoot > 0 && overshoot < buf.length) {
-                                buf = buf.slice(overshoot);
+                                buf = buf.subarray(overshoot);
                                 bufStartOff = t.s.offset;
                             }
                             break;

@@ -213,6 +213,65 @@ describe("GPS video association", () => {
         expect(candidate.appliedExtractors).toEqual(["sectioned-nmea-log"]);
     });
 
+    it.each([-1, -0.8, 0, 0.8, 1])("binds a creation time %s seconds from a fractional section start", (offset) => {
+        const startUtc = 1_777_777_777.5;
+        const rec = recordingRecord(startUtc);
+        const candidate = recordingCandidate("A/clip.mp4", "card-a", startUtc + offset);
+
+        const result = bindRecordsByRecordingStart(rebuildLog([], [rec], []), [candidate]);
+
+        expect(result.boundRecords).toBe(1);
+        expect(rec.videoKey).toBe(vendorFileKey(candidate));
+    });
+
+    it.each([-1.001, 1.001])("leaves a creation time %s seconds outside the section tolerance unbound", (offset) => {
+        const startUtc = 1_777_777_777.5;
+        const rec = recordingRecord(startUtc);
+        const candidate = recordingCandidate("A/clip.mp4", "card-a", startUtc + offset);
+
+        expect(bindRecordsByRecordingStart(rebuildLog([], [rec], []), [candidate]).boundRecords).toBe(0);
+        expect(rec.recordingAssociation).toBeDefined();
+    });
+
+    it("leaves matching starts in neighboring seconds ambiguous", () => {
+        const startUtc = 1_777_777_777;
+        const rec = recordingRecord(startUtc);
+        const candidates = [
+            recordingCandidate("A/first.mp4", "card-a", startUtc - 0.8),
+            recordingCandidate("A/second.mp4", "card-a", startUtc + 0.8),
+        ];
+
+        expect(bindRecordsByRecordingStart(rebuildLog([], [rec], []), candidates).boundRecords).toBe(0);
+        expect(rec.recordingAssociation).toBeDefined();
+    });
+
+    it("checks each candidate's external route once for a batch of pending sections", () => {
+        const startUtc = 1_777_777_777;
+        let externalTrackReads = 0;
+        const candidates = Array.from({ length: 20 }, (_, index) => {
+            const candidate = recordingCandidate(`A/clip-${index}.mp4`, "card-a", startUtc + index * 60);
+            const telemetry = record(10);
+            Object.defineProperty(telemetry, "externalTrack", {
+                get() {
+                    externalTrackReads++;
+                    return false;
+                },
+            });
+            candidate.records = [telemetry];
+            return candidate;
+        });
+        const pending = candidates.map((candidate) => recordingRecord(candidate.startUtc));
+
+        const result = bindRecordsByRecordingStart(rebuildLog([], pending, []), candidates);
+
+        expect(result.boundVideos).toBe(candidates.length);
+        expect(result.boundRecords).toBe(pending.length);
+        expect(externalTrackReads).toBe(candidates.length);
+        for (const [index, rec] of pending.entries()) {
+            expect(rec.videoKey).toBe(vendorFileKey(candidates[index]!));
+        }
+    });
+
     it("prefers the matching source scope when two cards contain the same start time", () => {
         const startUtc = 1_777_777_777;
         const a = recordingCandidate("MP_ROOT/100ANV01/MAH00001.MP4", "card-a", startUtc);

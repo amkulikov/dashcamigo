@@ -22,6 +22,51 @@ function sameRecordingAssociation(a: NonNullable<GpsRecord["recordingAssociation
     return a.startUtc === b.startUtc && a.extractorId === b.extractorId && a.sourceKey === b.sourceKey;
 }
 
+interface RecordingStartIndex {
+    sources: Set<string | undefined>;
+    bySecond: Map<number, VideoCandidate[]>;
+}
+
+function indexRecordingStarts(candidates: readonly VideoCandidate[]): RecordingStartIndex {
+    const sources = new Set<string | undefined>();
+    const bySecond = new Map<number, VideoCandidate[]>();
+    for (const candidate of candidates) {
+        // Include sources still waiting for metadata so another card cannot claim their logs.
+        sources.add(candidate.sourceKey);
+        const createdMs = candidate.createdUtc?.getTime();
+        if (createdMs === undefined || !Number.isFinite(createdMs)) continue;
+        // An explicitly assigned external route must never absorb a late recording log.
+        if (candidate.records.some((record) => record.externalTrack)) continue;
+        const second = Math.floor(createdMs / 1000);
+        const bucket = bySecond.get(second);
+        if (bucket) bucket.push(candidate);
+        else bySecond.set(second, [candidate]);
+    }
+    return { sources, bySecond };
+}
+
+function findRecordingStartCandidate(
+    index: RecordingStartIndex,
+    hint: NonNullable<GpsRecord["recordingAssociation"]>,
+): VideoCandidate | null {
+    const sameSourceOnly = hint.sourceKey !== undefined && index.sources.has(hint.sourceKey);
+    const second = Math.floor(hint.startUtc);
+    let match: VideoCandidate | null = null;
+    for (let offset = -RECORDING_START_TOLERANCE_SEC; offset <= RECORDING_START_TOLERANCE_SEC; offset++) {
+        const bucket = index.bySecond.get(second + offset);
+        if (!bucket) continue;
+        for (const candidate of bucket) {
+            if (sameSourceOnly && candidate.sourceKey !== hint.sourceKey) continue;
+            if (Math.abs(candidate.createdUtc!.getTime() / 1000 - hint.startUtc) > RECORDING_START_TOLERANCE_SEC) {
+                continue;
+            }
+            if (match) return null;
+            match = candidate;
+        }
+    }
+    return match;
+}
+
 export function buildVideoAssociationIndex(videos: readonly VendorFile[]): VideoAssociationIndex {
     const mutable = new Map<string, VendorFile[]>();
     const seen = new Set<string>();
@@ -50,6 +95,7 @@ export function bindRecordsByRecordingStart(
 ): RecordingStartAssociationResult {
     let boundRecords = 0;
     const boundCandidates = new Set<VideoCandidate>();
+    let startIndex: RecordingStartIndex | undefined;
 
     for (const bucket of log.pendingByFilename.values()) {
         const pending: GpsRecord[] = [];
@@ -68,28 +114,9 @@ export function bindRecordsByRecordingStart(
             continue;
         }
 
-        // A loose GPX chosen by the user is an explicit source decision. A
-        // recording-scoped log that becomes resolvable only after MP4 metadata
-        // arrives must not silently join that external route later.
-        let matches = candidates.filter((candidate) => {
-            const createdSec = candidate.createdUtc?.getTime();
-            return (
-                !candidate.records.some((record) => record.externalTrack) &&
-                createdSec !== undefined &&
-                Number.isFinite(createdSec) &&
-                Math.abs(createdSec / 1000 - hint.startUtc) <= RECORDING_START_TOLERANCE_SEC
-            );
-        });
-        if (hint.sourceKey !== undefined && candidates.some((candidate) => candidate.sourceKey === hint.sourceKey)) {
-            // A matching-source candidate may still be waiting for mvhd. Do not
-            // let an already-ready clip from another card claim the section in
-            // that window; cross-source fallback is only for a log added in a
-            // separate drop with none of its original videos present.
-            matches = matches.filter((candidate) => candidate.sourceKey === hint.sourceKey);
-        }
-        if (matches.length !== 1) continue;
-
-        const candidate = matches[0]!;
+        startIndex ??= indexRecordingStarts(candidates);
+        const candidate = findRecordingStartCandidate(startIndex, hint);
+        if (!candidate) continue;
         const key = vendorFileKey(candidate);
         for (const record of pending) {
             if (record.recordingAssociation === undefined) continue;
