@@ -1,4 +1,5 @@
-// Tests for the SStar 40-byte ssmd GPS extractor: unit decode, fixture-driven
+// Tests for the SStar 40-byte direct and 56-byte KTRX ssmd GPS extractor:
+// unit decode, fixture-driven
 // marker+parse (synthetic fixtures built by __fixtures__/sstar-ssmd/
 // build-synthetic.mjs), the filename date-anchor with month/year rollover,
 // and the disjointness matrix against the other ssmd dwellers (Rove 32-byte,
@@ -14,11 +15,16 @@ import {
     decodeSstarSsmdRow,
     findSstarSsmdTrack,
     hasSstarNoFixSentinel,
+    hasSstarKtrxTag,
     localDateAnchorMsFromFilename,
+    localNaiveSecondsFromKtrxFilename,
     localNaiveSecondsFromNeolineFilename,
     looksLikeSstarSsmdSample,
     SSTAR_FLAGS_FIX,
     SSTAR_FLAGS_NO_FIX,
+    SSTAR_KTRX_FACTORS,
+    SSTAR_KTRX_FLAGS_FIX,
+    SSTAR_KTRX_SSMD_SAMPLE_SIZE,
     SSTAR_SSMD_SAMPLE_SIZE,
     utcMsFromAnchoredDayTime,
 } from "../internal/sstar-ssmd-extract.js";
@@ -74,6 +80,33 @@ function noFixSample(flags: number = SSTAR_FLAGS_NO_FIX): Buffer {
     Buffer.from([15, 20, 39, 50]).copy(b, 24);
     Buffer.from([0xff, 0x00, 0xff, 0xff]).copy(b, 28);
     b.writeUInt32LE(1, 32);
+    return b;
+}
+
+function ktrxFixSample(opts: {
+    lat: number;
+    lon: number;
+    speedKmh?: number;
+    courseDeg?: number;
+    day?: number;
+    hour?: number;
+    min?: number;
+    sec?: number;
+}): Buffer {
+    const day = opts.day ?? 2;
+    const hour = opts.hour ?? 21;
+    const min = opts.min ?? 19;
+    const sec = opts.sec ?? 22;
+    const b = Buffer.alloc(SSTAR_KTRX_SSMD_SAMPLE_SIZE);
+    b.writeDoubleLE((opts.lat * SSTAR_KTRX_FACTORS[sec]!) / 10 + 114.712, 0);
+    b.writeDoubleLE((opts.lon * SSTAR_KTRX_FACTORS[min]!) / 10 + 224.222, 8);
+    b.writeInt32LE(300, 16);
+    b.writeUInt16LE(opts.speedKmh ?? 20, 20);
+    b.writeUInt16LE(SSTAR_KTRX_FLAGS_FIX, 22);
+    Buffer.from([day, hour, min, sec]).copy(b, 24);
+    Buffer.from([(opts.courseDeg ?? 128) / 2, 0x01, 0x01, 0x00]).copy(b, 28);
+    Buffer.from("0000000000000000KTRX", "ascii").copy(b, 32);
+    Buffer.from(`${String(hour).padStart(2, "0")}${String(min).padStart(2, "0")}`, "ascii").copy(b, 52);
     return b;
 }
 
@@ -182,6 +215,10 @@ describe("localDateAnchorMsFromFilename", () => {
         expect(localDateAnchorMsFromFilename("backup-20250101.mp4")).toBe(Date.UTC(2025, 0, 1));
     });
 
+    it("prefers the strict KTRX REC suffix over a foreign date run", () => {
+        expect(localDateAnchorMsFromFilename("backup-20250101 REC20260902-231922-661.mp4")).toBe(Date.UTC(2026, 8, 2));
+    });
+
     it("rejects names without a plausible date run", () => {
         expect(localDateAnchorMsFromFilename("video.mp4")).toBeNull();
         expect(localDateAnchorMsFromFilename("INF20261320-214526-1-F.mp4")).toBeNull(); // month 13
@@ -272,6 +309,18 @@ describe("decodeSstarSsmdRow", () => {
         expect(decodeSstarSsmdRow(dv(fixSample({ lat: 50, lon: 30, day: 0 })))).toBeNull();
         expect(decodeSstarSsmdRow(new DataView(new ArrayBuffer(12)))).toBeNull();
     });
+
+    it("decodes the 56-byte KTRX coordinate transform", () => {
+        const row = ktrxFixSample({ lat: 50.123456, lon: 30.654321, speedKmh: 72, courseDeg: 84 });
+        const fix = decodeSstarSsmdRow(dv(row));
+        expect(fix).not.toBeNull();
+        expect(fix).not.toBe("nofix");
+        if (fix === null || fix === "nofix") return;
+        expect(fix.lat).toBeCloseTo(50.123456, 9);
+        expect(fix.lon).toBeCloseTo(30.654321, 9);
+        expect(fix.speedMs).toBeCloseTo(20, 9);
+        expect(fix.bearingDeg).toBe(84);
+    });
 });
 
 describe("looksLikeSstarSsmdSample", () => {
@@ -299,6 +348,59 @@ describe("looksLikeSstarSsmdSample", () => {
         expect(looksLikeSstarSsmdSample(dv(halfBaked))).toBe(false);
         // wrong size
         expect(looksLikeSstarSsmdSample(new DataView(new ArrayBuffer(32)))).toBe(false);
+    });
+
+    it("requires the full KTRX tag, identifier shape and matching ASCII clock", () => {
+        const row = ktrxFixSample({ lat: 50, lon: 30 });
+        expect(hasSstarKtrxTag(dv(row))).toBe(true);
+        expect(looksLikeSstarSsmdSample(dv(row))).toBe(true);
+
+        const badMarker = Buffer.from(row);
+        Buffer.from("NOPE", "ascii").copy(badMarker, 48);
+        expect(looksLikeSstarSsmdSample(dv(badMarker))).toBe(false);
+
+        const badClock = Buffer.from(row);
+        Buffer.from("2219", "ascii").copy(badClock, 52);
+        expect(looksLikeSstarSsmdSample(dv(badClock))).toBe(false);
+
+        const badId = Buffer.from(row);
+        badId.writeUInt8(0x67, 32); // lowercase is not the observed identifier alphabet
+        expect(looksLikeSstarSsmdSample(dv(badId))).toBe(false);
+    });
+});
+
+describe("sstar-ssmd primitive on 56-byte KTRX fixtures", () => {
+    const NAME = "REC20260902-231922-661.mp4";
+
+    it("marks and parses the coordinate transform, speed, course and UTC anchor", async () => {
+        const { vf, index } = await loadFixture("synthetic-ktrx-happy.mp4", NAME);
+        expect(findSstarSsmdTrack(index)).not.toBeNull();
+        expect(await sstarSsmdPrimitive.marker(vf, index)).toBe(true);
+        const result = await sstarSsmdPrimitive.parse(vf, index);
+        expect(result.records).toHaveLength(5);
+        expect(result.skipped).toHaveLength(0);
+        expect(result.records[0]!.lat).toBeCloseTo(50, 9);
+        expect(result.records[0]!.lon).toBeCloseTo(30, 9);
+        expect(result.records[0]!.speedMs).toBeCloseTo(40 / 3.6, 9);
+        expect(result.records[0]!.bearingDeg).toBe(76);
+        expect(result.records[4]!.bearingDeg).toBe(78); // zero course forward-filled
+        expect(result.records[0]!.unixSeconds).toBe(Date.UTC(2026, 8, 2, 21, 19, 22) / 1000);
+        expect(result.records[0]!.timeUnsynced).toBeUndefined();
+        expect(result.videoStartUtcHint).toBe(Date.UTC(2026, 8, 2, 21, 19, 22) / 1000);
+    });
+
+    it("keeps a positive marker but skips corrupt later rows", async () => {
+        const { vf, index } = await loadFixture("synthetic-ktrx-edge.mp4", NAME);
+        expect(await sstarSsmdPrimitive.marker(vf, index)).toBe(true);
+        const result = await sstarSsmdPrimitive.parse(vf, index);
+        expect(result.records).toHaveLength(1);
+        expect(result.skipped.map((row) => row.line)).toEqual([2, 3, 4]);
+    });
+
+    it("rejects a foreign constant-56 ssmd track", async () => {
+        const { vf, index } = await loadFixture("synthetic-ktrx-wrong-format.mp4", NAME);
+        expect(await sstarSsmdPrimitive.marker(vf, index)).toBe(false);
+        await expect(sstarSsmdPrimitive.parse(vf, index)).rejects.toBeInstanceOf(WrongFormatError);
     });
 });
 
@@ -495,6 +597,19 @@ describe("localNaiveSecondsFromNeolineFilename", () => {
         expect(localNaiveSecondsFromNeolineFilename("video.mp4")).toBeNull();
         expect(localNaiveSecondsFromNeolineFilename("trip 20260315 dump.mp4")).toBeNull();
         expect(localNaiveSecondsFromNeolineFilename("INF20260520-250000-1-F.mp4")).toBeNull(); // hour 25
+    });
+});
+
+describe("localNaiveSecondsFromKtrxFilename", () => {
+    it("accepts only the strict REC shape and validates calendar fields", () => {
+        expect(localNaiveSecondsFromKtrxFilename("REC20260902-231922-661.mp4")).toBe(
+            Date.UTC(2026, 8, 2, 23, 19, 22) / 1000,
+        );
+        expect(localNaiveSecondsFromKtrxFilename("backup REC20260902-231922-661.mp4")).toBe(
+            Date.UTC(2026, 8, 2, 23, 19, 22) / 1000,
+        );
+        expect(localNaiveSecondsFromKtrxFilename("REC20260902-251922-661.mp4")).toBeNull();
+        expect(localNaiveSecondsFromKtrxFilename("clip-20260902-231922.mp4")).toBeNull();
     });
 });
 

@@ -7,6 +7,10 @@ User-facing changes, newest first. Dates are when the change landed on
 [beta](https://beta.dashcamigo.app); production picks it up with the next
 release tag. Localized texts ship inside the app (the "What's new" panel).
 
+## 2026-09-05
+
+- **New camera support:** Added GPS track and speed for iZEEKER iD300 recordings.
+
 ## 2026-09-03
 
 - **Improved:** Export overlay settings persist between visits and can be reset.

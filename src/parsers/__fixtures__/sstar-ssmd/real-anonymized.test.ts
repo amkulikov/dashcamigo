@@ -1,7 +1,7 @@
-// Regression tests on real-anonymized Neoline Spectrum (SStar firmware)
-// fixtures: actual 40-byte ssmd GPS track bytes of three real clips with
-// fix-row coordinates rounded to whole degrees. Timestamps, speed, course
-// and the fix/no-fix interleaving are the real firmware output. The
+// Regression tests on real-anonymized SStar firmware fixtures: actual
+// 40-byte Neoline and 56-byte iZEEKER ssmd GPS track bytes with fix-row
+// coordinates rounded to whole degrees. Timestamps, speed, course and the
+// fix/no-fix interleaving are the real firmware output. The
 // mirror-cam pair pins BOTH sides of the phantom-track quality gate on
 // real bytes; the 4K-front-cam clip pins the 0x067E flags base.
 //
@@ -147,5 +147,49 @@ describe("real-anonymized Neoline Spectrum sstar-ssmd fixture (4K front cam)", (
         // Frame-0 hint: first fix (09:04:25 UTC) at media 5669405/90000 s ~=
         // 62.99 s -> ~09:03:22 UTC, within 2 s of the filename RTC.
         expect(result.videoStartUtcHint).toBeCloseTo(Date.UTC(2026, 6, 25, 9, 4, 25) / 1000 - 5669405 / 90000, 6);
+    });
+});
+
+describe("real-anonymized iZEEKER iD300 KTRX fixture", () => {
+    const NAME = "REC20260902-231922-1.mp4";
+    const FIXTURE = "izeeker-id300-front.mp4";
+
+    it("marks the real constant-56 track and contains only the scrubbed identifier", async () => {
+        const buf = readFileSync(resolve(PUBLIC_FIXTURES, FIXTURE));
+        const identifiers = buf.toString("latin1").match(/[0-9A-F]{16}KTRX/g) ?? [];
+        expect(identifiers).toHaveLength(180);
+        expect(new Set(identifiers)).toEqual(new Set(["0000000000000000KTRX"]));
+
+        const { vf, index } = await load(FIXTURE, NAME);
+        expect(await sstarSsmdPrimitive.marker(vf, index)).toBe(true);
+    });
+
+    it("decodes all 180 real rows and demotes the stale GPS clock", async () => {
+        const { vf, index } = await load(FIXTURE, NAME);
+        const result = await sstarSsmdPrimitive.parse(vf, index);
+
+        expect(result.records).toHaveLength(180);
+        expect(result.skipped).toHaveLength(0);
+        expect(result.videoStartUtcHint).toBeUndefined();
+
+        let previousMediaTime = Number.NEGATIVE_INFINITY;
+        let sawMotion = false;
+        for (const record of result.records) {
+            expect(record.lat).toBeCloseTo(Math.round(record.lat), 9);
+            expect(record.lon).toBeCloseTo(Math.round(record.lon), 9);
+            expect(Math.abs(record.lat)).toBeLessThanOrEqual(90);
+            expect(Math.abs(record.lon)).toBeLessThanOrEqual(180);
+            expect(record.timeUnsynced).toBe(true);
+            expect(record.unixSeconds).toBe(0);
+            expect(record.relStartSeconds).toBeGreaterThan(previousMediaTime);
+            previousMediaTime = record.relStartSeconds!;
+            expect(record.speedMs).toBeGreaterThanOrEqual(0);
+            expect(record.speedMs).toBeLessThan(160 / 3.6);
+            if (record.speedMs > 30 / 3.6) sawMotion = true;
+            expect(record.bearingDeg).toBeGreaterThanOrEqual(0);
+            expect(record.bearingDeg).toBeLessThan(360);
+            expect(record.mp4Filename).toBe(NAME);
+        }
+        expect(sawMotion).toBe(true);
     });
 });

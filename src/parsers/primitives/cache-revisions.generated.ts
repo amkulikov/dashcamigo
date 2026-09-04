@@ -21,7 +21,7 @@ export const VIDEO_EMBEDDED_PRIMITIVE_CACHE_REVISIONS = [
     { id: "vantrue-fmas", revision: "ee887b2e0785cdd4" },
     { id: "rove-gpmd", revision: "5d8e7b97d769d633" },
     { id: "rove-ssmd", revision: "f7a4335f07b62608" },
-    { id: "sstar-ssmd", revision: "8140503f135db08d" },
+    { id: "sstar-ssmd", revision: "18ed89cd9dece1f2" },
     { id: "vueroid-txet", revision: "cc488c7e2f3075ee" },
     { id: "pndm", revision: "19201a8bb8dd39c3" },
     { id: "nextbase-subtitle", revision: "d469b5e2695941b5" },

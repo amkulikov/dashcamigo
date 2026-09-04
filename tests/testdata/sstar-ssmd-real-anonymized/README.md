@@ -1,11 +1,10 @@
-# Neoline Spectrum (SStar firmware) - real-anonymized fixtures
+# SStar firmware - real-anonymized fixtures
 
-Real 40-byte `ssmd` GPS meta-track bytes from Neoline Spectrum-family
-clips, repacked into minimal single-track MP4s. Fix-row coordinates
-rounded to whole degrees (~110 km precision); the no-fix sentinel rows,
-timestamps, speed, course, the altitude-like word and the real stts
-cadence are untouched. The sibling ssmd tracks of the originals (JPEG
-thumbnail, 12-byte telemetry) are dropped.
+Real `ssmd` GPS meta-track bytes from Neoline Spectrum-family and iZEEKER
+iD300 clips, repacked into minimal single-track MP4s. Fix-row coordinates
+are rounded to whole degrees (~110 km precision); timestamps, speed, course,
+the altitude-like word and the real stts cadence are untouched. The iZEEKER
+identifier field is replaced with zeroes. Sibling tracks are dropped.
 
 Used for the regression test of the sstar-ssmd extractor
 (`src/parsers/__fixtures__/sstar-ssmd/real-anonymized.test.ts`).
@@ -30,6 +29,10 @@ Used for the regression test of the sstar-ssmd extractor
   clip `INF20260725-120324-105-F.mp4` from a Spectrum-family 4K front
   cam. Same layout as the mirror cam but flags base 0x067E instead of
   0x047E - pins the second observed flags dialect on real bytes.
+- `izeeker-id300-front.mp4` (12021 bytes) - all 180 GPS samples from an
+  iZEEKER iD300. Pins the 56-byte KTRX dialect, its reversible coordinate
+  transform and the stale-clock fallback on real bytes. The stable 16-hex
+  identifier appended to every source row is `0000000000000000` here.
 
 ## How to rebuild
 

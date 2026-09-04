@@ -1,24 +1,31 @@
-# SStar ssmd GPS format (Neoline Spectrum)
+# SStar ssmd GPS formats
 
-GPS embedded as a dedicated `ssmd` meta track of constant 40-byte samples at
-~1 Hz, written by the SigmaStar ("SStar") firmware family. Confirmed
-cameras: Neoline Spectrum mirror cam and a Spectrum-family 4K front cam
-(ffprobe handler names `SStar Video` / `SStar Audio` / `SStarMeta`;
-filename pattern `INF<YYYYMMDD>-<hhmmss>-<seq>-<F|R>.mp4`, `RX_NEOLINE` in
-`src/parsers/filename/_patterns.ts`). The two differ only in the flags-word
-base (see the layout table).
+GPS embedded as a dedicated `ssmd` meta track of constant samples at ~1 Hz,
+written by the SigmaStar ("SStar") firmware family. Two incompatible layouts
+are supported:
 
-Reverse-engineered and validated against 3 real mirror-cam clips (528 GPS
-samples: an all-fix highway drive, a cold-start clip with sparse fixes, a
-night drive with sparse fixes) plus one 4K-cam day-drive clip (301 samples:
-a 64-row no-fix acquisition lead-in, then 237 fixes at exactly 1 Hz).
-Every interpretation below is tagged with its verification. Extractor:
-`src/parsers/internal/sstar-ssmd-extract.ts` (constants live there, not
-here).
+- 40-byte direct-coordinate samples from Neoline Spectrum mirror cam and a
+  Spectrum-family 4K front cam
+- 56-byte KTRX samples with reversible coordinate obfuscation from iZEEKER
+  iD300
+
+Neoline files use handler names `SStar Video` / `SStar Audio` / `SStarMeta`
+and filenames `INF<YYYYMMDD>-<hhmmss>-<seq>-<F|R>.mp4`. iZEEKER files use
+`REC<YYYYMMDD>-<hhmmss>-<seq>.mp4` in per-channel `A` / `B` folders.
+
+The 40-byte layout was reverse-engineered and validated against 3 real
+mirror-cam clips (528 GPS samples) plus one 4K-cam day-drive clip (301
+samples). The KTRX transform was independently recovered from one 180-row
+real clip and checked against 18 burned-in OSD coordinate/speed observations.
+That clip covers all 60 latitude-factor indices and four longitude-factor
+indices; using the same table for the remaining longitude minute values is
+an inference. Median haversine-vs-recorded speed error was 1.1 km/h (95th
+percentile 3.9 km/h). Extractor:
+`src/parsers/internal/sstar-ssmd-extract.ts` (constants live there, not here).
 
 ## Container shape
 
-Each MP4 carries THREE `ssmd` meta tracks (all handler `meta`, sample
+Each Neoline MP4 carries THREE `ssmd` meta tracks (all handler `meta`, sample
 format `ssmd`):
 
 1. **JPEG thumbnail** - a single sample, starts `ff d8 ff e0 ... JFIF`.
@@ -32,8 +39,9 @@ format `ssmd`):
 
 The `ssmd` sample-description name is multi-vendor (LigoGPS 64..1024-byte
 chunks, Chigee JPEG previews, Rove 32-byte GPS + 12-byte accel). The
-constant-40 stsz gate plus a first-sample content probe keep this extractor
-disjoint from all of them - see the marker in
+constant-size gate plus a first-sample dialect probe keep this extractor
+disjoint from all of them. The iZEEKER file carries one constant-56 `ssmd`
+meta track; its `KTRX` tag is required. See the marker in
 `src/parsers/primitives/sstar-ssmd.ts`.
 
 ## GPS sample layout (40 bytes, little-endian)
@@ -59,6 +67,31 @@ extractor (routine satellite acquisition).
 Hemisphere: no N/S/E/W field in the 40 bytes; signed doubles assumed (all
 real samples are N/E) - same caveat as rove-ssmd/navitel-gps0.
 
+## KTRX GPS sample layout (56 bytes, little-endian)
+
+The iZEEKER layout reuses bytes 16..31 of the 40-byte family for the
+altitude-like value, speed, flags, day/time, course and `01 01 00` tail. Its
+coordinate slots and appended 24 bytes differ:
+
+| Offset | Type | Meaning | Verification |
+|---|---|---|---|
+| 0 | f64 | encoded latitude: `lat * factor[second] / 10 + 114.712` | high: 18 independent OSD checkpoints and movement/speed cross-check |
+| 8 | f64 | encoded longitude: `lon * factor[minute] / 10 + 224.222` | high for the four minute indices in the real clip; remaining indices inferred from the shared table |
+| 16 | i32 | altitude-like value | not extracted |
+| 20 | u16 | speed in integer km/h | high: matches OSD and trajectory |
+| 22 | u16 | `0x087E` on every observed row | observed constant; no no-fix row available |
+| 24 | u8 x4 | day-of-month, hour, minute, second | high: 1 Hz clock; UTC but stale in the sample |
+| 28 | u8 | course / 2 | high: movement-bearing check |
+| 29 | u8 x3 | `01 01 00` | observed constant |
+| 32 | ASCII[16] | uppercase-hex stable identifier, likely device or session scoped | observed; always scrubbed from public fixtures |
+| 48 | ASCII[4] | literal `KTRX` | strong dialect marker |
+| 52 | ASCII[4] | `HHMM`, exactly repeating bytes 25..26 | exact across all 180 rows; part of the marker |
+
+The 60-entry factor table is `SSTAR_KTRX_FACTORS` in
+`src/parsers/internal/sstar-ssmd-extract.ts`; keeping the values beside the
+decoder avoids a second source of truth. Direct Big-Endian (`>dd`) decoding
+does not produce plausible coordinates for this sample.
+
 ## The UTC-vs-RTC clock quirk
 
 The day/hour/minute/second quartet changes meaning with the fix bit:
@@ -70,14 +103,17 @@ The day/hour/minute/second quartet changes meaning with the fix bit:
   clock exactly, confirming the fix/no-fix split holds across both cameras).
 
 The extractor therefore only ever reads time from fix rows.
+The iZEEKER sample also carries a UTC-like fix clock, but it ran 51 seconds
+ahead of the filename/OSD clock. The stale-clock gate therefore keeps its
+positions and media offsets while withholding absolute GPS timestamps.
 
 ## Year/month derivation
 
 Records carry no year/month, so the extractor anchors the record's
 day-of-month + time-of-day to the calendar date found in the filename
-(`INF<YYYYMMDD>-...`, camera-local; the strict Neoline name shape is
-preferred over a generic YYYYMMDD scan so a renamed file with a foreign date
-run cannot poison the anchor). A clip is minutes long and |TZ| <= 14 h,
+(`INF<YYYYMMDD>-...` or `REC<YYYYMMDD>-...`, camera-local; each strict name
+shape is preferred over a generic YYYYMMDD scan so a renamed file with a
+foreign date run cannot poison the anchor). A clip is minutes long and |TZ| <= 14 h,
 so the true UTC date is within one day of the anchor - that invariant is what
 makes the day-of-month match unambiguous. The matching itself (and its
 rollover handling) lives in `utcMsFromAnchoredDayTime`,

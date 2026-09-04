@@ -88,9 +88,9 @@ import { threeSixtyGpsJsonlPrimitive } from "./360gps-jsonl.js";
 //      constant 32-byte stsz) then async first-sample probe. No overlap with
 //      ligogps: that marker needs the LIGOGPSINFO literal and skips <64 B samples.
 //   5e. sstar-ssmd      - sync structural gate (meta handler + ssmd format +
-//      constant 40-byte stsz) then async first-sample probe (flags word
-//      0x057E/0x047E + no-fix sentinel plausibility). Disjoint from rove-ssmd
-//      by sample size and from ligogps by content.
+//      constant 40- or 56-byte stsz) then async first-sample dialect probe
+//      (known flags/sentinel for 40, KTRX tag for 56). Disjoint from
+//      rove-ssmd by sample size and from ligogps by size/content.
 //   5f. vueroid-txet    - sync structural gate (tvxt handler + mp4s format +
 //      constant 72-byte stsz). tvxt is used by no other known format; placed
 //      with the sync gates because it is cheaper than the async probes below.

@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-09-05.1",
+        category: "support",
+        text: {
+            en: "Added GPS track and speed for iZEEKER iD300 recordings.",
+            ru: "Добавлены GPS-трек и скорость для записей iZEEKER iD300.",
+            de: "GPS-Track und Geschwindigkeit für iZEEKER iD300-Aufnahmen hinzugefügt.",
+            es: "Se añadieron el track GPS y la velocidad para las grabaciones de la iZEEKER iD300.",
+            fr: "Ajout de la trace GPS et de la vitesse pour les enregistrements iZEEKER iD300.",
+            pl: "Dodano ślad GPS i prędkość dla nagrań z iZEEKER iD300.",
+            pt: "Trajeto GPS e velocidade adicionados às gravações da iZEEKER iD300.",
+            zh: "iZEEKER iD300 录像新增 GPS 轨迹和速度。",
+            ja: "iZEEKER iD300 の録画に GPS 軌跡と速度を追加しました。",
+            ko: "iZEEKER iD300 녹화에 GPS 트랙과 속도를 추가했습니다.",
+        },
+    },
+    {
         id: "2026-09-03.1",
         category: "improvement",
         text: {

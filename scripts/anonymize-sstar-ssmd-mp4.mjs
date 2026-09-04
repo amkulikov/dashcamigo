@@ -1,15 +1,16 @@
 #!/usr/bin/env node
-// Anonymize a real SStar-firmware MP4 (Neoline Spectrum family) with a
-// 40-byte `ssmd` GPS meta track into a public-safe fixture.
+// Anonymize a real SStar-firmware MP4 with a supported 40-byte direct or
+// 56-byte KTRX `ssmd` GPS meta track into a public-safe fixture.
 //
 // Anonymization (mirrors scripts/anonymize-rvmi-mp4.mjs):
 //   1. Walk the MP4, find the meta trak whose stsd entry is 'ssmd' and whose
-//      stsz is constant 40 bytes (the GPS track; the sibling JPEG-thumbnail
-//      and 12-byte telemetry ssmd tracks are dropped entirely).
-//   2. Read all its samples from mdat. On fix rows (flags base 0x047E or
+//      stsz is constant 40 or 56 bytes (sibling tracks are dropped entirely).
+//   2. Read all its samples from mdat. On 40-byte fix rows (flags base 0x047E or
 //      0x067E at +22 with the 0x0100 fix bit) round the lat/lon doubles to
-//      WHOLE degrees (~110 km precision). No-fix rows already carry the
-//      0xFFFFFFFF sentinel in both slots - untouched. A row with a foreign
+//      WHOLE degrees (~110 km precision). On 56-byte KTRX rows decode, round,
+//      re-encode, and replace the appended 16-hex device/session identifier
+//      with zeroes. No-fix rows already carry the 0xFFFFFFFF sentinel in
+//      both slots - untouched. A row with a foreign
 //      flags word is zeroed except the flags word: content this script
 //      cannot classify must never reach the fixture verbatim, and the
 //      scrubbed row still fails decode the same way.
@@ -18,18 +19,24 @@
 //      them real).
 //   3. Assemble a minimal MP4: ftyp + moov with a single meta/ssmd trak
 //      (real media timescale, real per-sample stts cadence, header-fixed
-//      40-byte stsz like the real firmware writes) + mdat.
+//      fixed-size stsz like the real firmware writes) + mdat.
 //
 // Usage:
 //   node scripts/anonymize-sstar-ssmd-mp4.mjs <input.mp4> <output.mp4>
 
 import { closeSync, openSync, readSync, statSync, writeFileSync } from "node:fs";
 
-const SAMPLE_SIZE = 40;
+const SUPPORTED_SAMPLE_SIZES = [40, 56];
 // Per-camera flags base + fix bit; mirrors SSTAR_FLAGS_* in
 // src/parsers/internal/sstar-ssmd-extract.ts.
 const FLAGS_FIX_BIT = 0x0100;
 const FLAGS_BASES = [0x047e, 0x067e];
+const KTRX_FLAGS_FIX = 0x087e;
+const KTRX_FACTORS = [
+    15, 25, 36, 63, 82, 13, 12, 15, 21, 31, 21, 57, 16, 29, 47, 26, 42, 26, 26, 12, 65, 28, 12, 26, 46, 24, 29, 25, 54,
+    23, 87, 12, 46, 48, 35, 37, 68, 12, 24, 46, 76, 55, 26, 28, 67, 24, 43, 46, 68, 87, 23, 56, 78, 34, 16, 48, 27, 81,
+    53, 82,
+];
 const HEADER_PROBE = 16;
 
 function readBoxHeader(fd, offset, fileSize) {
@@ -68,14 +75,20 @@ function readBoxBuf(fd, h) {
     return buf;
 }
 
-function fourCC(s) { return Buffer.from(s, "ascii"); }
+function fourCC(s) {
+    return Buffer.from(s, "ascii");
+}
 function box(type, payload) {
     const head = Buffer.alloc(8);
     head.writeUInt32BE(8 + payload.length, 0);
     fourCC(type).copy(head, 4);
     return Buffer.concat([head, payload]);
 }
-function u32be(n) { const b = Buffer.alloc(4); b.writeUInt32BE(n, 0); return b; }
+function u32be(n) {
+    const b = Buffer.alloc(4);
+    b.writeUInt32BE(n, 0);
+    return b;
+}
 
 const [, , inputPath, outputPath] = process.argv;
 if (!inputPath || !outputPath) {
@@ -93,14 +106,21 @@ let moov = null;
     while (pos + 8 <= stat.size) {
         const h = readBoxHeader(fd, pos, stat.size);
         if (!h) break;
-        if (h.type === "moov") { moov = { offset: pos, ...h }; break; }
+        if (h.type === "moov") {
+            moov = { offset: pos, ...h };
+            break;
+        }
         pos += h.size;
     }
 }
-if (!moov) { console.error("no moov found"); process.exit(1); }
+if (!moov) {
+    console.error("no moov found");
+    process.exit(1);
+}
 
-// Step 2: find the meta/ssmd trak with constant 40-byte samples.
+// Step 2: find the meta/ssmd trak with a supported constant sample size.
 let gpsTrak = null;
+let sampleSize = null;
 {
     let pos = moov.offset + moov.headerSize;
     const end = moov.offset + moov.size;
@@ -122,8 +142,9 @@ let gpsTrak = null;
                 const entryType = stsdBuf.toString("ascii", stsd.headerSize + 12, stsd.headerSize + 16);
                 const stszBuf = readBoxBuf(fd, stsz);
                 const fixedSize = stszBuf.readUInt32BE(stsz.headerSize + 4);
-                if (handler === "meta" && entryType === "ssmd" && fixedSize === SAMPLE_SIZE) {
+                if (handler === "meta" && entryType === "ssmd" && SUPPORTED_SAMPLE_SIZES.includes(fixedSize)) {
                     gpsTrak = { ...trak, mdia, minf, stbl };
+                    sampleSize = fixedSize;
                     break;
                 }
             }
@@ -131,7 +152,10 @@ let gpsTrak = null;
         pos += h.size;
     }
 }
-if (!gpsTrak) { console.error("no constant-40 meta/ssmd track found"); process.exit(1); }
+if (!gpsTrak || sampleSize === null) {
+    console.error("no supported fixed-size meta/ssmd track found");
+    process.exit(1);
+}
 
 // Step 3: sample table of the GPS trak.
 function stblChildBuf(type) {
@@ -181,9 +205,10 @@ const mdhd = (() => {
     return { h, buf: readBoxBuf(fd, h) };
 })();
 const mdhdVersion = mdhd.buf.readUInt8(mdhd.h.headerSize);
-const mediaTimescale = mdhdVersion === 1
-    ? mdhd.buf.readUInt32BE(mdhd.h.headerSize + 4 + 16)
-    : mdhd.buf.readUInt32BE(mdhd.h.headerSize + 4 + 8);
+const mediaTimescale =
+    mdhdVersion === 1
+        ? mdhd.buf.readUInt32BE(mdhd.h.headerSize + 4 + 16)
+        : mdhd.buf.readUInt32BE(mdhd.h.headerSize + 4 + 8);
 
 // Expand per-sample absolute offsets.
 const sampleAbsOffsets = [];
@@ -195,7 +220,7 @@ const sampleAbsOffsets = [];
         let off = chunkOffsets[ci];
         for (let i = 0; i < spc && sIdx < sampleCount; i++) {
             sampleAbsOffsets.push(off);
-            off += SAMPLE_SIZE;
+            off += sampleSize;
             sIdx++;
         }
     }
@@ -205,10 +230,43 @@ const sampleAbsOffsets = [];
 let fixCount = 0;
 let junkCount = 0;
 const sampleBuffers = sampleAbsOffsets.map((off) => {
-    const buf = Buffer.alloc(SAMPLE_SIZE);
-    readSync(fd, buf, 0, SAMPLE_SIZE, off);
+    const buf = Buffer.alloc(sampleSize);
+    readSync(fd, buf, 0, sampleSize, off);
     const flags = buf.readUInt16LE(22);
-    if (!FLAGS_BASES.includes(flags & ~FLAGS_FIX_BIT)) {
+    if (sampleSize === 56) {
+        const hour = buf.readUInt8(25);
+        const minute = buf.readUInt8(26);
+        const second = buf.readUInt8(27);
+        const asciiClock = `${String(hour).padStart(2, "0")}${String(minute).padStart(2, "0")}`;
+        const identifierValid = /^[0-9A-F]{16}$/.test(buf.toString("ascii", 32, 48));
+        const tagged =
+            identifierValid && buf.toString("ascii", 48, 52) === "KTRX" && buf.toString("ascii", 52, 56) === asciiClock;
+        // Always remove the appended stable identifier, including from rows
+        // whose remaining content cannot be classified.
+        buf.write("0000000000000000", 32, "ascii");
+        if (flags !== KTRX_FLAGS_FIX || !tagged || hour > 23 || minute > 59 || second > 59) {
+            buf.fill(0);
+            buf.writeUInt16LE(flags, 22);
+            junkCount++;
+        } else if (buf.readDoubleLE(0) === 4294967295 && buf.readDoubleLE(8) === 4294967295) {
+            // Tagged no-fix convention is supported defensively by the parser;
+            // the real KTRX sample did not contain one.
+        } else {
+            const latFactor = KTRX_FACTORS[second] / 10;
+            const lonFactor = KTRX_FACTORS[minute] / 10;
+            const lat = (buf.readDoubleLE(0) - 114.712) / latFactor;
+            const lon = (buf.readDoubleLE(8) - 224.222) / lonFactor;
+            if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+                buf.fill(0);
+                buf.writeUInt16LE(flags, 22);
+                junkCount++;
+            } else {
+                buf.writeDoubleLE(Math.round(lat) * latFactor + 114.712, 0);
+                buf.writeDoubleLE(Math.round(lon) * lonFactor + 224.222, 8);
+                fixCount++;
+            }
+        }
+    } else if (!FLAGS_BASES.includes(flags & ~FLAGS_FIX_BIT)) {
         // Unclassifiable row: scrub everything but the flags word, so unknown
         // content never reaches the fixture while the row still fails decode.
         buf.fill(0);
@@ -274,9 +332,12 @@ const sttsNew = (() => {
     );
 })();
 
-const stscNew = box("stsc", Buffer.concat([Buffer.alloc(4), u32be(1), u32be(1), u32be(sampleBuffers.length), u32be(1)]));
+const stscNew = box(
+    "stsc",
+    Buffer.concat([Buffer.alloc(4), u32be(1), u32be(1), u32be(sampleBuffers.length), u32be(1)]),
+);
 // Header-fixed stsz like the real firmware writes.
-const stszNew = box("stsz", Buffer.concat([Buffer.alloc(4), u32be(SAMPLE_SIZE), u32be(sampleBuffers.length)]));
+const stszNew = box("stsz", Buffer.concat([Buffer.alloc(4), u32be(sampleSize), u32be(sampleBuffers.length)]));
 const stcoPlaceholder = box("stco", Buffer.concat([Buffer.alloc(4), u32be(1), u32be(0)]));
 
 const dinf = box(
@@ -303,7 +364,10 @@ const mvhdNew = (() => {
     return box("mvhd", p);
 })();
 const moovNew = box("moov", Buffer.concat([mvhdNew, trakNew]));
-const ftypNew = box("ftyp", Buffer.concat([fourCC("isom"), u32be(512), fourCC("isom"), fourCC("iso2"), fourCC("mp41")]));
+const ftypNew = box(
+    "ftyp",
+    Buffer.concat([fourCC("isom"), u32be(512), fourCC("isom"), fourCC("iso2"), fourCC("mp41")]),
+);
 const mdat = box("mdat", Buffer.concat(sampleBuffers));
 
 // Patch the single chunk offset now that sizes are known.

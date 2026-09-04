@@ -219,8 +219,9 @@ const recSingleCameraKey: FilenameCameraKeyTechnique = {
     id: "rec-single-camera-key",
     extract(file: VendorFile): string | null {
         if (!RX_REC_SINGLE.test(file.file.name)) return null;
-        // Single-channel: no channel marker to strip from name or path.
-        const dir = strippedParentDir(file.relativePath, []);
+        // Some 2-channel SigmaStar cameras use the same REC name in A/B
+        // folders. The letter is a channel marker, not camera identity.
+        const dir = strippedParentDir(file.relativePath, ["a", "b", "c", "d"]);
         return `rec-single|${dir}|${maskName(file.file.name)}`;
     },
 };

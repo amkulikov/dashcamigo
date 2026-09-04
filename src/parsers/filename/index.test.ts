@@ -924,8 +924,8 @@ describe("vueroid techniques", () => {
     });
 });
 
-// Unbranded SigmaStar single-channel cam: REC<date>-<time>-<seq>.mp4 - the
-// CarCam shape minus the mandatory -A..D channel letter.
+// SigmaStar REC<date>-<time>-<seq>.mp4 - the CarCam shape minus the mandatory
+// -A..D channel letter. Some two-channel cameras put the channel in A/B dirs.
 describe("rec-single techniques", () => {
     it("time/sequence resolve; no channel or mode in the name", () => {
         const name = "REC20260101-120000-228.mp4";
@@ -942,6 +942,15 @@ describe("rec-single techniques", () => {
     it("camera-key is stable across timestamps", () => {
         expect(cameraFingerprint(vf("REC20260101-120000-228.mp4"))).toBe(
             cameraFingerprint(vf("REC20260101-120100-229.mp4")),
+        );
+    });
+
+    it("camera-key converges matching clips from A/B channel folders", () => {
+        const front = cameraFingerprint(vf("REC20260101-120000-228.mp4", "card/Normal/A/REC20260101-120000-228.mp4"));
+        const rear = cameraFingerprint(vf("REC20260101-120000-228.mp4", "card/Normal/B/REC20260101-120000-228.mp4"));
+        expect(front).toBe(rear);
+        expect(front).not.toBe(
+            cameraFingerprint(vf("REC20260101-120000-228.mp4", "other/Normal/A/REC20260101-120000-228.mp4")),
         );
     });
 

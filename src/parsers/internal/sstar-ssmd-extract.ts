@@ -1,9 +1,9 @@
 // SigmaStar ("SStar") firmware `ssmd` meta-track GPS extraction - constant
-// 40-byte samples at ~1 Hz. Known cameras: Neoline Spectrum mirror cam and
-// a Spectrum-family 4K front cam; ffprobe shows handler_name "SStarMeta" /
-// "SStar Video".
+// samples at ~1 Hz. Known dialects: 40-byte direct-coordinate records from
+// Neoline Spectrum-family cameras and 56-byte KTRX records from iZEEKER iD300.
 //
-// Reverse-engineered and validated against 3 real mirror-cam clips (528
+// The 40-byte dialect was reverse-engineered and validated against 3 real
+// mirror-cam clips (528
 // samples total; an all-fix day drive, a cold-start clip with sparse fixes
 // and an unsynced-clock stretch, a night drive with sparse fixes) plus a
 // 4K-cam day-drive clip (301 samples; the 0x067E flags base). Byte layout
@@ -11,10 +11,11 @@
 //
 // The `ssmd` sample-description name is multi-vendor (LigoGPS 64..1024-byte
 // chunks, Chigee JPEG previews, Rove 32-byte GPS, Rove 12-byte accel). This
-// firmware writes THREE ssmd meta tracks per file: a single-sample JPEG
+// Neoline firmware writes THREE ssmd meta tracks per file: a single-sample JPEG
 // thumbnail, the 40-byte GPS track (ours), and a 12-byte ~15 Hz telemetry
-// track (undeciphered - see the doc). The constant 40-byte size plus the
-// flags-word probe keep all other ssmd dwellers out.
+// track (undeciphered - see the doc). Constant size plus the dialect-specific
+// content probe keep all other ssmd dwellers out. The 56-byte iZEEKER layout
+// has one ssmd track and is gated by its appended identifier/KTRX/clock tag.
 //
 // Sample layout (40 bytes, little-endian):
 //   +0   f64  latitude, decimal degrees (NOT NMEA DDmm); no-fix sentinel
@@ -84,9 +85,11 @@ import { utcMillisecondsFromParts } from "./calendar.js";
 import type { Mp4Index, TrackInfo } from "./mp4-index.js";
 import { loadSamples, readMediaTimescale, readSampleStartsInTicks, readSampleTable } from "./mp4-walker.js";
 
-/** SStar ssmd GPS sample size - the structural gate; disjoint from the Rove
- *  32-byte and the LigoGPS 64..1024-byte ssmd dialects. */
+/** Direct-coordinate SStar ssmd GPS sample size (Neoline family). */
 export const SSTAR_SSMD_SAMPLE_SIZE = 40;
+
+/** Obfuscated-coordinate SStar ssmd GPS sample size (iZEEKER iD300). */
+export const SSTAR_KTRX_SSMD_SAMPLE_SIZE = 56;
 
 /** Flags word at +22: a constant per-camera base plus the 0x0100 fix bit.
  *  Two bases observed across the firmware family: 0x047E (mirror cam) and
@@ -97,6 +100,29 @@ export const SSTAR_FLAGS_BASES: readonly number[] = [0x047e, 0x067e];
 // Mirror-cam words, kept as named constants for the fixture builders.
 export const SSTAR_FLAGS_FIX = 0x057e;
 export const SSTAR_FLAGS_NO_FIX = 0x047e;
+
+// iZEEKER iD300 `KTRX` dialect. All 180 rows of the real sample carried
+// 0x087E; unlike the 40-byte dialect, no separate no-fix word was observed.
+export const SSTAR_KTRX_FLAGS_FIX = 0x087e;
+
+// The first two doubles of the KTRX dialect are reversible obfuscated
+// coordinates rather than degrees. The same second-indexed factor table is
+// used for latitude and minute-indexed for longitude:
+//   encodedLat = latitude  * factor[second] / 10 + 114.712
+//   encodedLon = longitude * factor[minute] / 10 + 224.222
+// Recovered independently from 18 burned-in OSD checkpoints; see the format
+// note for the cross-check against speed and movement.
+export const SSTAR_KTRX_FACTORS: readonly number[] = [
+    15, 25, 36, 63, 82, 13, 12, 15, 21, 31, 21, 57, 16, 29, 47, 26, 42, 26, 26, 12, 65, 28, 12, 26, 46, 24, 29, 25, 54,
+    23, 87, 12, 46, 48, 35, 37, 68, 12, 24, 46, 76, 55, 26, 28, 67, 24, 43, 46, 68, 87, 23, 56, 78, 34, 16, 48, 27, 81,
+    53, 82,
+];
+const SSTAR_KTRX_LAT_OFFSET = 114.712;
+const SSTAR_KTRX_LON_OFFSET = 224.222;
+const SSTAR_KTRX_ID_OFFSET = 32;
+const SSTAR_KTRX_ID_LENGTH = 16;
+const SSTAR_KTRX_MARKER_OFFSET = 48;
+const SSTAR_KTRX_CLOCK_OFFSET = 52;
 
 /**
  * Classifies the +22 flags word: "fix"/"nofix" when the word is a known
@@ -184,14 +210,18 @@ const PHANTOM_MIN_VIOLATION_SHARE = 0.1;
 // ("backup-... INF20260520-134803-14-F.mp4") still anchors on it.
 const RX_NEOLINE_SUFFIX = /INF(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-\d+-[FR]\.mp4$/i;
 
+// Strict iZEEKER iD300 filename shape. Kept local for the same parser-layer
+// decoupling reason as RX_NEOLINE_SUFFIX above.
+const RX_KTRX_REC_SUFFIX = /REC(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-\d{1,5}\.mp4$/i;
+
 // Generic fallback: the first plausible YYYYMMDD run anywhere in the name.
 const RX_GENERIC_DATE_RUN = /(?:^|\D)(20\d{2})(\d{2})(\d{2})(?=\D|$)/;
 
 /**
  * Returns the SStar GPS candidate track: handler 'meta', sample-format
- * 'ssmd', non-empty sample table where EVERY sample is exactly 40 bytes.
- * The constant size skips the sibling ssmd tracks this firmware writes
- * (JPEG thumbnail, 12-byte telemetry). null when absent.
+ * 'ssmd', non-empty sample table where EVERY sample is exactly one supported
+ * size: 40-byte direct-coordinate or 56-byte KTRX. Constant uniform size
+ * skips sibling ssmd tracks and mixed/foreign content. null when absent.
  */
 export function findSstarSsmdTrack(index: Mp4Index): TrackInfo | null {
     if (!index.moovView) return null;
@@ -199,7 +229,9 @@ export function findSstarSsmdTrack(index: Mp4Index): TrackInfo | null {
         if (t.handlerType !== "meta" || t.sampleFormat !== "ssmd") continue;
         const samples = readSampleTable(index.moovView, t.trakBox);
         if (!samples || samples.length === 0) continue;
-        if (!samples.every((s) => s.size === SSTAR_SSMD_SAMPLE_SIZE)) continue;
+        const sampleSize = samples[0]!.size;
+        if (sampleSize !== SSTAR_SSMD_SAMPLE_SIZE && sampleSize !== SSTAR_KTRX_SSMD_SAMPLE_SIZE) continue;
+        if (!samples.every((s) => s.size === sampleSize)) continue;
         return t;
     }
     return null;
@@ -220,6 +252,43 @@ function timeBytesValid(day: number, hour: number, minute: number, second: numbe
     return day >= 1 && day <= 31 && hour <= 23 && minute <= 59 && second <= 59;
 }
 
+function asciiDigit(dv: DataView, offset: number): number | null {
+    const value = dv.getUint8(offset) - 0x30;
+    return value >= 0 && value <= 9 ? value : null;
+}
+
+/** Strong content tag for the 56-byte iZEEKER dialect. */
+export function hasSstarKtrxTag(dv: DataView): boolean {
+    if (dv.byteLength !== SSTAR_KTRX_SSMD_SAMPLE_SIZE) return false;
+    for (let i = 0; i < SSTAR_KTRX_ID_LENGTH; i++) {
+        const c = dv.getUint8(SSTAR_KTRX_ID_OFFSET + i);
+        if (!((c >= 0x30 && c <= 0x39) || (c >= 0x41 && c <= 0x46))) return false;
+    }
+    if (
+        dv.getUint8(SSTAR_KTRX_MARKER_OFFSET) !== 0x4b ||
+        dv.getUint8(SSTAR_KTRX_MARKER_OFFSET + 1) !== 0x54 ||
+        dv.getUint8(SSTAR_KTRX_MARKER_OFFSET + 2) !== 0x52 ||
+        dv.getUint8(SSTAR_KTRX_MARKER_OFFSET + 3) !== 0x58
+    ) {
+        return false;
+    }
+    const h0 = asciiDigit(dv, SSTAR_KTRX_CLOCK_OFFSET);
+    const h1 = asciiDigit(dv, SSTAR_KTRX_CLOCK_OFFSET + 1);
+    const m0 = asciiDigit(dv, SSTAR_KTRX_CLOCK_OFFSET + 2);
+    const m1 = asciiDigit(dv, SSTAR_KTRX_CLOCK_OFFSET + 3);
+    if (h0 === null || h1 === null || m0 === null || m1 === null) return false;
+    return h0 * 10 + h1 === dv.getUint8(OFF_HOUR) && m0 * 10 + m1 === dv.getUint8(OFF_MIN);
+}
+
+function decodeKtrxCoordinates(dv: DataView, minute: number, second: number): { lat: number; lon: number } {
+    const latFactor = SSTAR_KTRX_FACTORS[second]! / 10;
+    const lonFactor = SSTAR_KTRX_FACTORS[minute]! / 10;
+    return {
+        lat: (dv.getFloat64(OFF_LAT, true) - SSTAR_KTRX_LAT_OFFSET) / latFactor,
+        lon: (dv.getFloat64(OFF_LON, true) - SSTAR_KTRX_LON_OFFSET) / lonFactor,
+    };
+}
+
 /**
  * Content probe for the marker. A 40-byte meta/ssmd sample alone is a weak
  * signature, so the first sample must also carry the constant flags word AND
@@ -227,6 +296,9 @@ function timeBytesValid(day: number, hour: number, minute: number, second: numbe
  * plausible fix (finite in-range degrees, valid time bytes).
  */
 export function looksLikeSstarSsmdSample(dv: DataView): boolean {
+    if (dv.byteLength === SSTAR_KTRX_SSMD_SAMPLE_SIZE) {
+        return decodeSstarSsmdRow(dv) !== null;
+    }
     if (dv.byteLength !== SSTAR_SSMD_SAMPLE_SIZE) return false;
     const cls = classifySstarFlagsWord(dv.getUint16(OFF_FLAGS, true));
     if (cls === "nofix") return hasSstarNoFixSentinel(dv);
@@ -250,7 +322,7 @@ export function looksLikeSstarSsmdSample(dv: DataView): boolean {
  * calendar date in ms, or null when no plausible date run exists.
  */
 export function localDateAnchorMsFromFilename(name: string): number | null {
-    const m = RX_NEOLINE_SUFFIX.exec(name) ?? RX_GENERIC_DATE_RUN.exec(name);
+    const m = RX_NEOLINE_SUFFIX.exec(name) ?? RX_KTRX_REC_SUFFIX.exec(name) ?? RX_GENERIC_DATE_RUN.exec(name);
     if (!m) return null;
     const year = Number(m[1]);
     const month = Number(m[2]);
@@ -300,7 +372,15 @@ export function utcMsFromAnchoredDayTime(
  * unavailable and the GPS clock is trusted as before.
  */
 export function localNaiveSecondsFromNeolineFilename(name: string): number | null {
-    const m = RX_NEOLINE_SUFFIX.exec(name);
+    return localNaiveSecondsFromMatch(RX_NEOLINE_SUFFIX.exec(name));
+}
+
+/** Camera-local naive time from the strict iZEEKER REC filename shape. */
+export function localNaiveSecondsFromKtrxFilename(name: string): number | null {
+    return localNaiveSecondsFromMatch(RX_KTRX_REC_SUFFIX.exec(name));
+}
+
+function localNaiveSecondsFromMatch(m: RegExpExecArray | null): number | null {
     if (!m) return null;
     const [, y, mo, d, h, mi, s] = m;
     const year = Number(y);
@@ -335,7 +415,7 @@ export interface SstarSsmdFix {
 }
 
 /**
- * Decodes one 40-byte sample. Returns:
+ * Decodes one supported 40- or 56-byte sample. Returns:
  *   - "nofix" for a no-fix row (no-fix flags word or the coordinate
  *     sentinel) - routine satellite acquisition, skipped silently;
  *   - null for an implausible row (foreign flags word, non-finite or
@@ -344,23 +424,32 @@ export interface SstarSsmdFix {
  *     absolute-time resolution depends on per-file state.
  */
 export function decodeSstarSsmdRow(dv: DataView): SstarSsmdFix | "nofix" | null {
-    if (dv.byteLength !== SSTAR_SSMD_SAMPLE_SIZE) return null;
-    const cls = classifySstarFlagsWord(dv.getUint16(OFF_FLAGS, true));
-    if (cls === "nofix" || hasSstarNoFixSentinel(dv)) return "nofix";
-    if (cls !== "fix") return null;
+    const isKtrx = dv.byteLength === SSTAR_KTRX_SSMD_SAMPLE_SIZE;
+    if (!isKtrx && dv.byteLength !== SSTAR_SSMD_SAMPLE_SIZE) return null;
 
-    const lat = dv.getFloat64(OFF_LAT, true);
-    const lon = dv.getFloat64(OFF_LON, true);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-    // Zeros mean an empty fix - same convention as the other embedded decoders.
-    if (lat === 0 && lon === 0) return null;
-    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+    if (isKtrx) {
+        if (!hasSstarKtrxTag(dv) || dv.getUint16(OFF_FLAGS, true) !== SSTAR_KTRX_FLAGS_FIX) return null;
+        if (hasSstarNoFixSentinel(dv)) return "nofix";
+    } else {
+        const cls = classifySstarFlagsWord(dv.getUint16(OFF_FLAGS, true));
+        if (cls === "nofix" || hasSstarNoFixSentinel(dv)) return "nofix";
+        if (cls !== "fix") return null;
+    }
 
     const day = dv.getUint8(OFF_DAY);
     const hour = dv.getUint8(OFF_HOUR);
     const minute = dv.getUint8(OFF_MIN);
     const second = dv.getUint8(OFF_SEC);
     if (!timeBytesValid(day, hour, minute, second)) return null;
+
+    const coords = isKtrx
+        ? decodeKtrxCoordinates(dv, minute, second)
+        : { lat: dv.getFloat64(OFF_LAT, true), lon: dv.getFloat64(OFF_LON, true) };
+    const { lat, lon } = coords;
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    // Zeros mean an empty fix - same convention as the other embedded decoders.
+    if (lat === 0 && lon === 0) return null;
+    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
 
     // 0xFFFF is the no-fix filler; on a flagged fix row treat it as "speed
     // unknown" rather than dropping an otherwise valid coordinate.
@@ -388,7 +477,7 @@ interface ResolvedFix {
 }
 
 /**
- * Extracts GPS from an SStar 40-byte ssmd track. No-fix rows are skipped
+ * Extracts GPS from a supported SStar ssmd track. No-fix rows are skipped
  * silently (routine during satellite acquisition; their time bytes are the
  * local RTC, not UTC - never trusted). Fix rows resolve to absolute UTC via
  * the filename date anchor (falling back to mvhd creation when the filename
@@ -416,7 +505,9 @@ export async function extractFromSstarSsmdTrack(
     if (!samples || samples.length === 0) return null;
     // Re-assert the constant size (cheap) - the caller normally got the track
     // from findSstarSsmdTrack, but extract must not misread a foreign track.
-    if (!samples.every((s) => s.size === SSTAR_SSMD_SAMPLE_SIZE)) return null;
+    const sampleSize = samples[0]!.size;
+    if (sampleSize !== SSTAR_SSMD_SAMPLE_SIZE && sampleSize !== SSTAR_KTRX_SSMD_SAMPLE_SIZE) return null;
+    if (!samples.every((s) => s.size === sampleSize)) return null;
 
     const sampleBuffers = await loadSamples(vf.file, samples, index.sliceCost);
     const skipped: SkippedLine[] = [];
@@ -545,7 +636,10 @@ export async function extractFromSstarSsmdTrack(
     // before the last clock step - the tail is the most-synced stretch.
     let anchored = resolved.some((f) => f.utcMs !== null);
     if (anchored && mediaStartSeconds) {
-        const nameNaive = localNaiveSecondsFromNeolineFilename(vf.file.name);
+        const nameNaive =
+            sampleSize === SSTAR_KTRX_SSMD_SAMPLE_SIZE
+                ? localNaiveSecondsFromKtrxFilename(vf.file.name)
+                : localNaiveSecondsFromNeolineFilename(vf.file.name);
         const lastFix = resolved[resolved.length - 1];
         const lastMedia = lastFix ? mediaStartSeconds[lastFix.sampleIndex] : undefined;
         if (nameNaive !== null && lastFix?.utcMs != null && lastMedia !== undefined) {

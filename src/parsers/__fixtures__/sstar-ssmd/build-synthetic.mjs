@@ -6,6 +6,9 @@
 //                                out-of-range latitude, no-fix rows
 //   synthetic-wrong-format.mp4 - structurally identical track (meta/ssmd,
 //                                constant 40-byte samples) with foreign content
+//   synthetic-ktrx-happy.mp4   - 56-byte iZEEKER KTRX rows
+//   synthetic-ktrx-edge.mp4    - valid marker plus corrupt KTRX rows
+//   synthetic-ktrx-wrong-format.mp4 - constant 56-byte foreign content
 //
 // MP4 skeleton mirrors wolfbox/build-synthetic.mjs: ftyp + moov(mvhd, trak
 // with hdlr='meta' and stsd format 'ssmd') + mdat with N fixed-size samples.
@@ -28,6 +31,13 @@ function u32be(n) { const b = Buffer.alloc(4); b.writeUInt32BE(n, 0); return b; 
 const FLAGS_FIX = 0x057e;
 const FLAGS_NO_FIX = 0x047e;
 const SENTINEL = Buffer.from([0x00, 0x00, 0xe0, 0xff, 0xff, 0xff, 0xef, 0x41]);
+const KTRX_FLAGS_FIX = 0x087e;
+const KTRX_FACTORS = [
+    15, 25, 36, 63, 82, 13, 12, 15, 21, 31, 21, 57, 16, 29, 47,
+    26, 42, 26, 26, 12, 65, 28, 12, 26, 46, 24, 29, 25, 54, 23,
+    87, 12, 46, 48, 35, 37, 68, 12, 24, 46, 76, 55, 26, 28, 67,
+    24, 43, 46, 68, 87, 23, 56, 78, 34, 16, 48, 27, 81, 53, 82,
+];
 
 // One 40-byte fix row. Defaults mimic a real fix (alt-like word, constant
 // 01 01 00 at +29, tail flag 1). courseDeg is stored as deg/2 at +28 - keep
@@ -67,8 +77,27 @@ function noFixSample({ day, hour, min, sec }) {
     return b;
 }
 
+function ktrxFixSample({ lat, lon, speedKmh = 20, day, hour, min, sec, courseDeg = 128 }) {
+    const b = Buffer.alloc(56);
+    b.writeDoubleLE(lat * KTRX_FACTORS[sec] / 10 + 114.712, 0);
+    b.writeDoubleLE(lon * KTRX_FACTORS[min] / 10 + 224.222, 8);
+    b.writeInt32LE(300, 16);
+    b.writeUInt16LE(speedKmh, 20);
+    b.writeUInt16LE(KTRX_FLAGS_FIX, 22);
+    b.writeUInt8(day, 24);
+    b.writeUInt8(hour, 25);
+    b.writeUInt8(min, 26);
+    b.writeUInt8(sec, 27);
+    Buffer.from([courseDeg / 2, 0x01, 0x01, 0x00]).copy(b, 28);
+    Buffer.from("0000000000000000KTRX", "ascii").copy(b, 32);
+    Buffer.from(`${String(hour).padStart(2, "0")}${String(min).padStart(2, "0")}`, "ascii").copy(b, 52);
+    return b;
+}
+
 function buildMp4(samples) {
     const n = samples.length;
+    const sampleSize = samples[0].length;
+    if (!samples.every((sample) => sample.length === sampleSize)) throw new Error("mixed sample sizes");
 
     const mvhd = (() => {
         const p = Buffer.alloc(108);
@@ -100,8 +129,8 @@ function buildMp4(samples) {
 
     const stts = box("stts", Buffer.concat([Buffer.alloc(4), u32be(1), u32be(n), u32be(90000)]));
     const stsc = box("stsc", Buffer.concat([Buffer.alloc(4), u32be(1), u32be(1), u32be(n), u32be(1)]));
-    // Header-fixed stsz like the real firmware writes (sample_size = 40).
-    const stsz = box("stsz", Buffer.concat([Buffer.alloc(4), u32be(40), u32be(n)]));
+    // Header-fixed stsz like the real firmware writes.
+    const stsz = box("stsz", Buffer.concat([Buffer.alloc(4), u32be(sampleSize), u32be(n)]));
     const stcoPlaceholder = box("stco", Buffer.concat([Buffer.alloc(4), u32be(1), u32be(0)]));
 
     const dinf = box(
@@ -168,8 +197,45 @@ const junkRow = Buffer.alloc(40);
 Buffer.from("LIGOGPSINFO 2026-03-15 17:39:51 junk....", "ascii").copy(junkRow, 0);
 const wrongFormat = buildMp4([junkRow, Buffer.from(junkRow), Buffer.from(junkRow)]);
 
+// KTRX happy path: filename-local 23:19:22, GPS UTC 21:19:22 -> exact UTC+2
+// grid. Five records exercise the changing second-indexed latitude factor.
+const ktrxHappyRows = Array.from({ length: 5 }, (_, i) => ktrxFixSample({
+    lat: 50 + i * 0.0001,
+    lon: 30 + i * 0.0001,
+    speedKmh: 40 + i,
+    courseDeg: i === 4 ? 0 : 76 + Math.floor(i / 2) * 2,
+    day: 2,
+    hour: 21,
+    min: 19,
+    sec: 22 + i,
+}));
+const ktrxHappy = buildMp4(ktrxHappyRows);
+
+// KTRX edge path: the first row keeps marker detection positive; later rows
+// cover a foreign flags word, a broken KTRX tag and an out-of-range decode.
+const ktrxBadFlags = ktrxFixSample({ lat: 50.0001, lon: 30.0001, day: 2, hour: 21, min: 19, sec: 23 });
+ktrxBadFlags.writeUInt16LE(0x0000, 22);
+const ktrxBadTag = ktrxFixSample({ lat: 50.0002, lon: 30.0002, day: 2, hour: 21, min: 19, sec: 24 });
+Buffer.from("NOPE", "ascii").copy(ktrxBadTag, 48);
+const ktrxBadLat = ktrxFixSample({ lat: 95, lon: 30.0003, day: 2, hour: 21, min: 19, sec: 25 });
+const ktrxEdge = buildMp4([
+    ktrxFixSample({ lat: 50, lon: 30, day: 2, hour: 21, min: 19, sec: 22 }),
+    ktrxBadFlags,
+    ktrxBadTag,
+    ktrxBadLat,
+]);
+
+const ktrxJunkRow = Buffer.alloc(56, 0x5a);
+const ktrxWrongFormat = buildMp4([ktrxJunkRow, Buffer.from(ktrxJunkRow)]);
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 writeFileSync(resolve(__dirname, "synthetic-happy.mp4"), happy);
 writeFileSync(resolve(__dirname, "synthetic-edge.mp4"), edge);
 writeFileSync(resolve(__dirname, "synthetic-wrong-format.mp4"), wrongFormat);
-console.error(`wrote ${happy.length} + ${edge.length} + ${wrongFormat.length} bytes`);
+writeFileSync(resolve(__dirname, "synthetic-ktrx-happy.mp4"), ktrxHappy);
+writeFileSync(resolve(__dirname, "synthetic-ktrx-edge.mp4"), ktrxEdge);
+writeFileSync(resolve(__dirname, "synthetic-ktrx-wrong-format.mp4"), ktrxWrongFormat);
+console.error(
+    `wrote ${happy.length} + ${edge.length} + ${wrongFormat.length} + ` +
+    `${ktrxHappy.length} + ${ktrxEdge.length} + ${ktrxWrongFormat.length} bytes`,
+);
