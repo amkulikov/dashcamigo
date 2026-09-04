@@ -46,6 +46,7 @@ import {
 import { escapeAttr, escapeText, stringifyJsonLd } from "./html-utils.js";
 import { renderHubCta } from "./hub-cta.js";
 import type { SeoBuildOptions } from "./seo-prerender.js";
+import { renderBreadcrumbs, renderSeoLanguageLinks } from "./seo-navigation.js";
 
 // Brand-mark camera icon, single source for vendor pages. Mirrors the SVG
 // embedded inline in index.html (.dc-mark) - design system has no shared
@@ -1604,7 +1605,7 @@ export function buildOgLocaleAlternatesHtml(
 // Build the static HTML for one vendor page. Inlines BreadcrumbList JSON-LD
 // and one tight HTML body. Loads
 // /vendor-page.css for styling. No JS app bundle.
-function renderVendorPage(vendor: VendorContent, lang: Lang, options: SeoBuildOptions): string {
+export function renderVendorPage(vendor: VendorContent, lang: Lang, options: SeoBuildOptions): string {
     const seoLocale = getSeoLocaleByLang(lang);
     if (!seoLocale) throw new Error(`vendor-pages: lang "${lang}" not in SEO_LOCALES`);
     if (!isVendorAvailableInLang(vendor, lang)) {
@@ -1629,16 +1630,13 @@ function renderVendorPage(vendor: VendorContent, lang: Lang, options: SeoBuildOp
         vendorLocales,
     );
     const ogLocaleAlternatesBlock = buildOgLocaleAlternatesHtml(lang, vendorLocales);
+    const languageLinks = renderSeoLanguageLinks(lang, (locale) => `/${locale.urlSegment}/cameras/${vendor.slug}/`, vendorLocales);
 
-    const breadcrumb = {
-        "@context": "https://schema.org",
-        "@type": "BreadcrumbList",
-        itemListElement: [
-            { "@type": "ListItem", position: 1, name: labels.breadcrumbHome, item: homeUrl },
-            { "@type": "ListItem", position: 2, name: labels.breadcrumbCameras, item: camerasUrl },
-            { "@type": "ListItem", position: 3, name: vendor.displayName, item: url },
-        ],
-    };
+    const breadcrumb = renderBreadcrumbs(lang, [
+        { name: labels.breadcrumbHome, url: homeUrl },
+        { name: labels.breadcrumbCameras, url: camerasUrl },
+        { name: vendor.displayName, url },
+    ]);
 
     const v = vendor.displayName;
 
@@ -1673,9 +1671,8 @@ ${ogLocaleAlternatesBlock}
 <link rel="alternate icon" href="/favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="/favicon-192.png">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="preload" href="/fonts/inter-400-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/vendor-page.css">
-<script type="application/ld+json">${stringifyJsonLd(breadcrumb)}</script>
+<script type="application/ld+json">${breadcrumb.jsonLd}</script>
 </head>
 <body>
 <header class="vp-header">
@@ -1686,6 +1683,7 @@ ${BRAND_ICON_SVG}
 <a href="${localHome}" class="vp-back">${escapeText(labels.backToPlayer)}</a>
 </header>
 <main class="vp-main">
+${breadcrumb.html}
 <article>
 <h1 class="vp-h1">${escapeText(content.h1)}</h1>
 <p class="vp-lead">${escapeText(content.lead)}</p>
@@ -1736,6 +1734,7 @@ ${otherVendors
 </main>
 
 <footer class="vp-footer">
+${languageLinks}
 <a href="/privacy">${escapeText(labels.footerPrivacy)}</a>
 <span>·</span>
 <a href="/terms">${escapeText(labels.footerTerms)}</a>
@@ -1753,7 +1752,7 @@ ${otherVendors
 // published in its language, so every card resolves to a real localized page.
 // Same chrome as vendor pages (header, footer, vendor-page.css). Loads no JS
 // app bundle.
-function renderCamerasIndexPage(lang: Lang, options: SeoBuildOptions): string {
+export function renderCamerasIndexPage(lang: Lang, options: SeoBuildOptions): string {
     const seoLocale = getSeoLocaleByLang(lang);
     if (!seoLocale) throw new Error(`vendor-pages: lang "${lang}" not in SEO_LOCALES`);
 
@@ -1770,17 +1769,13 @@ function renderCamerasIndexPage(lang: Lang, options: SeoBuildOptions): string {
         return canonicalLocaleUrl(loc, "cameras/");
     });
     const ogLocaleAlternatesBlock = buildOgLocaleAlternatesHtml(lang);
+    const languageLinks = renderSeoLanguageLinks(lang, (locale) => `/${locale.urlSegment}/cameras/`);
 
-    const breadcrumb = {
-        "@context": "https://schema.org",
-        "@type": "BreadcrumbList",
-        itemListElement: [
-            { "@type": "ListItem", position: 1, name: labels.breadcrumbHome, item: homeUrl },
-            { "@type": "ListItem", position: 2, name: labels.breadcrumbCameras, item: url },
-        ],
-    };
-    // CollectionPage with ItemList - tells Google this is a hub listing of
-    // related sub-pages, which can promote sitelinks under the main result.
+    const breadcrumb = renderBreadcrumbs(lang, [
+        { name: labels.breadcrumbHome, url: homeUrl },
+        { name: labels.breadcrumbCameras, url },
+    ]);
+    // The collection mirrors the localized cards visible on this hub.
     const collection = {
         "@context": "https://schema.org",
         "@type": "CollectionPage",
@@ -1831,9 +1826,8 @@ ${ogLocaleAlternatesBlock}
 <link rel="alternate icon" href="/favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="/favicon-192.png">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="preload" href="/fonts/inter-400-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/vendor-page.css">
-<script type="application/ld+json">${stringifyJsonLd(breadcrumb)}</script>
+<script type="application/ld+json">${breadcrumb.jsonLd}</script>
 <script type="application/ld+json">${stringifyJsonLd(collection)}</script>
 </head>
 <body>
@@ -1845,6 +1839,7 @@ ${BRAND_ICON_SVG}
 <a href="${localHome}" class="vp-back">${escapeText(labels.backToPlayer)}</a>
 </header>
 <main class="vp-main">
+${breadcrumb.html}
 <article>
 <h1 class="vp-h1">${escapeText(content.h1)}</h1>
 <p class="vp-lead">${escapeText(content.lead)}</p>
@@ -1852,7 +1847,8 @@ ${BRAND_ICON_SVG}
 ${localeVendors.map(
     (v) => `<li><a class="vp-vendor-card" href="${pathPrefix}/cameras/${v.slug}/">
 <span class="vp-vendor-card-name">${escapeText(v.displayName)}</span>
-<span class="vp-vendor-card-hint">${escapeText(content.cardHintPrefix)} ${escapeText(v.format.container)} · ${escapeText(v.format.gpsStorage)}</span>
+<span class="vp-vendor-card-hint">${v.models.slice(0, 2).map(escapeText).join(" · ")}</span>
+<span class="vp-vendor-card-hint">${escapeText(content.cardHintPrefix)} ${escapeText(v.format.container)}</span>
 </a></li>`,
 ).join("\n")}
 </ul>
@@ -1861,6 +1857,7 @@ ${renderHubCta(lang, pathPrefix)}
 </article>
 </main>
 <footer class="vp-footer">
+${languageLinks}
 <a href="/privacy">${escapeText(labels.footerPrivacy)}</a>
 <span>·</span>
 <a href="/terms">${escapeText(labels.footerTerms)}</a>

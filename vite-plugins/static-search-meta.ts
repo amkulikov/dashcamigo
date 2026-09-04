@@ -5,7 +5,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Plugin } from "vite";
-import type { SeoDeploymentContext } from "./deployment-profile.js";
+import { LARGE_IMAGE_PREVIEW_META, type SeoDeploymentContext } from "./deployment-profile.js";
 
 const STANDALONE_DOCUMENTS = ["privacy.html", "terms.html", "add-my-camera.html"] as const;
 const ROBOTS_NOINDEX = '<meta name="robots" content="noindex, nofollow">';
@@ -23,9 +23,8 @@ export function applyStaticSearchMeta(
     const tag = options.noIndex
         ? ROBOTS_NOINDEX
         : options.deployment.seoCutover && options.deployment.profile === "mirror"
-          ? YANDEX_NOINDEX
-          : "";
-    if (!tag) return;
+          ? LARGE_IMAGE_PREVIEW_META + YANDEX_NOINDEX
+          : LARGE_IMAGE_PREVIEW_META;
 
     for (const name of STANDALONE_DOCUMENTS) {
         const path = resolve(distDir, name);

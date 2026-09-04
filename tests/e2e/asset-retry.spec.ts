@@ -15,6 +15,15 @@ const HASHED_JS = /\/assets\/[^/?]+\.js$/;
 
 test("dead shell reloads itself and boots once the assets come back", async ({ page }) => {
     await page.clock.install();
+    await page.addInitScript(() => {
+        addEventListener(
+            "dc:ready",
+            () => {
+                document.documentElement.dataset.e2eReady = "true";
+            },
+            { once: true },
+        );
+    });
     let blockedRequests = 0;
     await page.route(HASHED_JS, (route) => {
         blockedRequests += 1;
@@ -44,13 +53,10 @@ test("dead shell reloads itself and boots once the assets come back", async ({ p
     await reload;
     await expect(page.locator(".landing-cta").first()).not.toHaveClass(/is-pending/);
 
-    // The CTA is baseline HTML and can become observable before app.ts has
-    // completed startup. The stable-uptime timer is armed by `dc:ready`, so
-    // advancing the fake clock before that event races the timer registration
-    // on a saturated full-suite worker. `is-loading` is removed synchronously
-    // by the dc:ready handler (the 15s watchdog cannot fire while the fake
-    // clock is parked here), making this the actual boot-complete boundary.
-    await expect(page.locator("html")).not.toHaveClass(/is-loading/);
+    // First visits reveal the static landing before the bundle is ready.
+    // The retry-reset timer starts at dc:ready, so wait for that event before
+    // advancing the fake clock across its stability window.
+    await expect(page.locator("html")).toHaveAttribute("data-e2e-ready", "true");
 
     // A successful boot takes the updating note down immediately, but returns
     // the budget only after 30s of stable uptime - a boot that succeeds right

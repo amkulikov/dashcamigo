@@ -26,13 +26,14 @@ afterEach(() => {
 });
 
 describe("static document search metadata", () => {
-    it("keeps a primary production build unchanged", () => {
+    it("allows large image previews on primary production documents", () => {
         const dir = fixture();
         applyStaticSearchMeta(dir, {
             noIndex: false,
             deployment: { profile: "primary", seoCutover: false, mirror: null },
         });
         expect(readFileSync(resolve(dir, "privacy.html"), "utf-8")).not.toContain("noindex");
+        expect(readFileSync(resolve(dir, "privacy.html"), "utf-8")).toContain('content="max-image-preview:large"');
     });
 
     it("makes standalone documents noindex in a preview build", () => {
@@ -51,6 +52,6 @@ describe("static document search metadata", () => {
             deployment: { profile: "mirror", seoCutover: true, mirror },
         });
         expect(readFileSync(resolve(dir, "privacy.html"), "utf-8")).toContain('<meta name="yandex" content="noindex">');
-        expect(readFileSync(resolve(dir, "privacy.html"), "utf-8")).not.toContain('name="robots"');
+        expect(readFileSync(resolve(dir, "privacy.html"), "utf-8")).toContain('<meta name="robots" content="max-image-preview:large">');
     });
 });

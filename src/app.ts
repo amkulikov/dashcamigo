@@ -517,8 +517,9 @@ initFolderSources();
 // Persistent-folder mode (Chromium): recent-folder chips on the landing.
 // Needs notifications and the ingest overlay, both initialized above. Its
 // first IndexedDB read can add a variable-height block above the capability
-// list, so keep the shell visibility-hidden under the splash until that
-// geometry is settled. A failed read already degrades to an empty block.
+// list, so returning users keep the splash until that geometry is settled.
+// First visits can reveal prerendered content earlier because the bootstrap
+// verifies there is no stored database. A failed read leaves an empty block.
 void initPersistentFolders()
     .catch((err: unknown) => {
         appLog.warn("recent folders init failed", {
@@ -526,10 +527,10 @@ void initPersistentFolders()
         });
     })
     .then(() => {
-        // The inline bootstrap in index.html added .is-loading and showed
-        // #dc-loader. rAF guarantees the localized, themed, settled shell is
-        // ready to paint before the fade starts. The 15s inline watchdog remains
-        // the fail-open path for an early import error or stuck storage.
+        // For returning users, rAF lets settled folder geometry paint before
+        // the splash fades. dc:ready also marks runtime readiness after an
+        // early static reveal. The inline watchdog covers a failed bundle or
+        // stuck storage.
         requestAnimationFrame(() => {
             dispatchEvent(new Event("dc:ready"));
         });
@@ -833,12 +834,12 @@ initLangSuggestionBanner();
 // landing light, but "lazy on first use" must not become "make the user wait
 // at the seam": on a slow connection the just-in-time fetch is visible right
 // when the user drops a folder (worker chunks) or opens a trip (map/chart). So
-// once the landing is interactive, warm the whole ingest -> view path in the
+// after the landing's load event, warm the whole ingest -> view path in the
 // background at idle priority. Vendor loaders are memoized and worker prewarm
 // keeps the spawned slot, so the real ingest and first trip-open reuse warm
-// chunks instead of starting a fresh download. Idle (not eager) so the
-// landing's own first paint / LCP stays untouched - the warm-up only runs
-// after the browser is done with the critical work.
+// chunks instead of starting a fresh download. An idle main thread can still
+// be waiting for images and fonts; wait for load before allowing speculative
+// downloads to compete with those critical resources.
 //
 // mediabunny is NOT in this list: its main-thread graph is materially heavy and
 // only needed after the user supplies a recording (codec probe) or starts an
@@ -883,7 +884,11 @@ function prefetchDeferredLibs(): void {
 // Skip eager worker prewarm on a fatal browser - `new Worker` would throw on a
 // Worker-less engine and the gate already blocks all interaction.
 if (!capabilityFatal) {
-    prefetchDeferredLibs();
+    if (document.readyState === "complete") {
+        prefetchDeferredLibs();
+    } else {
+        window.addEventListener("load", prefetchDeferredLibs, { once: true });
+    }
     // Proactive heads-up for user-visible degraded gaps (no map / no editor /
     // no H.264 decode). Notifications are initialized above; this fires once per
     // gap-set (persisted) so it does not nag every session.

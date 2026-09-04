@@ -8,6 +8,7 @@
 import { getIndexableSeoLocales, type SeoLocale } from "../src/i18n/seo-config.js";
 
 export const PRIMARY_SITE_ORIGIN = "https://dashcamigo.app";
+export const LARGE_IMAGE_PREVIEW_META = '<meta name="robots" content="max-image-preview:large">';
 
 export type DeploymentProfile = "primary" | "mirror";
 
@@ -160,7 +161,10 @@ export function searchIndexingMeta(
     context: SeoDeploymentContext = resolveSeoDeploymentContext(),
 ): string {
     if (globalNoIndex) return '<meta name="robots" content="noindex, nofollow">';
-    return localeNeedsYandexNoIndex(locale, context) ? '<meta name="yandex" content="noindex">' : "";
+    return (
+        LARGE_IMAGE_PREVIEW_META +
+        (localeNeedsYandexNoIndex(locale, context) ? '<meta name="yandex" content="noindex">' : "")
+    );
 }
 
 export function mirrorRootLocaleSegment(context: SeoDeploymentContext = resolveSeoDeploymentContext()): string {

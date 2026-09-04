@@ -266,13 +266,6 @@ export function initFileSources(): void {
         });
     }
 
-    // The static HTML ships #landing-cta as .is-pending (a loading spinner) so a
-    // slow-network reveal of the landing - before this bundle hydrates - reads as
-    // "loading" rather than a dead button (the click handler bound above is what
-    // makes the CTA work). Now that it is bound, drop the loading state.
-    dom.landingCta?.classList.remove("is-pending");
-    dom.landingCta?.removeAttribute("aria-busy");
-
     // Counter of active dragenter events without a matching dragleave. Without
     // it the overlay flickers as the cursor moves over child elements - dragleave
     // fires on every nested element boundary. Only the outermost enter/leave at
@@ -364,4 +357,12 @@ export function initFileSources(): void {
             }
         });
     }
+
+    // Native labels can open the picker before JavaScript is ready. Keep the
+    // inputs and hero button disabled until selections have their handlers.
+    dom.folderInput.disabled = false;
+    dom.fileInput.disabled = false;
+    dom.landingCta?.removeAttribute("disabled");
+    dom.landingCta?.classList.remove("is-pending");
+    dom.landingCta?.removeAttribute("aria-busy");
 }

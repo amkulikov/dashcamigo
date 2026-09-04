@@ -25,7 +25,7 @@
 //   doing client-side lang detection - they're language-agnostic legacy URLs
 //   that map to a single English destination.
 
-import { writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Plugin } from "vite";
 import { getDefaultSeoLocale, getIndexableSeoLocales } from "../src/i18n/seo-config.js";
@@ -38,6 +38,11 @@ export function redirectsPlugin(): Plugin {
         apply: "build",
         closeBundle() {
             const distDir = resolve(process.cwd(), "dist");
+            // A top-level 404.html disables Pages' SPA fallback. _redirects
+            // does not support 404 rewrites; a catch-all also shadows assets.
+            if (!existsSync(resolve(distDir, "404.html"))) {
+                throw new Error("redirects: 404.html is required to prevent soft 404 responses");
+            }
             const defaultSegment = getDefaultSeoLocale().urlSegment;
             // Sanity check - if the default locale somehow becomes empty
             // again, this file would 301 to /cameras/, an infinite loop.
@@ -64,7 +69,7 @@ export function redirectsPlugin(): Plugin {
             // docs treat "/trailing" and "/trailing/" as distinct patterns),
             // and there is no asset at these legacy paths to trigger CF's
             // slash normalization - a slashless backlink (/cameras/70mai)
-            // would fall through to the catch-all 404. Emit both variants per
+            // would return a 404. Emit both variants per
             // legacy path; the destination is always slash-terminated (the
             // canonical form CF Pages serves).
             const pushBothSlashVariants = (sourcePath: string, destinationPath: string): void => {
@@ -84,7 +89,7 @@ export function redirectsPlugin(): Plugin {
             // Alternative-to pages never had a bare (locale-less) URL - they were
             // born under /<lang>/. These 301s exist only so a hand-typed or
             // externally-linked /alternatives/<slug>/ resolves to the English
-            // page instead of hitting the catch-all 404. Same default-locale
+            // page instead of returning a 404. Same default-locale
             // target and PageRank-preserving 301 as the /cameras/ block above.
             lines.push("# Locale-less /alternatives/* -> English variant.");
             for (const slug of getAlternativeSlugs()) {
@@ -144,22 +149,6 @@ export function redirectsPlugin(): Plugin {
                 lines.push(`/${retired}/* /${defaultSegment}/:splat 301`);
             }
             lines.push("");
-            // Catch-all 404. CF Pages applies _redirects rules only when no
-            // static asset matches the URL ("Rules apply only if there are
-            // no static assets at the URL"), so prerendered /<lang>/index.html,
-            // /<lang>/cameras/<slug>/index.html, hashed assets etc. fall through
-            // and reach this rule only for genuine not-found requests. Status
-            // 404 is preserved end-to-end.
-            //
-            // Without this rule the dashboard "Single-page application" toggle
-            // (enabled on this project) rewrites every miss to /index.html with
-            // 200, which is a textbook soft-404 and Google flags it in Search
-            // Console. _redirects overrides the SPA toggle - the rule must be
-            // the LAST line because CF picks the first matching pattern.
-            lines.push("# Catch-all not-found fallback - last rule wins.");
-            lines.push("/* /404.html 404");
-            lines.push("");
-
             writeFileSync(resolve(distDir, "_redirects"), lines.join("\n"));
         },
     };

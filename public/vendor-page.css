@@ -133,6 +133,27 @@ a:hover {
     width: 100%;
 }
 
+.vp-breadcrumbs {
+    margin-bottom: 24px;
+    color: var(--fg-dim);
+    font-size: 14px;
+}
+.vp-breadcrumbs ol {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 0;
+    list-style: none;
+}
+.vp-breadcrumbs li + li::before {
+    content: "/";
+    margin: 0 10px;
+}
+.vp-breadcrumbs a {
+    display: inline-block;
+    padding: 4px 0;
+}
+
 @media (max-width: 640px) {
     .vp-header {
         padding: 12px 16px;
@@ -270,6 +291,8 @@ a:hover {
 }
 .vp-facts dd {
     color: var(--fg);
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 .vp-facts code {
     font-family: var(--font-mono);
@@ -590,4 +613,23 @@ a:hover {
 }
 .vp-footer-links {
     margin-top: 4px;
+}
+
+.vp-languages {
+    margin-bottom: 16px;
+}
+.vp-languages ul {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px 16px;
+    list-style: none;
+}
+.vp-languages a {
+    display: inline-block;
+    padding: 6px 0;
+}
+.vp-languages a[aria-current="page"] {
+    color: var(--fg);
+    font-weight: 600;
 }

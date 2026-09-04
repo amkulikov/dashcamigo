@@ -72,12 +72,13 @@ import {
     canonicalLocaleUrl,
     canonicalOriginForLocale,
     currentSiteOrigin,
-    localeNeedsYandexNoIndex,
+    searchIndexingMeta,
     profileOwnsCanonicalUrl,
 } from "./deployment-profile.js";
 import { zhDict } from "../src/i18n/zh.js";
 import { getGitMtimeIso, maxGitMtimeIso } from "./git-mtime.js";
 import { escapeAttr, escapeText, stringifyJsonLd } from "./html-utils.js";
+import { renderSeoLanguageLinks } from "./seo-navigation.js";
 import {
     getAllBrandsCommaSeparated,
     getLandingBrands,
@@ -97,8 +98,10 @@ const HOMEPAGE_SHARED_SOURCES = [
     "index.html",
     "src/i18n/en.ts",
     "src/i18n/seo-config.ts",
+    "src/i18n/languages.ts",
     "vite-plugins/seo-prerender.ts",
     "vite-plugins/dynamic-baseline.ts",
+    "vite-plugins/seo-navigation.ts",
     "vite-plugins/supported-brands.ts",
     // html-utils provides escapeAttr / escapeText / stringifyJsonLd -
     // any change to escaping rules mutates the rendered HTML, so it
@@ -571,7 +574,7 @@ export function applyLocale(html: string, locale: LocalePrerenderConfig, options
     // <html lang="...">: replace whatever value is there with the locale code.
     // The source HTML ships with "en"; for /ru/ we flip to "ru" so screen
     // readers and CSS :lang() see the right language for the document.
-    out = out.replace(/<html([^>]*?)\blang="[^"]*"/i, (_m, rest) => `<html${rest}lang="${locale.seo.lang}"`);
+    out = out.replace(/<html([^>]*?)\blang="[^"]*"/i, (_m, rest) => `<html data-prerendered${rest}lang="${locale.seo.lang}"`);
 
     // canonical / og:url - self-referencing per locale. Without distinct
     // canonical, both URLs would canonicalize to / and the /ru/ page would
@@ -745,18 +748,12 @@ export function applyLocale(html: string, locale: LocalePrerenderConfig, options
     // hreflang, og:url) are unaffected.
     out = out.replace(/href="\/en\/"/g, `href="/${locale.seo.urlSegment}/"`);
 
-    // Staging / preview deploys: inject the meta-robots noindex,nofollow
-    // signal right after <head> open. This sits ahead of <title> and meta
-    // description so crawlers see the noindex directive as soon as they
-    // start parsing. Production builds (without VITE_NO_INDEX) skip this.
-    if (options.noIndex) {
-        out = out.replace(/<head>/i, '<head><meta name="robots" content="noindex, nofollow">');
-    } else if (localeNeedsYandexNoIndex(locale.seo)) {
-        // Google must still crawl the duplicate and see its cross-domain
-        // canonical. This narrower directive suppresses only Yandex, which
-        // does not consolidate cross-host canonicals for this migration.
-        out = out.replace(/<head>/i, '<head><meta name="yandex" content="noindex">');
-    }
+    out = out.replace(
+        /<div\b[^>]*\bid="seo-language-links"[^>]*><\/div>/i,
+        renderSeoLanguageLinks(locale.seo.lang, (target) => `/${target.urlSegment}/`),
+    );
+
+    out = out.replace(/<head>/i, `<head>${searchIndexingMeta(locale.seo, options.noIndex ?? false)}`);
 
     return out;
 }

@@ -204,7 +204,7 @@ describe("applyLocale", () => {
     const out = applyLocale(buildMinimalBaseline(), ru, {});
 
     it("flips <html lang> to the target locale", () => {
-        expect(out).toContain('<html lang="ru">');
+        expect(out).toContain('<html data-prerendered lang="ru">');
     });
 
     it("rewrites canonical to the self-referencing locale URL", () => {
@@ -336,6 +336,7 @@ describe("applyLocale", () => {
 
     it("does NOT inject a general robots noindex when options.noIndex is false/undefined", () => {
         expect(out).not.toContain('name="robots" content="noindex');
+        expect(out).toContain('name="robots" content="max-image-preview:large"');
     });
 
     it("injects noindex meta-robots when options.noIndex is true", () => {

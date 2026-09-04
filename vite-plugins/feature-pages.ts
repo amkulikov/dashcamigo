@@ -40,6 +40,7 @@ import {
 import { COMMUNITY_FEATURE_CONTENT, COMMUNITY_FEATURE_LABELS } from "./feature-pages-content.js";
 import { escapeAttr, escapeText, stringifyJsonLd } from "./html-utils.js";
 import type { SeoBuildOptions } from "./seo-prerender.js";
+import { renderBreadcrumbs, renderSeoLanguageLinks } from "./seo-navigation.js";
 // Shared page chrome - reused from vendor-pages.ts rather than duplicated
 // (CLAUDE.md: abstractions against duplicates), exactly like alternative-pages.
 import {
@@ -614,7 +615,7 @@ function resolveLabels(lang: Lang): FeatureSharedLabels {
 
 // ---- rendering ----
 
-function renderFeaturePage(page: FeaturePage, lang: Lang, options: SeoBuildOptions): string {
+export function renderFeaturePage(page: FeaturePage, lang: Lang, options: SeoBuildOptions): string {
     const seoLocale = getSeoLocaleByLang(lang);
     if (!seoLocale) throw new Error(`feature-pages: lang "${lang}" not in SEO_LOCALES`);
 
@@ -636,19 +637,14 @@ function renderFeaturePage(page: FeaturePage, lang: Lang, options: SeoBuildOptio
 
     const hreflangBlock = buildHreflangLinksHtml((loc) => canonicalLocaleUrl(loc, `${page.slug}/`));
     const ogLocaleAlternatesBlock = buildOgLocaleAlternatesHtml(lang);
+    const languageLinks = renderSeoLanguageLinks(lang, (locale) => `/${locale.urlSegment}/${page.slug}/`);
 
-    const breadcrumb = {
-        "@context": "https://schema.org",
-        "@type": "BreadcrumbList",
-        itemListElement: [
-            { "@type": "ListItem", position: 1, name: labels.breadcrumbHome, item: homeUrl },
-            { "@type": "ListItem", position: 2, name: content.breadcrumbName, item: url },
-        ],
-    };
+    const breadcrumb = renderBreadcrumbs(lang, [
+        { name: labels.breadcrumbHome, url: homeUrl },
+        { name: content.breadcrumbName, url },
+    ]);
 
-    // HowTo schema from the step list - Google retired the HowTo rich result,
-    // but Bing / Yandex and AI-grounding still parse it, and it matches the
-    // page's literal how-to structure (same policy as the FAQPage below).
+    // Mirrors the visible steps; Google no longer offers HowTo rich results.
     const howTo = {
         "@context": "https://schema.org",
         "@type": "HowTo",
@@ -718,9 +714,8 @@ ${ogLocaleAlternatesBlock}
 <link rel="alternate icon" href="/favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="/favicon-192.png">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="preload" href="/fonts/inter-400-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/vendor-page.css">
-<script type="application/ld+json">${stringifyJsonLd(breadcrumb)}</script>
+<script type="application/ld+json">${breadcrumb.jsonLd}</script>
 <script type="application/ld+json">${stringifyJsonLd(howTo)}</script>
 ${faqJsonLd}
 </head>
@@ -733,6 +728,7 @@ ${BRAND_ICON_SVG}
 <a href="${localHome}" class="vp-back">${escapeText(labels.backToPlayer)}</a>
 </header>
 <main class="vp-main">
+${breadcrumb.html}
 <article>
 <h1 class="vp-h1">${escapeText(content.h1)}</h1>
 <p class="vp-lead">${escapeText(content.lead)}</p>
@@ -787,6 +783,7 @@ ${otherPages
 </main>
 
 <footer class="vp-footer">
+${languageLinks}
 <p class="vp-disclaimer">${escapeText(FEATURE_DISCLAIMER[lang])}</p>
 <div class="vp-footer-links">
 <a href="/privacy">${escapeText(labels.footerPrivacy)}</a>

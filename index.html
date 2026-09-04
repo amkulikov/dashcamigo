@@ -7,10 +7,10 @@
          so default scrollbar / form controls adapt automatically. -->
     <meta name="color-scheme" content="light dark">
 
-    <!-- Splash loader + early bootstrap. Inline, because the entry bundle
-         weighs over a megabyte after minification - until it runs, theme
-         and language have not been applied yet, and a returning user with
-         stored=ru sees the English landing flash for 100-400ms. Inline script:
+    <!-- Theme, locale and loading bootstrap run before the app bundle.
+         Prerendered first visits can paint while that bundle downloads;
+         returning users wait for remembered-folder geometry to settle.
+         Inline script:
            - applies the dc-light/dc-dark class on <html> from localStorage,
            - on a URL with an explicit locale segment (/en/, /ru/, /de/, ...) -
              sets <html lang> to that segment and moves on; URL wins,
@@ -23,9 +23,11 @@
              not a content page - the user should never stay on it,
            - on any other path (e.g. /privacy.html) - just sets <html lang>
              by the same priority, without a redirect,
-           - sets .is-loading - the splash overlay hides the baseline until
-             app.ts finishes applyStaticI18n() + initThemeToggle() and
-             fires dispatchEvent("dc:ready").
+           - sets .is-loading until app.ts fires dc:ready after startup.
+             On prerendered pages, an empty IndexedDB database list proves
+             there are no remembered folders, so the static landing can be
+             revealed immediately. Missing IndexedDB also allows this;
+             unsupported or failed enumeration keeps the startup fallback.
            - a 15s watchdog removes the splash even if the bundle never loads.
            - self-heals a dead shell: right after a deploy the CF edge can
              serve this HTML while its hashed /assets/ files still 404
@@ -97,10 +99,8 @@
       @media (prefers-color-scheme: light) {
         html:not(.dc-light):not(.dc-dark) #dc-retry-note { color: #57534e; }
       }
-      /* Landing CTA loading state. The landing is prerendered static HTML and
-         paints before the entry bundle hydrates; on a slow connection the 15s
-         splash watchdog can reveal it while app.ts is still downloading, so the
-         "Open folder" button has no click handler yet. Shipping it .is-pending
+      /* The prerendered landing can paint while app.ts is still downloading,
+         so the "Open folder" button has no click handler yet. Shipping it .is-pending
          (spinner + progress cursor) makes that window read as "loading" rather
          than a dead button; initFileSources() drops the class once the handler
          is bound. Inline here so it is styled at first paint regardless of the
@@ -118,7 +118,7 @@
       }
     </style>
     <script id="dc-bootstrap">
-(function(){try{var t=localStorage.getItem("dc-theme");if(t==="light")document.documentElement.classList.add("dc-light");else if(t==="dark")document.documentElement.classList.add("dc-dark")}catch(e){}var K=__DC_LANGS__,p=(location.pathname.split("/").filter(function(s){return s.length>0})[0]||"");if(p&&K.indexOf(p)!==-1){document.documentElement.lang=p}else{var s=null;try{s=localStorage.getItem("dashcamigo:lang")}catch(e){}var n=(navigator.language||"").toLowerCase().split("-")[0],l=(s&&K.indexOf(s)!==-1)?s:(K.indexOf(n)!==-1?n:"en");if(!p){location.replace("/"+l+"/"+location.search+location.hash);return}document.documentElement.lang=l}document.documentElement.classList.add("is-loading");function h(){document.documentElement.classList.remove("is-loading");setTimeout(function(){var el=document.getElementById("dc-loader");if(el)el.remove()},500)}addEventListener("dc:ready",h,{once:true});setTimeout(h,15000)})();
+(function(){try{var t=localStorage.getItem("dc-theme");if(t==="light")document.documentElement.classList.add("dc-light");else if(t==="dark")document.documentElement.classList.add("dc-dark")}catch(e){}var K=__DC_LANGS__,p=(location.pathname.split("/").filter(function(s){return s.length>0})[0]||"");if(p&&K.indexOf(p)!==-1){document.documentElement.lang=p}else{var s=null;try{s=localStorage.getItem("dashcamigo:lang")}catch(e){}var n=(navigator.language||"").toLowerCase().split("-")[0],l=(s&&K.indexOf(s)!==-1)?s:(K.indexOf(n)!==-1?n:"en");if(!p){location.replace("/"+l+"/"+location.search+location.hash);return}document.documentElement.lang=l}document.documentElement.classList.add("is-loading");function h(){document.documentElement.classList.remove("is-loading");setTimeout(function(){var el=document.getElementById("dc-loader");if(el)el.remove()},500)}addEventListener("dc:ready",h,{once:true});setTimeout(h,15000);if(document.documentElement.hasAttribute("data-prerendered")){try{var db=window.indexedDB;if(!db)h();else if(typeof db.databases==="function")db.databases().then(function(list){if(list.length===0)h()},function(){})}catch(e){}}})();
 (function(){var K="dc-asset-retry",D=[4000,15000,45000,90000],armed=false,booted=false,timer=0;function go(){location.reload()}function note(){if(document.getElementById("dc-retry-note"))return;var d=document.createElement("div");d.id="dc-retry-note";d.textContent=(document.documentElement.lang||"").indexOf("ru")===0?"Обновляем приложение…":"Updating the app…";(document.body||document.documentElement).appendChild(d)}window.__dcRetryNote=note;addEventListener("dc:ready",function(){booted=true;setTimeout(function(){if(document.getElementById("dc-retry-note"))return;try{sessionStorage.removeItem(K)}catch(e){}},30000);if(timer)clearTimeout(timer);removeEventListener("online",go);var d=document.getElementById("dc-retry-note");if(d)d.remove()},{once:true});addEventListener("error",function(ev){var el=ev.target;if(armed||booted||!el||!el.tagName)return;var tag=el.tagName;if(tag!=="SCRIPT"&&tag!=="LINK")return;var u=el.src||el.href||"";if(typeof u!=="string"||u.indexOf(location.origin+"/assets/")!==0)return;var n;try{n=parseInt(sessionStorage.getItem(K)||"0",10)||0;if(n>=D.length)return;sessionStorage.setItem(K,String(n+1))}catch(e){return}armed=true;note();if(navigator.onLine===false){addEventListener("online",go,{once:true})}else{timer=setTimeout(go,D[n])}},true)})();
     </script>
 
@@ -217,19 +217,14 @@
          the marker comment - source of truth is src/i18n/seo-config.ts SEO_LOCALES.
          seo-prerender plugin rewrites the canonical sibling per locale's HTML. -->
     <!--__DC_HREFLANG__-->
-    <!-- JSON-LD per schema.org/WebApplication for rich snippets in Google.
-         Only required/recommended fields per spec, no ratings or authors
-         (there are none). alternateName covers search-intent synonyms
-         ("dashcam player" / "dashcam viewer"). featureList lists what the
-         app actually does; the crawler uses it in rich snippets.
-         description is duplicated here and in meta - schema.org requires it. -->
+    <!-- Describe the app with factual structured data. Google's software rich
+         result also requires a real rating or review; never invent one. -->
     <script id="webapp-jsonld" type="application/ld+json">
     {
         "@context": "https://schema.org",
         "@type": "WebApplication",
         "@id": "https://dashcamigo.app/#webapp",
         "name": "dashcamigo",
-        "alternateName": ["dashcam player", "dashcam editor", "online dashcam player", "dashcam viewer", "dashcam video editor", "dashcam clip trimmer", "web dashcam player", "dashcam app for PC"],
         "url": "https://dashcamigo.app/",
         "isPartOf": { "@id": "https://dashcamigo.app/#website" },
         "publisher": { "@id": "https://dashcamigo.app/#organization" },
@@ -239,7 +234,6 @@
         "browserRequirements": "Works in any current browser; the GPS map needs WebGL2, and edited exports need WebCodecs",
         "inLanguage": ["de", "en", "es", "fr", "ja", "ko", "pl", "pt-BR", "ru", "zh-Hans"],
         "isAccessibleForFree": true,
-        "keywords": "dashcam player, dashcam editor, dashcam viewer, dashcam video editor, trim dashcam video, combine front and rear dashcam, dashcam split screen video, add speed overlay to dashcam video, dashcam gps overlay, online dashcam player, web dashcam player, dashcam gps viewer, dashcam app for pc, 70mai, viofo, blackvue, gopro, garmin, vantrue, thinkware, fitcamx",
         "featureList": [
             "Plays MP4, MOV and MPEG-TS dashcam recordings in the browser",
             "Synchronized GPS map with the route",
@@ -281,14 +275,7 @@
         "publisher": { "@id": "https://dashcamigo.app/#organization" }
     }
     </script>
-    <!-- Organization JSON-LD. Minimal markup for Google Knowledge Panel and
-         AI-grounding in Bing Copilot / ChatGPT (both pull from the Bing
-         index). We have no legal entity or public contacts - we emit only
-         name, url, logo, which are the schema.org fields that are valid
-         without LegalEntity properties. No sameAs because the project has
-         no public social profiles. Acts as a secondary entity signal next
-         to WebApplication above. Not rewritten per locale (Organization
-         has no language-specific fields), unlike WebApplication. -->
+    <!-- Publisher identity stays the same across locale pages and mirrors. -->
     <script id="org-jsonld" type="application/ld+json">
     {
         "@context": "https://schema.org",
@@ -307,9 +294,8 @@
          NOTE: Google retired the FAQ rich result - no SERP widget since
          2026-05-07, reporting removed mid-2026
          (https://developers.google.com/search/docs/appearance/structured-data/faqpage).
-         We keep the schema anyway: it still feeds Bing/Yandex/Naver and
-         AI-grounding, and it validly describes the on-page FAQ. But do NOT
-         invest in FAQ copy expecting a Google FAQ snippet - that widget is gone. -->
+         Keep the markup faithful to the on-page FAQ; it does not promise
+         a search enhancement. -->
     <script type="application/ld+json" id="faq-jsonld">
     {
         "@context": "https://schema.org",
@@ -484,13 +470,13 @@
          Now several label-buttons are bound to it via for="folder-input":
          the large one in landing (#landing-cta) and the compact one in the
          sidebar header (#sidebar-cta). Just sits inside body, not rendered. -->
-    <input id="folder-input" type="file" webkitdirectory directory multiple hidden>
+    <input id="folder-input" type="file" webkitdirectory directory multiple hidden disabled>
 
     <!-- Plain multi-file input for the iOS escape hatch: on iOS the folder
          picker copies the whole tree before the page sees anything (see
          ios-folder-warning-modal below), so the warning modal offers picking
          individual files through this input instead. -->
-    <input id="file-input" type="file" multiple hidden>
+    <input id="file-input" type="file" multiple hidden disabled>
 
     <header class="topbar">
         <!-- Trips button: opens the trip-list drawer on mobile (hidden on desktop
@@ -624,7 +610,7 @@
                         <path d="m2 2 20 20"></path>
                     </svg>
                 </button>
-                <div id="offline-banner-popover" class="offline-banner-popover" role="dialog"
+                <div data-nosnippet id="offline-banner-popover" class="offline-banner-popover" role="dialog"
                      data-i18n-attr="aria-label:status.offline.info" aria-label="What this means" hidden>
                     <p class="offline-banner-detail" data-i18n="status.offline.detail">The map background won't load while you're offline. Video, the speed chart and export still work — and the app updates itself the next time you're online.</p>
                 </div>
@@ -911,7 +897,7 @@
                                         <span class="landing-codecs-hint" data-i18n="landing.drop.codecsHint">+ any neighboring files — .gps, .nmea, .gpx, .map, .csv, .txt and more.</span>
                                     </span>
                                 </div>
-                                <button type="button" id="landing-cta" class="landing-cta dc-btn dc-btn--primary is-pending" aria-busy="true">
+                                <button type="button" id="landing-cta" class="landing-cta dc-btn dc-btn--primary is-pending" aria-busy="true" disabled>
                                     <span data-i18n="landing.drop.cta">Open folder</span>
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
                                 </button>
@@ -1173,6 +1159,7 @@
                      Minimalist styling: transparent background with no border-top,
                      so it doesn't look like the page cuts off. -->
                 <footer class="site-footer">
+                    <div id="seo-language-links"></div>
                     <div class="site-footer-links">
                         <a href="mailto:feedback@dashcamigo.app" class="site-footer-link">feedback@dashcamigo.app</a>
                         <a href="/add-my-camera" class="site-footer-link" data-i18n="footer.addCamera"
@@ -1264,7 +1251,7 @@
                 </label>
         </div>
 
-        <section class="viewer">
+        <section class="viewer" data-nosnippet>
             <!-- Empty-state placeholder for the "trips exist but none is
                  selected" case. JS toggles .viewer.empty - hides .player-wrap,
                  shows a compact card hinting "pick a trip on the left".
@@ -2064,7 +2051,7 @@
 
     <!-- Ambiguous GPX-to-clip pairing. Exact-name and single unambiguous
          tracks never open it; skipping leaves the recording load intact. -->
-    <div id="gpx-assignment-modal" class="export-modal modal-overlay" style="z-index: var(--dc-z-ingest-modal)" hidden tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="gpx-assignment-title">
+    <div data-nosnippet id="gpx-assignment-modal" class="export-modal modal-overlay" style="z-index: var(--dc-z-ingest-modal)" hidden tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="gpx-assignment-title">
         <div class="export-modal-card modal-card gpx-assignment-card">
             <div class="export-modal-title" id="gpx-assignment-title" data-i18n="gpxAssign.title">Match GPS tracks to trips</div>
             <div class="export-modal-section">
@@ -2094,7 +2081,7 @@
          classes are reused. --dc-z-ingest-modal raises it above
          ingest-overlay (--dc-z-ingest), so the modal stays visible while ingest
          keeps running in the background. var() resolves in the inline style. -->
-    <div id="unsupported-modal" class="export-modal modal-overlay" style="z-index: var(--dc-z-ingest-modal)" hidden role="dialog" aria-modal="true" aria-labelledby="unsupported-modal-title">
+    <div data-nosnippet id="unsupported-modal" class="export-modal modal-overlay" style="z-index: var(--dc-z-ingest-modal)" hidden role="dialog" aria-modal="true" aria-labelledby="unsupported-modal-title">
         <div class="export-modal-card modal-card">
             <div class="export-modal-title" id="unsupported-modal-title" data-i18n="unsupported.modal.title">Some files I can't open</div>
             <div class="export-modal-section">
@@ -2116,7 +2103,7 @@
          contained recording-like files (no-recordings-modal.ts). Routes into the
          feedback form (which auto-attaches the byte-free folder-structure report)
          or the public help page - no server. Mirrors the export-modal card. -->
-    <div id="no-recordings-modal" class="export-modal modal-overlay" style="z-index: var(--dc-z-ingest-modal)" hidden role="dialog" aria-modal="true" aria-labelledby="no-recordings-title">
+    <div data-nosnippet id="no-recordings-modal" class="export-modal modal-overlay" style="z-index: var(--dc-z-ingest-modal)" hidden role="dialog" aria-modal="true" aria-labelledby="no-recordings-title">
         <div class="export-modal-card modal-card">
             <div class="export-modal-title" id="no-recordings-title" data-i18n="noRecordings.title">We couldn't read this card</div>
             <div class="export-modal-section">
@@ -2137,7 +2124,7 @@
          external download links; on iOS every engine is WebKit, so the copy
          steers to a desktop Chromium browser, not "install this here". Browser
          names stay literal (proper nouns); only title/body are localized. -->
-    <div id="chromium-browsers-modal" class="export-modal modal-overlay" style="z-index: calc(var(--dc-z-ingest-modal) + 20)" hidden role="dialog" aria-modal="true" aria-labelledby="chromium-browsers-modal-title">
+    <div data-nosnippet id="chromium-browsers-modal" class="export-modal modal-overlay" style="z-index: calc(var(--dc-z-ingest-modal) + 20)" hidden role="dialog" aria-modal="true" aria-labelledby="chromium-browsers-modal-title">
         <div class="export-modal-card modal-card">
             <div class="export-modal-title" id="chromium-browsers-modal-title" data-i18n="export.chromiumModal.title">Open in a Chromium browser</div>
             <div class="export-modal-section">
@@ -2163,7 +2150,7 @@
          prompt, no files are actually sent anywhere. Not shown on DnD - the
          user already deliberately dropped the folder, there's no browser prompt there.
          Structure mirrors export-modal/unsupported-modal: one section. -->
-    <div id="upload-warning-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="upload-warning-modal-title">
+    <div data-nosnippet id="upload-warning-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="upload-warning-modal-title">
         <div class="export-modal-card modal-card">
             <div class="export-modal-title" id="upload-warning-modal-title" data-i18n="uploadWarning.title">Files stay on your device</div>
             <div class="export-modal-section">
@@ -2179,7 +2166,7 @@
     <!-- iOS/iPadOS folder-picker warning: on iOS the folder picker copies the
          whole chosen tree before the page sees anything (see
          ui/ios-folder-warning-modal.ts). Structure mirrors upload-warning-modal. -->
-    <div id="ios-folder-warning-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="ios-folder-warning-modal-title">
+    <div data-nosnippet id="ios-folder-warning-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="ios-folder-warning-modal-title">
         <div class="export-modal-card modal-card">
             <div class="export-modal-title" id="ios-folder-warning-modal-title" data-i18n="iosFolderWarning.title">Picking a whole folder is slow on iPhone and iPad</div>
             <div class="export-modal-section">
@@ -2199,7 +2186,7 @@
          bundled), which clears the loaded recordings - warn before that. Default
          focus lands on Cancel (destructive confirm). Structure mirrors
          upload-warning-modal. -->
-    <div id="switch-lang-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="switch-lang-modal-title">
+    <div data-nosnippet id="switch-lang-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="switch-lang-modal-title">
         <div class="export-modal-card modal-card">
             <div class="export-modal-title" id="switch-lang-modal-title" data-i18n="switchLang.title">Reload to switch language?</div>
             <div class="export-modal-section">
@@ -2216,7 +2203,7 @@
          There is intentionally no close button or backdrop dismissal: the
          edit is already safe locally, but the user must choose whether that
          local copy is enough or connect one narrowly scoped notes file. -->
-    <div id="notes-storage-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true"
+    <div data-nosnippet id="notes-storage-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true"
          aria-labelledby="notes-storage-modal-title" aria-describedby="notes-storage-modal-body">
         <div class="export-modal-card modal-card">
             <div class="export-modal-title" id="notes-storage-modal-title" data-i18n="notesStorageModal.title">Where should your notes be saved?</div>
@@ -2233,7 +2220,7 @@
 
     <!-- Trip name & note editor (annotations). Opened by the pencil on a trip
          card; the favorite star toggles on the card itself. -->
-    <div id="trip-meta-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="trip-meta-modal-title">
+    <div data-nosnippet id="trip-meta-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="trip-meta-modal-title">
         <div class="export-modal-card modal-card">
             <div class="export-modal-title" id="trip-meta-modal-title" data-i18n="tripMeta.title">Trip name and note</div>
             <div class="export-modal-section">
@@ -2262,7 +2249,7 @@
 
     <!-- Timeline-marker editor: text + delete. Opened after adding a marker
          and from a pin's contextmenu. -->
-    <div id="marker-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="marker-modal-title">
+    <div data-nosnippet id="marker-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="marker-modal-title">
         <div class="export-modal-card modal-card">
             <div class="export-modal-title" id="marker-modal-title" data-i18n="markerModal.title">Timeline marker</div>
             <div class="export-modal-section">
@@ -2286,7 +2273,7 @@
 
     <!-- Timeline-marker list of the active trip: seek, rename in place, delete.
          Opened from the player-bar button next to "add marker". -->
-    <div id="marker-list-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="marker-list-title">
+    <div data-nosnippet id="marker-list-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="marker-list-title">
         <div class="export-modal-card modal-card">
             <div class="export-modal-title" id="marker-list-title" data-i18n="markerList.title">Trip markers</div>
             <div class="export-modal-section">
@@ -2307,7 +2294,7 @@
          guided three-step wizard (recordings → report → hand-off): downloads one
          .txt report and walks the user through sending it to feedback@ by
          email (details below in index.html and in src/ui/feedback.ts). -->
-    <div id="feedback-modal" class="feedback-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="feedback-modal-title">
+    <div data-nosnippet id="feedback-modal" class="feedback-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="feedback-modal-title">
         <div class="feedback-modal-card modal-card">
             <div class="feedback-modal-header">
                 <div class="feedback-modal-title" id="feedback-modal-title" data-i18n="feedback.modal.title">Report a problem</div>
@@ -2391,7 +2378,7 @@
          or by pressing Shift+/ (?). Closed by Esc, clicking the backdrop,
          or pressing ? again. Content is generated in hotkeys-modal.ts (i18n keys
          hotkeys.* in src/i18n/). -->
-    <div id="hotkeys-modal" class="hotkeys-modal modal-overlay" hidden tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="hotkeys-modal-title">
+    <div data-nosnippet id="hotkeys-modal" class="hotkeys-modal modal-overlay" hidden tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="hotkeys-modal-title">
         <div class="hotkeys-modal-card modal-card">
             <div class="hotkeys-modal-title" id="hotkeys-modal-title" data-i18n="hotkeys.title">Keyboard shortcuts</div>
             <div class="hotkeys-modal-body" id="hotkeys-modal-body">
@@ -2405,7 +2392,7 @@
          (a lazy chunk - the list loads on first open); rendered by
          src/ui/whats-new-modal.ts. Opening acknowledges everything and turns
          the topbar dot off. -->
-    <div id="whats-new-modal" class="whats-new-modal modal-overlay" hidden tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="whats-new-modal-title">
+    <div data-nosnippet id="whats-new-modal" class="whats-new-modal modal-overlay" hidden tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="whats-new-modal-title">
         <!-- tabindex="-1": the card takes initial focus so keyboard scrolling
              works when the list outgrows the viewport (whats-new-modal.ts). -->
         <div class="whats-new-modal-card modal-card" tabindex="-1">
@@ -2446,7 +2433,7 @@
          is above drop-overlay, so a repeat drop over ingest correctly
          covers drop-overlay. role=dialog + aria-live on the status so the
          screen reader announces progress. -->
-    <div id="ingest-overlay" class="ingest-overlay" hidden role="dialog"
+    <div data-nosnippet id="ingest-overlay" class="ingest-overlay" hidden role="dialog"
          aria-modal="true" aria-labelledby="ingest-overlay-title">
         <div class="ingest-overlay-card">
             <div class="ingest-overlay-spinner" aria-hidden="true"></div>
@@ -2463,7 +2450,7 @@
 
     <!-- Per-trip GPS calibration. It becomes a modeless sidebar on desktop so
          the player, map and chart remain usable while the values change. -->
-    <div id="gps-sync-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="false"
+    <div data-nosnippet id="gps-sync-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="false"
          aria-labelledby="gps-sync-modal-title">
         <div class="export-modal-card modal-card gps-sync-card">
             <div class="export-modal-title" id="gps-sync-modal-title" data-i18n="gpsSync.title">Sync GPS with video</div>
@@ -2521,7 +2508,7 @@
          section); initially it only contains a Privacy tab with the anonymous-
          analytics toggle - other preferences will move here later. JS lazily
          manages the hidden flag via openSettings()/closeSettings(). -->
-    <div id="settings-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
+    <div data-nosnippet id="settings-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
         <div class="export-modal-card modal-card">
             <div class="export-modal-title" id="settings-modal-title" data-i18n="settings.modal.title">Settings</div>
             <!-- Playback: unit preference + arrow-key seek step.
@@ -2749,7 +2736,7 @@
     <!-- Reset confirmation. Second-step modal opened from the Danger zone
          button in settings. Reuses .export-modal styles like every other
          modal. The actual wipe + reload happens in src/ui/reset.ts. -->
-    <div id="reset-confirm-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="reset-confirm-modal-title">
+    <div data-nosnippet id="reset-confirm-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="reset-confirm-modal-title">
         <div class="export-modal-card modal-card">
             <div class="export-modal-title" id="reset-confirm-modal-title" data-i18n="settings.danger.confirm.title">Reset all local data?</div>
             <div class="install-modal-body">
@@ -2770,7 +2757,7 @@
          dismissed it before (see src/ui/pwa-install.ts). Reuses the shared
          .sticky-banner bottom-sticky-bar styles (.install-banner adds its
          own z-index and button order). -->
-    <div id="install-banner" class="sticky-banner install-banner" hidden role="dialog" aria-modal="false"
+    <div data-nosnippet id="install-banner" class="sticky-banner install-banner" hidden role="dialog" aria-modal="false"
          aria-labelledby="install-banner-title">
         <div class="sticky-banner-body">
             <div class="sticky-banner-title" id="install-banner-title" data-i18n="pwa.toast.title">Install dashcamigo</div>
@@ -2793,7 +2780,7 @@
          successful recording load, waits until onboarding/modals/other banners
          are out of the way, and observes a 30-day cooldown after each exposure
          (src/ui/support-prompt.ts). -->
-    <div id="support-banner" class="sticky-banner support-banner" hidden role="dialog" aria-modal="false"
+    <div data-nosnippet id="support-banner" class="sticky-banner support-banner" hidden role="dialog" aria-modal="false"
         aria-labelledby="support-banner-title" aria-describedby="support-banner-body">
         <div class="sticky-banner-body">
             <div class="sticky-banner-title" id="support-banner-title" data-i18n="supportPrompt.title">Did dashcamigo help?</div>
@@ -2820,7 +2807,7 @@
          offline-capable install). The container reuses .export-modal styles
          like every other modal in the project. The body content varies per
          browser and is populated by src/ui/pwa-install.ts. -->
-    <div id="install-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="install-modal-title">
+    <div data-nosnippet id="install-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="install-modal-title">
         <div class="export-modal-card modal-card">
             <div class="export-modal-title" id="install-modal-title" data-i18n="pwa.guide.title">Install as a desktop app</div>
             <div id="install-modal-body" class="install-modal-body"></div>
@@ -2836,7 +2823,7 @@
          link. Names WebGL explicitly (deliberate exception to the "no jargon" voice
          rule - WebGL is the searchable term that matches browser settings,
          chrome://gpu and get.webgl.org). Controller: ui/webgl-enable-modal.ts. -->
-    <div id="webgl-enable-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="webgl-enable-title">
+    <div data-nosnippet id="webgl-enable-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="webgl-enable-title">
         <div class="export-modal-card modal-card">
             <div class="export-modal-title" id="webgl-enable-title" data-i18n="webglEnable.title">The map needs WebGL</div>
             <div class="install-modal-body">
@@ -2867,7 +2854,7 @@
          these are inert containers. -->
     <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="false"></div>
 
-    <div id="notif-drawer" class="notif-drawer" hidden role="dialog" aria-modal="false" aria-labelledby="notif-drawer-title">
+    <div data-nosnippet id="notif-drawer" class="notif-drawer" hidden role="dialog" aria-modal="false" aria-labelledby="notif-drawer-title">
         <div id="notif-drawer-card" class="notif-drawer-card">
             <div class="notif-drawer-header">
                 <span id="notif-drawer-title" class="notif-drawer-title" data-i18n="notif.drawer.title">Notifications</span>
@@ -2885,7 +2872,7 @@
          variants; landing-shot.ts unhides the one whose thumb was clicked and
          swaps the dialog label. Images are lazy: [hidden] keeps them out of the
          initial page load. -->
-    <div class="landing-shot-lightbox" id="landing-shot-lightbox" role="dialog" aria-modal="true" tabindex="-1"
+    <div data-nosnippet class="landing-shot-lightbox" id="landing-shot-lightbox" role="dialog" aria-modal="true" tabindex="-1"
          data-i18n-attr="aria-label:landing.hero.shot.alt"
          aria-label="Inside dashcamigo: two cameras side by side, the speed chart with event marks and the route on the map" hidden>
         <img class="landing-shot-lightbox-desktop" src="/landing/app-desktop-2480.webp"

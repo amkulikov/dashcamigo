@@ -48,6 +48,7 @@ import { renderFeatureLinksHtml } from "./feature-links.js";
 import { escapeAttr, escapeText, stringifyJsonLd } from "./html-utils.js";
 import { renderHubCta } from "./hub-cta.js";
 import type { SeoBuildOptions } from "./seo-prerender.js";
+import { renderBreadcrumbs, renderSeoLanguageLinks } from "./seo-navigation.js";
 // Shared page chrome - one source, reused from vendor-pages.ts rather than
 // duplicated (CLAUDE.md: abstractions against duplicates).
 import {
@@ -639,7 +640,7 @@ ${rows}
 </div>`;
 }
 
-function renderAlternativePage(competitor: Competitor, lang: Lang, options: SeoBuildOptions): string {
+export function renderAlternativePage(competitor: Competitor, lang: Lang, options: SeoBuildOptions): string {
     const seoLocale = getSeoLocaleByLang(lang);
     if (!seoLocale) throw new Error(`alternative-pages: lang "${lang}" not in SEO_LOCALES`);
 
@@ -660,16 +661,13 @@ function renderAlternativePage(competitor: Competitor, lang: Lang, options: SeoB
         (loc) => canonicalLocaleUrl(loc, `alternatives/${competitor.slug}/`),
     );
     const ogLocaleAlternatesBlock = buildOgLocaleAlternatesHtml(lang);
+    const languageLinks = renderSeoLanguageLinks(lang, (locale) => `/${locale.urlSegment}/alternatives/${competitor.slug}/`);
 
-    const breadcrumb = {
-        "@context": "https://schema.org",
-        "@type": "BreadcrumbList",
-        itemListElement: [
-            { "@type": "ListItem", position: 1, name: labels.breadcrumbHome, item: homeUrl },
-            { "@type": "ListItem", position: 2, name: labels.breadcrumbAlternatives, item: alternativesUrl },
-            { "@type": "ListItem", position: 3, name, item: url },
-        ],
-    };
+    const breadcrumb = renderBreadcrumbs(lang, [
+        { name: labels.breadcrumbHome, url: homeUrl },
+        { name: labels.breadcrumbAlternatives, url: alternativesUrl },
+        { name, url },
+    ]);
 
     return `<!doctype html>
 <html lang="${lang}">
@@ -702,9 +700,8 @@ ${ogLocaleAlternatesBlock}
 <link rel="alternate icon" href="/favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="/favicon-192.png">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="preload" href="/fonts/inter-400-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/vendor-page.css">
-<script type="application/ld+json">${stringifyJsonLd(breadcrumb)}</script>
+<script type="application/ld+json">${breadcrumb.jsonLd}</script>
 </head>
 <body>
 <header class="vp-header">
@@ -715,6 +712,7 @@ ${BRAND_ICON_SVG}
 <a href="${localHome}" class="vp-back">${escapeText(labels.backToPlayer)}</a>
 </header>
 <main class="vp-main">
+${breadcrumb.html}
 <article>
 <h1 class="vp-h1">${escapeText(content.h1)}</h1>
 <p class="vp-lead">${escapeText(content.lead)}</p>
@@ -723,7 +721,7 @@ ${BRAND_ICON_SVG}
 <section class="vp-section">
 <h2 class="vp-h2">${escapeText(labels.whatItIsHeading.replace("{name}", name))}</h2>
 <p>${escapeText(content.whatItIs)}</p>
-<p><a href="${escapeAttr(competitor.officialUrl)}" rel="nofollow noopener" target="_blank">${escapeText(labels.officialSiteLabel)}</a></p>
+<p><a href="${escapeAttr(competitor.officialUrl)}" rel="noopener" target="_blank">${escapeText(labels.officialSiteLabel)}</a></p>
 </section>
 
 <section class="vp-section">
@@ -762,6 +760,7 @@ ${otherTools
 </main>
 
 <footer class="vp-footer">
+${languageLinks}
 <p class="vp-disclaimer">${escapeText(ALT_DISCLAIMER[lang])}</p>
 <div class="vp-footer-links">
 <a href="/privacy">${escapeText(labels.footerPrivacy)}</a>
@@ -778,7 +777,7 @@ ${otherTools
 `;
 }
 
-function renderAlternativesIndexPage(lang: Lang, options: SeoBuildOptions): string {
+export function renderAlternativesIndexPage(lang: Lang, options: SeoBuildOptions): string {
     const seoLocale = getSeoLocaleByLang(lang);
     if (!seoLocale) throw new Error(`alternative-pages: lang "${lang}" not in SEO_LOCALES`);
 
@@ -792,15 +791,12 @@ function renderAlternativesIndexPage(lang: Lang, options: SeoBuildOptions): stri
 
     const hreflangBlock = buildHreflangLinksHtml((loc) => canonicalLocaleUrl(loc, "alternatives/"));
     const ogLocaleAlternatesBlock = buildOgLocaleAlternatesHtml(lang);
+    const languageLinks = renderSeoLanguageLinks(lang, (locale) => `/${locale.urlSegment}/alternatives/`);
 
-    const breadcrumb = {
-        "@context": "https://schema.org",
-        "@type": "BreadcrumbList",
-        itemListElement: [
-            { "@type": "ListItem", position: 1, name: labels.breadcrumbHome, item: homeUrl },
-            { "@type": "ListItem", position: 2, name: labels.breadcrumbAlternatives, item: url },
-        ],
-    };
+    const breadcrumb = renderBreadcrumbs(lang, [
+        { name: labels.breadcrumbHome, url: homeUrl },
+        { name: labels.breadcrumbAlternatives, url },
+    ]);
     const collection = {
         "@context": "https://schema.org",
         "@type": "CollectionPage",
@@ -859,9 +855,8 @@ ${ogLocaleAlternatesBlock}
 <link rel="alternate icon" href="/favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="/favicon-192.png">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="preload" href="/fonts/inter-400-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/vendor-page.css">
-<script type="application/ld+json">${stringifyJsonLd(breadcrumb)}</script>
+<script type="application/ld+json">${breadcrumb.jsonLd}</script>
 <script type="application/ld+json">${stringifyJsonLd(collection)}</script>
 </head>
 <body>
@@ -873,6 +868,7 @@ ${BRAND_ICON_SVG}
 <a href="${localHome}" class="vp-back">${escapeText(labels.backToPlayer)}</a>
 </header>
 <main class="vp-main">
+${breadcrumb.html}
 <article>
 <h1 class="vp-h1">${escapeText(content.h1)}</h1>
 <p class="vp-lead">${escapeText(content.lead)}</p>
@@ -884,6 +880,7 @@ ${renderHubCta(lang, pathPrefix)}
 </article>
 </main>
 <footer class="vp-footer">
+${languageLinks}
 <p class="vp-disclaimer">${escapeText(ALT_DISCLAIMER[lang])}</p>
 <div class="vp-footer-links">
 <a href="/privacy">${escapeText(labels.footerPrivacy)}</a>
