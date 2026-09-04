@@ -26,6 +26,7 @@
 
 import { cameraFingerprint } from "./parsers/camera-fingerprint.js";
 import { matchFilenameChannel } from "./parsers/filename/index.js";
+import { RX_VIDEO_EXT } from "./parsers/registry-light.js";
 import type { VendorFile } from "./parsers/types.js";
 import { vendorFileKey } from "./vendor-file-key.js";
 
@@ -67,6 +68,27 @@ async function readBytes(file: File, start: number, end: number): Promise<Uint8A
 type ProbePart = "head" | "tail";
 type ProbeReader = (file: File, part: ProbePart, start: number, end: number) => Promise<Uint8Array>;
 
+/** Keep probes only for one collision group; input arrays keep File keys alive. */
+function createProbeReader(): ProbeReader {
+    const cache = new WeakMap<File, Partial<Record<ProbePart, Promise<Uint8Array>>>>();
+    return (file, part, start, end) => {
+        let cached = cache.get(file);
+        if (!cached) {
+            cached = {};
+            cache.set(file, cached);
+        }
+        const existing = cached[part];
+        if (existing) return existing;
+        const pending = readBytes(file, start, end);
+        cached[part] = pending;
+        // A later comparison can retry a transient device failure.
+        void pending.catch(() => {
+            if (cached[part] === pending) delete cached[part];
+        });
+        return pending;
+    };
+}
+
 function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
     if (a.length !== b.length) return false;
     for (let i = 0; i < a.length; i++) {
@@ -101,7 +123,7 @@ interface KeepPreferenceRank {
 }
 
 /**
- * Drops byte-identical duplicates from `incoming`, comparing both within the
+ * Drops byte-identical video duplicates from `incoming`, comparing both within the
  * drop and against `alreadyLoaded` (files currently in trips - a copy of an
  * already-loaded file is dropped even across separate drops). Returns the
  * survivors in the original order plus the dropped pairs for logging.
@@ -117,8 +139,15 @@ export async function dropDuplicateFiles(
     alreadyLoaded: VendorFile[],
     signal?: AbortSignal,
 ): Promise<DedupResult> {
+    const keep = new Set<VendorFile>();
     const groups = new Map<string, VendorFile[]>();
     for (const vf of incoming) {
+        // Equal external bytes can belong to different recordings. Their
+        // association must survive until the parser knows the video owner.
+        if (!RX_VIDEO_EXT.test(vf.file.name)) {
+            keep.add(vf);
+            continue;
+        }
         const key = dedupKey(vf.file);
         const group = groups.get(key);
         if (group) group.push(vf);
@@ -134,27 +163,6 @@ export async function dropDuplicateFiles(
         if (bucket) bucket.push(vf);
         else loadedByKey.set(key, [vf]);
     }
-
-    // A colliding group can compare one survivor with many candidates. Cache
-    // each immutable File's head/tail promise for this dedup pass so every range
-    // is read at most once. A failed read is evicted: the contract treats that
-    // pair as distinct, but a later pair may retry a transient device failure.
-    const probeCache = new WeakMap<File, Partial<Record<ProbePart, Promise<Uint8Array>>>>();
-    const readProbe: ProbeReader = (file, part, start, end) => {
-        let cached = probeCache.get(file);
-        if (!cached) {
-            cached = {};
-            probeCache.set(file, cached);
-        }
-        const existing = cached[part];
-        if (existing) return existing;
-        const pending = readBytes(file, start, end);
-        cached[part] = pending;
-        void pending.catch(() => {
-            if (cached[part] === pending) delete cached[part];
-        });
-        return pending;
-    };
 
     // Sort may invoke its comparator repeatedly for the same file. These ranks
     // depend only on immutable VendorFile metadata, so calculate each once.
@@ -219,7 +227,6 @@ export async function dropDuplicateFiles(
         return a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : 0;
     };
 
-    const keep = new Set<VendorFile>();
     const dropped: DroppedDuplicate[] = [];
     const sourceMatches: DuplicateSourceMatch[] = [];
     const loadedFiles = new Set(alreadyLoaded);
@@ -235,6 +242,7 @@ export async function dropDuplicateFiles(
         // Already-loaded copies always win - they cannot be replaced anyway.
         const ordered = [...group].sort(compareKeepPreference);
         const uniques: VendorFile[] = loaded ? [...loaded] : [];
+        const readProbe = createProbeReader();
         for (const vf of ordered) {
             if (signal?.aborted) throw new DOMException("ingest aborted", "AbortError");
             let duplicateOf: VendorFile | null = null;

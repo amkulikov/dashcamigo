@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 
 import { dropDuplicateFiles } from "./ingest-dedup.js";
 import { cameraFingerprint } from "./parsers/camera-fingerprint.js";
+import { associateRecordsWithVideos, recordsForVideo } from "./gps-association.js";
+import { mergeIntoGpsLog } from "./parser.js";
+import { csv70maiPrimitive } from "./parsers/primitives/csv-70mai.js";
 import type { VendorFile } from "./parsers/types.js";
 
 // Big enough to exercise the separate tail probe (> 64 KiB head window).
@@ -30,6 +34,44 @@ function vf(
 }
 
 describe("dropDuplicateFiles", () => {
+    it("preserves identical external logs owned by distinct surviving recordings", async () => {
+        const root = new URL("../tests/testdata/70mai-multichannel/", import.meta.url);
+        const name = "NO20260101-120000-000001F.MP4";
+        const a = vf(`A/Normal/Front/${name}`, readFileSync(new URL(`Normal/Front/${name}`, root)));
+        const b = vf(
+            `B/Normal/Front/${name}`,
+            readFileSync(new URL("Normal/Back/NO20260101-120000-000001B.MP4", root)),
+        );
+        const bytes = readFileSync(new URL("GPSData000001.txt", root));
+        const logA = vf("A/GPSData000001.txt", bytes);
+        const logB = vf("B/GPSData000001.txt", bytes);
+        const { kept } = await dropDuplicateFiles([a, b, logA, logB], []);
+        expect(kept).toEqual([a, b, logA, logB]);
+        let log = null;
+        for (const source of kept.filter((item) => item.file.name.endsWith(".txt"))) {
+            const parsed = await csv70maiPrimitive.parse(source);
+            associateRecordsWithVideos(parsed.records, source, [a, b]);
+            log = mergeIntoGpsLog(log, { records: parsed.records, skipped: parsed.skipped, appliedExtractors: [] });
+        }
+        expect(log).not.toBeNull();
+        expect(recordsForVideo(log!, a, [a, b])).toHaveLength(3);
+        expect(recordsForVideo(log!, b, [a, b])).toHaveLength(3);
+    });
+
+    it("keeps same-content auxiliary files without reading their bytes", async () => {
+        const incoming = ["gps", "gpx", "3gf", "map"].flatMap((ext) => [
+            vf(`A/clip.${ext}`, "shared"),
+            vf(`B/clip.${ext}`, "shared"),
+        ]);
+        const sliceSpy = vi.spyOn(File.prototype, "slice");
+        try {
+            expect((await dropDuplicateFiles(incoming, [])).kept).toEqual(incoming);
+            expect(sliceSpy).not.toHaveBeenCalled();
+        } finally {
+            sliceSpy.mockRestore();
+        }
+    });
+
     it("passes unique files through untouched, preserving order", async () => {
         const incoming = [
             vf("Normal/Front/A.MP4", makeContent(1024, 1)),
