@@ -762,6 +762,58 @@ test.describe("progressive ingest", () => {
         await expect(page.locator("#trip-analysis-status")).toBeHidden({ timeout: 20_000 });
     });
 
+    test("a second drop preserves unmerged accelerometer sidecars", async ({ page }) => {
+        const directory = makeTemporaryDirectory("dashcamigo-accel-restart-");
+        const name = "20260718_060329_NF.mp4";
+        const fixtureRoot = path.resolve("src/parsers/__fixtures__/blackvue");
+        writeFileSync(
+            path.join(directory, name),
+            withMvhdCreationTime(
+                path.join(SAMPLE_70MAI, "Normal/Front/NO20260101-120000-000001F.MP4"),
+                "2026-07-18T06:03:31Z",
+            ),
+        );
+        copyFileSync(path.join(fixtureRoot, "real-anonymized.gps"), path.join(directory, "20260718_060329_N.gps"));
+        copyFileSync(path.join(fixtureRoot, "real-anonymized.3gf"), path.join(directory, "20260718_060329_N.3gf"));
+
+        await page.evaluate(() => {
+            const schedule = window.requestIdleCallback.bind(window);
+            const pending: Array<() => void> = [];
+            let isHeld = true;
+            window.requestIdleCallback = (callback, options) =>
+                schedule((deadline) => {
+                    if (isHeld) pending.push(() => callback(deadline));
+                    else callback(deadline);
+                }, options);
+            (window as typeof window & { __releaseRecordingWork?: () => void }).__releaseRecordingWork = () => {
+                isHeld = false;
+                for (const callback of pending.splice(0)) callback();
+            };
+        });
+        await page.locator("#folder-input").setInputFiles(directory);
+        await expect(page.locator("#ingest-overlay")).toBeHidden();
+        await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.trips.length)).toBe(1);
+        const before = await page.evaluate((filename) => {
+            const records = window.__dashcamigo.state.gpsLog?.byFilename.get(filename) ?? [];
+            return { count: records.length, hasAccel: records.some((r) => r.accelXg !== 0 || r.accelYg !== 0) };
+        }, name);
+        expect(before.count).toBeGreaterThan(0);
+        expect(before.hasAccel).toBe(false);
+
+        await page.locator("#folder-input").setInputFiles(SAMPLE_NOGPS);
+        await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.trips.length)).toBe(2);
+        await page.evaluate(() => {
+            (window as typeof window & { __releaseRecordingWork?: () => void }).__releaseRecordingWork?.();
+        });
+        await expect(page.locator("#trip-analysis-status")).toBeHidden({ timeout: 30_000 });
+        const after = await page.evaluate((filename) => {
+            const records = window.__dashcamigo.state.gpsLog?.byFilename.get(filename) ?? [];
+            return { count: records.length, hasAccel: records.some((r) => Math.hypot(r.accelXg, r.accelYg) > 0.01) };
+        }, name);
+        expect(after.count).toBe(before.count);
+        expect(after.hasAccel).toBe(true);
+    });
+
     test("reuses cached metadata while stale GPS reparses after reload", async ({ page }) => {
         await page.locator("#folder-input").setInputFiles(SAMPLE_GOPRO);
         await expect(page.locator("#trip-list")).toHaveAttribute("aria-busy", "false", { timeout: 30_000 });

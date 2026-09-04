@@ -17,8 +17,7 @@ import { SLICE_COST_STREAM_ABOVE } from "../parsers/internal/mp4-walker.js";
 import { cameraFingerprint } from "../parsers/camera-fingerprint.js";
 import { classifyFilenameClockTimelapse, classifyFilenameTime } from "../parsers/filename/index.js";
 import type { ClassifiedFile } from "../parsers/registry-light.js";
-import { combineAccelSources, mergeAccelSamples } from "../parsers/registry-light.js";
-import type { AccelSample, GpsRecord, VendorFile } from "../parsers/types.js";
+import type { AccelSample, VendorFile } from "../parsers/types.js";
 import { emitLifecycle } from "../perf.js";
 import { looksLikeRecordings } from "../report-structure.js";
 import { pendingRecordingAnalysisProgress } from "../recording-analysis-progress.js";
@@ -57,6 +56,7 @@ import {
     registerRecordingWorkCoordinator,
 } from "./ingest-regroup.js";
 import { countByExtension, embeddedResultHasEffect } from "./ingest-core.js";
+import { createRecordingAccelStore } from "./recording-accel.js";
 import { reportParseErrors, reportSkippedGpsRecords } from "./ingest-diagnostics.js";
 import { planEmbeddedGpsQueue } from "./embedded-gps-queue.js";
 import { applyEmbeddedGpsResult } from "./embedded-gps-state.js";
@@ -232,10 +232,7 @@ const NOMINAL_DERIVE_DURATION_SEC = 60;
 // Candidate pool for the closing accuracy sweep.
 let candidatePool: VideoCandidate[] | null = null;
 let candidateAssociation: VideoAssociationIndex | null = null;
-// Accel-only sidecar samples are merged once each trip has an absolute clock.
-let sidecarAccelByFileKey: Map<string, AccelSample[]> | null = null;
-// Embedded accel accumulates across recording batches until the closing sweep.
-let embeddedAccelByFileKey = new Map<string, AccelSample[]>();
+const recordingAccel = createRecordingAccelStore();
 let schedulingPolicy: IngestSchedulingPolicy = RESPONSIVE_SCHEDULING;
 
 /** Concurrency suitable for a user-awaited deferred GPS scan on this storage. */
@@ -312,8 +309,6 @@ function clearRecordingAnalysisProgress(): void {
 export async function startProgressiveIngest(ctx: ProgressiveIngestContext): Promise<void> {
     // Background fill from a previous drop was already superseded by
     // cancelProgressiveIngest in ingestFilesInternal; here we adopt this drop's state.
-    sidecarAccelByFileKey = ctx.accelByFileKey;
-    embeddedAccelByFileKey = new Map(ctx.cachedEmbeddedAccelByFileKey);
     schedulingPolicy = RESPONSIVE_SCHEDULING;
     const run: ProgressiveIngestRun = {
         context: ctx,
@@ -464,6 +459,8 @@ export async function startProgressiveIngest(ctx: ProgressiveIngestContext): Pro
 
     candidatePool = ctx.allCandidates;
     candidateAssociation = ctx.videoAssociation;
+    recordingAccel.register(ctx.allCandidates, "sidecar", ctx.accelByFileKey);
+    recordingAccel.register(ctx.allCandidates, "embedded", ctx.cachedEmbeddedAccelByFileKey);
     run.analysisCandidates = new Set(ctx.allCandidates.filter(needsRecordingMetadata));
     publishRecordingAnalysisProgress(run);
     // Every regroup remaps active/expanded state, carries previews and clears the
@@ -541,8 +538,6 @@ export function cancelProgressiveIngest(): void {
     // Release per-run references; the generation bump neutralizes scheduled work.
     candidatePool = null;
     candidateAssociation = null;
-    sidecarAccelByFileKey = null;
-    embeddedAccelByFileKey = new Map();
     activeRun = null;
     clearRecordingAnalysisProgress();
 }
@@ -1020,9 +1015,7 @@ async function readRecordingData(
             if (embeddedResultHasEffect(embeddedResult)) {
                 applyEmbeddedGpsResult(embeddedResult, pending, recordingAssociation());
             }
-            for (const [fileKey, samples] of embeddedResult.accelByFileKey) {
-                embeddedAccelByFileKey.set(fileKey, samples);
-            }
+            recordingAccel.register(pending, "embedded", embeddedResult.accelByFileKey);
             session.run?.embeddedErrors.push(...embeddedResult.errors);
             for (const heavy of embeddedResult.heavyFiles) {
                 state.pendingHeavyEmbeddedGps.set(vendorFileKey(heavy.file), heavy);
@@ -1106,7 +1099,7 @@ function refreshTripsAfterRecordingRead(tripIndices: readonly number[]): void {
         const candidates = tripAllCandidates(trip);
         if (state.gpsLog) attachRecordsToCandidates(state.gpsLog, candidates, association);
         rederiveStartUtcForCandidates(candidates, classifyFilenameTime, classifyFilenameClockTimelapse);
-        mergeRecordingAccel(candidates);
+        recordingAccel.merge(candidates);
         for (const frame of trip.frames) finalizeFrameTiming(frame);
         refreshRecordingTrip(tripIdx);
     }
@@ -1127,36 +1120,6 @@ function bindReadyRecordingLogs(candidates: readonly VideoCandidate[]): void {
             videos: bound.boundVideos,
         });
     }
-}
-
-/**
- * Merges this drop's accel-only sidecar (.3gf) samples into the given
- * candidates' GpsRecords in place, keyed by absolute time. Must run AFTER the
- * startUtc re-derive (the sample time = startUtc + msSinceStart). Scoped to the
- * candidates' own records so it stays O(trip) per call. No-op when the drop has
- * no accel sidecar or no GpsLog to attach to.
- *
- * Safe to call twice (per-trip during the fill, then globally in finish() once
- * startUtc is authoritative): mergeAccelSamples assigns absolutely (record.accel
- * = sample - bias), not additively, so a re-merge just re-places to the best
- * match. A sub-0.5s startUtc shift between the two passes could in theory leave a
- * synced record with a stale match, but that needs the no-mvhd filename-anchored
- * branch (startUtc varies with the candidate set) on a camera that ALSO ships a
- * .3gf sidecar - BlackVue (the only .3gf source) writes mvhd, so its anchor is
- * pass-invariant and the case does not arise on a real camera.
- */
-function mergeRecordingAccel(cands: readonly VideoCandidate[]): void {
-    const accelByFileKey = combineAccelSources(sidecarAccelByFileKey ?? new Map(), embeddedAccelByFileKey);
-    if (accelByFileKey.size === 0 || !state.gpsLog) return;
-    const startUtcByFileKey = new Map<string, number>();
-    const tripRecords: GpsRecord[] = [];
-    for (const cand of cands) {
-        startUtcByFileKey.set(vendorFileKey(cand), cand.startUtc);
-        // candidate.records are the SAME GpsRecord objects state.gpsLog holds, so
-        // mutating them here is what the chart/map later read.
-        for (const rec of cand.records) tripRecords.push(rec);
-    }
-    mergeAccelSamples(tripRecords, accelByFileKey, startUtcByFileKey);
 }
 
 // === Low-priority background fill ===
@@ -1235,7 +1198,8 @@ function startBackgroundFill(): void {
         bindReadyRecordingLogs(readable);
         if (state.gpsLog) attachRecordsToCandidates(state.gpsLog, readable, candidateAssociation);
         reanchorRecordingCandidates(readable);
-        mergeRecordingAccel(readable);
+        recordingAccel.merge(readable);
+        recordingAccel.release(readable);
         commitRecordingTrips(readable);
         // The shared status describes mandatory time/duration work. Preview
         // extraction continues as a visual enhancement and must not leave a
@@ -1250,8 +1214,6 @@ function startBackgroundFill(): void {
         } else {
             candidatePool = null;
             candidateAssociation = null;
-            sidecarAccelByFileKey = null;
-            embeddedAccelByFileKey = new Map();
             void schedulePopulateTripPreviews(state.trips, updateTripPreview);
         }
     };
@@ -1396,6 +1358,4 @@ async function completeProgressiveRun(run: ProgressiveIngestRun, generation: num
     activeRun = null;
     candidatePool = null;
     candidateAssociation = null;
-    sidecarAccelByFileKey = null;
-    embeddedAccelByFileKey = new Map();
 }
