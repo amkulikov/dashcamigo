@@ -256,47 +256,53 @@ export async function createExportMapSnapshotter(
     // anyway, so [0,0] is a harmless fallback when there is no usable fix.
     const seed = finiteActiveRecords(records)[0];
     // Load maplibre-gl lazily (shared chunk with the viewer map). See T9 / map.ts.
-    const mlg = await loadMaplibre();
-    const map = new mlg.Map({
-        container: host,
-        style,
-        center: seed ? [seed.lon, seed.lat] : [0, 0],
-        zoom: 14,
-        bearing: 0,
-        pitch: 0,
-        interactive: false,
-        attributionControl: false,
-        // Performance: identical recipe to ensureMiniMap - we render snapshots
-        // back-to-back at 5-30 Hz; we cannot afford tile fade animations,
-        // collisions, or expiration revalidation in that loop.
-        fadeDuration: 0,
-        refreshExpiredTiles: false,
-        crossSourceCollisions: false,
-        // 256, not the mini-map's 128: a tilted chase frustum touches more tiles
-        // than a top-down square, and prewarm caches a wider corridor. The
-        // instance is short-lived (one export/preview), so the memory is fine.
-        maxTileCacheSize: 256,
-        // Raise the ceiling above MapLibre's default 60 so the chase tilt slider
-        // (0..70) reaches its full range here too. Without this the export/preview
-        // silently clamps pitch at 60 while the live map (maxPitch 70) does not -
-        // the WYSIWYG preview and the exported frame would not match a 61-70 tilt.
-        maxPitch: EXPORT_CHASE_MAX_PITCH,
-        // Required so map.getCanvas() returns a buffer that survives until our
-        // composite read - without it the WebGL buffer is invalidated right
-        // after the present and createImageBitmap captures a blank texture.
-        canvasContextAttributes: { preserveDrawingBuffer: true },
-        // Slot-derived buffer density (see snapshotPixelRatio). undefined =
-        // maplibre's devicePixelRatio default (preview path). preserveDrawingBuffer
-        // survives this: it is a context-creation attribute and setPixelRatio/this
-        // option only resize the canvas, never re-create the GL context.
-        pixelRatio: snapshotPixelRatio,
-        // Skip runtime style validation: unlike the interactive maps (which boot
-        // on EMPTY_STYLE), this constructor receives the full heavy style, so it
-        // is the single biggest validation cost. The style is static, self-hosted
-        // and gated at build time by scripts/validate-map-styles.mjs.
-        validateStyle: false,
-        transformRequest: transformMapTileRequest,
-    });
+    let map: maplibregl.Map;
+    try {
+        const mlg = await loadMaplibre();
+        map = new mlg.Map({
+            container: host,
+            style,
+            center: seed ? [seed.lon, seed.lat] : [0, 0],
+            zoom: 14,
+            bearing: 0,
+            pitch: 0,
+            interactive: false,
+            attributionControl: false,
+            // Performance: identical recipe to ensureMiniMap - we render snapshots
+            // back-to-back at 5-30 Hz; we cannot afford tile fade animations,
+            // collisions, or expiration revalidation in that loop.
+            fadeDuration: 0,
+            refreshExpiredTiles: false,
+            crossSourceCollisions: false,
+            // 256, not the mini-map's 128: a tilted chase frustum touches more tiles
+            // than a top-down square, and prewarm caches a wider corridor. The
+            // instance is short-lived (one export/preview), so the memory is fine.
+            maxTileCacheSize: 256,
+            // Raise the ceiling above MapLibre's default 60 so the chase tilt slider
+            // (0..70) reaches its full range here too. Without this the export/preview
+            // silently clamps pitch at 60 while the live map (maxPitch 70) does not -
+            // the WYSIWYG preview and the exported frame would not match a 61-70 tilt.
+            maxPitch: EXPORT_CHASE_MAX_PITCH,
+            // Required so map.getCanvas() returns a buffer that survives until our
+            // composite read - without it the WebGL buffer is invalidated right
+            // after the present and createImageBitmap captures a blank texture.
+            canvasContextAttributes: { preserveDrawingBuffer: true },
+            // Slot-derived buffer density (see snapshotPixelRatio). undefined =
+            // maplibre's devicePixelRatio default (preview path). preserveDrawingBuffer
+            // survives this: it is a context-creation attribute and setPixelRatio/this
+            // option only resize the canvas, never re-create the GL context.
+            pixelRatio: snapshotPixelRatio,
+            // Skip runtime style validation: unlike the interactive maps (which boot
+            // on EMPTY_STYLE), this constructor receives the full heavy style, so it
+            // is the single biggest validation cost. The style is static, self-hosted
+            // and gated at build time by scripts/validate-map-styles.mjs.
+            validateStyle: false,
+            transformRequest: transformMapTileRequest,
+        });
+    } catch (err) {
+        host.remove();
+        throw err;
+    }
 
     // Route maplibre error events through the logger - with NO listener,
     // MapLibre's Evented console.errors the raw event itself, bypassing the
