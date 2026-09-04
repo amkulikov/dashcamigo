@@ -39,26 +39,21 @@ function clamp(value: number, min: number, max: number): number {
     return value < min ? min : value > max ? max : value;
 }
 
-/** Per-channel ADPCM decoder state: running predictor and step-table index. */
-interface AdpcmState {
-    predictor: number; // current sample value, int16 range
-    index: number; // step-table index, 0..88
-}
-
-/**
- * Decodes one 4-bit ADPCM nibble, advancing `state` and returning the new
- * predictor (the decoded PCM sample, int16). Standard IMA reconstruction.
- */
-function decodeNibble(state: AdpcmState, nibble: number): number {
-    const step = STEP_TABLE[state.index]!;
-    // diff = step/8 + (b2?step:0) + (b1?step/2:0) + (b0?step/4:0)
-    let diff = step >> 3;
-    if (nibble & 4) diff += step;
-    if (nibble & 2) diff += step >> 1;
-    if (nibble & 1) diff += step >> 2;
-    state.predictor = clamp(state.predictor + (nibble & 8 ? -diff : diff), -32768, 32767);
-    state.index = clamp(state.index + INDEX_TABLE[nibble]!, 0, STEP_TABLE_MAX_INDEX);
-    return state.predictor;
+// Each nibble transition depends only on its step index. Keep the exact integer
+// reconstruction (including its separate shifts) outside the PCM sample loop.
+const nibbleDeltas = new Int32Array(STEP_TABLE.length * 16);
+const nibbleNextIndices = new Uint8Array(STEP_TABLE.length * 16);
+for (let index = 0; index < STEP_TABLE.length; index++) {
+    const step = STEP_TABLE[index]!;
+    for (let nibble = 0; nibble < 16; nibble++) {
+        let diff = step >> 3;
+        if (nibble & 4) diff += step;
+        if (nibble & 2) diff += step >> 1;
+        if (nibble & 1) diff += step >> 2;
+        const key = index * 16 + nibble;
+        nibbleDeltas[key] = nibble & 8 ? -diff : diff;
+        nibbleNextIndices[key] = clamp(index + INDEX_TABLE[nibble]!, 0, STEP_TABLE_MAX_INDEX);
+    }
 }
 
 /**
@@ -82,32 +77,35 @@ export function imaAdpcmFramesPerBlock(blockBytes: number, channels: number): nu
 export function decodeImaAdpcmBlock(block: Uint8Array, channels: number, out: Int16Array, outOffset: number): number {
     if (block.length < 4 * channels) return 0;
     const framesPerChannel = imaAdpcmFramesPerBlock(block.length, channels);
-    const states: AdpcmState[] = new Array(channels);
+    const wordsPerChannel = (framesPerChannel - 1) / 8;
+    const wordStride = 4 * channels;
 
-    // Per-channel 4-byte header: int16 LE predictor + uint8 index + 1 reserved.
+    // Decode channels independently so predictor/index remain scalar locals;
+    // no channel-state objects need allocating for each container block.
     for (let ch = 0; ch < channels; ch++) {
         const h = ch * 4;
-        const predictor = ((block[h]! | (block[h + 1]! << 8)) << 16) >> 16; // sign-extend int16
-        states[ch] = { predictor, index: clamp(block[h + 2]!, 0, STEP_TABLE_MAX_INDEX) };
-        out[outOffset + ch] = predictor; // sample 0 of each channel = initial predictor
-    }
-
-    // Remaining samples: 4-byte words interleaved per channel, 8 samples
-    // (2 per byte, low nibble first) per word.
-    let pos = channels * 4;
-    let frame = 1; // frame 0 is the header predictors
-    while (frame < framesPerChannel) {
-        for (let ch = 0; ch < channels; ch++) {
-            const state = states[ch]!;
-            const base = outOffset + frame * channels + ch;
+        let predictor = ((block[h]! | (block[h + 1]! << 8)) << 16) >> 16;
+        let index = clamp(block[h + 2]!, 0, STEP_TABLE_MAX_INDEX);
+        let writePos = outOffset + ch;
+        out[writePos] = predictor;
+        writePos += channels;
+        let pos = wordStride + h;
+        for (let word = 0; word < wordsPerChannel; word++) {
             for (let b = 0; b < 4; b++) {
                 const byte = block[pos + b]!;
-                out[base + b * 2 * channels] = decodeNibble(state, byte & 0x0f);
-                out[base + (b * 2 + 1) * channels] = decodeNibble(state, byte >> 4);
+                let key = index * 16 + (byte & 0x0f);
+                predictor = clamp(predictor + nibbleDeltas[key]!, -32768, 32767);
+                index = nibbleNextIndices[key]!;
+                out[writePos] = predictor;
+                writePos += channels;
+                key = index * 16 + (byte >> 4);
+                predictor = clamp(predictor + nibbleDeltas[key]!, -32768, 32767);
+                index = nibbleNextIndices[key]!;
+                out[writePos] = predictor;
+                writePos += channels;
             }
-            pos += 4;
+            pos += wordStride;
         }
-        frame += 8; // each channel's word produced 8 frames
     }
 
     return framesPerChannel * channels;

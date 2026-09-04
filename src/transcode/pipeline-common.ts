@@ -642,15 +642,15 @@ export async function emitSilence(
     const chunkSec = 0.1;
     const framesPerChunk = Math.floor(sampleRate * chunkSec);
     if (framesPerChunk <= 0) return;
-    let elapsed = 0;
-    while (elapsed < durationSec) {
+    // Every sample is read-only silence; its backing storage can be shared.
+    const data = new Float32Array(framesPerChunk * channels);
+    const totalFrames = Math.floor(durationSec * sampleRate);
+    let elapsedFrames = 0;
+    while (elapsedFrames < totalFrames) {
         if (signal.aborted) throw new DOMException("aborted", "AbortError");
-        const remaining = durationSec - elapsed;
-        const thisFrames = remaining < chunkSec ? Math.floor(sampleRate * remaining) : framesPerChunk;
-        if (thisFrames <= 0) break;
-        const data = new Float32Array(thisFrames * channels);
+        const thisFrames = Math.min(framesPerChunk, totalFrames - elapsedFrames);
         const sample = new AudioSample({
-            data: data.buffer,
+            data: thisFrames === framesPerChunk ? data : data.subarray(0, thisFrames * channels),
             // Interleaved f32 (all zeros). sampleRate/channels match the real
             // source samples (caller passes the probed format), so the source's
             // input-constancy guard sees one uniform format across silence and
@@ -658,14 +658,14 @@ export async function emitSilence(
             format: "f32",
             numberOfChannels: channels,
             sampleRate,
-            timestamp: offsetSec + elapsed,
+            timestamp: offsetSec + elapsedFrames / sampleRate,
         });
         try {
             await audioSource.add(sample);
         } finally {
             sample.close();
         }
-        elapsed += thisFrames / sampleRate;
+        elapsedFrames += thisFrames;
     }
 }
 
@@ -766,11 +766,8 @@ export async function finalizeTranscodeOutput(opts: {
  * chunk's size AFTER the write resolves; the caller keeps the running total so
  * its progress/return code can read a plain local.
  *
- * byteLength is captured BEFORE the await defensively: the worker-scope writable
- * posts each chunk over a MessagePort (port-writable.ts). We copy rather than
- * transfer the chunk buffer today (mediabunny's chunk-buffer ownership is
- * undocumented), so nothing is detached - but reading the size first keeps this
- * correct if a future zero-copy transfer path detaches data.buffer on write.
+ * byteLength is captured before write: the worker bridge transfers ownership
+ * of full chunk buffers, detaching them from this scope.
  */
 export function createMp4StreamOutput(
     writable: FileSystemWritableFileStream,

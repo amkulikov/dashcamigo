@@ -66,7 +66,9 @@ const server = createWorkerServer(self, {
             label: string,
         ): Promise<TranscodeResult> => {
             const extras: TranscodeRuntimeExtras = {
-                writable: wrapPortAsFsaWritable(writablePort),
+                // The pinned StreamTarget retires full chunks after writing;
+                // the real-muxer bridge test guards that ownership on upgrades.
+                writable: wrapPortAsFsaWritable(writablePort, { transferFullBuffers: true }),
                 signal: ctx.signal,
                 onProgress: (p) => {
                     const ntf: TranscodeProgressNotificationData = { progress: p };

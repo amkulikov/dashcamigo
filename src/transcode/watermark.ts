@@ -15,7 +15,7 @@
 // crop.
 
 import { createLogger } from "../log.js";
-import { roundRectPath } from "./canvas-draw.js";
+import { measureTextWidth, roundRectPath } from "./canvas-draw.js";
 import { type FontSpec, loadFontsIntoScope } from "./worker-fonts.js";
 
 const log = createLogger("transcode:watermark");
@@ -64,7 +64,7 @@ export function drawWatermark(
     ctx.letterSpacing = LETTER_SPACING;
     ctx.textBaseline = "middle";
     ctx.textAlign = "left";
-    const textWidth = ctx.measureText(TEXT).width;
+    const textWidth = measureTextWidth(ctx, TEXT);
     const totalW = textWidth + gap + iconSize;
     // Composition height = icon height (taller than font-size).
     const totalH = iconSize;

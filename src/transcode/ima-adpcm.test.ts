@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { decodeImaAdpcmBlock, decodeImaAdpcmBlocks, imaAdpcmFramesPerBlock } from "./ima-adpcm.js";
 
@@ -22,6 +23,38 @@ describe("imaAdpcmFramesPerBlock", () => {
 });
 
 describe("decodeImaAdpcmBlocks (mono)", () => {
+    it("matches independently decoded PCM across every nibble and step index", () => {
+        const blocks: Uint8Array[] = [];
+        for (const predictor of [-32768, -1, 0, 32767]) {
+            for (let index = 0; index < 89; index++) {
+                for (let nibble = 0; nibble < 16; nibble++) {
+                    blocks.push(
+                        new Uint8Array([
+                            predictor & 255,
+                            (predictor >> 8) & 255,
+                            index,
+                            0,
+                            nibble | ((15 - nibble) << 4),
+                            0x77,
+                            0xff,
+                            0x80,
+                        ]),
+                    );
+                }
+            }
+        }
+        const pcm = decodeImaAdpcmBlocks(blocks, 1);
+        expect(pcm).toHaveLength(blocks.length * 9);
+        expect(pcm[0]).toBe(-32768);
+        expect(pcm[(blocks.length - 1) * 9]).toBe(32767);
+        // Golden s16le PCM from ffmpeg decoding these blocks in a WAVE IMA file.
+        const bytes = Buffer.alloc(pcm.length * 2);
+        for (let i = 0; i < pcm.length; i++) bytes.writeInt16LE(pcm[i]!, i * 2);
+        expect(createHash("sha256").update(bytes).digest("hex")).toBe(
+            "9fa2f9578528762664491fce6f3de9c2f7a717678e47ff714551a27fd5c4c369",
+        );
+    });
+
     it("decodes a single block against a hand-verified IMA reference", () => {
         // header: predictor=100, stepIndex=5; one data word 0x12 0x34 0x56 0x78.
         const block = new Uint8Array([0x64, 0x00, 0x05, 0x00, 0x12, 0x34, 0x56, 0x78]);
@@ -67,6 +100,24 @@ describe("decodeImaAdpcmBlocks (stereo)", () => {
 });
 
 describe("decodeImaAdpcmBlock (low-level)", () => {
+    it("keeps distinct channel words independent and ignores incomplete final groups", () => {
+        const channel0 = new Uint8Array([0x64, 0x00, 0x05, 0x00, 0x12, 0x34, 0x56, 0x78]);
+        const channel1 = new Uint8Array([0x00, 0x80, 0x58, 0x00, 0xff, 0xff, 0xff, 0xff]);
+        const channel2 = new Uint8Array([0xff, 0x7f, 0x58, 0x00, 0x77, 0x77, 0x77, 0x77]);
+        const block = new Uint8Array(27);
+        for (const [ch, data] of [channel0, channel1, channel2].entries()) {
+            block.set(data.subarray(0, 4), ch * 4);
+            block.set(data.subarray(4), 12 + ch * 4);
+        }
+        block.fill(0x77, 24);
+        const pcm = decodeImaAdpcmBlocks([block], 3);
+        expect(pcm).toHaveLength(27);
+        const expected0 = [100, 107, 110, 121, 131, 148, 173, 170, 216];
+        for (let frame = 0; frame < 9; frame++) {
+            expect(Array.from(pcm.subarray(frame * 3, frame * 3 + 3))).toEqual([expected0[frame], -32768, 32767]);
+        }
+    });
+
     it("writes frames*channels int16 at the given offset and returns the count", () => {
         const block = new Uint8Array([0x64, 0x00, 0x05, 0x00, 0x12, 0x34, 0x56, 0x78]);
         const out = new Int16Array(20);

@@ -102,7 +102,8 @@ async function getOrOpenDecoder(file: File): Promise<DecoderEntry | null> {
         const entry: DecoderEntry = {
             input,
             track,
-            sink: new CanvasSink(track, { width }),
+            // Extraction is serialized and each bitmap snapshots the canvas before reuse.
+            sink: new CanvasSink(track, { width, poolSize: 1 }),
         };
         decoderCache.set(key, entry);
         // Evict LRU until under cap.

@@ -98,7 +98,7 @@ export async function openMatroskaAdpcmAudio(file: File): Promise<AdpcmAudioRead
             while (pkt) {
                 if (signal?.aborted) throw new DOMException("aborted", "AbortError");
                 if (pkt.timestamp >= endInFileSec) break;
-                const block = new Uint8Array(pkt.data);
+                const block = pkt.data;
                 const framesPerChannel = imaAdpcmFramesPerBlock(block.length, channels);
                 if (framesPerChannel > 0) {
                     if (anchorSec === null) anchorSec = mapTs(pkt.timestamp);

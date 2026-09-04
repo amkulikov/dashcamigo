@@ -12,6 +12,29 @@ import {
 } from "./pipeline-common.js";
 
 describe("emitSilence", () => {
+    it("keeps retained samples silent and tiles the partial final chunk", async () => {
+        const retained: AudioSample[] = [];
+        const source = {
+            async add(sample: AudioSample) {
+                retained.push(sample.clone());
+            },
+        } as unknown as AudioSampleSource;
+        try {
+            await emitSilence(source, 4, 0.25, 48_000, 2, new AbortController().signal);
+            expect(retained.map((sample) => sample.numberOfFrames)).toEqual([4800, 4800, 2400]);
+            let frames = 0;
+            for (const sample of retained) {
+                expect(sample.timestamp).toBeCloseTo(4 + frames / 48_000, 9);
+                const data = new Float32Array(sample.numberOfFrames * sample.numberOfChannels);
+                sample.copyTo(data, { planeIndex: 0 });
+                expect(data.every((value) => value === 0)).toBe(true);
+                frames += sample.numberOfFrames;
+            }
+        } finally {
+            for (const sample of retained) sample.close();
+        }
+    });
+
     it("closes the sample when the output source rejects it", async () => {
         const boom = new Error("encoder rejected sample");
         let captured: AudioSample | null = null;

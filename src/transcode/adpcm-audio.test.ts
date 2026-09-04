@@ -1,5 +1,5 @@
 import { AudioSample, type AudioSampleSource } from "mediabunny";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { decodeImaAdpcmBlocks } from "./ima-adpcm.js";
 import { openAdpcmAudio } from "./adpcm-audio.js";
 import { AUDIO_TARGET_SAMPLE_RATE } from "./types.js";
@@ -267,6 +267,37 @@ describe("openAdpcmAudio", () => {
         let total = 0;
         for (const s of samples) total += s.frames;
         expect(total).toBe(endFrame - startFrame);
+    });
+
+    it("passes each clipped PCM region to the native AudioData constructor", async () => {
+        const captured: { data: Int16Array }[] = [];
+        // Node has no AudioData. Capture the native constructor boundary;
+        // copyTo alone misses a backing-buffer offset lost by toAudioData.
+        class CapturedAudioData {
+            constructor(init: AudioDataInit) {
+                const bytes = ArrayBuffer.isView(init.data)
+                    ? new Uint8Array(init.data.buffer, init.data.byteOffset, init.data.byteLength)
+                    : new Uint8Array(init.data);
+                const size = init.numberOfFrames * init.numberOfChannels * 2;
+                captured.push({ data: new Int16Array(bytes.slice(0, size).buffer) });
+            }
+            close() {}
+        }
+        vi.stubGlobal("AudioData", CapturedAudioData);
+        try {
+            const blocks = makeBlocks(N_BLOCKS, BLOCK_LEN);
+            const reader = (await openAdpcmAudio(buildAdpcmMovFile(blocks, CHANNELS, SR)))!;
+            const source = {
+                async add(sample: AudioSample) {
+                    sample.toAudioData().close();
+                },
+            } as unknown as AudioSampleSource;
+            await reader.feedRange(source, 1.01, 4.67, 0);
+            const expected = decodeImaAdpcmBlocks(blocks, CHANNELS).subarray(1010 * CHANNELS, 4670 * CHANNELS);
+            expect(concat(captured)).toEqual(expected);
+        } finally {
+            vi.unstubAllGlobals();
+        }
     });
 
     it("feedRange on an empty range emits nothing", async () => {

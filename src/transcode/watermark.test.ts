@@ -12,9 +12,12 @@
 // as a trace. Node has no real canvas, but drawWatermark only uses a fixed set
 // of 2D operations (fillText, arc, fillRect, etc.).
 
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { drawWatermark, type WatermarkAnchor } from "./watermark.js";
+import { _resetForTests } from "./canvas-draw.js";
+
+beforeEach(_resetForTests);
 
 interface CtxCall {
     op: string;
@@ -97,6 +100,15 @@ function makeCtx(): {
 }
 
 describe("drawWatermark", () => {
+    it("reuses text shaping across frames and measures again when size changes", () => {
+        const { ctx, calls } = makeCtx();
+        drawWatermark(ctx, 1920, 1080);
+        drawWatermark(ctx, 1920, 1080);
+        expect(calls.filter((call) => call.op === "measureText")).toHaveLength(1);
+        drawWatermark(ctx, 1280, 720);
+        expect(calls.filter((call) => call.op === "measureText")).toHaveLength(2);
+    });
+
     it("isolates its state via save/restore (no leak into the caller's ctx)", () => {
         // Contract: the watermark mutates font/alpha/shadow on the shared export
         // ctx, so it must bracket everything in save/restore or it corrupts the

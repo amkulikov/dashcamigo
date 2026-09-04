@@ -198,7 +198,9 @@ export async function openAdpcmAudio(file: File): Promise<AdpcmAudioReader | nul
                 if (signal?.aborted) throw new DOMException("aborted", "AbortError");
                 const n = Math.min(sampleRate, clipEnd - f);
                 const local = (f - batchStartFrame) * channels;
-                const data = pcm.slice(local, local + n * channels); // own buffer
+                // AudioSample.toAudioData uses the backing buffer without its
+                // view offset, so each clipped PCM sample needs its own buffer.
+                const data = pcm.slice(local, local + n * channels);
                 const sample = new AudioSample({
                     data,
                     format: "s16",

@@ -15,10 +15,9 @@
 //    CountQueuingStrategy({highWaterMark:16}) depth without a per-chunk round
 //    trip (the naive one-ack-per-chunk model stalled the worker between chunks).
 //
-// Chunks are COPIED, not transferred: mediabunny's chunk-buffer ownership under
-// StreamTarget({chunked}) is undocumented (it may reuse the buffer across
-// flushes), and the native WritableStream we replaced also copied each chunk
-// across the realm boundary - so copying is zero-regression and safe.
+// Callers may surrender full chunk buffers to avoid copying the encoded video
+// across threads. Partial views still copy: different writes can share their
+// backing buffer, so transferring one would detach the remaining writes.
 
 /** worker -> main. `chunk` is the mediabunny FSA write params ({type,position,
  *  data}); kept `unknown` because the worker only forwards it. */
@@ -46,7 +45,7 @@ export type PortWritableDown =
  * concurrency logic here would otherwise be untestable outside a browser).
  */
 export interface PortLike {
-    postMessage(message: unknown): void;
+    postMessage(message: unknown, transfer?: Transferable[]): void;
     // MessageEvent (not a narrower {data} shape) so a real MessagePort assigns to
     // PortLike - its onmessage param is MessageEvent and function params are
     // contravariant. Tests deliver a `{ data } as MessageEvent`.
@@ -68,8 +67,13 @@ export const PORT_WRITABLE_HWM = 16;
  * abort() is best-effort. A main-side {k:"error"} rejects the pending op and all
  * subsequent ones. Cast to FileSystemWritableFileStream because the pipeline
  * only ever calls write/close/abort on it.
+ * With transferFullBuffers, the caller surrenders full Uint8Array buffers:
+ * write() may detach them. Leave it off when the producer retains ownership.
  */
-export function wrapPortAsFsaWritable(port: PortLike): FileSystemWritableFileStream {
+export function wrapPortAsFsaWritable(
+    port: PortLike,
+    options: { transferFullBuffers?: boolean } = {},
+): FileSystemWritableFileStream {
     let inFlight = 0;
     let failure: Error | null = null;
     // Producers parked because the window is full. FIFO to preserve write order;
@@ -81,7 +85,20 @@ export function wrapPortAsFsaWritable(port: PortLike): FileSystemWritableFileStr
 
     const postChunk = (chunk: unknown): void => {
         inFlight++;
-        port.postMessage({ k: "write", chunk } satisfies PortWritableUp);
+        const message = { k: "write", chunk } satisfies PortWritableUp;
+        if (options.transferFullBuffers && typeof chunk === "object" && chunk !== null && "data" in chunk) {
+            const data = chunk.data;
+            if (
+                data instanceof Uint8Array &&
+                data.buffer instanceof ArrayBuffer &&
+                data.byteOffset === 0 &&
+                data.byteLength === data.buffer.byteLength
+            ) {
+                port.postMessage(message, [data.buffer]);
+                return;
+            }
+        }
+        port.postMessage(message);
     };
 
     const failAll = (err: Error): void => {
