@@ -7,6 +7,7 @@ import { indexAllMp4Files } from "../indexer.js";
 import {
     attachRecordsToCandidates,
     bindRecordsByRecordingStart,
+    buildVideoAssociationIndex,
     recordsForVideo,
     type VideoAssociationIndex,
 } from "../gps-association.js";
@@ -230,6 +231,7 @@ const NOMINAL_DERIVE_DURATION_SEC = 60;
 
 // Candidate pool for the closing accuracy sweep.
 let candidatePool: VideoCandidate[] | null = null;
+let candidateAssociation: VideoAssociationIndex | null = null;
 // Accel-only sidecar samples are merged once each trip has an absolute clock.
 let sidecarAccelByFileKey: Map<string, AccelSample[]> | null = null;
 // Embedded accel accumulates across recording batches until the closing sweep.
@@ -461,6 +463,7 @@ export async function startProgressiveIngest(ctx: ProgressiveIngestContext): Pro
     }
 
     candidatePool = ctx.allCandidates;
+    candidateAssociation = ctx.videoAssociation;
     run.analysisCandidates = new Set(ctx.allCandidates.filter(needsRecordingMetadata));
     publishRecordingAnalysisProgress(run);
     // Every regroup remaps active/expanded state, carries previews and clears the
@@ -537,6 +540,7 @@ export function cancelProgressiveIngest(): void {
     activeRun?.controller.abort();
     // Release per-run references; the generation bump neutralizes scheduled work.
     candidatePool = null;
+    candidateAssociation = null;
     sidecarAccelByFileKey = null;
     embeddedAccelByFileKey = new Map();
     activeRun = null;
@@ -553,6 +557,7 @@ export function pauseProgressiveIngestForRegroup(): boolean {
     fillGeneration++;
     abortRecordingSessions();
     candidatePool = null;
+    candidateAssociation = null;
     return true;
 }
 
@@ -565,9 +570,11 @@ export function resumeProgressiveIngest(): void {
     const pool = state.trips.flatMap(tripAllCandidates);
     if (!pool.some(needsRecordingMetadata) && !activeRun) {
         candidatePool = null;
+        candidateAssociation = null;
         return;
     }
     candidatePool = pool;
+    candidateAssociation = buildVideoAssociationIndex(pool);
     if (activeRun && activeRun.scheduling === null) return;
     startBackgroundFill();
 }
@@ -1011,11 +1018,7 @@ async function readRecordingData(
             const embeddedResult = mergeEmbeddedResults(fulfilled);
             registerEmbeddedGpsCacheArtifacts(gpsTargets, embeddedResult, crashedGpsKeys);
             if (embeddedResultHasEffect(embeddedResult)) {
-                applyEmbeddedGpsResult(
-                    embeddedResult,
-                    pending,
-                    candidatePool ?? state.trips.flatMap(tripAllCandidates),
-                );
+                applyEmbeddedGpsResult(embeddedResult, pending, recordingAssociation());
             }
             for (const [fileKey, samples] of embeddedResult.accelByFileKey) {
                 embeddedAccelByFileKey.set(fileKey, samples);
@@ -1093,18 +1096,25 @@ async function readRecordingData(
 
 /** Rebuilds affected trips from their current metadata without changing list indices. */
 function refreshTripsAfterRecordingRead(tripIndices: readonly number[]): void {
-    const loaded = state.trips.flatMap(tripAllCandidates);
-    bindReadyRecordingLogs(candidatePool ?? loaded);
+    if (state.gpsLog && state.gpsLog.pendingByFilename.size > 0) {
+        bindReadyRecordingLogs(candidatePool ?? state.trips.flatMap(tripAllCandidates));
+    }
+    const association = recordingAssociation();
     for (const tripIdx of tripIndices) {
         const trip = state.trips[tripIdx];
         if (!trip) continue;
         const candidates = tripAllCandidates(trip);
-        if (state.gpsLog) attachRecordsToCandidates(state.gpsLog, candidates, loaded);
+        if (state.gpsLog) attachRecordsToCandidates(state.gpsLog, candidates, association);
         rederiveStartUtcForCandidates(candidates, classifyFilenameTime, classifyFilenameClockTimelapse);
         mergeRecordingAccel(candidates);
         for (const frame of trip.frames) finalizeFrameTiming(frame);
         refreshRecordingTrip(tripIdx);
     }
+}
+
+function recordingAssociation(): VideoAssociationIndex {
+    candidateAssociation ??= buildVideoAssociationIndex(candidatePool ?? state.trips.flatMap(tripAllCandidates));
+    return candidateAssociation;
 }
 
 function bindReadyRecordingLogs(candidates: readonly VideoCandidate[]): void {
@@ -1221,8 +1231,9 @@ function startBackgroundFill(): void {
             if (candidate.metadataFailed === true) state.addedKeys.delete(vendorFileKey(candidate));
         }
         candidatePool = readable;
+        candidateAssociation = buildVideoAssociationIndex(readable);
         bindReadyRecordingLogs(readable);
-        if (state.gpsLog) attachRecordsToCandidates(state.gpsLog, readable, readable);
+        if (state.gpsLog) attachRecordsToCandidates(state.gpsLog, readable, candidateAssociation);
         reanchorRecordingCandidates(readable);
         mergeRecordingAccel(readable);
         commitRecordingTrips(readable);
@@ -1238,6 +1249,7 @@ function startBackgroundFill(): void {
             void completeProgressiveRun(run, generation);
         } else {
             candidatePool = null;
+            candidateAssociation = null;
             sidecarAccelByFileKey = null;
             embeddedAccelByFileKey = new Map();
             void schedulePopulateTripPreviews(state.trips, updateTripPreview);
@@ -1383,6 +1395,7 @@ async function completeProgressiveRun(run: ProgressiveIngestRun, generation: num
     });
     activeRun = null;
     candidatePool = null;
+    candidateAssociation = null;
     sidecarAccelByFileKey = null;
     embeddedAccelByFileKey = new Map();
 }

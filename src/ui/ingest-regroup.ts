@@ -1,12 +1,6 @@
-import { attachRecordsToCandidates } from "../gps-association.js";
 import { applyStoredGpsSyncToTrip } from "../gps-sync.js";
 import { classifyFilenameClockTimelapse, classifyFilenameTime } from "../parsers/filename/index.js";
-import {
-    finalizeTripFromFrames,
-    rederiveStartUtcForCandidates,
-    tripAllCandidates,
-    type VideoCandidate,
-} from "../trips.js";
+import { finalizeTripFromFrames, rederiveStartUtcForCandidates, type VideoCandidate } from "../trips.js";
 
 import { applyRegroup } from "./apply-regroup.js";
 import { carryBlurRegions } from "./blur-regions-state.js";
@@ -50,14 +44,10 @@ export function commitRecordingTripsWhilePreservingIngest(candidates: VideoCandi
     }
 }
 
-/** Rebuilds one trip's aggregates without changing its membership or index. */
+/** Rebuilds aggregates after the caller has attached current records and timing. */
 export function refreshRecordingTrip(tripIdx: number): void {
     const old = state.trips[tripIdx];
     if (!old) return;
-    if (state.gpsLog) {
-        const loaded = state.trips.flatMap(tripAllCandidates);
-        attachRecordsToCandidates(state.gpsLog, tripAllCandidates(old), loaded);
-    }
     const refreshed = finalizeTripFromFrames(old.frames);
     applyStoredGpsSyncToTrip(refreshed);
     carryOverTripPreviews([old], [refreshed]);

@@ -1,4 +1,4 @@
-import { attachRecordsToCandidates } from "../gps-association.js";
+import { attachRecordsToCandidates, type VideoAssociationIndex } from "../gps-association.js";
 import { mergeIntoGpsLog } from "../parser.js";
 import type { DispatchedEmbeddedGpsResult } from "../parsers/registry.js";
 import type { VideoCandidate } from "../trips.js";
@@ -10,7 +10,7 @@ import { state } from "./state.js";
 export function applyEmbeddedGpsResult(
     result: DispatchedEmbeddedGpsResult,
     candidates: readonly VideoCandidate[],
-    associationCandidates: readonly VideoCandidate[],
+    associationCandidates: readonly VideoCandidate[] | VideoAssociationIndex,
 ): void {
     state.gpsLog = mergeIntoGpsLog(state.gpsLog, result);
     attachRecordsToCandidates(state.gpsLog, candidates, associationCandidates);

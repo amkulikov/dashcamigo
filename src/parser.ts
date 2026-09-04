@@ -809,6 +809,7 @@ export function cloneRecordsAcrossChannels(log: ParsedLog, loadedVideos: Iterabl
 export function rebuildLog(appliedExtractors: string[], records: GpsRecord[], skipped: SkippedLine[]): ParsedLog {
     const byFilename = new Map<string, GpsRecord[]>();
     const byVideoKey = new Map<string, GpsRecord[]>();
+    const pendingByFilename = new Map<string, GpsRecord[]>();
     for (const rec of records) {
         let bucket = byFilename.get(rec.mp4Filename);
         if (!bucket) {
@@ -816,6 +817,7 @@ export function rebuildLog(appliedExtractors: string[], records: GpsRecord[], sk
             byFilename.set(rec.mp4Filename, bucket);
         }
         bucket.push(rec);
+        if (rec.recordingAssociation !== undefined) pendingByFilename.set(rec.mp4Filename, bucket);
     }
     for (const arr of byFilename.values()) {
         arr.sort((a, b) => a.unixSeconds - b.unixSeconds);
@@ -832,7 +834,7 @@ export function rebuildLog(appliedExtractors: string[], records: GpsRecord[], sk
             owned.push(rec);
         }
     }
-    return { appliedExtractors, records, byFilename, byVideoKey, skipped };
+    return { appliedExtractors, records, byFilename, byVideoKey, pendingByFilename, skipped };
 }
 
 /**
@@ -932,9 +934,11 @@ export function mergeIntoGpsLog(
     // with the buckets - mergeAccelSamples mutates these same objects in place.
     const records: GpsRecord[] = [];
     const byVideoKey = new Map<string, GpsRecord[]>();
+    const pendingByFilename = new Map<string, GpsRecord[]>();
     for (const bucket of byFilename.values()) {
         for (const rec of bucket) {
             records.push(rec);
+            if (rec.recordingAssociation !== undefined) pendingByFilename.set(rec.mp4Filename, bucket);
             if (rec.videoKey === undefined) continue;
             let owned = byVideoKey.get(rec.videoKey);
             if (!owned) {
@@ -950,6 +954,7 @@ export function mergeIntoGpsLog(
         records,
         byFilename,
         byVideoKey,
+        pendingByFilename,
         skipped: existing.skipped.concat(batch.skipped),
     };
 }

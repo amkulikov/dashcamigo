@@ -109,6 +109,8 @@ export interface ParsedLog {
     // Records with an unambiguous ingest-time owner, grouped by vendorFileKey.
     // byFilename remains the raw-format index and includes these records too.
     byVideoKey: Map<string, GpsRecord[]>;
+    // Filename buckets still containing recording-start association hints.
+    pendingByFilename: Map<string, GpsRecord[]>;
     skipped: SkippedLine[];
 }
 

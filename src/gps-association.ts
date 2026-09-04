@@ -51,7 +51,7 @@ export function bindRecordsByRecordingStart(
     let boundRecords = 0;
     const boundCandidates = new Set<VideoCandidate>();
 
-    for (const bucket of log.byFilename.values()) {
+    for (const bucket of log.pendingByFilename.values()) {
         const pending: GpsRecord[] = [];
         for (const record of bucket) {
             if (record.recordingAssociation !== undefined) pending.push(record);

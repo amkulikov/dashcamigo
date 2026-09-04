@@ -85,6 +85,43 @@ function recordingRecord(startUtc: number, sourceKey?: string): GpsRecord {
 }
 
 describe("GPS video association", () => {
+    it("indexes pending sections through incremental merges and removes resolved hints", () => {
+        const startUtc = 1_777_777_777;
+        const first = recordingRecord(startUtc, "card-a");
+        const second = { ...recordingRecord(startUtc, "card-a"), unixSeconds: 101 };
+        const unresolved = recordingRecord(startUtc + 100, "card-a");
+        const candidate = recordingCandidate("A/MAH00001.MP4", "card-a", startUtc);
+        const log = mergeIntoGpsLog(rebuildLog([], [record(10), first], []), {
+            records: [second, unresolved],
+            appliedExtractors: [],
+            skipped: [],
+        });
+        expect(log.pendingByFilename.size).toBe(2);
+        expect(log.pendingByFilename.get(first.mp4Filename)).toBe(log.byFilename.get(first.mp4Filename));
+        const result = bindRecordsByRecordingStart(log, [candidate]);
+        expect(result.boundRecords).toBe(2);
+        expect(result.log.pendingByFilename.size).toBe(1);
+        expect(result.log.pendingByFilename.get(unresolved.mp4Filename)).toEqual([unresolved]);
+        expect(recordsForVideo(result.log, candidate, [candidate])).toHaveLength(2);
+    });
+
+    it("does not inspect settled record buckets while binding a new section", () => {
+        const settled = record(10);
+        const startUtc = 1_777_777_777;
+        const pending = recordingRecord(startUtc);
+        const log = rebuildLog([], [settled, pending], []);
+        let settledReads = 0;
+        Object.defineProperty(settled, "recordingAssociation", {
+            get() {
+                settledReads++;
+                return undefined;
+            },
+        });
+        const candidate = recordingCandidate("A/MAH00001.MP4", "card-a", startUtc + 10);
+        expect(bindRecordsByRecordingStart(log, [candidate]).boundRecords).toBe(0);
+        expect(settledReads).toBe(0);
+    });
+
     it("resolves an external source to the matching source scope", () => {
         const a = video("CARD/DCIM/clip.mp4", "card-a");
         const b = video("CARD/DCIM/clip.mp4", "card-b");
