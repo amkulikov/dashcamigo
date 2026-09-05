@@ -1051,6 +1051,14 @@ body.no-trips .viewer {
 @media (min-width: 881px) {
     .landing-hero-shot {
         margin-top: var(--dc-space-5);
+        padding: 0 var(--dc-space-5) var(--dc-space-7) 0;
+        background: none;
+        border: none;
+        border-radius: 0;
+    }
+    .landing-hero-shot-phone-btn {
+        right: 0;
+        bottom: 0;
     }
 }
 @media (max-width: 880px) {
