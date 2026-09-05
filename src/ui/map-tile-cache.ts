@@ -6,7 +6,8 @@
 
 import type { AddProtocolAction, RequestTransformFunction } from "maplibre-gl";
 
-import { MAP_PROVIDER_REQUEST_TIMEOUT_MS, mapProviderForTileUrl } from "./map-provider.js";
+import { reportMapTileNetworkError, reportMapTilesOk } from "./connectivity.js";
+import { getMapProvider, MAP_PROVIDER_REQUEST_TIMEOUT_MS, mapProviderForTileUrl } from "./map-provider.js";
 
 const TILE_PROTOCOL = "dashcamigo-tile";
 const TILE_PROTOCOL_PREFIX = `${TILE_PROTOCOL}://`;
@@ -69,14 +70,19 @@ async function fetchTile(url: string, signal: AbortSignal): Promise<TilePayload>
     try {
         const response = await fetch(url, { signal: requestController.signal });
         if (!response.ok) throw tileRequestError(url, response.status, response.statusText);
-        return {
+        const payload = {
             data: await response.arrayBuffer(),
             cacheControl: response.headers.get("cache-control"),
             expires: response.headers.get("expires"),
             etag: response.headers.get("etag") ?? undefined,
         };
+        // Local GeoJSON and memory-cache hits cannot prove network recovery.
+        if (mapProviderForTileUrl(url) === getMapProvider()) reportMapTilesOk();
+        return payload;
     } catch (err) {
         if (signal.aborted) throw abortError(signal.reason);
+        const isHttpError = err instanceof Error && "status" in err && typeof err.status === "number" && err.status > 0;
+        if (!isHttpError && mapProviderForTileUrl(url) === getMapProvider()) reportMapTileNetworkError();
         if (requestController.signal.aborted && requestController.signal.reason === "timeout") {
             throw tileRequestError(url, 0, "timeout", err);
         }
@@ -152,7 +158,8 @@ export function createSharedTileCache(maxBytes: number, fetcher: TileFetcher = f
                 return clonePayload(hit);
             }
 
-            const entry = pending.get(url) ?? start(url);
+            const existing = pending.get(url);
+            const entry = existing && !existing.controller.signal.aborted ? existing : start(url);
             entry.consumers++;
             let isActive = true;
             let onAbort: (() => void) | null = null;
@@ -170,7 +177,10 @@ export function createSharedTileCache(maxBytes: number, fetcher: TileFetcher = f
                     entry.consumers--;
                     // A pan/zoom can abandon a tile while it is queued. Keep a
                     // shared fetch only while at least one map still needs it.
-                    if (entry.consumers === 0 && !entry.isSettled) entry.controller.abort("unused");
+                    if (entry.consumers === 0 && !entry.isSettled) {
+                        if (pending.get(url) === entry) pending.delete(url);
+                        entry.controller.abort("unused");
+                    }
                 }
             }
         },

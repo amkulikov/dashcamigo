@@ -9,6 +9,7 @@ import {
     transformMapTileRequest,
 } from "./map-tile-cache.js";
 import { MAP_PROVIDER_REQUEST_TIMEOUT_MS } from "./map-provider.js";
+import { isOffline, reportMapTileNetworkError, reportMapTilesOk } from "./connectivity.js";
 
 function bytes(...values: number[]): ArrayBuffer {
     return new Uint8Array(values).buffer;
@@ -17,6 +18,7 @@ function bytes(...values: number[]): ArrayBuffer {
 describe("shared map tile cache", () => {
     beforeEach(() => {
         _resetForTests();
+        reportMapTilesOk();
     });
 
     afterEach(() => {
@@ -133,6 +135,76 @@ describe("shared map tile cache", () => {
 
         await expect(request).rejects.toMatchObject({ name: "AbortError" });
         expect(fetcher.mock.calls[0]?.[1].aborted).toBe(true);
+    });
+
+    it("starts a fresh request when an abandoned fetch has not settled yet", async () => {
+        let finishAbandoned!: (payload: { data: ArrayBuffer }) => void;
+        const fetcher = vi.fn(() => {
+            if (fetcher.mock.calls.length === 1) {
+                return new Promise<{ data: ArrayBuffer }>((resolve) => {
+                    finishAbandoned = resolve;
+                });
+            }
+            return Promise.resolve({ data: bytes(2) });
+        });
+        const cache = createSharedTileCache(1024, fetcher);
+        const controller = new AbortController();
+        const first = cache.load("tile-a", controller.signal);
+        controller.abort("map moved");
+        await expect(first).rejects.toMatchObject({ name: "AbortError" });
+
+        const replacement = await cache.load("tile-a", new AbortController().signal);
+
+        expect(fetcher).toHaveBeenCalledTimes(2);
+        expect([...new Uint8Array(replacement.data)]).toEqual([2]);
+        finishAbandoned({ data: bytes(1) });
+        const cached = await cache.load("tile-a", new AbortController().signal);
+        expect([...new Uint8Array(cached.data)]).toEqual([2]);
+    });
+
+    it("reports network failures from every map and clears them on a fetched resource", async () => {
+        const fetcher = vi
+            .fn()
+            .mockRejectedValueOnce(new TypeError("failed to fetch"))
+            .mockResolvedValueOnce(new Response(bytes(3)));
+        vi.stubGlobal("fetch", fetcher);
+        const cache = createSharedTileCache(1024);
+        const tile = "https://tiles.openfreemap.org/planet/build/10/1/2.pbf";
+
+        await expect(cache.load(tile, new AbortController().signal)).rejects.toMatchObject({ status: 0 });
+        expect(isOffline()).toBe(true);
+        await cache.load(tile, new AbortController().signal);
+        expect(isOffline()).toBe(false);
+    });
+
+    it("does not treat a memory cache hit as network recovery", async () => {
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async () => new Response(bytes(3))),
+        );
+        const cache = createSharedTileCache(1024);
+        const tile = "https://tiles.openfreemap.org/planet/build/10/1/2.pbf";
+        await cache.load(tile, new AbortController().signal);
+        reportMapTileNetworkError();
+
+        await cache.load(tile, new AbortController().signal);
+
+        expect(isOffline()).toBe(true);
+    });
+
+    it("keeps connectivity online for missing tiles and cancelled requests", async () => {
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async () => new Response(null, { status: 404 })),
+        );
+        const cache = createSharedTileCache(1024);
+        const tile = "https://tiles.openfreemap.org/planet/build/10/1/2.pbf";
+        await expect(cache.load(tile, new AbortController().signal)).rejects.toMatchObject({ status: 404 });
+        const controller = new AbortController();
+        controller.abort();
+        await expect(cache.load(tile, controller.signal)).rejects.toMatchObject({ name: "AbortError" });
+
+        expect(isOffline()).toBe(false);
     });
 
     it("registers a protocol handler that unwraps the original tile URL", async () => {

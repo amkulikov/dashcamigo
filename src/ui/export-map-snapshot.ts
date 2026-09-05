@@ -33,11 +33,23 @@ import { createLogger } from "../log.js";
 import type { GpsRecord } from "../parsers/types.js";
 import type { MapStyleId } from "./theme.js";
 import { buildMercatorCumulativeDistances, buildSpeedGradient } from "./speed-gradient.js";
-import { addBuildings3dLayer, loadMaplibre, loadMapStyle, type MapLoadSource, removeBuildings3dLayer } from "./map.js";
+import {
+    addBuildings3dLayer,
+    EMPTY_MAP_STYLE,
+    loadMaplibre,
+    loadMapStyle,
+    type MapLoadSource,
+    removeBuildings3dLayer,
+} from "./map.js";
 import { applyStreetLabelDensity, scaleStyleTextSizes, type StreetLabelDensity } from "./map-label-scale.js";
 import { DEFAULT_MAP_MARKER_APPEARANCE, type MapMarkerAppearance, mapMarkerSizeScale } from "./map-marker-pref.js";
 import { drawMapMarker } from "./map-marker-renderer.js";
-import { getMapProvider, reportMapProviderTileError, subscribeMapProvider } from "./map-provider.js";
+import {
+    getMapProvider,
+    mapProviderErrorKey,
+    reportMapProviderTileError,
+    subscribeMapProvider,
+} from "./map-provider.js";
 import { transformMapTileRequest } from "./map-tile-cache.js";
 
 const log = createLogger("export-map-snapshot");
@@ -168,8 +180,8 @@ export interface ExportMapSnapshotter {
 
 /**
  * Builds a hidden maplibre instance, adds the trip track + car marker, returns
- * the snapshotter interface. The constructor awaits style load + the first
- * 'idle' so callers can immediately start prewarming without race conditions.
+ * the snapshotter interface. Initialization waits for style parsing so the
+ * local track never depends on remote tiles reaching idle.
  * `source` labels the caller in analytics (export modal preview vs the actual
  * transcode) so map_load_failed events can be sliced per surface. `theme`
  * selects the base-layer style (default "light"); the user picks it per export
@@ -217,7 +229,7 @@ export async function createExportMapSnapshotter(
             : undefined;
 
     // Preflight the WebGL context. Without it `new mlg.Map` below would never
-    // fire 'load' and the export/preview would stall until waitForLoad's
+    // parse its style and the export/preview would stall until waitForStyleLoad's
     // timeout. Callers guard the map-overlay option on !isMapAvailable(), but
     // fail fast here too so a stray call rejects cleanly and immediately.
     if (!probeWebGL()) throw new Error("webgl context unavailable for map snapshot");
@@ -243,11 +255,10 @@ export async function createExportMapSnapshotter(
     // both themes at startup, so either is usually a cache hit.
     let activeProvider = getMapProvider();
     const styleFromCache = await loadMapStyle(theme, false, source, activeProvider);
-    if (!styleFromCache) {
-        host.remove();
-        throw new Error("map style unavailable");
-    }
-    const style = applyStreetLabelDensity(scaleStyleTextSizes(styleFromCache, labelScalePct / 100), labelDensity);
+    const style = applyStreetLabelDensity(
+        scaleStyleTextSizes(styleFromCache ?? EMPTY_MAP_STYLE, labelScalePct / 100),
+        labelDensity,
+    );
 
     // Seed the camera from a finite ACTIVE record, not records[0]: a leading
     // inactive/lost-fix entry can carry NaN coords, and a NaN center throws in
@@ -310,13 +321,29 @@ export async function createExportMapSnapshotter(
     // warn, not error: failures here are dominated by tile/sprite fetches,
     // which are EXPECTED degradation (tile server down -> blank base layer,
     // the overlay still renders the track per the offline invariant).
+    const seenErrors = new Set<string>();
     map.on("error", (ev) => {
         const cause = (ev as { error?: unknown }).error;
         reportMapProviderTileError(cause);
+        const errorKey = mapProviderErrorKey(cause);
+        if (seenErrors.has(errorKey)) return;
+        seenErrors.add(errorKey);
         log.warn("maplibre error", cause instanceof Error ? cause : { message: String(cause) });
     });
 
-    await waitForLoad(map);
+    try {
+        await waitForStyleLoad(map);
+    } catch (err) {
+        try {
+            map.remove();
+        } catch (cleanupErr) {
+            log.warn("map cleanup failed", {
+                err: cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr),
+            });
+        }
+        host.remove();
+        throw err;
+    }
 
     addTrackLayer(map, records);
 
@@ -333,7 +360,7 @@ export async function createExportMapSnapshotter(
                     scaleStyleTextSizes(nextStyle, labelScalePct / 100),
                     labelDensity,
                 );
-                await setStyleAndWait(map, styled);
+                await waitForStyleLoad(map, styled);
                 if (!map.getSource(TRACK_SOURCE_ID)) addTrackLayer(map, records);
             })
             .catch((err: unknown) => {
@@ -352,6 +379,8 @@ export async function createExportMapSnapshotter(
     const composite = document.createElement("canvas");
     const cctx = composite.getContext("2d");
     if (!cctx) {
+        isDisposed = true;
+        unsubscribeProvider();
         try {
             map.remove();
         } catch {
@@ -560,8 +589,14 @@ export async function createExportMapSnapshotter(
     };
 }
 
-function setStyleAndWait(map: maplibregl.Map, style: maplibregl.StyleSpecification): Promise<void> {
+function waitForStyleLoad(map: maplibregl.Map, style?: maplibregl.StyleSpecification): Promise<void> {
     return new Promise<void>((resolve, reject) => {
+        // getStyle is available once JSON is parsed. loaded/isStyleLoaded wait
+        // for remote tiles too, which cannot gate a local export overlay.
+        if (!style && map.getStyle()) {
+            resolve();
+            return;
+        }
         const timeoutId = setTimeout(() => {
             map.off("style.load", onLoad);
             reject(new Error(`map style load timed out after ${MAP_LOAD_TIMEOUT_MS}ms`));
@@ -571,38 +606,20 @@ function setStyleAndWait(map: maplibregl.Map, style: maplibregl.StyleSpecificati
             resolve();
         };
         map.once("style.load", onLoad);
-        map.setStyle(style, { diff: false });
-    });
-}
-
-// Ceiling for the style "load" wait. The style.json fetch is same-origin and
-// small; tile fetches do NOT gate "load". Generous to absorb a busy main
-// thread during export setup.
-const MAP_LOAD_TIMEOUT_MS = 20_000;
-
-function waitForLoad(map: maplibregl.Map): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-        if (map.loaded()) {
-            resolve();
-            return;
+        if (style) {
+            try {
+                map.setStyle(style, { diff: false });
+            } catch (err) {
+                clearTimeout(timeoutId);
+                map.off("style.load", onLoad);
+                reject(err);
+            }
         }
-        // The wait must SETTLE even when "load" never comes (style application
-        // failure, GL context lost during init) - a load-only wait hangs
-        // createExportMapSnapshotter's awaiter forever, the exact "stuck at
-        // Preparing" outcome this module's header warns about. A timeout, not
-        // an "error" listener: MapLibre fires recoverable "error" events for
-        // every failed tile fetch, and the tile server being down must NOT
-        // fail the snapshotter (tiles do not gate "load"; the offline-map
-        // invariant keeps the track usable on a blank base layer).
-        const timer = setTimeout(() => {
-            reject(new Error(`map load timed out after ${MAP_LOAD_TIMEOUT_MS}ms`));
-        }, MAP_LOAD_TIMEOUT_MS);
-        map.once("load", () => {
-            clearTimeout(timer);
-            resolve();
-        });
     });
 }
+
+// JSON parsing must settle even if the WebGL context disappears during setup.
+const MAP_LOAD_TIMEOUT_MS = 20_000;
 
 /**
  * Centers + zooms the map, then waits for `idle` (all tiles loaded + no

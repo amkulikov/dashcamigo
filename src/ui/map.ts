@@ -47,14 +47,12 @@ import {
 
 const log = createLogger("map");
 
-// Dedup MapLibre errors by message - one unique text logged once per session,
-// repeats dropped. Without this, `Failed to fetch` on offline floods the ring
-// buffer (~500 entries): MapLibre emits error per tile miss. The Set stays
-// at 10-20 unique messages in real use.
+// One diagnostic per provider/failure keeps offline tile misses from flooding
+// the log or growing a set of every URL crossed by a long route.
 const seenMapErrors = new Set<string>();
 const seenMiniMapErrors = new Set<string>();
 
-import { reportMapTileNetworkError, reportMapTilesOk } from "./connectivity.js";
+import { isOffline, subscribeConnectivity } from "./connectivity.js";
 import { dom, onActivePlayerEvent } from "./dom.js";
 import { subscribeExportState } from "./export-state.js";
 import { formatTime } from "./format.js";
@@ -66,7 +64,13 @@ import type { MapStyleId, MapTheme } from "./theme.js";
 import { applyViewerLabelPrefs } from "./map-label-scale.js";
 import { getMapMarkerAppearance, MAP_MARKER_SIZE_PX, subscribeMapMarkerAppearance } from "./map-marker-pref.js";
 import { mapMarkerPitchScale, renderMapMarkerIntoCanvas } from "./map-marker-renderer.js";
-import { getMapProvider, reportMapProviderTileError, subscribeMapProvider, type MapProvider } from "./map-provider.js";
+import {
+    getMapProvider,
+    mapProviderErrorKey,
+    reportMapProviderTileError,
+    subscribeMapProvider,
+    type MapProvider,
+} from "./map-provider.js";
 import { registerSharedMapTileCache, transformMapTileRequest } from "./map-tile-cache.js";
 import {
     createFallbackMapStyle,
@@ -141,14 +145,14 @@ const MAP_STYLE_URLS: Record<MapStyleId, string> = {
 // 10 s timeout for style.json fetch. The file is same-origin (CF Pages) and
 // typically responds in <500 ms; the ceiling covers slow mobile (EDGE / poor
 // coverage) and rare CF PoP slowness. The map canvas appears immediately with
-// EMPTY_STYLE, so the user is not blocked - timeout only affects when the base
+// EMPTY_MAP_STYLE, so the user is not blocked - timeout only affects when the base
 // layer becomes visible.
 const MAP_STYLE_TIMEOUT_MS = 10000;
 
 // Minimal valid MapLibre style with no base layer. Used as the initial value so
 // the map canvas appears immediately while the real style loads (or as permanent
 // fallback if fetch fails).
-const EMPTY_STYLE: maplibregl.StyleSpecification = {
+export const EMPTY_MAP_STYLE: maplibregl.StyleSpecification = {
     version: 8,
     sources: {},
     layers: [],
@@ -161,7 +165,11 @@ const EMPTY_STYLE: maplibregl.StyleSpecification = {
 // hit the cache instead of triggering a fresh fetch with its own failure surface.
 type MapStyleCacheKey = `${MapProvider}:${MapStyleId}`;
 const cachedMapStyles = new Map<MapStyleCacheKey, maplibregl.StyleSpecification>();
-const mapStyleLoadPromises = new Map<MapStyleCacheKey, Promise<maplibregl.StyleSpecification | null>>();
+interface PendingMapStyle {
+    promise: Promise<maplibregl.StyleSpecification | null>;
+    source: MapLoadSource;
+}
+const mapStyleLoadPromises = new Map<MapStyleCacheKey, PendingMapStyle>();
 // AbortController for the in-flight fetch per theme. force=true aborts it via
 // signal.reason="superseded" so the .catch knows the failure was our own
 // teardown and stays silent (no analytics event, no banner). Without this the
@@ -223,14 +231,27 @@ export function loadMapStyle(
         mapStyleLoadControllers.delete(key);
     }
     const cached = cachedMapStyles.get(key);
-    if (cached) return Promise.resolve(cached);
+    if (cached) {
+        if (!isSilentMapLoadSource(source) && lastFailedTheme === theme) {
+            lastFailedTheme = null;
+            hideMapStyleError();
+        }
+        return Promise.resolve(cached);
+    }
     const inflight = mapStyleLoadPromises.get(key);
-    if (inflight) return inflight;
+    if (inflight) {
+        // A foreground caller joining a prefetch owns the failure UI too.
+        if (!isSilentMapLoadSource(source)) inflight.source = source;
+        return inflight.promise;
+    }
 
     if (provider !== "openfreemap") {
         const style = createFallbackMapStyle(provider, theme);
         cachedMapStyles.set(key, style);
-        if (!isSilentMapLoadSource(source)) hideMapStyleError();
+        if (!isSilentMapLoadSource(source)) {
+            if (lastFailedTheme === theme) lastFailedTheme = null;
+            hideMapStyleError();
+        }
         log.info("map style loaded", { theme, provider, durationMs: 0 });
         return Promise.resolve(style);
     }
@@ -248,6 +269,7 @@ export function loadMapStyle(
             return r.json() as Promise<maplibregl.StyleSpecification>;
         })
         .then((style) => {
+            if (ctrl.signal.aborted && ctrl.signal.reason === "superseded") return null;
             // MapLibre refuses relative sprite/glyphs URLs at runtime
             // ("Invalid sprite URL ..., must be absolute"). Our self-hosted
             // dark style ships sprite: "/styles/sprite/sprite" - resolve it
@@ -260,7 +282,7 @@ export function loadMapStyle(
                 style.glyphs = new URL(style.glyphs, location.origin).href;
             }
             cachedMapStyles.set(key, style);
-            if (!isSilentMapLoadSource(source)) {
+            if (!isSilentMapLoadSource(pending.source)) {
                 if (lastFailedTheme === theme) lastFailedTheme = null;
                 hideMapStyleError();
             }
@@ -284,14 +306,14 @@ export function loadMapStyle(
             const reasonForLog = isTimeout ? "timeout" : err;
             log.warn("map style fetch failed", {
                 theme,
-                source,
+                source: pending.source,
                 reason: reasonForLog instanceof Error ? reasonForLog.message : reasonForLog,
             });
             // Clear in-flight promise/ctrl so the next loadMapStyle starts a
             // real new fetch. Guard with identity check: between our request
             // start and our own .catch a force=true may have already replaced
             // both fields - we must not stomp the newer references.
-            if (mapStyleLoadPromises.get(key) === promise) {
+            if (mapStyleLoadPromises.get(key) === pending) {
                 mapStyleLoadPromises.delete(key);
             }
             if (mapStyleLoadControllers.get(key) === ctrl) {
@@ -303,16 +325,18 @@ export function loadMapStyle(
             // If the user later requests that theme and it fails again, the user-facing
             // failure will fire its own map_load_failed; counting the
             // prefetch attempt too would double-count one real network issue.
-            if (isSilentMapLoadSource(source)) return null;
+            if (isSilentMapLoadSource(pending.source)) return null;
             lastFailedTheme = theme;
             showMapStyleError();
+            scheduleMapRecovery();
             return null;
         })
         .finally(() => {
             window.clearTimeout(timeoutId);
         });
 
-    mapStyleLoadPromises.set(key, promise);
+    const pending: PendingMapStyle = { promise, source };
+    mapStyleLoadPromises.set(key, pending);
     return promise;
 }
 
@@ -324,7 +348,12 @@ export function loadMapStyle(
  * Theme is checked before applying: the user may have toggled prefers-color-scheme
  * while the style was loading, making this result stale.
  */
-function applyLoadedStyle(style: maplibregl.StyleSpecification, theme: MapStyleId, provider = getMapProvider()): void {
+function applyLoadedStyle(
+    style: maplibregl.StyleSpecification,
+    theme: MapStyleId,
+    provider = getMapProvider(),
+    shouldPreserveCamera = false,
+): void {
     // Only the live UI theme is ever applied to the on-screen maps. A retried
     // "neon" fetch (export-overlay failure) re-caches neon.json but never equals
     // currentMapTheme(), so it falls out here - the next export reads the cache.
@@ -338,7 +367,22 @@ function applyLoadedStyle(style: maplibregl.StyleSpecification, theme: MapStyleI
     // export snapshotter reads the same cache with its own independent
     // per-export factor.
     const styled = applyViewerLabelPrefs(style);
-    if (state.map) state.map.setStyle(styled, { diff: false });
+    if (state.map) {
+        const map = state.map;
+        if (shouldPreserveCamera) {
+            const camera = {
+                center: map.getCenter(),
+                zoom: map.getZoom(),
+                bearing: map.getBearing(),
+                pitch: map.getPitch(),
+                padding: map.getPadding(),
+            };
+            // refreshMap fits the track after a style swap. A background retry
+            // must preserve the view the user is inspecting.
+            map.once("style.load", () => map.jumpTo(camera));
+        }
+        map.setStyle(styled, { diff: false });
+    }
     if (state.miniMap) state.miniMap.setStyle(styled, { diff: false });
 }
 
@@ -364,6 +408,31 @@ function showMapStyleError(): void {
 function hideMapStyleError(): void {
     if (!dom.mapStyleError) return;
     dom.mapStyleError.hidden = true;
+}
+
+// A failed TileJSON or tile stays failed in MapLibre until its source reloads.
+// Browser online events cover airplane mode; retries cover a router whose WAN
+// returns without changing navigator.onLine.
+const MAP_RECOVERY_RETRY_MS = 15_000;
+let mapRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
+
+function retryMapResources(): void {
+    if ((!state.map && !state.miniMap) || navigator.onLine === false) return;
+    const theme = lastFailedTheme ?? currentMapTheme();
+    const provider = getMapProvider();
+    void loadMapStyle(theme, false, "main", provider).then((style) => {
+        if (style) applyLoadedStyle(style, theme, provider, true);
+    });
+}
+
+function scheduleMapRecovery(): void {
+    if (mapRecoveryTimer !== null || (!isOffline() && lastFailedTheme === null)) return;
+    mapRecoveryTimer = setTimeout(() => {
+        mapRecoveryTimer = null;
+        if (!isOffline() && lastFailedTheme === null) return;
+        retryMapResources();
+        scheduleMapRecovery();
+    }, MAP_RECOVERY_RETRY_MS);
 }
 
 // Active user gestures on the map (keys: "drag"/"rotate"/"pitch"). Non-empty
@@ -616,7 +685,7 @@ export function ensureMap(): maplibregl.Map | null {
             // degradation: if the tile server is unavailable the canvas stays blank
             // but track/markers/popups keep working (sources are added on top of any
             // style).
-            style: EMPTY_STYLE,
+            style: EMPTY_MAP_STYLE,
             center: [0, 0],
             zoom: 1,
             // Default AttributionControl can't be reliably forced into "collapsed
@@ -680,8 +749,8 @@ export function ensureMap(): maplibregl.Map | null {
     // milder manual foreshortening than MapLibre's full map-plane projection.
     map.on("pitch", () => setMarkerPitch(state.marker, map.getPitch()));
 
-    map.on("load", () => {
-        state.mapReady = true;
+    map.on("styledataloading", () => {
+        state.mapReady = false;
     });
 
     // Dedup per message: MapLibre fires error per failed tile fetch, so one
@@ -691,21 +760,9 @@ export function ensureMap(): maplibregl.Map | null {
         const e = ev?.error || ev;
         const message = e?.message ?? String(e);
         reportMapProviderTileError(e);
-        // A tile fetch that failed with a NETWORK error (server unreachable)
-        // means we are offline - including "connected but no internet" limbo,
-        // where navigator.onLine stays true. status===0 / "failed to fetch" are
-        // the network-failure signatures; an HTTP 404 (a genuinely missing tile)
-        // is NOT offline and must not trip the banner. Fires before the dedup so
-        // it is not swallowed for repeated identical messages (it is idempotent).
-        const status = (e as { status?: number } | undefined)?.status;
-        if (
-            status === 0 ||
-            (status === undefined && /failed to fetch|networkerror|load failed|network request failed/i.test(message))
-        ) {
-            reportMapTileNetworkError();
-        }
-        if (seenMapErrors.has(message)) return;
-        seenMapErrors.add(message);
+        const errorKey = mapProviderErrorKey(e);
+        if (seenMapErrors.has(errorKey)) return;
+        seenMapErrors.add(errorKey);
         log.error("maplibre error", e instanceof Error ? e : { message });
     });
 
@@ -730,14 +787,6 @@ export function ensureMap(): maplibregl.Map | null {
             fingerprint: ["map_webgl_context_restored"],
             tags: { map: "main" },
         });
-    });
-
-    // Recovery signal for the offline banner: a tile that actually loaded means
-    // the tile server is reachable again. Gated inside reportMapTilesOk (no-op
-    // unless currently flagged offline), so this hot per-tile event costs one
-    // boolean check in the normal case - no logging on the hot path.
-    map.on("data", (e) => {
-        if (e.dataType === "source" && e.tile) reportMapTilesOk();
     });
 
     stubMissingStyleImages(map);
@@ -835,9 +884,10 @@ export function ensureMap(): maplibregl.Map | null {
     });
 
     // Redraw the track after every style change (setStyle clears all sources/layers
-    // including our trip-line). The first style.load fires for EMPTY_STYLE with
+    // including our trip-line). The first style.load fires for EMPTY_MAP_STYLE with
     // state.active === null - that's a no-op.
     map.on("style.load", () => {
+        state.mapReady = true;
         // A setStyle (theme swap) interrupts any in-flight gesture without
         // guaranteeing its '*end'; drop the stale gesture flags so follow-ease
         // is not suspended forever.
@@ -848,8 +898,7 @@ export function ensureMap(): maplibregl.Map | null {
         // reaches - and lowering maxZoomLevelsOnScreen below the 9.314 default
         // makes far tiles KEEP more zoom (more tiles, not fewer); the built-in
         // default is already the sane LOD for our pitch range.
-        const trip = activeTrip();
-        if (trip) refreshMap(trip);
+        refreshMap(activeTrip());
         // setStyle (theme swap) wipes every non-style layer, including our 3D
         // building extrusion. Re-add it - with the new theme's wall color - when
         // chase is the active mode.
@@ -923,7 +972,7 @@ export function ensureMiniMap(): maplibregl.Map | null {
             container: "mini-map",
             // Start with empty style; real style is applied via applyLoadedStyle
             // after the shared fetch in ensureMap.
-            style: EMPTY_STYLE,
+            style: EMPTY_MAP_STYLE,
             center: [0, 0],
             // Initial zoom at lat 0; recalculated on every rAF tick via jumpTo.
             zoom: miniMapZoomForLat(0),
@@ -964,16 +1013,17 @@ export function ensureMiniMap(): maplibregl.Map | null {
     }
     state.miniMap = mini;
 
-    mini.on("load", () => {
-        state.miniMapReady = true;
+    mini.on("styledataloading", () => {
+        state.miniMapReady = false;
     });
 
     mini.on("error", (ev) => {
         const e = ev?.error || ev;
         const message = e?.message ?? String(e);
         reportMapProviderTileError(e);
-        if (seenMiniMapErrors.has(message)) return;
-        seenMiniMapErrors.add(message);
+        const errorKey = mapProviderErrorKey(e);
+        if (seenMiniMapErrors.has(errorKey)) return;
+        seenMiniMapErrors.add(errorKey);
         log.error("maplibre mini error", e instanceof Error ? e : { message });
     });
 
@@ -1003,6 +1053,7 @@ export function ensureMiniMap(): maplibregl.Map | null {
     // ensureMiniMap is called AFTER ensureMap and the style fetch has already
     // completed (applyLoadedStyle was never called for this mini-map instance).
     mini.on("style.load", () => {
+        state.miniMapReady = true;
         if (state.miniMapData) refreshMiniMap(state.miniMapData);
     });
 
@@ -1120,13 +1171,6 @@ function refreshMapless(trip: Trip | null): void {
     emitLifecycle("map-tracks-rendered", { recordCount: hasUsableGps ? (trip?.records.length ?? 0) : 0 });
 }
 
-// Single pending-deferral guard: refreshMap can be called repeatedly (trip
-// switches) while the initial style load or a theme/style swap is in flight.
-// Each call would otherwise stack another one-shot listener, and they all redraw
-// the same current trip (refreshCurrent re-resolves state.active). Collapse to
-// one pending deferral.
-let mapRefreshDeferred = false;
-
 export function refreshMap(trip: Trip | null): void {
     const map = ensureMap();
     if (!map) {
@@ -1136,37 +1180,10 @@ export function refreshMap(trip: Trip | null): void {
         refreshMapless(trip);
         return;
     }
-    // Both deferrals below re-resolve the CURRENT active trip when they fire
-    // instead of capturing `trip`: the user can switch trips while the style
-    // loads, and the stale closure would then redraw the old trip's track
-    // over the new one (the rAF marker and the rendered track disagreeing).
-    const refreshCurrent = (): void => refreshMap(activeTrip());
-    if (!state.mapReady) {
-        // Initial style not yet loaded; defer until 'load' fires.
-        if (!mapRefreshDeferred) {
-            mapRefreshDeferred = true;
-            map.once("load", () => {
-                mapRefreshDeferred = false;
-                refreshCurrent();
-            });
-        }
-        return;
-    }
-    if (!map.isStyleLoaded()) {
-        // setStyle (theme switch / retry) is in flight. state.mapReady stays
-        // true from the initial load, but isStyleLoaded() flips false until
-        // the new style finishes parsing - addSource/addLayer would throw
-        // "Style is not done loading". Wait for 'idle', which fires once
-        // the new style is fully loaded and a render frame has completed.
-        if (!mapRefreshDeferred) {
-            mapRefreshDeferred = true;
-            map.once("idle", () => {
-                mapRefreshDeferred = false;
-                refreshCurrent();
-            });
-        }
-        return;
-    }
+    // style.load permits local source/layer writes. isStyleLoaded(), load and
+    // idle also wait for remote resources and must never gate the local track.
+    // The style.load handler redraws the current active trip after a swap.
+    if (!state.mapReady) return;
 
     // Remove old delegated listeners BEFORE removing the layer. MapLibre does
     // NOT auto-remove listeners registered via map.on(type, layerId, handler)
@@ -1561,9 +1578,6 @@ function refreshEventsLayer(map: maplibregl.Map, trip: Trip | null): void {
  * refreshMap on trip change. Accepts already-prepared coords + gradient to
  * avoid re-deduplicating GPS records and diverging from the large map.
  */
-// Mirror of mapRefreshDeferred for the mini-map - same stacking guard.
-let miniMapRefreshDeferred = false;
-
 function refreshMiniMap(data: MiniMapData | null): void {
     // Store in state so the style.load handler in ensureMiniMap can redraw
     // with the same coords/gradient without touching state.active.
@@ -1573,30 +1587,7 @@ function refreshMiniMap(data: MiniMapData | null): void {
     // No WebGL: no mini-map instance. Nothing to draw - the big-map slot already
     // shows the "map unavailable" notice (see applyMapLayout).
     if (!mini) return;
-    // Re-resolve state.miniMapData when the deferral fires (not the captured
-    // `data`): a trip switch mid-style-load would otherwise redraw the stale
-    // trip's track. Same rationale as the deferrals in refreshMap.
-    if (!state.miniMapReady) {
-        if (!miniMapRefreshDeferred) {
-            miniMapRefreshDeferred = true;
-            mini.once("load", () => {
-                miniMapRefreshDeferred = false;
-                refreshMiniMap(state.miniMapData);
-            });
-        }
-        return;
-    }
-    if (!mini.isStyleLoaded()) {
-        // Mini-map style swap in flight - see the matching guard in refreshMap.
-        if (!miniMapRefreshDeferred) {
-            miniMapRefreshDeferred = true;
-            mini.once("idle", () => {
-                miniMapRefreshDeferred = false;
-                refreshMiniMap(state.miniMapData);
-            });
-        }
-        return;
-    }
+    if (!state.miniMapReady) return;
 
     // Clear previous track.
     if (mini.getLayer(TRIP_SOURCE_ID)) mini.removeLayer(TRIP_SOURCE_ID);
@@ -3109,7 +3100,7 @@ function firstSymbolLayerId(map: maplibregl.Map): string | undefined {
  */
 export function addBuildings3dLayer(map: maplibregl.Map, theme: MapStyleId): void {
     if (map.getLayer(BUILDINGS_3D_LAYER_ID)) return;
-    // Style may still be EMPTY_STYLE (tiles unavailable) or mid-swap - bail
+    // Style may still be EMPTY_MAP_STYLE (tiles unavailable) or mid-swap - bail
     // silently; the live style.load handler re-adds it once chase is active.
     const hasOpenMapTiles = Boolean(map.getSource(VECTOR_SOURCE_ID));
     const hasShortbread = Boolean(map.getSource(OSM_SHORTBREAD_SOURCE_ID));
@@ -3268,6 +3259,29 @@ export function initMap(cb: MapCallbacks): void {
     onActivePlayerEvent("seeked", ensureMarkerLoop);
     state.mapExpanded = getPreferredMapMode() === "large";
     subscribeMapMarkerAppearance(refreshLiveMapMarkerAppearance);
+    let wasOffline = isOffline();
+    subscribeConnectivity((offline) => {
+        if (offline) scheduleMapRecovery();
+        else {
+            if (mapRecoveryTimer !== null) clearTimeout(mapRecoveryTimer);
+            mapRecoveryTimer = null;
+            if (wasOffline) {
+                // Let the successful shared fetch enter its cache before a
+                // style swap aborts the old map's remaining tile consumers.
+                mapRecoveryTimer = setTimeout(() => {
+                    mapRecoveryTimer = null;
+                    if (isOffline()) scheduleMapRecovery();
+                    else retryMapResources();
+                }, 0);
+            }
+        }
+        wasOffline = offline;
+    });
+    window.addEventListener("online", () => {
+        // The navigator flag may clear while a tile failure still holds the
+        // combined offline state, so this cannot rely on a state transition.
+        if (isOffline() || lastFailedTheme !== null) retryMapResources();
+    });
 
     subscribeMapProvider((provider, previous) => {
         mapAttributionControl.setProvider(provider);
@@ -3505,19 +3519,6 @@ export function reloadMapStyleForCurrentTheme(): void {
     const theme = currentMapTheme();
     const provider = getMapProvider();
     loadMapStyle(theme, false, "main", provider).then((style) => {
-        if (style) {
-            applyLoadedStyle(style, theme, provider);
-            return;
-        }
-        // null = either an in-flight prefetch (or a previous call) failed
-        // and resolved this awaited promise, OR a fresh fetch we just
-        // initiated failed (cache null + promise null = real new request).
-        // In the prefetch-inflight case the catch was silent because source
-        // was "prefetch"; in the fresh-fetch case the source was "main" and
-        // the catch already surfaced the banner. The defensive set+show
-        // below covers the prefetch-inflight branch without re-firing
-        // analytics (prefetch failures don't fire it at all - see catch).
-        lastFailedTheme = theme;
-        showMapStyleError();
+        if (style) applyLoadedStyle(style, theme, provider);
     });
 }

@@ -5,6 +5,7 @@ import {
     forceMapProvider,
     getMapProvider,
     mapProviderForTileUrl,
+    mapProviderErrorKey,
     reportMapProviderTileError,
     subscribeMapProvider,
     type MapProvider,
@@ -63,6 +64,16 @@ describe("map provider fallback", () => {
             "openfreemap",
         );
         expect(mapProviderForTileUrl("https://tiles.openfreemap.org/fonts/Inter/0-255.pbf")).toBe("openfreemap");
+    });
+
+    it("groups repeated outages by provider without hiding different failures", () => {
+        const first = new Error(`failed to fetch map resource: ${OFM_TILE_A.url}`);
+        const second = new Error(`failed to fetch map resource: ${OFM_TILE_B.url}`);
+        const missing = new Error(`map request failed (404): ${OFM_TILE_B.url}`);
+
+        expect(mapProviderErrorKey(first)).toBe(mapProviderErrorKey(second));
+        expect(mapProviderErrorKey(first)).not.toBe(mapProviderErrorKey(missing));
+        expect(mapProviderErrorKey(new Error("style is not loaded"))).toBe("style is not loaded");
     });
 
     it("downgrades an active vector provider to raster", async () => {

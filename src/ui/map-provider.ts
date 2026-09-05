@@ -74,6 +74,14 @@ function errorUrl(error: unknown): string | null {
     return match?.[0] ?? null;
 }
 
+/** Keep one diagnostic per provider/failure, rather than one per missing tile. */
+export function mapProviderErrorKey(error: unknown): string {
+    const message = error instanceof Error ? error.message : String(error);
+    const url = errorUrl(error);
+    const provider = url ? mapProviderForTileUrl(url) : null;
+    return provider && url ? message.replace(url, provider) : message;
+}
+
 export function mapProviderForTileUrl(rawUrl: string): MapProvider | null {
     let url: URL;
     try {

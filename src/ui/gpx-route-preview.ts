@@ -9,7 +9,7 @@ import { createLogger } from "../log.js";
 import type { GpsRecord } from "../parsers/types.js";
 import { loadMaplibre, loadMapStyle } from "./map.js";
 import { applyViewerLabelPrefs } from "./map-label-scale.js";
-import { getMapProvider } from "./map-provider.js";
+import { getMapProvider, mapProviderErrorKey } from "./map-provider.js";
 import { transformMapTileRequest } from "./map-tile-cache.js";
 import { currentMapTheme, getCssVar } from "./theme.js";
 
@@ -204,11 +204,12 @@ export class GpxRoutePreview {
             map.on("error", (event) => {
                 const cause = (event as { error?: unknown }).error;
                 const message = cause instanceof Error ? cause.message : String(cause);
-                if (this.seenErrors.has(message)) return;
-                this.seenErrors.add(message);
+                const errorKey = mapProviderErrorKey(cause);
+                if (this.seenErrors.has(errorKey)) return;
+                this.seenErrors.add(errorKey);
                 log.warn("maplibre error", { message });
             });
-            map.once("load", () => {
+            map.once("style.load", () => {
                 if (this.isDisposed || this.map !== map) return;
                 this.isReady = true;
                 this.addMapLayers();
