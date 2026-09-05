@@ -55,7 +55,7 @@
 // no-console rule is a src/ rule; sibling scripts print the same way).
 
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -429,10 +429,20 @@ function buildFixture(root, baseDay) {
     mkdirSync(backDir, { recursive: true });
 
     const clips = planClips(baseDay);
+    const encodedFrames = new Map();
+    const materializeClip = (frame, out) => {
+        const encoded = encodedFrames.get(frame);
+        if (encoded) {
+            copyFileSync(encoded, out);
+        } else {
+            encodeClip(frame, out);
+            encodedFrames.set(frame, out);
+        }
+    };
     console.log(`encoding ${clips.length * 2} clips (front + back)...`);
     for (const clip of clips) {
-        encodeClip(join(FRAMES_DIR, clip.frontFrame), join(frontDir, clip.frontName));
-        encodeClip(REAR_FRAME, join(backDir, clip.backName));
+        materializeClip(join(FRAMES_DIR, clip.frontFrame), join(frontDir, clip.frontName));
+        materializeClip(REAR_FRAME, join(backDir, clip.backName));
     }
     writeFileSync(join(root, "GPSData000001.txt"), buildGpsLog(clips));
     console.log(`fixture ready at ${root} (track length ${TRACK_LENGTH_M.toFixed(0)} m)`);
