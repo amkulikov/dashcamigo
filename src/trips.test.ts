@@ -1125,6 +1125,24 @@ describe("deriveStartUtc: mvhd start vs finalize semantics", () => {
         expect(result.source).toBe("name");
         expect(result.startUtc).toBe(1_781_633_039); // 18:03:59 UTC = 23:03:59 +05
     });
+
+    it("keeps a zero run offset ahead of the camera zone for a GPS-less channel", () => {
+        const startUtc = Date.UTC(2026, 5, 16, 23, 3, 59) / 1000;
+        const result = deriveStartUtc({
+            file: makeVendorFile("NO20260616-230359-004041B.mp4"),
+            fingerprint: "fp:70mai",
+            createdUtc: null,
+            durationSec: 60,
+            records: [],
+            fingerprintTz: { filenameTzSec: 18000, mvhdTzSec: null },
+            parseFilenameLocalTime: () => new Date(startUtc * 1000),
+            preciseFilenameOffsetSec: 0,
+            embeddedStartUtcHint: null,
+            isTimelapse: false,
+            wallDurationSec: null,
+        });
+        expect(result).toEqual({ startUtc, source: "name" });
+    });
 });
 
 describe("deriveStartUtc: mvhd-vs-GPS tripwire", () => {

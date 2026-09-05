@@ -2111,28 +2111,20 @@ export function deriveStartUtc({
     // WITHOUT GPS: no calibrator, fall back to per-fingerprint TZ estimates
     // (median over sibling files that had GPS), most-trusted first.
     const filenameLocalDate = parseFilenameLocalTime(file);
-    // a) mvhd + per-vendor TZ (mvhd-source estimate - the filename-source one may
-    //    carry a different offset on UTC-mvhd firmware, see FingerprintTzEstimate).
-    if (createdUtc !== null && fingerprintTz?.mvhdTzSec != null) {
-        return { startUtc: createdUtc.getTime() / 1000 - fingerprintTz.mvhdTzSec, source: "mp4" };
-    }
-    // a2) mvhd finalize semantics, corroborated by the filename clock. Some
-    //    cameras stamp creation_time at file CLOSE (70mai A510), so (b) "mvhd
-    //    as start" would shift every clip forward by its own length - and glue
-    //    each clip's map/chart to the wrong minute. Both stamps are the same
-    //    naive camera clock, so their difference is TZ-free evidence:
-    //    delta == durationSec (within close-latency rounding) proves finalize
-    //    semantics -> start = mvhd - duration (== the filename time, but the
-    //    container stamp carries the sub-second precision). The delta >= dur/2
-    //    guard keeps start-semantics cameras (delta ~ 0) out for clips shorter
-    //    than the tolerance. For a time-lapse clip the same delta is the
-    //    recording's real WALL span (>> video duration), which equally proves
-    //    the filename is the start.
     if (createdUtc !== null) {
+        const createdNaiveSec = createdUtc.getTime() / 1000;
+        // The container and filename clocks may use different zones on
+        // honest-UTC-mvhd firmware, so only the mvhd estimate applies here.
+        if (fingerprintTz?.mvhdTzSec != null) {
+            return { startUtc: createdNaiveSec - fingerprintTz.mvhdTzSec, source: "mp4" };
+        }
         if (filenameLocalDate !== null) {
-            const createdNaiveSec = createdUtc.getTime() / 1000;
             const filenameNaiveSec = filenameLocalDate.getTime() / 1000;
             const delta = createdNaiveSec - filenameNaiveSec;
+            // A same-clock difference of one clip length proves finalize
+            // semantics. Keep the container's sub-second precision. The dur/2
+            // floor excludes start-semantics cameras on clips shorter than the
+            // close-latency tolerance.
             if (delta >= durationSec / 2 && Math.abs(delta - durationSec) <= MVHD_FINALIZE_TOLERANCE_SEC) {
                 return { startUtc: localUnixFromNaiveClock(createdNaiveSec - durationSec), source: "mp4" };
             }
@@ -2154,48 +2146,21 @@ export function deriveStartUtc({
                 return { startUtc: localUnixFromNaiveClock(createdNaiveSec), source: "mp4" };
             }
         }
+        // Without corroboration, the container stamp still outranks filename
+        // guesses, even though local-as-UTC firmware may be off by hours.
+        return { startUtc: createdNaiveSec, source: "mp4" };
     }
-    // b) Uncorroborated mvhd as-is (no correction). Risky - it may be off by
-    //    hours with local-as-UTC firmware semantics, but the container stamp
-    //    still beats the filename guesses below when no TZ estimate exists.
-    if (createdUtc !== null) {
-        return { startUtc: createdUtc.getTime() / 1000, source: "mp4" };
-    }
-    // b.5) Filename + the run-measured PRECISE offset (full precision, NOT the
-    //    15-min-snapped filenameTzSec in (c)). A no-GPS sibling channel must land
-    //    on the SAME t=0 as its GPS-bearing sibling: on 70mai-mc GPS lives only on
-    //    the front, which anchors on filenameNaive - preciseFilenameOffsetSec, so
-    //    rear/interior MUST subtract the identical offset or they diverge by the
-    //    camera's sub-15-min RTC drift and tear out of the front's frame past the
-    //    30s frame snap. Siblings share name times, so
-    //    resolvePreciseClockOffsetForFile hands both the same run's offset.
-    if (preciseFilenameOffsetSec !== null) {
-        if (filenameLocalDate !== null) {
-            return { startUtc: filenameLocalDate.getTime() / 1000 - preciseFilenameOffsetSec, source: "name" };
-        }
-    }
-    // c) Filename + per-vendor TZ (filename-source estimate). Vendor TZ was
-    //    estimated from other files in the ingest that DO have GPS.
-    if (fingerprintTz?.filenameTzSec != null) {
-        if (filenameLocalDate !== null) {
-            const pseudo = filenameLocalDate.getTime() / 1000;
-            return { startUtc: pseudo - fingerprintTz.filenameTzSec, source: "name" };
-        }
-    }
-    // d) Filename without any TZ info - interpret as the user's local clock.
-    //    Hits when the whole ingest has neither mvhd nor GPS (e.g. MPEG-TS
-    //    sticks without telemetry), so vendor TZ cannot be inferred at all.
-    //    Reasonable assumption: the user is viewing footage recorded in their
-    //    own time zone. If not, the timestamp will be off, but it is still
-    //    vastly more useful than mtime (which carries the file copy date,
-    //    not the recording date).
-    //
-    //    parseFilenameLocalTime returns a Date constructed via Date.UTC(...),
-    //    so reinterpret its UTC fields as a local wall clock.
     if (filenameLocalDate !== null) {
-        return { startUtc: localUnixFromNaiveClock(filenameLocalDate.getTime() / 1000), source: "name" };
+        const filenameNaiveSec = filenameLocalDate.getTime() / 1000;
+        // A GPS-less channel must use its GPS sibling's precise run offset;
+        // rounding it to the camera zone would separate synchronized frames.
+        const offsetSec = preciseFilenameOffsetSec ?? fingerprintTz?.filenameTzSec;
+        return {
+            startUtc: offsetSec != null ? filenameNaiveSec - offsetSec : localUnixFromNaiveClock(filenameNaiveSec),
+            source: "name",
+        };
     }
-    // e) Last resort - mtime minus duration. On 70mai x800 mtime can be off by hours;
+    // Last resort - mtime minus duration. On 70mai x800 mtime can be off by hours;
     //    the UI marks this source as unreliable.
     const mtimeUtc = file.file.lastModified / 1000;
     return { startUtc: mtimeUtc - durationSec, source: "mtime" };
