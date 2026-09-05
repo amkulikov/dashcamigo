@@ -159,19 +159,12 @@ export function initExportPanel(opts: { onCompositionApply: () => void }): void 
     });
     // Model asset download state drives the consent / progress / offline strips
     // (Follow's and the detect checkboxes' - separate rows, same machinery).
-    subscribeBlurAssets(() => {
-        syncTrackerStrip();
-        syncDetectStrip();
-    });
+    subscribeBlurAssets(syncBlurDownloadStrips);
     // Detect pass lifecycle (progress %, fresh counts) re-renders its status row.
     subscribeBlurDetect(syncDetectGroup);
     // Model files are same-origin; a tile provider outage does not block them.
-    const syncAssetConnectivity = (): void => {
-        syncTrackerStrip();
-        syncDetectStrip();
-    };
-    window.addEventListener("online", syncAssetConnectivity);
-    window.addEventListener("offline", syncAssetConnectivity);
+    window.addEventListener("online", syncBlurDownloadStrips);
+    window.addEventListener("offline", syncBlurDownloadStrips);
     // The device encode ceiling resolves asynchronously (a WebCodecs probe). When
     // it lands, re-run the estimate so the size / device-cap note / Save state
     // reflect what this device can actually encode - without a full panel notify
@@ -1446,8 +1439,62 @@ async function startTrackerDownload(): Promise<void> {
     syncTrackerStrip();
 }
 
-// Progress updates preserve the Cancel button; only phase changes rebuild the strip.
-let trackerStripSig: string | null = null;
+type BlurDownloadStripPhase = "hidden" | "downloading" | "offline" | "error" | "consent";
+
+interface BlurDownloadStripOptions {
+    phase: BlurDownloadStripPhase;
+    progress: number;
+    consentMessage: () => string;
+    downloadLabel: I18nKey;
+    onDownload: () => Promise<void>;
+    onCancel: () => void;
+    onDismiss: () => void;
+}
+
+function syncBlurDownloadStrips(): void {
+    syncTrackerStrip();
+    syncDetectStrip();
+}
+
+/** Progress updates preserve the focused Cancel button; only phase changes
+ * rebuild the strip. Each feature owns its consent and download lifecycle. */
+function syncBlurDownloadStrip(
+    strip: HTMLElement,
+    previousPhase: BlurDownloadStripPhase | null,
+    options: BlurDownloadStripOptions,
+): BlurDownloadStripPhase {
+    const { phase, progress } = options;
+    if (phase === previousPhase) {
+        if (phase === "downloading") syncTrackerProgress(strip, progress);
+        return phase;
+    }
+    strip.innerHTML = "";
+    strip.classList.toggle("is-error", phase === "error");
+    strip.hidden = phase === "hidden";
+    if (phase === "hidden") return phase;
+    if (phase === "downloading") {
+        strip.append(
+            trackerProgressNode(progress),
+            trackerActionsNode([
+                { label: t("export.blur.tracker.cancel"), onClick: options.onCancel, secondary: true },
+            ]),
+        );
+        return phase;
+    }
+    strip.append(
+        trackerMessageNode(phase === "consent" ? options.consentMessage() : t(`export.blur.tracker.${phase}`)),
+        trackerActionsNode([
+            {
+                label: t(phase === "consent" ? options.downloadLabel : "export.blur.tracker.retry"),
+                onClick: () => void options.onDownload(),
+            },
+            { label: t("export.blur.tracker.notNow"), onClick: options.onDismiss, secondary: true },
+        ]),
+    );
+    return phase;
+}
+
+let trackerStripPhase: BlurDownloadStripPhase | null = null;
 
 /** Renders the consent / progress / offline / error strip from tracker state +
  *  the pending-follow intent. Hidden when nothing is downloading and no Follow
@@ -1464,11 +1511,9 @@ function syncTrackerStrip(): void {
     // Offline-ness is derived LIVE (no sticky phase), so a reconnect flips the
     // strip from "reconnect once" straight to consent on the next render.
     const offlineNow = blurAssetsBlockedOffline(FOLLOW_GROUPS);
-    // Signature mirrors the render branches below; identical sig -> identical DOM.
-    // "ready" is hidden: the assets landed and startTrackerDownload follows the
-    // pending zones synchronously right after, so showing consent for the one
-    // microtask the set is still non-empty would only flash.
-    const sig =
+    // Ready hides immediately, before the waiting zones are drained in the next
+    // microtask. In-flight warms always show Cancel, even when already consented.
+    const stripPhase =
         phase === "downloading" && followDownload
             ? "downloading"
             : blurAssetsReady(FOLLOW_GROUPS) || !pending
@@ -1478,65 +1523,15 @@ function syncTrackerStrip(): void {
                 : phase === "error" && followDownload
                   ? "error"
                   : "consent";
-    if (sig === trackerStripSig) {
-        if (sig === "downloading") syncTrackerProgress(strip, progress);
-        return;
-    }
-    trackerStripSig = sig;
-    strip.innerHTML = "";
-    strip.classList.remove("is-error");
-
-    // A download in flight always shows progress + a Cancel (a stalled limbo warm
-    // must be escapable), even the silent cached warm.
-    if (phase === "downloading" && followDownload) {
-        strip.append(
-            trackerProgressNode(progress),
-            trackerActionsNode([
-                { label: t("export.blur.tracker.cancel"), onClick: cancelTrackerDownload, secondary: true },
-            ]),
-        );
-        strip.hidden = false;
-        return;
-    }
-    // Ready, or nothing waiting -> nothing to say.
-    if (blurAssetsReady(FOLLOW_GROUPS) || !pending) {
-        strip.hidden = true;
-        return;
-    }
-    if (offlineNow) {
-        // Retry is honored the moment the connection is back (it re-checks live);
-        // The online listener also re-renders this strip on reconnect.
-        strip.append(
-            trackerMessageNode(t("export.blur.tracker.offline")),
-            trackerActionsNode([
-                { label: t("export.blur.tracker.retry"), onClick: () => void startTrackerDownload() },
-                { label: t("export.blur.tracker.notNow"), onClick: dismissTrackerStrip, secondary: true },
-            ]),
-        );
-        strip.hidden = false;
-        return;
-    }
-    if (phase === "error" && followDownload) {
-        strip.classList.add("is-error");
-        strip.append(
-            trackerMessageNode(t("export.blur.tracker.error")),
-            trackerActionsNode([
-                { label: t("export.blur.tracker.retry"), onClick: () => void startTrackerDownload() },
-                { label: t("export.blur.tracker.notNow"), onClick: dismissTrackerStrip, secondary: true },
-            ]),
-        );
-        strip.hidden = false;
-        return;
-    }
-    // idle + pending -> consent.
-    strip.append(
-        trackerMessageNode(t("export.blur.tracker.consent", { mb: blurAssetsDownloadMb(FOLLOW_GROUPS) })),
-        trackerActionsNode([
-            { label: t("export.blur.tracker.download"), onClick: () => void startTrackerDownload() },
-            { label: t("export.blur.tracker.notNow"), onClick: dismissTrackerStrip, secondary: true },
-        ]),
-    );
-    strip.hidden = false;
+    trackerStripPhase = syncBlurDownloadStrip(strip, trackerStripPhase, {
+        phase: stripPhase,
+        progress,
+        consentMessage: () => t("export.blur.tracker.consent", { mb: blurAssetsDownloadMb(FOLLOW_GROUPS) }),
+        downloadLabel: "export.blur.tracker.download",
+        onDownload: startTrackerDownload,
+        onCancel: cancelTrackerDownload,
+        onDismiss: dismissTrackerStrip,
+    });
 }
 
 function dismissTrackerStrip(): void {
@@ -1579,7 +1574,6 @@ async function startDetectDownload(options?: BlurAssetDownloadOptions): Promise<
         detectDownloadControllers.delete(ctrl);
     }
     if (ok && !ctrl.signal.aborted && blurAssetsReady(detectAssetGroups(enabledDetectKinds()))) ensureDetectPass();
-    syncDetectStrip();
     syncDetectGroup();
 }
 
@@ -1592,7 +1586,6 @@ function dismissDetectStrip(): void {
     }
     if (enabledDetectKinds().length > 0) void startDetectDownload({ canDownloadNew: false });
     syncDetectGroup();
-    syncDetectStrip();
     notifyExportStateChanged();
 }
 
@@ -1601,11 +1594,10 @@ function cancelDetectDownload(): void {
     syncDetectStrip();
 }
 
-let detectStripSig: string | null = null;
+let detectStripPhase: BlurDownloadStripPhase | null = null;
 
-/** Consent / progress / offline / error strip for the detect models. Same
- *  branches as the Follow strip; visibility derives from the enabled kinds'
- *  asset state instead of a pending-intent set. */
+/** Detection consent follows the enabled kinds' asset state, independent of
+ *  pending Follow requests. */
 function syncDetectStrip(): void {
     const strip = blurDetectStripEl;
     if (!strip) return;
@@ -1615,7 +1607,7 @@ function syncDetectStrip(): void {
     const detectDownload = activeGroups?.some((g) => g !== "track") ?? false;
     const need = kinds.length > 0 && blurAssetsNeedDownload(groups);
     const offlineNow = kinds.length > 0 && blurAssetsBlockedOffline(groups);
-    const sig =
+    const stripPhase =
         phase === "downloading" && detectDownload
             ? "downloading"
             : !need
@@ -1625,59 +1617,15 @@ function syncDetectStrip(): void {
                 : phase === "error" && detectDownload
                   ? "error"
                   : "consent";
-    if (sig === detectStripSig) {
-        if (sig === "downloading") syncTrackerProgress(strip, progress);
-        return;
-    }
-    detectStripSig = sig;
-    strip.innerHTML = "";
-    strip.classList.remove("is-error");
-
-    if (phase === "downloading" && detectDownload) {
-        strip.append(
-            trackerProgressNode(progress),
-            trackerActionsNode([
-                { label: t("export.blur.tracker.cancel"), onClick: cancelDetectDownload, secondary: true },
-            ]),
-        );
-        strip.hidden = false;
-        return;
-    }
-    if (!need) {
-        strip.hidden = true;
-        return;
-    }
-    if (offlineNow) {
-        strip.append(
-            trackerMessageNode(t("export.blur.tracker.offline")),
-            trackerActionsNode([
-                { label: t("export.blur.tracker.retry"), onClick: () => void startDetectDownload() },
-                { label: t("export.blur.tracker.notNow"), onClick: dismissDetectStrip, secondary: true },
-            ]),
-        );
-        strip.hidden = false;
-        return;
-    }
-    if (phase === "error" && detectDownload) {
-        strip.classList.add("is-error");
-        strip.append(
-            trackerMessageNode(t("export.blur.tracker.error")),
-            trackerActionsNode([
-                { label: t("export.blur.tracker.retry"), onClick: () => void startDetectDownload() },
-                { label: t("export.blur.tracker.notNow"), onClick: dismissDetectStrip, secondary: true },
-            ]),
-        );
-        strip.hidden = false;
-        return;
-    }
-    strip.append(
-        trackerMessageNode(t("export.blur.detect.consent", { mb: blurAssetsDownloadMb(groups) })),
-        trackerActionsNode([
-            { label: t("export.blur.detect.download"), onClick: () => void startDetectDownload() },
-            { label: t("export.blur.tracker.notNow"), onClick: dismissDetectStrip, secondary: true },
-        ]),
-    );
-    strip.hidden = false;
+    detectStripPhase = syncBlurDownloadStrip(strip, detectStripPhase, {
+        phase: stripPhase,
+        progress,
+        consentMessage: () => t("export.blur.detect.consent", { mb: blurAssetsDownloadMb(groups) }),
+        downloadLabel: "export.blur.detect.download",
+        onDownload: startDetectDownload,
+        onCancel: cancelDetectDownload,
+        onDismiss: dismissDetectStrip,
+    });
 }
 
 let detectStatusSig: string | null = null;
@@ -2312,34 +2260,61 @@ function overlaySubhead(text: string): HTMLElement {
     return el;
 }
 
-/** Segmented control over the 3 styles (min / card / bold). */
-function renderStyleSegment(): HTMLElement {
+interface OverlaySegmentOptions<Value extends string | number> {
+    label: string;
+    dataKey: string;
+    choices: ReadonlyArray<readonly [Value, string]>;
+    current: Value;
+    onChange: (value: Value) => void;
+}
+
+function renderOverlaySegment<Value extends string | number>(options: OverlaySegmentOptions<Value>): HTMLElement {
     const seg = document.createElement("div");
     seg.className = "export-panel__segment";
     seg.setAttribute("role", "group");
-    seg.setAttribute("aria-label", t("export.overlays.style"));
-    const styles: Array<[OverlayStyleId, I18nKey]> = [
-        ["min", "export.overlays.style.min"],
-        ["card", "export.overlays.style.card"],
-        ["bold", "export.overlays.style.bold"],
-    ];
-    for (const [id, key] of styles) {
+    seg.setAttribute("aria-label", options.label);
+    const buttons: HTMLButtonElement[] = [];
+    for (const [value, label] of options.choices) {
         const btn = document.createElement("button");
         btn.type = "button";
-        btn.textContent = t(key);
-        btn.dataset.style = id;
-        setToggleSelected(btn, exportPanelState.overlayStyle === id);
+        btn.textContent = label;
+        btn.dataset[options.dataKey] = String(value);
+        setToggleSelected(btn, options.current === value);
         btn.addEventListener("click", () => {
-            exportPanelState.overlayStyle = id;
-            for (const b of Array.from(seg.children)) {
-                const active = (b as HTMLElement).dataset.style === id;
-                setToggleSelected(b, active);
-            }
+            options.onChange(value);
+            for (const button of buttons) setToggleSelected(button, button === btn);
             notifyExportStateChanged();
         });
+        buttons.push(btn);
         seg.appendChild(btn);
     }
     return seg;
+}
+
+function renderOverlaySegmentField<Value extends string | number>(options: OverlaySegmentOptions<Value>): HTMLElement {
+    const wrap = document.createElement("div");
+    wrap.className = "export-panel__ov-field";
+    const label = document.createElement("span");
+    label.className = "export-panel__ov-field-label";
+    label.textContent = options.label;
+    wrap.append(label, renderOverlaySegment(options));
+    return wrap;
+}
+
+function renderStyleSegment(): HTMLElement {
+    return renderOverlaySegment<OverlayStyleId>({
+        label: t("export.overlays.style"),
+        dataKey: "style",
+        choices: [
+            ["min", t("export.overlays.style.min")],
+            ["card", t("export.overlays.style.card")],
+            ["bold", t("export.overlays.style.bold")],
+        ],
+        current: exportPanelState.overlayStyle,
+        onChange: (style) => {
+            exportPanelState.overlayStyle = style;
+        },
+    });
 }
 
 /** The widget toggle rows. Each: a checkbox (enable) + a name button that
@@ -2552,144 +2527,60 @@ function renderMapMarkerField(): HTMLElement {
     return wrap;
 }
 
-/** Map clip-shape segmented control (inspector, map only). */
 function renderMapShapeSegment(): HTMLElement {
-    const wrap = document.createElement("div");
-    wrap.className = "export-panel__ov-field";
-    const label = document.createElement("span");
-    label.className = "export-panel__ov-field-label";
-    label.textContent = t("export.overlays.shape");
-    wrap.appendChild(label);
-    const seg = document.createElement("div");
-    seg.className = "export-panel__segment";
-    seg.setAttribute("role", "group");
-    seg.setAttribute("aria-label", label.textContent);
-    const shapes: Array<[MapShape, I18nKey]> = [
-        ["rect", "export.overlays.shape.rect"],
-        ["circle", "export.overlays.shape.circle"],
-    ];
-    for (const [shape, key] of shapes) {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.textContent = t(key);
-        btn.dataset.shape = shape;
-        setToggleSelected(btn, exportPanelState.overlayMap.shape === shape);
-        btn.addEventListener("click", () => {
+    return renderOverlaySegmentField<MapShape>({
+        label: t("export.overlays.shape"),
+        dataKey: "shape",
+        choices: [
+            ["rect", t("export.overlays.shape.rect")],
+            ["circle", t("export.overlays.shape.circle")],
+        ],
+        current: exportPanelState.overlayMap.shape,
+        onChange: (shape) => {
             exportPanelState.overlayMap.shape = shape;
-            for (const b of Array.from(seg.children)) {
-                setToggleSelected(b, (b as HTMLElement).dataset.shape === shape);
-            }
-            notifyExportStateChanged();
-        });
-        seg.appendChild(btn);
-    }
-    wrap.appendChild(seg);
-    return wrap;
+        },
+    });
 }
 
-/** Map base-layer theme segmented control (inspector, map only). Independent of
- *  the app UI theme - it picks which style.json the burned-in mini-map uses. */
+/** The export map's appearance stays independent of the viewer's preferences. */
 function renderMapThemeSegment(): HTMLElement {
-    const wrap = document.createElement("div");
-    wrap.className = "export-panel__ov-field";
-    const label = document.createElement("span");
-    label.className = "export-panel__ov-field-label";
-    label.textContent = t("export.overlays.mapTheme");
-    wrap.appendChild(label);
-    const seg = document.createElement("div");
-    seg.className = "export-panel__segment";
-    seg.setAttribute("role", "group");
-    seg.setAttribute("aria-label", label.textContent);
-    const themes: Array<[MapStyleId, I18nKey]> = [
-        ["light", "export.overlays.mapTheme.light"],
-        ["dark", "export.overlays.mapTheme.dark"],
-        ["neon", "export.overlays.mapTheme.neon"],
-    ];
-    for (const [theme, key] of themes) {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.textContent = t(key);
-        btn.dataset.maptheme = theme;
-        setToggleSelected(btn, exportPanelState.overlayMap.theme === theme);
-        btn.addEventListener("click", () => {
+    return renderOverlaySegmentField<MapStyleId>({
+        label: t("export.overlays.mapTheme"),
+        dataKey: "maptheme",
+        choices: [
+            ["light", t("export.overlays.mapTheme.light")],
+            ["dark", t("export.overlays.mapTheme.dark")],
+            ["neon", t("export.overlays.mapTheme.neon")],
+        ],
+        current: exportPanelState.overlayMap.theme,
+        onChange: (theme) => {
             exportPanelState.overlayMap.theme = theme;
-            for (const b of Array.from(seg.children)) {
-                setToggleSelected(b, (b as HTMLElement).dataset.maptheme === theme);
-            }
-            notifyExportStateChanged();
-        });
-        seg.appendChild(btn);
-    }
-    wrap.appendChild(seg);
-    return wrap;
+        },
+    });
 }
 
-/** Map label-size segmented control (inspector, map only). Scales the burned-in
- *  map's street/place names; independent of the viewer's settings preference.
- *  Both the preview and the export rebuild their hidden MapLibre on change (the
- *  style is fixed at snapshotter construction, same as the theme). */
 function renderMapLabelSizeSegment(): HTMLElement {
-    const wrap = document.createElement("div");
-    wrap.className = "export-panel__ov-field";
-    const label = document.createElement("span");
-    label.className = "export-panel__ov-field-label";
-    label.textContent = t("export.overlays.mapLabelSize");
-    wrap.appendChild(label);
-    const seg = document.createElement("div");
-    seg.className = "export-panel__segment";
-    seg.setAttribute("role", "group");
-    seg.setAttribute("aria-label", label.textContent);
-    for (const pct of MAP_LABEL_SIZE_PCT_VALUES) {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.textContent = `${pct}%`;
-        btn.dataset.maplabelsize = String(pct);
-        setToggleSelected(btn, exportPanelState.overlayMap.labelScalePct === pct);
-        btn.addEventListener("click", () => {
+    return renderOverlaySegmentField({
+        label: t("export.overlays.mapLabelSize"),
+        dataKey: "maplabelsize",
+        choices: MAP_LABEL_SIZE_PCT_VALUES.map((pct) => [pct, `${pct}%`]),
+        current: exportPanelState.overlayMap.labelScalePct,
+        onChange: (pct) => {
             exportPanelState.overlayMap.labelScalePct = pct;
-            for (const b of Array.from(seg.children)) {
-                setToggleSelected(b, (b as HTMLElement).dataset.maplabelsize === String(pct));
-            }
-            notifyExportStateChanged();
-        });
-        seg.appendChild(btn);
-    }
-    wrap.appendChild(seg);
-    return wrap;
+        },
+    });
 }
 
-/** Map street-name density segmented control (inspector, map only). Same
- *  rebuild lifecycle as the text-size segment above; label wording is shared
- *  with the viewer preference (STREET_LABEL_DENSITY_LABEL_KEYS), the value is
- *  per-export and independent of it. */
 function renderMapStreetNamesSegment(): HTMLElement {
-    const wrap = document.createElement("div");
-    wrap.className = "export-panel__ov-field";
-    const label = document.createElement("span");
-    label.className = "export-panel__ov-field-label";
-    label.textContent = t("export.overlays.mapStreetNames");
-    wrap.appendChild(label);
-    const seg = document.createElement("div");
-    seg.className = "export-panel__segment";
-    seg.setAttribute("role", "group");
-    seg.setAttribute("aria-label", label.textContent);
-    for (const density of STREET_LABEL_DENSITY_VALUES) {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.textContent = t(STREET_LABEL_DENSITY_LABEL_KEYS[density]);
-        btn.dataset.mapstreetnames = density;
-        setToggleSelected(btn, exportPanelState.overlayMap.labelDensity === density);
-        btn.addEventListener("click", () => {
+    return renderOverlaySegmentField({
+        label: t("export.overlays.mapStreetNames"),
+        dataKey: "mapstreetnames",
+        choices: STREET_LABEL_DENSITY_VALUES.map((density) => [density, t(STREET_LABEL_DENSITY_LABEL_KEYS[density])]),
+        current: exportPanelState.overlayMap.labelDensity,
+        onChange: (density) => {
             exportPanelState.overlayMap.labelDensity = density;
-            for (const b of Array.from(seg.children)) {
-                setToggleSelected(b, (b as HTMLElement).dataset.mapstreetnames === density);
-            }
-            notifyExportStateChanged();
-        });
-        seg.appendChild(btn);
-    }
-    wrap.appendChild(seg);
-    return wrap;
+        },
+    });
 }
 
 /** Map view-mode controls (inspector, map only): a north-up vs chase segment,
@@ -2701,44 +2592,23 @@ function renderMapModeControls(): HTMLElement {
     const wrap = document.createElement("div");
     const om = exportPanelState.overlayMap;
 
-    // North-up / Chase segment.
-    const modeField = document.createElement("div");
-    modeField.className = "export-panel__ov-field";
-    const modeLabel = document.createElement("span");
-    modeLabel.className = "export-panel__ov-field-label";
-    modeLabel.textContent = t("export.overlays.mapMode");
-    modeField.appendChild(modeLabel);
-    const seg = document.createElement("div");
-    seg.className = "export-panel__segment";
-    seg.setAttribute("role", "group");
-    seg.setAttribute("aria-label", modeLabel.textContent);
-    const modes: Array<[MapViewMode, I18nKey]> = [
-        ["north", "export.overlays.mapMode.north"],
-        ["chase", "export.overlays.mapMode.chase"],
-    ];
-
-    // Chase extras (tilt + adaptive). Only meaningful in chase; toggled inline.
     const extras = document.createElement("div");
     extras.hidden = om.mode !== "chase";
-
-    for (const [mode, key] of modes) {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.textContent = t(key);
-        btn.dataset.mapmode = mode;
-        setToggleSelected(btn, om.mode === mode);
-        btn.addEventListener("click", () => {
-            om.mode = mode;
-            for (const b of Array.from(seg.children)) {
-                setToggleSelected(b, (b as HTMLElement).dataset.mapmode === mode);
-            }
-            extras.hidden = mode !== "chase";
-            notifyExportStateChanged();
-        });
-        seg.appendChild(btn);
-    }
-    modeField.appendChild(seg);
-    wrap.appendChild(modeField);
+    wrap.appendChild(
+        renderOverlaySegmentField<MapViewMode>({
+            label: t("export.overlays.mapMode"),
+            dataKey: "mapmode",
+            choices: [
+                ["north", t("export.overlays.mapMode.north")],
+                ["chase", t("export.overlays.mapMode.chase")],
+            ],
+            current: om.mode,
+            onChange: (mode) => {
+                om.mode = mode;
+                extras.hidden = mode !== "chase";
+            },
+        }),
+    );
 
     // Tilt slider (degrees).
     extras.appendChild(

@@ -136,6 +136,50 @@ test("cached detection warms after delayed discovery without remembered download
     await expect(page.locator("html")).toHaveAttribute("data-blur-warm-requests", JSON.stringify([runtimeUrl]));
 });
 
+test("detection consent follows connectivity and dismisses without downloading", async ({ page }) => {
+    await openDetection(page, { delayedCache: true });
+    const checkbox = page.locator("#export-panel-blur-plates");
+    const strip = page.locator(".export-panel__blur-detect-strip");
+    await page.evaluate(() => {
+        Object.defineProperty(navigator, "onLine", { value: false, configurable: true });
+        window.dispatchEvent(new Event("offline"));
+    });
+    await checkbox.check();
+    await expect(strip).toContainText("You're offline.");
+    await expect(strip).not.toHaveClass(/is-error/);
+    await expect(strip.getByRole("button", { name: "Try again", exact: true })).toBeVisible();
+    await expect(page.locator(".export-panel__blur-tracker")).toBeHidden();
+
+    await page.evaluate(() => {
+        Object.defineProperty(navigator, "onLine", { value: true, configurable: true });
+        window.dispatchEvent(new Event("online"));
+    });
+    await expect(strip.getByRole("button", { name: "Download & scan", exact: true })).toBeVisible();
+    await strip.getByRole("button", { name: "Not now", exact: true }).click();
+    await expect(checkbox).not.toBeChecked();
+    await expect(strip).toBeHidden();
+    await expect(page.locator("html")).not.toHaveAttribute("data-blur-warm-requests");
+});
+
+test("a stalled detection download retries and clears its error presentation", async ({ page }) => {
+    await openDetection(page);
+    await page.locator("#export-panel-blur-plates").check();
+    const strip = page.locator(".export-panel__blur-detect-strip");
+    await expect(strip.getByRole("progressbar")).toBeVisible();
+    await page.clock.fastForward(30_000);
+    await expect(strip).toHaveClass(/is-error/);
+    await expect(strip).toContainText("That didn't download.");
+    await expect(page.locator(".export-panel__blur-tracker")).toBeHidden();
+
+    await strip.getByRole("button", { name: "Try again", exact: true }).click();
+    await expect(strip.getByRole("progressbar")).toBeVisible();
+    await expect(strip).not.toHaveClass(/is-error/);
+    await strip.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(strip.getByRole("button", { name: "Download & scan", exact: true })).toBeVisible();
+    await strip.getByRole("button", { name: "Not now", exact: true }).click();
+    await expect(strip).toBeHidden();
+});
+
 for (const action of ["Not now", "uncheck"] as const) {
     test(`${action} cancels detection while cached models are still being discovered`, async ({ page }) => {
         await openDetection(page, { delayedCache: true });
