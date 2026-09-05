@@ -105,7 +105,17 @@ for (const hasOnlineEvent of [true, false]) {
 }
 
 test.describe("map style failures", () => {
-    test.use({ tolerateConsole: [/Failed to load resource: the server responded with a status of 503/] });
+    test.use({
+        tolerateConsole: [
+            [
+                /Failed to load resource: the server responded with a status of 503/,
+                // The reconnect case deliberately takes the browser offline; an
+                // in-flight asset request can report that injected network failure.
+                /^Failed to load resource: net::ERR_INTERNET_DISCONNECTED$/,
+            ],
+            { scope: "test" },
+        ],
+    });
 
     test("promotes a prefetched style request when the foreground map joins it", async ({ page }) => {
         let prefetched: Route | undefined;
