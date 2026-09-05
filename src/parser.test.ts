@@ -175,6 +175,12 @@ describe("recordsHaveGps", () => {
         // lack a fix carries no usable GPS, so telemetry/overlays/.gpx are off.
         expect(recordsHaveGps([rec(0, 0, 0, { active: false }), rec(1, 10, 10, { active: false })])).toBe(false);
     });
+
+    it("ignores active records whose coordinates cannot describe a valid fix", () => {
+        const invalid = [rec(0, Number.NaN, 37), rec(1, 55, Number.POSITIVE_INFINITY), rec(2, 91, 37), rec(3, 55, 181)];
+        expect(recordsHaveGps(invalid)).toBe(false);
+        expect(recordsHaveGps([...invalid, rec(4, 55, 37)])).toBe(true);
+    });
 });
 
 describe("findNearestIndex", () => {
@@ -229,10 +235,80 @@ describe("interpolatePosition", () => {
         expect(interpolatePosition([], 100)).toBeNull();
     });
 
-    it("returns single record for 1-element array regardless of target", () => {
+    it("keeps a single fix visible only within the endpoint tolerance", () => {
         const records = [rec(100, 55, 37, { bearingDeg: 90, speedMs: 5 })];
-        const result = interpolatePosition(records, 999_999);
-        expect(result).toEqual({ lat: 55, lon: 37, bearingDeg: 90, speedMs: 5 });
+        for (const target of [95, 100, 105]) {
+            expect(interpolatePosition(records, target)).toEqual({ lat: 55, lon: 37, bearingDeg: 90, speedMs: 5 });
+        }
+        expect(interpolatePosition(records, 94.999)).toBeNull();
+        expect(interpolatePosition(records, 105.001)).toBeNull();
+    });
+
+    it("hides the position through a lost-fix interval and returns the exact recovered fix", () => {
+        const records = [
+            rec(100, 43, 77),
+            rec(101, 0, 0, { active: false }),
+            rec(102, 0, 0, { active: false }),
+            rec(103, 43.0001, 77.0001),
+            rec(104, 43.0002, 77.0002),
+        ];
+        expect(interpolatePosition(records, 100)).toMatchObject({ lat: 43, lon: 77 });
+        for (const target of [100.5, 101, 101.5, 102, 102.5]) {
+            expect(interpolatePosition(records, target), `lost fix at ${target}`).toBeNull();
+        }
+        expect(interpolatePosition(records, 103)).toMatchObject({ lat: 43.0001, lon: 77.0001 });
+        expect(interpolatePosition(records, 103.5)!.lat).toBeCloseTo(43.00015, 8);
+    });
+
+    it("uses a valid concurrent fix when another channel has no fix at that timestamp", () => {
+        const records = [
+            rec(100, 0, 0, { active: false }),
+            rec(100, 43, 77),
+            rec(101, 43.0001, 77.0001),
+            rec(101, 0, 0, { active: false }),
+        ];
+        expect(interpolatePosition(records, 100)).toMatchObject({ lat: 43, lon: 77 });
+        expect(interpolatePosition(records, 100.5)!.lat).toBeCloseTo(43.00005, 8);
+        expect(interpolatePosition(records, 101)).toMatchObject({ lat: 43.0001, lon: 77.0001 });
+        expect(interpolatePosition(records, 102)).toMatchObject({ lat: 43.0001, lon: 77.0001 });
+    });
+
+    it.each<Partial<GpsRecord>>([
+        { active: false },
+        { lat: Number.NaN },
+        { lon: Number.POSITIVE_INFINITY },
+        { lat: 90.1 },
+        { lat: -90.1 },
+        { lon: 180.1 },
+        { lon: -180.1 },
+        { bearingDeg: Number.NaN },
+        { speedMs: Number.POSITIVE_INFINITY },
+        { speedMs: -1 },
+    ])("rejects an invalid position record %j without poisoning adjacent exact fixes", (overrides) => {
+        const records = [rec(100, 43, 77), rec(101, 43, 77, overrides), rec(102, 43.0001, 77.0001)];
+        for (const target of [100.5, 101, 101.5]) {
+            expect(interpolatePosition(records, target), `invalid fix at ${target}`).toBeNull();
+        }
+        expect(interpolatePosition(records, 100)).not.toBeNull();
+        expect(interpolatePosition(records, 102)).not.toBeNull();
+        expect(interpolatePosition([records[1]!], 101)).toBeNull();
+    });
+
+    it("rejects a non-finite playhead time", () => {
+        const records = [rec(100, 43, 77), rec(101, 43.0001, 77.0001)];
+        for (const target of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+            expect(interpolatePosition(records, target)).toBeNull();
+        }
+    });
+
+    it.each([
+        [179.9, -179.9, 179.95, -179.95],
+        [-179.9, 179.9, -179.95, 179.95],
+    ])("crosses the antimeridian along the short arc from %s to %s", (from, to, quarter, threeQuarters) => {
+        const records = [rec(100, 43, from), rec(104, 43, to)];
+        expect(interpolatePosition(records, 101)!.lon).toBeCloseTo(quarter, 8);
+        expect(Math.abs(interpolatePosition(records, 102)!.lon)).toBeCloseTo(180, 8);
+        expect(interpolatePosition(records, 103)!.lon).toBeCloseTo(threeQuarters, 8);
     });
 
     it("interpolates linearly between two points at t=0.5", () => {

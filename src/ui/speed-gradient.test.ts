@@ -61,4 +61,11 @@ describe("buildMercatorCumulativeDistances", () => {
         expect(Number.isFinite(total)).toBe(true);
         expect(total).toBeGreaterThan(0);
     });
+
+    it("measures the short path across the antimeridian", () => {
+        const crossing = buildMercatorCumulativeDistances([rec(50, 179), rec(50, -179), rec(51, -179)]);
+        const unwrapped = buildMercatorCumulativeDistances([rec(50, 179), rec(50, 181), rec(51, 181)]);
+        expect(crossing.cumDist[1]).toBeCloseTo(2);
+        expect(crossing.total).toBeCloseTo(unwrapped.total);
+    });
 });

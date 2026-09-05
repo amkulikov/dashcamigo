@@ -2,22 +2,17 @@
 // the readout row between the player bar and the timeline, plus a speed-only
 // copy the bar keeps for phones. Driven by timeupdate + unit-change
 // subscriptions. Falls back to placeholders when the player is outside the GPS
-// window (no nearby record within METRICS_TOLERANCE_SEC) so the numbers and the
-// map marker disappear together.
+// window so the numbers and the map marker disappear together.
 
 import { getDateLocale, t } from "../i18n/index.js";
-import { cumulativeDistanceKm, findNearestIndex } from "../parser.js";
+import { isValidGpsFix } from "../parser.js";
 import { contentToFrame, contentToWallUtc, displayClockDate, type Trip } from "../trips.js";
 import type { GpsRecord } from "../parser.js";
 import { formatDistanceFromKm, formatSpeedFromMs, getUnits, subscribeUnitsChange, toggleUnits } from "../units-pref.js";
 import { dom } from "./dom.js";
 import { syncGpsSyncLaunchers } from "./gps-sync-controls.js";
 import { activeCandidate, activeFrame } from "./state.js";
-
-// Kept in sync with TOLERANCE_SEC in interpolatePosition (parser.ts) so player
-// metrics and map marker hide together when the target is outside the GPS
-// window (typical: GPS stopped before the end of the video).
-const METRICS_TOLERANCE_SEC = 5;
+import { type FixState, resolvePlayerMetrics } from "./player-metrics-data.js";
 
 // timeupdate fires up to ~15 Hz during playback; Intl.DateTimeFormat
 // construction (locale-data resolution + ICU pattern compile) is the only
@@ -54,13 +49,6 @@ function setSpeedText(value: string, unit: string): void {
     dom.metrics.barUnit.textContent = unit;
 }
 
-// What the row can say about the GPS at the playhead. "none" = no record
-// covers this moment (the track ended before the video, or the trip has none);
-// "lost" = a record is there but the receiver had no lock, so its lat/lon is
-// not a position. Both hide the values - a coordinate from a record with no fix
-// is a number, not a place.
-type FixState = "ok" | "lost" | "none";
-
 // Last-applied state: refreshMetrics runs at timeupdate rate, and the class
 // toggle plus the t() lookup are wasted on every call that does not change it.
 let shownFixState: FixState | null = null;
@@ -96,7 +84,12 @@ let shownDistanceKm: number | null = null;
 let shownUnits: ReturnType<typeof getUnits> | null = null;
 let shownLocale: string | null = null;
 
-function refreshMetrics(rec: GpsRecord | null, cameraTzSec: number | null, distanceKm: number | null): void {
+function refreshMetrics(
+    rec: GpsRecord | null,
+    cameraTzSec: number | null,
+    distanceKm: number | null,
+    fix: FixState = "none",
+): void {
     const units = getUnits();
     const locale = getDateLocale();
     // The readout uses the nearest GPS sample, which often stays unchanged
@@ -105,6 +98,7 @@ function refreshMetrics(rec: GpsRecord | null, cameraTzSec: number | null, dista
     // enrichment can correct the same record in place, so retain its scalars.
     if (
         rec === shownRecord &&
+        fix === shownFixState &&
         Object.is(rec?.unixSeconds, shownUnixSeconds) &&
         rec?.active === shownActive &&
         Object.is(rec?.lat, shownLat) &&
@@ -134,7 +128,7 @@ function refreshMetrics(rec: GpsRecord | null, cameraTzSec: number | null, dista
     }
     // A lat/lon from a record whose fix was lost is a number, not a place -
     // treat it exactly like having nothing.
-    if (!rec.active || !Number.isFinite(rec.lat) || !Number.isFinite(rec.lon)) {
+    if (fix !== "ok" || !isValidGpsFix(rec)) {
         applyFixState("lost");
         showPlaceholders();
         return;
@@ -153,19 +147,6 @@ function refreshMetrics(rec: GpsRecord | null, cameraTzSec: number | null, dista
     dom.metrics.distanceUnit.textContent = t(distance.unitKey);
     // Map marker updates via rAF-loop with GPS interpolation - it moves
     // smoothly without us setting position here.
-}
-
-// Running distance per trip, built on first use. Trip objects are rebuilt on
-// every regroup/refresh, so the map self-invalidates with them.
-const tripDistances = new WeakMap<Trip, Float64Array>();
-
-function distanceAt(trip: Trip, recordIndex: number): number {
-    let prefix = tripDistances.get(trip);
-    if (!prefix) {
-        prefix = cumulativeDistanceKm(trip.records);
-        tripDistances.set(trip, prefix);
-    }
-    return prefix[recordIndex] ?? 0;
 }
 
 // Last-written file name: the value changes once per clip, the caller asks at
@@ -209,20 +190,9 @@ export function refreshMetricsFromActiveFrame(tripCurrentSec: number): void {
     }
     // tripCurrentSec is footage-axis; map to wall-clock to find the GPS record.
     const targetUnix = contentToWallUtc(af.trip.timeline, tripCurrentSec);
-    const idx = findNearestIndex(af.trip.records, targetUnix);
-    if (idx < 0) {
-        refreshMetrics(null, null, null);
-        markTimelapseClock(false);
-        return;
-    }
-    const nearest = af.trip.records[idx]!;
-    if (Math.abs(nearest.unixSeconds - targetUnix) > METRICS_TOLERANCE_SEC) {
-        refreshMetrics(null, null, null);
-        markTimelapseClock(false);
-        return;
-    }
-    refreshMetrics(nearest, af.trip.cameraTzSec, distanceAt(af.trip, idx));
-    markTimelapseClock(currentClipIsTimelapse(af.trip, tripCurrentSec));
+    const metrics = resolvePlayerMetrics(af.trip.records, targetUnix);
+    refreshMetrics(metrics.record, af.trip.cameraTzSec, metrics.distanceKm, metrics.fix);
+    markTimelapseClock(metrics.fix === "ok" && currentClipIsTimelapse(af.trip, tripCurrentSec));
 }
 
 // Trips overwhelmingly contain no time-lapse clips; remember that per Trip so

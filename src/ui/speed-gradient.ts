@@ -8,23 +8,8 @@
 // or every consumer of these fractions lands at the wrong spot on the line.
 
 import type { GpsRecord } from "../parser.js";
+import { mercatorY, wrapDegrees } from "../coordinates.js";
 import { speedKmhToColor, themeColors } from "./theme.js";
-
-// Web-Mercator latitude limit (~85.051°). Clamp before projecting: mercatorY
-// diverges toward the poles and lat=±90 would produce ±Infinity, poisoning
-// every cumulative distance after it.
-const MERCATOR_MAX_LAT_DEG = 85.051129;
-
-/** Web-Mercator Y for a latitude, in the same degree-equivalent scale as
- *  longitude (mercator X is linear in longitude, so lon deltas are used as-is
- *  and only Y needs projecting). Same formula as MapLibre's
- *  MercatorCoordinate.fromLngLat, times 360. Exported for the follow-camera
- *  teleport guard, which needs an orientation-independent ground distance
- *  (screen projection saturates/mirrors under a pitched camera). */
-export function mercatorY(latDeg: number): number {
-    const lat = Math.max(-MERCATOR_MAX_LAT_DEG, Math.min(MERCATOR_MAX_LAT_DEG, latDeg));
-    return 180 - (180 / Math.PI) * Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
-}
 
 /**
  * Cumulative distances along `recs` in Web-Mercator space - the SAME metric
@@ -46,7 +31,7 @@ export function buildMercatorCumulativeDistances(recs: GpsRecord[]): { cumDist: 
     let prevY = mercatorY(recs[0]!.lat);
     for (let i = 1; i < recs.length; i++) {
         const y = mercatorY(recs[i]!.lat);
-        const dX = recs[i]!.lon - recs[i - 1]!.lon;
+        const dX = wrapDegrees(recs[i]!.lon - recs[i - 1]!.lon);
         const dY = y - prevY;
         cumDist[i] = cumDist[i - 1]! + Math.sqrt(dX * dX + dY * dY);
         prevY = y;

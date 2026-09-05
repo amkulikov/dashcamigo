@@ -377,6 +377,9 @@ test.describe("player", () => {
         await page.reload();
         await loadTrip(page, SAMPLE_70MAI);
         await expect(page.locator("#player-wrap")).toHaveClass(/map-expanded/);
+        await expect
+            .poll(() => page.evaluate(() => window.__dashcamigo.state.map?.getPitch() ?? 0))
+            .toBeGreaterThan(20);
         await page.locator("#player-view-menu").click();
         await expect(page.locator('[data-map-mode="large"]')).toHaveAttribute("aria-checked", "true");
     });
@@ -462,8 +465,27 @@ test.describe("player", () => {
 
         // Picking presets applies them but keeps the popover open - the user
         // compares variants against the live map behind it.
+        await page.evaluate(() => {
+            const { state } = window.__dashcamigo;
+            state.followMode = "off";
+            state.map!.jumpTo({ center: [65, 45], zoom: 17, bearing: 20 });
+        });
         await scaleSeg.getByRole("button", { name: "150%" }).click();
         await namesSeg.getByRole("button", { name: "More" }).click();
+        await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.mapReady)).toBe(true);
+        const camera = await page.evaluate(() => {
+            const map = window.__dashcamigo.state.map!;
+            return {
+                lon: map.getCenter().lng,
+                lat: map.getCenter().lat,
+                zoom: map.getZoom(),
+                bearing: map.getBearing(),
+            };
+        });
+        expect(camera.lon).toBeCloseTo(65);
+        expect(camera.lat).toBeCloseTo(45);
+        expect(camera.zoom).toBeCloseTo(17);
+        expect(camera.bearing).toBeCloseTo(20);
         await markerControl.locator('button[data-marker-shape="suv"]').click();
         await markerControl.locator('button[data-marker-color="#2f7ee6"]').click();
         await markerControl.locator('button[data-marker-size="large"]').click();

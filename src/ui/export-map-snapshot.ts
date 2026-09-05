@@ -30,6 +30,7 @@ import type * as maplibregl from "maplibre-gl";
 
 import { probeWebGL } from "../capabilities.js";
 import { createLogger } from "../log.js";
+import { isValidGpsFix } from "../parser.js";
 import type { GpsRecord } from "../parsers/types.js";
 import type { MapStyleId } from "./theme.js";
 import { buildMercatorCumulativeDistances, buildSpeedGradient } from "./speed-gradient.js";
@@ -616,7 +617,7 @@ const MAP_LOAD_TIMEOUT_MS = 20_000;
  *  gradient (built over all records) from the active-only geometry and could
  *  poison cumulative distances with NaN. */
 function finiteActiveRecords(recs: GpsRecord[]): GpsRecord[] {
-    return recs.filter((r) => r.active && Number.isFinite(r.lat) && Number.isFinite(r.lon));
+    return recs.filter(isValidGpsFix);
 }
 
 function addTrackLayer(map: maplibregl.Map, records: GpsRecord[]): void {

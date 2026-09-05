@@ -19,12 +19,13 @@ import type * as maplibregl from "maplibre-gl";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 
 import { probeWebGL } from "../capabilities.js";
+import { mercatorY, unwrapLongitude, unwrapTrackCoordinates, wrapDegrees } from "../coordinates.js";
 import { gMagnitude, hasAccelData } from "../events.js";
 import { escapeHtml } from "../escape.js";
 import { getDateLocale, t } from "../i18n/index.js";
 import { createLogger } from "../log.js";
 import { emitLifecycle } from "../perf.js";
-import { interpolatePosition } from "../parser.js";
+import { interpolatePosition, isValidGpsFix } from "../parser.js";
 import { captureSentryMessage } from "../sentry.js";
 import {
     COARSE_POINTER_QUERY,
@@ -73,7 +74,7 @@ import {
     OSM_SHORTBREAD_BUILDING_SOURCE_LAYER,
     OSM_SHORTBREAD_SOURCE_ID,
 } from "./osm-fallback-style.js";
-import { buildMercatorCumulativeDistances, buildSpeedGradient, mercatorY } from "./speed-gradient.js";
+import { buildMercatorCumulativeDistances, buildSpeedGradient } from "./speed-gradient.js";
 import { addSpeedTrack } from "./map-track.js";
 
 // --- lazy maplibre-gl loading (T9) ---
@@ -376,7 +377,10 @@ function applyLoadedStyle(
             };
             // refreshMap fits the track after a style swap. A background retry
             // must preserve the view the user is inspecting.
-            map.once("style.load", () => map.jumpTo(camera));
+            map.once("style.load", () => {
+                map.jumpTo(camera);
+                ensureChaseEngaged();
+            });
         }
         map.setStyle(styled, { diff: false });
     }
@@ -394,7 +398,7 @@ export function reapplyMapLabelPrefs(): void {
     const theme = currentMapTheme();
     const provider = getMapProvider();
     const cached = cachedMapStyles.get(styleCacheKey(provider, theme));
-    if (cached) applyLoadedStyle(cached, theme, provider);
+    if (cached) applyLoadedStyle(cached, theme, provider, true);
 }
 
 function showMapStyleError(): void {
@@ -1134,7 +1138,7 @@ export function refreshMap(trip: Trip | null): void {
         // only on GPS data and must still work. Drive their state without
         // touching the (absent) map.
         const records = trip?.records ?? [];
-        const hasUsableGps = records.some((r) => r.active && Number.isFinite(r.lat) && Number.isFinite(r.lon));
+        const hasUsableGps = records.some(isValidGpsFix);
         syncMapPanels(trip, hasUsableGps ? records.length : 0);
         return;
     }
@@ -1213,11 +1217,7 @@ export function refreshMap(trip: Trip | null): void {
     const activeRecs: GpsRecord[] = [];
     const dedupedRecs: GpsRecord[] = [];
     for (const r of recs) {
-        if (!r.active) continue;
-        // Guard against non-finite coords from a buggy parser - a NaN lat/lon
-        // would poison fitBounds and the line-gradient stops. The events layer
-        // (refreshEventsLayer) already does this; keep the main track symmetric.
-        if (!Number.isFinite(r.lat) || !Number.isFinite(r.lon)) continue;
+        if (!isValidGpsFix(r)) continue;
         activeRecs.push(r);
         const last = dedupedRecs[dedupedRecs.length - 1];
         if (!last || last.lat !== r.lat || last.lon !== r.lon) {
@@ -1236,16 +1236,8 @@ export function refreshMap(trip: Trip | null): void {
         return;
     }
 
-    // MapLibre uses [lng, lat], not [lat, lng] like Leaflet.
-    //
-    // Known limitation: no antimeridian handling. A trip crossing ±180°
-    // (Chukotka, Taveuni) renders a world-spanning segment, and the marker
-    // interpolation lerps longitude straight across the globe. Deliberately
-    // undocumented in the UI and unfixed: no real dashcam sample crosses it,
-    // and the split/normalize machinery is not worth the surface until one
-    // does. If such a sample ever lands, normalize segment lon deltas to
-    // (-180, 180] in interpolatePosition and split the LineString here.
-    const coords: LngLatTuple[] = dedupedRecs.map((r) => [r.lon, r.lat]);
+    // Keep bounds and geometry in one continuous world copy across ±180°.
+    const coords = unwrapTrackCoordinates(dedupedRecs.map((r) => [r.lon, r.lat]));
     const { cumDist, total: totalDist } = buildMercatorCumulativeDistances(dedupedRecs);
     const gradient = buildSpeedGradient(dedupedRecs, cumDist, totalDist);
 
@@ -1347,6 +1339,7 @@ export function refreshMap(trip: Trip | null): void {
     refreshEventsLayer(map, trip);
 
     syncMapPanels(trip, dedupedRecs.length);
+    ensureChaseEngaged();
 }
 
 // -- Named handlers for delegated map.on(type, layerId) listeners. -----------
@@ -1437,8 +1430,7 @@ function refreshEventsLayer(map: maplibregl.Map, trip: Trip | null): void {
     }> = [];
     for (const ev of trip.events) {
         const rec = trip.records[ev.recordIndex];
-        if (!rec?.active) continue;
-        if (!Number.isFinite(rec.lat) || !Number.isFinite(rec.lon)) continue;
+        if (!rec || !isValidGpsFix(rec)) continue;
         features.push({
             type: "Feature",
             geometry: { type: "Point", coordinates: [rec.lon, rec.lat] },
@@ -1560,18 +1552,18 @@ function setMarkerHidden(m: maplibregl.Marker, hidden: boolean): void {
 }
 
 /**
- * Finds the nearest active GPS record to a geographic point. Euclidean distance
- * in degrees - negligible error over short segments, faster than haversine.
+ * Finds the nearest active GPS record in the map's projected coordinate space.
  * Returns the index in trip.records or -1.
  */
 function nearestActiveRecordIndex(trip: Trip, lat: number, lng: number): number {
     let bestIdx = -1;
     let bestDist = Infinity;
+    const targetY = mercatorY(lat);
     for (let i = 0; i < trip.records.length; i++) {
         const r = trip.records[i]!;
-        if (!r.active) continue;
-        const dLat = r.lat - lat;
-        const dLon = r.lon - lng;
+        if (!isValidGpsFix(r)) continue;
+        const dLat = mercatorY(r.lat) - targetY;
+        const dLon = wrapDegrees(r.lon - lng);
         const d = dLat * dLat + dLon * dLon;
         if (d < bestDist) {
             bestDist = d;
@@ -1619,7 +1611,10 @@ function onTrackHover(ev: maplibregl.MapMouseEvent): void {
             className: "ez-popup",
         });
     }
-    state.hoverPopup.setLngLat([rec.lon, rec.lat]).setHTML(buildRecordPopupHtml(rec, trip)).addTo(state.map);
+    state.hoverPopup
+        .setLngLat([unwrapLongitude(rec.lon, ev.lngLat.lng), rec.lat])
+        .setHTML(buildRecordPopupHtml(rec, trip))
+        .addTo(state.map);
 
     // Sync the chart cursor to the same moment (footage axis, same as chart hover).
     state.chartHoverX = wallToContentSec(trip.timeline, rec.unixSeconds);
@@ -2476,12 +2471,6 @@ function resetFollowCameraFilter(): void {
     followFilterConverged = false;
 }
 
-/** Maps an angle delta onto the shortest signed arc in [-180, 180) - an exact
- *  +180 input comes back as -180 (both are valid shortest arcs). */
-function shortestArcDeg(deltaDeg: number): number {
-    return ((((deltaDeg + 180) % 360) + 360) % 360) - 180;
-}
-
 // Last raw follow target (marker + camera goal). A static playhead yields a
 // byte-identical interpolated pos (interpolatePosition is deterministic), so an
 // exact compare against these reliably detects "nothing moved" and skips the
@@ -2526,8 +2515,9 @@ function stepFollowCamera(
     // A large zoom gap is a teleport too: gliding zoom across many levels
     // (trip switch lands on a fitBounds overview) sweeps every intermediate
     // tile level for no visual benefit.
+    const targetLon = unwrapLongitude(pos.lon, followCamLon);
     const groundPx =
-        Math.hypot(pos.lon - followCamLon, mercatorY(pos.lat) - mercatorY(followCamLat)) *
+        Math.hypot(targetLon - followCamLon, mercatorY(pos.lat) - mercatorY(followCamLat)) *
         ((MAPLIBRE_TILE_SIZE_PX * 2 ** followCamZoom) / 360);
     const zoomGap = zoomTarget === undefined ? 0 : Math.abs(zoomTarget - followCamZoom);
     const farTeleport =
@@ -2535,7 +2525,7 @@ function stepFollowCamera(
 
     if (farTeleport) {
         followCamLat = pos.lat;
-        followCamLon = pos.lon;
+        followCamLon = targetLon;
         followCamBearing = pos.bearingDeg;
         if (zoomTarget !== undefined) followCamZoom = zoomTarget;
     } else {
@@ -2545,10 +2535,10 @@ function stepFollowCamera(
         const dtScaled = frameDtMs * rate;
         const alphaCenter = 1 - Math.exp(-dtScaled / FOLLOW_CENTER_TAU_MS);
         followCamLat += (pos.lat - followCamLat) * alphaCenter;
-        followCamLon += (pos.lon - followCamLon) * alphaCenter;
+        followCamLon += (targetLon - followCamLon) * alphaCenter;
         if (headingUp) {
             const alphaBearing = 1 - Math.exp(-dtScaled / FOLLOW_BEARING_TAU_MS);
-            followCamBearing += shortestArcDeg(pos.bearingDeg - followCamBearing) * alphaBearing;
+            followCamBearing += wrapDegrees(pos.bearingDeg - followCamBearing) * alphaBearing;
         }
         if (zoomTarget !== undefined) {
             const alphaZoom = 1 - Math.exp(-dtScaled / FOLLOW_ZOOM_TAU_MS);
@@ -2557,14 +2547,14 @@ function stepFollowCamera(
     }
 
     const centerDone =
-        Math.abs(pos.lat - followCamLat) < FOLLOW_SNAP_DEG && Math.abs(pos.lon - followCamLon) < FOLLOW_SNAP_DEG;
+        Math.abs(pos.lat - followCamLat) < FOLLOW_SNAP_DEG && Math.abs(targetLon - followCamLon) < FOLLOW_SNAP_DEG;
     const bearingDone =
-        !headingUp || Math.abs(shortestArcDeg(pos.bearingDeg - followCamBearing)) < FOLLOW_SNAP_BEARING_DEG;
+        !headingUp || Math.abs(wrapDegrees(pos.bearingDeg - followCamBearing)) < FOLLOW_SNAP_BEARING_DEG;
     const zoomDone = zoomTarget === undefined || Math.abs(zoomTarget - followCamZoom) < FOLLOW_SNAP_ZOOM;
     if (centerDone && bearingDone && zoomDone) {
         followCamLat = pos.lat;
-        followCamLon = pos.lon;
-        followCamBearing += shortestArcDeg(pos.bearingDeg - followCamBearing);
+        followCamLon = targetLon;
+        followCamBearing += wrapDegrees(pos.bearingDeg - followCamBearing);
         if (zoomTarget !== undefined) followCamZoom = zoomTarget;
         followFilterConverged = true;
     }
@@ -2573,7 +2563,7 @@ function stepFollowCamera(
     // Wrap the unwrapped filter bearing back into MapLibre's range; without
     // heading-up the map bearing is left alone (north-up "follow" resets it in
     // applyFollowMode, "off" never reaches here).
-    if (headingUp) jump.bearing = shortestArcDeg(followCamBearing);
+    if (headingUp) jump.bearing = wrapDegrees(followCamBearing);
     if (zoomTarget !== undefined) jump.zoom = followCamZoom;
     map.jumpTo(jump);
 }
@@ -2728,7 +2718,7 @@ export function startMarkerLoop(opts: { onAfterTick?: () => void } = {}): void {
             const targetChanged =
                 pos.lat !== bigMapAppliedLat ||
                 pos.lon !== bigMapAppliedLon ||
-                (headingUp && pos.bearingDeg !== bigMapAppliedBearing) ||
+                pos.bearingDeg !== bigMapAppliedBearing ||
                 (zoomTarget !== undefined && zoomTarget !== bigMapAppliedZoom);
             if (targetChanged) {
                 // Trail overlay: dim the un-driven part of the track (a 4-stop
@@ -2782,12 +2772,14 @@ export function startMarkerLoop(opts: { onAfterTick?: () => void } = {}): void {
                 // stale) basemap.
                 const newZoom = miniMapZoomForLat(pos.lat);
                 const curZoom = miniMap.getZoom();
-                const curPx = miniMap.project(miniMap.getCenter());
-                const newPx = miniMap.project([pos.lon, pos.lat]);
+                const center = miniMap.getCenter();
+                const lon = unwrapLongitude(pos.lon, center.lng);
+                const curPx = miniMap.project(center);
+                const newPx = miniMap.project([lon, pos.lat]);
                 const pxDist = Math.hypot(curPx.x - newPx.x, curPx.y - newPx.y);
                 const zoomChanged = Math.abs(newZoom - curZoom) > 0.001;
                 if (pxDist >= MINI_MAP_REPAINT_THRESHOLD_PX || zoomChanged) {
-                    miniMap.jumpTo({ center: [pos.lon, pos.lat], zoom: newZoom });
+                    miniMap.jumpTo({ center: [lon, pos.lat], zoom: newZoom });
                 }
             }
         }
@@ -3108,21 +3100,22 @@ function resumeFollowAfterInteraction(): void {
 }
 
 /**
- * Tilts the big map into chase when it becomes visible while chase is the active
- * mode but the camera is still flat - the default-chase first expand. The follow
- * loop maintains center / bearing / zoom but never pitch, so the one-off tilt has
- * to be applied here (and re-applied if a later flat episode ever drops it).
- *
- * Pitch-guarded: an already-tilted chase map is left alone, so re-expanding the
- * panel does not re-ease. fitBounds (trip switch) keeps the pitch, so chase
- * survives trip changes without a re-entry here.
+ * The follow loop does not drive pitch. Complete the configured tilt after
+ * initial display or a style swap that interrupted the entry animation.
  */
 function ensureChaseEngaged(): void {
     const map = state.map;
-    if (!map || !state.mapExpanded || !state.hasTrack || state.followMode !== "chase") return;
-    if (map.getPitch() > 1) {
-        // Already tilted - just make sure the buildings are present (cheap,
-        // idempotent; covers a style swap that dropped them while collapsed).
+    if (
+        !map ||
+        !state.mapReady ||
+        !state.mapExpanded ||
+        !state.hasTrack ||
+        !getViewPanels().map ||
+        state.exportModeOpen ||
+        state.followMode !== "chase"
+    )
+        return;
+    if (Math.abs(map.getPitch() - chasePitchDeg) < 0.1) {
         ensure3dBuildings(map);
         return;
     }

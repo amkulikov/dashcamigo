@@ -12,6 +12,7 @@ import { mai70NameCore } from "./parsers/filename/_patterns.js";
 import { blackvueChannelCloneGroup } from "./parsers/blackvue-clone-group.js";
 import type { GpsRecord, InterpolatedPosition, ParsedLog, SkippedLine, VendorFile } from "./parsers/types.js";
 import { vendorFileKey } from "./vendor-file-key.js";
+import { wrapDegrees } from "./coordinates.js";
 
 /**
  * Dynamic-acceleration magnitude from a gravity-removed accel triple. Single
@@ -184,7 +185,7 @@ export function totalDistanceKm(records: GpsRecord[] | null | undefined): number
     let prev: GpsRecord | null = null;
     let sum = 0;
     for (const r of records) {
-        if (!r.active) continue;
+        if (!isValidGpsFix(r)) continue;
         if (prev !== null) {
             sum += haversineKm(prev.lat, prev.lon, r.lat, r.lon);
         }
@@ -196,7 +197,7 @@ export function totalDistanceKm(records: GpsRecord[] | null | undefined): number
 /**
  * Running distance in km from the first record to each one, aligned
  * index-for-index with `records`. Same rule as totalDistanceKm - only
- * `active === true` records advance the total, so a lost-fix jump does not
+ * valid fixes advance the total, so a lost-fix jump does not
  * inflate it, and the last element equals totalDistanceKm(records).
  *
  * Precomputed per trip on purpose: the readout row wants "distance so far" at
@@ -212,7 +213,7 @@ export function cumulativeDistanceKm(records: GpsRecord[] | null | undefined): F
     let sum = 0;
     for (let i = 0; i < records.length; i++) {
         const r = records[i]!;
-        if (r.active) {
+        if (isValidGpsFix(r)) {
             if (prev !== null) sum += haversineKm(prev.lat, prev.lon, r.lat, r.lon);
             prev = r;
         }
@@ -231,7 +232,18 @@ export function cumulativeDistanceKm(records: GpsRecord[] | null | undefined): F
  * this check.
  */
 export function recordsHaveGps(records: GpsRecord[] | null | undefined): boolean {
-    return !!records && records.some((r) => r.active);
+    return !!records && records.some(isValidGpsFix);
+}
+
+/** A fix must be safe to project even when a malformed record escapes parsing. */
+export function isValidGpsFix(record: GpsRecord): boolean {
+    return (
+        record.active &&
+        Number.isFinite(record.lat) &&
+        Number.isFinite(record.lon) &&
+        Math.abs(record.lat) <= 90 &&
+        Math.abs(record.lon) <= 180
+    );
 }
 
 /**
@@ -622,26 +634,31 @@ export function findNearestIndex(sortedRecords: GpsRecord[], targetUnixSeconds: 
     return lo;
 }
 
+export const GPS_POSITION_TOLERANCE_SEC = 5;
+
+/** Nearest sample's timestamp, resolving conflicting channel fixes at that instant. */
+export function findNearestPositionIndex(records: GpsRecord[], target: number): number {
+    const index = findNearestIndex(records, target);
+    return index < 0 ? -1 : validPositionIndexAt(records, index);
+}
+
 /**
  * Linearly interpolated position between adjacent GPS samples.
  * GPS runs at ~1 Hz; the map marker needs to move at 60 fps.
  *
  * Linear coordinate interpolation over short segments (tens to hundreds of
- * meters) is visually indistinguishable from geodesic. Bearing interpolation
- * takes the shortest arc through 360 (e.g. 350°→10° crosses 0°, not 180°).
+ * meters) is visually indistinguishable from geodesic. Longitude and bearing
+ * take the shortest arc through their wrap boundary.
  *
- * Returns null if targetUnix is more than 5 s outside the record range,
- * to avoid dragging the marker far past the track on a clock error.
+ * Invalid fixes break interpolation. Exact valid samples remain visible,
+ * including the first fix after a gap. Endpoints have a 5 s tolerance,
+ * including a one-record track, to avoid carrying a stale fix past its clock.
  */
 export function interpolatePosition(
     sortedRecords: GpsRecord[],
     targetUnixSeconds: number,
 ): InterpolatedPosition | null {
-    if (sortedRecords.length === 0) return null;
-    if (sortedRecords.length === 1) {
-        const r = sortedRecords[0]!;
-        return { lat: r.lat, lon: r.lon, bearingDeg: r.bearingDeg, speedMs: r.speedMs };
-    }
+    if (sortedRecords.length === 0 || !Number.isFinite(targetUnixSeconds)) return null;
 
     // Binary search for the first index with unixSeconds >= target.
     let lo = 0;
@@ -652,43 +669,60 @@ export function interpolatePosition(
         else hi = mid;
     }
 
-    const TOLERANCE_SEC = 5;
-
-    // target is before the first record - return first only if within tolerance.
-    if (lo === 0) {
-        const first = sortedRecords[0]!;
-        if (first.unixSeconds - targetUnixSeconds > TOLERANCE_SEC) return null;
-        return { lat: first.lat, lon: first.lon, bearingDeg: first.bearingDeg, speedMs: first.speedMs };
+    const nextIndex = validPositionIndexAt(sortedRecords, lo);
+    if (nextIndex < 0) return null;
+    const next = sortedRecords[nextIndex]!;
+    if (lo === 0 || targetUnixSeconds >= next.unixSeconds) {
+        if (Math.abs(next.unixSeconds - targetUnixSeconds) > GPS_POSITION_TOLERANCE_SEC) return null;
+        return positionFromRecord(next);
     }
 
-    const next = sortedRecords[lo]!;
-    const prev = sortedRecords[lo - 1]!;
-
-    // target is past the last record - return last only if within tolerance.
-    if (targetUnixSeconds > next.unixSeconds && lo === sortedRecords.length - 1) {
-        if (targetUnixSeconds - next.unixSeconds > TOLERANCE_SEC) return null;
-        return { lat: next.lat, lon: next.lon, bearingDeg: next.bearingDeg, speedMs: next.speedMs };
-    }
-
+    const prevIndex = validPositionIndexAt(sortedRecords, lo - 1);
+    if (prevIndex < 0) return null;
+    const prev = sortedRecords[prevIndex]!;
     const span = next.unixSeconds - prev.unixSeconds;
-    if (span <= 0) {
-        return { lat: prev.lat, lon: prev.lon, bearingDeg: prev.bearingDeg, speedMs: prev.speedMs };
-    }
+    if (span <= 0) return positionFromRecord(prev);
     const t = Math.max(0, Math.min(1, (targetUnixSeconds - prev.unixSeconds) / span));
 
     const lat = prev.lat + (next.lat - prev.lat) * t;
-    const lon = prev.lon + (next.lon - prev.lon) * t;
+    const lon = wrapDegrees(prev.lon + wrapDegrees(next.lon - prev.lon) * t);
     const speedMs = prev.speedMs + (next.speedMs - prev.speedMs) * t;
 
-    // Bearing: take the shortest arc through 360 to avoid spinning the wrong way.
-    let dBearing = next.bearingDeg - prev.bearingDeg;
-    if (dBearing > 180) dBearing -= 360;
-    else if (dBearing < -180) dBearing += 360;
-    let bearingDeg = prev.bearingDeg + dBearing * t;
-    if (bearingDeg < 0) bearingDeg += 360;
-    if (bearingDeg >= 360) bearingDeg -= 360;
+    const bearingDeg = (wrapDegrees(prev.bearingDeg + wrapDegrees(next.bearingDeg - prev.bearingDeg) * t) + 360) % 360;
 
     return { lat, lon, bearingDeg, speedMs };
+}
+
+function isValidPositionRecord(record: GpsRecord): boolean {
+    return (
+        isValidGpsFix(record) &&
+        Number.isFinite(record.unixSeconds) &&
+        Number.isFinite(record.bearingDeg) &&
+        Number.isFinite(record.speedMs) &&
+        record.speedMs >= 0
+    );
+}
+
+function validPositionIndexAt(records: GpsRecord[], index: number): number {
+    const record = records[index]!;
+    if (isValidPositionRecord(record)) return index;
+    // Concurrent channels can disagree on fix validity at the same instant.
+    for (let i = index - 1; i >= 0 && records[i]!.unixSeconds === record.unixSeconds; i--) {
+        if (isValidPositionRecord(records[i]!)) return i;
+    }
+    for (let i = index + 1; i < records.length && records[i]!.unixSeconds === record.unixSeconds; i++) {
+        if (isValidPositionRecord(records[i]!)) return i;
+    }
+    return -1;
+}
+
+function positionFromRecord(record: GpsRecord): InterpolatedPosition {
+    return {
+        lat: record.lat,
+        lon: wrapDegrees(record.lon),
+        bearingDeg: (wrapDegrees(record.bearingDeg) + 360) % 360,
+        speedMs: record.speedMs,
+    };
 }
 
 /**

@@ -1,5 +1,6 @@
 import type { ExpressionSpecification, Map as MapLibreMap } from "maplibre-gl";
 import type { MiniMapData } from "./state.js";
+import { unwrapTrackCoordinates } from "../coordinates.js";
 
 /** Geometry and gradient must describe the same ordered vertices. */
 export function addSpeedTrack(
@@ -15,7 +16,7 @@ export function addSpeedTrack(
         data: {
             type: "Feature",
             properties: {},
-            geometry: { type: "LineString", coordinates: data.coords },
+            geometry: { type: "LineString", coordinates: unwrapTrackCoordinates(data.coords) },
         },
     });
     map.addLayer({

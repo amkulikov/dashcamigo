@@ -5,7 +5,9 @@
 import type * as maplibregl from "maplibre-gl";
 
 import { probeWebGL } from "../capabilities.js";
+import { projectTrackToViewport, unwrapTrackCoordinates } from "../coordinates.js";
 import { createLogger } from "../log.js";
+import { isValidGpsFix } from "../parser.js";
 import type { GpsRecord } from "../parsers/types.js";
 import { loadMaplibre, loadMapStyle } from "./map.js";
 import { applyViewerLabelPrefs } from "./map-label-scale.js";
@@ -22,7 +24,6 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const SVG_WIDTH = 640;
 const SVG_HEIGHT = 360;
 const SVG_PADDING = 36;
-const MAX_MERCATOR_LAT = 85.051129;
 const MAX_PREVIEW_POINTS = 5000;
 
 type PreviewCoordinate = [number, number];
@@ -30,23 +31,18 @@ type PreviewCoordinate = [number, number];
 function previewCoordinates(records: readonly GpsRecord[]): PreviewCoordinate[] {
     const coords: PreviewCoordinate[] = [];
     for (const record of records) {
-        if (!record.active || !Number.isFinite(record.lat) || !Number.isFinite(record.lon)) continue;
+        if (!isValidGpsFix(record)) continue;
         const previous = coords[coords.length - 1];
         if (previous && previous[0] === record.lon && previous[1] === record.lat) continue;
         coords.push([record.lon, record.lat]);
     }
-    if (coords.length <= MAX_PREVIEW_POINTS) return coords;
+    const unwrapped = unwrapTrackCoordinates(coords);
+    if (unwrapped.length <= MAX_PREVIEW_POINTS) return unwrapped;
     const stride = Math.ceil(coords.length / MAX_PREVIEW_POINTS);
-    const reduced = coords.filter((_, index) => index % stride === 0);
-    const last = coords[coords.length - 1]!;
+    const reduced = unwrapped.filter((_, index) => index % stride === 0);
+    const last = unwrapped[unwrapped.length - 1]!;
     if (reduced[reduced.length - 1] !== last) reduced.push(last);
     return reduced;
-}
-
-function mercatorY(lat: number): number {
-    const clamped = Math.max(-MAX_MERCATOR_LAT, Math.min(MAX_MERCATOR_LAT, lat));
-    const radians = (clamped * Math.PI) / 180;
-    return Math.log(Math.tan(Math.PI / 4 + radians / 2));
 }
 
 function routeData(coords: readonly PreviewCoordinate[]): maplibregl.GeoJSONSourceSpecification["data"] {
@@ -102,28 +98,7 @@ function renderFallback(host: HTMLElement, coords: readonly PreviewCoordinate[])
     host.prepend(svg);
     if (coords.length === 0) return;
 
-    const projected = coords.map(([lon, lat]) => [lon, mercatorY(lat)] as const);
-    let minX = projected[0]![0];
-    let maxX = minX;
-    let minY = projected[0]![1];
-    let maxY = minY;
-    for (const [x, y] of projected.slice(1)) {
-        minX = Math.min(minX, x);
-        maxX = Math.max(maxX, x);
-        minY = Math.min(minY, y);
-        maxY = Math.max(maxY, y);
-    }
-    const spanX = maxX - minX;
-    const spanY = maxY - minY;
-    const scaleX = spanX > 1e-9 ? (SVG_WIDTH - SVG_PADDING * 2) / spanX : Number.POSITIVE_INFINITY;
-    const scaleY = spanY > 1e-9 ? (SVG_HEIGHT - SVG_PADDING * 2) / spanY : Number.POSITIVE_INFINITY;
-    const finiteScale = Math.min(scaleX, scaleY);
-    const scale = Number.isFinite(finiteScale) ? finiteScale : 1;
-    const usedWidth = spanX * scale;
-    const usedHeight = spanY * scale;
-    const offsetX = (SVG_WIDTH - usedWidth) / 2;
-    const offsetY = (SVG_HEIGHT - usedHeight) / 2;
-    const points = projected.map(([x, y]) => [offsetX + (x - minX) * scale, offsetY + (maxY - y) * scale] as const);
+    const points = projectTrackToViewport(coords, SVG_WIDTH, SVG_HEIGHT, SVG_PADDING);
 
     if (points.length >= 2) {
         const route = document.createElementNS(SVG_NS, "polyline");
