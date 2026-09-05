@@ -112,6 +112,27 @@ test.describe("touch player toolbar", () => {
         await expect(page.locator("#player-map")).toBeVisible();
         await expect(page.locator("#player-map")).toHaveAttribute("data-overflow-hidden", "false");
     });
+
+    test("page zoom preserves the map and export controls when the toolbar has room", async ({ page, context }) => {
+        await page.setViewportSize({ width: 767, height: 1024 });
+        await gotoApp(page, "ru");
+        await loadTrip(page, SAMPLE_70MAI);
+        await expect(page.locator("#player-map")).toBeVisible();
+        await expect(page.locator("#player-export")).toBeVisible();
+
+        const session = await context.newCDPSession(page);
+        await session.send("Emulation.setPageScaleFactor", { pageScaleFactor: 2 });
+        // A real layout resize forces overflow to measure while page zoom is
+        // active; the visual viewport is now narrower than the flex toolbar.
+        await page.setViewportSize({ width: 766, height: 1024 });
+
+        await expect.poll(() => page.evaluate(() => window.visualViewport?.scale)).toBeCloseTo(2);
+        await expect(page.locator("#player-map")).toHaveAttribute("data-overflow-hidden", "false");
+        await expect(page.locator("#player-export")).toHaveAttribute("data-overflow-hidden", "false");
+        await expect(page.locator("#player-map")).toBeVisible();
+        await expect(page.locator("#player-export")).toBeVisible();
+        await session.detach();
+    });
 });
 
 test("expanded map fills a narrow desktop viewer after sidebar resizing", async ({ page }) => {

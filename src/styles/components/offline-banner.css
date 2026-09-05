@@ -181,8 +181,11 @@ body:not(.has-offline-banner) .topbar-whats-slot:has(#whats-new-btn[data-overflo
         display: block;
     }
     .offline-banner-info {
-        width: 100%;
-        height: 100%;
+        /* Include the pill border in the button's touch target. */
+        position: absolute;
+        inset: -1px;
+        width: auto;
+        height: auto;
         margin: 0;
     }
 }
@@ -192,5 +195,18 @@ body:not(.has-offline-banner) .topbar-whats-slot:has(#whats-new-btn[data-overflo
     .offline-banner {
         width: var(--dc-iconbtn-touch);
         height: var(--dc-iconbtn-touch);
+    }
+}
+
+/* The offline slot remains visible after optional controls move to overflow.
+   Compact the brand on small phones so primary touch targets still fit. */
+@media (width < 360px) {
+    body.has-offline-banner .topbar .dc-mark {
+        font-size: 0;
+        gap: 0;
+    }
+    body.has-offline-banner .topbar .dc-mark__icon {
+        width: var(--dc-iconbtn-sm);
+        height: var(--dc-iconbtn-sm);
     }
 }

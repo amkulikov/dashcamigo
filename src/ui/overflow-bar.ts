@@ -231,11 +231,12 @@ export function initOverflowBar(opts: OverflowBarOptions): OverflowBarHandle {
         // pinch-zoomable with a dead strip on the right). If we measured against
         // the grown container's own right edge, every child would look like it
         // "fits" and we would never collapse - the bar stays inflated forever.
-        // visualViewport.width stays at the on-screen width regardless of the
-        // layout-viewport expansion, so it is the stable reference. min() makes
-        // this a no-op on desktop (the container never exceeds the viewport there).
+        // Normalize visual width by page scale: zoom changes the visible area,
+        // not the toolbar's CSS layout. Comparing against zoomed width would
+        // hide every optional item while the flex spacer still fills the bar.
+        // min() makes this a no-op when the container fits the viewport.
         const vp = window.visualViewport;
-        const viewportRight = vp ? vp.offsetLeft + vp.width : document.documentElement.clientWidth;
+        const viewportRight = vp ? vp.offsetLeft + vp.width * vp.scale : document.documentElement.clientWidth;
         const limit = Math.min(containerRect.right, viewportRight) - padR;
 
         let maxRight = Number.NEGATIVE_INFINITY;
