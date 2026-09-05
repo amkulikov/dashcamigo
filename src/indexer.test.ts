@@ -30,15 +30,9 @@ describe("indexer: MPEG-TS branch", () => {
         const file = new File([buf], "20260511134011_073648A.TS");
         const { indexed } = await indexOneFile(file, false);
         expect(indexed).not.toBeNull();
-        // 5 s fixture (anonymize-ts-generic.mjs default). mediabunny's
-        // computeDuration on MPEG-TS resolves from PCR/PTS spans, and ffmpeg's
-        // muxer offsets video by ~1.5 s relative to audio - so the reported
-        // duration is in [4.5, 7.5], not exactly the wall-clock 5 s. We only
-        // assert "non-zero + within the right order of magnitude" - the goal
-        // here is to catch regressions where indexTsFile returns null or 0,
-        // not to nail the exact value.
+        // The transport clock offset must not add blank time to the recording.
         expect(indexed!.durationSec).toBeGreaterThan(4.5);
-        expect(indexed!.durationSec).toBeLessThan(7.5);
+        expect(indexed!.durationSec).toBeLessThan(5.5);
         expect(indexed!.codec).toBe("hevc");
         expect(indexed!.fps).toBe(30);
         // Full RFC 6381 string from mediabunny.getCodecParameterString - feeds

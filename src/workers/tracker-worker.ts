@@ -13,6 +13,7 @@
 // side opens fresh per request - files change between passes.
 
 import { BlobSource, CanvasSink, Input } from "mediabunny";
+import { getInputTimeOrigin } from "../media-time.js";
 
 import { inflateRect } from "../blur-regions.js";
 import { finalizeFollowEndReason } from "../tracking/follow-end.js";
@@ -190,9 +191,10 @@ async function runTrackPass(
             // inside its loop iteration, before the next frame is pulled), so one
             // reused canvas keeps VRAM constant at the wider decode widths.
             const sink = new CanvasSink(track, { width, poolSize: 1 });
-            for await (const wrapped of sink.canvases(seedLocal, endLocal)) {
+            const timeOrigin = await getInputTimeOrigin(input);
+            for await (const wrapped of sink.canvases(seedLocal + timeOrigin, endLocal + timeOrigin)) {
                 if (signal.aborted) throw new DOMException("aborted", "AbortError");
-                const contentSec = seg.tripStart + wrapped.timestamp;
+                const contentSec = seg.tripStart + wrapped.timestamp - timeOrigin;
                 // Progress tracks decode position, so the bar stays smooth over the
                 // frames we skip for inference.
                 const now = performance.now();
@@ -523,9 +525,10 @@ async function runDetectPass(
                 // Frame dims are constant within a segment - the scan grid is
                 // built once (lazily, only when a scan actually fires).
                 let segTiles: TileRect[] | null = null;
-                for await (const wrapped of sink.canvases(startLocal, endLocal)) {
+                const timeOrigin = await getInputTimeOrigin(input);
+                for await (const wrapped of sink.canvases(startLocal + timeOrigin, endLocal + timeOrigin)) {
                     if (signal.aborted) throw new DOMException("aborted", "AbortError");
-                    const contentSec = seg.tripStart + wrapped.timestamp;
+                    const contentSec = seg.tripStart + wrapped.timestamp - timeOrigin;
                     const now = performance.now();
                     if (now - lastProgressAt >= PROGRESS_THROTTLE_MS) {
                         lastProgressAt = now;

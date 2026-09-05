@@ -26,6 +26,7 @@ import {
 } from "mediabunny";
 
 import { createLogger } from "../log.js";
+import { getInputTimeOrigin } from "../media-time.js";
 import { clampTsGpsTrailer } from "../ts-trailer.js";
 import { VIDEO_INPUT_FORMATS } from "../video-formats.js";
 
@@ -45,6 +46,7 @@ interface DecoderEntry {
     input: Input;
     track: InputVideoTrack;
     sink: CanvasSink;
+    timeOrigin: number;
 }
 
 // Long-edge cap for decoded thumbnail canvases. Consumers (chart-strip popup,
@@ -83,8 +85,9 @@ async function getOrOpenDecoder(file: File): Promise<DecoderEntry | null> {
         decoderCache.set(key, cached);
         return cached;
     }
+    let input: Input | null = null;
     try {
-        const input = new Input({
+        input = new Input({
             source: new BlobSource(await clampTsGpsTrailer(file)),
             formats: VIDEO_INPUT_FORMATS,
         });
@@ -104,6 +107,7 @@ async function getOrOpenDecoder(file: File): Promise<DecoderEntry | null> {
             track,
             // Extraction is serialized and each bitmap snapshots the canvas before reuse.
             sink: new CanvasSink(track, { width, poolSize: 1 }),
+            timeOrigin: await getInputTimeOrigin(input),
         };
         decoderCache.set(key, entry);
         // Evict LRU until under cap.
@@ -116,6 +120,7 @@ async function getOrOpenDecoder(file: File): Promise<DecoderEntry | null> {
         }
         return entry;
     } catch (err) {
+        input?.dispose();
         log.debug("decoder open failed", { file: file.name, err: String(err) });
         return null;
     }
@@ -163,7 +168,7 @@ async function extractFrames(file: File, timestamps: number[], signal: AbortSign
         let bitmap: ImageBitmap | null = null;
         for (let attempt = 0; attempt < 2; attempt++) {
             try {
-                const wrapped = await getCanvasNearestForward(entry.sink, t);
+                const wrapped = await getCanvasNearestForward(entry.sink, t + entry.timeOrigin);
                 if (signal.aborted) return dropAndReturn();
                 if (!wrapped) break;
                 bitmap = await canvasToImageBitmap(wrapped);

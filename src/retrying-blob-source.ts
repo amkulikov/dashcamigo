@@ -31,7 +31,7 @@ const log = createLogger("retrying-blob-source");
 const RETRY_DELAYS_MS = [250, 1000, 3000];
 
 // The orchestrator runs at most 2 read workers per CustomSource; a couple of
-// spare slots cover ranges abandoned mid-read without hoarding open readers.
+// spare slots cover noncontiguous ranges without hoarding open readers.
 const MAX_POOLED_READERS = 4;
 
 /**
@@ -61,6 +61,10 @@ async function backoffOrRethrow(
 /** Rejects with AbortError as soon as `signal` fires; resolves after `ms` otherwise. */
 function sleepWithAbort(ms: number, signal: AbortSignal | undefined): Promise<void> {
     return new Promise((resolve, reject) => {
+        if (signal?.aborted) {
+            reject(new DOMException("aborted", "AbortError"));
+            return;
+        }
         const timer = setTimeout(() => {
             signal?.removeEventListener("abort", onAbort);
             resolve();
@@ -91,30 +95,51 @@ interface PositionedReader {
  * cancels everything - wired to the source's dispose.
  */
 export interface ReaderPool {
-    take(pos: number): PositionedReader | null;
+    readonly disposed: boolean;
+    take(pos: number): PositionedReader;
     give(entry: PositionedReader): void;
+    discard(entry: PositionedReader): void;
     disposeAll(): void;
 }
 
 /** Creates an empty ReaderPool (one per source; standalone in tests). */
 export function createReaderPool(): ReaderPool {
     const entries: PositionedReader[] = [];
+    const active = new Set<PositionedReader>();
+    let isDisposed = false;
     const drop = (entry: PositionedReader): void => {
         entry.reader?.cancel().catch(() => {});
         entry.reader = null;
         entry.leftover = null;
     };
     return {
+        get disposed() {
+            return isDisposed;
+        },
         take(pos) {
+            if (isDisposed) throw new DOMException("aborted", "AbortError");
             const idx = entries.findIndex((e) => e.pos === pos);
-            if (idx === -1) return null;
-            return entries.splice(idx, 1)[0]!;
+            const entry = idx < 0 ? { pos, reader: null, leftover: null } : entries.splice(idx, 1)[0]!;
+            active.add(entry);
+            return entry;
         },
         give(entry) {
+            if (!active.delete(entry)) return;
+            if (isDisposed) {
+                drop(entry);
+                return;
+            }
             entries.push(entry);
             while (entries.length > MAX_POOLED_READERS) drop(entries.shift()!);
         },
+        discard(entry) {
+            active.delete(entry);
+            drop(entry);
+        },
         disposeAll() {
+            isDisposed = true;
+            for (const entry of active) drop(entry);
+            active.clear();
             while (entries.length > 0) drop(entries.pop()!);
         },
     };
@@ -139,6 +164,15 @@ export function createRetryingRangeStream(
 ): ReadableStream<Uint8Array> {
     let entry: PositionedReader | null = null;
     let consecutiveFailures = 0;
+    let isCancelled = false;
+
+    const checkAbort = (): void => {
+        if (isCancelled || pool.disposed || signal?.aborted) throw new DOMException("aborted", "AbortError");
+    };
+    const discard = (): void => {
+        if (entry) pool.discard(entry);
+        entry = null;
+    };
 
     // Serves up to (end - entry.pos) bytes from `bytes`, keeping the excess as
     // leftover for the next range. Returns the part to enqueue.
@@ -155,59 +189,71 @@ export function createRetryingRangeStream(
         return head;
     };
 
+    const enqueue = (
+        controller: ReadableStreamDefaultController<Uint8Array>,
+        e: PositionedReader,
+        bytes: Uint8Array,
+    ): void => {
+        controller.enqueue(serve(e, bytes));
+        consecutiveFailures = 0;
+        if (e.pos >= end) {
+            pool.give(e);
+            entry = null;
+            controller.close();
+        }
+    };
+
     return new ReadableStream<Uint8Array>({
         async pull(controller) {
-            for (;;) {
-                if (signal?.aborted) throw new DOMException("aborted", "AbortError");
-                if (!entry) entry = pool.take(start) ?? { pos: start, reader: null, leftover: null };
-                const e = entry;
-                if (e.pos >= end) {
-                    pool.give(e);
-                    entry = null;
-                    controller.close();
-                    return;
-                }
-                if (e.leftover && e.leftover.byteLength > 0) {
-                    const chunk = serve(e, e.leftover);
-                    consecutiveFailures = 0;
-                    controller.enqueue(chunk);
-                    return;
-                }
-                try {
-                    // Tail slice: outlives this range and keeps serving the next
-                    // contiguous one via the pool.
-                    e.reader ??= blob.slice(e.pos).stream().getReader();
-                    const { done, value } = await e.reader.read();
-                    if (done) {
-                        // EOF before `end` - the orchestrator never asks past the
-                        // size it was given, so a shrunk blob is a real failure;
-                        // closing early lets mediabunny raise its precise error.
+            try {
+                for (;;) {
+                    checkAbort();
+                    entry ??= pool.take(start);
+                    const e = entry;
+                    if (e.pos >= end) {
                         pool.give(e);
                         entry = null;
                         controller.close();
                         return;
                     }
-                    const chunk = serve(e, value);
-                    consecutiveFailures = 0;
-                    controller.enqueue(chunk);
-                    return;
-                } catch (err) {
-                    // The reader is poisoned after an error - the next attempt
-                    // must re-slice from e.pos to get a fresh one.
-                    e.reader?.cancel().catch(() => {});
-                    e.reader = null;
-                    await backoffOrRethrow(err, consecutiveFailures, e.pos, signal);
-                    consecutiveFailures++;
+                    if (e.leftover && e.leftover.byteLength > 0) {
+                        enqueue(controller, e, e.leftover);
+                        return;
+                    }
+                    try {
+                        // Tail slice: outlives this range and keeps serving the next
+                        // contiguous one via the pool.
+                        e.reader ??= blob.slice(e.pos).stream().getReader();
+                        const { done, value } = await e.reader.read();
+                        checkAbort();
+                        if (done) {
+                            // EOF before `end` - the orchestrator never asks past the
+                            // size it was given, so a shrunk blob is a real failure;
+                            // closing early lets mediabunny raise its precise error.
+                            discard();
+                            controller.close();
+                            return;
+                        }
+                        enqueue(controller, e, value);
+                        return;
+                    } catch (err) {
+                        // The reader is poisoned after an error - the next attempt
+                        // must re-slice from e.pos to get a fresh one.
+                        e.reader?.cancel().catch(() => {});
+                        e.reader = null;
+                        await backoffOrRethrow(err, consecutiveFailures, e.pos, signal);
+                        consecutiveFailures++;
+                    }
                 }
+            } catch (err) {
+                discard();
+                throw err;
             }
         },
         cancel() {
-            // Mid-range abandonment: the reader is still positioned and healthy,
-            // so hand it back for whoever reads on from here.
-            if (entry) {
-                pool.give(entry);
-                entry = null;
-            }
+            // A pending read must settle before another range can reuse its position.
+            isCancelled = true;
+            discard();
         },
     });
 }
@@ -230,7 +276,9 @@ export async function readRangeWithRetry(
     for (;;) {
         if (signal?.aborted) throw new DOMException("aborted", "AbortError");
         try {
-            return new Uint8Array(await blob.slice(start, end).arrayBuffer());
+            const bytes = new Uint8Array(await blob.slice(start, end).arrayBuffer());
+            if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+            return bytes;
         } catch (err) {
             await backoffOrRethrow(err, consecutiveFailures, start, signal);
             consecutiveFailures++;
@@ -249,6 +297,10 @@ export async function readRangeWithRetry(
  */
 export function createRetryingBlobSource(blob: Blob, signal?: AbortSignal): CustomSource {
     const pool = createReaderPool();
+    const disposeController = new AbortController();
+    const readSignal = signal ? AbortSignal.any([signal, disposeController.signal]) : disposeController.signal;
+    readSignal.addEventListener("abort", () => pool.disposeAll(), { once: true });
+    if (readSignal.aborted) pool.disposeAll();
     const avoidBlobStream = identifyBrowser().engine === "webkit";
     // A .ts file may end in a LigoGPS trailer that breaks the demuxer's packet
     // sync (see ts-trailer.ts). getSize is guaranteed to run before read, so
@@ -259,9 +311,9 @@ export function createRetryingBlobSource(blob: Blob, signal?: AbortSignal): Cust
         getSize: () => (effectiveSize ??= clampTsGpsTrailer(blob).then((b) => b.size)),
         read: (start, end) =>
             avoidBlobStream
-                ? readRangeWithRetry(blob, start, end, signal)
-                : createRetryingRangeStream(blob, pool, start, end, signal),
-        dispose: () => pool.disposeAll(),
+                ? readRangeWithRetry(blob, start, end, readSignal)
+                : createRetryingRangeStream(blob, pool, start, end, readSignal),
+        dispose: () => disposeController.abort(),
         // Mirror BlobSource: 8 MiB cache is its default, fileSystem prefetch is
         // what it hard-codes for local reads.
         maxCacheSize: 8 * 2 ** 20,

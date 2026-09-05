@@ -1,6 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { Input, InputDisposedError } from "mediabunny";
 
-import { createReaderPool, createRetryingRangeStream, readRangeWithRetry } from "./retrying-blob-source.js";
+import {
+    createReaderPool,
+    createRetryingBlobSource,
+    createRetryingRangeStream,
+    readRangeWithRetry,
+} from "./retrying-blob-source.js";
+import { VIDEO_INPUT_FORMATS } from "./video-formats.js";
 
 // Only the environment boundary is faked: a Blob whose slice().stream() we
 // script per call, so failures can be injected exactly where a scanner lock
@@ -78,6 +86,49 @@ function sampleBytes(len: number): Uint8Array {
 
 const readErr = (): TypeError => new TypeError("network error");
 
+function delayedRecording(): { file: File; started: Promise<void>; release(): void; cancellations(): number } {
+    const file = new File(
+        [readFileSync(new URL("../tests/testdata/no-gps-h264/clip-no-gps.mp4", import.meta.url))],
+        "video.mp4",
+    );
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+        markStarted = resolve;
+    });
+    const slice = file.slice.bind(file);
+    let cancellations = 0;
+    file.slice = (...args): Blob => {
+        const blob = slice(...args);
+        const stream = blob.stream.bind(blob);
+        blob.stream = () => {
+            const reader = stream().getReader();
+            let isCancelled = false;
+            return new ReadableStream<Uint8Array<ArrayBuffer>>({
+                async pull(controller) {
+                    markStarted();
+                    await gate;
+                    if (isCancelled) return;
+                    const result = await reader.read();
+                    if (isCancelled) return;
+                    if (result.done) controller.close();
+                    else controller.enqueue(result.value);
+                },
+                cancel() {
+                    isCancelled = true;
+                    cancellations++;
+                    return reader.cancel();
+                },
+            });
+        };
+        return blob;
+    };
+    return { file, started, release, cancellations: () => cancellations };
+}
+
 describe("createRetryingRangeStream", () => {
     it("yields exactly the requested range from a single tail slice", async () => {
         const bytes = sampleBytes(1000);
@@ -102,6 +153,41 @@ describe("createRetryingRangeStream", () => {
         expect(first).toEqual(bytes.slice(0, 500));
         expect(second).toEqual(bytes.slice(500, 1000));
         expect(sliceCalls, "the sequential fast path opens exactly one reader").toHaveLength(1);
+    });
+
+    it("disposes an active reader and rejects future reads from the closed pool", async () => {
+        const recording = delayedRecording();
+        const pool = createReaderPool();
+        const pending = readAll(createRetryingRangeStream(recording.file, pool, 0, 128, undefined));
+        const rejection = expect(pending).rejects.toMatchObject({ name: "AbortError" });
+        try {
+            await recording.started;
+            pool.disposeAll();
+            await rejection;
+            expect(recording.cancellations()).toBe(1);
+            expect(() => pool.take(0)).toThrow();
+            pool.disposeAll();
+            expect(recording.cancellations(), "repeated disposal is harmless").toBe(1);
+        } finally {
+            recording.release();
+            pool.disposeAll();
+        }
+    });
+
+    it("cancels a range while its underlying read is pending", async () => {
+        const recording = delayedRecording();
+        const pool = createReaderPool();
+        const reader = createRetryingRangeStream(recording.file, pool, 0, 128, undefined).getReader();
+        const pending = reader.read();
+        try {
+            await recording.started;
+            await reader.cancel();
+            expect((await pending).done).toBe(true);
+            expect(recording.cancellations()).toBe(1);
+        } finally {
+            recording.release();
+            pool.disposeAll();
+        }
     });
 
     // Timing (the backoff) is part of what's under test - fake timers.
@@ -252,6 +338,42 @@ describe("createRetryingRangeStream", () => {
             await expect(pending).rejects.toMatchObject({ name: "AbortError" });
         } finally {
             vi.useRealTimers();
+        }
+    });
+});
+
+describe("retrying input lifecycle", () => {
+    it("cancels the active file stream when Mediabunny disposes the input", async () => {
+        const recording = delayedRecording();
+        const input = new Input({ source: createRetryingBlobSource(recording.file), formats: VIDEO_INPUT_FORMATS });
+        const rejection = expect(input.getPrimaryVideoTrack()).rejects.toBeInstanceOf(InputDisposedError);
+        try {
+            await recording.started;
+            input.dispose();
+            await rejection;
+            expect(recording.cancellations()).toBe(1);
+        } finally {
+            recording.release();
+            input.dispose();
+        }
+    });
+
+    it("cancels the active file stream immediately on export abort", async () => {
+        const recording = delayedRecording();
+        const controller = new AbortController();
+        const input = new Input({
+            source: createRetryingBlobSource(recording.file, controller.signal),
+            formats: VIDEO_INPUT_FORMATS,
+        });
+        const rejection = expect(input.getPrimaryVideoTrack()).rejects.toMatchObject({ name: "AbortError" });
+        try {
+            await recording.started;
+            controller.abort();
+            await rejection;
+            expect(recording.cancellations()).toBe(1);
+        } finally {
+            recording.release();
+            input.dispose();
         }
     });
 });

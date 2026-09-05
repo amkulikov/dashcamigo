@@ -7,6 +7,7 @@ import { Input, BlobSource, InputDisposedError, UnsupportedInputFormatError } fr
 import type { VideoCodec } from "mediabunny";
 
 import { createLogger } from "../../log.js";
+import { getInputTimeOrigin } from "../../media-time.js";
 import { needsHevcRemux } from "../../hevc-remux.js";
 import { detectMoovRepairs } from "../../repair/moov-repair.js";
 import { clampTsGpsTrailer } from "../../ts-trailer.js";
@@ -202,7 +203,7 @@ export async function indexNonIsobmffFile(file: File, signal?: AbortSignal): Pro
             if (signal.aborted) onAbort();
             else signal.addEventListener("abort", onAbort, { once: true });
         }
-        const durationSec = await input.computeDuration();
+        const durationSec = (await input.computeDuration()) - (await getInputTimeOrigin(input));
         if (!Number.isFinite(durationSec) || durationSec <= 0) {
             log.info("non-isobmff indexing skipped: invalid duration", { file: file.name, durationSec });
             return { indexed: null };
