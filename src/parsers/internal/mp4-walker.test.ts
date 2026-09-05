@@ -21,6 +21,7 @@ import {
     readHandlerType,
     readChunkByteRanges,
     readFirstSampleEntry,
+    readSampleTable,
     readSampleDurationsInTicks,
     readSampleStartsInTicks,
     readSoundSampleParams,
@@ -509,6 +510,48 @@ describe("readChunkByteRanges", () => {
             { offset: 1000, length: 4 },
             { offset: 2000, length: 4 },
         ]);
+    });
+});
+
+describe("sample table readers", () => {
+    it.each(["stco", "co64"])("follows changing chunk runs and bounds the final %s chunk by stsz", (format) => {
+        const offsetBase = format === "co64" ? 0x100000000 : 0;
+        const offsets = [1000, 2000, 3000, 4000, 5000, 6000];
+        const chunkOffsets = box(
+            format,
+            u32be(0, offsets.length, ...offsets.flatMap((offset) => (format === "co64" ? [1, offset] : [offset]))),
+        );
+        const stsc = box("stsc", u32be(0, 4, 1, 0, 1, 2, 2, 1, 4, 0, 1, 5, 3, 1));
+        const stsz = box("stsz", u32be(0, 0, 6, 7, 0, 9, 11, 13, 17));
+        const { dv, trak } = trakWithSampleTable(chunkOffsets, stsc, stsz);
+
+        expect(readSampleTable(dv, trak)).toEqual([
+            { offset: offsetBase + 2000, size: 7, index: 1 },
+            { offset: offsetBase + 2007, size: 0, index: 2 },
+            { offset: offsetBase + 3000, size: 9, index: 3 },
+            { offset: offsetBase + 3009, size: 11, index: 4 },
+            { offset: offsetBase + 5000, size: 13, index: 5 },
+            { offset: offsetBase + 5013, size: 17, index: 6 },
+        ]);
+        expect(readChunkByteRanges(dv, trak)).toEqual([
+            { offset: offsetBase + 1000, length: 0 },
+            { offset: offsetBase + 2000, length: 7 },
+            { offset: offsetBase + 3000, length: 20 },
+            { offset: offsetBase + 4000, length: 0 },
+            { offset: offsetBase + 5000, length: 30 },
+        ]);
+        expect(readFirstSampleEntry(dv, trak)).toEqual({ offset: offsetBase + 2000, size: 7, index: 1 });
+    });
+
+    it("rejects a corrupt stco without falling back to a valid co64", () => {
+        const stco = box("stco", u32be(0, 2, 1000));
+        const co64 = box("co64", u32be(0, 1, 0, 2000));
+        const stsc = box("stsc", u32be(0, 1, 1, 1, 1));
+        const stsz = box("stsz", u32be(0, 1, 1));
+        const { dv, trak } = trakWithSampleTable(stco, co64, stsc, stsz);
+        expect(readSampleTable(dv, trak)).toBeNull();
+        expect(readChunkByteRanges(dv, trak)).toBeNull();
+        expect(readFirstSampleEntry(dv, trak)).toBeNull();
     });
 });
 

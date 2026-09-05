@@ -506,37 +506,23 @@ export interface ChunkRange {
  * Returns null if any required box is missing; best-effort on a truncated table.
  */
 export function readChunkByteRanges(dv: DataView, trak: Box): ChunkRange[] | null {
-    const stbl = walkPath(dv, trak, "mdia", "minf", "stbl");
-    if (!stbl) return null;
-
-    const chunkOffsets = readChunkOffsets(dv, stbl);
-    if (chunkOffsets === null) return null;
-    const stsc = readStsc(dv, stbl);
-    if (stsc === null) return null;
-    const sampleSizes = readSampleSizes(dv, stbl);
-    if (sampleSizes === null) return null;
+    const layout = readSampleLayout(dv, trak);
+    if (!layout) return null;
+    const { sizes, chunks } = layout;
 
     const ranges: ChunkRange[] = [];
-    let sampleIndex = 0;
-    for (let chunkIdx = 0; chunkIdx < chunkOffsets.length; chunkIdx++) {
-        const samplesInChunk = samplesPerChunkAt(stsc, chunkIdx);
-        // Clamp to the samples that actually exist - a truncated stsz (or a stsc
-        // declaring more samples than stsz has) stops here, best-effort.
-        const remaining = sampleSizes.count - sampleIndex;
-        if (remaining <= 0) break;
-        const n = Math.min(samplesInChunk, remaining);
+    for (const chunk of chunks) {
         let length: number;
-        if (sampleSizes.fixed !== null) {
+        if (sizes.fixed !== null) {
             // Uniform sample size: the chunk length is a single multiply, NOT a
             // per-sample walk. This is the IMA-ADPCM case - millions of 1-byte
             // samples - so the whole reader stays O(chunks), not O(samples).
-            length = n * sampleSizes.fixed;
+            length = chunk.sampleCount * sizes.fixed;
         } else {
             length = 0;
-            for (let s = 0; s < n; s++) length += sampleSizes.at(sampleIndex + s) ?? 0;
+            for (let s = 0; s < chunk.sampleCount; s++) length += sizes.at(chunk.firstSample + s);
         }
-        ranges.push({ offset: chunkOffsets[chunkIdx]!, length });
-        sampleIndex += n;
+        ranges.push({ offset: chunk.offset, length });
     }
     return ranges;
 }
@@ -641,35 +627,21 @@ export function isImaAdpcmSampleEntry(format: string): boolean {
  * next.first_chunk - 1. The last entry applies through the final chunk in stco.
  */
 export function readSampleTable(dv: DataView, trak: Box): SampleEntry[] | null {
-    const stbl = walkPath(dv, trak, "mdia", "minf", "stbl");
-    if (!stbl) return null;
-
-    const chunkOffsets = readChunkOffsets(dv, stbl);
-    if (chunkOffsets === null) return null;
-
-    const stsc = readStsc(dv, stbl);
-    if (stsc === null) return null;
-
-    const sampleSizes = readSampleSizes(dv, stbl);
-    if (sampleSizes === null) return null;
+    const layout = readSampleLayout(dv, trak);
+    if (!layout) return null;
 
     const samples: SampleEntry[] = [];
-    let sampleIndex = 0; // 0-based for sampleSizes indexing; SampleEntry.index is 1-based
-
-    for (let chunkIdx = 0; chunkIdx < chunkOffsets.length; chunkIdx++) {
-        const samplesInChunk = samplesPerChunkAt(stsc, chunkIdx);
-        const chunkOffset = chunkOffsets[chunkIdx]!;
+    for (const chunk of layout.chunks) {
         let intraChunkOffset = 0;
-        for (let s = 0; s < samplesInChunk; s++) {
-            const size = sampleSizes.at(sampleIndex);
-            if (size === null) return samples; // no more sizes - stop
+        for (let s = 0; s < chunk.sampleCount; s++) {
+            const sampleIndex = chunk.firstSample + s;
+            const size = layout.sizes.at(sampleIndex);
             samples.push({
-                offset: chunkOffset + intraChunkOffset,
+                offset: chunk.offset + intraChunkOffset,
                 size,
                 index: sampleIndex + 1,
             });
             intraChunkOffset += size;
-            sampleIndex++;
         }
     }
 
@@ -683,23 +655,60 @@ export function readSampleTable(dv: DataView, trak: Box): SampleEntry[] | null {
  * sizes need to be summed. Returns null for an empty or corrupt table.
  */
 export function readFirstSampleEntry(dv: DataView, trak: Box): SampleEntry | null {
-    const stbl = walkPath(dv, trak, "mdia", "minf", "stbl");
-    if (!stbl) return null;
+    const layout = readSampleLayout(dv, trak);
+    if (!layout) return null;
 
-    const chunkOffsets = readChunkOffsetTable(dv, stbl);
-    if (chunkOffsets === null) return null;
-    const stsc = readStsc(dv, stbl);
-    if (stsc === null) return null;
-    const sampleSizes = readSampleSizes(dv, stbl);
-    if (sampleSizes === null || sampleSizes.count === 0) return null;
-
-    for (let chunkIdx = 0; chunkIdx < chunkOffsets.count; chunkIdx++) {
-        if (samplesPerChunkAt(stsc, chunkIdx) === 0) continue;
-        const size = sampleSizes.at(0);
-        if (size === null) return null;
-        return { offset: chunkOffsetAt(dv, chunkOffsets, chunkIdx), size, index: 1 };
+    for (const chunk of layout.chunks) {
+        if (chunk.sampleCount > 0) return { offset: chunk.offset, size: layout.sizes.at(0), index: 1 };
     }
     return null;
+}
+
+interface SampleChunk {
+    offset: number;
+    firstSample: number;
+    sampleCount: number;
+}
+
+interface SampleLayout {
+    sizes: SampleSizes;
+    chunks: Generator<SampleChunk>;
+}
+
+/** Validates the shared sample tables without expanding chunk offsets or samples. */
+function readSampleLayout(dv: DataView, trak: Box): SampleLayout | null {
+    const stbl = walkPath(dv, trak, "mdia", "minf", "stbl");
+    if (!stbl) return null;
+    const offsets = readChunkOffsetTable(dv, stbl);
+    if (!offsets) return null;
+    const stsc = readStsc(dv, stbl);
+    if (!stsc) return null;
+    const sizes = readSampleSizes(dv, stbl);
+    return sizes ? { sizes, chunks: sampleChunks(dv, offsets, stsc, sizes.count) } : null;
+}
+
+/**
+ * Walks compressed stsc runs once, clipping the last chunk to the available
+ * samples. Zero-sample chunks retain their byte range but consume no sizes.
+ * Lazy iteration lets the first-sample reader stop before expanding the track.
+ */
+function* sampleChunks(
+    dv: DataView,
+    offsets: ChunkOffsetTable,
+    stsc: StscEntry[],
+    totalSamples: number,
+): Generator<SampleChunk> {
+    let stscIndex = 0;
+    let samplesPerChunk = 0;
+    let firstSample = 0;
+    for (let chunkIndex = 0; chunkIndex < offsets.count && firstSample < totalSamples; chunkIndex++) {
+        while (stscIndex < stsc.length && stsc[stscIndex]!.firstChunk <= chunkIndex + 1) {
+            samplesPerChunk = stsc[stscIndex++]!.samplesPerChunk;
+        }
+        const sampleCount = Math.min(samplesPerChunk, totalSamples - firstSample);
+        yield { offset: chunkOffsetAt(dv, offsets, chunkIndex), firstSample, sampleCount };
+        firstSample += sampleCount;
+    }
 }
 
 interface ChunkOffsetTable {
@@ -728,15 +737,6 @@ function chunkOffsetAt(dv: DataView, table: ChunkOffsetTable, index: number): nu
     return dv.getUint32(offset) * 0x100000000 + dv.getUint32(offset + 4);
 }
 
-/** Reads stco (u32) or co64 (u64) → array of absolute chunk offsets. */
-function readChunkOffsets(dv: DataView, stbl: Box): number[] | null {
-    const table = readChunkOffsetTable(dv, stbl);
-    if (table === null) return null;
-    const out = new Array<number>(table.count);
-    for (let i = 0; i < table.count; i++) out[i] = chunkOffsetAt(dv, table, i);
-    return out;
-}
-
 interface StscEntry {
     firstChunk: number; // 1-based per spec
     samplesPerChunk: number;
@@ -761,25 +761,14 @@ function readStsc(dv: DataView, stbl: Box): StscEntry[] | null {
     return out;
 }
 
-/** Returns samples_per_chunk for the chunk at 0-based index. */
-function samplesPerChunkAt(stsc: StscEntry[], chunkIdx0: number): number {
-    const chunkIdx1 = chunkIdx0 + 1; // stsc uses 1-based
-    let current = 0;
-    for (const entry of stsc) {
-        if (entry.firstChunk <= chunkIdx1) current = entry.samplesPerChunk;
-        else break;
-    }
-    return current;
-}
-
 interface SampleSizes {
     /** Total sample count declared in stsz. */
     count: number;
     /** Uniform per-sample size when stsz declares one (sample_size > 0 in the
      *  header), else null - lets callers skip the per-sample walk for a chunk. */
     fixed: number | null;
-    /** Size of the sample at a 0-based index, or null past the table. */
-    at(sampleIdx0: number): number | null;
+    /** Size at an in-bounds 0-based index supplied by sampleChunks. */
+    at(sampleIdx0: number): number;
 }
 
 /**
@@ -799,14 +788,14 @@ function readSampleSizes(dv: DataView, stbl: Box): SampleSizes | null {
     const sampleCount = dv.getUint32(stsz.payloadStart + 8);
     if (sampleCount > MAX_SAMPLE_TABLE_ENTRIES) return null;
     if (sampleSize > 0) {
-        return { count: sampleCount, fixed: sampleSize, at: (idx) => (idx < sampleCount ? sampleSize : null) };
+        return { count: sampleCount, fixed: sampleSize, at: () => sampleSize };
     }
     const arrayStart = stsz.payloadStart + 12;
     if (arrayStart + sampleCount * 4 > stsz.end) return null;
     return {
         count: sampleCount,
         fixed: null,
-        at: (idx) => (idx >= sampleCount ? null : dv.getUint32(arrayStart + idx * 4)),
+        at: (idx) => dv.getUint32(arrayStart + idx * 4),
     };
 }
 
