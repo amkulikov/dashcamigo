@@ -2,8 +2,9 @@
 // artifacts and asserts:
 //
 //   1. The manifest the plugin builds from the real dist/ covers every emitted
-//      JS/CSS file, including the actual /en/ boot graph, while fonts and media
-//      stay cache-as-used. A code dependency missing from the precache is an
+//      JS/CSS file and local map style/sprite dependencies, including the actual
+//      /en/ boot graph, while fonts and decorative media stay cache-as-used.
+//      A code dependency missing from the precache is an
 //      offline failure visible only in the field.
 //
 //   2. All prerendered locale shells (/<lang>/) are in the manifest.
@@ -19,9 +20,11 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 import { SEO_LOCALES } from "./i18n/seo-config.js";
 import { collectPrecacheEntries } from "../vite-plugins/sw-precache.js";
+import { computeTrackerAssets } from "../vite-plugins/tracker-assets.js";
 
 const DIST_DIR = resolve(__dirname, "..", "dist");
 const EN_HTML = resolve(DIST_DIR, "en", "index.html");
@@ -54,6 +57,13 @@ function bootAssetsOf(html: string): string[] {
     return [...new Set(out)];
 }
 
+function injectedValue(name: "PRECACHE_MANIFEST" | "TRACKER_ASSET_URLS"): unknown {
+    return runInNewContext(`${readFileSync(SW, "utf-8")}\n;${name};`, {
+        URL,
+        self: { location: { origin: "https://dashcamigo.test" }, addEventListener() {} },
+    });
+}
+
 describe("sw-precache integration: manifest covers the real boot graph", () => {
     itIf("every /en/ boot asset (entry, preloads, css) is in the precache manifest", () => {
         const segments = SEO_LOCALES.map((l) => l.urlSegment);
@@ -69,10 +79,31 @@ describe("sw-precache integration: manifest covers the real boot graph", () => {
     itIf("every emitted JS/CSS file is in the precache manifest", () => {
         const segments = SEO_LOCALES.map((l) => l.urlSegment);
         const urls = new Set(collectPrecacheEntries(DIST_DIR, segments).map((e) => e.url));
-        const assets = readdirSync(resolve(DIST_DIR, "assets")).filter((file) => /\.(?:js|css)$/.test(file));
+        const assets = readdirSync(resolve(DIST_DIR, "assets"), { recursive: true, encoding: "utf8" })
+            .filter((file) => /\.(?:m?js|css)$/.test(file))
+            .map((file) => file.replaceAll("\\", "/"));
         expect(assets.length, "dist/assets has emitted JS/CSS").toBeGreaterThan(0);
         for (const asset of assets) {
             expect(urls.has(`/assets/${asset}`), `code asset /assets/${asset} must be precached`).toBe(true);
+        }
+    });
+
+    itIf("all local map styles and sprite variants are available before opening the map", () => {
+        const segments = SEO_LOCALES.map((locale) => locale.urlSegment);
+        const urls = new Set(collectPrecacheEntries(DIST_DIR, segments).map((entry) => entry.url));
+        const styles = readdirSync(resolve(DIST_DIR, "styles"), { recursive: true, encoding: "utf8" })
+            .filter((file) => /\.(?:json|png)$/.test(file))
+            .map((file) => file.replaceAll("\\", "/"));
+        expect(
+            styles.some((file) => file.endsWith(".json")),
+            "local map style JSON exists",
+        ).toBe(true);
+        expect(
+            styles.some((file) => file.endsWith("@2x.png")),
+            "high-density map sprite exists",
+        ).toBe(true);
+        for (const file of styles) {
+            expect(urls.has(`/styles/${file}`), `map dependency /styles/${file} must be precached`).toBe(true);
         }
     });
 
@@ -88,16 +119,37 @@ describe("sw-precache integration: manifest covers the real boot graph", () => {
 
     itIf("all prerendered locale shells are in the precache manifest", () => {
         const segments = SEO_LOCALES.map((l) => l.urlSegment);
-        const urls = new Set(collectPrecacheEntries(DIST_DIR, segments).map((e) => e.url));
-        for (const seg of segments) {
-            expect(urls.has(`/${seg}/`), `locale shell /${seg}/ must be precached`).toBe(true);
+        const entries = collectPrecacheEntries(DIST_DIR, segments);
+        for (const url of ["/", ...segments.map((segment) => `/${segment}/`)]) {
+            expect(
+                entries.find((entry) => entry.url === url),
+                `shell ${url} must carry its build identity`,
+            ).toMatchObject({
+                htmlRevision: expect.stringMatching(/^[0-9a-f]{16}$/),
+            });
         }
-        expect(urls.has("/"), "root stub must be precached").toBe(true);
     });
 
-    itIf("dist/sw.js had its placeholder replaced (injection happened)", () => {
-        const sw = readFileSync(SW, "utf-8");
-        expect(sw.includes("PRECACHE_MANIFEST = []"), "empty placeholder must be gone after injection").toBe(false);
+    itIf("the injected manifest contains every final artifact and its current content revision", () => {
+        const expected = collectPrecacheEntries(
+            DIST_DIR,
+            SEO_LOCALES.map((locale) => locale.urlSegment),
+        );
+        expect(injectedValue("PRECACHE_MANIFEST")).toEqual(expected);
+    });
+
+    itIf("the injected tracker URLs match the emitted runtime and model bytes", () => {
+        const root = resolve(DIST_DIR, "..");
+        const assets = computeTrackerAssets("build", root);
+        expect(injectedValue("TRACKER_ASSET_URLS")).toEqual(assets.urls);
+        for (const url of assets.urls) {
+            const emitted = readFileSync(resolve(DIST_DIR, url.slice(1)));
+            const model = assets.modelEmit.find((entry) => entry.url === url);
+            const source = model
+                ? resolve(root, "public", model.rel)
+                : resolve(root, "node_modules/onnxruntime-web/dist", url.slice(url.lastIndexOf("/") + 1));
+            expect(emitted.equals(readFileSync(source)), `tracker asset ${url} matches its source bytes`).toBe(true);
+        }
     });
 
     itIf("the minified dist/sw.js is syntactically valid JavaScript", () => {

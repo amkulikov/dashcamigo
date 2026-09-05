@@ -8,6 +8,7 @@
 //
 // What goes IN the precache (the app's real boot+run graph):
 //   - JS/CSS under /assets/ (entry, lazy chunks and workers);
+//   - local map styles and sprites under /styles/, so saved tiles can render;
 //   - every per-locale shell (/<lang>/) and the root stub (/).
 // What stays OUT (loaded and cached only if the page actually requests it):
 //   - fonts, icons and other media. The SW cache-first route stores fonts when
@@ -45,10 +46,29 @@ export interface PrecacheEntry {
     url: string;
     // First 16 hex chars of the file's SHA-256 content hash.
     revision: string;
+    // Edge-injected analytics can alter HTML bytes without changing its build.
+    htmlRevision?: string;
 }
 
 function sha16(buf: Buffer): string {
     return createHash("sha256").update(buf).digest("hex").slice(0, 16);
+}
+
+const HTML_REVISION = /<meta name="dc-precache-revision" content="([0-9a-f]{16})">/;
+
+/** Stamp shell identity before hashing final files; edge HTML transforms keep this marker intact. */
+export function stampPrecacheShells(distDir: string, localeSegments: ReadonlyArray<string>): void {
+    for (const rel of ["index.html", ...localeSegments.map((segment) => `${segment}/index.html`)]) {
+        const path = resolve(distDir, rel);
+        const original = readFileSync(path, "utf-8");
+        const html = original.replace(HTML_REVISION, "");
+        if (!html.includes("</head>")) {
+            throw new Error(`sw-precache: shell ${rel} has no closing head tag`);
+        }
+        const marker = `<meta name="dc-precache-revision" content="${sha16(Buffer.from(html))}">`;
+        const stamped = html.replace("</head>", `${marker}</head>`);
+        if (stamped !== original) writeFileSync(path, stamped);
+    }
 }
 
 // Recursively list files under `dir`, returning paths relative to `dir` with
@@ -71,29 +91,35 @@ function listFilesRecursive(dir: string, base = dir): string[] {
  * Build the precache manifest by scanning `distDir`. Pure (no writes) so it can
  * be unit-tested against a synthetic dist tree.
  *
- * @param distDir absolute path to the build output directory
- * @param localeSegments url segments of the prerendered locale homes (e.g.
- *        ["de","en",...]); each must have a "<seg>/index.html" shell or the
- *        build is incomplete and this throws.
- * @returns manifest entries sorted by url (deterministic output)
+ * Each locale segment must have a matching index.html shell in the output
+ * directory. Entries are sorted by URL for deterministic injection.
  */
 export function collectPrecacheEntries(distDir: string, localeSegments: ReadonlyArray<string>): PrecacheEntry[] {
     const entries: PrecacheEntry[] = [];
     const add = (relFile: string, url: string): void => {
         const full = resolve(distDir, relFile);
-        entries.push({ url, revision: sha16(readFileSync(full)) });
+        const bytes = readFileSync(full);
+        const htmlRevision = relFile.endsWith(".html") ? HTML_REVISION.exec(bytes.toString("utf-8"))?.[1] : undefined;
+        entries.push({ url, revision: sha16(bytes), ...(htmlRevision ? { htmlRevision } : {}) });
     };
 
-    // 1) Functional code under /assets/ (recursive). Vite gives every emitted
+    // Functional code under /assets/ (recursive). Vite gives every emitted
     // JS/CSS file a content hash; images and other media are presentation-only
     // and stay cache-as-used. WASM under /assets/ is an unused ORT duplicate;
     // the tracker loads its runtime from /ort/ into its dedicated cache.
     for (const rel of listFilesRecursive(resolve(distDir, "assets"))) {
-        if (!rel.endsWith(".js") && !rel.endsWith(".css")) continue;
+        if (!/\.(?:m?js|css)$/.test(rel)) continue;
         add(`assets/${rel}`, `/assets/${rel}`);
     }
 
-    // 2) Per-locale shells, requested as "/<seg>/" (CF serves the index.html).
+    // Cached tiles need their local style and sprite dependencies even when
+    // the map has never been opened in the selected theme while online.
+    for (const rel of listFilesRecursive(resolve(distDir, "styles"))) {
+        if (!/\.(?:json|png)$/.test(rel)) continue;
+        add(`styles/${rel}`, `/styles/${rel}`);
+    }
+
+    // Per-locale shells, requested as "/<seg>/" (CF serves the index.html).
     for (const seg of localeSegments) {
         const rel = `${seg}/index.html`;
         if (!existsSync(resolve(distDir, rel))) {
@@ -102,7 +128,7 @@ export function collectPrecacheEntries(distDir: string, localeSegments: Readonly
         add(rel, `/${seg}/`);
     }
 
-    // 3) Root stub "/".
+    // Root stub "/".
     if (!existsSync(resolve(distDir, "index.html"))) {
         throw new Error("sw-precache: dist/index.html missing - root stub did not run before this plugin");
     }
@@ -126,13 +152,14 @@ export function swPrecachePlugin(): Plugin {
             }
 
             const localeSegments = SEO_LOCALES.map((l) => l.urlSegment);
+            stampPrecacheShells(distDir, localeSegments);
             const entries = collectPrecacheEntries(distDir, localeSegments);
 
             // Sanity: the entry must include at least one JS chunk, or the SW
             // would precache no app code and "offline" would silently mean
             // "blank page" - exactly the failure mode this exists to prevent.
-            if (!entries.some((e) => e.url.startsWith("/assets/") && e.url.endsWith(".js"))) {
-                throw new Error("sw-precache: no /assets/*.js in dist - the build shape changed; re-check this plugin");
+            if (!entries.some((e) => e.url.startsWith("/assets/") && /\.m?js$/.test(e.url))) {
+                throw new Error("sw-precache: no JavaScript in dist/assets - the build shape changed; re-check this plugin");
             }
 
             const sw = readFileSync(swPath, "utf-8");

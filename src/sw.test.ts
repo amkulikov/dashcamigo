@@ -1,582 +1,721 @@
-// Deterministic unit tests for public/sw.js: the navigation handler, the
-// install/activate lifecycle and the cacheFirst asset route. The SW is plain JS
-// the browser loads directly (no exports, not importable), so we run its source
-// in a vm sandbox with mocked web globals and reach the module-private
-// functions: sloppy-mode function declarations leak onto the vm context's
-// global object, and install/activate listeners are captured off the
-// addEventListener stub.
-//
-// Why a vm unit test and not e2e: Playwright's network emulation does not
-// compose reliably with SW navigation interception (offline.spec.ts header,
-// microsoft/playwright#2311), and an UPDATE flow (two SW versions, waiting,
-// reconcile) would need two full builds. The vm approach is fully deterministic
-// and covers both.
-//
-// What this gates:
-//   - navigation is network-first WITH a bounded wait: online the fast response
-//     wins (deploy freshness); offline-limbo the hung fetch is aborted at
-//     NAV_NETWORK_TIMEOUT_MS and the cached shell is served.
-//   - install fails loudly when an /assets/ chunk cannot be cached (a silent
-//     hole in app code detonates later as a module-worker load-failure), but
-//     tolerates degradable locale shells.
-//   - activate DEMOTES the previous deploy's precache entries to RUNTIME
-//     instead of deleting them, and cacheFirst falls back to that copy when the
-//     network 404s a stale hash - together these keep an old-build tab alive
-//     across a deploy (the version-skew crash).
-//   - current immutable tracker assets are cache-first, while dev/unknown URLs
-//     retain stale-while-revalidate for source edits and old-SW deploy skew.
-
+// Execute the browser worker with real response bodies and crypto, and a small
+// in-memory CacheStorage boundary. Separate contexts can share the same caches
+// to reproduce active/waiting workers across successful and failed updates.
+import { createHash, webcrypto } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import vm from "node:vm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const ORIGIN = "https://dashcamigo.app";
-const SW_SRC_RAW = readFileSync(resolve(__dirname, "..", "public", "sw.js"), "utf-8");
+const SOURCE = readFileSync(resolve(__dirname, "../public/sw.js"), "utf-8");
+const NAV_TIMEOUT_MS = Number(SOURCE.match(/NAV_NETWORK_TIMEOUT_MS = (\d+)/)?.[1]);
+const PRECACHE_TIMEOUT_MS = Number(SOURCE.match(/PRECACHE_FETCH_TIMEOUT_MS = (\d+)/)?.[1]);
+const abs = (url: string) => new URL(url, ORIGIN).href;
+const revision = (body: string) => createHash("sha256").update(body).digest("hex").slice(0, 16);
 
-// Read the timeout from the source so the test tracks the real constant rather
-// than a hand-copied number that could silently drift.
-const NAV_TIMEOUT_MS = Number(SW_SRC_RAW.match(/NAV_NETWORK_TIMEOUT_MS = (\d+)/)?.[1]);
-
-// Mirrors the internal MANIFEST_KEY constant in public/sw.js (not extractable -
-// it is interpolated into template strings there).
-const MANIFEST_KEY = "/__dc-precache-manifest__";
-
-// Default injected manifest: enough for LOCALE_SHELLS (derived from it) to be
-// populated so the locale-fallback branch is reachable. Tests that exercise the
-// install path pass their own manifest via LoadOptions.
-const DEFAULT_MANIFEST = [
-    { url: "/", revision: "r" },
-    { url: "/en/", revision: "r" },
-    { url: "/ru/", revision: "r" },
-];
-
-// Inject the manifests the way the build plugins do (mirrors
-// vite-plugins/sw-precache.ts and tracker-assets.ts placeholder replacement).
-function buildSwSrc(manifest: Array<{ url: string; revision: string }>, trackerUrls: string[] = []): string {
-    return SW_SRC_RAW.replace(
-        /const PRECACHE_MANIFEST = \[\];\s*\/\/ __DC_PRECACHE_MANIFEST__/,
-        `const PRECACHE_MANIFEST = ${JSON.stringify(manifest)};`,
-    ).replace(
-        /const TRACKER_ASSET_URLS = \[\];\s*\/\/ __DC_TRACKER_ASSET_URLS__/,
-        `const TRACKER_ASSET_URLS = ${JSON.stringify(trackerUrls)};`,
-    );
+interface Entry {
+    url: string;
+    revision: string;
+    htmlRevision?: string;
 }
-
-// Minimal Response-like cache value. `_tag` lets a test assert WHICH response
-// came back (network vs a specific cached shell vs the baked-in fallback).
-interface FakeResponse {
+interface CachedResponse {
     _tag: string;
     ok: boolean;
     status: number;
     type: string;
     redirected: boolean;
-    clone(): FakeResponse;
+    headers: Headers;
+    body: ReadableStream<Uint8Array>;
+    clone(): CachedResponse;
+    arrayBuffer(): Promise<ArrayBuffer>;
+    text(): Promise<string>;
 }
-function res(tag: string, extra: Partial<FakeResponse> = {}): FakeResponse {
-    const value: FakeResponse = {
-        _tag: tag,
+function res(body: string, extra: Partial<CachedResponse> = {}): CachedResponse {
+    return {
+        _tag: body,
         ok: true,
         status: 200,
         type: "basic",
         redirected: false,
-        clone: () => value,
+        headers: new Headers(),
+        body: new ReadableStream({
+            start(controller) {
+                controller.enqueue(new TextEncoder().encode(body));
+                controller.close();
+            },
+        }),
+        clone: () => res(body, extra),
+        arrayBuffer: async () => new TextEncoder().encode(body).buffer,
+        text: async () => body,
         ...extra,
     };
-    return value;
 }
-
-const abs = (u: string): string => new URL(u, ORIGIN).toString();
-const stripSearch = (u: string): string => {
-    const url = new URL(u);
-    url.search = "";
-    return url.toString();
-};
-
-// In-memory Cache stub. match() accepts a string URL (relative ok) or a
-// request-like {url}, honouring { ignoreSearch } like the real Cache API.
-// delete() really deletes - the activate reconcile tests assert on it.
-function makeCache(init: Record<string, FakeResponse> = {}) {
-    const map = new Map<string, FakeResponse>(Object.entries(init).map(([k, v]) => [abs(k), v]));
+function entry(url: string, body: string): Entry {
+    return { url, revision: revision(body) };
+}
+function makeCache() {
+    const entries = new Map<string, CachedResponse>();
     return {
-        async match(input: string | { url: string }, opts?: { ignoreSearch?: boolean }) {
-            const key = typeof input === "string" ? abs(input) : input.url;
-            if (map.has(key)) return map.get(key);
-            if (opts?.ignoreSearch) {
-                const bare = stripSearch(key);
-                for (const [storedKey, value] of map) {
-                    if (stripSearch(storedKey) === bare) return value;
+        async match(input: string | { url: string }, options?: { ignoreSearch?: boolean }) {
+            const url = abs(typeof input === "string" ? input : input.url);
+            for (const [key, value] of entries) {
+                if (key === url || (options?.ignoreSearch && key.split("?")[0] === url.split("?")[0])) {
+                    return value.clone();
                 }
             }
             return undefined;
         },
-        async put(request: string | { url: string }, response: FakeResponse) {
-            map.set(typeof request === "string" ? abs(request) : request.url, response);
-        },
-        async keys() {
-            return [...map.keys()].map((url) => ({ url }));
+        async put(input: string | { url: string }, response: CachedResponse) {
+            if (response.status === 206) throw new TypeError("partial response");
+            entries.set(abs(typeof input === "string" ? input : input.url), response.clone());
         },
         async delete(input: string | { url: string }) {
-            return map.delete(typeof input === "string" ? abs(input) : input.url);
-        },
-    };
-}
-
-interface LoadOptions {
-    onLine: boolean;
-    fetch: (...args: never[]) => Promise<unknown>;
-    pre?: Record<string, FakeResponse>;
-    rt?: Record<string, FakeResponse>;
-    /** TRACKER cache seed (the blur-tracker's /ort/ + /models/ entries). */
-    tr?: Record<string, FakeResponse>;
-    /** Precache manifest to inject; DEFAULT_MANIFEST when omitted. */
-    manifest?: Array<{ url: string; revision: string }>;
-    /** Injected tracker asset URL set; [] (dev, no activate cleanup) when omitted. */
-    trackerUrls?: string[];
-}
-
-// Run public/sw.js in a sandbox. Returns the captured module-private functions,
-// the fetch spy, the two cache stubs and fire() for dispatching captured
-// lifecycle events. setTimeout/clearTimeout are read from the CURRENT
-// globalThis, so a test that calls vi.useFakeTimers() before loadSw() gets the
-// fake clock.
-function loadSw(opts: LoadOptions) {
-    const pre = makeCache(opts.pre);
-    const rt = makeCache(opts.rt);
-    const tr = makeCache(opts.tr);
-    const caches = {
-        async open(name: string) {
-            if (name.includes("tracker")) return tr;
-            return name.includes("runtime") ? rt : pre;
+            return entries.delete(abs(typeof input === "string" ? input : input.url));
         },
         async keys() {
-            return [];
-        },
-        async delete() {
-            return true;
-        },
-        async match() {
-            return undefined;
+            return [...entries.keys()].map((url) => ({ url }));
         },
     };
-    const fetchSpy = vi.fn(opts.fetch);
+}
+type MemoryCache = ReturnType<typeof makeCache>;
+interface LoadOptions {
+    onLine?: boolean;
+    fetch?: (...args: never[]) => Promise<unknown>;
+    pre?: Record<string, CachedResponse>;
+    rt?: Record<string, CachedResponse>;
+    tr?: Record<string, CachedResponse>;
+    manifest?: Entry[];
+    trackerUrls?: string[];
+    storage?: Map<string, MemoryCache>;
+    storageError?: boolean;
+}
+function event() {
+    const background: Promise<unknown>[] = [];
+    return {
+        waitUntil(promise: Promise<unknown>) {
+            background.push(promise);
+        },
+        async settled() {
+            // A revalidation can append a cache write before it settles.
+            for (let i = 0; i < background.length; i++) await background[i];
+        },
+    };
+}
+function loadSw(options: LoadOptions = {}) {
+    const manifest =
+        options.manifest ?? Object.entries(options.pre ?? {}).map(([url, response]) => entry(url, response._tag));
+    const storage = options.storage ?? new Map<string, MemoryCache>();
+    function cache(name: string) {
+        let value = storage.get(name);
+        if (!value) {
+            value = makeCache();
+            storage.set(name, value);
+        }
+        return value;
+    }
     const listeners = new Map<string, (evt: unknown) => void>();
-    const ctx: Record<string, unknown> = {
+    const fetchSpy = vi.fn(options.fetch ?? (async () => res("network")));
+    const context: Record<string, unknown> = {
         self: {
             addEventListener(type: string, fn: (evt: unknown) => void) {
                 listeners.set(type, fn);
             },
             location: { origin: ORIGIN },
-            skipWaiting() {},
-            clients: { claim() {} },
+            clients: { claim: vi.fn() },
         },
-        navigator: { onLine: opts.onLine },
-        caches,
+        navigator: { onLine: options.onLine ?? true },
+        caches: {
+            async open(name: string) {
+                if (options.storageError) throw new Error("storage disabled");
+                return cache(name);
+            },
+            async keys() {
+                return [...storage.keys()];
+            },
+            async delete(name: string) {
+                return storage.delete(name);
+            },
+        },
         fetch: fetchSpy,
         URL,
-        Request: class {
-            url: string;
-            cache: string;
-            constructor(input: string, init?: { cache?: string }) {
-                this.url = new URL(input, ORIGIN).toString();
-                this.cache = init?.cache ?? "default";
+        Request: class extends Request {
+            constructor(input: string, init?: RequestInit) {
+                super(abs(input), init);
             }
         },
-        // The SW constructs `new Response(...)` for the baked-in offline page
-        // and the stored manifest; tag it so a test can recognise those.
         Response: class {
-            _tag = "offline-fallback";
-            ok = true;
-            status = 200;
-            type = "basic";
-            redirected = false;
-            body: unknown;
-            init: unknown;
-            constructor(body: unknown, init: unknown) {
-                this.body = body;
-                this.init = init;
+            constructor(body: string, init: ResponseInit = {}) {
+                Object.assign(
+                    this,
+                    res(body, {
+                        _tag: "offline-fallback",
+                        status: init.status ?? 200,
+                        headers: new Headers(init.headers),
+                    }),
+                );
             }
-            clone() {
-                return this;
+            static error() {
+                return res("network-error", { ok: false, status: 0, type: "error" });
             }
         },
+        crypto: webcrypto,
+        TextDecoder,
         AbortController,
         setTimeout: globalThis.setTimeout,
         clearTimeout: globalThis.clearTimeout,
-        CountQueuingStrategy: class {},
-        ReadableStream: class {},
-        console,
     };
-    vm.createContext(ctx);
-    vm.runInContext(buildSwSrc(opts.manifest ?? DEFAULT_MANIFEST, opts.trackerUrls), ctx);
+    vm.createContext(context);
+    vm.runInContext(
+        SOURCE.replace(
+            /const PRECACHE_MANIFEST = \[\];\s*\/\/ __DC_PRECACHE_MANIFEST__/,
+            `const PRECACHE_MANIFEST = ${JSON.stringify(manifest)};`,
+        ).replace(
+            /const TRACKER_ASSET_URLS = \[\];\s*\/\/ __DC_TRACKER_ASSET_URLS__/,
+            `const TRACKER_ASSET_URLS = ${JSON.stringify(options.trackerUrls ?? [])};`,
+        ),
+        context,
+    );
+    const precacheKey = context.precacheKey as (entry: Entry) => string;
+    const pre = cache("dashcamigo-precache-v4");
+    const rt = cache("dashcamigo-runtime-v3");
+    const tr = cache("dashcamigo-tracker-v3");
+    for (const [url, response] of Object.entries(options.pre ?? {})) {
+        const current = manifest.find((item) => item.url === url);
+        void pre.put(current ? precacheKey(current) : url, response);
+    }
+    for (const [url, response] of Object.entries(options.rt ?? {})) void rt.put(url, response);
+    for (const [url, response] of Object.entries(options.tr ?? {})) void tr.put(url, response);
+    const navRequest = (url: string) => ({ url: abs(url), mode: "navigate" });
+    const navigationResponse = context.navigationResponse as (
+        req: { url: string; mode: string },
+        evt: ReturnType<typeof event>,
+    ) => Promise<CachedResponse>;
     return {
-        navigationResponse: ctx.navigationResponse as (
-            req: { url: string; mode: string },
-            evt: { waitUntil(p: unknown): void },
-        ) => Promise<FakeResponse>,
-        cacheFirst: ctx.cacheFirst as (
-            req: { url: string },
-            evt: { waitUntil(p: unknown): void },
-        ) => Promise<FakeResponse>,
-        fetchSpy,
         pre,
         rt,
         tr,
-        // Dispatch a same-origin subresource request through the captured fetch
-        // listener and await both respondWith plus any background cache write.
-        async dispatchFetch(url: string): Promise<FakeResponse> {
-            const listener = listeners.get("fetch");
-            if (!listener) throw new Error("no fetch listener registered");
-            let response: Promise<FakeResponse> | undefined;
-            const background: Promise<unknown>[] = [];
-            listener({
-                request: { method: "GET", url: abs(url), mode: "same-origin" },
-                respondWith(value: Promise<FakeResponse>) {
-                    response = Promise.resolve(value);
-                },
-                waitUntil(value: Promise<unknown>) {
-                    background.push(value);
-                },
-            });
-            if (!response) throw new Error("fetch listener did not respond");
-            const out = await response;
-            await Promise.all(background);
-            return out;
+        storage,
+        fetchSpy,
+        precacheKey,
+        async cached(url: string) {
+            const current = manifest.find((item) => item.url === url);
+            return pre.match(current ? precacheKey(current) : url);
         },
-        // Dispatch a captured lifecycle event and await its waitUntil payload -
-        // exactly what the browser does with install/activate.
-        async fire(type: "install" | "activate"): Promise<void> {
-            const listener = listeners.get(type);
-            if (!listener) throw new Error(`no ${type} listener registered`);
-            let pending: unknown;
-            listener({
-                waitUntil(p: unknown) {
-                    pending = p;
+        async navigate(url: string) {
+            const evt = event();
+            const response = await navigationResponse(navRequest(url), evt);
+            return { response, settled: () => evt.settled() };
+        },
+        async dispatchFetch(url: string, headers: HeadersInit = {}) {
+            const evt = event();
+            let response: Promise<CachedResponse> | undefined;
+            listeners.get("fetch")?.({
+                ...evt,
+                request: { method: "GET", url: abs(url), mode: "same-origin", headers: new Headers(headers) },
+                respondWith(value: Promise<CachedResponse>) {
+                    response = value;
                 },
             });
-            await pending;
+            return { response: await response, settled: () => evt.settled() };
+        },
+        async fire(type: "install" | "activate") {
+            const evt = event();
+            listeners.get(type)?.(evt);
+            await evt.settled();
         },
     };
 }
+afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+});
 
-const navEvent = () => ({ waitUntil() {} });
-const navRequest = (url: string) => ({ url: abs(url), mode: "navigate" });
-
-describe("sw navigationResponse", () => {
-    afterEach(() => {
-        vi.useRealTimers();
-        vi.restoreAllMocks();
+describe("service worker navigation", () => {
+    it("serves fresh online HTML while preserving the complete offline shell", async () => {
+        const sw = loadSw({ pre: { "/ru/": res("cached") } });
+        const result = await sw.navigate("/ru/?source=pwa");
+        await result.settled();
+        expect(result.response._tag).toBe("network");
+        expect(sw.fetchSpy).toHaveBeenCalledTimes(1);
+        expect((await sw.cached("/ru/"))?._tag).toBe("cached");
     });
 
-    it("online: serves the fresh network response (deploy freshness preserved)", async () => {
-        const network = res("network");
-        const { navigationResponse, fetchSpy } = loadSw({
-            onLine: true,
-            fetch: async () => network,
-            pre: { "/ru/": res("cached-ru") },
-        });
-
-        const out = await navigationResponse(navRequest("/ru/?source=pwa"), navEvent());
-
-        expect(fetchSpy).toHaveBeenCalledTimes(1);
-        expect(out._tag).toBe("network");
-    });
-
-    it("offline-limbo (onLine true, fetch hangs): aborts at the timeout and serves the cached shell", async () => {
+    it("aborts a hung online navigation and serves the cached shell", async () => {
         vi.useFakeTimers();
-        // Mirrors "connected but no internet": the request never settles on its
-        // own; it only rejects when the navigation handler aborts it.
-        const { navigationResponse, fetchSpy } = loadSw({
-            onLine: true,
-            fetch: (_req, init: { signal?: AbortSignal }) =>
+        const sw = loadSw({
+            pre: { "/ru/": res("cached") },
+            fetch: (_req, init: { signal: AbortSignal }) =>
                 new Promise((_resolve, reject) => {
-                    init.signal?.addEventListener("abort", () =>
-                        reject(Object.assign(new Error("aborted"), { name: "AbortError" })),
-                    );
+                    init.signal.addEventListener("abort", () => reject(new Error("aborted")));
                 }),
-            pre: { "/ru/": res("cached-ru") },
         });
-
-        const pending = navigationResponse(navRequest("/ru/?source=pwa"), navEvent());
-        await vi.advanceTimersByTimeAsync(NAV_TIMEOUT_MS + 50);
-        const out = await pending;
-
-        expect(fetchSpy).toHaveBeenCalledTimes(1);
-        // Step-2 (ignoreSearch) hit: the "?source=pwa" query is dropped.
-        expect(out._tag).toBe("cached-ru");
+        const pending = sw.navigate("/ru/?source=pwa");
+        await vi.advanceTimersByTimeAsync(NAV_TIMEOUT_MS + 1);
+        expect((await pending).response._tag).toBe("cached");
     });
 
-    it("hard offline (navigator.onLine false): never touches the network", async () => {
-        const { navigationResponse, fetchSpy } = loadSw({
+    it("serves an offline cached shell without waiting for the network", async () => {
+        const sw = loadSw({ onLine: false, pre: { "/ru/": res("cached") } });
+        expect((await sw.navigate("/ru/?source=pwa")).response._tag).toBe("cached");
+        expect(sw.fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("tries a reachable server when onLine is false and no cache exists", async () => {
+        const sw = loadSw({ onLine: false });
+        expect((await sw.navigate("/en/")).response._tag).toBe("network");
+    });
+
+    it("uses the locale home for an uncached offline subpage", async () => {
+        const sw = loadSw({ onLine: false, pre: { "/ru/": res("cached") } });
+        expect((await sw.navigate("/ru/cameras/70mai")).response._tag).toBe("cached");
+    });
+
+    it("uses a runtime locale shell when its precache entry is evicted", async () => {
+        const sw = loadSw({ onLine: false, manifest: [entry("/ru/", "cached")], rt: { "/ru/": res("runtime") } });
+        expect((await sw.navigate("/ru/cameras/70mai")).response._tag).toBe("runtime");
+    });
+
+    it("uses English when the requested locale shell is unavailable", async () => {
+        const sw = loadSw({
             onLine: false,
-            fetch: async () => res("network"),
-            pre: { "/ru/": res("cached-ru") },
+            manifest: [entry("/ru/", "ru"), entry("/en/", "en")],
+            pre: { "/en/": res("en") },
         });
-
-        const out = await navigationResponse(navRequest("/ru/?source=pwa"), navEvent());
-
-        expect(fetchSpy).not.toHaveBeenCalled();
-        expect(out._tag).toBe("cached-ru");
+        expect((await sw.navigate("/ru/")).response._tag).toBe("en");
     });
 
-    it("locale-derived fallback: an uncached sub-page resolves to that locale's cached home", async () => {
-        const { navigationResponse } = loadSw({
-            onLine: true,
+    it("returns the self-contained page without a root redirect loop after eviction", async () => {
+        const sw = loadSw({
+            onLine: false,
+            pre: { "/": res("root") },
             fetch: async () => {
-                throw new Error("network down");
+                throw new Error("offline");
             },
-            pre: { "/ru/": res("cached-ru") },
         });
-
-        // No exact / query-agnostic hit for /ru/cameras/... -> LOCALE_SHELLS step.
-        const out = await navigationResponse(navRequest("/ru/cameras/70mai"), navEvent());
-
-        expect(out._tag).toBe("cached-ru");
+        expect((await sw.navigate("/en/")).response._tag).toBe("offline-fallback");
     });
 
-    it("evicted precache, live SW: serves the baked-in offline page, not a browser error", async () => {
-        const { navigationResponse } = loadSw({
-            onLine: true,
-            fetch: async () => {
-                throw new Error("network down");
-            },
-            pre: {},
-            rt: {},
+    it("uses the cached app during an HTTP server outage", async () => {
+        const sw = loadSw({
+            pre: { "/en/": res("cached") },
+            fetch: async () => res("bad gateway", { ok: false, status: 502 }),
         });
-
-        const out = await navigationResponse(navRequest("/de/anything"), navEvent());
-
-        expect(out._tag).toBe("offline-fallback");
+        expect((await sw.navigate("/en/")).response._tag).toBe("cached");
     });
 
-    // Regression: a precache install that transiently failed to fetch one
-    // locale shell (e.g. "/en/") but succeeded for the root stub ("/") used to
-    // send an offline request for that locale straight into an infinite
-    // navigation loop - the root stub's inline JS unconditionally redirects to
-    // a locale, landing back on the same request with the same miss, forever
-    // (observed in CI: 10+ repeated navigations to the same URL, page never
-    // settles). The fallback must recognize "this request IS the missing
-    // locale shell" and stop at the offline page instead of bouncing through
-    // the stub.
-    it("a locale's own shell is missing but the root stub is cached: serves the offline page, not the stub (would otherwise redirect-loop)", async () => {
-        const { navigationResponse } = loadSw({
-            onLine: true,
-            fetch: async () => {
-                throw new Error("network down");
-            },
-            pre: { "/": res("root-stub") }, // "/en/" deliberately absent
+    it.each([
+        { url: "/", status: 404 },
+        { url: "/en/", status: 404 },
+        { url: "/ru/", status: 403 },
+    ])("serves the cached required shell $url when the server returns $status", async ({ url, status }) => {
+        const sw = loadSw({
+            pre: { [url]: res("cached") },
+            fetch: async () => res("server error", { ok: false, status }),
         });
+        const result = await sw.navigate(`${url}?source=pwa`);
+        await result.settled();
+        expect(result.response._tag).toBe("cached");
+        expect(await sw.rt.match(`${url}?source=pwa`)).toBeUndefined();
+    });
 
-        const out = await navigationResponse(navRequest("/en/"), navEvent());
+    it("preserves a real online not-found response", async () => {
+        const sw = loadSw({
+            pre: { "/en/": res("cached") },
+            fetch: async () => res("not found", { ok: false, status: 404 }),
+        });
+        expect((await sw.navigate("/unknown")).response.status).toBe(404);
+    });
 
-        expect(out._tag).toBe("offline-fallback");
+    it("keeps online navigation working when Cache Storage is unavailable", async () => {
+        const sw = loadSw({ storageError: true });
+        expect((await sw.navigate("/en/")).response._tag).toBe("network");
+    });
+
+    it("serves the self-contained fallback when both network and storage fail", async () => {
+        const sw = loadSw({
+            storageError: true,
+            fetch: async () => {
+                throw new Error("offline");
+            },
+        });
+        expect((await sw.navigate("/en/")).response._tag).toBe("offline-fallback");
     });
 });
 
-describe("sw install", () => {
-    // These run on real timers: a failing entry costs fetchForPrecache its full
-    // 3-attempt backoff (~450ms) - bounded and simpler than faking the clock
-    // through Promise.allSettled.
+describe("service worker install and repair", () => {
+    it.each(["/assets/app-AAAA.js", "/en/", "/", "/styles/light.json"])(
+        "rejects an incomplete offline graph when %s is missing",
+        async (url) => {
+            const sw = loadSw({
+                manifest: [entry(url, "expected")],
+                fetch: async () => res("not found", { ok: false, status: 404 }),
+            });
+            await expect(sw.fire("install")).rejects.toThrow("precache incomplete");
+            expect(await sw.cached(url)).toBeUndefined();
+        },
+    );
 
-    it("fails the install when an /assets/ chunk cannot be fetched (no silent hole in app code)", async () => {
-        const manifest = [
-            { url: "/assets/app-AAAA.js", revision: "r1" },
-            { url: "/en/", revision: "r2" },
-        ];
-        const { fire, pre } = loadSw({
-            onLine: true,
-            manifest,
+    it("does not overwrite the active shell when an update cannot download its code", async () => {
+        const storage = new Map<string, MemoryCache>();
+        const old = loadSw({
+            storage,
+            onLine: false,
+            pre: { "/en/": res("old-shell"), "/assets/old.js": res("old-code") },
+        });
+        const next = loadSw({
+            storage,
+            manifest: [entry("/en/", "new-shell"), entry("/assets/new.js", "new-code")],
+            fetch: async (req: { url: string }) => {
+                return req.url.endsWith("/en/") ? res("new-shell") : res("not found", { ok: false, status: 404 });
+            },
+        });
+        await expect(next.fire("install")).rejects.toThrow("precache incomplete");
+        expect((await old.navigate("/en/")).response._tag).toBe("old-shell");
+        expect((await old.dispatchFetch("/assets/old.js")).response?._tag).toBe("old-code");
+        expect((await next.cached("/en/"))?._tag).toBe("new-shell");
+    });
+
+    it("retries a failed changed shell instead of labeling the old response fresh", async () => {
+        const storage = new Map<string, MemoryCache>();
+        loadSw({ storage, pre: { "/en/": res("old-shell") } });
+        const manifest = [entry("/en/", "new-shell")];
+        const failed = loadSw({ storage, manifest, fetch: async () => res("not found", { ok: false, status: 404 }) });
+        await expect(failed.fire("install")).rejects.toThrow("precache incomplete");
+        const retried = loadSw({ storage, manifest, fetch: async () => res("new-shell") });
+        await retried.fire("install");
+        expect(retried.fetchSpy).toHaveBeenCalledTimes(1);
+        expect((await retried.cached("/en/"))?._tag).toBe("new-shell");
+    });
+
+    it("reuses unchanged revisions without downloading them again", async () => {
+        const sw = loadSw({ pre: { "/en/": res("cached"), "/assets/app.js": res("code") } });
+        await sw.fire("install");
+        expect(sw.fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("reuses HTTP cache only for the first attempt at an immutable asset", async () => {
+        let calls = 0;
+        const sw = loadSw({
+            manifest: [entry("/assets/app.js", "right-code")],
+            fetch: async () => res(++calls === 1 ? "wrong-code" : "right-code"),
+        });
+        await sw.fire("install");
+        expect(sw.fetchSpy.mock.calls.map(([req]) => (req as unknown as Request).cache)).toEqual([
+            "force-cache",
+            "reload",
+        ]);
+    });
+
+    it("rejects a successful response with bytes from another deployment", async () => {
+        const sw = loadSw({
+            manifest: [entry("/assets/app.js", "expected-code")],
+            fetch: async () => res("<html>server fallback</html>"),
+        });
+        await expect(sw.fire("install")).rejects.toThrow("precache incomplete");
+        expect(await sw.cached("/assets/app.js")).toBeUndefined();
+    });
+
+    it("bounds a precache fetch whose connection never settles", async () => {
+        vi.useFakeTimers();
+        const sw = loadSw({
+            manifest: [entry("/assets/app.js", "code")],
+            fetch: (_req, init: { signal: AbortSignal }) =>
+                new Promise((_resolve, reject) => {
+                    init.signal.addEventListener("abort", () => reject(new Error("aborted")));
+                }),
+        });
+        const failure = expect(sw.fire("install")).rejects.toThrow("precache incomplete");
+        await vi.advanceTimersByTimeAsync(PRECACHE_TIMEOUT_MS * 3 + 500);
+        await failure;
+        expect(sw.fetchSpy).toHaveBeenCalledTimes(3);
+    });
+
+    it("repairs evicted lazy code after online navigation without reinstalling the worker", async () => {
+        const sw = loadSw({
+            manifest: [entry("/assets/lazy.js", "lazy")],
+            fetch: async (req: { url: string }) => res(req.url.endsWith("lazy.js") ? "lazy" : "online-shell"),
+        });
+        const result = await sw.navigate("/en/");
+        await result.settled();
+        expect(result.response._tag).toBe("online-shell");
+        expect((await sw.cached("/assets/lazy.js"))?._tag).toBe("lazy");
+    });
+
+    it("coalesces repairs from concurrent navigations", async () => {
+        let finish: (value: CachedResponse) => void = () => {};
+        const sw = loadSw({
+            manifest: [entry("/assets/lazy.js", "lazy")],
             fetch: async (req: { url: string }) =>
-                req.url.includes("/assets/") ? res("net-404", { ok: false, status: 404 }) : res("net-shell"),
+                req.url.endsWith("lazy.js")
+                    ? new Promise<CachedResponse>((resolve) => {
+                          finish = resolve;
+                      })
+                    : res("online-shell"),
         });
-
-        await expect(fire("install")).rejects.toThrow(/missing app code.*app-AAAA/);
-        // Entries that DID land stay cached and the manifest was persisted
-        // before the throw, so the browser's retried install re-fetches only
-        // what is still missing.
-        expect(await pre.match("/en/")).toBeTruthy();
-        expect(await pre.match(MANIFEST_KEY)).toBeTruthy();
-    });
-
-    it("tolerates a failed locale shell (degradable - navigation has its own layered fallback)", async () => {
-        const manifest = [
-            { url: "/assets/app-AAAA.js", revision: "r1" },
-            { url: "/en/", revision: "r2" },
-        ];
-        const { fire, pre } = loadSw({
-            onLine: true,
-            manifest,
-            fetch: async (req: { url: string }) =>
-                req.url.endsWith("/en/") ? res("net-404", { ok: false, status: 404 }) : res("net-chunk"),
-        });
-
-        await fire("install");
-
-        expect(await pre.match("/assets/app-AAAA.js")).toBeTruthy();
-        expect(await pre.match("/en/")).toBeUndefined();
-    });
-
-    it("reuses HTTP cache for content-addressed assets and reloads stable shell URLs", async () => {
-        const manifest = [
-            { url: "/assets/app-AAAA.js", revision: "r1" },
-            { url: "/en/", revision: "r2" },
-        ];
-        const { fire, fetchSpy } = loadSw({
-            onLine: true,
-            manifest,
-            fetch: async () => res("network"),
-        });
-
-        await fire("install");
-
-        const requests = fetchSpy.mock.calls.map(([req]) => req as unknown as { url: string; cache: string });
-        expect(requests).toEqual(
-            expect.arrayContaining([
-                expect.objectContaining({ url: abs("/assets/app-AAAA.js"), cache: "force-cache" }),
-                expect.objectContaining({ url: abs("/en/"), cache: "reload" }),
-            ]),
-        );
+        const first = await sw.navigate("/en/");
+        const second = await sw.navigate("/ru/");
+        finish(res("lazy"));
+        await Promise.all([first.settled(), second.settled()]);
+        expect(
+            sw.fetchSpy.mock.calls.filter(([req]) => (req as unknown as Request).url.endsWith("lazy.js")),
+        ).toHaveLength(1);
     });
 });
 
-describe("sw activate", () => {
-    it("demotes the previous deploy's precache entries to RUNTIME instead of deleting them", async () => {
-        const { fire, pre, rt } = loadSw({
-            onLine: true,
-            fetch: async () => res("network"),
-            pre: {
-                "/en/": res("shell"), // still in the manifest - stays put
-                "/assets/old-chunk-DEAD.js": res("old-chunk"), // renamed by the deploy - demoted
-                [MANIFEST_KEY]: res("stored-manifest"), // internal key - never reconciled away
+describe("service worker response validation", () => {
+    const marker = "0123456789abcdef";
+    const shell = `<html><head><meta name="dc-precache-revision" content="${marker}"></head><body>app</body></html>`;
+    const shellEntry = { ...entry("/en/", shell), htmlRevision: marker };
+
+    it("accepts edge-injected analytics while verifying the shell build marker", async () => {
+        const transformed = shell.replace("</body>", '<script src="https://example.com/beacon.js"></script></body>');
+        const sw = loadSw({ manifest: [shellEntry], fetch: async () => res(transformed) });
+        await sw.fire("install");
+        expect((await sw.cached("/en/"))?._tag).toBe(transformed);
+    });
+
+    it("accepts an unquoted build marker preserved by an HTML minifier", async () => {
+        const transformed = shell
+            .replace('name="dc-precache-revision"', "name=dc-precache-revision")
+            .replace(`content="${marker}"`, `content=${marker}`);
+        const sw = loadSw({ manifest: [shellEntry], fetch: async () => res(transformed) });
+        await sw.fire("install");
+        expect((await sw.cached("/en/"))?._tag).toBe(transformed);
+    });
+
+    it("rejects a shell from another build during cache repair", async () => {
+        const transformed = shell.replace(marker, "fedcba9876543210");
+        const sw = loadSw({ manifest: [shellEntry], fetch: async () => res(transformed) });
+        const result = await sw.navigate("/en/");
+        await result.settled();
+        expect(result.response._tag).toBe(transformed);
+        expect(await sw.cached("/en/")).toBeUndefined();
+    });
+
+    it("uses the cached shell when the network returns a captive portal page", async () => {
+        const sw = loadSw({
+            manifest: [shellEntry],
+            pre: { "/en/": res(shell) },
+            fetch: async () => res("<html>login to Wi-Fi</html>"),
+        });
+        const result = await sw.navigate("/en/");
+        await result.settled();
+        expect(result.response._tag).toBe(shell);
+        expect(await sw.rt.match("/en/")).toBeUndefined();
+    });
+
+    it("does not pin an HTML fallback as a tracker download", async () => {
+        const sw = loadSw({
+            trackerUrls: ["/ort/current.wasm"],
+            fetch: async () => res("<html>fallback</html>", { headers: new Headers({ "content-type": "text/html" }) }),
+        });
+        const result = await sw.dispatchFetch("/ort/current.wasm");
+        await result.settled();
+        expect(result.response?.type).toBe("error");
+        expect(await sw.tr.match("/ort/current.wasm")).toBeUndefined();
+    });
+
+    it.each(["/ort/current.wasm", "/ort/dev.wasm"])("recovers from a poisoned HTML cache entry at %s", async (url) => {
+        const sw = loadSw({
+            trackerUrls: ["/ort/current.wasm"],
+            tr: { [url]: res("<html>fallback</html>", { headers: new Headers({ "content-type": "text/html" }) }) },
+        });
+        const result = await sw.dispatchFetch(url);
+        await result.settled();
+        expect(result.response?._tag).toBe("network");
+        expect((await sw.tr.match(url))?._tag).toBe("network");
+    });
+
+    it("recovers a code asset poisoned by a server HTML fallback", async () => {
+        const sw = loadSw({
+            rt: {
+                "/assets/code.js": res("<html>fallback</html>", {
+                    headers: new Headers({ "content-type": "text/html" }),
+                }),
             },
         });
-
-        await fire("activate");
-
-        expect(await pre.match("/en/")).toBeTruthy();
-        expect(await pre.match(MANIFEST_KEY)).toBeTruthy();
-        // The stale chunk left PRECACHE but survives in RUNTIME: a bfcache'd or
-        // late-claimed old-build tab can still lazy-load it (via the cacheFirst
-        // 404 fallback) instead of crashing its module worker.
-        expect(await pre.match("/assets/old-chunk-DEAD.js")).toBeUndefined();
-        expect((await rt.match("/assets/old-chunk-DEAD.js"))?._tag).toBe("old-chunk");
+        const result = await sw.dispatchFetch("/assets/code.js");
+        await result.settled();
+        expect(result.response?._tag).toBe("network");
+        expect((await sw.rt.match("/assets/code.js"))?._tag).toBe("network");
     });
 
-    it("drops superseded tracker assets, keeps the current build's set", async () => {
-        const { fire, tr } = loadSw({
-            onLine: true,
-            fetch: async () => res("network"),
-            trackerUrls: [
-                "/ort/1.27.0/ort-wasm-simd-threaded.wasm",
-                "/models/plate/yolo-v9-s-608-license-plates-end2end-fp16.abc12345.onnx",
-            ],
-            tr: {
-                "/ort/1.27.0/ort-wasm-simd-threaded.wasm": res("current-wasm"),
-                "/ort/1.26.0/ort-wasm-simd-threaded.wasm": res("stale-wasm"),
-                "/models/plate/yolo-v9-s-608-license-plates-end2end-fp16.abc12345.onnx": res("current-model"),
-                "/models/plate/yolo-v9-s-608-license-plates-end2end-fp16.old00000.onnx": res("stale-model"),
+    it("lets a slow progressing precache body complete beyond the stall timeout", async () => {
+        vi.useFakeTimers();
+        const sw = loadSw({
+            manifest: [entry("/assets/slow.js", "abc")],
+            fetch: async () => {
+                let offset = 0;
+                const body = new ReadableStream<Uint8Array>({
+                    async pull(controller) {
+                        if (offset === 3) {
+                            controller.close();
+                            return;
+                        }
+                        await new Promise((resolve) => setTimeout(resolve, PRECACHE_TIMEOUT_MS / 2));
+                        controller.enqueue(new TextEncoder().encode("abc"[offset++]));
+                    },
+                });
+                return res("abc", { body });
             },
         });
-
-        await fire("activate");
-
-        // The current build's entries survive; the previous ort dir and the old
-        // model hash are dropped from the non-FIFO cache (the ABI-skew /
-        // stale-weights guard).
-        expect((await tr.match("/ort/1.27.0/ort-wasm-simd-threaded.wasm"))?._tag).toBe("current-wasm");
-        expect((await tr.match("/models/plate/yolo-v9-s-608-license-plates-end2end-fp16.abc12345.onnx"))?._tag).toBe(
-            "current-model",
-        );
-        expect(await tr.match("/ort/1.26.0/ort-wasm-simd-threaded.wasm")).toBeUndefined();
-        expect(await tr.match("/models/plate/yolo-v9-s-608-license-plates-end2end-fp16.old00000.onnx")).toBeUndefined();
+        const pending = sw.fire("install");
+        await vi.advanceTimersByTimeAsync(PRECACHE_TIMEOUT_MS * 2);
+        await pending;
+        expect((await sw.cached("/assets/slow.js"))?._tag).toBe("abc");
+        expect(sw.fetchSpy).toHaveBeenCalledTimes(1);
     });
 
-    it("leaves the tracker cache untouched when no asset set is injected (dev)", async () => {
-        const { fire, tr } = loadSw({
-            onLine: true,
-            fetch: async () => res("network"),
-            // trackerUrls omitted -> [] -> cleanup skipped, dev cache preserved.
-            tr: { "/ort/ort-wasm-simd-threaded.wasm": res("dev-wasm") },
+    it("aborts a precache body that stalls after successful response headers", async () => {
+        vi.useFakeTimers();
+        const sw = loadSw({
+            manifest: [entry("/assets/stalled.js", "code")],
+            fetch: async (_req, init: { signal: AbortSignal }) => {
+                const body = new ReadableStream<Uint8Array>({
+                    start(controller) {
+                        init.signal.addEventListener("abort", () => controller.error(new Error("aborted")));
+                    },
+                });
+                return res("code", { body });
+            },
         });
-
-        await fire("activate");
-
-        expect((await tr.match("/ort/ort-wasm-simd-threaded.wasm"))?._tag).toBe("dev-wasm");
-    });
-});
-
-describe("sw cacheFirst", () => {
-    const assetRequest = (url: string) => ({ url: abs(url) });
-
-    it("deploy-skew 404: serves the demoted RUNTIME copy instead of the error page", async () => {
-        const { cacheFirst, fetchSpy } = loadSw({
-            onLine: true,
-            fetch: async () => res("net-404", { ok: false, status: 404 }),
-            rt: { "/assets/old-chunk-DEAD.js": res("runtime-copy") },
-        });
-
-        const out = await cacheFirst(assetRequest("/assets/old-chunk-DEAD.js"), navEvent());
-
-        expect(fetchSpy).toHaveBeenCalledTimes(1);
-        expect(out._tag).toBe("runtime-copy");
-    });
-
-    it("404 with no cached copy anywhere passes through unchanged", async () => {
-        const { cacheFirst } = loadSw({
-            onLine: true,
-            fetch: async () => res("net-404", { ok: false, status: 404 }),
-        });
-
-        const out = await cacheFirst(assetRequest("/assets/never-seen.js"), navEvent());
-
-        expect(out._tag).toBe("net-404");
+        const failed = expect(sw.fire("install")).rejects.toThrow("precache incomplete");
+        await vi.advanceTimersByTimeAsync(PRECACHE_TIMEOUT_MS * 3 + 500);
+        await failed;
+        expect(sw.fetchSpy).toHaveBeenCalledTimes(3);
     });
 });
 
-describe("sw tracker assets", () => {
-    const currentUrl = "/ort/1.27.0/ort-wasm-simd-threaded.wasm";
-
-    it("serves a current immutable asset without revalidating the cache hit", async () => {
-        const { dispatchFetch, fetchSpy } = loadSw({
-            onLine: true,
-            trackerUrls: [currentUrl],
-            fetch: async () => res("network"),
-            tr: { [currentUrl]: res("cached-current") },
-        });
-
-        const out = await dispatchFetch(currentUrl);
-
-        expect(out._tag).toBe("cached-current");
-        expect(fetchSpy).not.toHaveBeenCalled();
+describe("service worker cache routes", () => {
+    it("serves a runtime immutable asset before attempting a hung network", async () => {
+        const sw = loadSw({ rt: { "/assets/old.js": res("cached") }, fetch: async () => new Promise(() => {}) });
+        expect((await sw.dispatchFetch("/assets/old.js")).response?._tag).toBe("cached");
+        expect(sw.fetchSpy).not.toHaveBeenCalled();
     });
 
-    it("fetches and stores a current immutable asset on its first request", async () => {
-        const { dispatchFetch, fetchSpy, tr } = loadSw({
-            onLine: true,
-            trackerUrls: [currentUrl],
-            fetch: async () => res("network"),
+    it("serves a precached style with a cache-busting query offline", async () => {
+        const sw = loadSw({
+            pre: { "/styles/light.json": res("style") },
+            fetch: async () => {
+                throw new Error("offline");
+            },
         });
-
-        const out = await dispatchFetch(currentUrl);
-
-        expect(out._tag).toBe("network");
-        expect(fetchSpy).toHaveBeenCalledTimes(1);
-        expect((await tr.match(currentUrl))?._tag).toBe("network");
+        expect((await sw.dispatchFetch("/styles/light.json?v=1")).response?._tag).toBe("style");
+        expect(sw.fetchSpy).not.toHaveBeenCalled();
     });
 
-    it("revalidates an unknown stable URL used by dev or a newer build", async () => {
-        const unknownUrl = "/ort/ort-wasm-simd-threaded.wasm";
-        const { dispatchFetch, fetchSpy, tr } = loadSw({
-            onLine: true,
-            trackerUrls: [currentUrl],
-            fetch: async () => res("network-refresh"),
-            tr: { [unknownUrl]: res("cached-dev") },
+    it.each(["/assets/new.js", "/ort/current.wasm", "/robots.txt"])(
+        "serves %s online when storage is disabled",
+        async (url) => {
+            const sw = loadSw({ storageError: true, trackerUrls: [url] });
+            expect((await sw.dispatchFetch(url)).response?._tag).toBe("network");
+        },
+    );
+
+    it("passes an uncached not-found asset through without storing it", async () => {
+        const sw = loadSw({ fetch: async () => res("not found", { ok: false, status: 404 }) });
+        const result = await sw.dispatchFetch("/assets/missing.js");
+        await result.settled();
+        expect(result.response?.status).toBe(404);
+        expect(await sw.rt.match("/assets/missing.js")).toBeUndefined();
+    });
+
+    it("lets range requests retain network byte-range semantics", async () => {
+        const sw = loadSw({ rt: { "/example.mp4": res("full video") } });
+        expect((await sw.dispatchFetch("/example.mp4", { range: "bytes=0-99" })).response).toBeUndefined();
+    });
+
+    it("ignores cache write failure while serving a successful response", async () => {
+        const sw = loadSw();
+        vi.spyOn(sw.rt, "put").mockRejectedValue(new Error("quota exceeded"));
+        const result = await sw.dispatchFetch("/assets/app.js");
+        await result.settled();
+        expect(result.response?._tag).toBe("network");
+    });
+
+    it("serves an immutable tracker cache hit without another multi-megabyte download", async () => {
+        const url = "/ort/1.27.0/ort.wasm";
+        const sw = loadSw({ trackerUrls: [url], tr: { [url]: res("cached") } });
+        expect((await sw.dispatchFetch(url)).response?._tag).toBe("cached");
+        expect(sw.fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("stores a first tracker download in its dedicated cache", async () => {
+        const url = "/ort/1.27.0/ort.wasm";
+        const sw = loadSw({ trackerUrls: [url] });
+        const result = await sw.dispatchFetch(url);
+        await result.settled();
+        expect((await sw.tr.match(url))?._tag).toBe("network");
+        expect(await sw.rt.match(url)).toBeUndefined();
+    });
+
+    it("revalidates unknown stable tracker URLs in the background", async () => {
+        const sw = loadSw({ tr: { "/ort/dev.wasm": res("cached") } });
+        const result = await sw.dispatchFetch("/ort/dev.wasm");
+        await result.settled();
+        expect(result.response?._tag).toBe("cached");
+        expect((await sw.tr.match("/ort/dev.wasm"))?._tag).toBe("network");
+    });
+
+    it("returns an error response once when an uncached optional resource is offline", async () => {
+        const sw = loadSw({
+            fetch: async () => {
+                throw new Error("offline");
+            },
         });
+        expect((await sw.dispatchFetch("/optional.png")).response?.type).toBe("error");
+        expect(sw.fetchSpy).toHaveBeenCalledTimes(1);
+    });
+});
 
-        const out = await dispatchFetch(unknownUrl);
+describe("service worker activation", () => {
+    it("demotes old revisioned code without replacing the current shell", async () => {
+        const storage = new Map<string, MemoryCache>();
+        const old = loadSw({ storage, pre: { "/assets/old.js": res("old-code"), "/en/": res("old-shell") } });
+        const sw = loadSw({
+            storage,
+            pre: { "/assets/new.js": res("new-code"), "/en/": res("new-shell") },
+            rt: { "/en/": res("fresh-network-shell") },
+        });
+        await sw.fire("activate");
+        expect((await sw.rt.match("/assets/old.js"))?._tag).toBe("old-code");
+        expect(await old.cached("/assets/old.js")).toBeUndefined();
+        expect((await sw.cached("/en/"))?._tag).toBe("new-shell");
+        expect((await sw.rt.match("/en/"))?._tag).toBe("fresh-network-shell");
+    });
 
-        expect(out._tag).toBe("cached-dev");
-        expect(fetchSpy).toHaveBeenCalledTimes(1);
-        expect((await tr.match(unknownUrl))?._tag).toBe("network-refresh");
+    it("migrates old schema chunks before deleting their cache", async () => {
+        const sw = loadSw();
+        const old = makeCache();
+        await old.put("/assets/legacy.js", res("legacy"));
+        sw.storage.set("dashcamigo-precache-v3", old);
+        await sw.fire("activate");
+        expect((await sw.rt.match("/assets/legacy.js"))?._tag).toBe("legacy");
+        expect(sw.storage.has("dashcamigo-precache-v3")).toBe(false);
+    });
+
+    it("activates a complete worker when retiring old code exceeds storage quota", async () => {
+        const sw = loadSw({ pre: { "/en/": res("shell") } });
+        await sw.pre.put("/assets/stale.js", res("stale"));
+        vi.spyOn(sw.rt, "put").mockRejectedValue(new Error("quota exceeded"));
+        await expect(sw.fire("activate")).resolves.toBeUndefined();
+        expect((await sw.cached("/en/"))?._tag).toBe("shell");
+    });
+
+    it("keeps current tracker downloads and removes superseded versions", async () => {
+        const sw = loadSw({
+            trackerUrls: ["/ort/new.wasm"],
+            tr: { "/ort/new.wasm": res("new"), "/ort/old.wasm": res("old") },
+        });
+        await sw.fire("activate");
+        expect((await sw.tr.match("/ort/new.wasm"))?._tag).toBe("new");
+        expect(await sw.tr.match("/ort/old.wasm")).toBeUndefined();
+    });
+
+    it("preserves warmed tracker assets in development without an injected asset list", async () => {
+        const sw = loadSw({ tr: { "/ort/dev.wasm": res("cached") } });
+        await sw.fire("activate");
+        expect((await sw.tr.match("/ort/dev.wasm"))?._tag).toBe("cached");
     });
 });

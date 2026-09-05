@@ -1,26 +1,18 @@
-// Offline PWA regression gate. The reported bug: an installed app opened with
-// no network showed the browser's built-in "you're offline" page instead of the
-// cached app. These specs install the service worker online, wait for it to
-// activate and control the page (so its precache is populated), then cut the
-// network and assert the SW serves the app from cache.
-//
-// Why this spec does NOT use the shared _fixtures harness:
-//   Playwright's offline emulation (context.setOffline / CDP
-//   Network.emulateNetworkConditions) fails the renderer's *declarative*
-//   subresource loads (<script src>, <link href>) BEFORE they reach the service
-//   worker, even when the page is SW-controlled and the resource is cached.
-//   A programmatic fetch() of the same URL from the same page IS served from
-//   the SW cache (verified) - which is how real Chrome serves an offline PWA's
-//   subresources. So the Playwright failure is a tooling artifact, not a real
-//   bug; but it means an offline reload logs benign "Failed to load resource"
-//   console errors that the shared fixture's strict teardown would flag. We
-//   therefore assert offline behavior two ways that ARE reliable under
-//   Playwright: (a) the navigation document is served from cache (the exact
-//   thing that was broken - the launch no longer hits the browser offline
-//   page), and (b) every functional code resource is served from the SW cache via
-//   programmatic fetch (proving the app has all it needs to run offline).
+// Context routing blocks HTTP, including service-worker fetches, while cached
+// declarative resources can still boot the full app. Separate setOffline cases
+// cover browser connectivity events and navigation fallback. Chromium can reject
+// declarative loads before the worker in that emulation, so those cases assert
+// the shell and direct cache fetches outside the strict console-error fixture.
 
 import { expect, test } from "@playwright/test";
+import {
+    installExportCapture,
+    loadTrip,
+    masterVideoTime,
+    openExport,
+    presetLocalStorage,
+    readExportResult,
+} from "./_fixtures.js";
 
 const READY_TIMEOUT = 20_000;
 
@@ -39,13 +31,10 @@ const READY_TIMEOUT = 20_000;
 // a not-yet-controlled page (every fetch bypasses the SW into the dead
 // network) - the exact flake this gate exists to prevent.
 async function installServiceWorker(page: import("@playwright/test").Page): Promise<void> {
-    await page.addInitScript(() => {
-        try {
-            localStorage.setItem("dashcamigo:lang", "en");
-            localStorage.setItem("dc-theme", "dark");
-        } catch {
-            /* private mode - ignore */
-        }
+    await presetLocalStorage(page, { lang: "en" });
+    await page.context().route(/^https?:\/\//, async (route) => {
+        if (new URL(route.request().url()).origin === "http://localhost:4173") await route.continue();
+        else await route.abort();
     });
     await page.goto("/en/");
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, null, {
@@ -71,6 +60,93 @@ async function navigateOffline(navigate: () => Promise<unknown>): Promise<void> 
 }
 
 test.describe("offline", () => {
+    test("boots, ingests local recordings and exports a clip with all network requests blocked", async ({
+        page,
+        context,
+    }) => {
+        const errors: string[] = [];
+        page.on("pageerror", (err) => errors.push(err.message));
+        await installExportCapture(page);
+        await installServiceWorker(page);
+
+        // Context routing reaches SW network fetches without Chromium's
+        // setOffline declarative-load interception. No HTTP request can succeed.
+        await context.route(/^https?:\/\//, (route) => route.abort("internetdisconnected"));
+        await page.addInitScript(() => {
+            Object.defineProperty(navigator, "onLine", { get: () => false });
+        });
+        const response = await page.reload();
+        expect(response?.fromServiceWorker(), "navigation is served by the installed worker").toBe(true);
+        await expect(page.locator("#offline-banner")).toBeVisible();
+        await loadTrip(page);
+        await expect(page.locator("#player-chart-canvas")).toBeVisible();
+        const play = page.locator("#player-play");
+        if ((await play.getAttribute("data-paused")) === "false") await play.click();
+        const before = await masterVideoTime(page);
+        await play.click();
+        await expect.poll(() => masterVideoTime(page)).toBeGreaterThan(before + 0.1);
+        await play.click();
+        await openExport(page);
+        const includes = page.locator(".top-panel__channel-include");
+        await expect(includes).toHaveCount(3);
+        await includes.nth(2).click();
+        await includes.nth(1).click();
+        await page.locator("#export-panel-save-btn").click();
+        await expect(page.locator("#export-panel-done-summary")).toBeVisible({ timeout: 30_000 });
+        const result = await readExportResult(page);
+        expect(result).not.toBeNull();
+        expect(result!.len).toBeGreaterThan(1024);
+        expect(result!.ftyp && result!.moov && result!.mdat && result!.gpmd).toBe(true);
+        expect(errors).toEqual([]);
+    });
+
+    test("opens an unvisited locale route offline despite a different saved language", async ({ page, context }) => {
+        await installServiceWorker(page);
+        await context.route(/^https?:\/\//, (route) => route.abort("internetdisconnected"));
+        const response = await page.goto("/ru/cameras/70mai/?source=offline-test");
+        expect(response?.fromServiceWorker()).toBe(true);
+        await expect(page.locator("html")).toHaveAttribute("lang", "ru");
+        await expect(page.locator("#folder-input")).toBeAttached();
+        await loadTrip(page);
+        await expect(page.locator("#player-chart-canvas")).toBeVisible();
+    });
+
+    test("repairs evicted lazy workers on an online visit without a new deployment", async ({ page }) => {
+        await installServiceWorker(page);
+        const missingKey = await page.evaluate(async () => {
+            const name = (await caches.keys()).find((key) => key.includes("precache"));
+            if (!name) return null;
+            const cache = await caches.open(name);
+            const key = (await cache.keys()).find((request) => /\/assets\/gps-extract-worker-/.test(request.url));
+            if (!key) return null;
+            await cache.delete(key);
+            return key.url;
+        });
+        expect(missingKey).not.toBeNull();
+        await page.reload();
+        await expect
+            .poll(() => page.evaluate(async (key) => Boolean(await caches.match(key)), missingKey!), {
+                timeout: READY_TIMEOUT,
+            })
+            .toBe(true);
+    });
+
+    test("serves the working cached app when the host returns a server error", async ({ page, context }) => {
+        await installServiceWorker(page);
+        await context.route("**/en/", (route) =>
+            route.fulfill({
+                status: 503,
+                contentType: "text/html",
+                body: "<title>service unavailable</title>",
+            }),
+        );
+        const response = await page.reload();
+        expect(response?.status()).toBe(200);
+        expect(response?.fromServiceWorker()).toBe(true);
+        await expect(page.locator("#folder-input")).toBeAttached();
+        await expect(page).toHaveTitle(/dashcamigo/i);
+    });
+
     test("offline reload serves the cached app shell, not the browser offline page", async ({ page, context }) => {
         await installServiceWorker(page);
         await context.setOffline(true);

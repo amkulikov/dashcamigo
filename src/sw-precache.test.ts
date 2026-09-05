@@ -6,16 +6,54 @@
 // offline failure that only shows up in the field, so this is the cheap gate
 // that catches a scan-scope regression at build time.
 
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { collectPrecacheEntries } from "../vite-plugins/sw-precache.js";
+import { collectPrecacheEntries, stampPrecacheShells } from "../vite-plugins/sw-precache.js";
 
 const created: string[] = [];
 
 afterAll(() => {
     for (const dir of created) rmSync(dir, { recursive: true, force: true });
+});
+
+describe("stampPrecacheShells", () => {
+    it("stamps a stable build identity while revisions hash the final shell bytes", () => {
+        const root = "<html><head><title>root</title></head><body>root</body></html>";
+        const en = "<html><head><title>en</title></head><body>en</body></html>";
+        const dir = makeDist({ "index.html": root, "en/index.html": en, "assets/app.js": "// app" });
+        stampPrecacheShells(dir, ["en"]);
+        const first = collectPrecacheEntries(dir, ["en"]);
+        for (const [url, file, source] of [
+            ["/", "index.html", root],
+            ["/en/", "en/index.html", en],
+        ] as const) {
+            const entry = first.find((item) => item.url === url);
+            const stamped = readFileSync(join(dir, file));
+            expect(entry?.htmlRevision).toBe(createHash("sha256").update(source).digest("hex").slice(0, 16));
+            expect(stamped.toString()).toContain(`<meta name="dc-precache-revision" content="${entry?.htmlRevision}">`);
+            expect(entry?.revision).toBe(createHash("sha256").update(stamped).digest("hex").slice(0, 16));
+        }
+        expect(first.find((entry) => entry.url === "/assets/app.js")?.htmlRevision).toBeUndefined();
+        stampPrecacheShells(dir, ["en"]);
+        expect(collectPrecacheEntries(dir, ["en"])).toEqual(first);
+
+        writeFileSync(
+            join(dir, "en/index.html"),
+            readFileSync(join(dir, "en/index.html"), "utf8").replace("<body>en", "<body>changed"),
+        );
+        stampPrecacheShells(dir, ["en"]);
+        const updated = collectPrecacheEntries(dir, ["en"]).find((entry) => entry.url === "/en/");
+        expect(updated?.htmlRevision).not.toBe(first.find((entry) => entry.url === "/en/")?.htmlRevision);
+        expect(readFileSync(join(dir, "en/index.html"), "utf8").match(/name="dc-precache-revision"/g)).toHaveLength(1);
+    });
+
+    it("rejects an incomplete shell before publishing an unverifiable precache", () => {
+        const dir = makeDist({ "index.html": "<html>no head</html>" });
+        expect(() => stampPrecacheShells(dir, [])).toThrow(/no closing head tag/);
+    });
 });
 
 // Build a synthetic dist/ tree. `files` maps a dist-relative path to its
@@ -40,11 +78,18 @@ function realisticDist(): string {
         "assets/maplibre-CCCC3333.js": "// maplibre",
         "assets/ingest-worker-DDDD.js": "// worker",
         "assets/workers/nested-worker-EEEE.js": "// nested worker",
+        "assets/workers/module-worker-FFFF.mjs": "// module worker",
         "assets/credits/maplibre.svg": "<svg/>",
         "assets/landing-image.png": "PNG",
         "assets/ort-runtime.wasm": "WASM",
         "fonts/inter-var-latin.woff2": "FONT",
         "fonts/space-grotesk-700-latin.woff2": "FONT2",
+        "styles/light.json": '{"version":8}',
+        "styles/dark.json": '{"version":8,"sprite":"/styles/sprite/sprite"}',
+        "styles/sprite/sprite.json": "{}",
+        "styles/sprite/sprite.png": "PNG",
+        "styles/sprite/sprite@2x.json": "{}",
+        "styles/sprite/sprite@2x.png": "PNG2",
         "en/index.html": "<html>en</html>",
         "ru/index.html": "<html>ru</html>",
         "index.html": "<html>stub</html>",
@@ -58,13 +103,14 @@ function realisticDist(): string {
         "privacy.html": "<html>privacy</html>",
         "robots.txt": "noindex",
         "sitemap.xml": "<urlset/>",
+        "styles/README.md": "style attribution",
         "en/cameras/70mai/index.html": "<html>vendor</html>",
         "sw.js": "// the SW itself must not precache itself",
     });
 }
 
 describe("collectPrecacheEntries", () => {
-    it("includes functional JS/CSS, locale shells and the root stub", () => {
+    it("includes functional code, local map styles and sprites, locale shells and the root stub", () => {
         const dir = realisticDist();
         const urls = collectPrecacheEntries(dir, ["en", "ru"]).map((e) => e.url);
 
@@ -74,9 +120,16 @@ describe("collectPrecacheEntries", () => {
             "/assets/index-BBBB2222.css",
             "/assets/ingest-worker-DDDD.js",
             "/assets/maplibre-CCCC3333.js",
+            "/assets/workers/module-worker-FFFF.mjs",
             "/assets/workers/nested-worker-EEEE.js",
             "/en/",
             "/ru/",
+            "/styles/dark.json",
+            "/styles/light.json",
+            "/styles/sprite/sprite.json",
+            "/styles/sprite/sprite.png",
+            "/styles/sprite/sprite@2x.json",
+            "/styles/sprite/sprite@2x.png",
         ]);
     });
 
@@ -99,6 +152,7 @@ describe("collectPrecacheEntries", () => {
             "/privacy.html",
             "/robots.txt",
             "/sitemap.xml",
+            "/styles/README.md",
             "/en/cameras/70mai/",
             "/en/cameras/70mai/index.html",
             "/sw.js",
@@ -148,6 +202,19 @@ describe("collectPrecacheEntries", () => {
         const urls = collectPrecacheEntries(realisticDist(), ["en", "ru"]).map((e) => e.url);
         const sorted = [...urls].sort();
         expect(urls).toEqual(sorted);
+    });
+
+    it("updates a stable map asset revision when its bytes change", () => {
+        const dir = realisticDist();
+        const before = collectPrecacheEntries(dir, ["en", "ru"]);
+        writeFileSync(join(dir, "styles/dark.json"), '{"version":8,"name":"new style"}');
+        const after = collectPrecacheEntries(dir, ["en", "ru"]);
+        expect(after.find((entry) => entry.url === "/styles/dark.json")?.revision).not.toBe(
+            before.find((entry) => entry.url === "/styles/dark.json")?.revision,
+        );
+        expect(after.filter((entry) => entry.url !== "/styles/dark.json")).toEqual(
+            before.filter((entry) => entry.url !== "/styles/dark.json"),
+        );
     });
 
     it("throws when a prerendered locale shell is missing (incomplete build)", () => {

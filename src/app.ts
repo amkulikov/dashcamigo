@@ -44,6 +44,7 @@ import { APP_VERSION } from "./version.js";
 import { initCapabilityGate, surfaceDegradedCapabilities, surfaceMapUnavailable } from "./ui/capability-gate.js";
 import { initConnectivity } from "./ui/connectivity.js";
 import { initOfflineBanner } from "./ui/offline-banner.js";
+import { scheduleServiceWorkerRegistration } from "./ui/sw-registration.js";
 import { initLangSuggestionBanner } from "./ui/lang-suggestion-banner.js";
 import { initLandingDock } from "./ui/landing-dock.js";
 import { initLandingShot } from "./ui/landing-shot.js";
@@ -735,12 +736,11 @@ if ("serviceWorker" in navigator) {
     // bandwidth on slow networks. An already-installed SW is unaffected - the
     // browser routes fetches through it before any register() call runs, so
     // offline boot does not depend on this timing; deferral only shifts WHEN a
-    // new install/update check starts. The idle timeout keeps registration
-    // guaranteed on busy pages (and bounds the e2e offline suite's
-    // controller-ready gate); a pagehide before it fires just means the next
-    // visit installs.
-    const registerSw = (): void => {
-        navigator.serviceWorker.register(swUrl, { updateViaCache: "none" }).then(
+    // new install/update check starts. The scheduler bounds both the load and
+    // idle waits, and retries registration on reconnect after a failed install.
+    const watchedRegistrations = new WeakSet<ServiceWorkerRegistration>();
+    const registerSw = (): Promise<void> => {
+        return navigator.serviceWorker.register(swUrl, { updateViaCache: "none" }).then(
             (reg) => {
                 // Log scope/state so "export not downloading" reports can quickly
                 // confirm the SW is fine and dig elsewhere (incognito, CORS, etc.).
@@ -748,6 +748,8 @@ if ("serviceWorker" in navigator) {
                 // by priority.
                 const sw = reg.active ?? reg.waiting ?? reg.installing;
                 swLog.info("registered", { scope: reg.scope, state: sw?.state });
+                if (watchedRegistrations.has(reg)) return;
+                watchedRegistrations.add(reg);
                 // Terminal outcome of an update install, for diagnostic reports:
                 // "installed" with isUpdate = new version downloaded and waiting
                 // for the next launch (so a report from an old build version is
@@ -766,20 +768,7 @@ if ("serviceWorker" in navigator) {
             },
         );
     };
-    const scheduleSwRegistration = (): void => {
-        if (typeof requestIdleCallback === "function") {
-            requestIdleCallback(registerSw, { timeout: 3000 });
-        } else {
-            // Safari has no requestIdleCallback; one macrotask past load is enough
-            // to stay off the render critical path.
-            setTimeout(registerSw, 1000);
-        }
-    };
-    if (document.readyState === "complete") {
-        scheduleSwRegistration();
-    } else {
-        window.addEventListener("load", scheduleSwRegistration, { once: true });
-    }
+    scheduleServiceWorkerRegistration(registerSw);
 
     // Persistent storage. The offline shell (and the SW registration itself)
     // live in this origin's quota-managed storage, which the browser may evict
