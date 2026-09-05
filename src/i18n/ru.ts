@@ -474,7 +474,7 @@ export const ruDict = {
     "topPanel.layout.label": "Раскладка",
     "topPanel.channels.label": "Камеры",
     "topPanel.channels.reorderAria": "Перетащи, чтобы изменить порядок",
-    "topPanel.channels.includeAria": "Включить {ch} в экспорт",
+    "topPanel.channels.includeAria": "Показывать {ch} при просмотре и сохранении",
     "topPanel.audio.label": "Звук",
     "export.output.legend": "Размер видео",
 
@@ -664,7 +664,7 @@ export const ruDict = {
     "export.quality.medium.sub": "файл поменьше",
     "export.quality.low": "Для отправки",
     "export.quality.low.sub": "самый маленький файл",
-    "export.quality.rate": " · ≈{rate}/с",
+    "export.quality.size": " · ≈{size}",
     "export.quality.manual.toggle": "Задать битрейт вручную",
     "export.quality.manual.label": "Битрейт",
     "export.quality.manual.auto": "авто",
@@ -1014,4 +1014,10 @@ export const ruDict = {
     "settings.danger.onboarding.description": "Снова показать вводные подсказки (поездки, плеер, экспорт) при следующем использовании.",
     "settings.danger.onboarding.cta": "Показать подсказки заново",
     "settings.danger.onboarding.done": "Подсказки сброшены — появятся снова по ходу работы.",
+    "plurals.camera": "{n, plural, one {# камера} few {# камеры} other {# камер}}",
+    "topPanel.channels.hint": "Выбранные камеры видны при просмотре и в сохранённом видео.",
+    "export.backToTrim": "К обрезке",
+    "player.noGps.message": "В этой записи нет данных GPS. Видео можно смотреть и сохранять.",
+    "player.nav.video": "Видео",
+    "player.nav.events": "События",
 } satisfies Record<I18nKey, string>;

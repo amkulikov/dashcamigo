@@ -492,7 +492,7 @@
 }
 /* In no-gps mode the scales are hidden (see rebuildChartFromTrip), so unit
    labels are useless too - hide them. */
-.player-wrap.no-gps .chart-axis-label {
+.player-wrap.no-gps .chart-axis-label--speed {
     display: none;
 }
 
@@ -525,7 +525,7 @@
    and shows the thin mini-progress scrubber instead. This display:none
    stays as a belt-and-braces fallback (also hides the canvas if the JS
    path ever fails to disable the panel). */
-.player-wrap.no-gps #player-chart-canvas {
+.player-wrap.no-chart-data #player-chart-canvas {
     display: none;
 }
 .chart-inferred-strip__canvas {
@@ -848,4 +848,19 @@
     border-left: 4px solid transparent;
     border-right: 4px solid transparent;
     border-top: 4px solid var(--border);
+}
+
+.player-no-gps {
+    display: none;
+}
+.player-wrap.no-chart-data .player-no-gps {
+    display: block;
+    position: absolute;
+    inset: 36px 16px auto;
+    margin: 0;
+    font-size: var(--dc-text-sm);
+    line-height: 1.4;
+    color: var(--fg-mute);
+    text-align: center;
+    pointer-events: none;
 }

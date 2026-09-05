@@ -1,3 +1,4 @@
+import { syncMobileViewNav } from "./mobile-view-nav.js";
 // Map (large + mini) on MapLibre. Single owner of map instances,
 // markers, popups, rAF marker loop, expand/collapse, mini-map morph animations,
 // follow modes, theme-aware tile style, and GPS-point hover popups.
@@ -1164,8 +1165,8 @@ function refreshMapless(trip: Trip | null): void {
     state.hasTrack = hasUsableGps;
     // The map row stays unavailable for the whole session - there is no WebGL.
     setPanelAvailable("map", false);
-    setPanelAvailable("chart", hasUsableGps);
-    setPanelAvailable("strip", hasUsableGps);
+    setPanelAvailable("chart", hasUsableGps || hasAccelData(trip?.records ?? []));
+    setPanelAvailable("strip", hasUsableGps || hasAccelData(trip?.records ?? []));
     applyMapLayout();
     callbacks.onChartLayoutChange();
     emitLifecycle("map-tracks-rendered", { recordCount: hasUsableGps ? (trip?.records.length ?? 0) : 0 });
@@ -1275,16 +1276,12 @@ export function refreshMap(trip: Trip | null): void {
         refreshEventsLayer(map, null);
         refreshMiniMap(null);
         state.hasTrack = false;
-        // Disable all three "View" menu rows - without GPS the mini-map is
-        // empty, the speed chart has no data, and the inferred-events strip
-        // can't detect anything. Rows dim, clicks are a no-op, hotkeys C / E
-        // / M ignored. Stored toggle preferences are preserved, so toggles
-        // come back the way the user left them on the next GPS-bearing trip.
+        // GPS and accelerometer availability are independent. Preserve panel preferences.
         setPanelAvailable("map", false);
-        setPanelAvailable("chart", false);
-        setPanelAvailable("strip", false);
+        const hasAccel = hasAccelData(trip?.records ?? []);
+        setPanelAvailable("chart", hasAccel);
+        setPanelAvailable("strip", hasAccel);
         applyMapLayout();
-        // Without GPS the chart is also hidden, leaving only the scrub bar.
         callbacks.onChartLayoutChange();
         // Lifecycle: stage finished. We still fire the event so external
         // observers (perf harness) don't wait forever on tracks-less trips.
@@ -1946,6 +1943,7 @@ function syncBigMapPixelRatio(): void {
 }
 
 export function applyMapLayout(): void {
+    syncMobileViewNav();
     // No WebGL: there is no map to lay out. Use the big-map slot to host the
     // permanent "map unavailable" notice (it has no canvas) whenever GPS exists
     // and the user wants a map; the mini-map circle and the toggles are hidden

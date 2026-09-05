@@ -470,7 +470,7 @@ export const deDict = {
     "topPanel.layout.label": "Layout",
     "topPanel.channels.label": "Kameras",
     "topPanel.channels.reorderAria": "Ziehen, um die Reihenfolge zu ändern",
-    "topPanel.channels.includeAria": "{ch} in den Export einbeziehen",
+    "topPanel.channels.includeAria": "{ch} in der Vorschau und im gespeicherten Video zeigen",
     "topPanel.audio.label": "Ton",
     "export.output.legend": "Videogröße",
 
@@ -660,7 +660,7 @@ export const deDict = {
     "export.quality.medium.sub": "kleinere Datei",
     "export.quality.low": "Zum Teilen",
     "export.quality.low.sub": "kleinste Datei",
-    "export.quality.rate": " · ≈{rate}/s",
+    "export.quality.size": " · ≈{size}",
     "export.quality.manual.toggle": "Bitrate manuell festlegen",
     "export.quality.manual.label": "Bitrate",
     "export.quality.manual.auto": "auto",
@@ -1011,4 +1011,10 @@ export const deDict = {
     "settings.danger.onboarding.done": "Tipps zurückgesetzt — erscheinen wieder beim nächsten Nutzen.",
 
     "footer.addCamera": "Deine Dashcam hinzufügen",
+    "plurals.camera": "{n, plural, one {# Kamera} other {# Kameras}}",
+    "topPanel.channels.hint": "Ausgewählte Kameras erscheinen in der Vorschau und im gespeicherten Video.",
+    "export.backToTrim": "Zum Zuschnitt",
+    "player.noGps.message": "Diese Aufnahme enthält keine GPS-Daten. Du kannst trotzdem Clips ansehen und speichern.",
+    "player.nav.video": "Video",
+    "player.nav.events": "Ereignisse",
 } satisfies Record<I18nKey, string>;

@@ -471,7 +471,7 @@ export const ptDict = {
     "topPanel.layout.label": "Layout",
     "topPanel.channels.label": "Câmeras",
     "topPanel.channels.reorderAria": "Arraste para reordenar",
-    "topPanel.channels.includeAria": "Incluir {ch} na exportação",
+    "topPanel.channels.includeAria": "Mostrar {ch} na prévia e no vídeo salvo",
     "topPanel.audio.label": "Áudio",
     "export.output.legend": "Tamanho do vídeo",
 
@@ -661,7 +661,7 @@ export const ptDict = {
     "export.quality.medium.sub": "arquivo menor",
     "export.quality.low": "Para compartilhar",
     "export.quality.low.sub": "o menor arquivo",
-    "export.quality.rate": " · ≈{rate}/s",
+    "export.quality.size": " · ≈{size}",
     "export.quality.manual.toggle": "Definir a taxa de bits manualmente",
     "export.quality.manual.label": "Taxa de bits",
     "export.quality.manual.auto": "auto",
@@ -1012,4 +1012,10 @@ export const ptDict = {
     "settings.danger.onboarding.done": "Dicas reativadas — aparecerão novamente conforme você usa o app.",
 
     "footer.addCamera": "Adicione sua dashcam",
+    "plurals.camera": "{n, plural, one {# câmera} other {# câmeras}}",
+    "topPanel.channels.hint": "As câmeras selecionadas aparecem na prévia e no vídeo salvo.",
+    "export.backToTrim": "Voltar ao corte",
+    "player.noGps.message": "Esta gravação não tem dados GPS. Você pode assistir e salvar clipes.",
+    "player.nav.video": "Vídeo",
+    "player.nav.events": "Eventos",
 } satisfies Record<I18nKey, string>;

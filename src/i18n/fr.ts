@@ -473,7 +473,7 @@ export const frDict = {
     "topPanel.layout.label": "Disposition",
     "topPanel.channels.label": "Caméras",
     "topPanel.channels.reorderAria": "Glisse pour réorganiser",
-    "topPanel.channels.includeAria": "Inclure {ch} dans l'export",
+    "topPanel.channels.includeAria": "Afficher {ch} dans l’aperçu et la vidéo enregistrée",
     "topPanel.audio.label": "Audio",
     "export.output.legend": "Taille de la vidéo",
 
@@ -663,7 +663,7 @@ export const frDict = {
     "export.quality.medium.sub": "fichier plus léger",
     "export.quality.low": "Pour partager",
     "export.quality.low.sub": "fichier le plus léger",
-    "export.quality.rate": " · ≈{rate}/s",
+    "export.quality.size": " · ≈{size}",
     "export.quality.manual.toggle": "Définir le débit à la main",
     "export.quality.manual.label": "Débit",
     "export.quality.manual.auto": "auto",
@@ -1014,4 +1014,10 @@ export const frDict = {
     "settings.danger.onboarding.done": "Conseils réinitialisés — ils réapparaîtront au fur et à mesure que tu utilises l'app.",
 
     "footer.addCamera": "Ajouter ta dashcam",
+    "plurals.camera": "{n, plural, one {# caméra} other {# caméras}}",
+    "topPanel.channels.hint": "Les caméras sélectionnées apparaissent dans l’aperçu et la vidéo enregistrée.",
+    "export.backToTrim": "Revenir au découpage",
+    "player.noGps.message": "Cet enregistrement ne contient pas de données GPS. Tu peux regarder et enregistrer des clips.",
+    "player.nav.video": "Vidéo",
+    "player.nav.events": "Événements",
 } satisfies Record<I18nKey, string>;

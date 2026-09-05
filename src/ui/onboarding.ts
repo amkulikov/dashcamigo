@@ -588,7 +588,11 @@ function finishTour(outcome: "complete" | "skip" | "later"): void {
     // the screen" - guard them so none can resurrect a trapped state.
     if (outcome === "complete" || outcome === "skip") {
         try {
-            markTourDone(rt.tour.id);
+            if (outcome === "skip") {
+                for (const tour of Object.values(TOURS)) markTourDone(tour.id);
+            } else {
+                markTourDone(rt.tour.id);
+            }
         } catch (err) {
             log.warn("could not persist onboarding flag", err);
         }

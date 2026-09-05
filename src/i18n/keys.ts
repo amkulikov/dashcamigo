@@ -320,6 +320,12 @@ export type I18nKey =
     // Plurals
     | "plurals.trip"
     | "plurals.file"
+    | "plurals.camera"
+    | "player.nav.video"
+    | "player.nav.events"
+    | "topPanel.channels.hint"
+    | "export.backToTrim"
+    | "player.noGps.message"
     | "plurals.pause"
 
     // Units of measurement
@@ -846,7 +852,7 @@ export type I18nKey =
     | "export.quality.medium.sub"
     | "export.quality.low"
     | "export.quality.low.sub"
-    | "export.quality.rate"
+    | "export.quality.size"
     | "export.quality.manual.toggle"
     | "export.quality.manual.label"
     | "export.quality.manual.auto"

@@ -468,7 +468,7 @@ export const zhDict = {
     "topPanel.layout.label": "布局",
     "topPanel.channels.label": "摄像头",
     "topPanel.channels.reorderAria": "拖动以重新排序",
-    "topPanel.channels.includeAria": "将 {ch} 包含在导出中",
+    "topPanel.channels.includeAria": "在预览和保存的视频中显示 {ch}",
     "topPanel.audio.label": "音频",
     "export.output.legend": "视频尺寸",
 
@@ -656,7 +656,7 @@ export const zhDict = {
     "export.quality.medium.sub": "更小的文件",
     "export.quality.low": "便于分享",
     "export.quality.low.sub": "文件最小",
-    "export.quality.rate": " · ≈{rate}/秒",
+    "export.quality.size": " · ≈{size}",
     "export.quality.manual.toggle": "手动设置码率",
     "export.quality.manual.label": "码率",
     "export.quality.manual.auto": "自动",
@@ -1009,4 +1009,10 @@ export const zhDict = {
     "settings.danger.onboarding.done": "提示已重置 — 下次使用时会再次显示。",
 
     "footer.addCamera": "添加你的行车记录仪",
+    "plurals.camera": "{n} 个摄像头",
+    "topPanel.channels.hint": "所选摄像头会显示在预览和保存的视频中。",
+    "export.backToTrim": "返回截取范围",
+    "player.noGps.message": "此录像没有 GPS 数据。仍可观看和保存片段。",
+    "player.nav.video": "视频",
+    "player.nav.events": "事件",
 } satisfies Record<I18nKey, string>;

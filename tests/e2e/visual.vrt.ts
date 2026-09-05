@@ -79,7 +79,7 @@ test.describe("visual regression", () => {
         await page.setViewportSize(DESKTOP);
         await gotoApp(page, "en");
         await loadTrip(page);
-        await openExport(page);
+        await openExport(page, false);
         const panel = page.locator("#export-panel");
         await expect(panel).toBeVisible();
         await settle(page);

@@ -10,8 +10,8 @@ import { subscribeUnitsChange } from "../units-pref.js";
 import type { Channel } from "../parsers/types.js";
 import type { Trip } from "../trips.js";
 import { needsRecordingMetadata, pickFrameChannel, tripAllCandidates } from "../trips.js";
-import { formatDistanceFromKm } from "../units-pref.js";
 
+import { buildEventList } from "./event-list.js";
 import { dom } from "./dom.js";
 import { syncEmptyState } from "./empty-state.js";
 import { buildFileDetailsHtml } from "./file-details.js";
@@ -26,6 +26,7 @@ import {
     formatDuration,
     formatFileMeta,
     formatTripMeta,
+    formatTripDistance,
     formatTripStartTitle,
     formatTripTitle,
     recordingModeLabel,
@@ -48,11 +49,12 @@ interface SidebarCallbacks {
      * UX-08: clicked the event chip in the trip header. Implementation (frame selection, seek to event-5s, pause)
      * lives in the player so the sidebar does not depend on the player API.
      */
-    onPlayTripEvent?: (tripIdx: number, eventIndex: number) => void | Promise<void>;
+    onPlayTripEvent?: (tripIdx: number, eventIndex: number, saveClip?: boolean) => void | Promise<void>;
 }
 
 /** UX-08: current "next" event index per trip. In-memory, resets on reload. Keyed by tripIdx (not trip object) because groupTrips can recreate the object; the index stays stable within one state.trips snapshot. */
 const tripEventCycleIdx = new Map<number, number>();
+let selectTripEvent: SidebarCallbacks["onPlayTripEvent"];
 
 /**
  * Drops the per-trip event-cycle cursor. Called from applyRegroup: the cursor is
@@ -370,6 +372,21 @@ function buildTripCard(trip: Trip, tripIdx: number): HTMLLIElement {
         noteEl.textContent = tripMeta.note;
         noteEl.title = tripMeta.note;
         li.appendChild(noteEl);
+    }
+
+    if (trip.events.length > 0) {
+        const events = document.createElement("details");
+        events.className = "trip-events-list";
+        const summary = document.createElement("summary");
+        summary.textContent = `${t("player.nav.events")} · ${trip.events.length}`;
+        events.appendChild(summary);
+        events.appendChild(
+            buildEventList(trip, (index, saveClip) => {
+                markOpening(tripIdx);
+                void selectTripEvent?.(tripIdx, index, saveClip);
+            }),
+        );
+        li.appendChild(events);
     }
 
     // Clip list inside the trip. One <li> = one frame (on multi-channel models this is a synchronized F/B/I pair/triple).
@@ -747,9 +764,7 @@ function buildSummaryItem(trips: Trip[]): HTMLLIElement {
     // ICU plurals handle Russian/English rules automatically.
     const parts = [t("plurals.trip", { n: trips.length }), formatDuration(totalDuration)];
     if (totalDistance > 0) {
-        const d = formatDistanceFromKm(totalDistance);
-        const rounded = Math.round(d.value);
-        if (rounded > 0) parts.push(`${rounded} ${t(d.unitKey)}`);
+        parts.push(formatTripDistance(totalDistance));
     }
     li.textContent = parts.join(" · ");
     return li;
@@ -826,6 +841,7 @@ export function syncSortControls(): void {
 }
 
 export function initSidebar(cb: SidebarCallbacks): void {
+    selectTripEvent = cb.onPlayTripEvent;
     dom.sortKey.addEventListener("change", () => {
         // Type guard: value comes from a <select> we control. Unknown values are ignored rather than cast as any.
         const v = dom.sortKey.value;

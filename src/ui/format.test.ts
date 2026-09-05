@@ -10,7 +10,9 @@ import {
     formatFileMeta,
     formatRateBytes,
     formatTripTitle,
+    formatTripDistance,
 } from "./format.js";
+import { setUnits, getUnits } from "../units-pref.js";
 import { t } from "../i18n/index.js";
 import { buildTripTimeline, type Trip, type TripFrame, type VideoCandidate } from "../trips.js";
 
@@ -214,5 +216,16 @@ describe("formatFileMeta", () => {
         const failed = { ...video, metadataReady: false, metadataFailed: true } as VideoCandidate;
         const meta = formatFileMeta(failed, 100, false);
         expect(meta).toBe(`${t("trip.chip.readFailed")} · 10.0 ${t("units.mb")}`);
+    });
+});
+
+describe("formatTripDistance", () => {
+    it("keeps short routes distinct from zero", () => {
+        const previous = getUnits();
+        setUnits("metric");
+        expect(formatTripDistance(0.5)).toBe(`0.5 ${t("units.km")}`);
+        expect(formatTripDistance(0.02)).toBe(`<0.1 ${t("units.km")}`);
+        expect(formatTripDistance(12.3)).toBe(`12 ${t("units.km")}`);
+        setUnits(previous);
     });
 });

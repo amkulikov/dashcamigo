@@ -137,6 +137,7 @@ test.describe("old and portable notes files", () => {
         await page.locator("#folder-input").setInputFiles(syncCopy);
         const card = page.locator("li.trip:not(.unindexed-note)").first();
         await expect(card).toBeVisible({ timeout: 30_000 });
+        await page.locator(".notes-file > summary").click();
         const notesStatus = page.locator("#notes-file-status");
         await expect(notesStatus).toContainText("Notes are saved in this browser");
         await notesStatus.getByRole("button", { name: "Choose existing…" }).click();
@@ -218,6 +219,7 @@ test.describe("old and portable notes files", () => {
         await decision.getByRole("button", { name: "Save to a file" }).click();
         await expect(decision).toBeHidden();
 
+        await page.locator(".notes-file > summary").click();
         const status = page.locator("#notes-file-status");
         await expect(status).toContainText("Saving to dashcamigo-report-2026-08-26-0745.dashcamigo");
         await expect(status.getByRole("button")).toHaveCount(1);

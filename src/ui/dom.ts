@@ -358,6 +358,7 @@ export const dom = {
     exportTrimBar: $id<HTMLDivElement>("export-trim-bar"),
     exportPanelClose: $id<HTMLButtonElement>("export-panel-close"),
     exportPanelOptions: $id<HTMLDivElement>("export-panel-options"),
+    exportPanelActions: $id<HTMLDivElement>("export-panel-actions"),
     exportPanelProgress: $id<HTMLDivElement>("export-panel-progress"),
     exportPanelDone: $id<HTMLDivElement>("export-panel-done"),
     exportPanelError: $id<HTMLDivElement>("export-panel-error"),

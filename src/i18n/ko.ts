@@ -478,7 +478,7 @@ export const koDict = {
     "topPanel.layout.label": "레이아웃",
     "topPanel.channels.label": "카메라",
     "topPanel.channels.reorderAria": "끌어서 순서 변경",
-    "topPanel.channels.includeAria": "내보내기에 포함: {ch}",
+    "topPanel.channels.includeAria": "미리보기와 저장할 영상에 {ch} 표시",
     "topPanel.audio.label": "오디오",
     "export.output.legend": "영상 크기",
 
@@ -666,7 +666,7 @@ export const koDict = {
     "export.quality.medium.sub": "더 작은 파일",
     "export.quality.low": "공유용",
     "export.quality.low.sub": "가장 작은 파일",
-    "export.quality.rate": " · ≈{rate}/초",
+    "export.quality.size": " · ≈{size}",
     "export.quality.manual.toggle": "비트레이트 직접 지정",
     "export.quality.manual.label": "비트레이트",
     "export.quality.manual.auto": "자동",
@@ -1019,4 +1019,10 @@ export const koDict = {
     "settings.danger.onboarding.done": "안내가 초기화됐어요 — 앱을 쓸 때 다시 나타날 거예요.",
 
     "footer.addCamera": "내 블랙박스 추가하기",
+    "plurals.camera": "카메라 {n}대",
+    "topPanel.channels.hint": "선택한 카메라가 미리보기와 저장할 영상에 표시됩니다.",
+    "export.backToTrim": "구간 선택으로 돌아가기",
+    "player.noGps.message": "이 녹화에는 GPS 데이터가 없습니다. 영상 재생과 클립 저장은 가능합니다.",
+    "player.nav.video": "영상",
+    "player.nav.events": "이벤트",
 } satisfies Record<I18nKey, string>;

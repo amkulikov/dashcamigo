@@ -999,3 +999,37 @@
         box-shadow: none;
     }
 }
+
+.notes-file > summary {
+    cursor: pointer;
+    padding-block: 8px;
+    font-size: var(--dc-text-sm);
+    color: var(--fg-dim);
+}
+.trip-events-list {
+    border-top: 1px solid var(--border);
+    padding: 4px 10px;
+}
+.trip-events-list > summary {
+    cursor: pointer;
+    padding-block: 8px;
+    font-size: var(--dc-text-sm);
+}
+.trip-events-list button {
+    display: block;
+    width: 100%;
+    min-height: 44px;
+    text-align: left;
+    margin-block: 4px;
+}
+
+.trip-header {
+    min-height: 104px;
+}
+.trip-title {
+    bottom: 42px;
+}
+.trip-meta .trip-meta-text {
+    white-space: pre-line;
+    line-height: 1.4;
+}

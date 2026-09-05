@@ -1,3 +1,4 @@
+import { syncMobileViewNav } from "./mobile-view-nav.js";
 // Top-panel: composition controls visible above the player.
 //
 // Visibility matrix (driven by trip channel count + export-mode flag):
@@ -85,6 +86,13 @@ let resetZoom: () => void = () => {};
 export function initTopPanel(opts: { onCompositionApply: () => void; resetZoom?: () => void }): void {
     onCompositionApply = opts.onCompositionApply;
     if (opts.resetZoom) resetZoom = opts.resetZoom;
+    const controls = document.querySelector<HTMLDetailsElement>("#top-panel-controls");
+    const mobile = window.matchMedia("(max-width: 767px), (max-height: 500px) and (orientation: landscape)");
+    const syncControls = (): void => {
+        if (controls) controls.open = !mobile.matches;
+    };
+    mobile.addEventListener("change", syncControls);
+    syncControls();
     subscribeExportState(syncTopPanel);
     syncTopPanel();
 }
@@ -96,6 +104,7 @@ export function initTopPanel(opts: { onCompositionApply: () => void; resetZoom?:
  * Cheap (~20 DOM writes worst case) - safe to call from any lifecycle hook.
  */
 export function syncTopPanel(): void {
+    syncMobileViewNav();
     if (!dom.topPanel) return;
     const trip = activeTrip();
     const isMulti = !!trip && hasMultipleChannels(trip);
@@ -111,6 +120,12 @@ export function syncTopPanel(): void {
     if (dom.topPanelLayout) dom.topPanelLayout.hidden = !isMulti;
     if (dom.topPanelChannels) dom.topPanelChannels.hidden = !isMulti;
     if (dom.topPanelAudio) dom.topPanelAudio.hidden = !isMulti;
+    const controls = document.getElementById("top-panel-controls");
+    if (controls) controls.hidden = !isMulti;
+    const summary = document.getElementById("top-panel-controls-summary");
+    if (summary) summary.textContent = t("plurals.camera", { n: state.composition.channelOrder.length });
+    const hint = document.getElementById("top-panel-hint");
+    if (hint) hint.hidden = !isMulti;
 
     // Trip-name header is only useful when the sidebar is hidden (export
     // mode on desktop) - duplicating the sidebar trip card is noise.

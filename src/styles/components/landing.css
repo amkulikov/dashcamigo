@@ -159,7 +159,7 @@ body.no-trips .viewer {
 .landing-copy-touch {
     display: none;
 }
-@media (pointer: coarse) {
+@media (pointer: coarse), (max-width: 767px) {
     .landing-copy-pointer {
         display: none;
     }

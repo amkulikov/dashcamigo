@@ -469,7 +469,7 @@ export const plDict = {
     "topPanel.layout.label": "Układ",
     "topPanel.channels.label": "Kamery",
     "topPanel.channels.reorderAria": "Przeciągnij, aby zmienić kolejność",
-    "topPanel.channels.includeAria": "Uwzględnij {ch} w eksporcie",
+    "topPanel.channels.includeAria": "Pokaż {ch} w podglądzie i zapisanym filmie",
     "topPanel.audio.label": "Dźwięk",
     "export.output.legend": "Rozmiar wideo",
 
@@ -659,7 +659,7 @@ export const plDict = {
     "export.quality.medium.sub": "mniejszy plik",
     "export.quality.low": "Do udostępniania",
     "export.quality.low.sub": "najmniejszy plik",
-    "export.quality.rate": " · ≈{rate}/s",
+    "export.quality.size": " · ≈{size}",
     "export.quality.manual.toggle": "Ustaw bitrate ręcznie",
     "export.quality.manual.label": "Bitrate",
     "export.quality.manual.auto": "auto",
@@ -1010,4 +1010,10 @@ export const plDict = {
     "settings.danger.onboarding.done": "Wskazówki zresetowane — pojawią się na nowo.",
 
     "footer.addCamera": "Dodaj swój wideorejestrator",
+    "plurals.camera": "{n, plural, one {# kamera} few {# kamery} many {# kamer} other {# kamery}}",
+    "topPanel.channels.hint": "Wybrane kamery są widoczne w podglądzie i zapisanym filmie.",
+    "export.backToTrim": "Wróć do przycinania",
+    "player.noGps.message": "To nagranie nie zawiera danych GPS. Nadal możesz oglądać i zapisywać klipy.",
+    "player.nav.video": "Wideo",
+    "player.nav.events": "Zdarzenia",
 } satisfies Record<I18nKey, string>;

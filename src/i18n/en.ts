@@ -470,7 +470,7 @@ export const enDict = {
     "topPanel.layout.label": "Layout",
     "topPanel.channels.label": "Cameras",
     "topPanel.channels.reorderAria": "Drag to reorder cameras",
-    "topPanel.channels.includeAria": "Include {ch} in the export",
+    "topPanel.channels.includeAria": "Show {ch} in the preview and saved video",
     "topPanel.audio.label": "Audio",
     "export.output.legend": "Video size",
 
@@ -659,7 +659,7 @@ export const enDict = {
     "export.quality.medium.sub": "smaller file",
     "export.quality.low": "For sharing",
     "export.quality.low.sub": "smallest file",
-    "export.quality.rate": " · ≈{rate}/s",
+    "export.quality.size": " · ≈{size}",
     "export.quality.manual.toggle": "Set the bitrate manually",
     "export.quality.manual.label": "Bitrate",
     "export.quality.manual.auto": "auto",
@@ -1009,4 +1009,10 @@ export const enDict = {
     "settings.danger.onboarding.description": "Show the first-run tips (trips, player, export) again next time you use them.",
     "settings.danger.onboarding.cta": "Replay tips",
     "settings.danger.onboarding.done": "Tips reset — they'll show again as you use the app.",
+    "plurals.camera": "{n, plural, one {# camera} other {# cameras}}",
+    "topPanel.channels.hint": "Selected cameras appear in the preview and saved video.",
+    "export.backToTrim": "Back to trim",
+    "player.noGps.message": "No GPS data in this recording. You can still watch and save clips.",
+    "player.nav.video": "Video",
+    "player.nav.events": "Events",
 } satisfies Record<I18nKey, string>;

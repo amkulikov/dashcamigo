@@ -770,9 +770,9 @@
                      that are not loaded yet. Filled by folder-sources.ts. -->
                 <ul id="folder-sources" class="folder-sources" hidden></ul>
 
-                <section class="notes-file" aria-labelledby="notes-file-title">
+                <details class="notes-file" aria-labelledby="notes-file-title">
+                    <summary id="notes-file-title" data-i18n="notesFile.title">Notes file</summary>
                     <div class="sidebar-sources__heading notes-file__heading">
-                        <h2 id="notes-file-title" data-i18n="notesFile.title">Notes file</h2>
                         <details class="folder-sources-help">
                             <summary data-i18n-attr="aria-label:notesFile.helpAria,title:notesFile.helpAria"
                                      aria-label="How the notes file works" title="How the notes file works">
@@ -790,7 +790,7 @@
                     <div id="notes-file-status" class="notes-file-status" aria-live="polite">
                         <span class="notes-file-status__label" data-i18n="notesFile.browser">Notes are saved in this browser.</span>
                     </div>
-                </section>
+                </details>
             </div>
             <div class="sidebar-header">
                 <h2 data-i18n="sidebar.title">Trips</h2>
@@ -1311,11 +1311,23 @@
                    - multi-channel export: layout + channels + audio + output preset.
                  Filled in by JS - body.no-trips and initial single-channel
                  hide it via [hidden]. -->
+            <nav id="mobile-view-nav" class="mobile-view-nav" hidden>
+                <button id="mobile-view-video" type="button" data-i18n="player.nav.video" aria-controls="player-wrap">Video</button>
+                <button id="mobile-view-map" type="button" data-i18n="viewMenu.map" aria-controls="player-wrap">Map</button>
+                <button id="mobile-view-events" type="button" data-i18n="player.nav.events" aria-controls="mobile-events-list" aria-expanded="false">Events</button>
+            </nav>
+            <div id="mobile-events-list" class="mobile-events-list" hidden></div>
             <div id="top-panel" class="top-panel" hidden>
                 <div id="top-panel-trip-name" class="top-panel__trip-name"></div>
-                <div id="top-panel-layout" class="top-panel__group top-panel__group--layout" hidden></div>
-                <div id="top-panel-channels" class="top-panel__group top-panel__group--channels" hidden></div>
-                <div id="top-panel-audio" class="top-panel__group top-panel__group--audio" hidden></div>
+                <details id="top-panel-controls" class="top-panel__controls" open>
+                    <summary id="top-panel-controls-summary"></summary>
+                    <div class="top-panel__controls-content">
+                        <div id="top-panel-layout" class="top-panel__group top-panel__group--layout" hidden></div>
+                        <div id="top-panel-channels" class="top-panel__group top-panel__group--channels" hidden></div>
+                        <div id="top-panel-audio" class="top-panel__group top-panel__group--audio" hidden></div>
+                        <p id="top-panel-hint" class="top-panel__hint" data-i18n="topPanel.channels.hint" hidden>Selected cameras appear in the preview and saved video.</p>
+                    </div>
+                </details>
             </div>
 
             <div class="player-wrap" id="player-wrap">
@@ -1508,6 +1520,7 @@
                     </div>
                 </div>
                 <div class="player-chart" id="player-chart">
+                    <p class="player-no-gps" data-i18n="player.noGps.message">No GPS data in this recording. You can still watch and save clips.</p>
                     <!-- Cross-cutting pointers for the current moment and hover position
                          run through the viewport-mapped rows as single visual elements.
                          The playhead is orange while visible and neutral when its moment
@@ -2041,6 +2054,7 @@
                     </button>
                 </header>
                 <div id="export-panel-options" class="export-panel__section"></div>
+                <div id="export-panel-actions" class="export-panel__actions" hidden></div>
                 <div id="export-panel-progress" class="export-panel__section" hidden></div>
                 <div id="export-panel-done" class="export-panel__section" hidden></div>
                 <div id="export-panel-error" class="export-panel__section" hidden></div>
@@ -2510,7 +2524,12 @@
          manages the hidden flag via openSettings()/closeSettings(). -->
     <div data-nosnippet id="settings-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
         <div class="export-modal-card modal-card">
-            <div class="export-modal-title" id="settings-modal-title" data-i18n="settings.modal.title">Settings</div>
+            <header class="settings-modal-header">
+                <div class="export-modal-title" id="settings-modal-title" data-i18n="settings.modal.title">Settings</div>
+                <button id="settings-modal-header-close" class="dc-btn dc-btn--secondary" type="button" data-i18n-attr="aria-label:export.close,title:export.close" aria-label="Close" title="Close">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+                </button>
+            </header>
             <!-- Playback: unit preference + arrow-key seek step.
                  Units drive chart axis label, map popup speed, trip distance display
                  (see src/units-pref.ts).

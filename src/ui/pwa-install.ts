@@ -1,5 +1,5 @@
 // PWA install flow. Topbar button #install-btn + one-shot toast #install-banner
-// after the first ingest + #install-modal with a guide for browsers without a
+// after a saved clip + #install-modal with a guide for browsers without a
 // native install API.
 //
 // Strategies (see detectStrategy):
@@ -87,7 +87,7 @@ let deferredPrompt: BeforeInstallPromptEvent | null = null;
 
 // Cached promise from navigator.getInstalledRelatedApps. The query is
 // fired once at init; both initialization (sync strategy override) and
-// the post-ingest toast path await this same promise so they never race
+// the post-export toast path await this same promise so they never race
 // with the OS-level installation check.
 let relatedAppsCheckPromise: Promise<boolean> | null = null;
 // Synchronous mirror of the above promise's resolved value. Used by
@@ -545,9 +545,9 @@ function showToast(): void {
 /**
  * Shows the install toast if the strategy allows it, the user hasn't seen
  * it before, AND the OS doesn't report the PWA as already installed.
- * Idempotent. Called from ingest.ts after the first successful ingest.
+ * Idempotent. Called after leaving a successfully completed export.
  */
-export async function maybeShowPostIngestToast(): Promise<void> {
+export async function maybeShowPostExportToast(): Promise<void> {
     // Authoritative OS-level check. The synchronous strategy may say
     // "chromium" (browser tab) while the OS knows we're installed elsewhere
     // - in that case the user has already taken the action, no need to

@@ -117,8 +117,7 @@ export function formatTripMeta(trip: Trip, loading: TripLoadingState = "loaded")
     // inflate a parking-stitched trip's apparent length. Pauses are surfaced
     // separately below so a stitched trip is recognizable.
     const dur = formatDuration(trip.timeline.contentDurationSec);
-    const sizeMb = (trip.totalBytes / (1024 * 1024)).toFixed(0);
-    const sizePart = `${sizeMb} ${t("units.mb")}`;
+    const sizePart = formatBytes(trip.totalBytes);
     if (loading === "recordings-pending" || loading === "recordings-inflight") {
         const sourceFilesPart = t("plurals.file", { n: tripAllCandidates(trip).length });
         return `${sourceFilesPart} · ${sizePart}`;
@@ -127,8 +126,7 @@ export function formatTripMeta(trip: Trip, loading: TripLoadingState = "loaded")
     let distStr = "";
     if (loading === "loaded") {
         if (trip.distanceKm > 0) {
-            const d = formatDistanceFromKm(trip.distanceKm);
-            distStr = ` · ${Math.round(d.value)} ${t(d.unitKey)}`;
+            distStr = ` · ${formatTripDistance(trip.distanceKm)}`;
         }
     } else if (loading === "gps-pending") {
         distStr = ` · ${t("gpsLoad.pending")}`;
@@ -139,9 +137,9 @@ export function formatTripMeta(trip: Trip, loading: TripLoadingState = "loaded")
     // count so the user knows the footage is not one continuous run.
     const pausesPart =
         trip.timeline.gaps.length > 0 ? ` · ${t("plurals.pause", { n: trip.timeline.gaps.length })}` : "";
-    // One synchronized multi-camera frame is one clip in the expanded list.
-    const filesPart = t("plurals.file", { n: trip.frames.length });
-    return `${dur} · ${filesPart}${pausesPart} · ${sizePart}${distStr}`;
+    const filesPart = t("plurals.file", { n: tripAllCandidates(trip).length });
+    const camerasPart = t("plurals.camera", { n: tripChannels(trip).length });
+    return `${dur} · ${filesPart} · ${camerasPart}${pausesPart}\n${sizePart}${distStr}`;
 }
 
 export function formatFileMeta(video: VideoCandidate, tripStartUtc: number, gpsPending = false): string {
@@ -259,6 +257,14 @@ export function formatTime(seconds: number, padMinutes = false): string {
     const pad = (n: number): string => String(n).padStart(2, "0");
     if (h > 0) return `${h}:${pad(m)}:${pad(s)}`;
     return `${padMinutes ? pad(m) : m}:${pad(s)}`;
+}
+
+/** Keeps short routes distinct from a stationary recording. */
+export function formatTripDistance(km: number): string {
+    const { value, unitKey } = formatDistanceFromKm(km);
+    const rounded = new Intl.NumberFormat(getDateLocale(), { maximumFractionDigits: value < 10 ? 1 : 0 }).format(value);
+    const distance = value > 0 && value < 0.1 ? `<${new Intl.NumberFormat(getDateLocale()).format(0.1)}` : rounded;
+    return `${distance} ${t(unitKey)}`;
 }
 
 /** Human-readable file size: bytes → KB/MB/GB via localized unit keys. */

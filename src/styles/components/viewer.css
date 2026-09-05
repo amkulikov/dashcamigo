@@ -112,8 +112,8 @@ body.export-mode .player-wrap:not(:fullscreen):not(.map-expanded) {
 }
 /* In no-gps trips the chart.js canvas is hidden (see chart.css); keep the
    fixed timeline rows and navigator readable without reserving chart space. */
-.player-wrap.no-gps {
-    --chart-height: 122px;
+.player-wrap.no-chart-data {
+    --chart-height: 112px;
 }
 /* "View" menu now hides chart canvas and strip separately (not the whole
    .player-chart box), so --chart-height is recomputed via :has() based on
@@ -127,18 +127,18 @@ body.export-mode .player-wrap:not(:fullscreen):not(.map-expanded) {
       as no-gps).
    3) Both hidden - keep only the progress, ruler, and navigator rows.
 
-   :not(.no-gps) - in no-gps canvas is hidden via display:none (no
+   :not(.no-chart-data) - in no-gps canvas is hidden via display:none (no
    hidden attribute), rule 2 must not match there. */
-.player-wrap:has(.chart-inferred-strip[hidden]):not(:has(#player-chart-canvas[hidden])):not(.no-gps) {
+.player-wrap:has(.chart-inferred-strip[hidden]):not(:has(#player-chart-canvas[hidden])):not(.no-chart-data) {
     --chart-height: 148px;
 }
-.player-wrap:has(#player-chart-canvas[hidden]):not(:has(.chart-inferred-strip[hidden])):not(.no-gps) {
+.player-wrap:has(#player-chart-canvas[hidden]):not(:has(.chart-inferred-strip[hidden])):not(.no-chart-data) {
     --chart-height: 122px;
 }
 /* Both chart canvas and strip hidden via the "View" menu: .player-chart no
    longer collapses - it still holds the ruler + navigator + always-on progress
    bar, and shrinks to those rows via a small --chart-height. */
-.player-wrap:has(#player-chart-canvas[hidden]):has(.chart-inferred-strip[hidden]):not(.no-gps) {
+.player-wrap:has(#player-chart-canvas[hidden]):has(.chart-inferred-strip[hidden]):not(.no-chart-data) {
     --chart-height: 74px;
 }
 .player-wrap .video-frame {
@@ -1092,17 +1092,17 @@ body.export-mode .tile-drag-handle {
     }
     /* On mobile we need separate :has overrides because desktop values
        (strip-hidden case) are excessive for the thin mobile panel. */
-    .player-wrap:has(.chart-inferred-strip[hidden]):not(:has(#player-chart-canvas[hidden])):not(.no-gps) {
+    .player-wrap:has(.chart-inferred-strip[hidden]):not(:has(#player-chart-canvas[hidden])):not(.no-chart-data) {
         --chart-height: 114px;
     }
-    .player-wrap:has(#player-chart-canvas[hidden]):not(:has(.chart-inferred-strip[hidden])):not(.no-gps) {
+    .player-wrap:has(#player-chart-canvas[hidden]):not(:has(.chart-inferred-strip[hidden])):not(.no-chart-data) {
         --chart-height: 134px;
     }
-    .player-wrap:has(#player-chart-canvas[hidden]):has(.chart-inferred-strip[hidden]):not(.no-gps) {
+    .player-wrap:has(#player-chart-canvas[hidden]):has(.chart-inferred-strip[hidden]):not(.no-chart-data) {
         --chart-height: 86px;
     }
-    .player-wrap.no-gps {
-        --chart-height: 134px;
+    .player-wrap.no-chart-data {
+        --chart-height: 124px;
     }
     /* Stacked no-map grid: video, chart, a flexible spacer, then the bar.
        Same for portrait and landscape - landscape just overflows the viewport
@@ -1223,5 +1223,58 @@ body.export-mode .tile-drag-handle {
         /* The 50vh row above already provides the height - drop the
            portrait min-height which would force extra rows. */
         min-height: 0;
+    }
+}
+
+.mobile-view-nav,
+.mobile-events-list {
+    display: none;
+}
+@media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {
+    .mobile-view-nav:not([hidden]) {
+        display: flex;
+        flex: none;
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        background: var(--bg-elev);
+        border-bottom: 1px solid var(--border);
+    }
+    .mobile-view-nav button {
+        flex: 1;
+        min-height: 44px;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        background: transparent;
+        color: var(--fg);
+        font: inherit;
+        font-size: var(--dc-text-sm);
+        cursor: pointer;
+    }
+    .mobile-view-nav button[aria-pressed="true"],
+    .mobile-view-nav button[aria-expanded="true"] {
+        border-bottom-color: var(--accent);
+    }
+    .mobile-view-nav button:disabled {
+        color: var(--fg-mute);
+        opacity: 0.6;
+        cursor: default;
+    }
+    .mobile-events-list:not([hidden]) {
+        display: flex;
+        flex: none;
+        flex-direction: column;
+        gap: 6px;
+        padding: 8px;
+        background: var(--bg-elev);
+        max-height: 35dvh;
+        overflow-y: auto;
+    }
+    .mobile-events-list button {
+        min-height: 44px;
+        text-align: left;
+    }
+    body.export-mode .mobile-events-list {
+        display: none;
     }
 }

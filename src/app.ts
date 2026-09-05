@@ -1,3 +1,4 @@
+import { initMobileViewNav } from "./ui/mobile-view-nav.js";
 // Frontend entry point. Vanilla DOM, no framework.
 //
 // Thin orchestrator shell: imports modules from ui/* and wires them via
@@ -84,6 +85,7 @@ import {
 import { initTripPreparation } from "./ui/trip-preparation.js";
 import { initHotkeysModal } from "./ui/hotkeys-modal.js";
 import { initWhatsNewModal } from "./ui/whats-new-modal.js";
+import { openExportMode, setRange } from "./ui/export-state.js";
 import { initExportMode } from "./ui/export-mode.js";
 import { initExportPanel } from "./ui/export-panel.js";
 import { initExportTrimBar } from "./ui/export-trim-bar.js";
@@ -482,6 +484,9 @@ initViewMenu({
     },
 });
 initExportMode();
+initMobileViewNav((index, saveClip) => {
+    if (state.active) void openTripEvent(state.active.trip, index, saveClip);
+});
 initTopPanel({ onCompositionApply: applyComposition, resetZoom: resetVideoZoom });
 initExportPanel({ onCompositionApply: applyComposition });
 initExportTrimBar({ getTripCurrentTime, seekThenPlay });
@@ -669,7 +674,7 @@ async function openTripFrame(tripIdx: number, requestedFrameIdx?: number): Promi
     }
 }
 
-async function openTripEvent(tripIdx: number, eventIndex: number): Promise<void> {
+async function openTripEvent(tripIdx: number, eventIndex: number, saveClip = false): Promise<void> {
     const target = captureTripOpenTarget(state.trips, tripIdx, undefined, eventIndex);
     const openToken = takeTripOpenToken(target?.tripKeys);
     if (!target) {
@@ -690,6 +695,11 @@ async function openTripEvent(tripIdx: number, eventIndex: number): Promise<void>
             return;
         }
         playTripEvent(resolved.tripIdx, nextEventIndex);
+        if (saveClip && trip) {
+            const event = trip.events[nextEventIndex]!;
+            openExportMode();
+            setRange(event.relSec - 10, event.relSec + 10);
+        }
         // Seeking inside the already-active trip does not call playFrame, so it
         // needs to release the click-feedback spinner explicitly.
         clearOpeningTrip();

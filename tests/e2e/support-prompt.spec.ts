@@ -133,7 +133,7 @@ test.describe("project support prompt", () => {
 
         await loadAndWait(page, SAMPLE_70MAI);
         await expect(page.locator(".dc-onb")).toBeVisible({ timeout: 5_000 });
-        await page.locator(".dc-onb__skip").click();
+        await page.locator(".dc-onb__next").click();
         await expect(page.locator(".dc-onb")).toHaveCount(0);
 
         await loadAndWait(page, SAMPLE_GOPRO);

@@ -76,7 +76,6 @@ import { hideTripPreparation, showTripPreparation, updateTripPreparationProgress
 import { showNoRecordingsModal } from "./no-recordings-modal.js";
 import { notify } from "./notifications.js";
 import { maybeRunIngestTour, maybeRunSourcesTour } from "./onboarding.js";
-import { maybeShowPostIngestToast } from "./pwa-install.js";
 import { maybeShowSupportPrompt, recordSuccessfulLoadForSupportPrompt } from "./support-prompt.js";
 import { refreshTripAnalysisStatus, refreshTripCard, renderTrips, updateTripPreview } from "./sidebar.js";
 import { state } from "./state.js";
@@ -1334,18 +1333,9 @@ async function completeProgressiveRun(run: ProgressiveIngestRun, generation: num
     if (state.trips.length > 0) {
         maybeRunIngestTour();
         maybeRunSourcesTour();
-        // Installation owns the first post-load ask. The project-support nudge
-        // waits for that async gate to settle, then checks that no install
-        // banner (or onboarding/modal) took the slot. Duplicate-only and fully
-        // unreadable selections do not advance its two-success threshold.
-        const installToast = maybeShowPostIngestToast();
         const addedPlayableRecording = ctx.videosNewCount - run.metadataFailed > 0;
         if (addedPlayableRecording && recordSuccessfulLoadForSupportPrompt()) {
-            void installToast.then(() => {
-                maybeShowSupportPrompt();
-            });
-        } else {
-            void installToast;
+            maybeShowSupportPrompt();
         }
     }
 

@@ -479,7 +479,7 @@ export const jaDict = {
     "topPanel.layout.label": "レイアウト",
     "topPanel.channels.label": "カメラ",
     "topPanel.channels.reorderAria": "ドラッグして順序を変更",
-    "topPanel.channels.includeAria": "{ch} を書き出しに含める",
+    "topPanel.channels.includeAria": "プレビューと保存する動画に {ch} を表示",
     "topPanel.audio.label": "音声",
     "export.output.legend": "動画サイズ",
 
@@ -669,7 +669,7 @@ export const jaDict = {
     "export.quality.medium.sub": "ファイルを小さく",
     "export.quality.low": "共有向け",
     "export.quality.low.sub": "最小ファイル",
-    "export.quality.rate": " · ≈{rate}/秒",
+    "export.quality.size": " · ≈{size}",
     "export.quality.manual.toggle": "ビットレートを手動で指定",
     "export.quality.manual.label": "ビットレート",
     "export.quality.manual.auto": "自動",
@@ -1022,4 +1022,10 @@ export const jaDict = {
     "settings.danger.onboarding.done": "ツアーをリセットしました — 次回のご使用時に再度表示されます。",
 
     "footer.addCamera": "ドライブレコーダーを追加",
+    "plurals.camera": "カメラ {n} 台",
+    "topPanel.channels.hint": "選択したカメラがプレビューと保存する動画に表示されます。",
+    "export.backToTrim": "切り出し範囲に戻る",
+    "player.noGps.message": "この録画にはGPSデータがありません。動画の再生とクリップの保存はできます。",
+    "player.nav.video": "動画",
+    "player.nav.events": "イベント",
 } satisfies Record<I18nKey, string>;

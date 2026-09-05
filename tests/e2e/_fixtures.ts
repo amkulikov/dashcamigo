@@ -299,7 +299,7 @@ export async function loadTrip(page: Page, sampleDir: string = SAMPLE_70MAI): Pr
  * CI workflow (the suite needs Chrome, not the codec-less bundled Chromium, on
  * Linux).
  */
-export async function openExport(page: Page): Promise<void> {
+export async function openExport(page: Page, expandAdvanced = true): Promise<void> {
     const btn = page.locator("#player-export");
     await expect(btn, "export must be enabled once a decodable trip is active").toBeEnabled();
     if (await btn.isVisible()) {
@@ -313,6 +313,10 @@ export async function openExport(page: Page): Promise<void> {
         await item.click();
     }
     await expect(page.locator("#export-panel")).toBeVisible();
+    if (expandAdvanced) {
+        const closed = page.locator(".export-panel__disclosure:not([open]) > summary");
+        while (await closed.count()) await closed.first().click();
+    }
 }
 
 /** Alias kept for readability at mobile call sites; the logic is viewport-agnostic. */

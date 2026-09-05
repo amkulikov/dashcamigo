@@ -118,7 +118,7 @@ function openSettings(): void {
     if (card) card.scrollTop = 0;
     activateModal(m, {
         onClose: closeSettings,
-        initialFocus: document.getElementById("settings-modal-close"),
+        initialFocus: document.getElementById("settings-modal-header-close"),
     });
 }
 
@@ -365,6 +365,7 @@ export function initSettingsModal(): void {
     });
 
     document.getElementById("settings-modal-close")?.addEventListener("click", closeSettings);
+    document.getElementById("settings-modal-header-close")?.addEventListener("click", closeSettings);
 
     // Backdrop click closes the active modal; the card stops its own clicks.
     wireBackdropDismiss(m, closeSettings, { cardSelector: ".export-modal-card" });

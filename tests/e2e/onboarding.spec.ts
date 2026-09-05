@@ -36,7 +36,7 @@ test.describe("onboarding", () => {
     });
 
     test("ingest tour appears after the first ingest and 'Don't show again' persists", async ({ page }) => {
-        await clearOnboarding(page, ["ingest"]);
+        await clearOnboarding(page);
         await gotoApp(page, "en");
 
         // Load the SD card but DON'T click a trip - the ingest tour fires on its
@@ -54,7 +54,7 @@ test.describe("onboarding", () => {
         // "Don't show again" ends the tour and persists.
         await page.locator(".dc-onb__skip").click();
         await expect(onb).toHaveCount(0);
-        expect(await flag(page, "ingest")).toBe("1");
+        for (const id of ONBOARD_TOUR_IDS) expect(await flag(page, id)).toBe("1");
     });
 
     test("player tour gates autoplay and completing it persists + resumes", async ({ page }) => {
@@ -123,7 +123,7 @@ test.describe("onboarding", () => {
         // Player/ingest tours stay suppressed (seeded done), so opening the trip
         // does not show a tour and export is reachable.
         await loadTrip(page, SAMPLE_70MAI);
-        await openExport(page);
+        await openExport(page, false);
 
         const onb = page.locator(".dc-onb");
         await expect(onb).toBeVisible({ timeout: 5_000 });

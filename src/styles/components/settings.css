@@ -97,3 +97,23 @@
     font-size: var(--dc-text-xs);
     line-height: 1.5;
 }
+
+.settings-modal-header {
+    position: sticky;
+    top: calc(-1 * var(--dc-space-4));
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-block: 12px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+}
+.settings-modal-header .export-modal-title {
+    margin: 0;
+}
+#settings-modal-header-close {
+    min-width: 44px;
+    min-height: 44px;
+}

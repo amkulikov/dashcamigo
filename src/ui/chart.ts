@@ -582,6 +582,7 @@ function applyChartXRange(min: number, max: number, fullView: boolean): void {
 export function applyChartLayout(): void {
     const noGps = !state.hasTrack;
     dom.playerWrap.classList.toggle("no-gps", noGps);
+    dom.playerWrap.classList.toggle("no-chart-data", noGps && !hasAccelData(activeTrip()?.records ?? []));
     // Chart.js must recalculate canvas size after area height changes.
     requestAnimationFrame(() => {
         if (state.chart) state.chart.resize();
@@ -2097,14 +2098,13 @@ export function rebuildChartFromTrip(trip: Trip): void {
     const speedData: Array<{ x: number; y: number }> = [];
     const accelData: Array<{ x: number; y: number }> = [];
     for (const r of trip.records) {
-        if (!r.active) continue;
         // Project the wall-clock record onto the footage axis so pauses collapse
         // (a record during a pause snaps to the divider; everything else shifts
         // left by the preceding pauses).
         const x = wallToContentSec(trip.timeline, r.unixSeconds);
         // Speed scaled to the user's unit preference (km/h or mph); the Y-axis
         // overlay label is updated separately via syncSpeedAxisUnit().
-        speedData.push({ x, y: formatSpeedFromMs(r.speedMs).value });
+        if (r.active) speedData.push({ x, y: formatSpeedFromMs(r.speedMs).value });
         accelData.push({ x, y: gMagnitude(r) });
     }
     state.chart.data.datasets[0]!.data = speedData;
@@ -2114,9 +2114,7 @@ export function rebuildChartFromTrip(trip: Trip): void {
     const xOpts = state.chart.options.scales!.x as any;
     xOpts.min = 0;
     xOpts.max = trip.timeline.contentDurationSec || 1;
-    // Without GPS points hide Y axes: on the thin no-gps timeline strip (.no-gps in
-    // CSS) they would overflow the canvas height and break layout. The x-axis and
-    // file-boundary lines (cursorPlugin) stay - the timeline is useless without them.
+    // GPS controls the speed axis; accelerometer-only recordings keep their own curve.
     const noGps = speedData.length === 0;
     // A format without an accelerometer (e.g. GPS-only embedded tracks) yields
     // all-zero |G| - a flat line at 0 reads as "no G-force ever", so hide the
@@ -2128,7 +2126,7 @@ export function rebuildChartFromTrip(trip: Trip): void {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const yAccelOpts = state.chart.options.scales!.yAccel as any;
     ySpeedOpts.display = !noGps;
-    yAccelOpts.display = !noGps && hasAccel;
+    yAccelOpts.display = hasAccel;
     const accelAxisLabel = document.querySelector<HTMLElement>(".chart-axis-label--accel");
     if (accelAxisLabel) accelAxisLabel.hidden = !hasAccel;
     state.chart.update("none");

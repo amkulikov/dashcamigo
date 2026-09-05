@@ -471,7 +471,7 @@ export const esDict = {
     "topPanel.layout.label": "Disposición",
     "topPanel.channels.label": "Cámaras",
     "topPanel.channels.reorderAria": "Arrastra para reordenar",
-    "topPanel.channels.includeAria": "Incluir {ch} en la exportación",
+    "topPanel.channels.includeAria": "Mostrar {ch} en la vista previa y el vídeo guardado",
     "topPanel.audio.label": "Audio",
     "export.output.legend": "Tamaño del vídeo",
 
@@ -661,7 +661,7 @@ export const esDict = {
     "export.quality.medium.sub": "archivo más pequeño",
     "export.quality.low": "Para compartir",
     "export.quality.low.sub": "el archivo más pequeño",
-    "export.quality.rate": " · ≈{rate}/s",
+    "export.quality.size": " · ≈{size}",
     "export.quality.manual.toggle": "Definir la tasa de bits manualmente",
     "export.quality.manual.label": "Tasa de bits",
     "export.quality.manual.auto": "auto",
@@ -1012,4 +1012,10 @@ export const esDict = {
     "settings.danger.onboarding.done": "Consejos restablecidos — volverán a aparecer mientras usas la app.",
 
     "footer.addCamera": "Añade tu cámara de coche",
+    "plurals.camera": "{n, plural, one {# cámara} other {# cámaras}}",
+    "topPanel.channels.hint": "Las cámaras seleccionadas aparecen en la vista previa y en el vídeo guardado.",
+    "export.backToTrim": "Volver al recorte",
+    "player.noGps.message": "Esta grabación no tiene datos GPS. Puedes ver y guardar clips.",
+    "player.nav.video": "Vídeo",
+    "player.nav.events": "Eventos",
 } satisfies Record<I18nKey, string>;

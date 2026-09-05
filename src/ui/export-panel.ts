@@ -1,3 +1,4 @@
+import { maybeShowPostExportToast } from "./pwa-install.js";
 // Export panel: side-drawer (desktop) / bottom-sheet (mobile) housing the
 // inline save UI - output frame size/aspect, quality, audio/gpmf/gpx, letterbox
 // blur, overlays toggles (incl. the map-scale slider), plus the Save button and
@@ -189,11 +190,16 @@ function openOrCloseExportMode(): void {
 }
 
 let wasExportModeOpen = false;
+let hasSavedClip = false;
 let previousPhase = exportPanelState.phase;
 let shouldFocusPhase = false;
 
 function syncExportPanel(): void {
     const hasJustOpened = state.exportModeOpen && !wasExportModeOpen;
+    if (!state.exportModeOpen && wasExportModeOpen && hasSavedClip) {
+        hasSavedClip = false;
+        void maybeShowPostExportToast();
+    }
     wasExportModeOpen = state.exportModeOpen;
     if (hasJustOpened && selectedOverlayKey === "map") refreshOverlayInspector();
     syncBlurGroup();
@@ -211,6 +217,10 @@ function syncExportPanel(): void {
         dom.exportPanelOptions.hidden = phase !== "options";
         dom.exportPanelOptions.inert = exportPanelState.configurationLocked;
         dom.exportPanelOptions.setAttribute("aria-busy", String(exportPanelState.configurationLocked));
+    }
+    if (dom.exportPanelActions) {
+        dom.exportPanelActions.hidden = phase !== "options" || !state.exportModeOpen;
+        dom.exportPanelActions.inert = exportPanelState.configurationLocked;
     }
     if (dom.exportPanelProgress) dom.exportPanelProgress.hidden = phase !== "progress";
     if (dom.exportPanelDone) dom.exportPanelDone.hidden = phase !== "done";
@@ -237,7 +247,7 @@ function syncExportPanel(): void {
         // wakes syncEstimate via subscribeEncodeCeiling. Gated to the open configure
         // view so we do not probe while the panel is closed or mid-export.
         if (state.exportModeOpen && phase === "options") refreshEncodeCeiling();
-        // Live export estimate (per-quality rate + size/res/dur/codec block) tracks
+        // Live export estimate (per-quality clip sizes and output summary) tracks
         // every Output / quality / range / speed / audio change routed through here.
         syncEstimate();
         // Refresh the in-memory-blob warning whenever the configure view is shown
@@ -366,10 +376,26 @@ function syncGpsOptionsAvailability(): void {
 
 /* ----------------------------- options section ---------------------------- */
 
+let actionsObserver: ResizeObserver | null = null;
+
+function renderDisclosure(group: HTMLElement): HTMLDetailsElement {
+    const details = document.createElement("details");
+    details.className = "export-panel__disclosure";
+    const summary = document.createElement("summary");
+    const legend = group.querySelector("legend");
+    summary.textContent = legend?.textContent ?? "";
+    group.setAttribute("aria-label", summary.textContent);
+    legend?.remove();
+    details.append(summary, group);
+    return details;
+}
+
 function renderOptionsSection(): void {
     const root = dom.exportPanelOptions;
-    if (!root) return;
+    const actions = dom.exportPanelActions;
+    if (!root || !actions) return;
     root.innerHTML = "";
+    actions.innerHTML = "";
 
     // "Video clip" vs "GPS track only" switch + the gpx track summary. Both are
     // always built; their visibility is reconciled by syncModeAvailability /
@@ -400,10 +426,12 @@ function renderOptionsSection(): void {
     videoOnly.appendChild(renderQualityGroup());
     videoOnly.appendChild(renderSpeedGroup());
     videoOnly.appendChild(renderCropGroup());
-    videoOnly.appendChild(renderBlurGroup());
+    videoOnly.appendChild(renderDisclosure(renderBlurGroup()));
     videoOnly.appendChild(renderToggleGroup());
-    videoOnly.appendChild(renderOverlaysGroup());
-    videoOnly.appendChild(renderEstimateGroup());
+    videoOnly.appendChild(renderDisclosure(renderOverlaysGroup()));
+    const estimate = renderEstimateGroup();
+    estimate.id = "export-panel-action-estimate";
+    actions.appendChild(estimate);
 
     // In-memory-build warning. Shown (async) on every browser without a native
     // save picker (Firefox / Safari / mobile), where the whole MP4 is built in
@@ -415,7 +443,7 @@ function renderOptionsSection(): void {
     warn.textContent = t("export.fallbackWarn");
     warn.hidden = true;
     fallbackWarnEl = warn;
-    videoOnly.appendChild(warn);
+    actions.appendChild(warn);
 
     root.appendChild(videoOnly);
     videoOnlyEl = videoOnly;
@@ -433,7 +461,20 @@ function renderOptionsSection(): void {
     saveBtn.textContent = t("export.start");
     saveBtn.addEventListener("click", onSaveClick);
     saveBtnEl = saveBtn;
-    root.appendChild(saveBtn);
+    const buttons = document.createElement("div");
+    buttons.className = "export-panel__action-buttons";
+    const trimBtn = document.createElement("button");
+    trimBtn.type = "button";
+    trimBtn.id = "export-panel-back-to-trim";
+    trimBtn.className = "export-panel__secondary-btn";
+    trimBtn.textContent = t("export.backToTrim");
+    trimBtn.addEventListener("click", () => {
+        const trim = document.getElementById("export-trim-bar");
+        trim?.scrollIntoView({ block: "center", behavior: "instant" });
+        trim?.querySelector<HTMLInputElement>("input:not([disabled])")?.focus({ preventScroll: true });
+    });
+    buttons.append(trimBtn, saveBtn);
+    actions.appendChild(buttons);
 
     const followNote = document.createElement("div");
     followNote.id = "export-panel-follow-save-note";
@@ -441,7 +482,12 @@ function renderOptionsSection(): void {
     followNote.textContent = t("export.blur.tracker.saveBlocked");
     followNote.hidden = true;
     followSaveNoteEl = followNote;
-    root.appendChild(followNote);
+    actions.appendChild(followNote);
+    actionsObserver?.disconnect();
+    actionsObserver = new ResizeObserver(() => {
+        document.documentElement.style.setProperty("--dc-export-actions-h", `${actions.offsetHeight}px`);
+    });
+    actionsObserver.observe(actions);
 
     // Reflect the current mode (hide video controls + relabel Save) now that all
     // the nodes exist.
@@ -545,6 +591,9 @@ function renderGpxSummary(): HTMLElement {
 function syncOutputKindUi(): void {
     const gpx = exportPanelState.outputKind === "gpx";
     if (videoOnlyEl) videoOnlyEl.hidden = gpx;
+    const estimate = document.getElementById("export-panel-action-estimate");
+    if (estimate) estimate.hidden = gpx;
+    if (fallbackWarnEl && gpx) fallbackWarnEl.hidden = true;
     if (gpxSummaryEl) gpxSummaryEl.hidden = !gpx;
     for (const btn of modeButtons) {
         setToggleSelected(btn, btn.dataset.mode === exportPanelState.outputKind, "active");
@@ -752,12 +801,10 @@ function renderQualityGroup(): HTMLElement {
             label.appendChild(sub);
             if (o.id === "original") topTierSubEl = sub;
         }
-        // Live data-rate (~MB/s) for this tier at the current Output dims, filled
-        // by syncEstimate. Muted, appended after the static density sub-label.
-        const rate = document.createElement("span");
-        rate.className = "export-panel__radio-sub";
-        qualityRateEls.set(o.id, rate);
-        label.appendChild(rate);
+        const size = document.createElement("span");
+        size.className = "export-panel__radio-sub";
+        qualitySizeEls.set(o.id, size);
+        label.appendChild(size);
         row.appendChild(label);
         wrap.appendChild(row);
         qualityRows.push({ row, input: r });
@@ -868,15 +915,15 @@ function syncManualBitrateUi(est: ReturnType<typeof estimateExport>): void {
     }
 }
 
-// Per-quality data-rate spans (filled by syncEstimate from estimateExport).
-const qualityRateEls = new Map<Quality, HTMLElement>();
+// Per-quality clip-size spans (filled by syncEstimate from estimateExport).
+const qualitySizeEls = new Map<Quality, HTMLElement>();
 
 // Top-tier ("original") head + sub spans, relabeled live by syncEstimate between
 // "Original" (stream-copy) and "High" (re-encode forced by the current config).
 let topTierHeadEl: HTMLElement | null = null;
 let topTierSubEl: HTMLElement | null = null;
 
-// Estimated-output block (size / resolution / duration / codec) shown above
+// Estimated-output block (size / resolution / duration) shown above
 // Save. Refs filled by renderEstimateGroup, values by syncEstimate.
 let estimateSizeEl: HTMLDivElement | null = null;
 let estimateDetailsEl: HTMLDivElement | null = null;
@@ -944,7 +991,7 @@ function syncTopTierLabel(streamCopyEligible: boolean): void {
     }
 }
 
-/** Recomputes the live estimate and writes the per-quality rates + the
+/** Recomputes the live estimate and writes the per-quality clip sizes + the
  *  estimated-output block. Cheap pure read; called from syncExportPanel. */
 function syncEstimate(): void {
     const est = estimateExport();
@@ -952,7 +999,7 @@ function syncEstimate(): void {
     // rate), so it is reconciled on both branches - including the no-estimate one.
     syncManualBitrateUi(est);
     if (!est) {
-        for (const el of qualityRateEls.values()) el.textContent = "";
+        for (const el of qualitySizeEls.values()) el.textContent = "";
         if (estimateSizeEl) estimateSizeEl.textContent = "";
         if (estimateDetailsEl) estimateDetailsEl.textContent = "";
         syncTopTierLabel(true);
@@ -960,8 +1007,8 @@ function syncEstimate(): void {
         return;
     }
     syncTopTierLabel(est.topStreamCopyEligible);
-    for (const [q, el] of qualityRateEls) {
-        el.textContent = t("export.quality.rate", { rate: formatRateBytes(est.rateByQuality[q]) });
+    for (const [q, el] of qualitySizeEls) {
+        el.textContent = t("export.quality.size", { size: formatBytes(est.rateByQuality[q] * est.durationSec) });
     }
     if (estimateSizeEl) {
         // Exact stream-copy size vs VBR re-encode floor - shared wording with
@@ -969,11 +1016,7 @@ function syncEstimate(): void {
         estimateSizeEl.textContent = formatEstimatedSize(est);
     }
     if (estimateDetailsEl) {
-        estimateDetailsEl.textContent = t("export.estimate.details", {
-            res: `${est.width}×${est.height}`,
-            dur: formatTime(est.durationSec),
-            codec: est.codecLabel,
-        });
+        estimateDetailsEl.textContent = `${formatTime(est.durationSec)} · ${est.width}×${est.height}`;
     }
     syncEncodeNote(est);
 }
@@ -2910,6 +2953,7 @@ async function onSaveClick(): Promise<void> {
                 notifyExportStateChanged();
             },
             onDone: (s) => {
+                hasSavedClip = true;
                 renderDoneSummary(s);
                 exportPanelState.phase = "done";
                 notifyExportStateChanged();
