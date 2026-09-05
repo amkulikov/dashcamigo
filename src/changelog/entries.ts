@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-09-06.1",
+        category: "improvement",
+        text: {
+            en: "Blurring selected areas in exported videos.",
+            ru: "Размытие выбранных областей при экспорте видео.",
+            de: "Weichzeichnen ausgewählter Bereiche in exportierten Videos.",
+            es: "Desenfoque de las áreas seleccionadas en los vídeos exportados.",
+            fr: "Floutage des zones sélectionnées dans les vidéos exportées.",
+            pl: "Rozmywanie wybranych obszarów w eksportowanych filmach.",
+            pt: "Desfoque das áreas selecionadas nos vídeos exportados.",
+            zh: "导出视频中选定区域的模糊处理。",
+            ja: "書き出す動画で選択した範囲のぼかし処理。",
+            ko: "내보내는 영상에서 선택한 영역의 흐림 처리.",
+        },
+    },
+    {
         id: "2026-09-05.2",
         category: "improvement",
         text: {

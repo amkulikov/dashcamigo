@@ -7,6 +7,10 @@ User-facing changes, newest first. Dates are when the change landed on
 [beta](https://beta.dashcamigo.app); production picks it up with the next
 release tag. Localized texts ship inside the app (the "What's new" panel).
 
+## 2026-09-06
+
+- **Improved:** Blurring selected areas in exported videos.
+
 ## 2026-09-05
 
 - **Improved:** Updated the interface and simplified common actions.
