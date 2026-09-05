@@ -860,9 +860,7 @@
              bots; data-i18n swaps them for the active locale. -->
         <div class="landing" id="landing">
                 <div class="landing-inner">
-                    <!-- Hero: two-column split (1.22 / 1). Left = copy + drop CTA +
-                         capability bullets. Right = privacy "safety wall". On <=1020px
-                         collapses to single column with safety dropping under hero-main. -->
+                    <!-- The primary action precedes the product preview on narrow screens. -->
                     <section class="landing-hero">
                         <div class="landing-hero-main">
                             <!-- H1 is split into three text nodes around the orange highlight
@@ -889,13 +887,7 @@
                                         <span class="landing-copy-touch" data-i18n="landing.drop.t1Touch">Choose the entire SD-card folder</span>
                                     </span>
                                     <span class="landing-drop-t2" data-i18n="landing.drop.t2">Keep the subfolders and original filenames — that's how clips get stitched into trips</span>
-                                    <span class="landing-codecs">
-                                        <span class="landing-codec">.mp4</span>
-                                        <span class="landing-codec">.mov</span>
-                                        <span class="landing-codec">.ts</span>
-                                        <span class="landing-codec">.mkv</span>
-                                        <span class="landing-codecs-hint" data-i18n="landing.drop.codecsHint">+ any neighboring files — .gps, .nmea, .gpx, .map, .csv, .txt and more.</span>
-                                    </span>
+
                                 </div>
                                 <button type="button" id="landing-cta" class="landing-cta dc-btn dc-btn--primary is-pending" aria-busy="true" disabled>
                                     <span data-i18n="landing.drop.cta">Open folder</span>
@@ -918,104 +910,120 @@
                                 <span class="recent-folders-list" id="recent-folders-list"></span>
                             </div>
 
-                            <!-- Vendor brand names are language-agnostic literals, no i18n key.
-                                 They are <a> to /cameras/<slug>/ for internal SEO linking;
-                                 the seo-prerender plugin rewrites these hrefs to /ru/cameras/...
-                                 for the RU build. Vantrue now has its own page (linked here);
-                                 Thinkware and the rest stay plain text in the FAQ tail. -->
-                            <p class="landing-hero-lead"><span data-i18n="landing.hero.lead.before">Recordings in MP4, MOV or TS from most dashcams — </span><a class="landing-brand-link" href="/cameras/70mai/">70mai</a>, <a class="landing-brand-link" href="/cameras/viofo/">Viofo</a>, <a class="landing-brand-link" href="/cameras/blackvue/">BlackVue</a>, <a class="landing-brand-link" href="/cameras/gopro/">GoPro</a>, <a class="landing-brand-link" href="/cameras/garmin/">Garmin</a>, <a class="landing-brand-link" href="/cameras/vantrue/">Vantrue</a>, <a class="landing-brand-link" href="/cameras/thinkware/">Thinkware</a><span data-i18n="landing.hero.lead.brandsTail"> and more.</span><span data-i18n="landing.hero.lead.after"> GPS and events — the app reads them straight from the video and the files next to it, no setup.</span> <a class="landing-brand-link" href="/cameras/" data-i18n="landing.hero.allBrands">All supported brands →</a></p>
-
-                            <!-- Capability bullets (3x2 grid -> 1 column on <=640px). -->
-                            <ul class="landing-caps">
-                                <li>
-                                    <span class="landing-cap-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg></span>
-                                    <div><b data-i18n="landing.caps.g.title">Trips, not clips</b><span data-i18n="landing.caps.g.body">Minute-long clips join into one continuous trip — one timeline, one route. Any stretch saves as a single MP4.</span></div>
-                                </li>
-                                <li>
-                                    <span class="landing-cap-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 12 2 2 4-4"/><path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9c1.36 0 2.65.3 3.81.84"/></svg></span>
-                                    <div><b data-i18n="landing.caps.a.title">Many dashcam brands</b><span data-i18n="landing.caps.a.body">.mp4 .mov .ts files open as-is — no drivers, no vendor software.</span></div>
-                                </li>
-                                <li>
-                                    <span class="landing-cap-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></span>
-                                    <div><b data-i18n="landing.caps.b.title">Speed and events</b><span data-i18n="landing.caps.b.body">Hard braking and impacts are marked on the chart. Click a mark to jump to that moment.</span></div>
-                                </li>
-                                <li>
-                                    <span class="landing-cap-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="m22 8-6 4 6 4Z"/></svg></span>
-                                    <div><b data-i18n="landing.caps.c.title">All cameras at once</b><span data-i18n="landing.caps.c.body">Front, rear, cabin — in sync. Enlarge any of them.</span></div>
-                                </li>
-                                <li>
-                                    <span class="landing-cap-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="m9 14 2 2 4-4"/></svg></span>
-                                    <div><b data-i18n="landing.caps.e.title">Edit, combine &amp; export</b><span data-i18n="landing.caps.e.body.lead">Trim, </span><a class="landing-brand-link" href="/combine-dashcam-cameras-into-one-video/" data-i18n="landing.caps.e.link.combine">combine cameras into one video</a><span data-i18n="landing.caps.e.body.mid"> and </span><a class="landing-brand-link" href="/add-data-overlay-to-dashcam-video/" data-i18n="landing.caps.e.link.overlay">burn speed, coordinates or a moving map</a><span data-i18n="landing.caps.e.body.tail"> onto the export. GPS inside the file or as a separate .gpx.</span></div>
-                                </li>
-                                <li>
-                                    <span class="landing-cap-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/></svg></span>
-                                    <div><b data-i18n="landing.caps.d.title">Hide plates &amp; faces</b><span data-i18n="landing.caps.d.body.lead">You can </span><a class="landing-brand-link" href="/blur-license-plate-in-dashcam-video/" data-i18n="landing.caps.d.link">blur a license plate or a face</a><span data-i18n="landing.caps.d.body.tail"> before sharing — the cover follows the object as it moves.</span></div>
-                                </li>
-                            </ul>
                         </div>
 
-                        <!-- Right column: safety wall + a product glimpse under it.
-                             The wrapper owns the column so the shot stacks below the
-                             card instead of the card stretching into a void. -->
+                        <!-- The preview follows the primary action in reading and focus order. -->
                         <div class="landing-hero-side">
-                        <!-- "safety wall". Always-dark surface (overrides
-                             light theme) - product decision: privacy block is visually
-                             anchored by high contrast regardless of UI theme. -->
-                        <aside class="landing-safety" aria-labelledby="landing-safety-h2">
-                            <p class="landing-safety-eyebrow"><span class="landing-safety-dot"></span><span data-i18n="landing.safety.eyebrow">Privacy by default</span></p>
-                            <h2 id="landing-safety-h2"><span data-i18n="landing.safety.h2.before">Your recordings stay </span><em data-i18n="landing.safety.h2.hl">on your device</em><span data-i18n="landing.safety.h2.after">.</span></h2>
 
-                            <ul class="landing-guarantees">
-                                <li>
-                                    <span class="landing-guarantee-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"/><path d="M2 14a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"/><path d="M6 8h.01"/><path d="M6 16h.01"/><path d="m2 2 20 20"/></svg></span>
-                                    <div><b data-i18n="landing.safety.uploads.title">Recordings aren’t uploaded.</b> <span data-i18n="landing.safety.uploads.body">Open them straight from your SD card.</span></div>
-                                </li>
-                                <li>
-                                    <span class="landing-guarantee-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.7 5.1a10.7 10.7 0 0 1 11.2 6.6 1 1 0 0 1 0 .7 10.7 10.7 0 0 1-1.4 2.5"/><path d="M14.1 14.2a3 3 0 0 1-4.2-4.3"/><path d="M17.5 17.5a10.8 10.8 0 0 1-15.4-5.2 1 1 0 0 1 0-.7 10.8 10.8 0 0 1 4.4-5.1"/><path d="m2 2 20 20"/></svg></span>
-                                    <div><b data-i18n="landing.safety.tracking.title">Trips aren’t tracked.</b> <span data-i18n="landing.safety.tracking.body">dashcamigo doesn’t collect where you drove.</span></div>
-                                </li>
-                                <li>
-                                    <span class="landing-guarantee-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01"/><path d="M8.5 16.4a5 5 0 0 1 7 0"/><path d="M5 12.9a10 10 0 0 1 5.2-2.7"/><path d="M19 12.9a10 10 0 0 0-2-1.5"/><path d="M2 8.8a15 15 0 0 1 4.2-2.6"/><path d="M22 8.8a15 15 0 0 0-11.6-3.8"/><path d="m2 2 20 20"/></svg></span>
-                                    <div><b data-i18n="landing.safety.offline.title">Works offline.</b> <span data-i18n="landing.safety.offline.body">Open it once, then watch and edit without internet.</span></div>
-                                </li>
-                            </ul>
-
-                            <p class="landing-oss">
-                                <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
-                                <span data-i18n="landing.oss.line">Open source.</span>
-                                <a class="landing-oss-link" href="https://github.com/amkulikov/dashcamigo" target="_blank" rel="noopener" data-i18n="landing.oss.cta">Source on GitHub →</a>
-                            </p>
-                        </aside>
-
-                        <!-- Product glimpse: desktop shot + the phone shot overlapping
-                             its corner (same composite idiom as the README hero) - the
-                             one visual proof of both form factors on the page. Above
-                             the fold on desktop -> eager + fetchpriority on the desktop
-                             image (likely LCP element). Two separate buttons - each
-                             opens the lightbox with ITS full-size variant, and the
-                             phone stays keyboard-reachable (src/ui/landing-shot.ts). -->
-                        <div class="landing-hero-shot">
-                            <button type="button" class="landing-hero-shot-main" id="landing-shot-open" aria-haspopup="dialog">
-                                <img class="landing-hero-shot-desktop"
-                                     src="/landing/app-desktop-1240.webp"
-                                     srcset="/landing/app-desktop-1240.webp 1240w, /landing/app-desktop-2480.webp 2480w"
-                                     sizes="(max-width: 1024px) 92vw, (max-width: 1368px) 40vw, 530px"
-                                     width="1240" height="689" fetchpriority="high" decoding="async"
-                                     alt="Inside dashcamigo: two cameras side by side, the speed chart with event marks and the route on the map"
-                                     data-i18n-attr="alt:landing.hero.shot.alt">
-                            </button>
-                            <button type="button" class="landing-hero-shot-phone-btn" id="landing-shot-open-phone" aria-haspopup="dialog">
-                                <img class="landing-hero-shot-phone"
-                                     src="/landing/app-phone-300.webp"
-                                     srcset="/landing/app-phone-300.webp 300w, /landing/app-phone-600.webp 600w"
-                                     sizes="130px"
-                                     width="300" height="649" decoding="async"
-                                     alt="dashcamigo on a phone: the player with the route map"
-                                     data-i18n-attr="alt:landing.hero.shot.altPhone">
-                            </button>
-                        </div>
+                            <!-- Product glimpse: desktop shot + the phone shot overlapping
+                                 its corner (same composite idiom as the README hero) - the
+                                 one visual proof of both form factors on the page. Above
+                                 the fold on desktop -> eager + fetchpriority on the desktop
+                                 image (likely LCP element). Two separate buttons - each
+                                 opens the lightbox with ITS full-size variant, and the
+                                 phone stays keyboard-reachable (src/ui/landing-shot.ts). -->
+                            <div class="landing-hero-shot">
+                                <button type="button" class="landing-hero-shot-main" id="landing-shot-open" aria-haspopup="dialog">
+                                    <img class="landing-hero-shot-desktop"
+                                         src="/landing/app-desktop-1240.webp"
+                                         srcset="/landing/app-desktop-1240.webp 1240w, /landing/app-desktop-2480.webp 2480w"
+                                         sizes="(max-width: 880px) 88vw, (max-width: 1440px) 50vw, 700px"
+                                         width="1240" height="689" fetchpriority="high" decoding="async"
+                                         alt="Inside dashcamigo: two cameras side by side, the speed chart with event marks and the route on the map"
+                                         data-i18n-attr="alt:landing.hero.shot.alt">
+                                </button>
+                                <button type="button" class="landing-hero-shot-phone-btn" id="landing-shot-open-phone" aria-haspopup="dialog">
+                                    <img class="landing-hero-shot-phone"
+                                         src="/landing/app-phone-300.webp"
+                                         srcset="/landing/app-phone-300.webp 300w, /landing/app-phone-600.webp 600w"
+                                         sizes="(max-width: 560px) 84px, 150px"
+                                         width="300" height="649" decoding="async"
+                                         alt="dashcamigo on a phone: the player with the route map"
+                                         data-i18n-attr="alt:landing.hero.shot.altPhone">
+                                </button>
+                            </div>
                         </div>
                     </section>
+
+                    <!-- How it works: 3-step strip with arrows between cards (>880px). -->
+                    <section class="landing-how" id="landing-how" aria-label="How it works">
+                        <div class="landing-step">
+                            <span class="landing-step-num" data-i18n="landing.how.s1.num">STEP 01</span>
+                            <h3 data-i18n="landing.how.s1.title">Take out the SD card</h3>
+                            <p data-i18n="landing.how.s1.body">From the dashcam into your device. Card reader, USB or OTG — anything works.</p>
+                            <div class="landing-step-arrow" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></div>
+                        </div>
+                        <div class="landing-step">
+                            <span class="landing-step-num" data-i18n="landing.how.s2.num">STEP 02</span>
+                            <!-- Pointer/touch copy pair - same mechanism as the drop-card t1 above. -->
+                            <h3><span class="landing-copy-pointer" data-i18n="landing.how.s2.title">Drop the folder</span><span class="landing-copy-touch" data-i18n="landing.how.s2.titleTouch">Pick the folder</span></h3>
+                            <p><span class="landing-copy-pointer" data-i18n="landing.how.s2.body">The whole card folder — anywhere on the page. Or via the button above.</span><span class="landing-copy-touch" data-i18n="landing.how.s2.bodyTouch">The whole card folder — via the button above.</span></p>
+                            <div class="landing-step-arrow" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></div>
+                        </div>
+                        <div class="landing-step">
+                            <span class="landing-step-num" data-i18n="landing.how.s3.num">STEP 03</span>
+                            <h3 data-i18n="landing.how.s3.title">Watch</h3>
+                            <p data-i18n="landing.how.s3.body">Video, route on the map, speed and events — all on one screen with a shared timeline.</p>
+                        </div>
+                    </section>
+
+                    <!-- Capabilities -->
+                    <ul class="landing-caps">
+                        <li>
+                            <span class="landing-cap-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg></span>
+                            <div><b data-i18n="landing.caps.g.title">Trips, not clips</b><span data-i18n="landing.caps.g.body">Minute-long clips join into one continuous trip — one timeline, one route. Any stretch saves as a single MP4.</span></div>
+                        </li>
+                        <li>
+                            <span class="landing-cap-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 12 2 2 4-4"/><path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9c1.36 0 2.65.3 3.81.84"/></svg></span>
+                            <div><b data-i18n="landing.caps.a.title">Many dashcam brands</b><span data-i18n="landing.caps.a.body">.mp4 .mov .ts files open as-is — no drivers, no vendor software.</span></div>
+                        </li>
+                        <li>
+                            <span class="landing-cap-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></span>
+                            <div><b data-i18n="landing.caps.b.title">Speed and events</b><span data-i18n="landing.caps.b.body">Hard braking and impacts are marked on the chart. Click a mark to jump to that moment.</span></div>
+                        </li>
+                        <li>
+                            <span class="landing-cap-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="m22 8-6 4 6 4Z"/></svg></span>
+                            <div><b data-i18n="landing.caps.c.title">All cameras at once</b><span data-i18n="landing.caps.c.body">Front, rear, cabin — in sync. Enlarge any of them.</span></div>
+                        </li>
+                        <li>
+                            <span class="landing-cap-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="m9 14 2 2 4-4"/></svg></span>
+                            <div><b data-i18n="landing.caps.e.title">Edit, combine &amp; export</b><span data-i18n="landing.caps.e.body.lead">Trim, </span><a class="landing-brand-link" href="/combine-dashcam-cameras-into-one-video/" data-i18n="landing.caps.e.link.combine">combine cameras into one video</a><span data-i18n="landing.caps.e.body.mid"> and </span><a class="landing-brand-link" href="/add-data-overlay-to-dashcam-video/" data-i18n="landing.caps.e.link.overlay">burn speed, coordinates or a moving map</a><span data-i18n="landing.caps.e.body.tail"> onto the export. GPS inside the file or as a separate .gpx.</span></div>
+                        </li>
+                        <li>
+                            <span class="landing-cap-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/></svg></span>
+                            <div><b data-i18n="landing.caps.d.title">Hide plates &amp; faces</b><span data-i18n="landing.caps.d.body.lead">You can </span><a class="landing-brand-link" href="/blur-license-plate-in-dashcam-video/" data-i18n="landing.caps.d.link">blur a license plate or a face</a><span data-i18n="landing.caps.d.body.tail"> before sharing — the cover follows the object as it moves.</span></div>
+                        </li>
+                    </ul>
+
+                    <!-- "safety wall". Always-dark surface (overrides
+                         light theme) - product decision: privacy block is visually
+                         anchored by high contrast regardless of UI theme. -->
+                    <aside class="landing-safety" aria-labelledby="landing-safety-h2">
+                        <div class="landing-safety-head">
+                            <p class="landing-safety-eyebrow"><span class="landing-safety-dot"></span><span data-i18n="landing.safety.eyebrow">Privacy by default</span></p>
+                            <h2 id="landing-safety-h2"><span data-i18n="landing.safety.h2.before">Your recordings stay </span><em data-i18n="landing.safety.h2.hl">on your device</em><span data-i18n="landing.safety.h2.after">.</span></h2>
+                        </div>
+                        <ul class="landing-guarantees">
+                            <li>
+                                <span class="landing-guarantee-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"/><path d="M2 14a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"/><path d="M6 8h.01"/><path d="M6 16h.01"/><path d="m2 2 20 20"/></svg></span>
+                                <div><b data-i18n="landing.safety.uploads.title">Recordings aren’t uploaded.</b> <span data-i18n="landing.safety.uploads.body">Open them straight from your SD card.</span></div>
+                            </li>
+                            <li>
+                                <span class="landing-guarantee-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.7 5.1a10.7 10.7 0 0 1 11.2 6.6 1 1 0 0 1 0 .7 10.7 10.7 0 0 1-1.4 2.5"/><path d="M14.1 14.2a3 3 0 0 1-4.2-4.3"/><path d="M17.5 17.5a10.8 10.8 0 0 1-15.4-5.2 1 1 0 0 1 0-.7 10.8 10.8 0 0 1 4.4-5.1"/><path d="m2 2 20 20"/></svg></span>
+                                <div><b data-i18n="landing.safety.tracking.title">Trips aren’t tracked.</b> <span data-i18n="landing.safety.tracking.body">dashcamigo doesn’t collect where you drove.</span></div>
+                            </li>
+                            <li>
+                                <span class="landing-guarantee-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01"/><path d="M8.5 16.4a5 5 0 0 1 7 0"/><path d="M5 12.9a10 10 0 0 1 5.2-2.7"/><path d="M19 12.9a10 10 0 0 0-2-1.5"/><path d="M2 8.8a15 15 0 0 1 4.2-2.6"/><path d="M22 8.8a15 15 0 0 0-11.6-3.8"/><path d="m2 2 20 20"/></svg></span>
+                                <div><b data-i18n="landing.safety.offline.title">Works offline.</b> <span data-i18n="landing.safety.offline.body">Open it once, then watch and edit without internet.</span></div>
+                            </li>
+                        </ul>
+
+                        <p class="landing-oss">
+                            <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+                            <span data-i18n="landing.oss.line">Open source.</span>
+                            <a class="landing-oss-link" href="https://github.com/amkulikov/dashcamigo" target="_blank" rel="noopener" data-i18n="landing.oss.cta">Source on GitHub →</a>
+                        </p>
+                    </aside>
 
                     <!-- "Runs anywhere a browser runs": two stacked rows of monochrome
                          brand chips (currentColor fill). 5 OSes + 9 browsers. -->
@@ -1023,6 +1031,17 @@
                         <div class="landing-works-head">
                             <h2 id="landing-works-title" class="landing-works-title" data-i18n="landing.works.title">On your computer, tablet or phone</h2>
                             <p class="landing-works-sub" data-i18n="landing.works.sub">No installs, no plugins, no drivers.</p>
+                        </div>
+                        <!-- Brand links use locale paths in the prerendered pages. -->
+                        <p class="landing-compat-copy"><span data-i18n="landing.hero.lead.before">Recordings in MP4, MOV or TS from most dashcams — </span><a class="landing-brand-link" href="/cameras/70mai/">70mai</a>, <a class="landing-brand-link" href="/cameras/viofo/">Viofo</a>, <a class="landing-brand-link" href="/cameras/blackvue/">BlackVue</a>, <a class="landing-brand-link" href="/cameras/gopro/">GoPro</a>, <a class="landing-brand-link" href="/cameras/garmin/">Garmin</a>, <a class="landing-brand-link" href="/cameras/vantrue/">Vantrue</a>, <a class="landing-brand-link" href="/cameras/thinkware/">Thinkware</a><span data-i18n="landing.hero.lead.brandsTail"> and more.</span><span data-i18n="landing.hero.lead.after"> GPS and events — the app reads them straight from the video and the files next to it, no setup.</span> <a class="landing-brand-link" href="/cameras/" data-i18n="landing.hero.allBrands">All supported brands →</a></p>
+                        <div class="landing-format-info">
+                            <span class="landing-codecs">
+                                <span class="landing-codec">.mp4</span>
+                                <span class="landing-codec">.mov</span>
+                                <span class="landing-codec">.ts</span>
+                                <span class="landing-codec">.mkv</span>
+                                <span class="landing-codecs-hint" data-i18n="landing.drop.codecsHint">+ any neighboring files — .gps, .nmea, .gpx, .map, .csv, .txt and more.</span>
+                            </span>
                         </div>
                         <div class="landing-works-grid">
                             <div class="landing-works-col">
@@ -1057,28 +1076,6 @@
                             </div>
                         </div>
                         <p class="landing-works-note" data-i18n="landing.works.note">Playback depends on your browser and recording format. Editing and export work best in Chrome and other Chromium-based browsers.</p>
-                    </section>
-
-                    <!-- How it works: 3-step strip with arrows between cards (>880px). -->
-                    <section class="landing-how" id="landing-how" aria-label="How it works">
-                        <div class="landing-step">
-                            <span class="landing-step-num" data-i18n="landing.how.s1.num">STEP 01</span>
-                            <h3 data-i18n="landing.how.s1.title">Take out the SD card</h3>
-                            <p data-i18n="landing.how.s1.body">From the dashcam into your device. Card reader, USB or OTG — anything works.</p>
-                            <div class="landing-step-arrow" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></div>
-                        </div>
-                        <div class="landing-step">
-                            <span class="landing-step-num" data-i18n="landing.how.s2.num">STEP 02</span>
-                            <!-- Pointer/touch copy pair - same mechanism as the drop-card t1 above. -->
-                            <h3><span class="landing-copy-pointer" data-i18n="landing.how.s2.title">Drop the folder</span><span class="landing-copy-touch" data-i18n="landing.how.s2.titleTouch">Pick the folder</span></h3>
-                            <p><span class="landing-copy-pointer" data-i18n="landing.how.s2.body">The whole card folder — anywhere on the page. Or via the button above.</span><span class="landing-copy-touch" data-i18n="landing.how.s2.bodyTouch">The whole card folder — via the button above.</span></p>
-                            <div class="landing-step-arrow" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></div>
-                        </div>
-                        <div class="landing-step">
-                            <span class="landing-step-num" data-i18n="landing.how.s3.num">STEP 03</span>
-                            <h3 data-i18n="landing.how.s3.title">Watch</h3>
-                            <p data-i18n="landing.how.s3.body">Video, route on the map, speed and events — all on one screen with a shared timeline.</p>
-                        </div>
                     </section>
 
                     <!-- FAQ: sticky title (>880px) + native <details> accordion.
@@ -2061,7 +2058,6 @@
             </aside>
         </section>
     </main>
-
 
     <!-- Ambiguous GPX-to-clip pairing. Exact-name and single unambiguous
          tracks never open it; skipping leaves the recording load intact. -->

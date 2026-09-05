@@ -1,8 +1,8 @@
 /* =========================================================================
    LANDING (body.no-trips - empty state before first ingest)
    --------------------------------------------------------------------------
-   Layout: single-column .landing-inner with stacked blocks - hero (split),
-   works (OS + browsers), how (3 steps), faq, built-with credits. It overlays
+   Layout: product hero, three steps, capabilities, privacy, compatibility
+   and FAQ. It overlays
    the final app grid while body.no-trips is set. After the first successful
    ingest landing.ts removes the class and FLIP-animates #landing-cta into
    #sidebar-cta without changing the grid geometry.
@@ -30,9 +30,9 @@ body.no-trips .viewer {
 }
 
 .landing-inner {
-    max-width: 1320px;
+    max-width: 1440px;
     margin: 0 auto;
-    padding: var(--dc-space-7) var(--dc-space-6) var(--dc-space-8);
+    padding: var(--dc-space-8) var(--dc-space-7) var(--dc-space-8);
 }
 @media (max-width: 880px) {
     .landing-inner {
@@ -41,7 +41,7 @@ body.no-trips .viewer {
 }
 @media (max-width: 560px) {
     .landing-inner {
-        padding: var(--dc-space-5) var(--dc-space-3) var(--dc-space-7);
+        padding: var(--dc-space-6) var(--dc-space-4) var(--dc-space-7);
     }
 }
 /* Room for the docked CTA pill (.landing-dock): it overlays the viewport
@@ -58,16 +58,15 @@ body.no-trips .viewer {
 }
 
 /* ============================================================
-   HERO - two-column split. Left = copy + drop CTA + caps.
-   Right = always-dark privacy wall.
+   HERO - primary action and product preview.
    ============================================================ */
 .landing-hero {
     display: grid;
-    grid-template-columns: minmax(0, 1.22fr) minmax(0, 1fr);
-    gap: var(--dc-space-5);
-    align-items: stretch;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.2fr);
+    gap: var(--dc-space-7);
+    align-items: center;
 }
-@media (max-width: 1024px) {
+@media (max-width: 880px) {
     .landing-hero {
         grid-template-columns: 1fr;
     }
@@ -93,9 +92,10 @@ body.no-trips .viewer {
 .landing-hero-h1 {
     font-family: var(--dc-font-body);
     font-weight: 800;
-    font-size: clamp(30px, 4.2vw, 56px);
-    line-height: 1.04;
-    letter-spacing: -0.025em;
+    font-size: clamp(30px, 3.25vw, 46px);
+    line-height: 1.1;
+    letter-spacing: -0.04em;
+    overflow-wrap: break-word;
     margin: 0;
     text-wrap: balance;
     color: var(--fg);
@@ -109,24 +109,23 @@ body.no-trips .viewer {
 
 .landing-hero-kicker {
     font-family: var(--dc-font-body);
-    font-weight: 600;
-    font-size: clamp(16px, 1.8vw, 20px);
-    line-height: 1.3;
+    font-weight: 400;
+    font-size: clamp(16px, 1.5vw, 19px);
+    line-height: 1.5;
     letter-spacing: -0.01em;
     color: var(--fg);
     margin: -6px 0 0 0;
     text-wrap: balance;
 }
 
-.landing-hero-lead {
+.landing-compat-copy {
     font-size: var(--dc-text-lg);
     line-height: 1.55;
     color: var(--fg-dim);
-    max-width: 54ch;
+    max-width: 82ch;
     margin: 0;
 }
-/* Inline link in hero-lead / FAQ Q2 / caps.e: inherits font, uses accent color
-   with a dotted underline to stay visually quieter than the orange .hl. */
+/* Inline links stay recognizable in running text. */
 .landing-brand-link {
     color: var(--fg);
     text-decoration: none;
@@ -135,13 +134,8 @@ body.no-trips .viewer {
         color var(--dc-dur-fast) var(--dc-ease),
         border-bottom-color var(--dc-dur-fast) var(--dc-ease);
 }
-/* In the hero lead the eight brand anchors are SEO-load-bearing but visually
-   secondary - a dotted line under every brand name made the paragraph noisier
-   than the h1. Resting decoration goes; hover/focus (below, wins by source
-   order) keeps the affordance, and "All supported brands →" stays the
-   discoverable path. caps.e / FAQ links keep the resting underline - in
-   running prose it is the only thing marking them as links. */
-.landing-hero-lead .landing-brand-link {
+/* The dedicated all-brands link keeps the brand list visually quiet. */
+.landing-compat-copy .landing-brand-link {
     border-bottom-color: transparent;
 }
 .landing-brand-link:hover,
@@ -168,22 +162,21 @@ body.no-trips .viewer {
     }
 }
 
-/* ----- Drop CTA card ----- */
-/* Grid, not flex: the trust footer (.landing-drop-foot) must span the full
-   card width under both the text block and the CTA button. */
+/* ----- Folder action ----- */
 .landing-drop {
     position: relative;
     display: grid;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr;
     grid-template-areas:
-        "text cta"
-        "foot foot";
+        "text"
+        "cta"
+        "foot";
     align-items: center;
     column-gap: var(--dc-space-4);
     row-gap: var(--dc-space-3);
-    padding: var(--dc-space-4) var(--dc-space-4) var(--dc-space-4) var(--dc-space-5);
+    padding: var(--dc-space-5);
     background: var(--bg-elev);
-    border: 1px dashed var(--border-strong);
+    border: 1px solid var(--border);
     border-radius: var(--dc-radius-lg);
     cursor: pointer;
     transition:
@@ -219,8 +212,7 @@ body.no-trips .viewer {
     /* --fg-dim, not --fg-mute: this line instructs the page's main action -
        at mute (1.8:1 on the light theme) it was decoration, not text. */
     color: var(--fg-dim);
-    font-family: var(--dc-font-mono);
-    letter-spacing: var(--dc-tracking-normal);
+    line-height: 1.5;
 }
 .landing-codecs {
     display: inline-flex;
@@ -275,7 +267,9 @@ body.no-trips .viewer {
     font-size: var(--dc-text-base);
     font-weight: 700;
     letter-spacing: 0.01em;
-    white-space: nowrap;
+    min-height: 48px;
+    width: 100%;
+    white-space: normal;
 }
 @media (max-width: 880px) {
     .landing-drop {
@@ -291,16 +285,16 @@ body.no-trips .viewer {
     }
 }
 
-/* ----- Capability bullets (3x2 grid) ----- */
+/* ----- Capabilities ----- */
 .landing-caps {
     list-style: none;
-    margin: 0;
+    margin: var(--dc-space-8) 0;
     padding: 0;
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--dc-space-3) var(--dc-space-5);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--dc-space-6) var(--dc-space-7);
 }
-@media (max-width: 640px) {
+@media (max-width: 880px) {
     .landing-caps {
         grid-template-columns: 1fr;
     }
@@ -309,11 +303,13 @@ body.no-trips .viewer {
     display: flex;
     gap: var(--dc-space-3);
     align-items: flex-start;
+    padding-top: var(--dc-space-5);
+    border-top: 1px solid var(--border);
 }
 .landing-cap-ico {
     flex: none;
-    width: 22px;
-    height: 22px;
+    width: 36px;
+    height: 36px;
     border-radius: var(--dc-radius-md);
     background: var(--bg-elev-2);
     display: inline-flex;
@@ -323,33 +319,31 @@ body.no-trips .viewer {
     margin-top: 1px;
 }
 .landing-cap-ico svg {
-    width: 13px;
-    height: 13px;
+    width: 18px;
+    height: 18px;
 }
 .landing-caps b {
     display: block;
     font-weight: 600;
-    font-size: var(--dc-text-base);
+    font-size: var(--dc-text-lg);
     color: var(--fg);
-    letter-spacing: -0.005em;
-    margin-bottom: 1px;
+    letter-spacing: -0.015em;
+    margin-bottom: var(--dc-space-2);
 }
 /* caps.e body holds inline .landing-brand-link anchors - cover <a> too so the
    links share the body metrics (the brand-link class only adds the affordance). */
 .landing-caps span,
 .landing-caps a {
-    font-size: var(--dc-text-md);
+    font-size: var(--dc-text-base);
     color: var(--fg-dim);
-    line-height: 1.45;
+    line-height: 1.65;
 }
 
 /* ============================================================
-   SAFETY WALL (right column) - always-dark surface regardless
+   PRIVACY - always-dark surface regardless
    of theme, plus a 38%-width orange accent stripe on top.
    ============================================================ */
-/* Right hero column: the safety card + the product glimpse stacked under it.
-   The wrapper (not the card) is the grid item, so the card keeps its content
-   height - no stretched black void - and the shot fills the space below. */
+/* Keep the preview in its own grid cell at desktop sizes. */
 .landing-hero-side {
     display: flex;
     flex-direction: column;
@@ -362,10 +356,10 @@ body.no-trips .viewer {
     background: #0a0a0a;
     border: 1px solid #1c1c1c;
     border-radius: var(--dc-radius-lg);
-    padding: var(--dc-space-5);
-    display: flex;
-    flex-direction: column;
-    gap: var(--dc-space-4);
+    padding: var(--dc-space-7);
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.2fr);
+    gap: var(--dc-space-5) var(--dc-space-8);
     overflow: hidden;
     color: var(--dc-white);
 }
@@ -380,12 +374,19 @@ body.no-trips .viewer {
 }
 @media (max-width: 880px) {
     .landing-safety {
-        padding: var(--dc-space-4);
-        gap: var(--dc-space-3);
+        padding: var(--dc-space-5);
+        gap: var(--dc-space-5);
+        grid-template-columns: 1fr;
     }
 }
 
-/* Product glimpse under the safety card: the desktop shot with the phone shot
+.landing-safety-head {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-5);
+}
+
+/* Product preview: the desktop shot with the phone shot
    overlapping its bottom-right corner (same composite idiom as the README
    hero) - proof of both form factors in one thumb. Two separate buttons:
    each opens the lightbox with its own full-size variant
@@ -393,8 +394,10 @@ body.no-trips .viewer {
 .landing-hero-shot {
     position: relative;
     width: 100%;
-    /* Room for the phone hanging below the desktop shot's bottom edge. */
-    padding-bottom: var(--dc-space-5);
+    padding: var(--dc-space-5) var(--dc-space-5) var(--dc-space-7);
+    background: var(--bg-elev-2);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-lg);
 }
 .landing-hero-shot-main {
     display: block;
@@ -412,15 +415,14 @@ body.no-trips .viewer {
     height: auto;
     border: 1px solid var(--border-strong);
     border-radius: var(--dc-radius-lg);
-    box-shadow: var(--dc-shadow-sheet);
+    box-shadow: var(--dc-shadow-card);
     transition: border-color var(--dc-dur-fast) var(--dc-ease);
 }
 .landing-hero-shot-phone-btn {
     position: absolute;
     right: var(--dc-space-4);
-    bottom: 0;
-    /* ~22% of the column, same proportion the old preview composite used. */
-    width: clamp(84px, 22%, 120px);
+    bottom: var(--dc-space-3);
+    width: clamp(84px, 22%, 150px);
     padding: 0;
     border: none;
     background: none;
@@ -490,6 +492,8 @@ body.no-trips .viewer {
 
 /* Open-source line at the bottom of the safety card. */
 .landing-oss {
+    grid-column: 1 / -1;
+    flex-wrap: wrap;
     display: flex;
     align-items: center;
     gap: var(--dc-space-2);
@@ -533,20 +537,20 @@ body.no-trips .viewer {
 .landing-safety h2 {
     font-family: var(--dc-font-body);
     font-weight: 700;
-    font-size: var(--dc-text-2xl);
-    letter-spacing: -0.015em;
+    font-size: clamp(24px, 2.5vw, 36px);
+    letter-spacing: -0.025em;
     line-height: 1.18;
     color: var(--dc-white);
     margin: 0;
 }
 @media (max-width: 880px) {
     .landing-safety h2 {
-        font-size: var(--dc-text-xl);
+        font-size: var(--dc-text-3xl);
     }
 }
 @media (max-width: 560px) {
     .landing-safety h2 {
-        font-size: var(--dc-text-xl);
+        font-size: var(--dc-text-3xl);
     }
 }
 .landing-safety h2 em {
@@ -563,12 +567,13 @@ body.no-trips .viewer {
 }
 .landing-guarantees li {
     display: flex;
-    align-items: center;
     gap: var(--dc-space-3);
     padding: var(--dc-space-3) 0;
     border-top: 1px solid #1b1b1b;
     color: #dadada;
     font-size: var(--dc-text-base);
+    line-height: 1.65;
+    align-items: flex-start;
 }
 .landing-guarantees li:first-child {
     border-top: none;
@@ -663,23 +668,21 @@ body.no-trips .viewer {
 }
 
 /* ============================================================
-   WORKS - OS + browsers chips. 2 stacked rows with a 200px
-   label column and chips-grid on the right.
+   COMPATIBILITY - recording formats, operating systems and browsers.
    ============================================================ */
 .landing-works {
-    margin-top: var(--dc-space-7);
-    padding: var(--dc-space-5);
-    background: var(--bg-elev);
-    border: 1px solid var(--border);
-    border-radius: var(--dc-radius-lg);
+    margin-top: var(--dc-space-8);
+    padding: var(--dc-space-7) 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     gap: var(--dc-space-4);
 }
 @media (max-width: 880px) {
     .landing-works {
-        padding: var(--dc-space-4);
-        gap: var(--dc-space-3);
+        padding: var(--dc-space-6) 0;
+        gap: var(--dc-space-4);
     }
 }
 .landing-works-head {
@@ -690,9 +693,9 @@ body.no-trips .viewer {
 }
 .landing-works-title {
     margin: 0;
-    font-size: var(--dc-text-xl);
+    font-size: var(--dc-text-3xl);
     font-weight: 700;
-    letter-spacing: -0.015em;
+    letter-spacing: -0.025em;
     color: var(--fg);
 }
 @media (max-width: 880px) {
@@ -753,8 +756,8 @@ body.no-trips .viewer {
     padding: var(--dc-space-1) var(--dc-space-3) var(--dc-space-1) var(--dc-space-2);
     background: var(--bg);
     border: 1px solid var(--border);
-    border-radius: var(--dc-radius-pill);
-    font-size: var(--dc-text-sm);
+    border-radius: var(--dc-radius-md);
+    font-size: var(--dc-text-md);
     color: var(--fg);
     font-weight: 500;
     white-space: nowrap;
@@ -813,13 +816,13 @@ body.no-trips .viewer {
 }
 
 /* ============================================================
-   HOW - 3-step strip with arrows between cards.
+   HOW - three steps joined by a quiet rule and directional arrows.
    ============================================================ */
 .landing-how {
-    margin-top: var(--dc-space-7);
+    margin-top: var(--dc-space-8);
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: var(--dc-space-4);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--dc-space-7);
 }
 @media (max-width: 880px) {
     .landing-how {
@@ -828,24 +831,22 @@ body.no-trips .viewer {
 }
 .landing-step {
     position: relative;
-    padding: var(--dc-space-4);
-    background: var(--bg-elev);
-    border: 1px solid var(--border);
-    border-radius: var(--dc-radius-lg);
+    padding: var(--dc-space-5) 0 0;
+    border-top: 2px solid var(--border);
     display: flex;
     flex-direction: column;
-    gap: var(--dc-space-1);
+    gap: var(--dc-space-3);
 }
 @media (max-width: 880px) {
     .landing-step {
-        padding: var(--dc-space-4);
+        padding: var(--dc-space-4) 0 0;
     }
 }
 .landing-step-num {
     font-family: var(--dc-font-mono);
     font-size: var(--dc-text-xs);
     letter-spacing: 0.12em;
-    color: var(--accent);
+    color: var(--accent-ink);
 }
 .landing-step h3 {
     margin: 0;
@@ -863,7 +864,7 @@ body.no-trips .viewer {
 .landing-step-arrow {
     position: absolute;
     top: 50%;
-    right: -14px;
+    right: -36px;
     width: 24px;
     height: 24px;
     background: var(--bg);
@@ -889,7 +890,7 @@ body.no-trips .viewer {
    FAQ - sticky title + native <details> accordion.
    ============================================================ */
 .landing-faq {
-    margin-top: var(--dc-space-7);
+    margin-top: var(--dc-space-8);
     display: grid;
     grid-template-columns: 280px 1fr;
     gap: var(--dc-space-6);
@@ -968,7 +969,7 @@ body.no-trips .viewer {
 }
 .landing-faq-chev {
     margin-left: auto;
-    color: var(--fg-mute);
+    color: var(--fg-dim);
     transition:
         transform var(--dc-dur-entrance) var(--dc-ease),
         color var(--dc-dur-base) var(--dc-ease);
@@ -979,7 +980,7 @@ body.no-trips .viewer {
     color: var(--accent);
 }
 .landing-faq-item summary:hover {
-    color: var(--accent);
+    color: var(--accent-ink);
 }
 .landing-faq-item summary:hover .landing-faq-chev {
     color: var(--accent);
@@ -1032,4 +1033,54 @@ body.no-trips .viewer {
     background: color-mix(in srgb, var(--accent) 8%, transparent);
     color: var(--accent);
     outline: none;
+}
+
+.landing-format-info {
+    padding-bottom: var(--dc-space-4);
+    border-bottom: 1px solid var(--border);
+}
+.landing-codecs-hint {
+    font-family: var(--dc-font-body);
+    font-size: var(--dc-text-md);
+    line-height: 1.5;
+}
+.landing-faq-item summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 4px;
+}
+@media (min-width: 881px) {
+    .landing-hero-shot {
+        margin-top: var(--dc-space-5);
+    }
+}
+@media (max-width: 880px) {
+    .landing-hero {
+        gap: var(--dc-space-6);
+    }
+    .landing-caps {
+        gap: var(--dc-space-5);
+    }
+    .landing-how {
+        gap: var(--dc-space-5);
+    }
+}
+@media (max-width: 560px) {
+    .landing-hero-main {
+        gap: var(--dc-space-4);
+    }
+    .landing-drop-foot {
+        font-size: var(--dc-text-sm);
+        line-height: 1.5;
+        font-weight: 400;
+    }
+    .landing-hero-shot {
+        padding: var(--dc-space-3) var(--dc-space-3) var(--dc-space-7);
+    }
+    .landing-oss {
+        align-items: flex-start;
+    }
+    .landing-faq-item summary {
+        font-size: var(--dc-text-base);
+        line-height: 1.5;
+    }
 }
