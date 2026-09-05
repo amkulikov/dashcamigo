@@ -236,10 +236,7 @@ body.no-trips .viewer {
        opacity landed at 1.65:1 on light - illegible, not "subtle". */
     color: var(--fg-dim);
 }
-/* Trust footer inside the drop card. Deliberately NOT the mono/--fg-mute
-   styling of .landing-drop-t2 - that twinning is what made it read as fine
-   print. Body font + --fg-dim + a green check make the reassurance visible
-   without competing with the orange CTA. */
+/* Keep the privacy reassurance readable beside the primary action. */
 .landing-drop-foot {
     grid-area: foot;
     display: flex;
@@ -252,11 +249,8 @@ body.no-trips .viewer {
     font-weight: 600;
     color: var(--fg-dim);
 }
-.landing-drop-foot::before {
-    content: "\2713";
-    color: var(--ok);
-    font-weight: 700;
-    line-height: 1;
+.landing-privacy-icon {
+    flex: none;
 }
 /* Hero CTA = .dc-btn dc-btn--primary (appearance, hover, focus ring, states)
    plus this hero-size modifier. The FLIP morph into the compact sidebar CTA
