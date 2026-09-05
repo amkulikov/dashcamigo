@@ -4,7 +4,7 @@
 // protocol also gives every provider request a real deadline: blocked hosts
 // often leave browser fetch pending for tens of seconds instead of rejecting.
 
-import type { AddProtocolAction, RequestTransformFunction } from "maplibre-gl";
+import type { AddProtocolAction, RequestParameters, RequestTransformFunction } from "maplibre-gl";
 
 import { reportMapTileNetworkError, reportMapTilesOk } from "./connectivity.js";
 import { getMapProvider, MAP_PROVIDER_REQUEST_TIMEOUT_MS, mapProviderForTileUrl } from "./map-provider.js";
@@ -31,7 +31,7 @@ interface PendingTile {
     isSettled: boolean;
 }
 
-type TileFetcher = (url: string, signal: AbortSignal) => Promise<TilePayload>;
+type TileFetcher = (url: string, signal: AbortSignal, type?: RequestParameters["type"]) => Promise<TilePayload>;
 
 export interface SharedTileCacheStats {
     entries: number;
@@ -41,7 +41,7 @@ export interface SharedTileCacheStats {
 }
 
 interface SharedTileCache {
-    load(url: string, signal: AbortSignal): Promise<TilePayload>;
+    load(url: string, signal: AbortSignal, type?: RequestParameters["type"]): Promise<TilePayload>;
     clear(): void;
     stats(): SharedTileCacheStats;
 }
@@ -62,7 +62,7 @@ function tileRequestError(url: string, status: number, statusText: string, cause
     return Object.assign(error, { status, statusText, url });
 }
 
-async function fetchTile(url: string, signal: AbortSignal): Promise<TilePayload> {
+async function fetchTile(url: string, signal: AbortSignal, type?: RequestParameters["type"]): Promise<TilePayload> {
     const requestController = new AbortController();
     const forwardAbort = () => requestController.abort(signal.reason);
     signal.addEventListener("abort", forwardAbort, { once: true });
@@ -76,13 +76,17 @@ async function fetchTile(url: string, signal: AbortSignal): Promise<TilePayload>
             expires: response.headers.get("expires"),
             etag: response.headers.get("etag") ?? undefined,
         };
+        // A successful HTTP response can still contain an upstream error page.
+        // Reject it before it enters the shared cache or signals recovery.
+        if (type === "json") JSON.parse(new TextDecoder().decode(payload.data));
         // Local GeoJSON and memory-cache hits cannot prove network recovery.
         if (mapProviderForTileUrl(url) === getMapProvider()) reportMapTilesOk();
         return payload;
     } catch (err) {
         if (signal.aborted) throw abortError(signal.reason);
-        const isHttpError = err instanceof Error && "status" in err && typeof err.status === "number" && err.status > 0;
-        if (!isHttpError && mapProviderForTileUrl(url) === getMapProvider()) reportMapTileNetworkError();
+        const status = err instanceof Error && "status" in err && typeof err.status === "number" ? err.status : 0;
+        const shouldRetry = status === 0 || status === 408 || status === 429 || status >= 500;
+        if (shouldRetry && mapProviderForTileUrl(url) === getMapProvider()) reportMapTileNetworkError();
         if (requestController.signal.aborted && requestController.signal.reason === "timeout") {
             throw tileRequestError(url, 0, "timeout", err);
         }
@@ -127,9 +131,9 @@ export function createSharedTileCache(maxBytes: number, fetcher: TileFetcher = f
         }
     };
 
-    const start = (url: string): PendingTile => {
+    const start = (url: string, type?: RequestParameters["type"]): PendingTile => {
         const controller = new AbortController();
-        const promise = fetcher(url, controller.signal).then((payload) => {
+        const promise = fetcher(url, controller.signal, type).then((payload) => {
             if (!controller.signal.aborted) store(url, payload);
             return payload;
         });
@@ -149,7 +153,7 @@ export function createSharedTileCache(maxBytes: number, fetcher: TileFetcher = f
     };
 
     return {
-        async load(url, signal): Promise<TilePayload> {
+        async load(url, signal, type): Promise<TilePayload> {
             if (signal.aborted) throw abortError(signal.reason);
 
             const hit = cached.get(url);
@@ -159,7 +163,7 @@ export function createSharedTileCache(maxBytes: number, fetcher: TileFetcher = f
             }
 
             const existing = pending.get(url);
-            const entry = existing && !existing.controller.signal.aborted ? existing : start(url);
+            const entry = existing && !existing.controller.signal.aborted ? existing : start(url, type);
             entry.consumers++;
             let isActive = true;
             let onAbort: (() => void) | null = null;
@@ -213,7 +217,7 @@ function unwrapTileUrl(protocolUrl: string): string {
 }
 
 const loadSharedTile: AddProtocolAction = async (request, abortController) => {
-    const payload = await sharedTileCache.load(unwrapTileUrl(request.url), abortController.signal);
+    const payload = await sharedTileCache.load(unwrapTileUrl(request.url), abortController.signal, request.type);
     let data: unknown = payload.data;
     if (request.type === "json") data = JSON.parse(new TextDecoder().decode(payload.data));
     else if (request.type === "string") data = new TextDecoder().decode(payload.data);

@@ -5,10 +5,16 @@ import type { AddProtocolAction } from "maplibre-gl";
 import {
     _resetForTests,
     createSharedTileCache,
+    getSharedMapTileCacheStats,
     registerSharedMapTileCache,
     transformMapTileRequest,
 } from "./map-tile-cache.js";
-import { MAP_PROVIDER_REQUEST_TIMEOUT_MS } from "./map-provider.js";
+import {
+    _resetForTests as resetMapProvider,
+    getMapProvider,
+    MAP_PROVIDER_REQUEST_TIMEOUT_MS,
+    reportMapProviderTileError,
+} from "./map-provider.js";
 import { isOffline, reportMapTileNetworkError, reportMapTilesOk } from "./connectivity.js";
 
 function bytes(...values: number[]): ArrayBuffer {
@@ -18,6 +24,7 @@ function bytes(...values: number[]): ArrayBuffer {
 describe("shared map tile cache", () => {
     beforeEach(() => {
         _resetForTests();
+        resetMapProvider();
         reportMapTilesOk();
     });
 
@@ -207,6 +214,32 @@ describe("shared map tile cache", () => {
         expect(isOffline()).toBe(false);
     });
 
+    it.each([408, 429, 500, 502, 503, 504])(
+        "keeps recovery active after HTTP %s when fallback is unavailable",
+        async (status) => {
+            resetMapProvider(async () => false);
+            const fetcher = vi
+                .fn()
+                .mockResolvedValueOnce(new Response(null, { status }))
+                .mockResolvedValueOnce(new Response(JSON.stringify({ tiles: [] })));
+            vi.stubGlobal("fetch", fetcher);
+            const cache = createSharedTileCache(1024);
+            const source = "https://tiles.openfreemap.org/planet";
+            const failure = await cache
+                .load(source, new AbortController().signal, "json")
+                .catch((error: unknown) => error);
+            expect(failure).toMatchObject({ status, url: source });
+
+            await reportMapProviderTileError(failure);
+
+            expect(getMapProvider()).toBe("openfreemap");
+            expect(isOffline(), "resource recovery must keep retrying without another browser online event").toBe(true);
+            await cache.load(source, new AbortController().signal, "json");
+            expect(isOffline()).toBe(false);
+            expect(fetcher).toHaveBeenCalledTimes(2);
+        },
+    );
+
     it("registers a protocol handler that unwraps the original tile URL", async () => {
         let loader: AddProtocolAction = async () => ({ data: new ArrayBuffer(0) });
         registerSharedMapTileCache((_protocol, registered) => {
@@ -240,6 +273,37 @@ describe("shared map tile cache", () => {
         const response = await loader({ url: transformed?.url ?? "", type: "json" }, new AbortController());
 
         expect(response.data).toEqual({ tiles: ["https://example.test/{z}/{x}/{y}.pbf"] });
+    });
+
+    it("rejects malformed JSON without caching it or reporting recovery", async () => {
+        const fetcher = vi
+            .fn()
+            .mockResolvedValueOnce(new Response("<html>upstream error</html>"))
+            .mockResolvedValueOnce(new Response(JSON.stringify({ tiles: ["https://example.test/{z}/{x}/{y}.pbf"] })));
+        vi.stubGlobal("fetch", fetcher);
+        const probe = vi.fn(async () => false);
+        resetMapProvider(probe);
+        let loader: AddProtocolAction = async () => ({ data: {} });
+        registerSharedMapTileCache((_protocol, registered) => {
+            loader = registered;
+        });
+        const source = "https://tiles.openfreemap.org/planet";
+        const request = { url: transformMapTileRequest(source, "Source")?.url ?? "", type: "json" as const };
+
+        const failure = await loader(request, new AbortController()).catch((error: unknown) => error);
+
+        expect(failure).toMatchObject({ status: 0, url: source, cause: expect.any(SyntaxError) });
+        expect(getSharedMapTileCacheStats()).toMatchObject({ entries: 0, bytes: 0 });
+        expect(isOffline()).toBe(true);
+        await reportMapProviderTileError(failure);
+        expect(probe).toHaveBeenNthCalledWith(1, "osm-vector");
+        expect(probe).toHaveBeenNthCalledWith(2, "osm-raster");
+
+        const response = await loader(request, new AbortController());
+
+        expect(response.data).toEqual({ tiles: ["https://example.test/{z}/{x}/{y}.pbf"] });
+        expect(fetcher).toHaveBeenCalledTimes(2);
+        expect(isOffline()).toBe(false);
     });
 
     it("times out a provider request instead of waiting for the browser", async () => {

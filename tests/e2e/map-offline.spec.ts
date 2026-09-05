@@ -160,3 +160,53 @@ test.describe("map style failures", () => {
         expect(bootstrapRequests).toBeGreaterThan(0);
     });
 });
+
+for (const fault of ["http", "json"] as const) {
+    test(`recovers from a temporary ${fault === "http" ? "503 response" : "invalid TileJSON response"} without reloading the page`, async ({
+        page,
+    }) => {
+        let canLoadTiles = false;
+        let bootstrapRequests = 0;
+        await page.route(/openfreemap\.org|(?:tile|vector)\.openstreetmap\.org/i, async (route) => {
+            const url = new URL(route.request().url());
+            if (url.hostname !== "tiles.openfreemap.org") {
+                await route.fulfill({ status: 503, headers: { "access-control-allow-origin": "*" } });
+                return;
+            }
+            if (url.pathname === "/planet") {
+                bootstrapRequests++;
+                if (!canLoadTiles) {
+                    await route.fulfill({
+                        status: fault === "http" ? 503 : 200,
+                        body: "<html>temporarily unavailable</html>",
+                        headers: { "access-control-allow-origin": "*" },
+                    });
+                    return;
+                }
+                await route.fulfill({
+                    json: {
+                        tilejson: "3.0.0",
+                        tiles: ["https://tiles.openfreemap.org/recovery-test/{z}/{x}/{y}.pbf"],
+                        minzoom: 0,
+                        maxzoom: 14,
+                    },
+                    headers: { "access-control-allow-origin": "*" },
+                });
+            } else if (url.pathname.endsWith(".pbf") && canLoadTiles) {
+                await route.fulfill({ body: Buffer.alloc(0), headers: { "access-control-allow-origin": "*" } });
+            } else {
+                await route.fulfill({ status: 404, headers: { "access-control-allow-origin": "*" } });
+            }
+        });
+        await presetLocalStorage(page);
+        await gotoApp(page);
+        await loadTrip(page);
+        await expectLocalTrack(page);
+        await expect(page.locator("#offline-banner")).toBeVisible();
+        const requestsBeforeRecovery = bootstrapRequests;
+        canLoadTiles = true;
+        await expect.poll(() => bootstrapRequests, { timeout: 25_000 }).toBeGreaterThan(requestsBeforeRecovery);
+        await expect(page.locator("#offline-banner")).toBeHidden();
+        await expectLocalTrack(page);
+    });
+}
