@@ -19,7 +19,7 @@ import { roundRectPath } from "./canvas-draw.js";
  * VideoSample (uses its own draw API). The pipeline passes VideoSample;
  * the UI preview passes ImageBitmap.
  */
-export type BlurSource = VideoSample | ImageBitmap | HTMLCanvasElement | OffscreenCanvas;
+export type BlurSource = VideoSample | ImageBitmap | HTMLCanvasElement | HTMLVideoElement | OffscreenCanvas;
 
 /**
  * Pre-allocated canvases for the downscale-blur-upscale pipeline. Created
@@ -110,12 +110,8 @@ export function fillBlurredCover(
     if (censorRegions?.length) {
         helper.smallCtx.fillStyle = "#000";
         for (const region of censorRegions) {
-            helper.smallCtx.fillRect(
-                region.rect.xPct * dsW,
-                region.rect.yPct * dsH,
-                region.rect.wPct * dsW,
-                region.rect.hPct * dsH,
-            );
+            const patch = mapRegionRectToDest(region.rect, sourceW, sourceH, 0, 0, sourceW, sourceH, 0, 0, dsW, dsH);
+            if (patch) helper.smallCtx.fillRect(patch.x, patch.y, patch.w, patch.h);
         }
     }
     // 2. Blur via ctx.filter onto a separate canvas (filter applies to the
@@ -373,10 +369,36 @@ export function snapRegionToMosaicGrid(
         rows: Math.max(1, Math.round((y1 - y0) / block)),
     };
 }
-/** Soft-blur style: downscale factor for the down-up fake gaussian. ctx.filter
- *  is not available on OffscreenCanvas in Safari, so the soft look is produced
- *  by resampling instead - works on every engine in the browser bar. */
-const SOFT_BLUR_DOWNSCALE = 6;
+/** Soft blur retains more samples than mosaic, then smooths their edges. */
+const SOFT_BLUR_SAMPLES_MIN_DIM = 12;
+
+/** Source-relative sampling keeps soft blur equally strong in preview and
+ *  export. Crop clipping retains the original block size, so a narrow visible
+ *  sliver cannot become a finely sampled strip. */
+export function softBlurRegionGrid(
+    rect: CropRect,
+    sourceW: number,
+    sourceH: number,
+    vx: number,
+    vy: number,
+    vw: number,
+    vh: number,
+): { rect: CropRect; cols: number; rows: number } | null {
+    const rw = rect.wPct * sourceW;
+    const rh = rect.hPct * sourceH;
+    if (rw <= 0 || rh <= 0 || vw <= 0 || vh <= 0) return null;
+    const block = Math.max(2, Math.min(rw, rh) / SOFT_BLUR_SAMPLES_MIN_DIM);
+    const x0 = Math.max(rect.xPct * sourceW, vx);
+    const y0 = Math.max(rect.yPct * sourceH, vy);
+    const x1 = Math.min(rect.xPct * sourceW + rw, vx + vw);
+    const y1 = Math.min(rect.yPct * sourceH + rh, vy + vh);
+    if (x1 <= x0 || y1 <= y0) return null;
+    return {
+        rect: { xPct: x0 / sourceW, yPct: y0 / sourceH, wPct: (x1 - x0) / sourceW, hPct: (y1 - y0) / sourceH },
+        cols: Math.max(1, Math.round((x1 - x0) / block)),
+        rows: Math.max(1, Math.round((y1 - y0) / block)),
+    };
+}
 
 /**
  * Paints one region patch onto destCtx. `source` provides the pixels to
@@ -384,8 +406,8 @@ const SOFT_BLUR_DOWNSCALE = 6;
  * pipeline passes the composed output canvas itself (srcRect === destRect),
  * the live preview passes the <video> element with a video-pixel rect.
  * "fill" ignores the source entirely. Restores ctx smoothing state.
- * grid (optional) - explicit mosaic dims from snapRegionToMosaicGrid, so the
- * blocks stay scene-anchored; without it the grid derives from destRect.
+ * grid (optional) - source-relative sampling dims from snapRegionToMosaicGrid
+ * or softBlurRegionGrid; without it the grid derives from destRect.
  */
 export function paintRegionBlur(
     destCtx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
@@ -405,18 +427,17 @@ export function paintRegionBlur(
     const { scratchCanvas, scratchCtx } = helper;
     let cols: number;
     let rows: number;
-    if (style === "pixelate") {
-        if (grid) {
-            cols = grid.cols;
-            rows = grid.rows;
-        } else {
-            const blockPx = Math.max(4, Math.min(destRect.w, destRect.h) / PIXELATE_BLOCKS_MIN_DIM);
-            cols = Math.max(1, Math.round(destRect.w / blockPx));
-            rows = Math.max(1, Math.round(destRect.h / blockPx));
-        }
+    if (grid) {
+        cols = grid.cols;
+        rows = grid.rows;
+    } else if (style === "pixelate") {
+        const blockPx = Math.max(4, Math.min(destRect.w, destRect.h) / PIXELATE_BLOCKS_MIN_DIM);
+        cols = Math.max(1, Math.round(destRect.w / blockPx));
+        rows = Math.max(1, Math.round(destRect.h / blockPx));
     } else {
-        cols = Math.max(2, Math.round(destRect.w / SOFT_BLUR_DOWNSCALE));
-        rows = Math.max(2, Math.round(destRect.h / SOFT_BLUR_DOWNSCALE));
+        const blockPx = Math.min(destRect.w, destRect.h) / SOFT_BLUR_SAMPLES_MIN_DIM;
+        cols = Math.max(1, Math.round(destRect.w / blockPx));
+        rows = Math.max(1, Math.round(destRect.h / blockPx));
     }
     if (scratchCanvas.width !== cols) scratchCanvas.width = cols;
     if (scratchCanvas.height !== rows) scratchCanvas.height = rows;
@@ -456,12 +477,15 @@ export function paintRegionBlursForView(
     helper: RegionBlurHelper | null,
 ): void {
     for (const rb of regionBlurs) {
-        if (rb.style === "pixelate") {
-            const snapped = snapRegionToMosaicGrid(rb.rect, sourceW, sourceH, sx, sy, sw, sh);
+        if (rb.style !== "fill") {
+            const snapped =
+                rb.style === "pixelate"
+                    ? snapRegionToMosaicGrid(rb.rect, sourceW, sourceH, sx, sy, sw, sh)
+                    : softBlurRegionGrid(rb.rect, sourceW, sourceH, sx, sy, sw, sh);
             if (!snapped) continue;
             const patch = mapRegionRectToDest(snapped.rect, sourceW, sourceH, sx, sy, sw, sh, dx, dy, dw, dh);
             if (!patch) continue;
-            paintRegionBlur(ctx, ctx.canvas, patch, patch, "pixelate", helper, {
+            paintRegionBlur(ctx, ctx.canvas, patch, patch, rb.style, helper, {
                 cols: snapped.cols,
                 rows: snapped.rows,
             });

@@ -33,5 +33,21 @@ export function applyTrackResult(
                 ? Math.min(contentDurationSec, Math.max(result.trackedUntilSec, region.startSec + MIN_ZONE_SPAN_SEC))
                 : contentDurationSec;
     }
+    // Keyframes beyond a manually shortened span remain available for later
+    // edits. Anchor its end so their stale geometry cannot move an uncertain tail.
+    for (let index = region.keyframes.length - 1; index >= 0; index--) {
+        const keyframe = region.keyframes[index]!;
+        if (keyframe.contentSec > region.endSec) continue;
+        if (keyframe.contentSec < region.endSec && index < region.keyframes.length - 1) {
+            // This boundary must stay exact: epsilon-merging into a nearby pin
+            // outside the span would pull its geometry back into the held tail.
+            region.keyframes.splice(index + 1, 0, {
+                contentSec: region.endSec,
+                rect: { ...keyframe.rect },
+                pinned: false,
+            });
+        }
+        break;
+    }
     region.lastTrackLost = result.endReason !== "completed";
 }

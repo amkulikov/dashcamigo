@@ -314,6 +314,7 @@ export async function downloadBlurAssets(
     while (inFlight) {
         if (!(await waitForWarm(inFlight, signal))) return false;
     }
+    if (signal?.aborted) return false;
     if (blurAssetsReady(groups)) return true;
     if (options?.canDownloadNew === false && blurAssetsNeedDownload(groups)) return false;
     // Hard offline with no downloaded assets: do not even start.
@@ -355,6 +356,7 @@ async function warmAll(groups: readonly BlurAssetGroupId[], signal?: AbortSignal
     setState("downloading", 0, groups);
     let baseMb = 0;
     for (const asset of todo) {
+        signal?.throwIfAborted();
         try {
             await warmOne(asset.url, signal, (frac) => {
                 setState("downloading", Math.min(1, (baseMb + asset.approxMb * frac) / totalMb), groups);
@@ -397,15 +399,21 @@ async function warmOne(url: string, signal: AbortSignal | undefined, onFrac: (fr
         const total = Number(res.headers.get("content-length")) || 0;
         const reader = res.body.getReader();
         let received = 0;
-        for (;;) {
-            armStall(); // reset per chunk - only a real stall (no data) trips it
-            const { done, value } = await reader.read();
-            if (done) break;
-            received += value.byteLength;
-            // No Content-Length (dev middleware / proxy): hold at an indeterminate
-            // half rather than jump around; the completed-asset base still advances.
-            onFrac(total > 0 ? Math.min(1, received / total) : 0.5);
+        try {
+            for (;;) {
+                armStall(); // reset per chunk - only a real stall (no data) trips it
+                const { done, value } = await reader.read();
+                merged.throwIfAborted();
+                if (done) break;
+                received += value.byteLength;
+                // No Content-Length (dev middleware / proxy): hold at an indeterminate
+                // half rather than jump around; the completed-asset base still advances.
+                onFrac(total > 0 ? Math.min(1, received / total) : 0.5);
+            }
+        } finally {
+            reader.releaseLock();
         }
+        if (received === 0) throw new Error(`blur asset ${url}: empty response`);
         onFrac(1);
     } finally {
         if (stallTimer) clearTimeout(stallTimer);

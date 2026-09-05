@@ -7,6 +7,7 @@
 
 import {
     DESKTOP,
+    MOBILE,
     SAMPLE_70MAI,
     SAMPLE_NOGPS,
     canEncodeHighProfileH264,
@@ -202,6 +203,76 @@ test.describe("blur regions", () => {
         await expect(page.locator(".export-panel__blur-row-actions button")).toHaveCount(3);
     });
 
+    test("whole-clip timing uses the current trim bounds", async ({ page }) => {
+        await drawZone(page, 0.4, 0.4, 0.6, 0.6);
+        const start = page.locator('.export-trim-bar__input[data-range-edge="start"]');
+        const end = page.locator('.export-trim-bar__input[data-range-edge="end"]');
+        await end.fill("3");
+        await end.press("Enter");
+        await start.fill("1");
+        await start.press("Enter");
+        await page.getByRole("button", { name: "Keep this zone active for the whole clip" }).click();
+        await expect(page.locator(".export-panel__blur-row-range")).toHaveText("0:01-0:03");
+
+        await page.locator("#export-trim-reset").click();
+        await page.getByRole("button", { name: "Keep this zone active for the whole clip" }).click();
+        const fullEnd = await end.inputValue();
+        await expect(page.locator(".export-panel__blur-row-range")).toHaveText(`0:00-${fullEnd}`);
+    });
+
+    test("manual timing cancels a pending Follow request and unblocks Save", async ({ page }) => {
+        await drawZone(page, 0.4, 0.4, 0.6, 0.6);
+        const strip = page.locator(".export-panel__blur-tracker");
+        const follow = page.locator(".export-panel__blur-follow-btn");
+        await follow.click();
+        await expect(strip.getByRole("button", { name: "Download & follow" })).toBeVisible();
+        await expect(page.locator("#export-panel-save-btn")).toBeDisabled();
+
+        await page.getByRole("button", { name: "Set the start and end yourself; tracked motion stays" }).click();
+        await expect(strip).toBeHidden();
+        await expect(follow).toHaveAttribute("aria-pressed", "false");
+        await expect(page.locator("#export-panel-follow-save-note")).toBeHidden();
+        await expect(page.locator("#export-panel-save-btn")).toBeEnabled();
+        await expect(page.locator(".export-panel__blur-row")).toHaveCount(1);
+    });
+
+    test("a zone can be created, edited and cancelled from the keyboard", async ({ page }) => {
+        const add = page.locator(".export-panel__blur-add-btn");
+        await add.focus();
+        await page.keyboard.press("Enter");
+        const layer = page.locator('.video-tile[data-channel="front"] .blur-draw-layer');
+        await expect(layer).toHaveAttribute("role", "button");
+        await expect(layer).toBeFocused();
+        await page.keyboard.press("Enter");
+        const box = page.locator('.video-tile[data-channel="front"] .blur-box:not([hidden])');
+        await expect(box).toBeVisible();
+        await expect(box).toBeFocused();
+        const before = await zoneSourceRect(page);
+        await page.keyboard.press("ArrowRight");
+        await expect.poll(async () => (await zoneSourceRect(page)).x).toBeGreaterThan(before.x);
+
+        await add.focus();
+        await page.keyboard.press("Enter");
+        await expect(layer).toBeFocused();
+        await page.keyboard.press("Escape");
+        await expect(layer).toHaveCount(0);
+        await expect(add).toBeFocused();
+        await expect(page.locator(".export-panel__blur-row")).toHaveCount(1);
+    });
+
+    test("adding a zone on mobile brings the video back into view", async ({ page }) => {
+        await page.setViewportSize(MOBILE);
+        const add = page.locator(".export-panel__blur-add-btn");
+        await add.scrollIntoViewIfNeeded();
+        await add.click();
+        const layer = page.locator('.video-tile[data-channel="front"] .blur-draw-layer');
+        await expect(layer).toBeInViewport({ ratio: 0.9 });
+        await expect(layer).toBeFocused();
+        await layer.click();
+        await expect(page.locator(".export-panel__blur-row")).toHaveCount(1);
+        await expect(page.locator('.video-tile[data-channel="front"] .blur-box:not([hidden])')).toBeInViewport();
+    });
+
     test("zone can be moved and resized from the keyboard", async ({ page }) => {
         await drawZone(page, 0.4, 0.4, 0.6, 0.6);
         const box = page.getByRole("group", {
@@ -316,6 +387,46 @@ test.describe("blur regions", () => {
         await expect(page.locator("#export-panel")).toBeVisible();
     });
 
+    test("a cancelled drawing gesture leaves no zone and can be retried", async ({ page }) => {
+        await page.locator(".export-panel__blur-add-btn").click();
+        const layer = page.locator('.video-tile[data-channel="front"] .blur-draw-layer');
+        await expect(layer).toBeVisible();
+        const box = await layer.boundingBox();
+        expect(box).not.toBeNull();
+        const start = { clientX: box!.x + box!.width * 0.35, clientY: box!.y + box!.height * 0.35 };
+        const end = { clientX: box!.x + box!.width * 0.65, clientY: box!.y + box!.height * 0.65 };
+        await layer.dispatchEvent("pointerdown", { ...start, pointerId: 12, pointerType: "touch", button: 0 });
+        await layer.dispatchEvent("pointermove", { ...end, pointerId: 12, pointerType: "touch" });
+        await expect(layer.locator(".blur-box--marquee")).toBeVisible();
+        await layer.dispatchEvent("pointercancel", { ...end, pointerId: 12, pointerType: "touch" });
+        await expect(layer.locator(".blur-box--marquee")).toHaveCount(0);
+        await expect(page.locator(".export-panel__blur-row")).toHaveCount(0);
+        await expect(layer).toBeVisible();
+
+        await layer.click({ position: { x: box!.width / 2, y: box!.height / 2 } });
+        await expect(page.locator(".export-panel__blur-row")).toHaveCount(1);
+        await expect(page.locator(".blur-draw-layer")).toHaveCount(0);
+    });
+
+    test("Escape during a drag cannot create a zone on a late pointer release", async ({ page }) => {
+        await page.locator(".export-panel__blur-add-btn").click();
+        const layer = page.locator('.video-tile[data-channel="front"] .blur-draw-layer');
+        await expect(layer).toBeVisible();
+        const handle = await layer.elementHandle();
+        expect(handle).not.toBeNull();
+        const box = await layer.boundingBox();
+        expect(box).not.toBeNull();
+        const start = { clientX: box!.x + box!.width * 0.35, clientY: box!.y + box!.height * 0.35 };
+        const end = { clientX: box!.x + box!.width * 0.65, clientY: box!.y + box!.height * 0.65 };
+        await layer.dispatchEvent("pointerdown", { ...start, pointerId: 12, pointerType: "touch", button: 0 });
+        await layer.dispatchEvent("pointermove", { ...end, pointerId: 12, pointerType: "touch" });
+        await page.keyboard.press("Escape");
+        await expect(page.locator(".blur-draw-layer")).toHaveCount(0);
+        await handle!.dispatchEvent("pointerup", { ...end, pointerId: 12, pointerType: "touch" });
+        await expect(page.locator(".export-panel__blur-row")).toHaveCount(0);
+        await expect(page.locator("#export-panel")).toBeVisible();
+    });
+
     test("Follow gates on the one-time download, then tracks and keeps the zone editable", async ({ page }) => {
         // Real asset download (~14 MB, warmed on the main thread) + vittrack
         // inference over the sample clip (WASM). Deterministic input ->
@@ -412,6 +523,48 @@ test.describe("blur regions", () => {
         // The degradation is detect-only - manual zones with Follow stay
         // available (vittrack runs on wasm).
         await expect(page.locator(".export-panel__blur-add-btn")).toBeEnabled();
+    });
+
+    test("blurred letterbox preview covers the same private content as the foreground", async ({ page }) => {
+        await page.locator("#export-panel-output").selectOption("1080_9x16");
+        await page.locator("#export-panel-blur").check();
+        const sourceLuma = await page.evaluate(() => {
+            const video = window.__dashcamigo.dom.player;
+            const canvas = document.createElement("canvas");
+            canvas.width = canvas.height = 32;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) throw new Error("source preview unavailable");
+            ctx.drawImage(video, 0, 0, 32, 32);
+            const pixels = ctx.getImageData(0, 0, 32, 32).data;
+            let luma = 0;
+            for (let i = 0; i < pixels.length; i += 4) {
+                luma += 0.2126 * pixels[i]! + 0.7152 * pixels[i + 1]! + 0.0722 * pixels[i + 2]!;
+            }
+            return luma / (pixels.length / 4);
+        });
+        expect(sourceLuma, "the source itself is not a black frame").toBeGreaterThan(24);
+
+        // Drawing across the portrait tile's bars clamps to the full source
+        // height; the covered source must also feed the repeated background.
+        await drawZone(page, 0.01, 0.01, 0.99, 0.99);
+        await page.locator("#export-panel-blur-style").selectOption("fill");
+        const canvas = page.locator('.video-tile[data-channel="front"] .blur-preview-canvas');
+        await expect(canvas).toBeVisible();
+        await expect
+            .poll(() =>
+                canvas.evaluate((el: HTMLCanvasElement) => {
+                    const ctx = el.getContext("2d");
+                    if (!ctx) throw new Error("blur preview unavailable");
+                    return [0.15, 0.5, 0.85].map((y) =>
+                        Array.from(ctx.getImageData(Math.floor(el.width / 2), Math.floor(el.height * y), 1, 1).data),
+                    );
+                }),
+            )
+            .toEqual([
+                [0, 0, 0, 255],
+                [0, 0, 0, 255],
+                [0, 0, 0, 255],
+            ]);
     });
 
     test("solid-cover zone is actually burned into the exported pixels", async ({ page, browserName }) => {

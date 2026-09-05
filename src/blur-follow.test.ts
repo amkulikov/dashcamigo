@@ -64,4 +64,49 @@ describe("applyTrackResult", () => {
         expect(value.lastTrackLost).toBe(true);
         expect(regionRectAt(value, 9)).toEqual({ xPct: 0.4, yPct: 0.2, wPct: 0.2, hPct: 0.2 });
     });
+
+    it("holds a manually shortened tail instead of interpolating toward stale future tracking", () => {
+        const value = region();
+        value.autoEnd = false;
+        const stale = { xPct: 0.8, yPct: 0.8, wPct: 0.1, hPct: 0.1 };
+        upsertKeyframe(value, 8, stale, false);
+        applyTrackResult(value, 2, 5, 10, result("lost", 4));
+
+        expect(value.endSec).toBe(5);
+        expect(regionRectAt(value, 4.5)).toEqual({ xPct: 0.4, yPct: 0.2, wPct: 0.2, hPct: 0.2 });
+        expect(regionRectAt(value, 5)).toEqual({ xPct: 0.4, yPct: 0.2, wPct: 0.2, hPct: 0.2 });
+        expect(value.keyframes.find((keyframe) => keyframe.contentSec === 8)?.rect).toEqual(stale);
+    });
+
+    it("holds the seed through an undecodable manual span while preserving a later user pin", () => {
+        const value = region();
+        value.autoEnd = false;
+        const seedRect = { ...value.keyframes[0]!.rect };
+        const laterPin = { xPct: 0.8, yPct: 0.8, wPct: 0.1, hPct: 0.1 };
+        upsertKeyframe(value, 8, laterPin, true);
+        applyTrackResult(value, 2, 5, 10, { endReason: "lost", trackedUntilSec: 2, keyframes: [] });
+
+        expect(regionRectAt(value, 4.5)).toEqual(seedRect);
+        expect(value.keyframes.find((keyframe) => keyframe.contentSec === 8)).toEqual({
+            contentSec: 8,
+            rect: laterPin,
+            pinned: true,
+        });
+    });
+
+    it("keeps the terminal hold distinct from a user pin just after the active end", () => {
+        const value = region();
+        value.autoEnd = false;
+        const laterPin = { xPct: 0.8, yPct: 0.8, wPct: 0.1, hPct: 0.1 };
+        upsertKeyframe(value, 5.001, laterPin, true);
+        applyTrackResult(value, 2, 5, 10, result("lost", 4));
+
+        expect(regionRectAt(value, 4.5)).toEqual({ xPct: 0.4, yPct: 0.2, wPct: 0.2, hPct: 0.2 });
+        expect(regionRectAt(value, 5)).toEqual({ xPct: 0.4, yPct: 0.2, wPct: 0.2, hPct: 0.2 });
+        expect(value.keyframes.find((keyframe) => keyframe.contentSec === 5.001)).toEqual({
+            contentSec: 5.001,
+            rect: laterPin,
+            pinned: true,
+        });
+    });
 });

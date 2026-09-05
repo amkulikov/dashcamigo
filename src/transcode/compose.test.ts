@@ -18,6 +18,7 @@ import {
     fitKeepAspectCover,
     mapRegionRectToDest,
     snapRegionToMosaicGrid,
+    softBlurRegionGrid,
     getSplitSlotCount,
     getSplitSlots,
 } from "./compose.js";
@@ -543,6 +544,47 @@ describe("snapRegionToMosaicGrid", () => {
         // Snap only grows the rect (outward), never shrinks it.
         expect(snapped!.rect.wPct).toBeGreaterThanOrEqual(0.1 - 1e-9);
         expect(snapped!.cols).toBeGreaterThanOrEqual(6);
+    });
+});
+
+describe("softBlurRegionGrid", () => {
+    const region = { xPct: 0.4, yPct: 0.4, wPct: 0.1, hPct: 0.1 };
+
+    it("keeps the same detail budget across preview, full-HD and 4K source sizes", () => {
+        const grids = [
+            [960, 540],
+            [1920, 1080],
+            [3840, 2160],
+        ].map(([width, height]) => softBlurRegionGrid(region, width!, height!, 0, 0, width!, height!));
+        expect(grids[0]).not.toBeNull();
+        for (const grid of grids) {
+            expect(grid!.cols).toBe(21);
+            expect(grid!.rows).toBe(12);
+            expect(grid!.rect.xPct).toBeCloseTo(region.xPct);
+            expect(grid!.rect.wPct).toBeCloseTo(region.wPct);
+        }
+    });
+
+    it("samples only the visible source intersection without shrinking its blur blocks", () => {
+        const grid = softBlurRegionGrid(
+            { xPct: 780 / 1920, yPct: 0.4, wPct: 192 / 1920, hPct: 108 / 1080 },
+            1920,
+            1080,
+            960,
+            0,
+            960,
+            1080,
+        );
+        expect(grid).not.toBeNull();
+        expect(grid!.rect.xPct).toBeCloseTo(0.5);
+        expect(grid!.rect.wPct * 1920).toBeCloseTo(12);
+        expect(grid!.cols).toBe(1);
+        expect(grid!.rows).toBe(12);
+    });
+
+    it("skips fully cropped regions and empty source views", () => {
+        expect(softBlurRegionGrid(region, 1920, 1080, 1200, 0, 720, 1080)).toBeNull();
+        expect(softBlurRegionGrid(region, 1920, 1080, 0, 0, 0, 1080)).toBeNull();
     });
 });
 

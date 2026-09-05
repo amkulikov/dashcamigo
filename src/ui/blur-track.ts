@@ -31,9 +31,9 @@ const log = createLogger("blur-track");
 // (tracker-worker-client.ts - the worker is shared with blur-detect).
 subscribeTrackerWorkerNotifications((msg) => {
     if (msg.type !== TRACK_NOTIFY_PROGRESS && msg.type !== TRACK_NOTIFY_STARTED) return;
-    const data = msg.data as Partial<TrackProgressData> & { regionId?: string };
+    const data = msg.data as Partial<TrackProgressData> & { regionId?: string; passId?: string };
     const pass = data.regionId ? runningPasses.get(data.regionId) : null;
-    if (pass) {
+    if (pass && pass.passId === data.passId && !pass.controller.signal.aborted) {
         if (msg.type === TRACK_NOTIFY_PROGRESS && data.fractionDone !== undefined) {
             pass.fractionDone = data.fractionDone;
         }
@@ -53,6 +53,7 @@ const TRACK_REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
 
 interface RunningPass {
     trip: Trip;
+    passId: string;
     controller: AbortController;
     /** 0..1, updated from worker progress notifications. */
     fractionDone: number;
@@ -66,6 +67,7 @@ interface RunningPass {
 
 // Passes keyed by region id; the panel polls via trackPassOf on its sync.
 const runningPasses = new Map<string, RunningPass>();
+let passCounter = 0;
 type Listener = () => void;
 const passListeners = new Set<Listener>();
 
@@ -165,15 +167,17 @@ export async function toggleTrackPass(trip: Trip, region: BlurRegion): Promise<T
             timeoutCtrl.abort();
         }, TRACK_REQUEST_TIMEOUT_MS);
     };
-    runningPasses.set(region.id, { trip, controller, fractionDone: 0, armTimeout });
+    const passId = `track-${++passCounter}`;
+    runningPasses.set(region.id, { trip, passId, controller, fractionDone: 0, armTimeout });
     // Clear any prior "verify the tail" flag while this pass runs - it will be
     // re-set from this pass's own outcome below.
     const previousTrackWarning = region.lastTrackLost;
     region.lastTrackLost = false;
     notifyPassChanged();
     try {
-        const request: TrackRequestData & { regionId: string } = {
+        const request: TrackRequestData & { regionId: string; passId: string } = {
             regionId: region.id,
+            passId,
             segments,
             seedContentSec: fromSec,
             seedRect: { ...seed.rect },
@@ -234,4 +238,11 @@ export async function toggleTrackPass(trip: Trip, region: BlurRegion): Promise<T
         runningPasses.delete(region.id);
         notifyPassChanged();
     }
+}
+
+export function _resetForTests(): void {
+    cancelTrackPassesExceptTrip(null);
+    runningPasses.clear();
+    passListeners.clear();
+    passCounter = 0;
 }

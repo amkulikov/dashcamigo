@@ -151,6 +151,21 @@ describe("resolveRegionBlursAt", () => {
         expect(resolved).toHaveLength(1);
         expect(resolved[0]!.style).toBe("pixelate");
     });
+
+    it("paints stronger overlapping covers after weaker styles regardless of creation order", () => {
+        const coverRect = rect(0.4, 0.4);
+        const fill = createBlurRegion("front", "fill", 0, 10, 2, coverRect);
+        const soft = createBlurRegion("front", "blur", 0, 10, 2, coverRect);
+        const mosaic = createBlurRegion("front", "pixelate", 0, 10, 2, coverRect);
+        const regions = [fill, soft, mosaic];
+
+        expect(resolveRegionBlursAt(regions, "front", 5).map((region) => region.style)).toEqual([
+            "blur",
+            "pixelate",
+            "fill",
+        ]);
+        expect(regions).toEqual([fill, soft, mosaic]);
+    });
 });
 
 describe("anyRegionIntersectsRange", () => {

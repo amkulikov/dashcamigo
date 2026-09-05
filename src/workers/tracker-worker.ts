@@ -84,7 +84,7 @@ const TRACK_COVERAGE_MARGIN_PCT = 0.08;
 /** Progress notification throttle (matches the transcode reporter cadence). */
 const PROGRESS_THROTTLE_MS = 200;
 
-let cachedSession: { key: string; session: VitTrackerSession } | null = null;
+const cachedSessions = new Map<string, VitTrackerSession>();
 
 async function getTrackerSession(
     ortRuntime: OrtRuntime,
@@ -92,9 +92,12 @@ async function getTrackerSession(
     wasmDir: string,
 ): Promise<VitTrackerSession> {
     const key = `${ortRuntime}|${wasmDir}|${modelUrl}`;
-    if (cachedSession?.key === key) return cachedSession.session;
+    const cached = cachedSessions.get(key);
+    if (cached) return cached;
     const session = await VitTrackerSession.create(ortRuntime, modelUrl, wasmDir);
-    cachedSession = { key, session };
+    // Follow and detection use separate runtime builds. Retain both sessions:
+    // replacing one on every mode switch leaks its native ORT allocation.
+    cachedSessions.set(key, session);
     return session;
 }
 
@@ -699,14 +702,14 @@ function serialize<T>(fn: () => Promise<T>): Promise<T> {
 const server = createWorkerServer(self, {
     onRequest: async (type, data, ctx: RequestContext): Promise<TrackResult | DetectResult> => {
         if (type === TRACK_REQUEST) {
-            const req = data as TrackRequestData & { regionId?: string };
+            const req = data as TrackRequestData & { regionId?: string; passId?: string };
             return await serialize(() => {
                 // A request can be cancelled while waiting behind another pass.
                 // Do not let it wake/load the model when its queue turn arrives.
                 if (ctx.signal.aborted) throw new DOMException("aborted", "AbortError");
-                server.notify(TRACK_NOTIFY_STARTED, { regionId: req.regionId });
+                server.notify(TRACK_NOTIFY_STARTED, { regionId: req.regionId, passId: req.passId });
                 return runTrackPass(req, ctx.signal, (fractionDone) => {
-                    server.notify(TRACK_NOTIFY_PROGRESS, { fractionDone, regionId: req.regionId });
+                    server.notify(TRACK_NOTIFY_PROGRESS, { fractionDone, regionId: req.regionId, passId: req.passId });
                 });
             });
         }

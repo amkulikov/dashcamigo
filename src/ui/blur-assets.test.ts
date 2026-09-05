@@ -159,6 +159,40 @@ describe("blur assets offline readiness", () => {
         expect(blurAssetsState().phase).toBe("idle");
     });
 
+    it("rejects empty assets and leaves the failed feature available to retry", async () => {
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async () => new Response(new Uint8Array())),
+        );
+        expect(await downloadBlurAssets(["track"])).toBe(false);
+        expect(blurAssetsReady(["track"])).toBe(false);
+        expect(history.size).toBe(0);
+        expect(blurAssetsState()).toMatchObject({ phase: "error", activeGroups: ["track"] });
+
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async () => new Response(new Uint8Array([1, 2, 3]))),
+        );
+        expect(await downloadBlurAssets(["track"])).toBe(true);
+        expect(blurAssetsReady(["track"])).toBe(true);
+    });
+
+    it("keeps an interrupted response retriable when cancellation crosses its last chunk", async () => {
+        const controller = new AbortController();
+        const unsubscribe = subscribeBlurAssets(() => {
+            if (blurAssetsState().progress > 0) controller.abort();
+        });
+        try {
+            expect(await downloadBlurAssets(["track"], controller.signal)).toBe(false);
+            expect(blurAssetsReady(["track"])).toBe(false);
+            expect(history.size).toBe(0);
+            expect(blurAssetsState().phase).toBe("idle");
+        } finally {
+            unsubscribe();
+        }
+        expect(await downloadBlurAssets(["track"])).toBe(true);
+    });
+
     it("cancels a queued warm without waiting for or aborting another feature's download", async () => {
         let finish!: (response: Response) => void;
         const fetcher = vi

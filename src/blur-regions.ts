@@ -263,6 +263,12 @@ export interface ResolvedRegionBlur {
     style: BlurStyle;
 }
 
+/** Stronger covers paint last so overlapping regions cannot weaken them. */
+export function sortBlurRegionsForPaint<T extends { style: BlurStyle }>(regions: readonly T[]): T[] {
+    const priority: Record<BlurStyle, number> = { blur: 0, pixelate: 1, fill: 2 };
+    return [...regions].sort((a, b) => priority[a.style] - priority[b.style]);
+}
+
 /**
  * Rects to paint at `contentSec` for one channel. Used identically by the
  * export pipelines (per decoded frame) and the live preview (per rVFC tick).
@@ -278,7 +284,7 @@ export function resolveRegionBlursAt(
         const rect = regionRectAt(region, contentSec);
         if (rect) out.push({ rect, style: region.style });
     }
-    return out;
+    return sortBlurRegionsForPaint(out);
 }
 
 /** True when any region intersects [startSec, endSec] on one of `channels` -

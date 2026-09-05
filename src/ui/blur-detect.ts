@@ -232,7 +232,7 @@ function passParams(trip: Trip): PassParams | null {
     const endSec = range ? range.endTripSec : trip.timeline.contentDurationSec;
     const channels = [...state.composition.channelOrder];
     return {
-        key: `${startSec.toFixed(2)}|${endSec.toFixed(2)}|${channels.join("+")}|${kinds.join("+")}`,
+        key: `${startSec}|${endSec}|${channels.join("+")}|${kinds.join("+")}`,
         startSec,
         endSec,
         channels,
@@ -538,7 +538,8 @@ function startRun(trip: Trip, params: PassParams, exportProtected = false): void
         exportProtected,
         promise: Promise.resolve(false), // replaced synchronously below
     };
-    run.promise = (async (): Promise<boolean> => {
+    running = run;
+    run.promise = Promise.resolve().then(async (): Promise<boolean> => {
         try {
             const st = tripState(trip);
             const regions: BlurRegion[] = [];
@@ -581,6 +582,10 @@ function startRun(trip: Trip, params: PassParams, exportProtected = false): void
                 const result = await trackerWorkerClient().request<DetectResult>(DETECT_REQUEST, request, {
                     signal: AbortSignal.any([controller.signal, timeoutCtrl.signal]),
                 });
+                // Cancel remains authoritative if it crosses a delivered worker
+                // response before this continuation resumes.
+                controller.signal.throwIfAborted();
+                timeoutCtrl.signal.throwIfAborted();
                 // The next channel may sit behind a Follow request in the
                 // worker's serialization queue. Stop counting inactivity now;
                 // its own STARTED notification re-arms after that queue.
@@ -680,7 +685,6 @@ function startRun(trip: Trip, params: PassParams, exportProtected = false): void
             // the panel's estimate listens on export-state, not on this module.
             notifyExportStateChanged();
         }
-    })();
-    running = run;
+    });
     notifyDetectChanged();
 }

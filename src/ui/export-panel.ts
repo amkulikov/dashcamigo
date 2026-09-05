@@ -1386,6 +1386,11 @@ function renderBlurGroup(): HTMLElement {
 function onFollowClick(region: BlurRegion): void {
     const trip = activeTrip();
     if (!trip) return;
+    if (pendingFollowRegionIds.has(region.id)) {
+        cancelRegionFollow(region.id);
+        syncBlurGroup();
+        return;
+    }
     if (trackPassOf(region.id)) {
         void toggleTrackPass(trip, region); // running -> cancel
         return;
@@ -1398,12 +1403,22 @@ function onFollowClick(region: BlurRegion): void {
         // First time on this device: surface the size + offline story and wait
         // for an explicit click before pulling ~14 MB.
         pendingFollowRegionIds.add(region.id);
+        syncBlurGroup();
         syncTrackerStrip();
         return;
     }
     // Already consented once (assets cached): warm from cache (fast) and follow.
     pendingFollowRegionIds.add(region.id);
+    syncBlurGroup();
     void startTrackerDownload();
+}
+
+function cancelRegionFollow(regionId: string): void {
+    const wasPending = pendingFollowRegionIds.delete(regionId);
+    cancelTrackPass(regionId);
+    if (!wasPending) return;
+    if (pendingFollowRegionIds.size === 0) trackerDownloadCtrl?.abort();
+    syncTrackerStrip();
 }
 
 /** Flips the zone to auto-tracked and starts the pass. Follow always owns the
@@ -1551,6 +1566,7 @@ function syncTrackerStrip(): void {
 
 function dismissTrackerStrip(): void {
     pendingFollowRegionIds.clear();
+    syncBlurGroup();
     syncTrackerStrip();
 }
 
@@ -1726,6 +1742,7 @@ function syncDetectGroup(): void {
 function cancelTrackerDownload(): void {
     trackerDownloadCtrl?.abort();
     pendingFollowRegionIds.clear();
+    syncBlurGroup();
     syncTrackerStrip();
 }
 
@@ -1805,6 +1822,7 @@ function syncBlurGroup(): void {
     if (blurAddBtnEl) {
         blurAddBtnEl.textContent = isBlurDrawArmed() ? t("export.blur.cancel") : t("export.blur.add");
         blurAddBtnEl.classList.toggle("is-armed", isBlurDrawArmed());
+        blurAddBtnEl.setAttribute("aria-pressed", String(isBlurDrawArmed()));
     }
     const list = blurListEl;
     if (!list) return;
@@ -1827,12 +1845,15 @@ function syncBlurGroup(): void {
     if (pendingFollowRegionIds.size > 0) {
         let changed = false;
         for (const id of pendingFollowRegionIds) {
-            if (!regions.some((r) => r.id === id)) {
+            if (!state.exportModeOpen || !regions.some((r) => r.id === id)) {
                 pendingFollowRegionIds.delete(id);
                 changed = true;
             }
         }
-        if (changed) syncTrackerStrip();
+        if (changed) {
+            if (pendingFollowRegionIds.size === 0) trackerDownloadCtrl?.abort();
+            syncTrackerStrip();
+        }
     }
     // Box drags notify at pointermove rate but only touch keyframes - skip
     // the DOM rebuild unless something the rows actually render changed. autoEnd
@@ -1845,7 +1866,7 @@ function syncBlurGroup(): void {
             const pct = trackPassOf(r.id);
             return `${r.id}|${r.startSec.toFixed(3)}|${r.endSec.toFixed(3)}|${r.style}|${r.autoEnd ? 1 : 0}|${
                 regionHasTrackedKeyframes(r) ? 1 : 0
-            }|${r.lastTrackLost ? 1 : 0}|${pct ? Math.round(pct.fractionDone * 100) : -1}`;
+            }|${r.lastTrackLost ? 1 : 0}|${pct ? Math.round(pct.fractionDone * 100) : -1}|${pendingFollowRegionIds.has(r.id)}`;
         })
         .join(";")}`;
     if (sig === blurListSig) return;
@@ -1878,7 +1899,7 @@ function syncBlurGroup(): void {
  *  any tail-review warning stay intact. autoEnd is timing ownership, not
  *  geometry. */
 function setBlurManualTimeMode(region: BlurRegion): void {
-    cancelTrackPass(region.id);
+    cancelRegionFollow(region.id);
     region.autoEnd = false;
     notifyBlurRegionsChanged();
     notifyExportStateChanged();
@@ -1887,7 +1908,7 @@ function setBlurManualTimeMode(region: BlurRegion): void {
 /** Whole-export shortcut: use the selected clip range, not the whole source
  *  trip (which made a row labelled "whole clip" show unrelated timestamps). */
 function setBlurWholeClip(region: BlurRegion, startSec: number, endSec: number): void {
-    cancelTrackPass(region.id);
+    cancelRegionFollow(region.id);
     region.startSec = startSec;
     region.endSec = endSec;
     region.autoEnd = false;
@@ -1900,7 +1921,7 @@ function setBlurWholeClip(region: BlurRegion, startSec: number, endSec: number):
 function setBlurStartHere(region: BlurRegion): void {
     const frame = channelPresentedFrame(region.channel, true);
     if (!frame) return;
-    cancelTrackPass(region.id);
+    cancelRegionFollow(region.id);
     region.startSec = Math.min(
         Math.max(0, frame.contentSec - ZONE_START_PLAYHEAD_BACKOFF_SEC),
         Math.max(0, region.endSec - MIN_ZONE_SPAN_SEC),
@@ -1913,7 +1934,7 @@ function setBlurStartHere(region: BlurRegion): void {
 function setBlurEndHere(region: BlurRegion): void {
     const frame = channelPresentedFrame(region.channel, true);
     if (!frame) return;
-    cancelTrackPass(region.id);
+    cancelRegionFollow(region.id);
     const durationSec = activeTrip()?.timeline.contentDurationSec ?? region.endSec;
     region.endSec = Math.min(durationSec, Math.max(frame.contentSec, region.startSec + MIN_ZONE_SPAN_SEC));
     if (region.endSec - region.startSec < MIN_ZONE_SPAN_SEC) {
@@ -1934,8 +1955,6 @@ function setBlurEndHere(region: BlurRegion): void {
  *  is drivers, not video editors, and tooltips do not exist on touch. */
 function renderBlurRow(region: BlurRegion, index: number): HTMLElement {
     const trip = activeTrip();
-    const durationSec = trip?.timeline.contentDurationSec ?? region.endSec;
-    const exportRange = exportPanelState.range ?? { startTripSec: 0, endTripSec: durationSec };
 
     const row = document.createElement("div");
     row.className = "export-panel__blur-row";
@@ -1949,6 +1968,8 @@ function renderBlurRow(region: BlurRegion, index: number): HTMLElement {
     name.className = "export-panel__blur-row-name";
     const zoneName = t("export.blur.zone", { n: index + 1 });
     name.textContent = trip ? `${zoneName} · ${channelDisplayLabel(region.channel, trip)}` : zoneName;
+    row.setAttribute("role", "group");
+    row.setAttribute("aria-label", name.textContent);
     head.appendChild(name);
 
     // The range doubles as the "jump to start" control: the old ▸ glyph sat right
@@ -1973,7 +1994,7 @@ function renderBlurRow(region: BlurRegion, index: number): HTMLElement {
     del.addEventListener("click", () => {
         // Abort an in-flight pass first: an orphaned pass keeps decoding and holds
         // the worker's single-pass gate, blocking the next Follow.
-        cancelTrackPass(region.id);
+        cancelRegionFollow(region.id);
         removeBlurRegion(region.id);
         notifyExportStateChanged();
     });
@@ -2018,6 +2039,7 @@ function renderBlurRow(region: BlurRegion, index: number): HTMLElement {
 
     const pass = trackPassOf(region.id);
     const running = !!pass;
+    const pending = pendingFollowRegionIds.has(region.id);
     // Follow shows live decode progress ("Following… 42%") while a pass runs and
     // cancels on click - the async pass is otherwise invisible and reads as stuck.
     // The percent tracks footage decoded; on early loss it ends before 100%
@@ -2026,16 +2048,18 @@ function renderBlurRow(region: BlurRegion, index: number): HTMLElement {
         "follow",
         running
             ? t("export.blur.tracker.working", { pct: Math.round((pass?.fractionDone ?? 0) * 100) })
-            : t("export.blur.follow"),
-        running ? t("export.blur.row.trackCancel") : t("export.blur.row.track"),
-        region.autoEnd,
+            : pending
+              ? t("export.blur.tracker.cancel")
+              : t("export.blur.follow"),
+        running || pending ? t("export.blur.row.trackCancel") : t("export.blur.row.track"),
+        region.autoEnd || pending,
         () => onFollowClick(region),
     );
     followSeg.classList.add("export-panel__blur-follow-btn");
     followSeg.classList.toggle("is-running", running);
     seg.appendChild(followSeg);
     seg.appendChild(
-        mkSeg("fixed", t("export.blur.mode.fixed"), t("export.blur.mode.fixedHint"), !region.autoEnd, () =>
+        mkSeg("fixed", t("export.blur.mode.fixed"), t("export.blur.mode.fixedHint"), !region.autoEnd && !pending, () =>
             setBlurManualTimeMode(region),
         ),
     );
@@ -2049,7 +2073,7 @@ function renderBlurRow(region: BlurRegion, index: number): HTMLElement {
             const b = document.createElement("button");
             b.type = "button";
             b.dataset.action = action;
-            b.className = "export-panel__blur-row-btn";
+            b.className = "dc-btn dc-btn--secondary export-panel__blur-row-btn";
             b.textContent = label;
             b.title = title;
             b.setAttribute("aria-label", title);
@@ -2063,9 +2087,10 @@ function renderBlurRow(region: BlurRegion, index: number): HTMLElement {
             mkBtn("end", t("export.blur.setEnd"), t("export.blur.row.setEnd"), () => setBlurEndHere(region)),
         );
         fixed.appendChild(
-            mkBtn("whole", t("export.blur.mode.wholeClip"), t("export.blur.wholeClip"), () =>
-                setBlurWholeClip(region, exportRange.startTripSec, exportRange.endTripSec),
-            ),
+            mkBtn("whole", t("export.blur.mode.wholeClip"), t("export.blur.wholeClip"), () => {
+                const range = exportPanelState.range;
+                if (range) setBlurWholeClip(region, range.startTripSec, range.endTripSec);
+            }),
         );
         row.appendChild(fixed);
     }

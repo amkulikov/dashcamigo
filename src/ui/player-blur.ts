@@ -29,16 +29,22 @@ import {
     DEFAULT_ZONE_SPAN_SEC,
     MIN_ZONE_SPAN_SEC,
     regionRectAt,
+    resolveRegionBlursAt,
+    sortBlurRegionsForPaint,
     upsertKeyframe,
     ZONE_START_PLAYHEAD_BACKOFF_SEC,
     type BlurRegion,
 } from "../blur-regions.js";
 import type { CropRect } from "../transcode/compose.js";
 import {
+    createBlurHelper,
     createRegionBlurHelper,
+    fillBlurredCover,
     mapRegionRectToDest,
     paintRegionBlur,
     snapRegionToMosaicGrid,
+    softBlurRegionGrid,
+    type BlurHelper,
     type RegionBlurHelper,
 } from "../transcode/compose.js";
 
@@ -92,8 +98,10 @@ interface TileUi {
 
 const tileUis = new Map<Channel, TileUi>();
 let previewHelper: RegionBlurHelper | null = null;
+let previewBackdropHelper: BlurHelper | null = null;
 let rafId = 0;
 let armed = false;
+let drawOpener: HTMLElement | null = null;
 let drawLayerEls: HTMLDivElement[] = [];
 // Bumped by anything that changes geometry (resize, crop, layout) so the rAF
 // loop repaints even at an unchanged playhead.
@@ -187,7 +195,7 @@ function blurEditorActive(): boolean {
 function syncLifecycle(): void {
     const active = blurUiActive();
     if (active) {
-        previewRegions = activeEffectiveBlurRegions();
+        previewRegions = sortBlurRegionsForPaint(activeEffectiveBlurRegions());
         for (const ch of ALL_CHANNELS) {
             if (state.composition.channelOrder.indexOf(ch) >= 0) ensureTileUi(ch);
         }
@@ -372,6 +380,29 @@ function paintTile(ch: Channel, ui: TileUi, regions: readonly BlurRegion[]): voi
     if (cropEditing || !v || tile.hidden) return;
 
     const mapping = tileMapping(ch, tileWidth, tileHeight);
+    if (mapping && exportPanelState.letterboxFill === "blur") {
+        // The CSS backdrop mirrors raw video. Repaint its visible bars with
+        // the export's censored backdrop, including regions outside the crop.
+        previewBackdropHelper ??= createBlurHelper();
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, 0, tileWidth, tileHeight);
+        ctx.rect(mapping.dest.x, mapping.dest.y, mapping.dest.w, mapping.dest.h);
+        ctx.clip("evenodd");
+        fillBlurredCover(
+            ctx,
+            v,
+            v.videoWidth,
+            v.videoHeight,
+            0,
+            0,
+            tileWidth,
+            tileHeight,
+            previewBackdropHelper,
+            resolveRegionBlursAt(regions, ch, contentSec),
+        );
+        ctx.restore();
+    }
     previewHelper ??= createRegionBlurHelper();
     for (const region of regions) {
         if (region.channel !== ch) continue;
@@ -392,9 +423,10 @@ function paintTile(ch: Channel, ui: TileUi, regions: readonly BlurRegion[]): voi
         // preview shows the exact block layout of the output.
         let patchRect = rect;
         let grid: { cols: number; rows: number } | undefined;
-        if (region.style === "pixelate") {
+        if (region.style !== "fill") {
+            const regionGrid = region.style === "pixelate" ? snapRegionToMosaicGrid : softBlurRegionGrid;
             const snapped = mapping
-                ? snapRegionToMosaicGrid(
+                ? regionGrid(
                       rect,
                       v.videoWidth,
                       v.videoHeight,
@@ -648,14 +680,31 @@ export function toggleBlurDraw(): void {
     // The crop editor owns tile surfaces and the video transform - the two
     // editors must not share a tile. Close it before arming.
     exitCropEditIfOpen();
+    drawOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     armed = true;
     pauseBlurVideos();
-    for (const ch of ALL_CHANNELS) {
-        if (state.composition.channelOrder.indexOf(ch) < 0) continue;
+    for (const ch of state.composition.channelOrder) {
         const tile = channelTileFor(ch);
         if (tile.hidden) continue;
         const layer = document.createElement("div");
         layer.className = "blur-draw-layer";
+        layer.tabIndex = 0;
+        layer.setAttribute("role", "button");
+        const trip = activeTrip();
+        const channelName = trip ? ` · ${channelDisplayLabel(ch, trip)}` : "";
+        layer.setAttribute("aria-label", `${t("export.blur.add")}${channelName}`);
+        layer.addEventListener("keydown", (event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            event.stopPropagation();
+            pauseBlurVideos();
+            const frame = channelPresentedFrame(ch, true);
+            if (!frame) return;
+            const bounds = layer.getBoundingClientRect();
+            const x = bounds.left + bounds.width / 2;
+            const y = bounds.top + bounds.height / 2;
+            finishDraw(ch, layer, x, y, x, y, frame);
+        });
         const hint = document.createElement("div");
         hint.className = "blur-draw-hint";
         hint.textContent = t("export.blur.drawHint");
@@ -665,13 +714,19 @@ export function toggleBlurDraw(): void {
         drawLayerEls.push(layer);
     }
     notifyExportStateChanged();
+    const firstLayer = drawLayerEls[0];
+    firstLayer?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
+    firstLayer?.focus({ preventScroll: true });
 }
 
 function disarmDraw(): void {
     if (!armed) return;
     armed = false;
+    const hadDrawFocus = drawLayerEls.some((el) => el.contains(document.activeElement));
     for (const el of drawLayerEls) el.remove();
     drawLayerEls = [];
+    if (hadDrawFocus && drawOpener?.isConnected) drawOpener.focus({ preventScroll: true });
+    drawOpener = null;
     notifyExportStateChanged();
 }
 
@@ -715,7 +770,8 @@ function attachDrawDrag(ch: Channel, layer: HTMLDivElement): void {
         onEnd: (e) => {
             marquee?.remove();
             marquee = null;
-            if (frame) finishDraw(ch, layer, sx, sy, e.clientX, e.clientY, frame);
+            if (frame && e.type === "pointerup") finishDraw(ch, layer, sx, sy, e.clientX, e.clientY, frame);
+            frame = null;
         },
     });
 }
@@ -729,6 +785,7 @@ function finishDraw(
     y1: number,
     frame: ChannelPresentedFrame,
 ): void {
+    if (!armed || !layer.isConnected) return;
     if (!blurEditorActive() || !samePresentedFrame(frame, channelPresentedFrame(ch, true))) {
         disarmDraw();
         return;
@@ -785,4 +842,7 @@ function finishDraw(
     // and keeps the stale "Original (stream copy)" label until the next edit.
     addBlurRegion(region);
     disarmDraw();
+    requestAnimationFrame(() => {
+        if (blurEditorActive()) tileUis.get(ch)?.boxes.get(region.id)?.focus({ preventScroll: true });
+    });
 }

@@ -1336,6 +1336,11 @@ body.export-mode .video-grid.pip-overlay-mode .video-tile {
     background: rgba(0, 0, 0, 0.2);
 }
 
+.blur-draw-layer:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: -3px;
+}
+
 .blur-draw-hint {
     position: absolute;
     top: 8px;
@@ -1350,6 +1355,10 @@ body.export-mode .video-grid.pip-overlay-mode .video-tile {
     pointer-events: none;
     white-space: normal;
     text-align: center;
+}
+
+.video-tile.pip-inset .blur-draw-hint {
+    display: none;
 }
 
 /* Panel bits */
@@ -1394,6 +1403,16 @@ body.export-mode .video-grid.pip-overlay-mode .video-tile {
     margin-top: 8px;
 }
 
+.export-panel__blur-style-row > label {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.export-panel__blur-style-select {
+    flex: 1;
+    min-width: 0;
+}
+
 /* display:flex would defeat the [hidden] attribute (it maps to display:none
    only at UA-default specificity) - restate it. */
 .export-panel__blur-style-row[hidden] {
@@ -1425,12 +1444,15 @@ body.export-mode .video-grid.pip-overlay-mode .video-tile {
 
 .export-panel__blur-row-head {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 6px;
 }
 
 .export-panel__blur-row-name {
-    flex: 0 0 auto;
+    flex: 1 1 140px;
+    min-width: 0;
+    overflow-wrap: anywhere;
     font-weight: 600;
 }
 
@@ -1457,7 +1479,8 @@ body.export-mode .video-grid.pip-overlay-mode .video-tile {
 /* Doubles as the "jump to zone start" control - a button reset styled as the
    muted range text, right-aligned so the delete glyph sits at the row's edge. */
 .export-panel__blur-row-range {
-    flex: 1 1 auto;
+    flex: 0 0 auto;
+    margin-left: auto;
     text-align: right;
     color: var(--fg-dim);
     /* nowrap: without it "10:28-11:15" line-breaks at the hyphen when squeezed */
@@ -1509,7 +1532,7 @@ body.export-mode .video-grid.pip-overlay-mode .video-tile {
 }
 
 .export-panel__blur-row-btn {
-    flex: 0 0 auto;
+    flex: 1 1 auto;
     min-width: 26px;
     padding: 2px 6px;
 }
