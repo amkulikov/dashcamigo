@@ -811,6 +811,7 @@ export const plDict = {
     "export.progress.etaUnknown": "szacowanie...",
     "export.progress.bytes": "zapisano {bytes}",
     "export.error.generic": "Coś poszło nie tak i zapis został przerwany. Spróbuj ponownie.",
+    "export.error.incompatibleVideo": "Te nagrania mają różne ustawienia wideo. Zapisz klipy osobno lub wybierz niższą jakość eksportu.",
     "export.error.cannotEncodeResolution": "To urządzenie nie może zapisać wideo w tej rozdzielczości. Wybierz niższą rozdzielczość i spróbuj ponownie.",
     "export.error.sourceNotPlayable": "Ta przeglądarka nie odtworzy tego wideo, więc nie da się go tu zapisać ze zmianami.",
     "export.error.sourceNotPlayable.asIs": "Aby zapisać wideo bez zmian, wyłącz opcje edycji i wybierz jakość „Oryginał”.",

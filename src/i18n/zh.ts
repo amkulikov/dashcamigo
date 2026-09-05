@@ -810,6 +810,7 @@ export const zhDict = {
     "export.progress.etaUnknown": "估算中...",
     "export.progress.bytes": "已写入 {bytes}",
     "export.error.generic": "出现问题，导出已停止。请重试。",
+    "export.error.incompatibleVideo": "这些录像的视频设置不同。请分别保存片段，或降低导出画质。",
     "export.error.cannotEncodeResolution": "此设备无法以该分辨率保存视频。请降低分辨率后重试。",
     "export.error.sourceNotPlayable": "此浏览器无法播放这段视频，因此也无法在这里编辑后保存。",
     "export.error.sourceNotPlayable.asIs": "如需保持原样保存，请关闭编辑选项，并选择“原始”画质。",

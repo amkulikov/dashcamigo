@@ -816,6 +816,7 @@ export const ruDict = {
     "export.progress.etaUnknown": "оценка...",
     "export.progress.bytes": "записано {bytes}",
     "export.error.generic": "Что-то пошло не так, и сохранение прервалось. Попробуй ещё раз.",
+    "export.error.incompatibleVideo": "У записей разные настройки видео. Сохрани клипы отдельно или выбери качество ниже исходного.",
     "export.error.cannotEncodeResolution": "Это устройство не может сохранить видео в таком разрешении. Выбери разрешение поменьше и попробуй снова.",
     "export.error.sourceNotPlayable": "Браузер не воспроизводит это видео, поэтому сохранить его с изменениями здесь не получится.",
     "export.error.sourceNotPlayable.asIs": "Чтобы сохранить без изменений, отключи редактирование и выбери качество «Исходное».",

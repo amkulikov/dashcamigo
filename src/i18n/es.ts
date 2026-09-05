@@ -813,6 +813,7 @@ export const esDict = {
     "export.progress.etaUnknown": "estimando...",
     "export.progress.bytes": "escrito {bytes}",
     "export.error.generic": "Algo salió mal y la exportación se detuvo. Inténtalo de nuevo.",
+    "export.error.incompatibleVideo": "Estas grabaciones tienen distintos ajustes de vídeo. Guarda los clips por separado o elige una calidad de exportación más baja.",
     "export.error.cannotEncodeResolution": "Este dispositivo no puede guardar el vídeo en esta resolución. Elige una resolución más baja e inténtalo de nuevo.",
     "export.error.sourceNotPlayable": "Este navegador no puede reproducir este vídeo, así que aquí no se puede guardar con cambios.",
     "export.error.sourceNotPlayable.asIs": "Para guardarlo sin cambios, desactiva las opciones de edición y elige la calidad «Original».",

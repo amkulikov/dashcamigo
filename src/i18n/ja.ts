@@ -823,6 +823,7 @@ export const jaDict = {
     "export.progress.etaUnknown": "推定中…",
     "export.progress.bytes": "書き込み {bytes}",
     "export.error.generic": "問題が発生し、書き出しが中断されました。もう一度お試しください。",
+    "export.error.incompatibleVideo": "録画ごとに動画の設定が異なります。クリップを個別に保存するか、書き出し画質を下げてください。",
     "export.error.cannotEncodeResolution": "この端末ではこの解像度で動画を保存できません。解像度を下げて、もう一度お試しください。",
     "export.error.sourceNotPlayable": "このブラウザではこの動画を再生できないため、ここでは編集を加えて保存できません。",
     "export.error.sourceNotPlayable.asIs": "変更せずに保存するには、編集オプションをオフにして「元の画質」を選んでください。",

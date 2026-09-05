@@ -813,6 +813,7 @@ export const ptDict = {
     "export.progress.etaUnknown": "estimando...",
     "export.progress.bytes": "gravado {bytes}",
     "export.error.generic": "Algo deu errado e a exportação foi interrompida. Tente novamente.",
+    "export.error.incompatibleVideo": "Estas gravações usam configurações de vídeo diferentes. Salve os clipes separadamente ou escolha uma qualidade de exportação mais baixa.",
     "export.error.cannotEncodeResolution": "Este dispositivo não consegue salvar vídeo nesta resolução. Escolha uma resolução menor e tente novamente.",
     "export.error.sourceNotPlayable": "Este navegador não consegue reproduzir este vídeo, então aqui não dá para salvá-lo com alterações.",
     "export.error.sourceNotPlayable.asIs": "Para salvar sem alterações, desative as opções de edição e escolha a qualidade “Original”.",

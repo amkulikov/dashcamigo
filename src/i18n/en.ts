@@ -811,6 +811,7 @@ export const enDict = {
     "export.progress.etaUnknown": "estimating...",
     "export.progress.bytes": "wrote {bytes}",
     "export.error.generic": "Something went wrong and the export stopped — try again.",
+    "export.error.incompatibleVideo": "These recordings use different video settings. Save the clips separately or choose a lower export quality.",
     "export.error.cannotEncodeResolution": "This device can't save video at this resolution. Pick a lower resolution and try again.",
     "export.error.sourceNotPlayable": "This browser can't play this video, so it can't be saved with changes here.",
     "export.error.sourceNotPlayable.asIs": "To save it unchanged, turn off the editing options and choose Original quality.",

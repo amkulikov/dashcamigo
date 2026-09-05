@@ -1317,15 +1317,18 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
         //    sink tag: the source-read shapes are name/text matches, and a
         //    write failure carrying one of them would otherwise send the user
         //    to check the card when the destination is the problem.
-        const errorKey: I18nKey = isQuotaExceededError(err)
-            ? "export.error.diskFull"
-            : isAllocationFailure(err)
-              ? "export.error.tooLargeForMemory"
-              : isDestinationLostError(err)
-                ? "export.error.destinationLost"
-                : !isSinkFailure(err) && isSourceReadError(err)
-                  ? "export.error.sourceReadFailed"
-                  : "export.error.generic";
+        const errorKey: I18nKey =
+            err instanceof Error && err.name === "IncompatibleVideoConfigError"
+                ? "export.error.incompatibleVideo"
+                : isQuotaExceededError(err)
+                  ? "export.error.diskFull"
+                  : isAllocationFailure(err)
+                    ? "export.error.tooLargeForMemory"
+                    : isDestinationLostError(err)
+                      ? "export.error.destinationLost"
+                      : !isSinkFailure(err) && isSourceReadError(err)
+                        ? "export.error.sourceReadFailed"
+                        : "export.error.generic";
         hooks.onError(errorKey);
         // mediabunny's internal read-orchestrator assert during stream-copy (see
         // isMediabunnyReadAssert): an upstream-side failure class we want to COUNT

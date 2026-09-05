@@ -815,6 +815,7 @@ export const frDict = {
     "export.progress.etaUnknown": "estimation...",
     "export.progress.bytes": "écrit {bytes}",
     "export.error.generic": "Un problème est survenu et l'export s'est arrêté. Réessaie.",
+    "export.error.incompatibleVideo": "Ces enregistrements ont des réglages vidéo différents. Enregistre les clips séparément ou choisis une qualité d’export plus basse.",
     "export.error.cannotEncodeResolution": "Cet appareil ne peut pas enregistrer la vidéo à cette résolution. Choisis une résolution plus basse et réessaie.",
     "export.error.sourceNotPlayable": "Ce navigateur ne peut pas lire cette vidéo, donc impossible de l'enregistrer ici avec des modifications.",
     "export.error.sourceNotPlayable.asIs": "Pour enregistrer la vidéo sans modification, désactive les options d’édition et choisis la qualité « D’origine ».",

@@ -33,6 +33,8 @@
 
 import {
     Input,
+    BufferSource,
+    BufferTarget,
     Output,
     Mp4OutputFormat,
     StreamTarget,
@@ -42,6 +44,7 @@ import {
     EncodedPacketSink,
     type EncodedPacket,
     type AudioCodec,
+    type InputVideoTrack,
 } from "mediabunny";
 
 import { VIDEO_INPUT_FORMATS } from "./video-formats.js";
@@ -50,6 +53,8 @@ import { type AdpcmAudioReader, openAdpcmAudioAuto } from "./transcode/adpcm-aud
 import { createEncodeAudioSource, resolveEncodeAudioCodec } from "./transcode/capabilities.js";
 import { createLogger } from "./log.js";
 import { createRetryingBlobSource } from "./retrying-blob-source.js";
+import { getInputTimeOrigin } from "./media-time.js";
+import { isSourceReadError } from "./source-read-error.js";
 import { type AudioTrackFormat, sliceCandidatesForRange } from "./export-range.js";
 import { injectClipGpmf, type CapturedMoov } from "./export/gpmd-inject.js";
 import { closeWritableWithWatchdog } from "./export/writable-finalize.js";
@@ -270,156 +275,161 @@ export async function exportClip({
         formats: VIDEO_INPUT_FORMATS,
     });
 
-    const firstVideoTrack = await firstInput.getPrimaryVideoTrack();
-    if (!firstVideoTrack) {
-        firstInput.dispose();
-        // Technical error messages stay in English by Go-style convention
-        // (no period, lowercase). They surface to the user only via the
-        // generic "Error: ..." plate in export-modal, which is rare and
-        // already reads like a debug breadcrumb.
-        throw new Error(`no video track in file ${segments[0]!.file.name}`);
-    }
-    const videoCodec = await firstVideoTrack.getCodec();
-    if (!videoCodec) {
-        firstInput.dispose();
-        throw new Error(`unable to detect video codec in file ${segments[0]!.file.name}`);
-    }
-    // Preflight the decoder config before output.start(). The first video
-    // packet carries it into the moov sample entry; if it is null the muxer
-    // throws mid-export ("metadata must include a decoder configuration"),
-    // after output.start() already opened the writable - the user has committed
-    // the save dialog and gets a truncated file instead of a clean failure.
-    const firstVideoDecoderConfig = await firstVideoTrack.getDecoderConfig();
-    if (!firstVideoDecoderConfig) {
-        firstInput.dispose();
-        throw new Error(`unable to read video decoder config in file ${segments[0]!.file.name}`);
-    }
-    // Pass the display-matrix rotation to the output, otherwise clips from
-    // cameras that write rotated MP4s open sideways in OS players. mediabunny
-    // writes it into the tkhd-matrix of the output container. Taken from the
-    // first segment - rotation is consistent across all files of one camera.
-    const videoRotation = await firstVideoTrack.getRotation();
-    const videoSource = new EncodedVideoPacketSource(videoCodec);
-    output.addVideoTrack(videoSource, { rotation: videoRotation });
+    try {
+        const firstVideoTrack = await firstInput.getPrimaryVideoTrack();
+        if (!firstVideoTrack) {
+            // Technical error messages stay in English by Go-style convention
+            // (no period, lowercase). They surface to the user only via the
+            // generic "Error: ..." plate in export-modal, which is rare and
+            // already reads like a debug breadcrumb.
+            throw new Error(`no video track in file ${segments[0]!.file.name}`);
+        }
+        const videoCodec = await firstVideoTrack.getCodec();
+        if (!videoCodec) {
+            throw new Error(`unable to detect video codec in file ${segments[0]!.file.name}`);
+        }
+        // Preflight the decoder config before output.start(). The first video
+        // packet carries it into the moov sample entry; if it is null the muxer
+        // throws mid-export ("metadata must include a decoder configuration"),
+        // after output.start() already opened the writable - the user has committed
+        // the save dialog and gets a truncated file instead of a clean failure.
+        const firstVideoDecoderConfig = await firstVideoTrack.getDecoderConfig();
+        if (!firstVideoDecoderConfig) {
+            throw new Error(`unable to read video decoder config in file ${segments[0]!.file.name}`);
+        }
+        // Pass the display-matrix rotation to the output, otherwise clips from
+        // cameras that write rotated MP4s open sideways in OS players. mediabunny
+        // writes it into the tkhd-matrix of the output container. Taken from the
+        // first segment - rotation is consistent across all files of one camera.
+        const videoRotation = await firstVideoTrack.getRotation();
+        await assertVideoCompatibility(
+            segments.slice(1).map((seg) => seg.file),
+            firstVideoTrack,
+            firstVideoDecoderConfig,
+            signal,
+        );
+        const videoSource = new EncodedVideoPacketSource(videoCodec);
+        output.addVideoTrack(videoSource, { rotation: videoRotation });
 
-    let audioSource: EncodedAudioPacketSource | null = null;
-    let audioCodec: AudioCodec | null = null;
-    let audioDroppedHeterogeneous = false;
-    // IMA-ADPCM path: mediabunny cannot read this codec, so we decode it to
-    // PCM-s16 ourselves and feed an AudioSampleSource instead of stream-copying.
-    let adpcmSource: AudioSampleSource | null = null;
-    let adpcmReader: AdpcmAudioReader | null = null;
-    if (withAudio) {
-        // A multi-file range may splice clips with different audio formats (e.g.
-        // an original mono-16k recording next to a 48k-stereo re-export dropped
-        // back into the same folder). Stream-copy muxes every packet under the
-        // first segment's decoder config, so a later format would play as
-        // corruption - drop audio and let the caller warn instead. Single-file
-        // ranges cannot be heterogeneous, so skip the probe (saves N header reads).
-        if (segments.length > 1) {
-            // Reuse firstInput (already open for video codec detection) for the
-            // probe's first file - one moov read instead of two.
-            const { uniform } = await probeAudioUniformity(
+        let audioSource: EncodedAudioPacketSource | null = null;
+        let audioCodec: AudioCodec | null = null;
+        let audioDroppedHeterogeneous = false;
+        // IMA-ADPCM path: mediabunny cannot read this codec, so we decode it to
+        // PCM-s16 ourselves and feed an AudioSampleSource instead of stream-copying.
+        let adpcmSource: AudioSampleSource | null = null;
+        let adpcmReader: AdpcmAudioReader | null = null;
+        let adpcmFile: File | null = null;
+        let audioDecoderConfig: AudioDecoderConfig | null = null;
+        if (withAudio) {
+            // One sample entry cannot describe incompatible audio. Files without
+            // audio are allowed, including before the first audio-bearing file.
+            const { uniform, firstFile } = await probeAudioUniformity(
                 segments.map((s) => s.file),
-                {
-                    reuseFirstInput: firstInput,
-                },
+                { reuseFirstInput: firstInput, signal },
             );
             if (!uniform) {
                 audioDroppedHeterogeneous = true;
                 log.warn("mixed audio formats across segments, exporting without audio");
             }
-        }
-        const firstAudioTrack = audioDroppedHeterogeneous ? null : await firstInput.getPrimaryAudioTrack();
-        if (firstAudioTrack) {
-            audioCodec = await firstAudioTrack.getCodec();
-            // Same preflight as video, but a null audio decoder config is a
-            // benign "export without audio" rather than a hard failure: decide
-            // the audio track up front so a missing config never reaches the
-            // muxer on the first audio packet (which would throw mid-export).
-            const firstAudioDecoderConfig = audioCodec ? await firstAudioTrack.getDecoderConfig() : null;
-            if (audioCodec && firstAudioDecoderConfig) {
-                audioSource = new EncodedAudioPacketSource(audioCodec);
-                output.addAudioTrack(audioSource);
-            } else if (audioCodec) {
-                log.warn("audio track present but no decoder config, exporting without audio", {
-                    file: segments[0]!.file.name,
-                });
-                audioCodec = null;
-            } else {
-                // getCodec() returned null: mediabunny does not recognise the
-                // codec. The known case is Mio/Navman IMA ADPCM in a QuickTime
-                // `ms ` entry - we decode it ourselves. Prefer encoding to AAC
-                // (else Opus): the alternative, lossless pcm-s16, muxes as `ipcm`
-                // in an MP4 (mediabunny's non-QuickTime PCM fourcc), which Apple
-                // players / QuickTime do not play - so a stream-copy export would
-                // produce a file that fails to open "in any player", the exact
-                // thing the user wants. AAC is small and universal; the source is
-                // 4-bit ADPCM so the re-encode is transparent. pcm-s16 stays only
-                // as the no-encoder fallback (Safari < 26 has no AudioEncoder),
-                // where lossless-but-niche still beats silent. Any other unknown
-                // codec falls through to a no-audio export.
-                const reader = await openAdpcmAudioAuto(segments[0]!.file);
-                if (reader) {
-                    adpcmReader = reader;
-                    // Encode to AAC/Opus where the browser has an encoder; the
-                    // shared factory pins the exact 48k/stereo config the probe
-                    // checked. Note: like the re-encode pipeline's ADPCM path, an
-                    // encoder that throws mid-export (rare: probe passed but encode
-                    // fails) aborts the export rather than degrading to silent -
-                    // accepted as parity with feedSegmentAudioAdpcm, not a per-path
-                    // special case. pcm-s16 only when there is no encoder at all.
-                    const encodeCodec = await resolveEncodeAudioCodec();
-                    adpcmSource = encodeCodec
-                        ? createEncodeAudioSource(encodeCodec)
-                        : new AudioSampleSource({ codec: "pcm-s16" });
-                    output.addAudioTrack(adpcmSource);
-                    log.info("audio is ima adpcm, transcoding", {
-                        outputCodec: encodeCodec ?? "pcm-s16",
-                        channels: reader.channels,
-                        sampleRate: reader.sampleRate,
-                    });
-                } else {
-                    log.warn("unsupported audio codec, exporting without audio", {
-                        file: segments[0]!.file.name,
-                    });
+            const audioInput =
+                firstFile && firstFile !== segments[0]!.file
+                    ? new Input({ source: createRetryingBlobSource(firstFile, signal), formats: VIDEO_INPUT_FORMATS })
+                    : firstInput;
+            try {
+                const firstAudioTrack = audioDroppedHeterogeneous ? null : await audioInput.getPrimaryAudioTrack();
+                if (firstAudioTrack) {
+                    audioCodec = await firstAudioTrack.getCodec();
+                    // Same preflight as video, but a null audio decoder config is a
+                    // benign "export without audio" rather than a hard failure: decide
+                    // the audio track up front so a missing config never reaches the
+                    // muxer on the first audio packet (which would throw mid-export).
+                    const firstAudioDecoderConfig = audioCodec ? await firstAudioTrack.getDecoderConfig() : null;
+                    audioDecoderConfig = firstAudioDecoderConfig;
+                    if (audioCodec && firstAudioDecoderConfig) {
+                        audioSource = new EncodedAudioPacketSource(audioCodec);
+                        output.addAudioTrack(audioSource);
+                    } else if (audioCodec) {
+                        log.warn("audio track present but no decoder config, exporting without audio", {
+                            file: segments[0]!.file.name,
+                        });
+                        audioCodec = null;
+                    } else {
+                        // getCodec() returned null: mediabunny does not recognise the
+                        // codec. The known case is Mio/Navman IMA ADPCM in a QuickTime
+                        // `ms ` entry - we decode it ourselves. Prefer encoding to AAC
+                        // (else Opus): the alternative, lossless pcm-s16, muxes as `ipcm`
+                        // in an MP4 (mediabunny's non-QuickTime PCM fourcc), which Apple
+                        // players / QuickTime do not play - so a stream-copy export would
+                        // produce a file that fails to open "in any player", the exact
+                        // thing the user wants. AAC is small and universal; the source is
+                        // 4-bit ADPCM so the re-encode is transparent. pcm-s16 stays only
+                        // as the no-encoder fallback (Safari < 26 has no AudioEncoder),
+                        // where lossless-but-niche still beats silent. Any other unknown
+                        // codec falls through to a no-audio export.
+                        const reader = firstFile ? await openAdpcmAudioAuto(firstFile) : null;
+                        if (reader) {
+                            adpcmReader = reader;
+                            adpcmFile = firstFile;
+                            // Encode to AAC/Opus where the browser has an encoder; the
+                            // shared factory pins the exact 48k/stereo config the probe
+                            // checked. Note: like the re-encode pipeline's ADPCM path, an
+                            // encoder that throws mid-export (rare: probe passed but encode
+                            // fails) aborts the export rather than degrading to silent -
+                            // accepted as parity with feedSegmentAudioAdpcm, not a per-path
+                            // special case. pcm-s16 only when there is no encoder at all.
+                            const encodeCodec = await resolveEncodeAudioCodec();
+                            adpcmSource = encodeCodec
+                                ? createEncodeAudioSource(encodeCodec)
+                                : new AudioSampleSource({ codec: "pcm-s16" });
+                            output.addAudioTrack(adpcmSource);
+                            log.info("audio is ima adpcm, transcoding", {
+                                outputCodec: encodeCodec ?? "pcm-s16",
+                                channels: reader.channels,
+                                sampleRate: reader.sampleRate,
+                            });
+                        } else {
+                            log.warn("unsupported audio codec, exporting without audio", {
+                                file: segments[0]!.file.name,
+                            });
+                        }
+                    }
                 }
+            } finally {
+                if (audioInput !== firstInput) audioInput.dispose();
             }
         }
-    }
 
-    await output.start();
+        await output.start();
 
-    // Startup info log. Emitted after codec detection and segment calculation
-    // so the breakdown is complete. Diagnoses most export bug reports:
-    // "no audio" → audioCodec=null; "sideways video" → rotation=90/270;
-    // "longer than selected" → totalDurationSec vs output mp4;
-    // "too slow" → segmentsCount + sourceTotalBytes.
-    log.info("export started", {
-        channel,
-        videoCodec,
-        audioCodec,
-        adpcm: adpcmSource !== null,
-        withAudio,
-        rotation: videoRotation,
-        segmentsCount: segments.length,
-        startTripSec: Math.round(startTripSec * 100) / 100,
-        endTripSec: Math.round(endTripSec * 100) / 100,
-        totalDurationSec: Math.round(totalDurationSec * 100) / 100,
-        sourceTotalBytes: segments.reduce((s, seg) => s + seg.file.size, 0),
-        firstFile: segments[0]!.file.name,
-    });
+        // Startup info log. Emitted after codec detection and segment calculation
+        // so the breakdown is complete. Diagnoses most export bug reports:
+        // "no audio" → audioCodec=null; "sideways video" → rotation=90/270;
+        // "longer than selected" → totalDurationSec vs output mp4;
+        // "too slow" → segmentsCount + sourceTotalBytes.
+        log.info("export started", {
+            channel,
+            videoCodec,
+            audioCodec,
+            adpcm: adpcmSource !== null,
+            withAudio,
+            rotation: videoRotation,
+            segmentsCount: segments.length,
+            startTripSec: Math.round(startTripSec * 100) / 100,
+            endTripSec: Math.round(endTripSec * 100) / 100,
+            totalDurationSec: Math.round(totalDurationSec * 100) / 100,
+            sourceTotalBytes: segments.reduce((s, seg) => s + seg.file.size, 0),
+            firstFile: segments[0]!.file.name,
+        });
 
-    // Each subsequent source file shifts timestamps forward by the sum of
-    // already-added durations to produce a continuous output timeline.
-    let videoAccumSec = 0;
-    let audioAccumSec = 0;
-    // Decoder config (avcC/hvcC payload, audio config) is submitted exactly
-    // once with the first packet - mediabunny populates the sample entry in moov.
-    let videoDecoderConfigPushed = false;
-    let audioDecoderConfigPushed = false;
+        // Each subsequent source file shifts timestamps forward by the sum of
+        // already-added durations to produce a continuous output timeline.
+        let videoAccumSec = 0;
+        let audioLastEndSec = 0;
+        // Decoder config (avcC/hvcC payload, audio config) is submitted exactly
+        // once with the first packet - mediabunny populates the sample entry in moov.
+        let videoDecoderConfigPushed = false;
+        let audioDecoderConfigPushed = false;
 
-    try {
         for (let segIdx = 0; segIdx < segments.length; segIdx++) {
             if (signal?.aborted) throw new DOMException("aborted", "AbortError");
 
@@ -436,11 +446,7 @@ export async function exportClip({
             try {
                 const v = segIdx === 0 ? firstVideoTrack : await input.getPrimaryVideoTrack();
                 if (!v) {
-                    log.warn("no video track, skipping segment", { file: seg.file.name });
-                    const skipDur = seg.endInFile - seg.startInFile;
-                    videoAccumSec += skipDur;
-                    audioAccumSec += skipDur;
-                    continue;
+                    throw new Error(`no video track in file ${seg.file.name}`);
                 }
                 const a = audioSource
                     ? segIdx === 0
@@ -448,8 +454,9 @@ export async function exportClip({
                         : await input.getPrimaryAudioTrack()
                     : null;
 
-                const videoDecCfg = await v.getDecoderConfig();
-                const audioDecCfg = a ? await a.getDecoderConfig() : null;
+                const origin = await getInputTimeOrigin(input);
+                const sourceStart = seg.startInFile + origin;
+                const sourceEnd = seg.endInFile + origin;
 
                 const videoSink = new EncodedPacketSink(v);
                 const audioSink = a ? new EncodedPacketSink(a) : null;
@@ -462,18 +469,16 @@ export async function exportClip({
                 // undecodable export head. The check parses bytes we load anyway
                 // for the copy, so it costs CPU, not IO (mediabunny's own decode
                 // sinks enable it by default).
-                const videoStartPacket = await videoSink.getKeyPacket(seg.startInFile, {
-                    verifyKeyPackets: true,
-                });
+                const videoStartPacket =
+                    (await videoSink.getKeyPacket(sourceStart, {
+                        verifyKeyPackets: true,
+                    })) ?? (await videoSink.getFirstKeyPacket({ verifyKeyPackets: true }));
                 if (!videoStartPacket) {
-                    log.warn("no keyframe in range, skipping segment", {
-                        file: seg.file.name,
-                        startInFile: seg.startInFile,
-                    });
-                    const skipDur = seg.endInFile - seg.startInFile;
-                    videoAccumSec += skipDur;
-                    audioAccumSec += skipDur;
-                    continue;
+                    throw new Error(`no decodable video packets in file ${seg.file.name}`);
+                }
+                const videoEndPacket = await lastVideoPacketInRange(videoSink, v, sourceEnd, signal);
+                if (!videoEndPacket || videoEndPacket.sequenceNumber < videoStartPacket.sequenceNumber) {
+                    throw new Error(`no video packets in selected range in file ${seg.file.name}`);
                 }
                 const videoStartShift = videoStartPacket.timestamp;
                 let videoLastEndSec = videoStartShift;
@@ -482,7 +487,7 @@ export async function exportClip({
                 let pkt: EncodedPacket | null = videoStartPacket;
                 while (pkt) {
                     if (signal?.aborted) throw new DOMException("aborted", "AbortError");
-                    if (pkt.timestamp >= seg.endInFile) break;
+                    if (pkt.sequenceNumber > videoEndPacket.sequenceNumber) break;
                     // Skip degenerate packets: some muxers (seen on Matroska
                     // re-exports) emit an empty ~4-byte access unit (a zero-length
                     // NAL) about once a second. A coded H.264/HEVC picture is always
@@ -500,10 +505,10 @@ export async function exportClip({
                     // type it copies is the verifyKeyPackets-corrected one from the
                     // getNextPacket below, so the output sync-sample table stays right.
                     const shifted = pkt.clone({ timestamp: pkt.timestamp - videoStartShift + videoAccumSec });
-                    const meta = videoDecoderConfigPushed ? undefined : { decoderConfig: videoDecCfg ?? undefined };
+                    const meta = videoDecoderConfigPushed ? undefined : { decoderConfig: firstVideoDecoderConfig };
                     await videoSource.add(shifted, meta);
                     videoDecoderConfigPushed = true;
-                    videoLastEndSec = pkt.timestamp + pkt.duration;
+                    videoLastEndSec = Math.max(videoLastEndSec, pkt.timestamp + pkt.duration);
                     videoCount++;
                     reportProgress(videoAccumSec + (videoLastEndSec - videoStartShift));
                     // Verify each packet's key/delta flag too: pkt.type above is
@@ -512,65 +517,49 @@ export async function exportClip({
                     // exported file, not just the head.
                     pkt = await videoSink.getNextPacket(pkt, { verifyKeyPackets: true });
                 }
+                if (videoCount === 0) throw new Error(`no decodable video packets in file ${seg.file.name}`);
 
                 // Align audio to the real video start (after keyframe snap)
                 // to keep AV in sync. getPacket(t) returns the packet with
                 // pts <= t (latest by presentation time).
                 let audioCount = 0;
-                let audioRangeSec = 0;
+                const videoSegDur = videoLastEndSec - videoStartShift;
                 if (adpcmSource && adpcmReader) {
-                    // IMA-ADPCM: decode this segment's range to PCM-s16 and feed
-                    // the AudioSampleSource. Align the audio to the real video
-                    // start (videoStartShift, after the keyframe snap) so AV stays
-                    // in sync; advance the output timeline by audioAccumSec.
-                    const reader = segIdx === 0 ? adpcmReader : await openAdpcmAudioAuto(seg.file);
+                    const reader = seg.file === adpcmFile ? adpcmReader : await openAdpcmAudioAuto(seg.file);
                     if (reader) {
-                        audioRangeSec = await reader.feedRange(
-                            adpcmSource,
-                            videoStartShift,
-                            seg.endInFile,
-                            audioAccumSec,
-                            signal,
-                        );
+                        await reader.feedRange(adpcmSource, videoStartShift, videoLastEndSec, videoAccumSec, signal);
                     }
                 } else if (audioSink && audioSource) {
-                    const audioStartPacket = await audioSink.getPacket(videoStartShift);
+                    const audioStartPacket =
+                        (await audioSink.getPacket(videoStartShift)) ?? (await audioSink.getFirstPacket());
                     if (audioStartPacket) {
-                        const audioStartShift = audioStartPacket.timestamp;
-                        let audioLastEndSec = audioStartShift;
                         let apkt: EncodedPacket | null = audioStartPacket;
                         while (apkt) {
                             if (signal?.aborted) throw new DOMException("aborted", "AbortError");
-                            if (apkt.timestamp >= seg.endInFile) break;
+                            if (apkt.timestamp >= videoLastEndSec) break;
+                            const timestamp = apkt.timestamp - videoStartShift + videoAccumSec;
+                            // Keep the source A/V offset; dropping a boundary frame avoids
+                            // accumulating audio-frame rounding at every file join.
+                            if (timestamp < audioLastEndSec - 1e-6) {
+                                apkt = await audioSink.getNextPacket(apkt);
+                                continue;
+                            }
                             const shifted = apkt.clone({
-                                timestamp: apkt.timestamp - audioStartShift + audioAccumSec,
+                                timestamp,
                             });
                             const meta = audioDecoderConfigPushed
                                 ? undefined
-                                : { decoderConfig: audioDecCfg ?? undefined };
+                                : { decoderConfig: audioDecoderConfig ?? undefined };
                             await audioSource.add(shifted, meta);
                             audioDecoderConfigPushed = true;
-                            audioLastEndSec = apkt.timestamp + apkt.duration;
+                            audioLastEndSec = timestamp + apkt.duration;
                             audioCount++;
                             apkt = await audioSink.getNextPacket(apkt);
                         }
-                        audioRangeSec = audioLastEndSec - audioStartShift;
                     }
                 }
 
-                const videoSegDur = videoLastEndSec - videoStartShift;
                 videoAccumSec += videoSegDur;
-                // Advance audio by its OWN measured range so the audio track stays
-                // contiguous and monotonic (mediabunny requires non-decreasing PTS
-                // per track). Anchoring it to videoSegDur instead would overlap the
-                // next file's audio backwards whenever the audio start packet sits
-                // before the video keyframe (audioRangeSec > videoSegDur) - a
-                // non-monotonic-timestamp throw. The small cross-track drift this
-                // leaves on long multi-file exports is the accepted trade-off.
-                // Fallback to videoSegDur only when the file carries no audio, so
-                // audioAccumSec still advances and the next file's audio does not
-                // land at the start of the timeline and overlap.
-                audioAccumSec += audioRangeSec > 0 ? audioRangeSec : videoSegDur;
 
                 // One log per source file, not per packet. Useful for diagnosing
                 // AV stitching issues (mismatched video/audio durations are the
@@ -586,72 +575,83 @@ export async function exportClip({
                 if (segIdx > 0) input.dispose();
             }
         }
+
+        if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+        onProgress({ stage: t("export.progress.writingHeader") });
+
+        // finalize() does three things in sequence:
+        //  1. Flushes remaining pending packets to the target.
+        //  2. Serializes the moov box (~24 B per sample - several MB for hour-long
+        //     clips) and writes it to the END of the file (fastStart: false).
+        //     onMoov fires here → savePhaseTimer starts.
+        //  3. Closes targetWritable → mp4Writable.close() → FSA commits the
+        //     temp file to its final path. Slowest part on large clips + slow disks.
+        try {
+            await output.finalize();
+        } finally {
+            stopSavePhaseTimer();
+        }
+
+        // A cancel that lands between finalize and here: the mp4 is already
+        // committed (too late to undo), but the user DID cancel - surface
+        // AbortError so the UI shows "cancelled" instead of a success view for a
+        // cancelled export.
+        if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+
+        // GPMF injection (post-process). Done AFTER finalize - mediabunny has
+        // already closed the writable and FSA committed the mp4 to disk. Re-open
+        // via handle and append the gpmd track in truncate+append mode (see
+        // gpmd-inject.ts). If withGpmf=true but mp4Handle is absent (caller bug),
+        // warn and skip rather than failing the entire export.
+        let gpmfInjected = false;
+        if (withGpmf) {
+            if (!mp4Handle) {
+                log.warn("withGpmf=true but mp4Handle not provided - skipping injection");
+            } else {
+                onProgress({ stage: t("export.progress.embeddingGps") });
+                // GPMF lives on the footage axis, matching the stream-copy video
+                // track. The range is already content-sec, so pass it through.
+                gpmfInjected = await injectClipGpmf({
+                    handle: mp4Handle,
+                    trip,
+                    clipContentStartSec: startTripSec,
+                    clipContentEndSec: endTripSec,
+                    signal,
+                    capturedMoov: capturedMoov ?? undefined,
+                });
+            }
+        }
+
+        // Final log. durationMs covers the full time from exportClip start to
+        // finalize() completion (including FSA writer.close() / save phase).
+        // Shows the "stream copy vs disk commit" split for "export is slow"
+        // reports - per-segment packet counts in the debug log narrow it further.
+        log.info("export done", {
+            durationMs: Math.round(performance.now() - exportStart),
+            outputBytes: totalBytesWritten,
+            segmentsCount: segments.length,
+            gpmfInjected,
+        });
+
+        return {
+            basename: clipBasename(trip, startTripSec, endTripSec),
+            gpmfInjected,
+            audioDroppedHeterogeneous,
+        };
+    } catch (err) {
+        // Output.cancel closes StreamTarget, which would commit an unfinished
+        // file. Discard the writable before allowing the muxer to close it.
+        try {
+            await mp4Writable.abort(err);
+        } catch {
+            /* writable already terminal */
+        }
+        await output.cancel().catch(() => {});
+        throw err;
     } finally {
         firstInput.dispose();
-    }
-
-    if (signal?.aborted) throw new DOMException("aborted", "AbortError");
-    onProgress({ stage: t("export.progress.writingHeader") });
-
-    // finalize() does three things in sequence:
-    //  1. Flushes remaining pending packets to the target.
-    //  2. Serializes the moov box (~24 B per sample - several MB for hour-long
-    //     clips) and writes it to the END of the file (fastStart: false).
-    //     onMoov fires here → savePhaseTimer starts.
-    //  3. Closes targetWritable → mp4Writable.close() → FSA commits the
-    //     temp file to its final path. Slowest part on large clips + slow disks.
-    try {
-        await output.finalize();
-    } finally {
         stopSavePhaseTimer();
     }
-
-    // A cancel that lands between finalize and here: the mp4 is already
-    // committed (too late to undo), but the user DID cancel - surface
-    // AbortError so the UI shows "cancelled" instead of a success view for a
-    // cancelled export.
-    if (signal?.aborted) throw new DOMException("aborted", "AbortError");
-
-    // GPMF injection (post-process). Done AFTER finalize - mediabunny has
-    // already closed the writable and FSA committed the mp4 to disk. Re-open
-    // via handle and append the gpmd track in truncate+append mode (see
-    // gpmd-inject.ts). If withGpmf=true but mp4Handle is absent (caller bug),
-    // warn and skip rather than failing the entire export.
-    let gpmfInjected = false;
-    if (withGpmf) {
-        if (!mp4Handle) {
-            log.warn("withGpmf=true but mp4Handle not provided - skipping injection");
-        } else {
-            onProgress({ stage: t("export.progress.embeddingGps") });
-            // GPMF lives on the footage axis, matching the stream-copy video
-            // track. The range is already content-sec, so pass it through.
-            gpmfInjected = await injectClipGpmf({
-                handle: mp4Handle,
-                trip,
-                clipContentStartSec: startTripSec,
-                clipContentEndSec: endTripSec,
-                signal,
-                capturedMoov: capturedMoov ?? undefined,
-            });
-        }
-    }
-
-    // Final log. durationMs covers the full time from exportClip start to
-    // finalize() completion (including FSA writer.close() / save phase).
-    // Shows the "stream copy vs disk commit" split for "export is slow"
-    // reports - per-segment packet counts in the debug log narrow it further.
-    log.info("export done", {
-        durationMs: Math.round(performance.now() - exportStart),
-        outputBytes: totalBytesWritten,
-        segmentsCount: segments.length,
-        gpmfInjected,
-    });
-
-    return {
-        basename: clipBasename(trip, startTripSec, endTripSec),
-        gpmfInjected,
-        audioDroppedHeterogeneous,
-    };
 }
 
 /**
@@ -662,10 +662,9 @@ export async function exportClip({
  * first file's decoder config (a later mismatch would corrupt the audio). Files
  * with no audio track are ignored - on the re-encode path they become silence.
  *
- * `format` is the shared format (from the first audio-bearing file), or null when
- * no file carries audio - the re-encode pipelines reuse it as the silence format
- * so gap-fill matches the real samples. Cheap: reads each file's header for track
- * metadata, no decode.
+ * `firstFile` identifies the first audio-bearing file, even when the range starts
+ * silently. Its `format` also defines silence samples in the re-encode pipeline.
+ * Reads track metadata without decoding.
  *
  * `opts.reuseFirstInput` lets the caller pass an already-open Input for files[0]
  * (the same one it will reuse in the export loop): the probe borrows it instead of
@@ -675,9 +674,16 @@ export async function exportClip({
  */
 export async function probeAudioUniformity(
     files: File[],
-    opts: { reuseFirstInput?: Input } = {},
-): Promise<{ uniform: boolean; format: AudioTrackFormat | null; firstHasDecoderConfig: boolean }> {
+    opts: { reuseFirstInput?: Input; signal?: AbortSignal } = {},
+): Promise<{
+    uniform: boolean;
+    format: AudioTrackFormat | null;
+    firstHasDecoderConfig: boolean;
+    firstFile: File | null;
+}> {
     let first: AudioTrackFormat | null = null;
+    let firstFile: File | null = null;
+    let firstConfig: AudioDecoderConfig | null = null;
     // For the first audio-bearing track: does it actually carry a decoder config?
     // A readable codec tag with a damaged/absent config (power-cut esds, corrupt
     // stbl) cannot mux a valid stream-copy track - the muxer throws on the first
@@ -688,12 +694,15 @@ export async function probeAudioUniformity(
     let firstHasDecoderConfig = false;
     let uniform = true;
     for (let i = 0; i < files.length; i++) {
+        opts.signal?.throwIfAborted();
         const file = files[i]!;
         // Borrow the caller's already-open Input for files[0] so its moov is read
         // once across the probe + the export loop (see reuseFirstInput above). A
         // borrowed Input is never disposed here - the caller owns its lifecycle.
         const borrowed = i === 0 ? opts.reuseFirstInput : undefined;
-        const input = borrowed ?? new Input({ source: createRetryingBlobSource(file), formats: VIDEO_INPUT_FORMATS });
+        const input =
+            borrowed ??
+            new Input({ source: createRetryingBlobSource(file, opts.signal), formats: VIDEO_INPUT_FORMATS });
         try {
             const track = await input.getPrimaryAudioTrack();
             if (!track) continue;
@@ -702,26 +711,137 @@ export async function probeAudioUniformity(
                 sampleRate: await track.getSampleRate(),
                 numberOfChannels: await track.getNumberOfChannels(),
             };
+            const config = fmt.codec ? await track.getDecoderConfig() : null;
             if (!first) {
                 first = fmt;
-                firstHasDecoderConfig = fmt.codec != null && (await track.getDecoderConfig()) != null;
+                firstFile = file;
+                firstConfig = config;
+                firstHasDecoderConfig = config != null;
             } else if (
                 fmt.codec !== first.codec ||
                 fmt.sampleRate !== first.sampleRate ||
-                fmt.numberOfChannels !== first.numberOfChannels
+                fmt.numberOfChannels !== first.numberOfChannels ||
+                config?.codec !== firstConfig?.codec ||
+                !sameDecoderDescription(config?.description, firstConfig?.description)
             ) {
                 uniform = false;
                 break;
             }
         } catch (err) {
-            // A single unreadable header must not force-drop audio for the whole
-            // range; skip this file (best effort). A real mismatch that slips
-            // through surfaces later as a loud mediabunny error, not silent
-            // corruption.
+            if (err instanceof Error && err.name === "AbortError") throw err;
+            if (isSourceReadError(err)) throw err;
+            // An unreadable format cannot safely share the first sample entry.
+            uniform = false;
             log.warn("audio format probe failed", { file: file.name, err: String(err) });
         } finally {
             if (!borrowed) input.dispose();
         }
     }
-    return { uniform, format: first, firstHasDecoderConfig };
+    return { uniform, format: first, firstHasDecoderConfig, firstFile };
+}
+
+function sameDecoderDescription(
+    a: AllowSharedBufferSource | undefined,
+    b: AllowSharedBufferSource | undefined,
+): boolean {
+    if (!a || !b) return a === b;
+    if (a.byteLength !== b.byteLength) return false;
+    const aBytes = ArrayBuffer.isView(a) ? new Uint8Array(a.buffer, a.byteOffset, a.byteLength) : new Uint8Array(a);
+    const bBytes = ArrayBuffer.isView(b) ? new Uint8Array(b.buffer, b.byteOffset, b.byteLength) : new Uint8Array(b);
+    return aBytes.every((byte, i) => byte === bBytes[i]);
+}
+
+async function assertVideoCompatibility(
+    files: File[],
+    firstTrack: InputVideoTrack,
+    first: VideoDecoderConfig,
+    signal: AbortSignal | undefined,
+): Promise<void> {
+    if (files.length === 0) return;
+    const rotation = await firstTrack.getRotation();
+    const firstDescription = await comparableVideoDescription(firstTrack, first);
+    for (const file of files) {
+        signal?.throwIfAborted();
+        const input = new Input({ source: createRetryingBlobSource(file, signal), formats: VIDEO_INPUT_FORMATS });
+        try {
+            const track = await input.getPrimaryVideoTrack();
+            const config = await track?.getDecoderConfig();
+            if (!track || !config) throw new Error(`unable to read video decoder config in file ${file.name}`);
+            if (
+                config.codec !== first.codec ||
+                config.codedWidth !== first.codedWidth ||
+                config.codedHeight !== first.codedHeight ||
+                config.displayAspectWidth !== first.displayAspectWidth ||
+                config.displayAspectHeight !== first.displayAspectHeight ||
+                config.colorSpace?.primaries !== first.colorSpace?.primaries ||
+                config.colorSpace?.transfer !== first.colorSpace?.transfer ||
+                config.colorSpace?.matrix !== first.colorSpace?.matrix ||
+                config.colorSpace?.fullRange !== first.colorSpace?.fullRange ||
+                Boolean(config.description) !== Boolean(first.description) ||
+                (await track.getRotation()) !== rotation ||
+                !sameDecoderDescription(await comparableVideoDescription(track, config), firstDescription)
+            ) {
+                const err = new Error("video formats differ across files; choose medium or low export quality");
+                err.name = "IncompatibleVideoConfigError";
+                throw err;
+            }
+        } finally {
+            input.dispose();
+        }
+    }
+}
+
+async function comparableVideoDescription(
+    track: InputVideoTrack,
+    config: VideoDecoderConfig,
+): Promise<AllowSharedBufferSource | undefined> {
+    const codec = await track.getCodec();
+    if (config.description || (codec !== "avc" && codec !== "hevc")) return config.description;
+    // Annex B leaves SPS/PPS/VPS in packets. Let the muxer construct the same
+    // decoder description it will use in the real output before comparing files.
+    const packet = await new EncodedPacketSink(track).getFirstKeyPacket({ verifyKeyPackets: true });
+    if (!packet) throw new Error("no decodable video packets");
+    const target = new BufferTarget();
+    const output = new Output({ target, format: new Mp4OutputFormat() });
+    const source = new EncodedVideoPacketSource(codec);
+    output.addVideoTrack(source);
+    try {
+        await output.start();
+        await source.add(packet, { decoderConfig: config });
+        await output.finalize();
+    } catch (err) {
+        await output.cancel().catch(() => {});
+        throw err;
+    }
+    if (!target.buffer) throw new Error("video configuration remux produced no data");
+    const input = new Input({ source: new BufferSource(target.buffer), formats: VIDEO_INPUT_FORMATS });
+    try {
+        const normalizedTrack = await input.getPrimaryVideoTrack();
+        const description = (await normalizedTrack?.getDecoderConfig())?.description;
+        if (!description) throw new Error("unable to read video decoder description");
+        return description;
+    } finally {
+        input.dispose();
+    }
+}
+
+async function lastVideoPacketInRange(
+    sink: EncodedPacketSink,
+    track: InputVideoTrack,
+    end: number,
+    signal: AbortSignal | undefined,
+): Promise<EncodedPacket | null> {
+    let last = await sink.getPacket(end - 0.5 / (await track.getTimeResolution()), { metadataOnly: true });
+    if (!last) return null;
+    // The last presentation frame may precede earlier B-frames in decode order.
+    // Include their reference packets too, even when a reference presents past
+    // the requested end. Stream-copy cannot cut those dependencies away.
+    const nextKey = await sink.getNextKeyPacket(last, { verifyKeyPackets: true });
+    let packet = await sink.getNextPacket(last, { metadataOnly: true });
+    while (packet && (!nextKey || packet.sequenceNumber < nextKey.sequenceNumber)) {
+        signal?.throwIfAborted();
+        if (packet.timestamp < end) last = packet;
+        packet = await sink.getNextPacket(packet, { metadataOnly: true });
+    }
+    return last;
 }

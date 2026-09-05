@@ -812,6 +812,7 @@ export const deDict = {
     "export.progress.etaUnknown": "wird geschätzt...",
     "export.progress.bytes": "geschrieben {bytes}",
     "export.error.generic": "Etwas ist schiefgelaufen und der Export wurde gestoppt — versuche es noch einmal.",
+    "export.error.incompatibleVideo": "Diese Aufnahmen haben unterschiedliche Videoeinstellungen. Speichere die Clips einzeln oder wähle eine niedrigere Exportqualität.",
     "export.error.cannotEncodeResolution": "Dieses Gerät kann kein Video in dieser Auflösung speichern. Wähle eine niedrigere Auflösung und versuche es erneut.",
     "export.error.sourceNotPlayable": "Dieser Browser kann dieses Video nicht abspielen, deshalb lässt es sich hier nicht mit Änderungen speichern.",
     "export.error.sourceNotPlayable.asIs": "Um das Video unverändert zu speichern, schalte die Bearbeitungsoptionen aus und wähle die Qualität „Original“.",

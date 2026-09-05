@@ -1031,6 +1031,7 @@ export type I18nKey =
     | "export.progress.etaUnknown"
     | "export.progress.bytes"
     | "export.error.generic"
+    | "export.error.incompatibleVideo"
     | "export.error.cannotEncodeResolution"
     // Source can't be decoded by this browser (canPlay=false), so any export
     // that re-encodes is impossible; export-as-is (stream-copy) still works.
