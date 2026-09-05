@@ -31,8 +31,15 @@ import { emitLifecycle } from "../perf.js";
 import type { Channel } from "../parsers/types.js";
 import { getSplitSlots, PIP_OVERLAY_CHAR_SIZE, type SplitSlotsContext } from "../transcode/compose.js";
 import { PerFileMseBackend } from "../per-file-mse.js";
-import { pickFrameChannel, frameChannels, tripAllCandidates, contentToFrame } from "../trips.js";
+import {
+    pickFrameChannel,
+    frameChannels,
+    tripAllCandidates,
+    tripCandidatesByChannel,
+    contentToFrame,
+} from "../trips.js";
 import type { TripFrame, VideoCandidate } from "../trips.js";
+import { playbackTimeForContent } from "../video-frame-time.js";
 
 const log = createLogger("player");
 
@@ -68,6 +75,7 @@ import { setDrawerOpen } from "./mobile-drawer.js";
 import { captureCurrentFrame, syncCaptureButton } from "./player-capture.js";
 import { hideLoadingOverlay, showLoadingOverlay } from "./player-loading-overlay.js";
 import { initFrameStep } from "./player-frame-step.js";
+import { channelPresentedFrame, initPlayerFrameTimes } from "./player-frame-time.js";
 import { initPlayerHotkeys } from "./player-hotkeys.js";
 import { initPlayerScrubber, updatePlayerProgressUi } from "./player-scrubber.js";
 import { syncCropPreviews } from "./player-crop.js";
@@ -168,7 +176,11 @@ function captureFrameNow(): void {
     // is actually drawn. A click-time startUtc snapshot combined with the
     // post-await seconds produced a nonsense timestamp when the user switched
     // trips during the ≤1.75 s readiness wait.
-    void captureCurrentFrame(() => activeTrip()?.startUtc ?? null, getTripCurrentTime);
+    void captureCurrentFrame(
+        () => activeTrip()?.startUtc ?? null,
+        getTripCurrentTime,
+        (channel, mediaTime) => channelPresentedFrame(channel, true, mediaTime)?.contentSec ?? null,
+    );
 }
 
 /** Whether playback was active before a src change - auto-resumes after load. */
@@ -1736,6 +1748,17 @@ export function getTripCurrentTime(): number {
     return naturalTripCurrentTime();
 }
 
+/** Seeks a mask/detector timestamp through the actual master-channel file. */
+export function seekPresentedContentTime(contentSec: number): void {
+    const trip = activeTrip();
+    if (!trip) return;
+    const destination = trip.frames[contentToFrame(trip.timeline, contentSec).index];
+    const channel = destination
+        ? (pickFrameChannel(destination, mainChannel())?.channel ?? mainChannel())
+        : mainChannel();
+    seekTripTime(playbackTimeForContent(trip.timeline, tripCandidatesByChannel(trip, channel), contentSec));
+}
+
 /** Real trip position read straight from the active <video>, ignoring any
  *  in-flight seek pin. Used to detect when a pinned seek has actually landed. */
 function naturalTripCurrentTime(): number {
@@ -1957,6 +1980,7 @@ export function syncPlayButton(): void {
  * exported below. Public-API list lives in the file header comment.
  */
 export function initPlayer(): void {
+    initPlayerFrameTimes();
     registerGpsSyncRefreshListener(() => {
         renderTrips();
         const trip = activeTrip();

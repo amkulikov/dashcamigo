@@ -35,7 +35,8 @@
 // Runs in a worker. No logging - per-frame hot path.
 
 import { loadOrt, type OrtModule, type OrtRuntime } from "./ort-runtime.js";
-import { isPlausibleStep, seedSizeCap, type SizeCap, type TrackBox } from "./track-guards.js";
+import type { TrackBox } from "./track-guards.js";
+import { TrackGeometry } from "./track-state.js";
 
 /** ort's Tensor instance type - both builds expose the same class. */
 type OrtTensor = InstanceType<OrtModule["Tensor"]>;
@@ -208,12 +209,7 @@ export class VitTrackerSession {
  *  detection pass makes one per plate/face and the Follow pass makes one. */
 export class VitTrack {
     private readonly templateWorkspace: PreprocessWorkspace;
-    private initialized = false;
-    private rectLast: TrackBox = { x: 0, y: 0, w: 0, h: 0 };
-    /** Frames since init - gates the size-ratio guard's warmup (track-guards.ts). */
-    private sinceInit = 0;
-    /** Seed-derived size ceiling for this pass - set in init(). */
-    private cap: SizeCap = { maxW: 0, maxH: 0 };
+    private geometry: TrackGeometry | null = null;
     constructor(private readonly runtime: VitTrackerRuntime) {
         // Templates differ per tracked object and persist across updates; search
         // storage is larger but transient, so it lives once on the runtime.
@@ -222,36 +218,43 @@ export class VitTrack {
 
     /** Current box (last confident position). */
     get box(): TrackBox {
-        return { ...this.rectLast };
+        if (!this.geometry) throw new Error("vittrack: box before init");
+        return this.geometry.box;
     }
 
-    /** Seeds (or RE-seeds) the track: template crop (factor 2) around the box.
-     *  Re-calling it re-anchors on a fresh box - the detection pass does this on
-     *  every detector hit to null out drift, which also re-derives the size cap
-     *  from the now-closer object and restarts the warmup. */
+    /** Seeds a new object. Continuing detector hits use reanchor so they cannot
+     *  renew the original object's total growth budget. */
     init(frame: CanvasImageSource, frameW: number, frameH: number, box: TrackBox): void {
         const { crop } = cropImage(frame, frameW, frameH, box, 2);
         preprocessInto(crop, this.templateWorkspace);
-        this.initialized = true;
-        this.rectLast = { ...box };
-        this.sinceInit = 0;
-        this.cap = seedSizeCap(box, frameW, frameH);
+        this.geometry = new TrackGeometry(box, frameW, frameH);
     }
 
-    /** Advances the tracker by one analyzed frame, `dtSec` seconds after the
-     *  previous one (used to scale the plausibility guards). Returns the tracking
-     *  score, the current box (unchanged when score < threshold OR the step was
-     *  rejected as implausible - see the header and track-guards.ts), and whether
-     *  this step was rejected. */
+    /** Refreshes a matched object's template while preserving its original
+     *  size cap and settled guards. False leaves the existing template intact. */
+    reanchor(frame: CanvasImageSource, frameW: number, frameH: number, box: TrackBox): boolean {
+        if (!this.geometry) throw new Error("vittrack: reanchor before init");
+        if (!this.geometry.reanchor(box, frameW, frameH)) return false;
+        const { crop } = cropImage(frame, frameW, frameH, box, 2);
+        preprocessInto(crop, this.templateWorkspace);
+        return true;
+    }
+
+    /** Advances by one analyzed frame, `dtSec` seconds after the previous one.
+     *  Guards accumulate time since the last accepted box. Returns the score,
+     *  the box in this frame's pixels, and whether the prediction was rejected.
+     *  Low-score and rejected predictions hold the last normalized position;
+     *  resolution changes rebase the search geometry without replacing the template. */
     async update(
         frame: CanvasImageSource,
         frameW: number,
         frameH: number,
         dtSec: number,
     ): Promise<{ box: TrackBox; score: number; rejected: boolean }> {
-        if (!this.initialized) throw new Error("vittrack: update before init");
-        this.sinceInit++;
-        const { crop, cropSz, x0, y0 } = cropImage(frame, frameW, frameH, this.rectLast, 4);
+        const geometry = this.geometry;
+        if (!geometry) throw new Error("vittrack: update before init");
+        geometry.advanceFrame(frameW, frameH, dtSec);
+        const { crop, cropSz, x0, y0 } = cropImage(frame, frameW, frameH, geometry.box, 4);
         return this.runtime.runSearch(this.templateWorkspace.tensor, crop, (outs) => {
             const conf = outs.output1!.data as Float32Array;
             const sizeMap = outs.output2!.data as Float32Array;
@@ -284,13 +287,9 @@ export class VitTrack {
                 // Confident localization, but an implausible step (teleport / balloon)
                 // means the peak landed on a distractor: reject it and keep the last
                 // good box so the next search stays anchored on the target.
-                if (isPlausibleStep(this.rectLast, cand, this.cap, frameW, frameH, this.sinceInit, dtSec)) {
-                    this.rectLast = cand;
-                } else {
-                    rejected = true;
-                }
+                rejected = !geometry.acceptCandidate(cand);
             }
-            return { box: { ...this.rectLast }, score: maxVal, rejected };
+            return { box: geometry.box, score: maxVal, rejected };
         });
     }
 }

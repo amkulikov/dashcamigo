@@ -448,9 +448,7 @@ export async function ensureDetectRegionsForExport(
             return snapshot;
         }
         // Adopt a matching running pass or start one, then await it.
-        if (!(running && running.trip === trip && running.key === params.key)) {
-            ensureDetectPassFor(trip, params, { protectForExport: true });
-        }
+        ensureDetectPassFor(trip, params, { protectForExport: true });
         const run = running;
         if (!run || run.trip !== trip || run.key !== params.key) {
             // Never turn an enabled privacy promise into an unredacted export.

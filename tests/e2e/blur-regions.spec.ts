@@ -8,6 +8,7 @@
 import {
     DESKTOP,
     SAMPLE_70MAI,
+    SAMPLE_NOGPS,
     canEncodeHighProfileH264,
     expect,
     gotoApp,
@@ -22,9 +23,9 @@ import type { Page } from "@playwright/test";
 
 /** Drags a marquee on the front tile's draw layer between two fractional
  *  points of the layer box. */
-async function drawZone(page: Page, x0: number, y0: number, x1: number, y1: number): Promise<void> {
+async function drawZone(page: Page, x0: number, y0: number, x1: number, y1: number, channel = "front"): Promise<void> {
     await page.locator(".export-panel__blur-add-btn").click();
-    const layer = page.locator('.video-tile[data-channel="front"] .blur-draw-layer');
+    const layer = page.locator(`.video-tile[data-channel="${channel}"] .blur-draw-layer`);
     await expect(layer).toBeVisible();
     const box = await layer.boundingBox();
     expect(box).not.toBeNull();
@@ -104,6 +105,84 @@ test.describe("blur regions", () => {
         await expect(page.locator(".export-panel__blur-row")).toHaveCount(0);
         await expect(page.locator('.video-tile[data-channel="front"] .blur-box')).toHaveCount(0);
         await expect(topTier).toHaveText("Original");
+    });
+
+    test("a rear-camera seed and time setters use its corrected content time", async ({ page }) => {
+        await page.locator('.top-panel__channel-chip[data-channel="rear"] input').check();
+        await page.locator('.top-panel__channel-chip[data-channel="front"] input').uncheck();
+        await expect(page.locator('.video-tile[data-channel="rear"]')).toBeVisible();
+        await page.evaluate(async () => {
+            const { state, dom } = window.__dashcamigo;
+            const trip = state.active && state.trips[state.active.trip];
+            if (!trip) throw new Error("trip unavailable");
+            // A measured lead on a long recording is metadata, independent of
+            // the short anonymized video used to exercise the UI pipeline.
+            for (const frame of trip.frames) {
+                if (frame.channels.rear) frame.channels.rear.driftLeadSec = 2;
+            }
+            const video = dom.player;
+            video.pause();
+            const shown = new Promise<void>((resolve) => video.requestVideoFrameCallback(() => resolve()));
+            video.currentTime = 1.25;
+            await shown;
+        });
+        await drawZone(page, 0.35, 0.35, 0.65, 0.65, "rear");
+        const range = page.locator(".export-panel__blur-row-range");
+        await expect(range).toHaveText("0:03-0:04");
+        await expect(page.locator('.video-tile[data-channel="rear"] .blur-box:not([hidden])')).toBeVisible();
+        await range.click();
+        await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.active?.frame)).toBe(0);
+        await expect.poll(() => page.evaluate(() => window.__dashcamigo.dom.player.currentTime)).toBeCloseTo(1, 1);
+        await page.evaluate(async () => {
+            const video = window.__dashcamigo.dom.player;
+            const shown = new Promise<void>((resolve) => video.requestVideoFrameCallback(() => resolve()));
+            video.currentTime = 0.75;
+            await shown;
+        });
+        await page.locator('.export-panel__blur-row-btn[data-action="start"]').click();
+        await expect(range).toHaveText("0:02-0:04");
+    });
+
+    test("a seek during drawing cannot pin geometry from the old frame", async ({ page }) => {
+        await page.locator(".export-panel__blur-add-btn").click();
+        const layer = page.locator('.video-tile[data-channel="front"] .blur-draw-layer');
+        const box = await layer.boundingBox();
+        expect(box).not.toBeNull();
+        const b = box!;
+        await page.mouse.move(b.x + b.width * 0.35, b.y + b.height * 0.35);
+        await page.mouse.down();
+        await page.mouse.move(b.x + b.width * 0.65, b.y + b.height * 0.65);
+        await page.evaluate(async () => {
+            const video = window.__dashcamigo.dom.player;
+            const shown = new Promise<void>((resolve) => video.requestVideoFrameCallback(() => resolve()));
+            video.currentTime = 1.25;
+            await shown;
+        });
+        await page.mouse.up();
+        await expect(page.locator(".blur-draw-layer")).toHaveCount(0);
+        await expect(page.locator(".export-panel__blur-row")).toHaveCount(0);
+    });
+
+    test("an unclassified MP4 keeps editable masks on its resolved front slot", async ({ page }) => {
+        await gotoApp(page, "en");
+        await loadTrip(page, SAMPLE_NOGPS);
+        await openExport(page);
+        expect(
+            await page.evaluate(() => {
+                const { state } = window.__dashcamigo;
+                return (
+                    state.active && state.trips[state.active.trip]?.frames[state.active.frame]?.channels.front?.channel
+                );
+            }),
+        ).toBeNull();
+        await drawZone(page, 0.35, 0.35, 0.65, 0.65);
+        await expect(page.locator(".export-panel__blur-row")).toHaveCount(1);
+        const box = page.locator('.video-tile[data-channel="front"] .blur-box:not([hidden])');
+        await expect(box).toBeVisible();
+        const before = await zoneSourceRect(page);
+        await box.focus();
+        await page.keyboard.press("ArrowRight");
+        await expect.poll(async () => (await zoneSourceRect(page)).x).toBeGreaterThan(before.x);
     });
 
     test("manual timing: setters + whole-clip shortcut", async ({ page }) => {

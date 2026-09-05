@@ -6,7 +6,7 @@
 // region (unpinned - user pins stay authoritative, replaceGeneratedKeyframes).
 
 import type { BlurRegion } from "../blur-regions.js";
-import { applyTrackResult } from "../blur-follow.js";
+import { applyTrackResult, followSeed } from "../blur-follow.js";
 import { sliceCandidatesForRange } from "../export-range.js";
 import { createLogger } from "../log.js";
 import { tripCandidatesByChannel } from "../trips.js";
@@ -129,10 +129,9 @@ export async function toggleTrackPass(trip: Trip, region: BlurRegion): Promise<T
     }
 
     const contentDur = trip.timeline.contentDurationSec;
-    const pinned = region.keyframes.filter((k) => k.pinned && k.contentSec < region.endSec);
-    const seed = pinned.length > 0 ? pinned[pinned.length - 1]! : region.keyframes[0];
+    const seed = followSeed(region);
     if (!seed) return "not-started";
-    const fromSec = Math.max(seed.contentSec, region.startSec);
+    const fromSec = Math.max(0, seed.contentSec);
     // autoEnd follows to the end of footage (the pass halts itself on loss);
     // a manual end tracks only within the user's span.
     const toSec = region.autoEnd ? contentDur : region.endSec;

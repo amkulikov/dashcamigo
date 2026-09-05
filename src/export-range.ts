@@ -42,6 +42,14 @@ export interface AudioTrackFormat {
     numberOfChannels: number;
 }
 
+/** Canonical footage-axis anchor shared by decode and displayed-frame clocks. */
+export function candidateContentStart(
+    timeline: TripTimeline,
+    candidate: Pick<VideoCandidate, "startUtc" | "driftLeadSec">,
+): number {
+    return wallToContentSec(timeline, candidate.startUtc) + (candidate.driftLeadSec ?? 0);
+}
+
 /**
  * Slices [startContentSec, endContentSec] (footage axis) into segments from the
  * given VideoCandidate list for one channel. Each segment is the portion of one
@@ -88,7 +96,7 @@ export function candidatesInRange(
         // lands in the PREVIOUS file's tail, which is where the matching content
         // actually is. Consecutive placements stay monotonic (the lead grows a
         // few ms per file), so the early-break below remains valid.
-        const fileStart = wallToContentSec(timeline, v.startUtc) + (v.driftLeadSec ?? 0);
+        const fileStart = candidateContentStart(timeline, v);
         if (endContentSec <= fileStart) break;
         if (startContentSec >= fileStart + v.durationSec) continue;
         out.push({ candidate: v, fileStart });

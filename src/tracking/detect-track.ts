@@ -5,7 +5,7 @@
 //
 //   - which detector box continues which live track (matchDetectionsToTracks),
 //   - whether an accumulated track is a real object or flicker (isTrackConfirmed),
-//   - keyframe decimation (shouldEmitKeyframe),
+//   - lossless keyframe retention (appendTrackKeyframe),
 //   - and the final span + backward/forward hold extension (finalizeTrack).
 //
 // Why this replaced detect-merge's smear/extrapolation: the old pass sampled the
@@ -119,22 +119,30 @@ export function isTrackConfirmed(state: TrackConfirmState, opts: ConfirmOptions)
     );
 }
 
-/** True when a new box is worth emitting as a keyframe: enough time passed, or it
- *  moved enough. Keeps the keyframe stream sparse without dropping real motion. */
-export function shouldEmitKeyframe(
-    lastEmit: TrackKeyframe | null,
-    contentSec: number,
-    rect: CropRect,
-    opts: { minIntervalSec: number; minMovePct: number },
-): boolean {
-    if (!lastEmit) return true;
-    if (contentSec - lastEmit.contentSec >= opts.minIntervalSec) return true;
-    return (
-        Math.abs(rect.xPct - lastEmit.rect.xPct) > opts.minMovePct ||
-        Math.abs(rect.yPct - lastEmit.rect.yPct) > opts.minMovePct ||
-        Math.abs(rect.wPct - lastEmit.rect.wPct) > opts.minMovePct ||
-        Math.abs(rect.hPct - lastEmit.rect.hPct) > opts.minMovePct
-    );
+/** Keeps every observed change. Only stationary interiors can be removed without
+ *  shifting the mask off a small target or erasing a brief reversal. */
+export function appendTrackKeyframe(keyframes: TrackKeyframe[], contentSec: number, rect: CropRect): void {
+    const last = keyframes[keyframes.length - 1];
+    if (last && contentSec < last.contentSec) throw new Error("track keyframes must be time ordered");
+    if (last?.contentSec === contentSec) {
+        last.rect = { ...rect };
+    } else {
+        keyframes.push({ contentSec, rect: { ...rect } });
+    }
+    // The current frame can still be re-anchored by the detector. Keep its
+    // predecessor so that override cannot interpolate back across a long hold.
+    const n = keyframes.length;
+    if (
+        n >= 4 &&
+        sameRect(keyframes[n - 4]!.rect, keyframes[n - 3]!.rect) &&
+        sameRect(keyframes[n - 3]!.rect, keyframes[n - 2]!.rect)
+    ) {
+        keyframes.splice(n - 3, 1);
+    }
+}
+
+function sameRect(a: CropRect, b: CropRect): boolean {
+    return a.xPct === b.xPct && a.yPct === b.yPct && a.wPct === b.wPct && a.hPct === b.hPct;
 }
 
 export interface FinalizeOptions extends ConfirmOptions {

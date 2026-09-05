@@ -7,11 +7,13 @@ import { resolveRegionBlursAt } from "../blur-regions.js";
 import { downloadBlob } from "../download.js";
 import { t } from "../i18n/index.js";
 import { createLogger } from "../log.js";
+import type { Channel } from "../parsers/types.js";
 import { createRegionBlurHelper, paintRegionBlursForView } from "../transcode/compose.js";
 import { activeEffectiveBlurRegions } from "./blur-effective.js";
 import { displayClockDate } from "../trips.js";
 import { activePlayer, effectiveMasterChannel, dom } from "./dom.js";
 import { activeCandidate, activeTrip, state } from "./state.js";
+import { videoAttachedFile } from "./player-video-src.js";
 
 const log = createLogger("player");
 
@@ -28,14 +30,18 @@ const log = createLogger("player");
  * enough for the user to switch trips, and a click-time startUtc paired with
  * the new trip's seconds produced a nonsense timestamp).
  *
- * Both passed in instead of imported so this module does not pull in the
- * rest of the playback graph.
+ * The displayed-frame clock resolves privacy geometry independently of the
+ * playhead. Callbacks keep this module out of the playback core's import graph.
  */
 export async function captureCurrentFrame(
     getTripStartUtcSec: () => number | null,
     getTripCurrentSec: () => number,
+    getFrameContentSec: (channel: Channel, mediaTime?: number) => number | null,
 ): Promise<void> {
     const video = activePlayer();
+    const sourceFile = videoAttachedFile.get(video);
+    const sourceSrc = video.src;
+    const sourceTrip = activeTrip();
     // One snapshot log per attempt so users can share "pressed S, nothing
     // downloaded" reports and the cause is immediately visible. Without it
     // early returns are silent and unreproducible.
@@ -91,6 +97,7 @@ export async function captureCurrentFrame(
     // to force a decode of the current frame and confirm via
     // requestVideoFrameCallback. Without this drawImage gives a black or
     // stale frame.
+    let mediaTime: number | undefined;
     if (typeof video.requestVideoFrameCallback === "function") {
         // Intentionally self-assign currentTime to force the throttled
         // decoder to drop the stale frame and decode the current one.
@@ -99,9 +106,13 @@ export async function captureCurrentFrame(
         const frameAck = await new Promise<"callback" | "timeout">((resolve) => {
             // 250ms timeout in case the callback doesn't fire (paused +
             // currentTime= sometimes doesn't trigger a new frame).
-            const timer = setTimeout(() => resolve("timeout"), 250);
-            video.requestVideoFrameCallback(() => {
+            const timer = setTimeout(() => {
+                video.cancelVideoFrameCallback(callbackId);
+                resolve("timeout");
+            }, 250);
+            const callbackId = video.requestVideoFrameCallback((_, metadata) => {
                 clearTimeout(timer);
+                mediaTime = metadata.mediaTime;
                 resolve("callback");
             });
         });
@@ -115,10 +126,22 @@ export async function captureCurrentFrame(
     // the stale `video` would capture a black/wrong-trip frame under a filename
     // resolved post-await for the NEW trip. Bail; capture is a manual action, the
     // user can retry on the live element.
-    if (activePlayer() !== video) {
+    if (
+        activePlayer() !== video ||
+        videoAttachedFile.get(video) !== sourceFile ||
+        video.src !== sourceSrc ||
+        activeTrip() !== sourceTrip
+    ) {
         log.warn("capture skipped: active video changed during readiness wait", ctxLog);
         return;
     }
+
+    const frameContentSec = getFrameContentSec(ch, mediaTime);
+    if (video.seeking || (state.exportModeOpen && frameContentSec === null)) {
+        log.warn("capture skipped: displayed frame time unavailable", ctxLog);
+        return;
+    }
+    const filename = makeFrameFilename(getTripStartUtcSec(), getTripCurrentSec(), sourceTrip?.cameraTzSec ?? null);
 
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth;
@@ -140,8 +163,8 @@ export async function captureCurrentFrame(
     // Blur zones: in export-mode the tiles preview the redaction, so the
     // captured JPG must match - otherwise S quietly saves the very plate the
     // user just covered. Identity view: raw source frame -> same-size canvas.
-    if (state.exportModeOpen) {
-        const regionBlurs = resolveRegionBlursAt(activeEffectiveBlurRegions(), ch, getTripCurrentSec());
+    if (state.exportModeOpen && frameContentSec !== null) {
+        const regionBlurs = resolveRegionBlursAt(activeEffectiveBlurRegions(), ch, frameContentSec);
         if (regionBlurs.length > 0) {
             paintRegionBlursForView(
                 ctx,
@@ -167,10 +190,6 @@ export async function captureCurrentFrame(
         return;
     }
 
-    // Snapshot trip anchor + trip-current AFTER awaits: filename now matches
-    // the frame drawn above, not the click instant (which could be far behind
-    // on a slow readyState wait - or even a different trip).
-    const filename = makeFrameFilename(getTripStartUtcSec(), getTripCurrentSec(), activeTrip()?.cameraTzSec ?? null);
     downloadBlob(blob, filename);
     log.info("capture saved", { filename, bytes: blob.size, ...ctxLog });
 }

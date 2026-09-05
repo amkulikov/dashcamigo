@@ -1,15 +1,17 @@
 import { describe, expect, it } from "vitest";
 
+import { createBlurRegion, regionRectAt } from "../blur-regions.js";
 import type { CropRect } from "../transcode/compose.js";
 import {
+    appendTrackKeyframe,
     type ConfirmOptions,
     finalizeTrack,
     type FinalizeOptions,
     iou,
     isTrackConfirmed,
     matchDetectionsToTracks,
-    shouldEmitKeyframe,
     type TrackAccumulator,
+    type TrackKeyframe,
 } from "./detect-track.js";
 
 function rect(xPct: number, yPct: number, wPct = 0.04, hPct = 0.02): CropRect {
@@ -76,22 +78,57 @@ describe("isTrackConfirmed", () => {
     });
 });
 
-describe("shouldEmitKeyframe", () => {
-    const opts = { minIntervalSec: 0.2, minMovePct: 0.005 };
-    it("always emits the first keyframe", () => {
-        expect(shouldEmitKeyframe(null, 1.0, rect(0.5, 0.5), opts)).toBe(true);
+function renderedRect(keyframes: TrackKeyframe[], contentSec: number): CropRect {
+    const region = createBlurRegion("front", "fill", 0, 100, 0, keyframes[0]!.rect);
+    region.keyframes = keyframes.map((keyframe) => ({ ...keyframe, pinned: false }));
+    return regionRectAt(region, contentSec)!;
+}
+
+describe("appendTrackKeyframe", () => {
+    it("covers a small plate throughout a brief lateral reversal", () => {
+        const keyframes: TrackKeyframe[] = [];
+        const samples = [
+            { contentSec: 0, rect: rect(0.5, 0.5, 0.00896, 0.00448) },
+            { contentSec: 1 / 15, rect: rect(0.504, 0.5, 0.00896, 0.00448) },
+            { contentSec: 2 / 15, rect: rect(0.5, 0.5, 0.00896, 0.00448) },
+            { contentSec: 0.2, rect: rect(0.5, 0.5, 0.00896, 0.00448) },
+        ];
+        for (const sample of samples) appendTrackKeyframe(keyframes, sample.contentSec, sample.rect);
+        for (const sample of samples) {
+            const cover = renderedRect(keyframes, sample.contentSec);
+            expect(cover.xPct, `plate position at ${sample.contentSec}`).toBeCloseTo(sample.rect.xPct);
+            expect(cover.wPct).toBeCloseTo(sample.rect.wPct);
+        }
     });
-    it("emits once the interval elapsed even without motion", () => {
-        const last = { contentSec: 1.0, rect: rect(0.5, 0.5) };
-        expect(shouldEmitKeyframe(last, 1.25, rect(0.5, 0.5), opts)).toBe(true);
+
+    it("preserves small size changes while the target approaches", () => {
+        const keyframes: TrackKeyframe[] = [];
+        appendTrackKeyframe(keyframes, 0, rect(0.5, 0.5, 0.008, 0.004));
+        appendTrackKeyframe(keyframes, 1 / 15, rect(0.499, 0.499, 0.01, 0.006));
+        appendTrackKeyframe(keyframes, 2 / 15, rect(0.5, 0.5, 0.008, 0.004));
+        const cover = renderedRect(keyframes, 1 / 15);
+        expect(cover.wPct).toBeCloseTo(0.01);
+        expect(cover.hPct).toBeCloseTo(0.006);
     });
-    it("emits on meaningful motion inside the interval", () => {
-        const last = { contentSec: 1.0, rect: rect(0.5, 0.5) };
-        expect(shouldEmitKeyframe(last, 1.05, rect(0.52, 0.5), opts)).toBe(true);
+
+    it("bounds stationary storage without starting subsequent motion early", () => {
+        const keyframes: TrackKeyframe[] = [];
+        for (let sec = 0; sec <= 60; sec++) appendTrackKeyframe(keyframes, sec, rect(0.5, 0.5));
+        expect(keyframes.length).toBeLessThanOrEqual(3);
+        appendTrackKeyframe(keyframes, 61, rect(0.6, 0.5));
+        expect(renderedRect(keyframes, 59.5).xPct).toBeCloseTo(0.5);
+        expect(renderedRect(keyframes, 60).xPct).toBeCloseTo(0.5);
+        expect(renderedRect(keyframes, 60.5).xPct).toBeCloseTo(0.55);
     });
-    it("skips a near-still keyframe inside the interval", () => {
-        const last = { contentSec: 1.0, rect: rect(0.5, 0.5) };
-        expect(shouldEmitKeyframe(last, 1.05, rect(0.5005, 0.5), opts)).toBe(false);
+
+    it("keeps the preceding hold when a detector replaces the current tracker box", () => {
+        const keyframes: TrackKeyframe[] = [];
+        for (let sec = 0; sec <= 60; sec++) appendTrackKeyframe(keyframes, sec, rect(0.5, 0.5));
+        appendTrackKeyframe(keyframes, 60, rect(0.6, 0.5));
+        expect(renderedRect(keyframes, 59).xPct).toBeCloseTo(0.5);
+        expect(renderedRect(keyframes, 59.5).xPct).toBeCloseTo(0.55);
+        expect(renderedRect(keyframes, 60).xPct).toBeCloseTo(0.6);
+        expect(keyframes.filter((keyframe) => keyframe.contentSec === 60)).toHaveLength(1);
     });
 });
 

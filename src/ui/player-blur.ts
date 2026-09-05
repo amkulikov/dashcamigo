@@ -55,9 +55,14 @@ import { exportPanelState, notifyExportStateChanged, subscribeExportState } from
 import { channelDisplayLabel } from "./format.js";
 import { exitCropEditIfOpen } from "./player-crop.js";
 import { attachPointerDrag } from "./pointer-drag.js";
-import { getTripCurrentTime } from "./player.js";
+import {
+    channelPresentedFrame,
+    samePresentedFrame,
+    subscribePlayerFrames,
+    type ChannelPresentedFrame,
+} from "./player-frame-time.js";
 import { activeTrip, state } from "./state.js";
-import { cancelTrackPassesExceptTrip } from "./blur-track.js";
+import { cancelTrackPass, cancelTrackPassesExceptTrip } from "./blur-track.js";
 import { containRect, type Rect } from "./video-geometry.js";
 
 /** Smallest region dimension as a fraction of the source frame. */
@@ -98,6 +103,7 @@ let previewRegions: readonly BlurRegion[] = [];
 let lastSeenTrip: ReturnType<typeof activeTrip> = null;
 
 export function initPlayerBlur(): void {
+    subscribePlayerFrames(schedulePaint);
     subscribeExportState(() => {
         if (!blurEditorActive()) disarmDraw();
         // Trip switch invalidates the armed draw layers (their channel
@@ -305,23 +311,31 @@ function schedulePaint(): void {
 function tick(): void {
     rafId = 0;
     if (!state.exportModeOpen || previewRegions.length === 0) return;
-    const contentSec = getTripCurrentTime();
     // Manual zones + auto-detected regions paint identically; only manual ones
     // get editor boxes (rebuildBoxes reads activeBlurRegions alone - dozens of
     // non-editable auto boxes would bury the drag handles).
     let isPlaying = false;
     for (const [ch, ui] of tileUis) {
-        paintTile(ch, ui, previewRegions, contentSec);
+        paintTile(ch, ui, previewRegions);
         if (!channelTileFor(ch).hidden && !channelPlayers[ch].paused) isPlaying = true;
     }
     if (isPlaying) schedulePaint();
 }
 
-function paintTile(ch: Channel, ui: TileUi, regions: readonly BlurRegion[], contentSec: number): void {
+function paintTile(ch: Channel, ui: TileUi, regions: readonly BlurRegion[]): void {
     const tile = channelTileFor(ch);
     // The crop editor owns this tile's surface and transform right now.
     const cropEditing = tile.classList.contains("crop-editing");
     const v = channelPlayers[ch];
+    const shownFrame = channelPresentedFrame(ch);
+    ui.boxLayer.hidden = cropEditing || !blurEditorActive() || channelPresentedFrame(ch, true) === null;
+    // Keep the old patch while a seek/source change still displays old pixels.
+    // The frame callback wakes us when new pixels have a matching timestamp.
+    if (!shownFrame) {
+        if (cropEditing || tile.hidden) ui.ctx.clearRect(0, 0, ui.canvas.width, ui.canvas.height);
+        return;
+    }
+    const contentSec = shownFrame.contentSec;
     // Repaint only when something could have changed: time moved, geometry
     // epoch bumped, or the region list was edited (epoch covers that too).
     const currentTime = v.currentTime;
@@ -355,7 +369,6 @@ function paintTile(ch: Channel, ui: TileUi, regions: readonly BlurRegion[], cont
     const ctx = ui.ctx;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, tileWidth, tileHeight);
-    ui.boxLayer.hidden = cropEditing || !blurEditorActive();
     if (cropEditing || !v || tile.hidden) return;
 
     const mapping = tileMapping(ch, tileWidth, tileHeight);
@@ -490,7 +503,12 @@ function buildRegionBox(region: BlurRegion, index: number): HTMLDivElement {
  *  resize its right/bottom edges. */
 function editBoxWithKeyboard(region: BlurRegion, event: KeyboardEvent): void {
     if (!blurEditorActive() || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
-    const current = regionRectAt(region, getTripCurrentTime());
+    event.preventDefault();
+    event.stopPropagation();
+    pauseBlurVideos();
+    const frame = channelPresentedFrame(region.channel, true);
+    if (!frame) return;
+    const current = regionRectAt(region, frame.contentSec);
     if (!current) return;
     const step = 0.005;
     const next = { ...current };
@@ -505,19 +523,24 @@ function editBoxWithKeyboard(region: BlurRegion, event: KeyboardEvent): void {
         if (event.key === "ArrowUp") next.yPct = Math.max(0, next.yPct - step);
         if (event.key === "ArrowDown") next.yPct = Math.min(1 - next.hPct, next.yPct + step);
     }
-    event.preventDefault();
-    event.stopPropagation();
-    if (dom.player && !dom.player.paused) dom.player.pause();
-    commitRect(region, next);
+    commitRect(region, next, frame);
 }
 
-/** Commits the box's current rect as a pinned keyframe at the playhead. */
-function commitRect(region: BlurRegion, rect: CropRect): void {
+function pauseBlurVideos(): void {
+    for (const ch of ALL_CHANNELS) {
+        const video = channelPlayers[ch];
+        if (!video.paused) video.pause();
+    }
+}
+
+/** Commits geometry only to the displayed frame where editing began. */
+function commitRect(region: BlurRegion, rect: CropRect, frame: ChannelPresentedFrame): void {
     // Save can lock the form while a keyboard/pointer gesture is already in
     // flight. The export has its own snapshot; stop the editor too so a late
     // pointerup does not create a zone that appears to belong to that run.
-    if (!blurEditorActive()) return;
-    upsertKeyframe(region, getTripCurrentTime(), rect, true);
+    if (!blurEditorActive() || !samePresentedFrame(frame, channelPresentedFrame(region.channel, true))) return;
+    cancelTrackPass(region.id);
+    upsertKeyframe(region, frame.contentSec, rect, true);
     geometryEpoch++;
     notifyBlurRegionsChanged();
 }
@@ -526,6 +549,7 @@ function attachBoxMoveDrag(region: BlurRegion, el: HTMLDivElement): void {
     let startX = 0;
     let startY = 0;
     let base: CropRect | null = null;
+    let frame: ChannelPresentedFrame | null = null;
     // The synthetic click after a drag would bubble to the tile and trigger
     // its click behavior (audio-channel swap on non-master tiles).
     el.addEventListener("click", (e) => e.stopPropagation());
@@ -534,8 +558,10 @@ function attachBoxMoveDrag(region: BlurRegion, el: HTMLDivElement): void {
             if (!blurEditorActive()) return false;
             if ((e.target as HTMLElement)?.classList.contains("blur-box-handle")) return false;
             // Editing a box on moving video is chaos - hold the frame.
-            if (dom.player && !dom.player.paused) dom.player.pause();
-            base = regionRectAt(region, getTripCurrentTime());
+            pauseBlurVideos();
+            frame = channelPresentedFrame(region.channel, true);
+            if (!frame) return false;
+            base = regionRectAt(region, frame.contentSec);
             if (!base) return false;
             startX = e.clientX;
             startY = e.clientY;
@@ -544,10 +570,10 @@ function attachBoxMoveDrag(region: BlurRegion, el: HTMLDivElement): void {
             return true;
         },
         onMove: (e) => {
-            if (!base) return;
+            if (!base || !frame) return;
             // Space/K can resume playback mid-drag; a moving playhead would
             // smear a keyframe trail. Hold the frame for the whole gesture.
-            if (dom.player && !dom.player.paused) dom.player.pause();
+            pauseBlurVideos();
             const m = tileMapping(region.channel);
             if (!m || m.dest.w <= 0) return;
             // Pointer delta in tile px -> normalized source delta through the view.
@@ -555,26 +581,29 @@ function attachBoxMoveDrag(region: BlurRegion, el: HTMLDivElement): void {
             const dy = ((e.clientY - startY) / m.dest.h) * m.view.hPct;
             const xPct = Math.max(0, Math.min(1 - base.wPct, base.xPct + dx));
             const yPct = Math.max(0, Math.min(1 - base.hPct, base.yPct + dy));
-            commitRect(region, { ...base, xPct, yPct });
+            commitRect(region, { ...base, xPct, yPct }, frame);
         },
     });
 }
 
 function attachBoxHandleDrag(region: BlurRegion, handle: HTMLElement, corner: "tl" | "tr" | "bl" | "br"): void {
     let base: CropRect | null = null;
+    let frame: ChannelPresentedFrame | null = null;
     attachPointerDrag(handle, {
         onStart: (e) => {
             if (!blurEditorActive()) return false;
-            if (dom.player && !dom.player.paused) dom.player.pause();
-            base = regionRectAt(region, getTripCurrentTime());
+            pauseBlurVideos();
+            frame = channelPresentedFrame(region.channel, true);
+            if (!frame) return false;
+            base = regionRectAt(region, frame.contentSec);
             if (!base) return false;
             e.preventDefault();
             e.stopPropagation();
             return true;
         },
         onMove: (e) => {
-            if (!base) return;
-            if (dom.player && !dom.player.paused) dom.player.pause();
+            if (!base || !frame) return;
+            pauseBlurVideos();
             const ch = region.channel;
             const tile = channelTileFor(ch);
             const tileRect = tile.getBoundingClientRect();
@@ -595,7 +624,7 @@ function attachBoxHandleDrag(region: BlurRegion, handle: HTMLElement, corner: "t
             } else {
                 hPct = Math.max(MIN_REGION, p.y - yPct);
             }
-            commitRect(region, { xPct, yPct, wPct, hPct });
+            commitRect(region, { xPct, yPct, wPct, hPct }, frame);
         },
     });
 }
@@ -620,7 +649,7 @@ export function toggleBlurDraw(): void {
     // editors must not share a tile. Close it before arming.
     exitCropEditIfOpen();
     armed = true;
-    if (dom.player && !dom.player.paused) dom.player.pause();
+    pauseBlurVideos();
     for (const ch of ALL_CHANNELS) {
         if (state.composition.channelOrder.indexOf(ch) < 0) continue;
         const tile = channelTileFor(ch);
@@ -650,11 +679,15 @@ function attachDrawDrag(ch: Channel, layer: HTMLDivElement): void {
     let sx = 0;
     let sy = 0;
     let marquee: HTMLDivElement | null = null;
+    let frame: ChannelPresentedFrame | null = null;
     // Post-drag synthetic click must not reach the tile (audio swap / pip).
     layer.addEventListener("click", (e) => e.stopPropagation());
     attachPointerDrag(layer, {
         onStart: (e) => {
             if (!blurEditorActive()) return false;
+            pauseBlurVideos();
+            frame = channelPresentedFrame(ch, true);
+            if (!frame) return false;
             sx = e.clientX;
             sy = e.clientY;
             marquee = document.createElement("div");
@@ -669,6 +702,7 @@ function attachDrawDrag(ch: Channel, layer: HTMLDivElement): void {
         },
         onMove: (e) => {
             if (!marquee) return;
+            pauseBlurVideos();
             const r = layer.getBoundingClientRect();
             const x = Math.min(sx, e.clientX) - r.left;
             const y = Math.min(sy, e.clientY) - r.top;
@@ -681,13 +715,21 @@ function attachDrawDrag(ch: Channel, layer: HTMLDivElement): void {
         onEnd: (e) => {
             marquee?.remove();
             marquee = null;
-            finishDraw(ch, layer, sx, sy, e.clientX, e.clientY);
+            if (frame) finishDraw(ch, layer, sx, sy, e.clientX, e.clientY, frame);
         },
     });
 }
 
-function finishDraw(ch: Channel, layer: HTMLDivElement, x0: number, y0: number, x1: number, y1: number): void {
-    if (!blurEditorActive()) {
+function finishDraw(
+    ch: Channel,
+    layer: HTMLDivElement,
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+    frame: ChannelPresentedFrame,
+): void {
+    if (!blurEditorActive() || !samePresentedFrame(frame, channelPresentedFrame(ch, true))) {
         disarmDraw();
         return;
     }
@@ -730,16 +772,14 @@ function finishDraw(ch: Channel, layer: HTMLDivElement, x0: number, y0: number, 
             hPct: Math.max(MIN_REGION, b.y - a.y),
         };
     }
-    const now = getTripCurrentTime();
+    const now = frame.contentSec;
     const dur = trip.timeline.contentDurationSec;
-    // Start one frame BEFORE the playhead (the displayed frame's timestamp is
-    // <= currentTime - see ZONE_START_PLAYHEAD_BACKOFF_SEC), and guarantee a
-    // minimum span when the playhead sits at the trip end, where
-    // [now, now+span] would collapse to zero exported frames.
+    // Retain the conservative back-off for engines without presentation PTS,
+    // and keep the minimum span when drawing near the trip end.
     let startSec = Math.max(0, Math.min(now, dur) - ZONE_START_PLAYHEAD_BACKOFF_SEC);
     const endSec = Math.min(dur, Math.max(now + DEFAULT_ZONE_SPAN_SEC, startSec + MIN_ZONE_SPAN_SEC));
     if (endSec - startSec < MIN_ZONE_SPAN_SEC) startSec = Math.max(0, endSec - MIN_ZONE_SPAN_SEC);
-    const region = createBlurRegion(ch, exportPanelState.blurStyle, startSec, endSec, Math.min(now, endSec), rect);
+    const region = createBlurRegion(ch, exportPanelState.blurStyle, startSec, endSec, now, rect);
     // Order matters: the region must be in the store BEFORE disarmDraw's
     // export-state notify, or the quality-tier estimate recomputes without it
     // and keeps the stale "Original (stream copy)" label until the next edit.

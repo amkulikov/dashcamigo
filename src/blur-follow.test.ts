@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { applyTrackResult } from "./blur-follow.js";
-import { createBlurRegion, regionRectAt } from "./blur-regions.js";
+import { applyTrackResult, followSeed } from "./blur-follow.js";
+import { createBlurRegion, regionRectAt, upsertKeyframe } from "./blur-regions.js";
 import type { TrackResult } from "./workers/tracker-protocol.js";
 
 function region() {
@@ -22,6 +22,24 @@ function result(endReason: TrackResult["endReason"], trackedUntilSec: number): T
         ],
     };
 }
+
+describe("followSeed", () => {
+    it("tracks from the marked frame when coverage starts later", () => {
+        const value = region();
+        value.startSec = 4;
+        expect(followSeed(value)?.contentSec).toBe(2);
+        expect(followSeed(value)?.rect).toEqual(value.keyframes[0]!.rect);
+    });
+
+    it("uses the latest correction before the cover ends", () => {
+        const value = region();
+        const corrected = { xPct: 0.3, yPct: 0.2, wPct: 0.1, hPct: 0.1 };
+        upsertKeyframe(value, 3, corrected, true);
+        upsertKeyframe(value, 4, { ...corrected, xPct: 0.4 }, false);
+        upsertKeyframe(value, 6, { ...corrected, xPct: 0.6 }, true);
+        expect(followSeed(value)).toEqual({ contentSec: 3, rect: corrected });
+    });
+});
 
 describe("applyTrackResult", () => {
     it("keeps a completed Follow active through the footage end", () => {

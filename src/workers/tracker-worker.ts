@@ -1,6 +1,6 @@
 // Blur-zone auto-tracking pass: sequential reduced-resolution decode of the
 // zone's span (mediabunny CanvasSink) + vittrack inference per frame, emitting
-// decimated keyframes on the trip content axis.
+// observed keyframes on the trip content axis.
 //
 // Deliberately a DEDICATED worker, not frame-extract: that worker serializes
 // its handlers, and a multi-second pass inside its gate would block chart
@@ -15,24 +15,26 @@
 import { BlobSource, CanvasSink, Input } from "mediabunny";
 import { getInputTimeOrigin } from "../media-time.js";
 
-import { inflateRect } from "../blur-regions.js";
+import { analysisIntervalTransition } from "../tracking/analysis-interval.js";
+import { boxToRect, visibleBoxRect } from "../tracking/box-geometry.js";
 import { finalizeFollowEndReason } from "../tracking/follow-end.js";
 import { chooseAnalysisWidth } from "../tracking/analysis-resolution.js";
 import { type TileRect, tileRects } from "../tracking/detect-common.js";
+import { weakDetectionCanReanchor } from "../tracking/detection-anchor.js";
 import {
     type ConfirmOptions,
     type DetectedTrack,
     finalizeTrack,
     type FinalizeOptions,
     matchDetectionsToTracks,
-    shouldEmitKeyframe,
     type TrackKeyframe,
 } from "../tracking/detect-track.js";
-import { intervalsContain, totalIntervalSec, unionIntervals } from "../tracking/interval-set.js";
+import { type TimeInterval, totalIntervalSec, unionIntervals } from "../tracking/interval-set.js";
 import { createFaceDetector } from "../tracking/face-detector.js";
 import { type OrtRuntime } from "../tracking/ort-runtime.js";
 import { createPlateDetector } from "../tracking/plate-detector.js";
 import { boxVisibleFraction, EXIT_CONFIRM_SEC, EXIT_VISIBLE_FRACTION } from "../tracking/track-guards.js";
+import { appendTrackObservation, type PendingTrackHold, recordTrackHold } from "../tracking/track-observations.js";
 import { type VitTrack, VitTrackerSession, VITTRACK_SCORE_THRESHOLD, type TrackBox } from "../tracking/vittrack.js";
 import { clampTsGpsTrailer } from "../ts-trailer.js";
 import { VIDEO_INPUT_FORMATS } from "../video-formats.js";
@@ -68,16 +70,11 @@ const ANALYSIS_FPS = 15;
 const ANALYSIS_MIN_INTERVAL_SEC = 1 / ANALYSIS_FPS;
 /** How long the target may stay below-confidence before the pass declares it
  *  lost. Rides out a real occlusion (a pole, a sign, a passing truck, glare) and
- *  RESUMES covering the subject when it reappears - the box freezes and emits
- *  nothing meanwhile, so a true departure still ends at the last confident point,
- *  but a brief disappearance no longer trims the cover and exposes a reappearing
- *  plate (the privacy under-cover this feature prevents). Time-based, so it holds
- *  independent of ANALYSIS_FPS. */
+ *  resumes covering the subject when it reappears. The box freezes until the
+ *  last uncertain frame, then follows the recovered observation. An uncertain
+ *  Follow ending keeps the last cover through the requested tail and asks for
+ *  review. Time-based, so it holds independent of ANALYSIS_FPS. */
 const LOSS_RIDE_OUT_SEC = 3;
-/** Keyframe decimation: emit when this much time passed... */
-const EMIT_MIN_INTERVAL_SEC = 0.2;
-/** ...or any box coordinate moved this much (normalized) since the last emit. */
-const EMIT_MIN_MOVE_PCT = 0.005;
 /** Padding added to every emitted (auto-tracked) box, as a fraction of its own
  *  size. vittrack tends to under-size the target as it moves/zooms, so the raw
  *  box can clip a plate/face edge; a small margin keeps the redaction covering.
@@ -120,15 +117,6 @@ async function getDetector(kind: DetectKind, modelUrl: string, wasmDir: string):
     return detector;
 }
 
-function boxToRect(box: TrackBox, frameW: number, frameH: number): CropRect {
-    return {
-        xPct: Math.max(0, Math.min(1, box.x / frameW)),
-        yPct: Math.max(0, Math.min(1, box.y / frameH)),
-        wPct: Math.max(0, Math.min(1, box.w / frameW)),
-        hPct: Math.max(0, Math.min(1, box.h / frameH)),
-    };
-}
-
 function rectToBox(rect: CropRect, frameW: number, frameH: number): TrackBox {
     return {
         x: Math.round(rect.xPct * frameW),
@@ -136,15 +124,6 @@ function rectToBox(rect: CropRect, frameW: number, frameH: number): TrackBox {
         w: Math.max(2, Math.round(rect.wPct * frameW)),
         h: Math.max(2, Math.round(rect.hPct * frameH)),
     };
-}
-
-function rectMoved(a: CropRect, b: CropRect): boolean {
-    return (
-        Math.abs(a.xPct - b.xPct) > EMIT_MIN_MOVE_PCT ||
-        Math.abs(a.yPct - b.yPct) > EMIT_MIN_MOVE_PCT ||
-        Math.abs(a.wPct - b.wPct) > EMIT_MIN_MOVE_PCT ||
-        Math.abs(a.hPct - b.hPct) > EMIT_MIN_MOVE_PCT
-    );
 }
 
 async function runTrackPass(
@@ -157,13 +136,13 @@ async function runTrackPass(
     const span = Math.max(1e-6, req.endContentSec - req.seedContentSec);
 
     const keyframes: TrackResultKeyframe[] = [];
+    const pendingHold: PendingTrackHold = { previousSec: null, latestSec: null };
     let initialized = false;
     let lastAnalyzedSec = req.seedContentSec;
     let lossStartedSec: number | null = null;
     let exitStartedSec: number | null = null;
     let endReason: TrackResult["endReason"] = "completed";
     let lastGoodSec = req.seedContentSec;
-    let lastEmit: TrackResultKeyframe | null = null;
     let lastProgressAt = 0;
 
     outer: for (const seg of req.segments) {
@@ -207,6 +186,8 @@ async function runTrackPass(
                     vitTrack.init(frame, frame.width, frame.height, rectToBox(req.seedRect, frame.width, frame.height));
                     initialized = true;
                     lastAnalyzedSec = contentSec;
+                    lastGoodSec = Math.max(req.seedContentSec, contentSec);
+                    appendTrackObservation(keyframes, pendingHold, lastGoodSec, req.seedRect);
                     continue;
                 }
                 // Temporal subsampling: analyze at ~ANALYSIS_FPS, not every decoded
@@ -236,23 +217,21 @@ async function runTrackPass(
                     // Low confidence OR a rejected implausible step (identity
                     // switch / balloon): the box did not move. Ride out a brief
                     // occlusion; a long enough loss means the target is gone.
+                    recordTrackHold(pendingHold, contentSec);
                     lossStartedSec ??= contentSec;
                     if (contentSec - lossStartedSec >= LOSS_RIDE_OUT_SEC) {
                         endReason = "lost";
                         break outer;
                     }
                 } else {
+                    const rect = visibleBoxRect(box, frame.width, frame.height, TRACK_COVERAGE_MARGIN_PCT);
+                    if (!rect) {
+                        recordTrackHold(pendingHold, contentSec);
+                        continue;
+                    }
                     lossStartedSec = null;
                     lastGoodSec = contentSec;
-                    const rect = inflateRect(boxToRect(box, frame.width, frame.height), TRACK_COVERAGE_MARGIN_PCT);
-                    if (
-                        !lastEmit ||
-                        contentSec - lastEmit.contentSec >= EMIT_MIN_INTERVAL_SEC ||
-                        rectMoved(rect, lastEmit.rect)
-                    ) {
-                        lastEmit = { contentSec, rect };
-                        keyframes.push(lastEmit);
-                    }
+                    appendTrackObservation(keyframes, pendingHold, contentSec, rect);
                 }
             }
         } finally {
@@ -273,15 +252,6 @@ async function runTrackPass(
         analysisIntervalSec: ANALYSIS_MIN_INTERVAL_SEC,
     });
 
-    // Ensure the last confident position is pinned down even if decimation
-    // skipped it - the span tail must not extrapolate from an older keyframe.
-    if (lastEmit && lastEmit.contentSec < lastGoodSec) {
-        // lastEmit rect is the most recent EMITTED one; the truly last good
-        // rect was within EMIT_MIN_MOVE_PCT of it (else it would have been
-        // emitted), so re-stamping it at lastGoodSec is accurate enough.
-        keyframes.push({ contentSec: lastGoodSec, rect: { ...lastEmit.rect } });
-    }
-
     return {
         keyframes,
         trackedUntilSec: endReason === "completed" ? req.endContentSec : lastGoodSec,
@@ -294,10 +264,9 @@ async function runTrackPass(
 // Detector-seeded, tracker-followed, re-anchored. The detector SCANS the full
 // tile grid at a slow flat cadence (discovery); between scans a per-object
 // vittrack follows every hit frame-by-frame; each new scan re-anchors matched
-// tracks on the fresh detector box (nulling drift) and seeds fresh ones. This
-// replaced the old sparse-detector + extrapolation merge: the cover now rides
-// OBSERVED motion, not a constant-velocity guess (which drifted off the object -
-// the "flying zones" field bugs). detect-track.ts owns the pure decisions.
+// tracks on compatible detector boxes and seeds fresh ones. Track observations
+// retain motion between scans and hold the last known box through uncertainty.
+// detect-track.ts owns association, confirmation, and final span decisions.
 
 /** Discovery scan cadence, per kind - flat, no ROI/boost scheduler. One hit is
  *  enough to seed a bidirectional cover (backward hold + forward track), so
@@ -390,7 +359,9 @@ interface FrameDetector {
 interface LiveTrack {
     vit: VitTrack;
     keyframes: TrackKeyframe[];
-    lastEmit: TrackKeyframe | null;
+    pendingHold: PendingTrackHold;
+    /** A scale-budget split must not project its new box back over the old identity. */
+    startClampSec: number;
     /** Content time of this track's last tracker update (for dt). */
     lastAnalyzedSec: number;
     detHits: number;
@@ -398,28 +369,6 @@ interface LiveTrack {
     trackedGoodSec: number;
     lossStartedSec: number | null;
     exitStartedSec: number | null;
-}
-
-/** Appends (or, on a re-anchor at the same frame, overrides) a keyframe. `force`
- *  bypasses decimation - a detector box is ground truth and always lands. Keeps
- *  lastEmit pointing at the last pushed keyframe so a same-frame override mutates
- *  the array entry in place. */
-function emitKeyframe(track: LiveTrack, contentSec: number, rect: CropRect, force: boolean): void {
-    if (track.lastEmit && track.lastEmit.contentSec === contentSec) {
-        track.lastEmit.rect = rect;
-        return;
-    }
-    if (
-        force ||
-        shouldEmitKeyframe(track.lastEmit, contentSec, rect, {
-            minIntervalSec: EMIT_MIN_INTERVAL_SEC,
-            minMovePct: EMIT_MIN_MOVE_PCT,
-        })
-    ) {
-        const kf: TrackKeyframe = { contentSec, rect };
-        track.keyframes.push(kf);
-        track.lastEmit = kf;
-    }
 }
 
 async function runDetectPass(
@@ -459,6 +408,7 @@ async function runDetectPass(
     const live = new Map<DetectKind, LiveTrack[]>();
     const finished = new Map<DetectKind, DetectedTrack[]>();
     const lastScanSec = new Map<DetectKind, number>();
+    const activeIntervals = new Map<DetectKind, TimeInterval | null>();
     for (const kind of req.kinds) {
         detectors.set(
             kind,
@@ -467,6 +417,7 @@ async function runDetectPass(
         live.set(kind, []);
         finished.set(kind, []);
         lastScanSec.set(kind, Number.NEGATIVE_INFINITY);
+        activeIntervals.set(kind, null);
     }
 
     let decodedFrames = 0;
@@ -489,11 +440,15 @@ async function runDetectPass(
                 ...DETECT_CONFIRM[kind],
                 extendBackSec: DETECT_EXTEND_BACK_SEC[kind],
                 extendForwardSec: DETECT_EXTEND_FWD_SEC,
-                clampStartSec,
+                clampStartSec: Math.max(clampStartSec, track.startClampSec),
                 clampEndSec,
             } satisfies FinalizeOptions,
         );
         if (done) finished.get(kind)!.push(done);
+    };
+    const finishLive = (kind: DetectKind, bounds: TimeInterval, endSec = bounds.endSec): void => {
+        for (const track of live.get(kind)!) finish(kind, track, bounds.startSec, Math.min(bounds.endSec, endSec));
+        live.set(kind, []);
     };
 
     for (const interval of decodeIntervals) {
@@ -542,18 +497,28 @@ async function runDetectPass(
                     decodedFrames++;
                     if (intervalFrameW !== 0 && (frameW !== intervalFrameW || frameH !== intervalFrameH)) {
                         for (const kind of req.kinds) {
-                            const liveTracks = live.get(kind)!;
-                            for (const track of liveTracks) finish(kind, track, interval.startSec, interval.endSec);
-                            live.set(kind, []);
+                            const active = activeIntervals.get(kind);
+                            if (active) finishLive(kind, active, contentSec);
+                            lastScanSec.set(kind, Number.NEGATIVE_INFINITY);
                         }
                     }
                     intervalFrameW = frameW;
                     intervalFrameH = frameH;
 
                     for (const kind of req.kinds) {
-                        // A kind whose OWN intervals do not cover this frame is
-                        // skipped (its cache already holds this span's tracks).
-                        if (!intervalsContain(req.analyzeIntervalsByKind[kind] ?? [], contentSec)) continue;
+                        const {
+                            active,
+                            finished: ended,
+                            started,
+                        } = analysisIntervalTransition(
+                            activeIntervals.get(kind) ?? null,
+                            req.analyzeIntervalsByKind[kind] ?? [],
+                            contentSec,
+                        );
+                        if (ended) finishLive(kind, ended);
+                        activeIntervals.set(kind, active);
+                        if (started) lastScanSec.set(kind, Number.NEGATIVE_INFINITY);
+                        if (!active) continue;
                         const liveTracks = live.get(kind)!;
                         const stat = statsByKind[kind]!;
 
@@ -576,7 +541,7 @@ async function runDetectPass(
                             if (boxVisibleFraction(box, frameW, frameH) < EXIT_VISIBLE_FRACTION) {
                                 track.exitStartedSec ??= contentSec;
                                 if (contentSec - track.exitStartedSec >= EXIT_CONFIRM_SEC) {
-                                    finish(kind, track, interval.startSec, interval.endSec);
+                                    finish(kind, track, active.startSec, active.endSec);
                                     liveTracks.splice(i, 1);
                                     continue;
                                 }
@@ -586,20 +551,21 @@ async function runDetectPass(
                             if (rejected || score < VITTRACK_SCORE_THRESHOLD) {
                                 // Occlusion / implausible step: ride out a brief
                                 // loss, end a long one.
+                                recordTrackHold(track.pendingHold, contentSec);
                                 track.lossStartedSec ??= contentSec;
                                 if (contentSec - track.lossStartedSec >= LOSS_RIDE_OUT_SEC) {
-                                    finish(kind, track, interval.startSec, interval.endSec);
+                                    finish(kind, track, active.startSec, active.endSec);
                                     liveTracks.splice(i, 1);
                                 }
                             } else {
+                                const rect = visibleBoxRect(box, frameW, frameH, DETECT_MARGIN_PCT[kind]);
+                                if (!rect) {
+                                    recordTrackHold(track.pendingHold, contentSec);
+                                    continue;
+                                }
                                 track.lossStartedSec = null;
                                 track.trackedGoodSec += dt;
-                                emitKeyframe(
-                                    track,
-                                    contentSec,
-                                    inflateRect(boxToRect(box, frameW, frameH), DETECT_MARGIN_PCT[kind]),
-                                    false,
-                                );
+                                appendTrackObservation(track.keyframes, track.pendingHold, contentSec, rect);
                             }
                         }
 
@@ -615,24 +581,30 @@ async function runDetectPass(
                         stat.inferMs += performance.now() - t0;
                         if (detections.length === 0) continue;
 
-                        const detRects = detections.map((d) => boxToRect(d, frameW, frameH));
-                        const trackBoxes = liveTracks.map((tr) => boxToRect(tr.vit.box, frameW, frameH));
-                        const matchedTrack = matchDetectionsToTracks(detRects, trackBoxes, {
-                            minIou: DETECT_MATCH_MIN_IOU,
+                        const observations = detections.flatMap((box) => {
+                            const padded = visibleBoxRect(box, frameW, frameH, DETECT_MARGIN_PCT[kind]);
+                            return padded ? [{ box, rect: boxToRect(box, frameW, frameH), padded }] : [];
                         });
-                        for (let d = 0; d < detRects.length; d++) {
-                            const rect = detRects[d]!;
-                            const score = detections[d]!.score;
+                        const trackBoxes = liveTracks.map((tr) => boxToRect(tr.vit.box, frameW, frameH));
+                        const matchedTrack = matchDetectionsToTracks(
+                            observations.map((observation) => observation.rect),
+                            trackBoxes,
+                            {
+                                minIou: DETECT_MATCH_MIN_IOU,
+                            },
+                        );
+                        for (let d = 0; d < observations.length; d++) {
+                            const { box, padded } = observations[d]!;
+                            const score = box.score;
                             const seedable = score >= DETECT_SEED_SCORE_MIN[kind];
                             const ti = matchedTrack[d]!;
                             // Sub-floor with no live track to maintain: junk (or
                             // an object not yet worth a track) - ignore.
                             if (ti < 0 && !seedable) continue;
-                            const padded = inflateRect(rect, DETECT_MARGIN_PCT[kind]);
-                            const box = rectToBox(rect, frameW, frameH);
-                            if (ti >= 0) {
-                                const track = liveTracks[ti]!;
-                                track.vit.init(frame, frameW, frameH, box); // re-anchor: null drift
+                            const matched = ti >= 0 ? liveTracks[ti]! : null;
+                            if (matched && !seedable && !weakDetectionCanReanchor(box, matched.vit.box)) continue;
+                            if (matched?.vit.reanchor(frame, frameW, frameH, box)) {
+                                const track = matched;
                                 track.lastAnalyzedSec = contentSec;
                                 track.lossStartedSec = null;
                                 track.exitStartedSec = null;
@@ -643,14 +615,21 @@ async function runDetectPass(
                                     track.detHits++;
                                     track.bestScore = Math.max(track.bestScore, score);
                                 }
-                                emitKeyframe(track, contentSec, padded, true); // detector box wins
+                                appendTrackObservation(track.keyframes, track.pendingHold, contentSec, padded);
                             } else {
+                                // Weak evidence cannot renew an exhausted size
+                                // budget. A strong hit starts a new trajectory,
+                                // preserving genuine growth without bridging an
+                                // identity/scale change with interpolated boxes.
+                                if (!seedable) continue;
+                                if (matched) finish(kind, matched, active.startSec, contentSec);
                                 const vit = trackerSession.newTrack();
                                 vit.init(frame, frameW, frameH, box);
                                 const track: LiveTrack = {
                                     vit,
                                     keyframes: [],
-                                    lastEmit: null,
+                                    pendingHold: { previousSec: null, latestSec: null },
+                                    startClampSec: matched ? contentSec : active.startSec,
                                     lastAnalyzedSec: contentSec,
                                     detHits: 1,
                                     bestScore: score,
@@ -658,8 +637,9 @@ async function runDetectPass(
                                     lossStartedSec: null,
                                     exitStartedSec: null,
                                 };
-                                emitKeyframe(track, contentSec, padded, true);
-                                liveTracks.push(track);
+                                appendTrackObservation(track.keyframes, track.pendingHold, contentSec, padded);
+                                if (ti >= 0) liveTracks[ti] = track;
+                                else liveTracks.push(track);
                             }
                         }
                     }
@@ -674,9 +654,9 @@ async function runDetectPass(
         // independently - the accepted trade-off of the incremental cache (see
         // TrackCacheEntry in blur-detect.ts).
         for (const kind of req.kinds) {
-            const liveTracks = live.get(kind)!;
-            for (const track of liveTracks) finish(kind, track, interval.startSec, interval.endSec);
-            live.set(kind, []);
+            const active = activeIntervals.get(kind);
+            if (active) finishLive(kind, active);
+            activeIntervals.set(kind, null);
         }
         decodeDoneSec += interval.endSec - interval.startSec;
     }

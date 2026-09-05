@@ -77,7 +77,8 @@ import {
     regionHasTrackedKeyframes,
     ZONE_START_PLAYHEAD_BACKOFF_SEC,
 } from "../blur-regions.js";
-import { getTripCurrentTime, seekTripTime } from "./player.js";
+import { seekPresentedContentTime } from "./player.js";
+import { channelPresentedFrame } from "./player-frame-time.js";
 import { cancelTrackPass, subscribeTrackPasses, toggleTrackPass, trackPassOf } from "./blur-track.js";
 import {
     detectAssetGroups,
@@ -1694,7 +1695,7 @@ function syncDetectGroup(): void {
                 // Land just inside the active span: a paused video displays the
                 // frame at-or-before currentTime, so the exact boundary can
                 // otherwise show one frame before the cover appears.
-                seekTripTime(Math.min(finding.endSec, finding.startSec + 0.1));
+                seekPresentedContentTime(Math.min(finding.endSec, finding.startSec + 0.1));
             });
             el.appendChild(review);
         } else {
@@ -1872,6 +1873,7 @@ function setBlurManualTimeMode(region: BlurRegion): void {
 /** Whole-export shortcut: use the selected clip range, not the whole source
  *  trip (which made a row labelled "whole clip" show unrelated timestamps). */
 function setBlurWholeClip(region: BlurRegion, startSec: number, endSec: number): void {
+    cancelTrackPass(region.id);
     region.startSec = startSec;
     region.endSec = endSec;
     region.autoEnd = false;
@@ -1879,23 +1881,27 @@ function setBlurWholeClip(region: BlurRegion, startSec: number, endSec: number):
     notifyExportStateChanged();
 }
 
-/** Move the zone start to the playhead. Same one-frame back-off as creation (the
- *  displayed frame's timestamp is <= playhead and must stay covered); never
- *  collapses below MIN_ZONE_SPAN_SEC (a zero-span zone forces re-encode, lists a
- *  row, yet paints on ~no frames - a silent privacy hole). */
+/** Anchor to this channel's displayed frame, preserving the conservative
+ *  back-off and minimum span used by zone creation. */
 function setBlurStartHere(region: BlurRegion): void {
+    const frame = channelPresentedFrame(region.channel, true);
+    if (!frame) return;
+    cancelTrackPass(region.id);
     region.startSec = Math.min(
-        Math.max(0, getTripCurrentTime() - ZONE_START_PLAYHEAD_BACKOFF_SEC),
+        Math.max(0, frame.contentSec - ZONE_START_PLAYHEAD_BACKOFF_SEC),
         Math.max(0, region.endSec - MIN_ZONE_SPAN_SEC),
     );
     notifyBlurRegionsChanged();
     notifyExportStateChanged();
 }
 
-/** Move the zone end to the playhead (kept >= start + MIN_ZONE_SPAN_SEC). */
+/** Move the zone end to this channel's displayed frame without collapsing it. */
 function setBlurEndHere(region: BlurRegion): void {
+    const frame = channelPresentedFrame(region.channel, true);
+    if (!frame) return;
+    cancelTrackPass(region.id);
     const durationSec = activeTrip()?.timeline.contentDurationSec ?? region.endSec;
-    region.endSec = Math.min(durationSec, Math.max(getTripCurrentTime(), region.startSec + MIN_ZONE_SPAN_SEC));
+    region.endSec = Math.min(durationSec, Math.max(frame.contentSec, region.startSec + MIN_ZONE_SPAN_SEC));
     if (region.endSec - region.startSec < MIN_ZONE_SPAN_SEC) {
         region.startSec = Math.max(0, region.endSec - MIN_ZONE_SPAN_SEC);
     }
@@ -1940,7 +1946,7 @@ function renderBlurRow(region: BlurRegion, index: number): HTMLElement {
     range.textContent = `${formatTime(region.startSec)}-${formatTime(region.endSec)}`;
     range.title = t("export.blur.row.jump");
     range.setAttribute("aria-label", t("export.blur.row.jump"));
-    range.addEventListener("click", () => seekTripTime(region.startSec));
+    range.addEventListener("click", () => seekPresentedContentTime(region.startSec));
     head.appendChild(range);
 
     const del = document.createElement("button");

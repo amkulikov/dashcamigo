@@ -159,13 +159,15 @@ export function regionHasTrackedKeyframes(region: BlurRegion): boolean {
 export function inflateRect(rect: CropRect, pct: number): CropRect {
     const dx = (rect.wPct * pct) / 2;
     const dy = (rect.hPct * pct) / 2;
-    const xPct = Math.max(0, rect.xPct - dx);
-    const yPct = Math.max(0, rect.yPct - dy);
+    const xPct = Math.max(0, Math.min(1, rect.xPct - dx));
+    const yPct = Math.max(0, Math.min(1, rect.yPct - dy));
+    const right = Math.max(0, Math.min(1, rect.xPct + rect.wPct + dx));
+    const bottom = Math.max(0, Math.min(1, rect.yPct + rect.hPct + dy));
     return {
         xPct,
         yPct,
-        wPct: Math.min(1 - xPct, rect.wPct + dx * 2),
-        hPct: Math.min(1 - yPct, rect.hPct + dy * 2),
+        wPct: Math.max(0, right - xPct),
+        hPct: Math.max(0, bottom - yPct),
     };
 }
 

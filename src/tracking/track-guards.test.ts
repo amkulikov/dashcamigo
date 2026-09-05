@@ -100,6 +100,17 @@ describe("isPlausibleStep", () => {
         const cand = box(prev.x + FRAME_W * 2, prev.y, prev.w, prev.h);
         expect(isPlausibleStep(prev, cand, ROOMY_CAP, FRAME_W, FRAME_H, SETTLED, 5)).toBe(false);
     });
+
+    it("rejects non-finite and collapsed predictions even during warmup", () => {
+        for (const candidate of [
+            { ...prev, x: Number.NaN },
+            { ...prev, w: Number.POSITIVE_INFINITY },
+            { ...prev, w: 0 },
+            { ...prev, h: -1 },
+        ]) {
+            expect(isPlausibleStep(prev, candidate, ROOMY_CAP, FRAME_W, FRAME_H, 1, DT_STEP)).toBe(false);
+        }
+    });
 });
 
 describe("seedSizeCap", () => {
@@ -109,16 +120,34 @@ describe("seedSizeCap", () => {
         expect(cap.maxH).toBeCloseTo(FRAME_H * SEED_CAP_MIN_FRACTION);
     });
 
-    it("scales with a mid-size seed (typical hand-drawn plate zone)", () => {
-        const cap = seedSizeCap(box(0, 0, 20, 12), FRAME_W, FRAME_H);
-        expect(cap.maxW).toBe(200);
-        expect(cap.maxH).toBe(120);
+    it("bounds a five-percent seed before it expands beyond fifteen percent", () => {
+        const cap = seedSizeCap(box(0, 0, FRAME_W * 0.05, FRAME_H * 0.05), FRAME_W, FRAME_H);
+        expect(cap.maxW).toBeCloseTo(FRAME_W * 0.15);
+        expect(cap.maxH).toBeCloseTo(FRAME_H * 0.15);
     });
 
     it("clips a whole-vehicle seed at the frame ceiling", () => {
         const cap = seedSizeCap(box(0, 0, 300, 200), FRAME_W, FRAME_H);
         expect(cap.maxW).toBeCloseTo(FRAME_W * MAX_BOX_FRAME_FRACTION);
         expect(cap.maxH).toBeCloseTo(FRAME_H * MAX_BOX_FRAME_FRACTION);
+    });
+
+    it("allows a large manual seed to hold and grow without opening the whole frame", () => {
+        const seed = box(100, 80, 500, 300);
+        const cap = seedSizeCap(seed, FRAME_W, FRAME_H);
+        expect(isPlausibleStep(seed, seed, cap, FRAME_W, FRAME_H, 1, DT_STEP)).toBe(true);
+        expect(isPlausibleStep(seed, box(75, 65, 550, 330), cap, FRAME_W, FRAME_H, SETTLED, DT_STEP)).toBe(true);
+        expect(isPlausibleStep(seed, box(40, 50, 620, 360), cap, FRAME_W, FRAME_H, 1, 0.5)).toBe(false);
+        expect(cap.maxW).toBeLessThan(FRAME_W);
+        expect(cap.maxH).toBeLessThan(FRAME_H);
+    });
+
+    it("bounds a nearly full-frame seed at the frame dimensions", () => {
+        const seed = box(0, 0, 800, 450);
+        const cap = seedSizeCap(seed, FRAME_W, FRAME_H);
+        expect(cap).toEqual({ maxW: FRAME_W, maxH: FRAME_H });
+        expect(isPlausibleStep(seed, seed, cap, FRAME_W, FRAME_H, SETTLED, DT_STEP)).toBe(true);
+        expect(isPlausibleStep(seed, box(0, 0, FRAME_W + 1, 450), cap, FRAME_W, FRAME_H, 1, 0.5)).toBe(false);
     });
 });
 

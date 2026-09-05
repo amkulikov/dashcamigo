@@ -10,9 +10,8 @@
 // apparent size by a large factor between two adjacent analyzed frames, so a
 // confident-but-implausible step is rejected - kept OUT of rectLast (so the next
 // search stays anchored on the target, not the distractor) and reported so the
-// caller freezes and counts it toward the loss streak. The cover then ends at
-// the last good point instead of dragging onto the wrong object - the safe
-// failure for a privacy blur.
+// caller freezes and counts it toward the loss streak. An uncertain Follow
+// holds the last cover through the requested tail and marks it for review.
 //
 // A per-step rate guard cannot stop a GRADUAL balloon (every step plausible, the
 // sum not): that failure is closed by two absolute mechanisms - the seed-derived
@@ -20,7 +19,7 @@
 // always leaves through a frame edge, and ending the track there removes the
 // window where the peak has only bodywork left to lock onto.
 //
-// The rate guards scale with the time since the last analyzed frame (dt), so
+// The rate guards scale with the time since the last accepted box (dt), so
 // they hold whatever the analysis rate is (the pass subsamples inference for
 // speed - see tracker-worker's ANALYSIS_FPS). Tunables derived from pass
 // geometry (closing speeds, apparent angular rates), not measured from a
@@ -55,25 +54,37 @@ export const MAX_SIZE_RATE_PER_SEC = 3;
  *  relative limit is smaller; the damage is bounded (a few px per step) and the
  *  seed cap + frame exit still rule the balloon. */
 export const SIZE_JITTER_PX = 4;
-/** Ceiling of the per-pass size cap, in frame fraction - only a whole-vehicle
- *  zone is ever legitimately this large. Absolute, dt-independent. */
+/** Default ceiling of the per-pass size cap, in frame fraction. Larger manual
+ *  seeds get bounded headroom instead of being rejected at their initial size. */
 export const MAX_BOX_FRAME_FRACTION = 0.5;
+const LARGE_SEED_CAP_GROWTH_FACTOR = 1.2;
 /** Floor of the per-pass size cap, in frame fraction. Physical bound for the
  *  small targets this feature redacts: a 52 cm plate on a ~120deg dashcam lens
  *  tops out around 10-12% of frame width at 1.5 m (closer, it leaves the view),
  *  a face around 5% - 15% covers both with margin, and grants a tiny tight seed
  *  the 10-15x total growth a far-seeded approach really produces. */
 export const SEED_CAP_MIN_FRACTION = 0.15;
-/** Max legit total growth of a box dimension relative to its seed. Mid-size
- *  seeds are either loosely drawn around a small target (little growth left) or
- *  tight on a large one (the ceiling case), so they need less headroom than the
- *  floor already gives tiny seeds. */
-export const SEED_CAP_GROWTH_FACTOR = 10;
+/** Total growth budget from the original seed. The frame-fraction floor gives
+ *  distant tiny targets room to approach; ordinary seeds must not grow into
+ *  half-frame covers through a sequence of individually plausible steps. */
+export const SEED_CAP_GROWTH_FACTOR = 3;
 
 /** Per-dimension absolute size ceiling for one tracking pass, frame pixels. */
 export interface SizeCap {
     maxW: number;
     maxH: number;
+}
+
+/** Shared by predictions and detector anchors: a fresh template must not reset
+ *  the original object's total growth budget. */
+export function fitsTrackSizeCap(box: TrackBox, cap: SizeCap): boolean {
+    return (
+        [box.x, box.y, box.w, box.h].every(Number.isFinite) &&
+        box.w > 0 &&
+        box.h > 0 &&
+        box.w <= cap.maxW &&
+        box.h <= cap.maxH
+    );
 }
 
 /** Derives the pass's size ceiling from the seed box: the seed tells the
@@ -82,10 +93,16 @@ export interface SizeCap {
  *  every zone half the frame. A balloon starting from a plate-sized seed is now
  *  bounded near the floor, not at half the frame. */
 export function seedSizeCap(seed: TrackBox, frameW: number, frameH: number): SizeCap {
-    const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
+    const dimensionCap = (size: number, frameSize: number): number => {
+        const ceiling = Math.min(
+            frameSize,
+            Math.max(frameSize * MAX_BOX_FRAME_FRACTION, size * LARGE_SEED_CAP_GROWTH_FACTOR),
+        );
+        return Math.min(ceiling, Math.max(frameSize * SEED_CAP_MIN_FRACTION, size * SEED_CAP_GROWTH_FACTOR));
+    };
     return {
-        maxW: clamp(seed.w * SEED_CAP_GROWTH_FACTOR, frameW * SEED_CAP_MIN_FRACTION, frameW * MAX_BOX_FRAME_FRACTION),
-        maxH: clamp(seed.h * SEED_CAP_GROWTH_FACTOR, frameH * SEED_CAP_MIN_FRACTION, frameH * MAX_BOX_FRAME_FRACTION),
+        maxW: dimensionCap(seed.w, frameW),
+        maxH: dimensionCap(seed.h, frameH),
     };
 }
 /** Skip the size-rate guard for the first few analyzed frames so the box can
@@ -119,7 +136,7 @@ export function isPlausibleStep(
     // Runaway: a box past the seed-derived ceiling is a lock-on to a large
     // nearby object. This is what bounds a GRADUAL balloon - the rate guard
     // below cannot (every step plausible, the sum not).
-    if (cand.w > cap.maxW || cand.h > cap.maxH) return false;
+    if (!fitsTrackSizeCap(cand, cap)) return false;
     // Clamp dt: a long gap between analyzed frames must not divide oddly nor fully
     // open the guard.
     const dt = Math.min(Math.max(dtSec, 1e-3), 0.5);

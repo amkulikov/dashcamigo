@@ -3,7 +3,21 @@
 // testable: uncertain tails fail closed and hold the last known cover.
 
 import { MIN_ZONE_SPAN_SEC, replaceGeneratedKeyframes, type BlurRegion } from "./blur-regions.js";
-import type { TrackResult } from "./workers/tracker-protocol.js";
+import type { TrackResult, TrackResultKeyframe } from "./workers/tracker-protocol.js";
+
+/** The seed geometry belongs to its pinned frame even when the user moves the
+ *  cover's start later. Decode from that frame instead of seeding another image. */
+export function followSeed(region: BlurRegion): TrackResultKeyframe | null {
+    let seed = region.keyframes[0];
+    for (let index = region.keyframes.length - 1; index >= 0; index--) {
+        const keyframe = region.keyframes[index]!;
+        if (keyframe.pinned && keyframe.contentSec < region.endSec) {
+            seed = keyframe;
+            break;
+        }
+    }
+    return seed ? { contentSec: seed.contentSec, rect: { ...seed.rect } } : null;
+}
 
 export function applyTrackResult(
     region: BlurRegion,
