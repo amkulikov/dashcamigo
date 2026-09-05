@@ -79,6 +79,27 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+  # Exercise the hosted chunk graph without credentials or Sentry uploads.
+  # The plain build tree-shakes reporting code and omits debug-ID injection.
+  staging-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VITE_NO_INDEX: "1"
+      VITE_SENTRY_DSN: "https://public@example.invalid/1"
+      SENTRY_AUTH_TOKEN: "synthetic-ci-token"
+      SENTRY_ORG: "synthetic-ci"
+      SENTRY_PROJECT: "synthetic-ci"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build with hosted instrumentation
+        run: npm run build
+
   # The public build contract is origin-agnostic. A synthetic profile catches
   # accidental dependencies on private host or locale values without exposing
   # the real deployment configuration to this repository or PR logs.

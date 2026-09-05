@@ -48,10 +48,10 @@ const EAGER_VENDOR_BUDGET_BYTES = 120 * 1024;
 // shows up as a modulepreload and the vendor check never sees it grow. The
 // smallest guarded lib (chart.js ~165KB) leaking back overshoots this budget,
 // while the headroom above the current entry+preload sum absorbs normal app
-// growth before a deliberate bump is needed. The timeline navigator and export
-// trim accessibility work bring the intentional total to ~729KB; 744KB keeps
-// useful app-growth headroom while remaining far below a heavy-lib leak.
-const EAGER_TOTAL_JS_BUDGET_BYTES = 744 * 1024;
+// growth before a deliberate bump is needed. Allow for the Sentry-enabled
+// hosted build, including its release/debug-ID instrumentation. Keep the
+// remaining headroom well below the smallest guarded library.
+const EAGER_TOTAL_JS_BUDGET_BYTES = 768 * 1024;
 
 function fail(msg) {
     console.error(`\n[check-lazy-chunks] FAIL: ${msg}\n`);
