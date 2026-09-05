@@ -18,7 +18,7 @@ import { resolveRegionBlursAt, type BlurRegion } from "../blur-regions.js";
 import { openAdpcmAudioAuto } from "./adpcm-audio.js";
 import { createLogger } from "../log.js";
 import type { Channel } from "../parsers/types.js";
-import { tripCandidatesByChannel, contentToWallUtc } from "../trips.js";
+import { tripCandidatesByChannel } from "../trips.js";
 import type { Trip } from "../trips.js";
 import { VIDEO_INPUT_FORMATS } from "../video-formats.js";
 
@@ -43,9 +43,9 @@ import {
     type WatermarkAnchor,
 } from "./types.js";
 import { drawWatermark, ensureWatermarkFontReady } from "./watermark.js";
-import { hasAnyOverlay, isFinitePosition } from "./overlay-pipeline-helpers.js";
+import { createOverlayFrameResolver, hasAnyOverlay } from "./overlay-pipeline-helpers.js";
 import { ensureOverlayFontsReady } from "./overlay-styles.js";
-import { type FramePos, interpScalar, recordsHaveAccel, resolveFramePos, resolveNoFixFramePos } from "./frame-pos.js";
+import { recordsHaveAccel } from "./frame-pos.js";
 import {
     achievedKbps,
     resolveOutputFps,
@@ -69,7 +69,6 @@ import { drawMapPlaceholder } from "./map-overlay.js";
 import { drawTelemetryOverlays } from "./telemetry-overlays.js";
 import { createVideoSourceResolver } from "./normalize-degenerate-video.js";
 import { locateMonotonicSegment } from "./segment-locator.js";
-import { interpolatePosition } from "../parser.js";
 import type { OverlayPipelineArgs } from "./types.js";
 
 const log = createLogger("transcode:split");
@@ -310,22 +309,11 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
     const regionBlurHelper: RegionBlurHelper | null = output.blurRegions?.length ? createRegionBlurHelper() : null;
     const renderOpts = { fill: output.letterboxFill, blurHelper, regionBlurHelper };
 
-    // Wall-clock range bounds: graph progress + distance base, mirroring
-    // pipeline.ts (the graph is sampled on the wall axis, so the marker tracks
-    // wall progress; the distance widget subtracts the cumulative at range start).
-    let rangeStartUtc = 0;
-    let rangeEndUtc = 0;
-    let distanceBaseM = 0;
-    if (anyOverlay && output.overlays) {
-        rangeStartUtc = contentToWallUtc(source.trip.timeline, source.startTripSec);
-        rangeEndUtc = contentToWallUtc(source.trip.timeline, source.endTripSec);
-        if (output.overlays.cumulativeDistanceM) {
-            distanceBaseM = interpScalar(
-                output.overlays.gpsRecords,
-                output.overlays.cumulativeDistanceM,
-                rangeStartUtc,
-            );
-        }
+    const resolveOverlayFrame =
+        anyOverlay && output.overlays
+            ? createOverlayFrameResolver(output.overlays, source.trip.timeline, source.startTripSec, source.endTripSec)
+            : null;
+    if (resolveOverlayFrame && output.overlays) {
         log.debug("overlays enabled", {
             style: output.overlays.style,
             gSource: recordsHaveAccel(output.overlays.gpsRecords) ? "recorded" : "derived",
@@ -583,41 +571,17 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
                 // decode and composite.
                 const overlays = output.overlays;
                 const overlayMapOpts = overlays?.map ?? null;
-                let pos: ReturnType<typeof interpolatePosition> = null;
-                // tripTimeSec is an absolute footage-axis position; map it to
-                // wall-clock UTC (skipping pauses) once per frame, reused for GPS
-                // interpolation and resolveFramePos below.
-                const frameUtc = overlays ? contentToWallUtc(source.trip.timeline, tripTimeSec) : 0;
-                // Built for every overlay frame, fix or not: a no-fix frame
-                // renders widget placeholders instead of dropping the layer
-                // (see pipeline.ts for the single-channel mirror of this).
-                let framePos: FramePos | null = null;
-                if (overlays && hasAnyOverlay(overlays)) {
-                    const interp = interpolatePosition(overlays.gpsRecords, frameUtc);
-                    if (interp && isFinitePosition(interp)) pos = interp;
-                    const span = rangeEndUtc - rangeStartUtc;
-                    const progress = span > 0 ? (frameUtc - rangeStartUtc) / span : 0;
-                    framePos = pos
-                        ? resolveFramePos({
-                              records: overlays.gpsRecords,
-                              base: pos,
-                              cumulative: overlays.cumulativeDistanceM,
-                              distanceBaseM,
-                              frameUtc,
-                              progress,
-                          })
-                        : resolveNoFixFramePos(frameUtc, progress);
-                }
+                const framePos = resolveOverlayFrame?.(tripTimeSec) ?? null;
                 let snapPromise: Promise<ImageBitmap> | null = null;
-                // hasFix, not just pos: a long dropout interpolates fabricated
+                // A long dropout can interpolate finite but fabricated
                 // coordinates - the placeholder is drawn instead of a snapshot.
-                if (framePos?.hasFix && pos && overlayMapOpts && mapSnapshotter && !mapOverlayFailed) {
+                if (framePos?.hasFix && overlayMapOpts && mapSnapshotter && !mapOverlayFailed) {
                     snapPromise = mapSnapshotter.snapshot({
-                        lat: pos.lat,
-                        lon: pos.lon,
-                        bearingDeg: pos.bearingDeg,
+                        lat: framePos.lat,
+                        lon: framePos.lon,
+                        bearingDeg: framePos.headingDeg,
                         zoomKm: overlayMapOpts.zoomKm,
-                        speedMs: pos.speedMs,
+                        speedMs: framePos.speedMs,
                     });
                     // Attach a noop drain so a rejection that lands BEFORE we
                     // reach `await snapPromise` (e.g. Promise.all below throws

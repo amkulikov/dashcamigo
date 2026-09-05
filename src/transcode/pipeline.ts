@@ -44,7 +44,7 @@ import { createVideoSourceResolver } from "./normalize-degenerate-video.js";
 import { probeAudioUniformity } from "../export.js";
 import { rangeSourceFps, sliceCandidatesForRange } from "../export-range.js";
 import { createLogger } from "../log.js";
-import { tripCandidatesByChannel, contentToWallUtc } from "../trips.js";
+import { tripCandidatesByChannel } from "../trips.js";
 import { VIDEO_INPUT_FORMATS } from "../video-formats.js";
 
 import { resolveRegionBlursAt } from "../blur-regions.js";
@@ -60,9 +60,9 @@ import {
     type TranscodeResult,
 } from "./types.js";
 import { ensureWatermarkFontReady } from "./watermark.js";
-import { hasAnyOverlay, isFinitePosition } from "./overlay-pipeline-helpers.js";
+import { createOverlayFrameResolver, hasAnyOverlay } from "./overlay-pipeline-helpers.js";
 import { ensureOverlayFontsReady } from "./overlay-styles.js";
-import { type FramePos, interpScalar, recordsHaveAccel, resolveFramePos, resolveNoFixFramePos } from "./frame-pos.js";
+import { type FramePos, recordsHaveAccel } from "./frame-pos.js";
 import {
     achievedKbps,
     resolveOutputFps,
@@ -85,7 +85,6 @@ import {
 } from "./pipeline-common.js";
 import { drawMapPlaceholder } from "./map-overlay.js";
 import { drawTelemetryOverlays } from "./telemetry-overlays.js";
-import { interpolatePosition } from "../parser.js";
 
 const log = createLogger("transcode");
 
@@ -265,22 +264,11 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
     const regionBlurHelper: RegionBlurHelper | null = output.blurRegions?.length ? createRegionBlurHelper() : null;
     const renderOpts = { fill: output.letterboxFill, blurHelper, regionBlurHelper };
 
-    // Wall-clock UTC bounds of the export range. The speed graph is sampled on
-    // this same wall axis (sampleSpeedAcross in export-flow) AND the live preview
-    // tracks progress on it, so the per-frame graph marker uses wall progress too
-    // - on a trip with an in-range pause, content vs wall fractions diverge and a
-    // content-axis marker would drift off the wall-sampled curve (and off the
-    // preview). rangeStartUtc also anchors the distance widget (distance within
-    // the exported clip = cumulative now minus cumulative at the range start).
-    let rangeStartUtc = 0;
-    let rangeEndUtc = 0;
-    let distanceBaseM = 0;
-    if (anyOverlay && overlays) {
-        rangeStartUtc = contentToWallUtc(source.trip.timeline, source.startTripSec);
-        rangeEndUtc = contentToWallUtc(source.trip.timeline, source.endTripSec);
-        if (overlays.cumulativeDistanceM) {
-            distanceBaseM = interpScalar(overlays.gpsRecords, overlays.cumulativeDistanceM, rangeStartUtc);
-        }
+    const resolveOverlayFrame =
+        anyOverlay && overlays
+            ? createOverlayFrameResolver(overlays, source.trip.timeline, source.startTripSec, source.endTripSec)
+            : null;
+    if (resolveOverlayFrame && overlays) {
         log.debug("overlays enabled", {
             style: overlays.style,
             gSource: recordsHaveAccel(overlays.gpsRecords) ? "recorded" : "derived",
@@ -556,29 +544,8 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
                             // frame would resolve GPS / blur rects from a moment
                             // earlier by the gap length (stale overlays).
                             frameContentSec = seg.tripStart + sample.timestamp;
-                            if (overlays && anyOverlay) {
-                                // Interpolate GPS once per frame; reuse for all widgets.
-                                // Map footage-axis position to wall-clock UTC
-                                // (skipping paused time) for GPS interpolation.
-                                const frameUtc = contentToWallUtc(source.trip.timeline, frameContentSec);
-                                const base = interpolatePosition(overlays.gpsRecords, frameUtc);
-                                const span = rangeEndUtc - rangeStartUtc;
-                                const progress = span > 0 ? (frameUtc - rangeStartUtc) / span : 0;
-                                // A frame without a usable position (warm-up, long
-                                // dropout, NaN from active=false records) still gets a
-                                // FramePos: widgets render their no-fix placeholder
-                                // instead of vanishing and popping back at first fix.
-                                framePos =
-                                    base && isFinitePosition(base)
-                                        ? resolveFramePos({
-                                              records: overlays.gpsRecords,
-                                              base,
-                                              cumulative: overlays.cumulativeDistanceM,
-                                              distanceBaseM,
-                                              frameUtc,
-                                              progress,
-                                          })
-                                        : resolveNoFixFramePos(frameUtc, progress);
+                            if (resolveOverlayFrame && overlays) {
+                                framePos = resolveOverlayFrame(frameContentSec);
                                 // Issue (do NOT await) the snapshot now so it renders
                                 // on the main thread while flushFrame(prev) composites
                                 // + encodes below - this is the decode-ahead overlap
@@ -587,13 +554,13 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
                                 // Gated on hasFix, not just finiteness: a long dropout
                                 // interpolates finite-but-fabricated coordinates, and
                                 // the map placeholder is drawn instead.
-                                if (framePos.hasFix && base && overlays.map && mapSnapshotter && !mapOverlayFailed) {
+                                if (framePos.hasFix && overlays.map && mapSnapshotter && !mapOverlayFailed) {
                                     snapPromise = mapSnapshotter.snapshot({
-                                        lat: base.lat,
-                                        lon: base.lon,
-                                        bearingDeg: base.bearingDeg,
+                                        lat: framePos.lat,
+                                        lon: framePos.lon,
+                                        bearingDeg: framePos.headingDeg,
                                         zoomKm: overlays.map.zoomKm,
-                                        speedMs: base.speedMs,
+                                        speedMs: framePos.speedMs,
                                     });
                                 }
                             }
