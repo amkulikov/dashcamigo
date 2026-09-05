@@ -87,9 +87,7 @@ interface TileUi {
     /** region id -> box element, rebuilt on region list changes. */
     boxes: Map<string, HTMLDivElement>;
     /** Last painted state, to skip idle repaints. */
-    lastVideo: HTMLVideoElement | null;
-    lastTime: number;
-    lastContentSec: number;
+    lastFrame: ChannelPresentedFrame | null;
     lastEpoch: number;
     lastWidth: number;
     lastHeight: number;
@@ -103,17 +101,26 @@ let rafId = 0;
 let armed = false;
 let drawOpener: HTMLElement | null = null;
 let drawLayerEls: HTMLDivElement[] = [];
+let drawChannels: Channel[] = [];
 // Bumped by anything that changes geometry (resize, crop, layout) so the rAF
 // loop repaints even at an unchanged playhead.
 let geometryEpoch = 0;
 let previewRegions: readonly BlurRegion[] = [];
+let detectedPreviewRegions: readonly BlurRegion[] = [];
+let detectedPreviewStyles: BlurRegion["style"][] = [];
 
 let lastSeenTrip: ReturnType<typeof activeTrip> = null;
 
 export function initPlayerBlur(): void {
     subscribePlayerFrames(schedulePaint);
     subscribeExportState(() => {
-        if (!blurEditorActive()) disarmDraw();
+        if (
+            !blurEditorActive() ||
+            ALL_CHANNELS.some((ch) => channelTileFor(ch).classList.contains("crop-editing")) ||
+            drawChannels.length !== state.composition.channelOrder.length ||
+            drawChannels.some((ch, i) => ch !== state.composition.channelOrder[i])
+        )
+            disarmDraw();
         // Trip switch invalidates the armed draw layers (their channel
         // closures and tile bindings belong to the previous trip).
         const trip = activeTrip();
@@ -134,6 +141,19 @@ export function initPlayerBlur(): void {
     // Auto-detected regions arrive/expire without touching the manual list -
     // repaint (and start/stop the loop) on their changes too.
     subscribeBlurDetect(() => {
+        if (!state.exportModeOpen) return;
+        const regions = detectRegions();
+        // Progress does not change privacy geometry. Keep paused previews and
+        // editor boxes asleep until results arrive, expire, or change style.
+        if (
+            regions.length === detectedPreviewRegions.length &&
+            regions.every(
+                (region, i) => region === detectedPreviewRegions[i] && region.style === detectedPreviewStyles[i],
+            )
+        )
+            return;
+        detectedPreviewRegions = regions.slice();
+        detectedPreviewStyles = regions.map((region) => region.style);
         geometryEpoch++;
         syncLifecycle();
     });
@@ -210,6 +230,8 @@ function syncLifecycle(): void {
         schedulePaint();
     } else {
         previewRegions = [];
+        detectedPreviewRegions = [];
+        detectedPreviewStyles = [];
         if (rafId) {
             cancelAnimationFrame(rafId);
             rafId = 0;
@@ -236,9 +258,7 @@ function ensureTileUi(ch: Channel): TileUi {
         ctx,
         boxLayer,
         boxes: new Map(),
-        lastVideo: null,
-        lastTime: Number.NaN,
-        lastContentSec: Number.NaN,
+        lastFrame: null,
         lastEpoch: -1,
         lastWidth: 0,
         lastHeight: 0,
@@ -344,25 +364,20 @@ function paintTile(ch: Channel, ui: TileUi, regions: readonly BlurRegion[]): voi
         return;
     }
     const contentSec = shownFrame.contentSec;
-    // Repaint only when something could have changed: time moved, geometry
-    // epoch bumped, or the region list was edited (epoch covers that too).
-    const currentTime = v.currentTime;
+    // The media clock advances between decoded frames. Repaint for the frame
+    // actually shown, or an edit/resize; repeated pixels need no new patch.
     const tileWidth = tile.clientWidth;
     const tileHeight = tile.clientHeight;
     const dpr = window.devicePixelRatio || 1;
     if (
-        v === ui.lastVideo &&
-        currentTime === ui.lastTime &&
-        contentSec === ui.lastContentSec &&
+        samePresentedFrame(shownFrame, ui.lastFrame) &&
         geometryEpoch === ui.lastEpoch &&
         tileWidth === ui.lastWidth &&
         tileHeight === ui.lastHeight &&
         dpr === ui.lastDpr
     )
         return;
-    ui.lastVideo = v;
-    ui.lastTime = currentTime;
-    ui.lastContentSec = contentSec;
+    ui.lastFrame = shownFrame;
     ui.lastEpoch = geometryEpoch;
     ui.lastWidth = tileWidth;
     ui.lastHeight = tileHeight;
@@ -520,6 +535,9 @@ function buildRegionBox(region: BlurRegion, index: number): HTMLDivElement {
     el.tabIndex = 0;
     el.setAttribute("role", "group");
     el.setAttribute("aria-label", regionBoxAriaLabel(region, index));
+    // A double-click also emits its own event after the suppressed clicks.
+    // Keep the tile's crop shortcut from taking over a blur edit.
+    el.addEventListener("dblclick", (event) => event.stopPropagation());
     el.addEventListener("keydown", (event) => editBoxWithKeyboard(region, event));
     for (const corner of ["tl", "tr", "bl", "br"] as const) {
         const hnd = document.createElement("div");
@@ -619,6 +637,8 @@ function attachBoxMoveDrag(region: BlurRegion, el: HTMLDivElement): void {
 }
 
 function attachBoxHandleDrag(region: BlurRegion, handle: HTMLElement, corner: "tl" | "tr" | "bl" | "br"): void {
+    let startX = 0;
+    let startY = 0;
     let base: CropRect | null = null;
     let frame: ChannelPresentedFrame | null = null;
     attachPointerDrag(handle, {
@@ -629,6 +649,8 @@ function attachBoxHandleDrag(region: BlurRegion, handle: HTMLElement, corner: "t
             if (!frame) return false;
             base = regionRectAt(region, frame.contentSec);
             if (!base) return false;
+            startX = e.clientX;
+            startY = e.clientY;
             e.preventDefault();
             e.stopPropagation();
             return true;
@@ -636,25 +658,26 @@ function attachBoxHandleDrag(region: BlurRegion, handle: HTMLElement, corner: "t
         onMove: (e) => {
             if (!base || !frame) return;
             pauseBlurVideos();
-            const ch = region.channel;
-            const tile = channelTileFor(ch);
-            const tileRect = tile.getBoundingClientRect();
-            const p = tilePointToSource(ch, e.clientX - tileRect.left, e.clientY - tileRect.top);
-            if (!p) return;
+            const m = tileMapping(region.channel);
+            if (!m || m.dest.w <= 0 || m.dest.h <= 0) return;
+            // The handle may mark a crop-clipped edge or be grabbed off-centre.
+            // Apply the pointer delta to the stored edge, preserving that offset.
+            const dx = ((e.clientX - startX) / m.dest.w) * m.view.wPct;
+            const dy = ((e.clientY - startY) / m.dest.h) * m.view.hPct;
             let { xPct, yPct, wPct, hPct } = base;
             const right = xPct + wPct;
             const bottom = yPct + hPct;
             if (corner === "tl" || corner === "bl") {
-                xPct = Math.min(p.x, right - MIN_REGION);
+                xPct = Math.max(0, Math.min(xPct + dx, right - MIN_REGION));
                 wPct = right - xPct;
             } else {
-                wPct = Math.max(MIN_REGION, p.x - xPct);
+                wPct = Math.min(1 - xPct, Math.max(MIN_REGION, wPct + dx));
             }
             if (corner === "tl" || corner === "tr") {
-                yPct = Math.min(p.y, bottom - MIN_REGION);
+                yPct = Math.max(0, Math.min(yPct + dy, bottom - MIN_REGION));
                 hPct = bottom - yPct;
             } else {
-                hPct = Math.max(MIN_REGION, p.y - yPct);
+                hPct = Math.min(1 - yPct, Math.max(MIN_REGION, hPct + dy));
             }
             commitRect(region, { xPct, yPct, wPct, hPct }, frame);
         },
@@ -682,6 +705,7 @@ export function toggleBlurDraw(): void {
     exitCropEditIfOpen();
     drawOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     armed = true;
+    drawChannels = [...state.composition.channelOrder];
     pauseBlurVideos();
     for (const ch of state.composition.channelOrder) {
         const tile = channelTileFor(ch);
@@ -725,6 +749,7 @@ function disarmDraw(): void {
     const hadDrawFocus = drawLayerEls.some((el) => el.contains(document.activeElement));
     for (const el of drawLayerEls) el.remove();
     drawLayerEls = [];
+    drawChannels = [];
     if (hadDrawFocus && drawOpener?.isConnected) drawOpener.focus({ preventScroll: true });
     drawOpener = null;
     notifyExportStateChanged();

@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
 
-import { finalizeFollowEndReason } from "./follow-end.js";
+import { finalizeFollowEndReason, followEdgeEndReason } from "./follow-end.js";
+
+describe("followEdgeEndReason", () => {
+    it("keeps the cover when a reliable box is still partly visible", () => {
+        expect(followEdgeEndReason(0.2, true)).toBe("lost");
+    });
+
+    it("does not mistake a frozen off-frame box for a confirmed departure", () => {
+        expect(followEdgeEndReason(0, false)).toBe("lost");
+    });
+
+    it("allows trimming only after a reliable fully off-frame observation", () => {
+        expect(followEdgeEndReason(0, true)).toBe("exited");
+    });
+});
 
 const base = {
     initialized: true,

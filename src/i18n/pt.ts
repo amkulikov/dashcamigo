@@ -688,6 +688,7 @@ export const ptDict = {
     "export.blur.explainer": "Desenhe uma zona sobre o que quiser ocultar. Use “Seguir” para que ela acompanhe um objeto em movimento.",
     "export.blur.add": "Adicionar zona...",
     "export.blur.cancel": "Cancelar desenho",
+    "export.blur.regroupChanged": "As gravações mudaram. Algumas zonas de desfoque foram removidas — adiciona-as novamente antes de guardar.",
     "export.blur.hint": "Mova a caixa enquanto navega pelo vídeo — cada movimento fixa a posição naquele momento.",
     "export.blur.drawHint": "Arraste sobre o objeto que quer ocultar (Esc — cancelar)",
     "export.blur.editBox": "Editar zona de desfoque. As setas movem; Shift + setas redimensiona.",

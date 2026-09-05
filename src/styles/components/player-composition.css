@@ -1518,6 +1518,7 @@ body.export-mode .video-grid.pip-overlay-mode .video-tile {
 }
 
 @media (pointer: coarse) {
+    .export-panel__blur-row-range,
     .export-panel__blur-del-btn,
     .export-panel__blur-row-btn {
         min-width: var(--dc-iconbtn-touch);

@@ -257,19 +257,51 @@ export interface RenderFillOpts {
 
 // === Privacy region blurs (see src/blur-regions.ts for the track model) ===
 
-/** Scratch canvas for the pixelate / soft-blur region styles. Created once per
- *  pipeline run / preview module and reused across frames (BlurHelper rationale:
- *  per-frame OffscreenCanvas allocation is unacceptable). */
+interface RegionBlurSurface {
+    canvas: OffscreenCanvas;
+    ctx: OffscreenCanvasRenderingContext2D;
+}
+
+/** Exact-size scratch canvases retain sampling boundaries while avoiding a
+ *  backing-store resize whenever consecutive masks use different grids. */
 export interface RegionBlurHelper {
-    scratchCanvas: OffscreenCanvas;
-    scratchCtx: OffscreenCanvasRenderingContext2D;
+    surfaces: Map<string, RegionBlurSurface>;
+    activeKey: string | null;
 }
 
 export function createRegionBlurHelper(): RegionBlurHelper {
-    const scratchCanvas = new OffscreenCanvas(64, 64);
-    const scratchCtx = scratchCanvas.getContext("2d", { alpha: false });
-    if (!scratchCtx) throw new Error("createRegionBlurHelper: scratch canvas ctx unavailable");
-    return { scratchCanvas, scratchCtx };
+    return { surfaces: new Map(), activeKey: null };
+}
+
+const REGION_BLUR_SURFACE_LIMIT = 64;
+
+function regionBlurSurface(helper: RegionBlurHelper, cols: number, rows: number): RegionBlurSurface {
+    const key = `${cols}x${rows}`;
+    let surface = helper.surfaces.get(key);
+    if (surface) {
+        // Switching grids clears the old single-canvas backing store. Preserve
+        // that behavior for transparent input without reallocating its pixels.
+        if (key !== helper.activeKey) surface.ctx.clearRect(0, 0, cols, rows);
+        helper.surfaces.delete(key);
+    } else {
+        if (helper.surfaces.size >= REGION_BLUR_SURFACE_LIMIT) {
+            const oldest = helper.surfaces.keys().next().value!;
+            surface = helper.surfaces.get(oldest)!;
+            helper.surfaces.delete(oldest);
+            surface.canvas.width = cols;
+            surface.canvas.height = rows;
+        } else {
+            const canvas = new OffscreenCanvas(cols, rows);
+            const ctx = canvas.getContext("2d", { alpha: false });
+            if (!ctx) throw new Error("createRegionBlurHelper: scratch canvas ctx unavailable");
+            surface = { canvas, ctx };
+        }
+        surface.ctx.imageSmoothingEnabled = true;
+        surface.ctx.imageSmoothingQuality = "high";
+    }
+    helper.surfaces.set(key, surface);
+    helper.activeKey = key;
+    return surface;
 }
 
 /** Axis-aligned rect in destination pixels. */
@@ -424,7 +456,6 @@ export function paintRegionBlur(
         destCtx.fillRect(destRect.x, destRect.y, destRect.w, destRect.h);
         return;
     }
-    const { scratchCanvas, scratchCtx } = helper;
     let cols: number;
     let rows: number;
     if (grid) {
@@ -439,11 +470,8 @@ export function paintRegionBlur(
         cols = Math.max(1, Math.round(destRect.w / blockPx));
         rows = Math.max(1, Math.round(destRect.h / blockPx));
     }
-    if (scratchCanvas.width !== cols) scratchCanvas.width = cols;
-    if (scratchCanvas.height !== rows) scratchCanvas.height = rows;
+    const { canvas: scratchCanvas, ctx: scratchCtx } = regionBlurSurface(helper, cols, rows);
     // Downscale with smoothing ON: each scratch pixel box-averages its block.
-    scratchCtx.imageSmoothingEnabled = true;
-    scratchCtx.imageSmoothingQuality = "high";
     scratchCtx.drawImage(source, srcRect.x, srcRect.y, srcRect.w, srcRect.h, 0, 0, cols, rows);
     const prevSmoothing = destCtx.imageSmoothingEnabled;
     // Upscale: pixelate keeps hard block edges (smoothing off); soft-blur
@@ -904,7 +932,9 @@ export function drawSplitScreen(
             paintSlotRegionBlurs();
             ctx.restore();
         } else {
-            fillBackdrop(ctx, sample, sourceW, sourceH, dx, dy, dw, dh, opts, regionBlurs);
+            if (!fitHidesBackdrop(fit, dw, dh, sample.format)) {
+                fillBackdrop(ctx, sample, sourceW, sourceH, dx, dy, dw, dh, opts, regionBlurs);
+            }
             sample.draw(ctx, sx, sy, sw, sh, drawX, drawY, fit.dw, fit.dh);
             paintSlotRegionBlurs();
         }

@@ -24,11 +24,10 @@ const log = createLogger("player");
  * appeared dead.
  *
  * `getTripStartUtcSec` resolves the active trip's start; like
- * `getTripCurrentSec` it is invoked AFTER all readiness awaits + rVFC ack so
+ * `getTripCurrentSec` it is invoked AFTER readiness, rVFC and seek completion so
  * the filename matches the frame actually drawn, not the moment of click
- * (which can drift by up to ~1.75s if the readyState wait kicks in - long
- * enough for the user to switch trips, and a click-time startUtc paired with
- * the new trip's seconds produced a nonsense timestamp).
+ * (the waits leave time for the user to switch trips, and a click-time startUtc
+ * paired with the new trip's seconds would produce a mismatched timestamp).
  *
  * The displayed-frame clock resolves privacy geometry independently of the
  * playhead. Callbacks keep this module out of the playback core's import graph.
@@ -119,9 +118,39 @@ export async function captureCurrentFrame(
         if (frameAck === "timeout") {
             log.debug("capture: rVFC timeout, drawing last decoded frame", ctxLog);
         }
+        // The compositor may acknowledge the self-seek before the media
+        // element clears seeking. Keep its PTS, but wait before drawing pixels.
+        if (video.seeking) {
+            const settled = await new Promise<boolean>((resolve) => {
+                const finish = (ready: boolean): void => {
+                    clearTimeout(timer);
+                    video.removeEventListener("seeked", onSeeked);
+                    video.removeEventListener("emptied", onUnavailable);
+                    video.removeEventListener("loadstart", onUnavailable);
+                    video.removeEventListener("error", onUnavailable);
+                    resolve(ready);
+                };
+                const onSeeked = (): void => {
+                    if (!video.seeking) finish(true);
+                };
+                const onUnavailable = (): void => finish(false);
+                const timer = setTimeout(() => finish(false), 1500);
+                video.addEventListener("seeked", onSeeked);
+                video.addEventListener("emptied", onUnavailable);
+                video.addEventListener("loadstart", onUnavailable);
+                video.addEventListener("error", onUnavailable);
+            });
+            if (!settled) {
+                log.warn("capture skipped: seek did not settle", ctxLog);
+                return;
+            }
+            // Another frame may have arrived during the wait. Resolve the live
+            // presentation clock instead of painting with the earlier callback's PTS.
+            mediaTime = undefined;
+        }
     }
 
-    // The active element may have been swapped during the readiness/rVFC awaits
+    // The active element may have been swapped during the readiness/frame awaits
     // (user switched trip or channel, or a preload slot promotion). Drawing from
     // the stale `video` would capture a black/wrong-trip frame under a filename
     // resolved post-await for the NEW trip. Bail; capture is a manual action, the

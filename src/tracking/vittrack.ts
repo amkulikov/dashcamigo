@@ -37,6 +37,7 @@
 import { loadOrt, type OrtModule, type OrtRuntime } from "./ort-runtime.js";
 import type { TrackBox } from "./track-guards.js";
 import { TrackGeometry } from "./track-state.js";
+import { packBgrPlanarStandardized } from "./vittrack-pixels.js";
 
 /** ort's Tensor instance type - both builds expose the same class. */
 type OrtTensor = InstanceType<OrtModule["Tensor"]>;
@@ -50,10 +51,6 @@ const SEARCH_SIZE = 256;
 const MAP_SIZE = 16;
 /** OpenCV default: "safe threshold to filter out black frames". */
 export const VITTRACK_SCORE_THRESHOLD = 0.2;
-/** blobFromImageWithParams equivalent: (p/255 - mean)/std, BGR plane order
- *  (OpenCV Mat channel order, swapRB=false - the model was exported for it). */
-const MEAN = [0.485, 0.456, 0.406] as const;
-const STD = [0.229, 0.224, 0.225] as const;
 
 /** hann2d(16, centered) flattened row-major - the confidence-map window that
  *  penalizes detections far from the previous position. */
@@ -87,6 +84,7 @@ function cropImage(
     frameH: number,
     box: TrackBox,
     factor: number,
+    crop: OffscreenCanvas,
 ): CropResult {
     const cropSz = Math.ceil(Math.sqrt(box.w * box.h) * factor);
     const x1 = box.x + Math.trunc((box.w - cropSz) / 2);
@@ -99,7 +97,9 @@ function cropImage(
     const y2pad = Math.max(y2 - frameH + 1, 0);
     const roiW = x2 - x2pad - x1 - x1pad;
     const roiH = y2 - y2pad - y1 - y1pad;
-    const crop = new OffscreenCanvas(Math.max(1, cropSz), Math.max(1, cropSz));
+    const side = Math.max(1, cropSz);
+    if (crop.width !== side) crop.width = side;
+    if (crop.height !== side) crop.height = side;
     const ctx = crop.getContext("2d", { alpha: false });
     if (!ctx) throw new Error("vittrack: crop canvas ctx unavailable");
     ctx.fillStyle = "#000";
@@ -130,24 +130,17 @@ function preprocessInto(cropCanvas: OffscreenCanvas, workspace: PreprocessWorksp
     const { ctx, data, size } = workspace;
     ctx.drawImage(cropCanvas, 0, 0, size, size);
     const rgba = ctx.getImageData(0, 0, size, size).data;
-    const n = size * size;
-    for (let i = 0; i < n; i++) {
-        const r = rgba[i * 4]!;
-        const g = rgba[i * 4 + 1]!;
-        const b = rgba[i * 4 + 2]!;
-        data[i] = (b / 255 - MEAN[0]) / STD[0];
-        data[n + i] = (g / 255 - MEAN[1]) / STD[1];
-        data[2 * n + i] = (r / 255 - MEAN[2]) / STD[2];
-    }
+    packBgrPlanarStandardized(rgba, data);
     return workspace.tensor;
 }
 
-/** Shared model + search workspace. The worker serializes track updates, but
+/** Shared model + crop/search workspaces. The worker serializes track updates, but
  *  keep the invariant executable: overlapping calls would mutate the same
  *  Float32Array while ORT owns it. Outputs stay inside the guarded callback and
  *  are always disposed after decoding. */
 class VitTrackerRuntime {
     private readonly searchWorkspace: PreprocessWorkspace;
+    private readonly cropCanvas = new OffscreenCanvas(1, 1);
     private inUse = false;
 
     constructor(
@@ -159,6 +152,11 @@ class VitTrackerRuntime {
 
     createTemplateWorkspace(): PreprocessWorkspace {
         return createPreprocessWorkspace(this.ort, TEMPLATE_SIZE);
+    }
+
+    /** Borrowed until the next crop; preprocessing consumes it before inference yields. */
+    crop(frame: CanvasImageSource, frameW: number, frameH: number, box: TrackBox, factor: number): CropResult {
+        return cropImage(frame, frameW, frameH, box, factor, this.cropCanvas);
     }
 
     async runSearch<T>(template: OrtTensor, crop: OffscreenCanvas, consume: (outputs: OrtOutputs) => T): Promise<T> {
@@ -225,7 +223,7 @@ export class VitTrack {
     /** Seeds a new object. Continuing detector hits use reanchor so they cannot
      *  renew the original object's total growth budget. */
     init(frame: CanvasImageSource, frameW: number, frameH: number, box: TrackBox): void {
-        const { crop } = cropImage(frame, frameW, frameH, box, 2);
+        const { crop } = this.runtime.crop(frame, frameW, frameH, box, 2);
         preprocessInto(crop, this.templateWorkspace);
         this.geometry = new TrackGeometry(box, frameW, frameH);
     }
@@ -235,7 +233,7 @@ export class VitTrack {
     reanchor(frame: CanvasImageSource, frameW: number, frameH: number, box: TrackBox): boolean {
         if (!this.geometry) throw new Error("vittrack: reanchor before init");
         if (!this.geometry.reanchor(box, frameW, frameH)) return false;
-        const { crop } = cropImage(frame, frameW, frameH, box, 2);
+        const { crop } = this.runtime.crop(frame, frameW, frameH, box, 2);
         preprocessInto(crop, this.templateWorkspace);
         return true;
     }
@@ -254,7 +252,7 @@ export class VitTrack {
         const geometry = this.geometry;
         if (!geometry) throw new Error("vittrack: update before init");
         geometry.advanceFrame(frameW, frameH, dtSec);
-        const { crop, cropSz, x0, y0 } = cropImage(frame, frameW, frameH, geometry.box, 4);
+        const { crop, cropSz, x0, y0 } = this.runtime.crop(frame, frameW, frameH, geometry.box, 4);
         return this.runtime.runSearch(this.templateWorkspace.tensor, crop, (outs) => {
             const conf = outs.output1!.data as Float32Array;
             const sizeMap = outs.output2!.data as Float32Array;

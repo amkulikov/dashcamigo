@@ -106,8 +106,13 @@ export function initPlayerFrameTimes(): void {
                 if (videoAttachedFile.get(video) !== file || video.src !== src) return;
                 // Presentation can precede the readyState update. Preserve its
                 // PTS now; readers still require decoded pixels before use.
+                const previous = frames.get(video);
                 frames.set(video, { file, src, mediaTime: metadata.mediaTime });
-                if (!video.seeking) pendingFrames.delete(video);
+                // A seek's frame can arrive before seeked, with its PTS before
+                // the requested media time. Acknowledge it now; the seeking
+                // guard still blocks edits until the media element settles.
+                // A repeated old PTS does not acknowledge the pending seek.
+                if (!video.seeking || previous?.mediaTime !== metadata.mediaTime) pendingFrames.delete(video);
                 for (const listener of listeners) listener();
                 arm();
             });

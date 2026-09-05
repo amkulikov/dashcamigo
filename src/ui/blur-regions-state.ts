@@ -13,8 +13,10 @@ import { tripAllCandidates } from "../trips.js";
 import type { Trip } from "../trips.js";
 
 import { activeTrip } from "./state.js";
+import { captureBlurTripSource, matchesBlurTripSource, type BlurTripSource } from "./blur-trip-source.js";
 
-const regionsByTrip = new WeakMap<Trip, BlurRegion[]>();
+let regionsByTrip = new WeakMap<Trip, BlurRegion[]>();
+let sourceByTrip = new WeakMap<Trip, BlurTripSource>();
 
 type Listener = () => void;
 const listeners = new Set<Listener>();
@@ -46,7 +48,11 @@ export function activeBlurRegions(): BlurRegion[] {
 }
 
 export function addBlurRegion(region: BlurRegion): void {
-    activeBlurRegions().push(region);
+    const trip = activeTrip();
+    if (!trip) return;
+    const regions = activeBlurRegions();
+    if (regions.length === 0) sourceByTrip.set(trip, captureBlurTripSource(trip));
+    regions.push(region);
     notifyBlurRegionsChanged();
 }
 
@@ -71,6 +77,17 @@ export function setDroppedRegionPassCanceller(fn: (regionId: string) => void): v
     droppedRegionPassCanceller = fn;
 }
 
+type RegroupListener = (oldTrips: readonly Trip[], newTrips: readonly Trip[], invalidatedRegionCount: number) => void;
+const regroupListeners = new Set<RegroupListener>();
+
+/** Shares the regroup boundary with detection and the lost-zone notice without
+ * importing either UI lifecycle into ingest. Removed footage does not count as
+ * invalidation: the notice applies only when source files still survive. */
+export function subscribeBlurTripRegroup(listener: RegroupListener): () => void {
+    regroupListeners.add(listener);
+    return () => regroupListeners.delete(listener);
+}
+
 /**
  * Carries blur regions from replaced Trip objects onto their rebuilt
  * successors. Trip objects are rebuilt through the shared regroup boundary and
@@ -78,33 +95,40 @@ export function setDroppedRegionPassCanceller(fn: (regionId: string) => void): v
  * vanishes on those paths.
  * Matching mirrors carryOverTripPreviews: the first candidate's File identity
  * names a trip across a rebuild. Regions transfer ONLY when the successor has
- * the exact same file set: same files = identical timeline = keyframe times
- * stay valid, while a merged/split trip shifts content-axis offsets and a
- * carried keyframe would blur the wrong moment - dropping there is honest.
+ * the same source mapping: channel assignments, footage offsets and orientation
+ * must remain unchanged, or a carried region would hide the wrong pixels.
  */
 export function carryBlurRegions(oldTrips: readonly Trip[], newTrips: readonly Trip[]): void {
-    const byFirstFile = new Map<File, { regions: BlurRegion[]; files: Set<File> }>();
+    const byFirstFile = new Map<File, { regions: BlurRegion[]; source: BlurTripSource }>();
     // Every region that existed before the regroup, to tell carried from dropped.
     const oldRegionIds = new Set<string>();
     for (const trip of oldTrips) {
         const regions = regionsByTrip.get(trip);
         if (!regions || regions.length === 0) continue;
         for (const r of regions) oldRegionIds.add(r.id);
-        const cands = tripAllCandidates(trip);
-        const first = cands[0];
-        if (first) byFirstFile.set(first.file, { regions, files: new Set(cands.map((c) => c.file)) });
+        const source = sourceByTrip.get(trip);
+        const first = source?.files[0];
+        if (first && source) byFirstFile.set(first.file, { regions, source });
     }
-    if (byFirstFile.size === 0) return;
     const carriedRegionIds = new Set<string>();
+    const remainingFiles = new Set<File>();
     for (const trip of newTrips) {
-        if (regionsByTrip.get(trip)?.length) continue;
         const cands = tripAllCandidates(trip);
+        for (const candidate of cands) remainingFiles.add(candidate.file);
+        const existing = regionsByTrip.get(trip);
+        const existingSource = sourceByTrip.get(trip);
+        if (existing?.length && existingSource && matchesBlurTripSource(existingSource, trip)) {
+            for (const region of existing) carriedRegionIds.add(region.id);
+            continue;
+        }
+        if (existing?.length) regionsByTrip.delete(trip);
         const first = cands[0];
         if (!first) continue;
         const carried = byFirstFile.get(first.file);
         if (!carried) continue;
-        if (cands.length !== carried.files.size || !cands.every((c) => carried.files.has(c.file))) continue;
+        if (!matchesBlurTripSource(carried.source, trip)) continue;
         regionsByTrip.set(trip, carried.regions);
+        sourceByTrip.set(trip, carried.source);
         for (const r of carried.regions) carriedRegionIds.add(r.id);
     }
     // A dropped region (merge/split invalidated its keyframe times, so it was not
@@ -115,9 +139,24 @@ export function carryBlurRegions(oldTrips: readonly Trip[], newTrips: readonly T
     for (const id of oldRegionIds) {
         if (!carriedRegionIds.has(id)) droppedRegionPassCanceller?.(id);
     }
+    const invalidatedRegionIds = new Set<string>();
+    for (const { regions, source } of byFirstFile.values()) {
+        if (!source.files.some(({ file }) => remainingFiles.has(file))) continue;
+        for (const region of regions) {
+            if (!carriedRegionIds.has(region.id)) invalidatedRegionIds.add(region.id);
+        }
+    }
+    for (const listener of regroupListeners) listener(oldTrips, newTrips, invalidatedRegionIds.size);
     // Old trips HAD regions, so the active list identity changed either way -
     // carried over or (on a merge/split) legitimately dropped. Listeners must
     // re-read via activeBlurRegions() in both cases, or the panel keeps
     // rendering rows for zones that no longer exist.
-    notifyBlurRegionsChanged();
+    if (oldRegionIds.size > 0) notifyBlurRegionsChanged();
+}
+
+export function _resetForTests(): void {
+    regionsByTrip = new WeakMap();
+    sourceByTrip = new WeakMap();
+    listeners.clear();
+    droppedRegionPassCanceller = null;
 }

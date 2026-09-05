@@ -690,6 +690,7 @@ export const frDict = {
     "export.blur.explainer": "Dessine une zone sur ce que tu veux cacher. Utilise « Suivre » pour qu’elle accompagne un objet en mouvement.",
     "export.blur.add": "Ajouter une zone...",
     "export.blur.cancel": "Annuler le dessin",
+    "export.blur.regroupChanged": "Les enregistrements ont changé. Certaines zones de flou ont été supprimées — ajoute-les à nouveau avant de sauvegarder.",
     "export.blur.hint": "Déplace le cadre pendant que tu navigues — chaque déplacement fixe sa position à cet instant.",
     "export.blur.drawHint": "Fais glisser sur l'objet que tu veux cacher (Échap — annuler)",
     "export.blur.editBox": "Modifier la zone de floutage. Les flèches déplacent ; Maj + flèches redimensionne.",

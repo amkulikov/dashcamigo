@@ -686,6 +686,7 @@ export const plDict = {
     "export.blur.explainer": "Narysuj strefę na tym, co chcesz ukryć. Użyj opcji „Śledź”, aby strefa podążała za poruszającym się obiektem.",
     "export.blur.add": "Dodaj strefę...",
     "export.blur.cancel": "Anuluj rysowanie",
+    "export.blur.regroupChanged": "Nagrania się zmieniły. Niektóre obszary rozmycia zostały usunięte — dodaj je ponownie przed zapisaniem.",
     "export.blur.hint": "Przesuwaj ramkę podczas przewijania — każde przesunięcie ustala jej położenie w tym momencie.",
     "export.blur.drawHint": "Przeciągnij po obiekcie, który chcesz zakryć (Esc — anuluj)",
     "export.blur.editBox": "Edytuj strefę rozmycia. Strzałki przesuwają, Shift + strzałki zmieniają rozmiar.",

@@ -693,6 +693,7 @@ export const koDict = {
     "export.blur.explainer": "가리고 싶은 부분에 구역을 그려 주세요. 움직이는 대상을 따라가게 하려면 “따라가기”를 사용하세요.",
     "export.blur.add": "구역 추가...",
     "export.blur.cancel": "그리기 취소",
+    "export.blur.regroupChanged": "녹화가 변경되어 일부 흐림 영역이 삭제됐어요. 저장하기 전에 다시 추가해 주세요.",
     "export.blur.hint": "탐색하는 동안 상자를 옮겨보세요 — 옮길 때마다 그 순간의 위치가 고정돼요.",
     "export.blur.drawHint": "가리고 싶은 대상 위로 드래그 (Esc — 취소)",
     "export.blur.editBox": "흐림 구역 편집. 화살표 키로 이동하고 Shift+화살표 키로 크기를 조절해요.",

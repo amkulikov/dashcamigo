@@ -91,7 +91,7 @@ import { initExportPanel } from "./ui/export-panel.js";
 import { initExportTrimBar } from "./ui/export-trim-bar.js";
 import { initPlayerBlur } from "./ui/player-blur.js";
 import { cancelTrackPass } from "./ui/blur-track.js";
-import { setDroppedRegionPassCanceller } from "./ui/blur-regions-state.js";
+import { setDroppedRegionPassCanceller, subscribeBlurTripRegroup } from "./ui/blur-regions-state.js";
 import { initPlayerCrop } from "./ui/player-crop.js";
 import { initPlayerOverlays } from "./ui/player-overlays.js";
 import { initTimelineRange } from "./ui/timeline-range.js";
@@ -499,6 +499,9 @@ initPlayerBlur();
 // the tracker worker's single-pass gate. Wired here (not a direct import in
 // blur-regions-state) to keep that module out of blur-track's import graph.
 setDroppedRegionPassCanceller(cancelTrackPass);
+subscribeBlurTripRegroup((_oldTrips, _newTrips, invalidatedRegionCount) => {
+    if (invalidatedRegionCount > 0) notify({ severity: "warn", messageKey: "export.blur.regroupChanged" });
+});
 initFeedbackModal();
 // Hero-shot lightbox: landing right-column thumb -> full-size screenshot.
 initLandingShot();

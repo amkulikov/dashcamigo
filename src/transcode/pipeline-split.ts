@@ -15,7 +15,8 @@ import { getInputTimeOrigin } from "../media-time.js";
 
 import { probeAudioUniformity } from "../export.js";
 import { rangeSourceFps, sliceCandidatesForRange, type FileSegment } from "../export-range.js";
-import { resolveRegionBlursAt, type BlurRegion } from "../blur-regions.js";
+import type { BlurRegion } from "../blur-regions.js";
+import { createRegionBlurResolver } from "../blur-region-resolver.js";
 import { openAdpcmAudioAuto } from "./adpcm-audio.js";
 import { createLogger } from "../log.js";
 import type { Channel } from "../parsers/types.js";
@@ -314,6 +315,9 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
         const blurHelper: BlurHelper | null = output.letterboxFill === "blur" ? createBlurHelper() : null;
         // Privacy-region scratch canvas, allocated once per run (see compose.ts).
         const regionBlurHelper: RegionBlurHelper | null = output.blurRegions?.length ? createRegionBlurHelper() : null;
+        const regionBlurResolvers = source.slotChannels.map((channel) =>
+            createRegionBlurResolver(output.blurRegions ?? [], channel),
+        );
         const renderOpts = { fill: output.letterboxFill, blurHelper, regionBlurHelper };
 
         const resolveOverlayFrame =
@@ -657,12 +661,12 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
                     // tick time would leave a frozen plate uncovered whenever the
                     // region span does not include the gap.
                     const slotRegionBlurs = output.blurRegions?.length
-                        ? source.slotChannels.map((ch, slotIdx) => {
+                        ? regionBlurResolvers.map((resolveRegionBlurs, slotIdx) => {
                               const rt = slotRuntimes[slotIdx]!;
                               const shownSec = rt.current
                                   ? rt.segTripStart + rt.current.timestamp - rt.timeOrigin
                                   : tripTimeSec;
-                              return resolveRegionBlursAt(output.blurRegions ?? [], ch, shownSec);
+                              return resolveRegionBlurs(shownSec);
                           })
                         : undefined;
                     drawSplitScreen(

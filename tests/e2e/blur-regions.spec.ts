@@ -18,6 +18,7 @@ import {
     loadTrip,
     openExport,
     presetLocalStorage,
+    shot,
     test,
 } from "./_fixtures.js";
 import type { Page } from "@playwright/test";
@@ -376,6 +377,64 @@ test.describe("blur regions", () => {
         await testInfo.attach("blur-preview-work", { body: JSON.stringify(work), contentType: "application/json" });
     });
 
+    test("blur preview paints new video frames without repainting between them", async ({ page }, testInfo) => {
+        await drawZone(page, 0.4, 0.4, 0.6, 0.6);
+        await expect(page.locator('.video-tile[data-channel="front"] .blur-box:not([hidden])')).toBeVisible();
+        const work = await page
+            .locator('.video-tile[data-channel="front"] .blur-preview-canvas')
+            .evaluate(async (canvas: HTMLCanvasElement) => {
+                const video = window.__dashcamigo.dom.player;
+                const ctx = canvas.getContext("2d");
+                if (!ctx) throw new Error("preview unavailable");
+                video.pause();
+                const seeked = new Promise<void>((resolve) =>
+                    video.addEventListener("seeked", () => resolve(), { once: true }),
+                );
+                video.currentTime = 0.25;
+                await seeked;
+                await new Promise<void>((resolve) =>
+                    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+                );
+                const clear = ctx.clearRect;
+                const rate = video.playbackRate;
+                let paints = 0;
+                let frames = 0;
+                let callbackId = 0;
+                const frame = (): void => {
+                    frames++;
+                    callbackId = video.requestVideoFrameCallback(frame);
+                };
+                ctx.clearRect = (...args) => {
+                    paints++;
+                    clear.apply(ctx, args);
+                };
+                callbackId = video.requestVideoFrameCallback(frame);
+                try {
+                    // Slower playback separates video cadence from screen refresh.
+                    // Every presented frame still needs a fresh privacy patch.
+                    video.playbackRate = 0.25;
+                    await video.play();
+                    await new Promise((resolve) => setTimeout(resolve, 1200));
+                    video.pause();
+                    await new Promise<void>((resolve) =>
+                        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+                    );
+                    return { paints, frames };
+                } finally {
+                    video.cancelVideoFrameCallback(callbackId);
+                    video.playbackRate = rate;
+                    ctx.clearRect = clear;
+                }
+            });
+        await testInfo.attach("blur-preview-frame-work", {
+            body: JSON.stringify(work),
+            contentType: "application/json",
+        });
+        expect(work.frames).toBeGreaterThanOrEqual(5);
+        expect(work.paints, JSON.stringify(work)).toBeGreaterThanOrEqual(work.frames - 1);
+        expect(work.paints, JSON.stringify(work)).toBeLessThanOrEqual(work.frames + 3);
+    });
+
     test("escape cancels drawing without creating a zone", async ({ page }) => {
         await page.locator(".export-panel__blur-add-btn").click();
         await expect(page.locator(".blur-draw-layer").first()).toBeVisible();
@@ -385,6 +444,85 @@ test.describe("blur regions", () => {
         // Export-mode itself must survive that Escape (the capture-phase
         // handler swallows it, same contract as the crop editor).
         await expect(page.locator("#export-panel")).toBeVisible();
+    });
+
+    test("double-clicking a zone keeps the blur editor open", async ({ page }) => {
+        await drawZone(page, 0.35, 0.35, 0.65, 0.65);
+        const box = page.locator('.video-tile[data-channel="front"] .blur-box:not([hidden])');
+        await box.dblclick();
+        await expect(page.locator(".crop-editor")).toHaveCount(0);
+        await expect(box).toBeVisible();
+    });
+
+    test("opening crop cancels blur drawing before the editors share a tile", async ({ page }) => {
+        await page.locator(".export-panel__blur-add-btn").click();
+        await expect(page.locator(".blur-draw-layer")).toHaveCount(1);
+        await page.locator(".export-panel__crop-btn").click();
+        await expect(page.locator(".crop-editor")).toBeVisible();
+        await expect(page.locator(".blur-draw-layer")).toHaveCount(0);
+        await expect(page.locator(".export-panel__blur-add-btn")).toHaveAttribute("aria-pressed", "false");
+        await page.locator(".crop-done-btn").click();
+        await expect(page.locator(".export-panel__blur-row")).toHaveCount(0);
+    });
+
+    for (const [locale, message] of [
+        ["en", "The recordings changed. Some blur zones were removed — add them again before saving."],
+        ["ru", "Записи изменились. Часть областей размытия удалена — добавь их заново перед сохранением."],
+    ]) {
+        test(`changed source mapping explains removed zones in ${locale}`, async ({ page }) => {
+            await page.emulateMedia({ reducedMotion: "reduce" });
+            if (locale === "ru") {
+                await gotoApp(page, locale);
+                await loadTrip(page, SAMPLE_70MAI);
+                await openExport(page);
+            }
+            await drawZone(page, 0.35, 0.35, 0.65, 0.65);
+            await expect(page.locator(".export-panel__blur-row")).toHaveCount(1);
+            await page.locator("#export-panel-close").click();
+            await page.evaluate(() => {
+                const { state } = window.__dashcamigo;
+                const candidate = state.active && state.trips[state.active.trip]?.frames[0]?.channels.front;
+                if (!candidate) throw new Error("source unavailable");
+                // Metadata can finish after the user creates a zone. The next
+                // regroup must compare its original mapping with this update.
+                candidate.rotation = 90;
+            });
+            await page.locator("#settings-btn").click();
+            await page.locator("#settings-trip-gap-input").fill("2");
+            await page.locator("#settings-trip-gap-input").dispatchEvent("change");
+            await page.locator("#settings-modal-close").click();
+            await expect(page.locator(".dc-toast__body", { hasText: message })).toBeVisible();
+            await openExport(page);
+            await expect(page.locator(".export-panel__blur-row")).toHaveCount(0);
+            await shot(page, `blur-regroup-${locale}`);
+        });
+    }
+
+    test("a clipped zone handle resizes from its existing edge without jumping", async ({ page }) => {
+        await drawZone(page, 0.1, 0.35, 0.9, 0.65);
+        const box = page.locator('.video-tile[data-channel="front"] .blur-box:not([hidden])');
+        await expect(box).toBeVisible();
+        const original = await zoneSourceRect(page);
+        await page.locator(".export-panel__crop-btn").click();
+        await page.locator('.crop-aspect-btn[data-preset="1:1"]').click();
+        await page.locator(".crop-done-btn").click();
+        await expect(box).toBeVisible();
+        const handle = box.locator(".blur-box-handle--tr");
+        const bounds = await handle.boundingBox();
+        expect(bounds).not.toBeNull();
+        await page.mouse.move(bounds!.x + bounds!.width / 2, bounds!.y + bounds!.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(bounds!.x + bounds!.width / 2 - 2, bounds!.y + bounds!.height / 2);
+        await page.mouse.up();
+        await page.locator(".export-panel__crop-btn").click();
+        await page.locator('.crop-aspect-btn[data-preset="original"]').click();
+        await page.locator(".crop-done-btn").click();
+        await expect(box).toBeVisible();
+        const after = await zoneSourceRect(page);
+        expect(Math.abs(after.w - original.w), "a two-pixel drag cannot cut off the hidden source edge").toBeLessThan(
+            0.03,
+        );
+        expect(after.h, "horizontal resizing keeps the height").toBeCloseTo(original.h, 2);
     });
 
     test("a cancelled drawing gesture leaves no zone and can be retried", async ({ page }) => {

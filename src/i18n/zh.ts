@@ -683,6 +683,7 @@ export const zhDict = {
     "export.blur.explainer": "框选想遮住的内容。点击“跟随”，让遮挡区域跟着移动的目标走。",
     "export.blur.add": "添加区域...",
     "export.blur.cancel": "取消绘制",
+    "export.blur.regroupChanged": "录像已更改，部分模糊区域已移除。请在保存前重新添加。",
     "export.blur.hint": "切换播放位置，再移动选框。每次移动都会记录选框在该时刻的位置。",
     "export.blur.drawHint": "在想遮住的目标上拖动（Esc — 取消）",
     "export.blur.editBox": "编辑模糊区域。方向键移动，Shift 加方向键调整大小。",

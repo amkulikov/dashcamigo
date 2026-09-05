@@ -687,6 +687,7 @@ export const deDict = {
     "export.blur.explainer": "Zeichne eine Zone über alles, was du verdecken möchtest. Mit „Verfolgen“ folgt sie einem bewegten Objekt.",
     "export.blur.add": "Zone hinzufügen...",
     "export.blur.cancel": "Zeichnen abbrechen",
+    "export.blur.regroupChanged": "Die Aufnahmen haben sich geändert. Einige Unschärfebereiche wurden entfernt — füge sie vor dem Speichern erneut hinzu.",
     "export.blur.hint": "Verschieb den Rahmen beim Spulen — jede Bewegung fixiert diese Stelle zu diesem Zeitpunkt.",
     "export.blur.drawHint": "Ziehe über das Objekt, das du verdecken willst (Esc — abbrechen)",
     "export.blur.editBox": "Unschärfezone bearbeiten. Pfeiltasten verschieben, Umschalt + Pfeiltasten ändern die Größe.",

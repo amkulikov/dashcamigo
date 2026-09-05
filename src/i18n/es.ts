@@ -688,6 +688,7 @@ export const esDict = {
     "export.blur.explainer": "Dibuja una zona sobre lo que quieras ocultar. Usa «Seguir» para que acompañe a un objeto en movimiento.",
     "export.blur.add": "Añadir zona...",
     "export.blur.cancel": "Cancelar dibujo",
+    "export.blur.regroupChanged": "Las grabaciones han cambiado. Se eliminaron algunas zonas de desenfoque — vuelve a añadirlas antes de guardar.",
     "export.blur.hint": "Mueve el recuadro mientras te desplazas — cada movimiento fija ese punto en ese momento.",
     "export.blur.drawHint": "Arrastra sobre el objeto que quieras ocultar (Esc — cancelar)",
     "export.blur.editBox": "Editar zona de desenfoque. Las flechas mueven; Mayús + flechas cambia el tamaño.",

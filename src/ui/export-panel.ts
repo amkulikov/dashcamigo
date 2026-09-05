@@ -1496,6 +1496,10 @@ function syncBlurDownloadStrip(
     const { phase, progress } = options;
     if (phase === previousPhase) {
         if (phase === "downloading") syncTrackerProgress(strip, progress);
+        if (phase === "consent") {
+            const message = strip.querySelector(".export-panel__blur-tracker-msg");
+            if (message) message.textContent = options.consentMessage();
+        }
         return phase;
     }
     strip.innerHTML = "";
@@ -1690,18 +1694,20 @@ function syncDetectGroup(): void {
           ? `c${counts.plate}|${counts.face}|${kinds.join("+")}`
           : "hidden";
     if (sig === detectStatusSig) return;
+    const wasProgress = detectStatusSig?.startsWith("p") ?? false;
     detectStatusSig = sig;
-    el.innerHTML = "";
     if (pass) {
-        el.appendChild(
-            trackerProgressNode(
-                pass.fraction,
-                t("export.blur.detect.scanning", { pct: Math.round(pass.fraction * 100) }),
-            ),
-        );
+        const label = t("export.blur.detect.scanning", { pct: Math.round(pass.fraction * 100) });
+        if (wasProgress) {
+            syncTrackerProgress(el, pass.fraction, label);
+            return;
+        }
+        el.innerHTML = "";
+        el.appendChild(trackerProgressNode(pass.fraction, label));
         el.hidden = false;
         return;
     }
+    el.innerHTML = "";
     if (counts && kinds.length > 0) {
         const parts: string[] = [];
         if (kinds.includes("plate")) parts.push(t("export.blur.detect.countPlates", { n: counts.plate }));
@@ -1817,6 +1823,18 @@ function zoneStateLabel(region: BlurRegion): string | null {
  *  so a "" start would short-circuit the very first sync and never apply the
  *  zero-zone DOM state (hide the style row and the keyframe hint). */
 let blurListSig: string | null = null;
+const followProgressButtons = new Map<string, { button: HTMLButtonElement; pct: number }>();
+
+function syncFollowProgress(): void {
+    for (const [id, entry] of followProgressButtons) {
+        const pass = trackPassOf(id);
+        if (!pass) continue;
+        const pct = Math.round(pass.fractionDone * 100);
+        if (entry.pct === pct) continue;
+        entry.pct = pct;
+        entry.button.textContent = t("export.blur.tracker.working", { pct });
+    }
+}
 
 function syncBlurGroup(): void {
     if (blurAddBtnEl) {
@@ -1857,19 +1875,21 @@ function syncBlurGroup(): void {
     }
     // Box drags notify at pointermove rate but only touch keyframes - skip
     // the DOM rebuild unless something the rows actually render changed. autoEnd
-    // + tracked + lost flags drive the state badge; the running percent drives
-    // the Follow button label, so all belong in the signature. Rounding the
-    // fraction to whole percent bounds the rebuilds at ~100 over a pass, not one
-    // per progress tick; -1 marks "not running" distinctly from 0%.
+    // + tracked + lost flags drive the state badge. Follow progress only updates
+    // its button text: rebuilding every zone row would discard focus and create
+    // DOM churn while the worker is already busy analyzing frames.
     const sig = `${effectiveStyle}|${enabledDetectKinds().join("+")}|${regions
         .map((r) => {
             const pct = trackPassOf(r.id);
             return `${r.id}|${r.startSec.toFixed(3)}|${r.endSec.toFixed(3)}|${r.style}|${r.autoEnd ? 1 : 0}|${
                 regionHasTrackedKeyframes(r) ? 1 : 0
-            }|${r.lastTrackLost ? 1 : 0}|${pct ? Math.round(pct.fractionDone * 100) : -1}|${pendingFollowRegionIds.has(r.id)}`;
+            }|${r.lastTrackLost ? 1 : 0}|${pct ? 1 : 0}|${pendingFollowRegionIds.has(r.id)}`;
         })
         .join(";")}`;
-    if (sig === blurListSig) return;
+    if (sig === blurListSig) {
+        syncFollowProgress();
+        return;
+    }
     blurListSig = sig;
     // The keyframe hint refers to a box that exists - hide it until the first
     // zone (the empty list needs no note: the Add button IS the empty state).
@@ -1880,6 +1900,7 @@ function syncBlurGroup(): void {
             ? focused.closest<HTMLElement>("[data-region-id]")
             : null;
     const focusedAction = focused instanceof HTMLElement ? focused.dataset.action : undefined;
+    followProgressButtons.clear();
     list.innerHTML = "";
     regions.forEach((region, i) => {
         list.appendChild(renderBlurRow(region, i));
@@ -2057,6 +2078,7 @@ function renderBlurRow(region: BlurRegion, index: number): HTMLElement {
     );
     followSeg.classList.add("export-panel__blur-follow-btn");
     followSeg.classList.toggle("is-running", running);
+    if (pass) followProgressButtons.set(region.id, { button: followSeg, pct: Math.round(pass.fractionDone * 100) });
     seg.appendChild(followSeg);
     seg.appendChild(
         mkSeg("fixed", t("export.blur.mode.fixed"), t("export.blur.mode.fixedHint"), !region.autoEnd && !pending, () =>

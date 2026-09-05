@@ -161,6 +161,21 @@ test("detection consent follows connectivity and dismisses without downloading",
     await expect(page.locator("html")).not.toHaveAttribute("data-blur-warm-requests");
 });
 
+test("consent updates the download size when another detection kind is selected", async ({ page }) => {
+    await openDetection(page, { delayedCache: true });
+    const strip = page.locator(".export-panel__blur-detect-strip");
+    await page.locator("#export-panel-blur-plates").check();
+    const message = strip.locator(".export-panel__blur-tracker-msg");
+    const platesOnly = await message.innerText();
+    await page.locator("#export-panel-blur-faces").check();
+    await expect(message).not.toHaveText(platesOnly);
+    const downloadSize = (text: string): number => Number(/about (\d+) MB/.exec(text)?.[1]);
+    expect(downloadSize(await message.innerText())).toBeGreaterThan(downloadSize(platesOnly));
+    await page.locator("#export-panel-blur-faces").uncheck();
+    await expect(message).toHaveText(platesOnly);
+    await expect(page.locator("html")).not.toHaveAttribute("data-blur-warm-requests");
+});
+
 test("a stalled detection download retries and clears its error presentation", async ({ page }) => {
     await openDetection(page);
     await page.locator("#export-panel-blur-plates").check();

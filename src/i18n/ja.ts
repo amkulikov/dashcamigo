@@ -696,6 +696,7 @@ export const jaDict = {
     "export.blur.explainer": "隠したい部分を枠で囲んでください。対象が動く場合は「追尾する」を使うと枠が追いかけます。",
     "export.blur.add": "ゾーンを追加...",
     "export.blur.cancel": "描画をキャンセル",
+    "export.blur.regroupChanged": "録画が変更され、一部のぼかし領域が削除されました。保存する前にもう一度追加してください。",
     "export.blur.hint": "再生位置を変えながら枠を動かせます。動かすたびに、その時点の位置が記録されます。",
     "export.blur.drawHint": "隠したいものの上をドラッグ（Esc — キャンセル）",
     "export.blur.editBox": "ぼかし範囲を編集。矢印キーで移動、Shift＋矢印キーでサイズ変更。",

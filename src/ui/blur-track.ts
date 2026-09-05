@@ -20,7 +20,8 @@ import {
     type TrackResult,
 } from "../workers/tracker-protocol.js";
 
-import { notifyBlurRegionsChanged } from "./blur-regions-state.js";
+import { notifyBlurRegionsChanged, subscribeBlurTripRegroup } from "./blur-regions-state.js";
+import { captureBlurTripSource, matchesBlurTripSource, type BlurTripSource } from "./blur-trip-source.js";
 import { notify } from "./notifications.js";
 import { TRACKER_MODEL_URL, TRACKER_ORT_WASM_DIR } from "./blur-assets.js";
 import { subscribeTrackerWorkerNotifications, trackerWorkerClient } from "./tracker-worker-client.js";
@@ -53,6 +54,7 @@ const TRACK_REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
 
 interface RunningPass {
     trip: Trip;
+    source: BlurTripSource;
     passId: string;
     controller: AbortController;
     /** 0..1, updated from worker progress notifications. */
@@ -67,6 +69,16 @@ interface RunningPass {
 
 // Passes keyed by region id; the panel polls via trackPassOf on its sync.
 const runningPasses = new Map<string, RunningPass>();
+
+subscribeBlurTripRegroup((oldTrips, newTrips) => {
+    for (const pass of runningPasses.values()) {
+        if (pass.controller.signal.aborted || !oldTrips.includes(pass.trip)) continue;
+        const replacement = newTrips.find((trip) => matchesBlurTripSource(pass.source, trip));
+        if (replacement) pass.trip = replacement;
+        else pass.controller.abort();
+    }
+});
+
 let passCounter = 0;
 type Listener = () => void;
 const passListeners = new Set<Listener>();
@@ -168,7 +180,14 @@ export async function toggleTrackPass(trip: Trip, region: BlurRegion): Promise<T
         }, TRACK_REQUEST_TIMEOUT_MS);
     };
     const passId = `track-${++passCounter}`;
-    runningPasses.set(region.id, { trip, passId, controller, fractionDone: 0, armTimeout });
+    runningPasses.set(region.id, {
+        trip,
+        source: captureBlurTripSource(trip),
+        passId,
+        controller,
+        fractionDone: 0,
+        armTimeout,
+    });
     // Clear any prior "verify the tail" flag while this pass runs - it will be
     // re-set from this pass's own outcome below.
     const previousTrackWarning = region.lastTrackLost;
@@ -194,7 +213,8 @@ export async function toggleTrackPass(trip: Trip, region: BlurRegion): Promise<T
             // explicit cancellation wins even if the worker response was
             // already in flight; never apply late keyframes behind Set time,
             // a trip switch or zone deletion.
-            if (controller.signal.aborted) throw new DOMException("aborted", "AbortError");
+            controller.signal.throwIfAborted();
+            timeoutCtrl.signal.throwIfAborted();
         } finally {
             if (timeoutTimer !== undefined) window.clearTimeout(timeoutTimer);
         }

@@ -1,0 +1,48 @@
+// Export owns an immutable region snapshot. Walk its spans once as decoded
+// frames advance, instead of searching every track in a long trip per frame.
+
+import { regionRectAt, sortBlurRegionsForPaint, type BlurRegion, type ResolvedRegionBlur } from "./blur-regions.js";
+import type { Channel } from "./parsers/types.js";
+
+/** Indexed resolver for one channel of an immutable export snapshot. Recreate
+ *  after editing regions. Held frames and backward timestamp jumps are supported. */
+export function createRegionBlurResolver(
+    regions: readonly BlurRegion[],
+    channel: Channel,
+): (contentSec: number) => ResolvedRegionBlur[] {
+    // Paint order belongs to the original snapshot, including ties between
+    // equal styles. Chronological insertion must not change overlapping pixels.
+    const entries = sortBlurRegionsForPaint(
+        regions.filter((region) => region.channel === channel && region.startSec <= region.endSec),
+    )
+        .map((region, order) => ({ region, order }))
+        .sort((a, b) => a.region.startSec - b.region.startSec);
+    let next = 0;
+    let previousSec = -Infinity;
+    let active: typeof entries = [];
+
+    return (contentSec) => {
+        if (Number.isNaN(contentSec)) return [];
+        if (contentSec < previousSec) {
+            next = 0;
+            active = [];
+        }
+        previousSec = contentSec;
+        active = active.filter(({ region }) => region.endSec >= contentSec);
+        let added = false;
+        while (next < entries.length && entries[next]!.region.startSec <= contentSec) {
+            const entry = entries[next++]!;
+            if (entry.region.endSec >= contentSec) {
+                active.push(entry);
+                added = true;
+            }
+        }
+        if (added) active.sort((a, b) => a.order - b.order);
+        const out: ResolvedRegionBlur[] = [];
+        for (const { region } of active) {
+            const rect = regionRectAt(region, contentSec);
+            if (rect) out.push({ rect, style: region.style });
+        }
+        return out;
+    };
+}

@@ -17,7 +17,7 @@ import { getInputTimeOrigin } from "../media-time.js";
 
 import { analysisIntervalTransition } from "../tracking/analysis-interval.js";
 import { boxToRect, visibleBoxRect } from "../tracking/box-geometry.js";
-import { finalizeFollowEndReason } from "../tracking/follow-end.js";
+import { finalizeFollowEndReason, followEdgeEndReason } from "../tracking/follow-end.js";
 import { chooseAnalysisWidth } from "../tracking/analysis-resolution.js";
 import { type TileRect, tileRects } from "../tracking/detect-common.js";
 import { weakDetectionCanReanchor } from "../tracking/detection-anchor.js";
@@ -207,10 +207,14 @@ async function runTrackPass(
                 // mostly-out box alive leaves the confidence peak nothing but own
                 // bodywork to lock onto, which is the balloon this prevents. The
                 // ride-out is for mid-frame occlusions; an edge exit is not one.
-                if (boxVisibleFraction(box, frame.width, frame.height) < EXIT_VISIBLE_FRACTION) {
+                const visibleFraction = boxVisibleFraction(box, frame.width, frame.height);
+                if (visibleFraction < EXIT_VISIBLE_FRACTION) {
                     exitStartedSec ??= contentSec;
                     if (contentSec - exitStartedSec >= EXIT_CONFIRM_SEC) {
-                        endReason = "exited";
+                        endReason = followEdgeEndReason(
+                            visibleFraction,
+                            !rejected && score >= VITTRACK_SCORE_THRESHOLD,
+                        );
                         break outer;
                     }
                 } else {
@@ -257,7 +261,10 @@ async function runTrackPass(
 
     return {
         keyframes,
-        trackedUntilSec: endReason === "completed" ? req.endContentSec : lastGoodSec,
+        // Keep subsampled source frames covered through the observed departure,
+        // not merely through the preceding reliable (still visible) rectangle.
+        trackedUntilSec:
+            endReason === "completed" ? req.endContentSec : endReason === "exited" ? lastAnalyzedSec : lastGoodSec,
         endReason,
     };
 }

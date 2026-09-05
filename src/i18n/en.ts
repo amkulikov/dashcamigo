@@ -686,6 +686,7 @@ export const enDict = {
     "export.blur.explainer": "Draw a zone over anything you want hidden. Use Follow to make it follow a moving object.",
     "export.blur.add": "Add blur zone...",
     "export.blur.cancel": "Cancel drawing",
+    "export.blur.regroupChanged": "The recordings changed. Some blur zones were removed — add them again before saving.",
     "export.blur.hint": "Move the box while scrubbing — each move pins that spot at that moment.",
     "export.blur.drawHint": "Drag over the object you want to hide (Esc — cancel)",
     "export.blur.editBox": "Edit blur zone. Arrows move; Shift plus arrows resize.",

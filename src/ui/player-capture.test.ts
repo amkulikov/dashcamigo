@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
     resolveRegionBlursAt: vi.fn(),
     paintRegionBlursForView: vi.fn(),
     downloadBlob: vi.fn(),
-    video: {
+    video: Object.assign(new EventTarget(), {
         readyState: 2,
         videoWidth: 100,
         videoHeight: 60,
@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
         src: "blob:current",
         requestVideoFrameCallback: undefined as undefined | ((callback: VideoFrameRequestCallback) => number),
         cancelVideoFrameCallback: vi.fn(),
-    },
+    }),
 }));
 
 vi.mock("../blur-regions.js", () => ({ resolveRegionBlursAt: mocks.resolveRegionBlursAt }));
@@ -88,6 +88,7 @@ describe("captureCurrentFrame privacy blur", () => {
     });
 
     afterEach(() => {
+        vi.useRealTimers();
         vi.unstubAllGlobals();
     });
 
@@ -172,5 +173,127 @@ describe("captureCurrentFrame privacy blur", () => {
         );
         expect(mocks.downloadBlob).not.toHaveBeenCalled();
         expect(mocks.resolveRegionBlursAt).not.toHaveBeenCalled();
+    });
+
+    it("waits for seeked when the captured frame arrives while the self-seek is still pending", async () => {
+        vi.useFakeTimers();
+        const ctx = stubCaptureCanvas();
+        acknowledgeFrame(() => {
+            mocks.video.seeking = true;
+        });
+        const effective = [{ id: "manual" }];
+        mocks.activeEffectiveBlurRegions.mockReturnValue(effective);
+        mocks.resolveRegionBlursAt.mockReturnValue([{ style: "fill" }]);
+        const contentTime = vi.fn((_channel: string, time?: number) => (time === undefined ? 3.25 : time + 2));
+        const pending = captureCurrentFrame(
+            () => 0,
+            () => 40,
+            contentTime,
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(ctx.drawImage).not.toHaveBeenCalled();
+        mocks.video.seeking = false;
+        mocks.video.dispatchEvent(new Event("seeked"));
+        await pending;
+
+        expect(contentTime).toHaveBeenCalledWith("front", undefined);
+        expect(mocks.resolveRegionBlursAt).toHaveBeenCalledWith(effective, "front", 3.25);
+        expect(mocks.paintRegionBlursForView).toHaveBeenCalledOnce();
+        expect(mocks.downloadBlob).toHaveBeenCalledOnce();
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("uses the latest presented frame when the same video advances before seeked", async () => {
+        const ctx = stubCaptureCanvas();
+        acknowledgeFrame(() => {
+            mocks.video.seeking = true;
+        });
+        mocks.activeEffectiveBlurRegions.mockReturnValue([]);
+        mocks.resolveRegionBlursAt.mockReturnValue([]);
+        let currentFrameSec = 3.25;
+        const contentTime = vi.fn((_channel: string, time?: number) =>
+            time === undefined ? currentFrameSec : time + 2,
+        );
+        const pending = captureCurrentFrame(
+            () => 0,
+            () => 40,
+            contentTime,
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+        currentFrameSec = 4.5;
+        mocks.video.seeking = false;
+        mocks.video.dispatchEvent(new Event("seeked"));
+        await pending;
+
+        expect(ctx.drawImage).toHaveBeenCalledOnce();
+        expect(mocks.resolveRegionBlursAt).toHaveBeenCalledWith([], "front", 4.5);
+        expect(mocks.downloadBlob).toHaveBeenCalledOnce();
+    });
+
+    it("rejects a source replacement during the seek completion wait", async () => {
+        vi.useFakeTimers();
+        const ctx = stubCaptureCanvas();
+        acknowledgeFrame(() => {
+            mocks.video.seeking = true;
+        });
+        const pending = captureCurrentFrame(
+            () => 0,
+            () => 40,
+            () => 3.25,
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+        mocks.video.src = "blob:replacement";
+        mocks.video.seeking = false;
+        mocks.video.dispatchEvent(new Event("seeked"));
+        await pending;
+
+        expect(ctx.drawImage).not.toHaveBeenCalled();
+        expect(mocks.downloadBlob).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("stops waiting when the source unloads before seeked", async () => {
+        vi.useFakeTimers();
+        const ctx = stubCaptureCanvas();
+        acknowledgeFrame(() => {
+            mocks.video.seeking = true;
+        });
+        const pending = captureCurrentFrame(
+            () => 0,
+            () => 40,
+            () => 3.25,
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+        mocks.video.dispatchEvent(new Event("emptied"));
+        await pending;
+
+        expect(ctx.drawImage).not.toHaveBeenCalled();
+        expect(mocks.downloadBlob).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("refuses capture when the acknowledged frame's seek never settles", async () => {
+        vi.useFakeTimers();
+        const ctx = stubCaptureCanvas();
+        acknowledgeFrame(() => {
+            mocks.video.seeking = true;
+        });
+        const pending = captureCurrentFrame(
+            () => 0,
+            () => 40,
+            () => 3.25,
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+        await vi.advanceTimersByTimeAsync(1500);
+        await pending;
+
+        expect(ctx.drawImage).not.toHaveBeenCalled();
+        expect(mocks.downloadBlob).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(0);
     });
 });

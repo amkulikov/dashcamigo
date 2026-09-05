@@ -948,6 +948,7 @@ export type I18nKey =
     | "export.blur.explainer"
     | "export.blur.add"
     | "export.blur.cancel"
+    | "export.blur.regroupChanged"
     | "export.blur.hint"
     | "export.blur.drawHint"
     | "export.blur.editBox"

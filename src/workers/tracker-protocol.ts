@@ -49,8 +49,8 @@ export interface TrackResult {
     /** Decimated keyframes (time- and movement-thresholded), sorted. May be
      *  empty when the first frame already failed to decode. */
     keyframes: TrackResultKeyframe[];
-    /** Content time tracking confidently reached: endContentSec on a complete
-     *  pass, or the last reliable target position on an early end. */
+    /** Requested end on completion, the observed departure on a confirmed
+     *  exit, or the last reliable target position on an uncertain end. */
     trackedUntilSec: number;
     /** Why tracking ended. `exited` is a confidently confirmed frame-edge
      *  departure; `lost` includes confidence collapse, an uncertain EOF tail

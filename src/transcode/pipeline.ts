@@ -48,7 +48,7 @@ import { createLogger } from "../log.js";
 import { tripCandidatesByChannel } from "../trips.js";
 import { VIDEO_INPUT_FORMATS } from "../video-formats.js";
 
-import { resolveRegionBlursAt } from "../blur-regions.js";
+import { createRegionBlurResolver } from "../blur-region-resolver.js";
 import { computeOutputSize, createBlurHelper, createRegionBlurHelper, drawMain } from "./compose.js";
 import { drawWatermark } from "./watermark.js";
 import type { BlurHelper, RegionBlurHelper } from "./compose.js";
@@ -267,6 +267,7 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
         const blurHelper: BlurHelper | null = output.letterboxFill === "blur" ? createBlurHelper() : null;
         // Privacy-region scratch canvas, same allocate-once rationale.
         const regionBlurHelper: RegionBlurHelper | null = output.blurRegions?.length ? createRegionBlurHelper() : null;
+        const resolveRegionBlurs = createRegionBlurResolver(output.blurRegions ?? [], source.channel);
         const renderOpts = { fill: output.letterboxFill, blurHelper, regionBlurHelper };
 
         const resolveOverlayFrame =
@@ -376,9 +377,7 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
                 }
                 // Privacy blur rects for this frame's content time (empty -> null,
                 // so drawMain skips the paint pass entirely on unaffected frames).
-                const regionBlurs = output.blurRegions?.length
-                    ? resolveRegionBlursAt(output.blurRegions, source.channel, p.contentSec)
-                    : null;
+                const regionBlurs = output.blurRegions?.length ? resolveRegionBlurs(p.contentSec) : null;
                 // Composition. drawMain does keep-aspect-fit internally: output.crop=null
                 // fits the whole frame; a crop rect fits that region.
                 drawMain(ctx, p.sample, output.crop, widthPx, heightPx, renderOpts, regionBlurs);

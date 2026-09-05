@@ -175,3 +175,74 @@ describe("player frame observations", () => {
         expect(channelPresentedFrame("front", true)?.contentSec).toBe(0);
     });
 });
+
+describe("paused seek presentation order", () => {
+    beforeEach(() => _resetForTests());
+
+    function loadedVideo() {
+        const source = makeVideo();
+        ui.video = source.video;
+        const file = new File(["video"], "generic.mp4");
+        ui.trip = makeTrip(file);
+        videoAttachedFile.set(source.video, file);
+        source.target.src = "blob:generic";
+        source.target.readyState = 2;
+        initPlayerFrameTimes();
+        source.present(0);
+        return source;
+    }
+
+    it("unlocks a new frame received before seeked even when its PTS precedes the target", () => {
+        const source = loadedVideo();
+        source.target.currentTime = 1.25;
+        source.target.seeking = true;
+        source.target.dispatchEvent(new Event("seeking"));
+        source.present(1.233333);
+        expect(channelPresentedFrame("front")?.contentSec).toBeCloseTo(1.233333);
+        expect(channelPresentedFrame("front", true)).toBeNull();
+
+        source.target.seeking = false;
+        source.target.dispatchEvent(new Event("seeked"));
+        expect(channelPresentedFrame("front", true)?.contentSec).toBeCloseTo(1.233333);
+    });
+
+    it("requires a new observation after each successive seek", () => {
+        const source = loadedVideo();
+        source.target.currentTime = 1.25;
+        source.target.seeking = true;
+        source.target.dispatchEvent(new Event("seeking"));
+        source.present(1.233333);
+        source.target.seeking = false;
+        source.target.dispatchEvent(new Event("seeked"));
+
+        source.target.currentTime = 0.75;
+        source.target.seeking = true;
+        source.target.dispatchEvent(new Event("seeking"));
+        source.present(1.233333);
+        source.target.seeking = false;
+        source.target.dispatchEvent(new Event("seeked"));
+        expect(channelPresentedFrame("front", true)).toBeNull();
+
+        source.present(0.733333);
+        expect(channelPresentedFrame("front", true)?.contentSec).toBeCloseTo(0.733333);
+    });
+
+    it("rejects a previous source callback during a replacement seek", () => {
+        const source = loadedVideo();
+        const replacement = new File(["next video"], "next.mp4");
+        videoAttachedFile.set(source.video, replacement);
+        ui.trip = makeTrip(replacement);
+        source.target.src = "blob:replacement";
+        source.target.currentTime = 0.75;
+        source.target.seeking = true;
+        source.target.dispatchEvent(new Event("seeking"));
+        source.present(0.733333);
+        source.target.seeking = false;
+        source.target.dispatchEvent(new Event("seeked"));
+        expect(channelPresentedFrame("front", true)).toBeNull();
+
+        source.target.dispatchEvent(new Event("loadstart"));
+        source.present(0.733333);
+        expect(channelPresentedFrame("front", true)?.contentSec).toBeCloseTo(0.733333);
+    });
+});
