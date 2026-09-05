@@ -100,6 +100,8 @@ export interface TickNotificationData {
      *  this: at rate=N, the same wall-clock cushion requires N times more
      *  video seconds buffered. */
     playbackRate: number;
+    /** SourceBuffer quota recovery keeps queued appends pending. */
+    appendPaused?: boolean;
 }
 
 /** "seek" notification: in-backend reseek. Worker aborts the current feed,
@@ -122,6 +124,8 @@ export interface InitSegmentNotificationData {
 export interface MediaSegmentNotificationData {
     cycleId: number;
     bytes: Uint8Array;
+    /** Verified video keyframe timestamps in this fragment, in seconds. */
+    videoKeyframeTimestamps: number[];
 }
 
 /** "feed-done" notification: mediabunny finished feeding the whole file. */
@@ -129,7 +133,7 @@ export interface FeedDoneNotificationData {
     cycleId: number;
 }
 
-/** "seek-done" notification: first media segment after the new startSec emitted. */
+/** "seek-done" notification: first video media segment after the new startSec emitted. */
 export interface SeekDoneNotificationData {
     cycleId: number;
 }

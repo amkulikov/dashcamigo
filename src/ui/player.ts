@@ -798,6 +798,7 @@ function attachCandidateToVideo(
     /** Start position of the feed in the file for the MSE backend. Default 0 (beginning of file).
      * Used for out-of-buffer seeks via reattachBackendsAtOffset. */
     startSec: number = 0,
+    forceReseek = false,
 ): AttachOutcome {
     // Every trigger forces the same code path - PerFileMseBackend handles hev1
     // remux, MPEG-TS and Matroska demux uniformly (mediabunny picks the input format).
@@ -839,21 +840,21 @@ function attachCandidateToVideo(
     if (useMseBackend) {
         const existing = state.channelBackends[ch];
         if (existing) {
-            // Same file, same startSec, backend not yet done - skip (idempotency of syncFrameToGrid).
-            // The backend holds a ref to File internally; we record (file, startSec) in the video
-            // marker to avoid redundant re-attaches for the same frame.
-            // isDone=true means the MS has already reached endOfStream after the feed -
-            // <video> is ended and play() won't restart. Re-attach is required (trip loop on one file, repeated click).
-            if (videoAttachedFile.get(v) === cand.file && existing.fileStartSec === startSec && !existing.isDone) {
-                log.info("attach: mse skip (same file+startSec)", logMeta);
+            // EOF and failure still require a fresh attachment for replay.
+            if (
+                videoAttachedFile.get(v) === cand.file &&
+                existing.file === cand.file &&
+                !existing.isDone &&
+                !existing.isFailed &&
+                !forceReseek
+            ) {
+                // Grid synchronization has no seek intent. Its default offset
+                // must not overwrite a user seek that changed the feed origin.
+                log.info("attach: mse skip (same file)", logMeta);
                 return "skip";
             }
-            // Same file, different startSec, backend is alive - reuse it via
-            // seekTo instead of dispose+new. On a new Input for MPEG-TS,
-            // mediabunny scans the whole file to build the sample-table; on an
-            // SD card that takes 10+ seconds. seekTo keeps the Input alive -
-            // only a new Output + new feed from the same sink. CPU cost
-            // ~30-100 ms instead of a full file scan.
+            // Reuse retains parsed metadata and cached reads. Only the muxer
+            // and feed restart for an explicit seek within the same file.
             if (
                 videoAttachedFile.get(v) === cand.file &&
                 existing.file === cand.file &&
@@ -1013,7 +1014,7 @@ function reattachBackendsAtOffset(frame: TripFrame, offsetInFrame: number, wasPl
         // the IIFE right after the SourceBuffer is ready;
         // "full-attach" - dispose+new, pendingFileOffset is picked up in the
         // loadedmetadata handler.
-        const outcome = attachCandidateToVideo(ch, v, cand, isMaster, offsetInFrame);
+        const outcome = attachCandidateToVideo(ch, v, cand, isMaster, offsetInFrame, true);
         if (outcome === "full-attach") anyFullAttach = true;
         anyReattached = true;
     }

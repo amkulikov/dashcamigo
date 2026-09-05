@@ -30,6 +30,7 @@ import {
     type VideoCodec,
 } from "mediabunny";
 import { createLogger } from "../log.js";
+import { getInputTimeOrigin } from "../media-time.js";
 import { cleanHvccDescription, hasVideoContent } from "../hevc-remux.js";
 import { type AdpcmAudioReader, openAdpcmAudioAuto } from "../transcode/adpcm-audio.js";
 import { createEncodeAudioSource, resolveEncodeAudioCodec } from "../transcode/capabilities.js";
@@ -59,11 +60,12 @@ import {
     type TickNotificationData,
 } from "./per-file-mse-protocol.js";
 import { createWorkerServer, type WorkerScopeEndpoint } from "./_protocol/worker-server.js";
+import { readVideoFragmentMetadata, readVideoTrackMetadata } from "./mse-fragment-metadata.js";
 
 const log = createLogger("worker:per-file-mse");
 
 // Baseline buffer-ahead in video seconds at playbackRate=1x. Worker pauses
-// the feed while (feedSentUpToSec - currentTime) >= effective target. At
+// the feed while (feedEmittedUpToSec - currentTime) >= effective target. At
 // higher playback rates the SAME wall-clock cushion requires N times more
 // video seconds buffered - waitForBufferRoom scales this by playbackRate.
 const BASE_BUFFER_AHEAD_SEC = 8;
@@ -86,6 +88,9 @@ const BUFFER_AHEAD_QUOTA_BUDGET_BYTES = 30 * 1024 * 1024;
 // collapse the cushion to zero (which would stall playback hard).
 // At 5.8 MB/sec that's ~2.6 sec of ahead - tight but workable.
 const MIN_ADAPTIVE_AHEAD_SEC = 2.5;
+
+// Normal frame/codec padding differences fit inside the playback cushion.
+const AUDIO_TAIL_TOLERANCE_SEC = 0.25;
 
 // Backpressure is event-driven via tickWaiters: when MSE_NOTIFY_TICK lands
 // (periodic 200 ms from main + out-of-band on every SourceBuffer updateend)
@@ -117,6 +122,7 @@ let videoDecoderConfig: VideoDecoderConfig | null = null;
 let audioDecoderConfig: AudioDecoderConfig | null = null;
 let videoRotation: Rotation = 0;
 let startSec = 0;
+let sourceTimeOrigin = 0;
 // IMA-ADPCM transcode mode (Mio/Navman): mediabunny cannot read the audio, so
 // we decode it ourselves and re-encode. When set, audioTrack/audioCodec stay
 // null and the audio half of the feed runs through adpcmReader instead.
@@ -135,7 +141,7 @@ let dropAudio = false;
  * Per-feed-cycle state. A new instance is created on initial start-feed and
  * on each seek. The old cycle's references stay alive in its runFeed
  * closures - so a still-running stale feed cannot pollute the new cycle's
- * pendingSegment / feedSentUpToSec / output. This decoupling is what lets
+ * pendingSegment / feedEmittedUpToSec / output. This decoupling is what lets
  * onSeek hand off to the new cycle WITHOUT awaiting feed shutdown (the
  * slow path that previously tripped a 2-sec ack timeout when two channels
  * seeked at once).
@@ -151,7 +157,7 @@ interface FeedCycle {
      * pre-seek currentTime (which can happen between the seek arriving
      * and main's video.currentTime = target write) would otherwise drag
      * lastTick.currentTime back below the new target, making
-     * ahead = feedSentUpToSec - lastTick.currentTime balloon past
+     * ahead = feedEmittedUpToSec - lastTick.currentTime balloon past
      * the scaled target and freeze the feed indefinitely. */
     startTimestamp: number;
     abort: AbortController;
@@ -163,15 +169,15 @@ interface FeedCycle {
     /** moof/ftyp etc bytes accumulated before the matching mdat/moov flush. */
     pendingSegment: Uint8Array[];
     pendingSegmentLen: number;
-    /** Largest video packet PTS pushed so far - drives backpressure. */
-    feedSentUpToSec: number;
+    /** Video PTS reached by completed fragments sent to the main thread. */
+    feedEmittedUpToSec: number;
     /** If true, the first media segment also emits "seek-done" to main. */
     postSeekFirstMediaPending: boolean;
     /**
      * Adaptive bitrate estimate, cycle-scoped so a stale aborted cycle's late
      * mdat callback mutates its own dead cycle, not the new one. bytesEmitted
      * tallies moof+mdat bytes; mediaSecondsCovered tracks the max
-     * feedSentUpToSec advance since the cycle started. waitForBufferRoom derives
+     * feedEmittedUpToSec advance since the cycle started. waitForBufferRoom derives
      * the per-bitrate buffer-ahead cap from these two.
      */
     bytesEmitted: number;
@@ -181,7 +187,7 @@ interface FeedCycle {
 let currentCycle: FeedCycle | null = null;
 
 // Last tick info from main, used for backpressure.
-let lastTick = { currentTime: 0, appendQueueLen: 0, playbackRate: 1 };
+let lastTick = { currentTime: 0, appendQueueLen: 0, playbackRate: 1, appendPaused: false };
 let failed = false;
 
 // One-shot resolvers waiting for the next MSE_NOTIFY_TICK. Filled by
@@ -215,7 +221,7 @@ function waitForNextTick(signal: AbortSignal): Promise<void> {
 // at a time. Without this gate, fast chart-drag seeks fan out into concurrent
 // onSeek invocations: the second cancel() throws "Output has already been
 // canceled", the second nullifies an output that a parallel onStartFeed just
-// created, and SourceBuffer ends up empty while feedSentUpToSec runs off
+// created, and SourceBuffer ends up empty while feedEmittedUpToSec runs off
 // past the end of the file. tick is left out of the gate - it is a pure
 // state write and we want it to land synchronously even while a long
 // operation (e.g. waiting on feedDonePromise) is mid-flight.
@@ -238,7 +244,7 @@ function serialize(fn: () => Promise<void>): void {
 // down" would already be impossible because the main side disposes the
 // whole worker before constructing a new backend.
 const server = createWorkerServer(self, {
-    onRequest: async (type, data): Promise<InitResult> => {
+    onRequest: async (type, data, ctx): Promise<InitResult> => {
         if (type !== MSE_REQUEST_INIT) {
             throw new Error(`unknown request type: ${type}`);
         }
@@ -248,6 +254,7 @@ const server = createWorkerServer(self, {
             req.startSec,
             req.transcodeAdpcmAudio ?? false,
             req.adpcmPlaybackCodecs ?? ["aac", "opus"],
+            ctx.signal,
         );
     },
     onNotification: (type, data) => {
@@ -271,6 +278,7 @@ const server = createWorkerServer(self, {
                     currentTime: tick.currentTime,
                     appendQueueLen: tick.appendQueueLen,
                     playbackRate: tick.playbackRate,
+                    appendPaused: tick.appendPaused ?? false,
                 };
                 // Wake anyone parked in waitForBufferRoom so they re-evaluate
                 // against the fresh currentTime / appendQueueLen / rate.
@@ -289,6 +297,12 @@ const server = createWorkerServer(self, {
 function fail(reason: string, error?: unknown): void {
     if (failed) return;
     failed = true;
+    if (currentCycle) {
+        currentCycle.abort.abort();
+        void currentCycle.output.cancel().catch((error) => log.debug("failed output cleanup threw", error));
+    }
+    input?.dispose();
+    input = null;
     const message = error instanceof Error ? error.message : error !== undefined ? String(error) : undefined;
     log.warn("worker fail", { file: workerFile?.name, reason, error });
     const ntf: ErrorNotificationData = { reason, message };
@@ -318,95 +332,132 @@ async function onInit(
     initialStartSec: number,
     wantTranscodeAudio: boolean,
     adpcmPlaybackCodecs: readonly AdpcmPlaybackCodec[],
+    signal: AbortSignal,
 ): Promise<InitResult> {
     workerFile = file;
     startSec = Math.max(0, initialStartSec);
     input = new Input({ source: new BlobSource(await clampTsGpsTrailer(file)), formats: VIDEO_INPUT_FORMATS });
-    const vt = await input.getPrimaryVideoTrack();
-    if (!vt) throw new Error("no-video-track");
-    videoTrack = vt;
-    videoCodec = (await vt.getCodec()) as VideoCodec;
-    videoRotation = await vt.getRotation();
-    const videoCodecParamRaw = await vt.getCodecParameterString();
-    if (!videoCodecParamRaw) throw new Error("no-video-codec-param");
+    const openedInput = input;
+    const abortInput = () => openedInput.dispose();
+    signal.addEventListener("abort", abortInput, { once: true });
+    try {
+        signal.throwIfAborted();
+        sourceTimeOrigin = await getInputTimeOrigin(input);
+        const vt = await input.getPrimaryVideoTrack();
+        if (!vt) throw new Error("no-video-track");
+        videoTrack = vt;
+        videoCodec = (await vt.getCodec()) as VideoCodec;
+        videoRotation = await vt.getRotation();
+        const videoCodecParamRaw = await vt.getCodecParameterString();
+        if (!videoCodecParamRaw) throw new Error("no-video-codec-param");
 
-    // hev1 -> hvc1: Chrome MSE and native <video> only accept hvc1 for HEVC;
-    // some firmware (BlackVue ELITE 9, Vantrue N2X) writes hev1. Mediabunny
-    // always remuxes to hvc1, so the swap is safe.
-    const videoCodecParam = videoCodecParamRaw.startsWith("hev1.")
-        ? `hvc1.${videoCodecParamRaw.slice(5)}`
-        : videoCodecParamRaw;
+        // hev1 -> hvc1: Chrome MSE and native <video> only accept hvc1 for HEVC;
+        // some firmware (BlackVue ELITE 9, Vantrue N2X) writes hev1. Mediabunny
+        // always remuxes to hvc1, so the swap is safe.
+        const videoCodecParam = videoCodecParamRaw.startsWith("hev1.")
+            ? `hvc1.${videoCodecParamRaw.slice(5)}`
+            : videoCodecParamRaw;
 
-    let vdc = await vt.getDecoderConfig();
-    if (!vdc) throw new Error("no-video-decoder-config");
-    const cleanedDesc = videoCodec === "hevc" ? cleanHvccDescription(vdc.description) : vdc.description;
-    if (cleanedDesc !== vdc.description) {
-        vdc = { ...vdc, description: cleanedDesc };
-        log.info("hvcC cleaned of invalid NAL arrays", { file: file.name });
-    }
-    videoDecoderConfig = vdc;
+        let vdc = await vt.getDecoderConfig();
+        if (!vdc) throw new Error("no-video-decoder-config");
+        const cleanedDesc = videoCodec === "hevc" ? cleanHvccDescription(vdc.description) : vdc.description;
+        if (cleanedDesc !== vdc.description) {
+            vdc = { ...vdc, description: cleanedDesc };
+            log.info("hvcC cleaned of invalid NAL arrays", { file: file.name });
+        }
+        videoDecoderConfig = vdc;
 
-    let audioCodecParam: string | null = null;
-    if (wantTranscodeAudio) {
-        // IMA-ADPCM (Mio/Navman): bypass mediabunny's audio track entirely - it
-        // cannot read the codec. We decode the ADPCM ourselves and re-encode.
-        // openAdpcmAudio re-reads the moov + chunk table; null means the file is
-        // not actually the ADPCM form we handle, in which case we just play video
-        // without audio.
-        adpcmReader = await openAdpcmAudioAuto(file);
-        if (adpcmReader) {
-            // Main has already filtered this preference list by what its MSE
-            // can play. Chromium/Firefox prefer the original, proven Opus path;
-            // Safari supplies AAC because it rejects Opus-in-MP4. The worker
-            // then picks the first candidate it can actually encode.
-            adpcmEncodeCodec = await resolveEncodeAudioCodec(adpcmPlaybackCodecs);
-            if (adpcmEncodeCodec) {
-                transcodeAdpcmAudio = true;
-                audioCodecParam = adpcmAudioMimeParam(adpcmEncodeCodec);
-                log.info("audio: transcoding IMA-ADPCM", {
-                    file: file.name,
-                    encodeCodec: adpcmEncodeCodec,
-                    channels: adpcmReader.channels,
-                    sampleRate: adpcmReader.sampleRate,
-                });
+        let audioCodecParam: string | null = null;
+        if (wantTranscodeAudio) {
+            // IMA-ADPCM (Mio/Navman): bypass mediabunny's audio track entirely - it
+            // cannot read the codec. We decode the ADPCM ourselves and re-encode.
+            // openAdpcmAudio re-reads the moov + chunk table; null means the file is
+            // not actually the ADPCM form we handle, in which case we just play video
+            // without audio.
+            adpcmReader = await openAdpcmAudioAuto(file);
+            if (
+                adpcmReader &&
+                !hasPlaybackAudioTail(await vt.computeDuration(), adpcmReader.totalFrames / adpcmReader.sampleRate)
+            ) {
+                adpcmReader = null;
+            }
+            if (adpcmReader) {
+                // Main has already filtered this preference list by what its MSE
+                // can play. Chromium/Firefox prefer the original, proven Opus path;
+                // Safari supplies AAC because it rejects Opus-in-MP4. The worker
+                // then picks the first candidate it can actually encode.
+                adpcmEncodeCodec = await resolveEncodeAudioCodec(adpcmPlaybackCodecs);
+                if (adpcmEncodeCodec) {
+                    transcodeAdpcmAudio = true;
+                    audioCodecParam = adpcmAudioMimeParam(adpcmEncodeCodec);
+                    log.info("audio: transcoding IMA-ADPCM", {
+                        file: file.name,
+                        encodeCodec: adpcmEncodeCodec,
+                        channels: adpcmReader.channels,
+                        sampleRate: adpcmReader.sampleRate,
+                    });
+                } else {
+                    log.warn("audio is IMA-ADPCM but no audio encoder available, dropping audio", { file: file.name });
+                }
             } else {
-                log.warn("audio is IMA-ADPCM but no audio encoder available, dropping audio", { file: file.name });
+                log.warn("ADPCM audio unavailable for playback, dropping audio", { file: file.name });
             }
         } else {
-            log.warn("audio transcode requested but no ADPCM track found, dropping audio", { file: file.name });
-        }
-    } else {
-        const at = await input.getPrimaryAudioTrack();
-        if (at) {
-            const ac = (await at.getCodec()) as AudioCodec;
-            const acParam = await at.getCodecParameterString();
-            const adc = await at.getDecoderConfig();
-            if (acParam && adc) {
-                audioTrack = at;
-                audioCodec = ac;
-                audioCodecParam = acParam;
-                audioDecoderConfig = adc;
-            } else {
-                // Audio track present but codec params unparseable - drop audio.
-                // Silent video beats a black screen.
-                log.warn("audio track present but no codec params, dropping audio", { file: file.name });
+            let at = await input.getPrimaryAudioTrack();
+            if (at) {
+                const [videoEnd, audioEnd] = await Promise.all([vt.computeDuration(), at.computeDuration()]);
+                if (!hasPlaybackAudioTail(videoEnd, audioEnd)) at = null;
+            }
+            if (at) {
+                const ac = (await at.getCodec()) as AudioCodec;
+                const acParam = await at.getCodecParameterString();
+                const adc = await at.getDecoderConfig();
+                if (acParam && adc) {
+                    audioTrack = at;
+                    audioCodec = ac;
+                    audioCodecParam = acParam;
+                    audioDecoderConfig = adc;
+                } else {
+                    // Audio track present but codec params unparseable - drop audio.
+                    // Silent video beats a black screen.
+                    log.warn("audio track present but no codec params, dropping audio", { file: file.name });
+                }
             }
         }
-    }
 
-    const videoOnlyMime = `video/mp4; codecs="${videoCodecParam}"`;
-    const codecMime = audioCodecParam ? `video/mp4; codecs="${videoCodecParam},${audioCodecParam}"` : videoOnlyMime;
-    // hasAudio true for either a usable mediabunny track or an open ADPCM reader.
-    // audioTranscoded gates main's drop-audio fallback: only our re-encoded ADPCM
-    // is safe to silently drop (the video is the plain stream the user wants);
-    // a failing stream-copy mime usually means the VIDEO codec, where dropping
-    // audio would not help.
-    return {
-        codecMime,
-        videoOnlyMime,
-        hasAudio: audioTrack !== null || transcodeAdpcmAudio,
-        audioTranscoded: transcodeAdpcmAudio,
-    };
+        const videoOnlyMime = `video/mp4; codecs="${videoCodecParam}"`;
+        const codecMime = audioCodecParam ? `video/mp4; codecs="${videoCodecParam},${audioCodecParam}"` : videoOnlyMime;
+        // hasAudio true for either a usable mediabunny track or an open ADPCM reader.
+        // audioTranscoded gates main's drop-audio fallback: only our re-encoded ADPCM
+        // is safe to silently drop (the video is the plain stream the user wants);
+        // a failing stream-copy mime usually means the VIDEO codec, where dropping
+        // audio would not help.
+        signal.throwIfAborted();
+        return {
+            codecMime,
+            videoOnlyMime,
+            hasAudio: audioTrack !== null || transcodeAdpcmAudio,
+            audioTranscoded: transcodeAdpcmAudio,
+        };
+    } catch (error) {
+        openedInput.dispose();
+        input = null;
+        throw error;
+    } finally {
+        signal.removeEventListener("abort", abortInput);
+    }
+}
+
+function hasPlaybackAudioTail(videoEnd: number, audioEnd: number): boolean {
+    if (videoEnd - audioEnd <= AUDIO_TAIL_TOLERANCE_SEC) return true;
+    // MSE intersects audio/video buffered ranges until endOfStream. A short
+    // audio tail stalls playback before the bounded video feed can reach EOF.
+    log.warn("audio ends before video, keeping video-only playback", {
+        reason: "audio-ends-before-video",
+        videoEndSec: videoEnd,
+        audioEndSec: audioEnd,
+    });
+    return false;
 }
 
 /**
@@ -436,7 +487,7 @@ async function startNewFeedCycle(cycleId: number, armSeekDone: boolean): Promise
         audioSource: null,
         pendingSegment: [],
         pendingSegmentLen: 0,
-        feedSentUpToSec: 0,
+        feedEmittedUpToSec: startSec,
         postSeekFirstMediaPending: armSeekDone,
         // Fresh per cycle: a seek to a different segment of the file may
         // legitimately have a different bitrate, so the estimate rebases.
@@ -500,22 +551,31 @@ async function startNewFeedCycle(cycleId: number, armSeekDone: boolean): Promise
         server.notify(MSE_NOTIFY_INIT_SEGMENT, ntf, [merged.buffer]);
     };
 
+    let outputVideoTrack: ReturnType<typeof readVideoTrackMetadata> | null = null;
+    let fragmentVideoMetadata: ReturnType<typeof readVideoFragmentMetadata> | null = null;
     const flushAsMedia = (data: Uint8Array) => {
         if (isStale()) return;
+        if (!fragmentVideoMetadata) throw new Error("media fragment has no parsed video metadata");
         const merged = mergeAndFlush(data);
         // Bitrate sample, cycle-scoped. mediaSecondsCovered tracks the maximum
-        // feedSentUpToSec advance since this cycle started; bytes tally includes
+        // feedEmittedUpToSec advance since this cycle started; bytes tally includes
         // mp4 box overhead (moof + mdat). waitForBufferRoom uses these two to
         // derive an adaptive cap. Writing to cycle (not a module global) means a
         // stale aborted output's late callback cannot skew the new cycle's tally.
         cycle.bytesEmitted += merged.length;
-        const cycleElapsed = cycle.feedSentUpToSec - cycle.startTimestamp;
+        const emittedVideo = fragmentVideoMetadata.endSec !== null;
+        if (fragmentVideoMetadata.endSec !== null) {
+            cycle.feedEmittedUpToSec = Math.max(cycle.feedEmittedUpToSec, fragmentVideoMetadata.endSec);
+        }
+        const cycleElapsed = cycle.feedEmittedUpToSec - cycle.startTimestamp;
         if (cycleElapsed > cycle.mediaSecondsCovered) {
             cycle.mediaSecondsCovered = cycleElapsed;
         }
-        const mediaNtf: MediaSegmentNotificationData = { cycleId: cycle.id, bytes: merged };
+        const videoKeyframeTimestamps = fragmentVideoMetadata.keyframeTimestamps;
+        fragmentVideoMetadata = null;
+        const mediaNtf: MediaSegmentNotificationData = { cycleId: cycle.id, bytes: merged, videoKeyframeTimestamps };
         server.notify(MSE_NOTIFY_MEDIA_SEGMENT, mediaNtf, [merged.buffer]);
-        if (cycle.postSeekFirstMediaPending) {
+        if (cycle.postSeekFirstMediaPending && emittedVideo) {
             cycle.postSeekFirstMediaPending = false;
             const seekDoneNtf: SeekDoneNotificationData = { cycleId: cycle.id };
             server.notify(MSE_NOTIFY_SEEK_DONE, seekDoneNtf);
@@ -542,14 +602,27 @@ async function startNewFeedCycle(cycleId: number, armSeekDone: boolean): Promise
             // side. Per-fragment moof overhead is negligible (~344 bytes).
             minimumFragmentDuration: 0,
             onFtyp: accumulate,
-            onMoov: flushAsInit,
-            onMoof: accumulate,
+            onMoov: (data) => {
+                outputVideoTrack = readVideoTrackMetadata(data);
+                flushAsInit(data);
+            },
+            onMoof: (data) => {
+                if (!outputVideoTrack) throw new Error("media fragment precedes video track metadata");
+                fragmentVideoMetadata = readVideoFragmentMetadata(data, outputVideoTrack);
+                accumulate(data);
+            },
             onMdat: flushAsMedia,
         }),
         target: new StreamTarget(noopWritable),
     });
     cycle.output.addVideoTrack(cycle.videoSource, { rotation: videoRotation });
-    if (cycle.audioSource) cycle.output.addAudioTrack(cycle.audioSource);
+    if (cycle.audioSource) {
+        // Keep the track set stable even when a seek has no remaining audio packets.
+        cycle.output.addAudioTrack(
+            cycle.audioSource,
+            audioDecoderConfig ? { decoderConfig: audioDecoderConfig } : undefined,
+        );
+    }
 
     try {
         await cycle.output.start();
@@ -621,7 +694,7 @@ async function onSeek(newStartSec: number, newCycleId: number): Promise<void> {
 
     startSec = target;
     // Anticipate the new playback position. Without this, lastTick.currentTime
-    // sits at the pre-seek value (e.g. 60 s) while feedSentUpToSec for the new
+    // sits at the pre-seek value (e.g. 60 s) while feedEmittedUpToSec for the new
     // cycle immediately jumps to target+ε (e.g. 187 s) on the first packet.
     // ahead = 127 s >> target, feed waits, mediabunny gets no packets,
     // no fragment, no seek-done. Resetting unblocks the gate; real ticks
@@ -638,11 +711,13 @@ async function onSeek(newStartSec: number, newCycleId: number): Promise<void> {
  * Feed loop. Video and audio feed in parallel after an audio primer ensures
  * the first push to mediabunny output emits an init segment containing both
  * tracks. All cycle-scoped state (output, videoSource, audioSource, pending
- * accumulator, feedSentUpToSec) is reached only via the `cycle` parameter -
+ * accumulator, feedEmittedUpToSec) is reached only via the `cycle` parameter -
  * a stale runFeed from a previous cycle therefore cannot touch the new one.
  */
 async function runFeed(cycle: FeedCycle): Promise<void> {
     const signal = cycle.abort.signal;
+    const target = cycle.startTimestamp;
+    const sourceTarget = target + sourceTimeOrigin;
     if (!videoTrack || !videoCodec || !videoDecoderConfig) {
         fail("runFeed-missing-state");
         return;
@@ -656,47 +731,30 @@ async function runFeed(cycle: FeedCycle): Promise<void> {
         // real keyframe. Costs a small bitstream read per candidate; the feed reads
         // the data anyway. (mediabunny issue #414 - not fixed in the demuxer by
         // design; this option is the intended fix.)
-        let startKey = await videoSink.getKeyPacket(startSec, { verifyKeyPackets: true });
-        if (!startKey && startSec === 0) {
-            // MPEG-TS muxers shift the first video PTS by 0.03-1.5 s for PCR
-            // pre-roll, so getKeyPacket(0) returns null even though the very
-            // first packet is an IDR. Fall back to getFirstPacket() and
-            // require type==="key".
-            const first = await videoSink.getFirstPacket();
+        let startKey = await videoSink.getKeyPacket(sourceTarget, { verifyKeyPackets: true });
+        if (!startKey) {
+            // A composition timeline can begin with an audio-only gap. Use
+            // the first verified video keyframe when the target precedes it.
+            const first = await videoSink.getFirstPacket({ verifyKeyPackets: true });
             if (first && first.type === "key") startKey = first;
         }
+        if (signal.aborted) return;
         if (!startKey) {
             fail("no-video-keyframe");
             return;
         }
-        if (signal.aborted) return;
 
-        // Peek the audio start TIMESTAMP (file time of the first audio frame)
-        // up front so framePtsOffset keeps both streams non-negative after the
-        // shift. Transcode: the ADPCM reader feeds from startSec, so that is the
-        // first audio frame's file time. Stream-copy: peek the first mediabunny
-        // audio packet.
         let firstAudio: EncodedPacket | null = null;
         let audioSinkForPrimer: EncodedPacketSink | null = null;
-        let audioStartTs: number | null = null;
-        if (transcodeAdpcmAudio && adpcmReader && cycle.audioSource) {
-            audioStartTs = Math.max(0, startSec);
-        } else if (audioTrack && cycle.audioSource && audioDecoderConfig) {
+        if (audioTrack && cycle.audioSource && audioDecoderConfig) {
             audioSinkForPrimer = new EncodedPacketSink(audioTrack);
-            firstAudio = await audioSinkForPrimer.getPacket(Math.max(0, startSec));
-            if (!firstAudio && startSec === 0) {
-                firstAudio = await audioSinkForPrimer.getFirstPacket();
-            }
-            audioStartTs = firstAudio?.timestamp ?? null;
+            firstAudio = await audioSinkForPrimer.getPacket(sourceTarget);
+            if (!firstAudio) firstAudio = await audioSinkForPrimer.getFirstPacket();
         }
         if (signal.aborted) return;
 
-        // Anchor the timeline at the earliest video keyframe / audio start.
-        // For startSec === 0 we always shift to 0; for seek we keep the absolute
-        // timeline so video.currentTime = startSec works without correction.
-        const earliestSourceTs =
-            audioStartTs !== null ? Math.min(startKey.timestamp, audioStartTs) : startKey.timestamp;
-        const framePtsOffset = startSec === 0 ? -earliestSourceTs : earliestSourceTs < 0 ? -earliestSourceTs : 0;
+        // The same file must keep the same timeline before and after a seek.
+        const framePtsOffset = -sourceTimeOrigin;
 
         // Build the feed set. In all cases the FIRST audio sample must reach the
         // muxer before the first video packet: mediabunny emits the init segment
@@ -717,11 +775,11 @@ async function runFeed(cycle: FeedCycle): Promise<void> {
             });
             const audioFeed = (async () => {
                 try {
-                    await reader.feedToEnd(audioSource, Math.max(0, startSec), framePtsOffset, signal, resolvePrimed);
+                    await reader.feedToEnd(audioSource, target, framePtsOffset, signal, resolvePrimed);
                 } catch (e) {
-                    // Audio failure is not critical - video continues silently.
-                    if (!signal.aborted) log.warn("feedTranscodedAudio threw, dropping audio", e);
+                    if (!signal.aborted) fail("audio-transcode-threw", e);
                 } finally {
+                    if (!signal.aborted) audioSource.close();
                     // Never leave the video feed blocked: onFirstEmit does not
                     // fire if the range is empty (e.g. a seek past audio end) or
                     // the feed threw before its first sample.
@@ -743,14 +801,14 @@ async function runFeed(cycle: FeedCycle): Promise<void> {
                 await audioSource.add(adjusted, { decoderConfig: audioDecoderConfig });
                 primedAudioFirstPacket = firstAudio;
             } catch (e) {
-                if (!signal.aborted) {
-                    log.warn("audio primer add threw, dropping audio", e);
-                }
+                if (!signal.aborted) fail("audio-primer-threw", e);
             }
             if (signal.aborted) return;
             if (primedAudioFirstPacket) {
                 promises.push(feedAudio(cycle, audioTrack, framePtsOffset, primedAudioFirstPacket));
             }
+        } else if (cycle.audioSource) {
+            cycle.audioSource.close();
         }
 
         promises.push(feedVideo(cycle, videoSink, startKey, videoDecoderConfig, framePtsOffset));
@@ -760,7 +818,8 @@ async function runFeed(cycle: FeedCycle): Promise<void> {
         try {
             await cycle.output.finalize();
         } catch (e) {
-            log.debug("runFeed: finalize threw", e);
+            if (!signal.aborted) fail("output-finalize-threw", e);
+            return;
         }
         if (signal.aborted) return;
         const ntf: FeedDoneNotificationData = { cycleId: cycle.id };
@@ -799,12 +858,7 @@ async function feedVideo(
             fail("video-add-threw", e);
             return;
         }
-        // Stale-feed guard: by the time await videoSource.add returns, a
-        // concurrent onSeek may have already aborted us. Re-check before
-        // mutating cycle state so an obsolete cycle does not advance its
-        // own counter past where it actually fed.
         if (signal.aborted) return;
-        if (adjustedTs > cycle.feedSentUpToSec) cycle.feedSentUpToSec = adjustedTs;
         configPushed = true;
         // verifyKeyPackets: bitstream-check the key/delta flag of each fed packet,
         // matching the seek-anchor check above. Some MPEG-TS cameras (Rexing, #414)
@@ -834,7 +888,7 @@ async function feedAudio(
     // muxes video+audio into one interleaved fMP4 stream and will not flush
     // a fragment until both tracks have packets up to the fragment boundary.
     // If both feed loops shared the same backpressure gate keyed on
-    // feedSentUpToSec (advanced only by video), audio would wait for video
+    // feedEmittedUpToSec (advanced only by video), audio would wait for video
     // to make room, video would wait for buffered to grow, buffered would
     // not grow because Output cannot flush without audio - classic three-way
     // deadlock.
@@ -843,42 +897,30 @@ async function feedAudio(
     // = 1.2 MB for a 5 min clip) and audioSource.add accepts packets without
     // blocking on video. Output emits fragments paced by video keyframes;
     // audio sits in its internal queue until then.
-    let pkt: EncodedPacket | null = await sink.getNextPacket(primedFirstPacket);
-    while (pkt) {
-        if (signal.aborted) return;
-        const adjusted = framePtsOffset !== 0 ? pkt.clone({ timestamp: pkt.timestamp + framePtsOffset }) : pkt;
-        try {
-            await audioSource.add(adjusted);
-        } catch (e) {
+    try {
+        let pkt: EncodedPacket | null = await sink.getNextPacket(primedFirstPacket);
+        while (pkt) {
             if (signal.aborted) return;
-            // Audio failure is not critical - video continues silently.
-            log.warn("feedAudio: audio-add threw, dropping audio", e);
-            return;
+            const adjusted = framePtsOffset !== 0 ? pkt.clone({ timestamp: pkt.timestamp + framePtsOffset }) : pkt;
+            try {
+                await audioSource.add(adjusted);
+            } catch (e) {
+                if (signal.aborted) return;
+                fail("audio-add-threw", e);
+                return;
+            }
+            pkt = await sink.getNextPacket(pkt);
         }
-        pkt = await sink.getNextPacket(pkt);
+    } finally {
+        // A live fragmented muxer waits for every open track before flushing.
+        if (!signal.aborted) audioSource.close();
     }
 }
 
 /**
- * Pauses the feed loop until there is room for more video ahead of
- * video.currentTime. Uses cycle.feedSentUpToSec (cycle-scoped, mutated
- * synchronously by feedVideo on this cycle) as the leading edge of fed
- * media, not the bufferedFurthestEnd from main's last tick. Reason: on
- * fast appendBuffer paths the worker can push several fragments between
- * tick messages (~200 ms cadence); a tick-only gate lets the feed overshoot
- * by a few seconds and blow past Chrome's SourceBuffer quota.
- *
- * Both the buffer-ahead target and the queue-length ceiling scale with
- * lastTick.playbackRate. At 1x = baseline; at 8x both targets are 8x
- * larger (capped) so a wall-clock-equivalent cushion stays in place.
- * Without the scale, high-rate playback drains the fixed 8-sec window in
- * under a second and any feed jitter shows up as a stall.
- *
- * Wait is event-driven: the loop sleeps on waitForNextTick and re-checks
- * when MSE_NOTIFY_TICK arrives. Main posts a tick on every SourceBuffer
- * updateend (out-of-band, see per-file-mse.ts) in addition to the 200 ms
- * periodic - so room-freed events resume the feed immediately instead of
- * waiting up to 200 ms for the next poll.
+ * Gate on completed fragments, not packets still buffered inside the muxer.
+ * A GOP must reach its next keyframe before MSE can receive any of its data;
+ * stopping inside that GOP would wait for playback that cannot start yet.
  */
 async function waitForBufferRoom(cycle: FeedCycle): Promise<void> {
     const signal = cycle.abort.signal;
@@ -886,10 +928,10 @@ async function waitForBufferRoom(cycle: FeedCycle): Promise<void> {
         // Floor currentTime at cycle.startTimestamp. Between worker's
         // onSeek and main's video.currentTime = target write, a tick
         // can arrive carrying the pre-seek currentTime; without the
-        // floor it would set ahead to feedSentUpToSec - oldCurrentTime
+        // floor it would set ahead to feedEmittedUpToSec - oldCurrentTime
         // (large positive value) and freeze the feed.
         const effectiveCurrentTime = Math.max(lastTick.currentTime, cycle.startTimestamp);
-        const ahead = cycle.feedSentUpToSec - effectiveCurrentTime;
+        const ahead = cycle.feedEmittedUpToSec - effectiveCurrentTime;
         const rate = Math.max(1, lastTick.playbackRate);
         let targetAhead = Math.min(BASE_BUFFER_AHEAD_SEC * rate, MAX_BUFFER_AHEAD_SEC);
         // Adaptive cap: after at least 1 sec of media covered, derive a
@@ -904,7 +946,7 @@ async function waitForBufferRoom(cycle: FeedCycle): Promise<void> {
         }
         const targetQueueLen = Math.min(Math.ceil(BASE_MAX_APPEND_QUEUE_LEN * rate), MAX_APPEND_QUEUE_CAP);
         const bufferedEnough = ahead >= targetAhead;
-        const queueFull = lastTick.appendQueueLen >= targetQueueLen;
+        const queueFull = lastTick.appendPaused || lastTick.appendQueueLen >= targetQueueLen;
         if (!bufferedEnough && !queueFull) return;
         await waitForNextTick(signal);
     }

@@ -109,6 +109,9 @@ const TRIM_TICK_MS = 500;
 // uses these for its backpressure decisions; finer = more accurate gating
 // at higher postMessage rate.
 const TICK_MS = 200;
+const QUOTA_STALL_TIMEOUT_MS = 10000;
+// Stay before the keyframe despite MP4 timestamp rounding (video uses 57600 Hz).
+const TRIM_KEYFRAME_MARGIN_SEC = 0.001;
 
 interface PerFileMseBackendOptions {
     /** Source file. */
@@ -146,7 +149,9 @@ interface PerFileMseBackendOptions {
     onError?: (reason: string, error?: unknown) => void;
 }
 
-type AppendOp = { type: "data"; bytes: Uint8Array } | { type: "remove"; from: number; to: number };
+type AppendOp =
+    | { type: "data"; bytes: Uint8Array; videoKeyframeTimestamps?: number[] }
+    | { type: "remove"; from: number; to: number };
 
 /**
  * Per-file MSE backend. Lifecycle:
@@ -174,10 +179,15 @@ export class PerFileMseBackend {
     private trimInterval: ReturnType<typeof setInterval> | null = null;
     private updateEndHandler: (() => void) | null = null;
     private appendQueue: AppendOp[] = [];
-    // Tracks SB op type for quota retry latching - a data-append success
-    // clears the retry flag, a remove (our aggressive trim) does not.
-    private lastSubmittedOpType: "data" | "remove" | null = null;
+    // updating can become false before updateend is dispatched. Keep the op
+    // until its event so a late completion cannot confirm the next append.
+    private lastSubmittedOp: AppendOp | null = null;
+    private lastSubmittedCycleId = 0;
+    private bufferedVideoKeyframes: number[] = [];
     private quotaRetryAttempted = false;
+    private quotaBlocked = false;
+    private quotaLastProgressAt = 0;
+    private quotaLastCurrentTime = 0;
     // Pending seek-done waiter. Single-valued because opQueue serializes
     // attach/seekTo: only one in-flight seek can exist at a time.
     private seekDoneResolver: (() => void) | null = null;
@@ -385,8 +395,13 @@ export class PerFileMseBackend {
             }
             this.sourceBuffer.mode = "segments";
             this.updateEndHandler = () => {
-                if (this.lastSubmittedOpType === "data") {
+                const completed = this.lastSubmittedCycleId === this.currentCycleId ? this.lastSubmittedOp : null;
+                this.lastSubmittedOp = null;
+                if (completed?.type === "data") {
                     this.quotaRetryAttempted = false;
+                    this.bufferedVideoKeyframes.push(...(completed.videoKeyframeTimestamps ?? []));
+                } else if (completed?.type === "remove") {
+                    this.bufferedVideoKeyframes = this.bufferedVideoKeyframes.filter((time) => time >= completed.to);
                 }
                 // Reactive trim on every successful op so the behind-window
                 // tracks currentTime without waiting for the next interval.
@@ -496,7 +511,6 @@ export class PerFileMseBackend {
             return;
         }
         const target = Math.max(0, newStartSec);
-        if (target === this.startSec && !this.done && !this.failed) return;
 
         this.logger.info("seekTo: in-backend reseek", {
             file: this._file.name,
@@ -510,6 +524,8 @@ export class PerFileMseBackend {
         // the cycleId check on receipt in onWorkerNotification and be dropped -
         // they cannot pollute SourceBuffer with stale data.
         this.currentCycleId++;
+        this.resetQuotaRecovery();
+        this.bufferedVideoKeyframes = [];
 
         const seekDonePromise = new Promise<void>((resolve) => {
             this.seekDoneResolver = resolve;
@@ -593,6 +609,9 @@ export class PerFileMseBackend {
     async dispose(): Promise<void> {
         if (this.disposed) return;
         this.disposed = true;
+        this.resetQuotaRecovery();
+        this.bufferedVideoKeyframes = [];
+        this.lastSubmittedOp = null;
         if (this.tickInterval !== null) {
             clearInterval(this.tickInterval);
             this.tickInterval = null;
@@ -689,7 +708,7 @@ export class PerFileMseBackend {
      * pollute SourceBuffer.
      */
     private onWorkerNotification(type: string, data: unknown): void {
-        if (this.disposed) return;
+        if (this.disposed || this.failed) return;
         switch (type) {
             case MSE_NOTIFY_INIT_SEGMENT: {
                 const ntf = data as InitSegmentNotificationData;
@@ -705,7 +724,11 @@ export class PerFileMseBackend {
             case MSE_NOTIFY_MEDIA_SEGMENT: {
                 const ntf = data as MediaSegmentNotificationData;
                 if (ntf.cycleId !== this.currentCycleId) return;
-                this.appendQueue.push({ type: "data", bytes: ntf.bytes });
+                this.appendQueue.push({
+                    type: "data",
+                    bytes: ntf.bytes,
+                    videoKeyframeTimestamps: ntf.videoKeyframeTimestamps,
+                });
                 this.drainAppendQueue();
                 return;
             }
@@ -742,7 +765,7 @@ export class PerFileMseBackend {
         // done=false; bailing here avoids endOfStream-ing the new cycle's
         // MediaSource and clobbering its done=false (which would force a full
         // dispose + rescan on the next same-file seek).
-        if (this.disposed || this.currentCycleId !== cycleAtEntry) return;
+        if (this.disposed || this.failed || this.currentCycleId !== cycleAtEntry) return;
         if (this.mediaSource && this.mediaSource.readyState === "open") {
             try {
                 this.mediaSource.endOfStream();
@@ -788,6 +811,7 @@ export class PerFileMseBackend {
             currentTime: ct,
             appendQueueLen: this.appendQueue.length,
             playbackRate: rate,
+            appendPaused: this.quotaBlocked,
         };
         this.client.notify(MSE_NOTIFY_TICK, ntf);
     }
@@ -795,7 +819,7 @@ export class PerFileMseBackend {
     private waitForSbIdle(): Promise<void> {
         return new Promise<void>((resolve) => {
             const tick = () => {
-                if (this.disposed) return resolve();
+                if (this.disposed || this.failed) return resolve();
                 const sb = this.sourceBuffer;
                 if (!sb) return resolve();
                 if (this.appendQueue.length === 0 && !sb.updating) return resolve();
@@ -823,12 +847,16 @@ export class PerFileMseBackend {
      */
     private maybeEnqueueTrim(): void {
         if (this.disposed || this.failed) return;
+        if (this.quotaBlocked) {
+            this.tryQuotaRecovery();
+            return;
+        }
         const sb = this.sourceBuffer;
         const v = this.video;
         const ms = this.mediaSource;
         if (!sb || !v || !ms || ms.readyState !== "open") return;
         const ct = v.currentTime || 0;
-        const cutoff = ct - DEFAULT_BUFFER_BEHIND_SEC;
+        const cutoff = this.safeTrimEnd(ct - DEFAULT_BUFFER_BEHIND_SEC);
         if (cutoff <= 0) return;
         let buffered: TimeRanges;
         try {
@@ -847,31 +875,36 @@ export class PerFileMseBackend {
     }
 
     private drainAppendQueue(): void {
-        if (this.disposed) return;
+        if (this.disposed || this.failed || this.quotaBlocked) return;
         const sb = this.sourceBuffer;
-        if (!sb || sb.updating) return;
+        if (!sb || sb.updating || this.lastSubmittedOp) return;
         const op = this.appendQueue.shift();
         if (!op) return;
         try {
+            this.lastSubmittedOp = op;
+            this.lastSubmittedCycleId = this.currentCycleId;
             if (op.type === "data") {
-                this.lastSubmittedOpType = "data";
                 sb.appendBuffer(op.bytes as Uint8Array<ArrayBuffer>);
             } else {
-                this.lastSubmittedOpType = "remove";
                 sb.remove(op.from, op.to);
             }
         } catch (e) {
+            this.lastSubmittedOp = null;
             // QuotaExceededError - SB hit its quota. Standard MSE-spec
             // mitigation: aggressive trim + retry once. On a second failure
             // we give up - file is too large for this device even after trim.
             if (op.type === "data" && this.isQuotaExceeded(e) && !this.quotaRetryAttempted) {
                 this.quotaRetryAttempted = true;
-                this.logger.warn("appendBuffer quota exceeded, aggressive trim + retry", {
+                this.quotaBlocked = true;
+                this.quotaLastCurrentTime = this.video?.currentTime ?? 0;
+                this.quotaLastProgressAt = performance.now();
+                this.logger.warn("appendBuffer quota exceeded, waiting for safe behind trim", {
                     file: this._file.name,
                     bytes: op.bytes.byteLength,
                 });
                 this.appendQueue.unshift(op);
-                this.aggressiveTrimAndRetry();
+                this.sendTick();
+                this.tryQuotaRecovery();
                 return;
             }
             this.fail(op.type === "data" ? "appendBuffer-threw" : "remove-threw", e);
@@ -885,28 +918,31 @@ export class PerFileMseBackend {
         return false;
     }
 
-    /**
-     * Aggressive trim after QuotaExceededError. Two strategies in order:
-     *   1. Trim behind currentTime down to 1 s (least disruptive - user has
-     *      already played past it).
-     *   2. If the behind window is already empty (typical right after a
-     *      seekTo or attach: SB just got filled from the seek target so
-     *      buffered.start(0) ≈ currentTime), trim the FAR-AHEAD tail down
-     *      to ct + 2 s. Costs the user a re-feed of that region when
-     *      playback catches up; the alternative is marking the file
-     *      unplayable, which is worse.
-     *
-     * Both kinds go through the appendQueue (SB.updating blocks direct
-     * calls). After updateend the retry data chunk auto-drains.
-     */
-    private aggressiveTrimAndRetry(): void {
-        if (this.disposed) return;
+    private safeTrimEnd(cutoff: number): number {
+        let boundary = 0;
+        for (const time of this.bufferedVideoKeyframes) {
+            if (time <= cutoff) boundary = Math.max(boundary, time);
+        }
+        return Math.max(0, boundary - TRIM_KEYFRAME_MARGIN_SEC);
+    }
+
+    private resetQuotaRecovery(): void {
+        this.quotaBlocked = false;
+        this.quotaRetryAttempted = false;
+        this.quotaLastProgressAt = 0;
+        this.quotaLastCurrentTime = 0;
+    }
+
+    /** Keep the rejected append queued until playback frees a complete GOP. */
+    private tryQuotaRecovery(): void {
+        if (this.disposed || this.failed || !this.quotaBlocked) return;
         const sb = this.sourceBuffer;
         const v = this.video;
         if (!sb || !v) {
             this.fail("appendBuffer-quota-no-sb-after-trim");
             return;
         }
+        if (sb.updating || this.lastSubmittedOp) return;
         const ct = v.currentTime || 0;
         let buffered: TimeRanges;
         try {
@@ -922,37 +958,32 @@ export class PerFileMseBackend {
         const bufferedStart = buffered.start(0);
         const bufferedEnd = buffered.end(buffered.length - 1);
 
-        // Strategy 1: behind-window trim.
-        const trimBehindTo = Math.max(0, ct - 1);
+        // remove() extends to the next random-access point. An arbitrary
+        // time cutoff can remove the GOP that is still being displayed.
+        const trimBehindTo = this.safeTrimEnd(ct - 1);
         if (trimBehindTo > bufferedStart) {
             this.logger.info("quota: trimming behind", {
                 file: this._file.name,
                 trimTo: trimBehindTo,
                 bufferedStart,
             });
+            this.quotaBlocked = false;
             this.appendQueue.unshift({ type: "remove", from: 0, to: trimBehindTo });
             this.drainAppendQueue();
+            this.sendTick();
             return;
         }
 
-        // Strategy 2: far-ahead tail trim. Keep only [bufferedStart, ct + 2]
-        // so playback has 2 seconds of cushion to keep moving. Anything past
-        // that will be re-fed by the worker (cycleId match guaranteed
-        // because we did NOT bump it - this is the same cycle).
-        const trimAheadFrom = ct + 2;
-        if (trimAheadFrom < bufferedEnd) {
-            this.logger.info("quota: trimming ahead tail (no behind-room)", {
-                file: this._file.name,
-                trimFrom: trimAheadFrom,
-                bufferedEnd,
-            });
-            this.appendQueue.unshift({ type: "remove", from: trimAheadFrom, to: bufferedEnd });
-            this.drainAppendQueue();
-            return;
+        const now = performance.now();
+        if (v.paused || ct > this.quotaLastCurrentTime + 0.01) {
+            this.quotaLastCurrentTime = ct;
+            this.quotaLastProgressAt = now;
         }
-
-        // Neither side has room - SB literally holds only [ct-something, ct+2].
-        // Single chunk exceeds the quota: nothing more we can do.
-        this.fail("appendBuffer-quota-nothing-to-trim");
+        if (v.paused) return;
+        // Future bytes cannot be discarded: the worker has already advanced
+        // beyond them. Keep playing them, but never wait forever at their end.
+        if (ct >= bufferedEnd - 0.05 || now - this.quotaLastProgressAt >= QUOTA_STALL_TIMEOUT_MS) {
+            this.fail("appendBuffer-quota-no-safe-trim");
+        }
     }
 }
