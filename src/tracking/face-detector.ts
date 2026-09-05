@@ -29,28 +29,12 @@
 //
 // Runs in a worker. No logging - per-frame hot path.
 
-import {
-    letterboxInto,
-    type LetterboxMap,
-    packRgbPlanarNormalized,
-    type RawDetection,
-    suppressOverlaps,
-    type TileRect,
-    tileRects,
-} from "./detect-common.js";
-import { loadOrt, type OrtModule, type OrtRuntime } from "./ort-runtime.js";
-
-type OrtTensor = InstanceType<OrtModule["Tensor"]>;
-
-interface InputSlot {
-    readonly data: Float32Array;
-    readonly tensor: OrtTensor;
-}
+import type { RawDetection } from "./detect-common.js";
+import type { OrtRuntime } from "./ort-runtime.js";
+import { type DetectionTileOutput, TiledDetector } from "./tiled-detector.js";
 
 /** The re-export's static input side (see header). */
 const INPUT_SIZE = 960;
-/** YOLO letterbox convention the model was trained with: centered, 114-gray. */
-const LETTERBOX_FILL = "rgb(114,114,114)";
 /** Raw score floor - junk cut only. In the small exploratory bake-off, manually
  *  reviewed face candidates sat at 0.2-0.66 at this scale and the residual FP
  *  class (traffic-light lenses) topped out at
@@ -72,127 +56,32 @@ export const FACE_MIN_WIDTH_PX = 20;
 /** Duplicate suppression across tiles and model leftovers. */
 const NMS_IOU = 0.45;
 
-export class FaceDetector {
-    /** Reused letterbox target - one allocation per detector. */
-    private readonly scratch = new OffscreenCanvas(INPUT_SIZE, INPUT_SIZE);
-    /** Two slots are required by the one-run-deep CPU/GPU pipeline: while ORT
-     *  owns one tensor, the next tile is packed into the other. */
-    private readonly inputSlots: readonly [InputSlot, InputSlot];
-
-    private constructor(
-        ort: OrtModule,
-        private readonly session: Awaited<ReturnType<OrtModule["InferenceSession"]["create"]>>,
-    ) {
-        const makeSlot = (): InputSlot => {
-            const data = new Float32Array(3 * INPUT_SIZE * INPUT_SIZE);
-            return { data, tensor: new ort.Tensor("float32", data, [1, 3, INPUT_SIZE, INPUT_SIZE]) };
-        };
-        this.inputSlots = [makeSlot(), makeSlot()];
-    }
-
-    /** Loads the model and prepares a session on the given runtime. `wasmDir`
-     *  must host the matching ort binaries (see vite-plugins/tracker-assets). The
-     *  caller enforces the webgpu-only rule - a create on "wasm" would work
-     *  but is never requested (see header). */
-    static async create(runtime: OrtRuntime, modelUrl: string, wasmDir: string): Promise<FaceDetector> {
-        const ort = await loadOrt(runtime, wasmDir);
-        const session = await ort.InferenceSession.create(modelUrl, {
-            executionProviders: [runtime],
-            // Errors only - same per-node-fallback warning noise as the plate
-            // detector (see there).
-            logSeverityLevel: 3,
+/** Decodes the model's channels-first [1, 5, N] boxes into frame pixels. */
+export function collectFaceDetections({ data, dims, lb, tile }: DetectionTileOutput, detections: RawDetection[]): void {
+    const n = dims[2]!;
+    for (let i = 0; i < n; i++) {
+        const score = data[4 * n + i]!;
+        if (!(score >= FACE_SCORE_MIN)) continue;
+        const cx = data[i]!;
+        const cy = data[n + i]!;
+        const w = data[2 * n + i]!;
+        const h = data[3 * n + i]!;
+        if (w / lb.scale < FACE_MIN_WIDTH_PX) continue;
+        detections.push({
+            x: (cx - w / 2 - lb.dx) / lb.scale + tile.sx,
+            y: (cy - h / 2 - lb.dy) / lb.scale + tile.sy,
+            w: w / lb.scale,
+            h: h / lb.scale,
+            score,
         });
-        return new FaceDetector(ort, session);
     }
+}
 
-    /** All face candidates over `tiles` (default: the full grid), in frame
-     *  pixels, deduped across tiles, scores >= FACE_SCORE_MIN. */
-    async detect(
-        frame: CanvasImageSource,
-        frameW: number,
-        frameH: number,
-        tiles: readonly TileRect[] = tileRects(frameW, frameH),
-    ): Promise<RawDetection[]> {
-        const detections: RawDetection[] = [];
-        // Pipelined tiles - same shape and rationale as PlateDetector.detect:
-        // pack the next tile on the CPU while the current one runs on the GPU,
-        // one inference in flight at a time.
-        let inFlight: { outputs: ReturnType<FaceDetector["session"]["run"]>; lb: LetterboxMap; tile: TileRect } | null =
-            null;
-        const collect = async (): Promise<void> => {
-            if (!inFlight) return;
-            const { outputs, lb, tile } = inFlight;
-            inFlight = null;
-            let resolved: Awaited<typeof outputs> | null = null;
-            try {
-                resolved = await outputs;
-                const out = resolved[this.session.outputNames[0]!];
-                if (!out) return;
-                // [1, 5, N] channels-first: cx, cy, w, h, score in input pixels.
-                const data = out.data as Float32Array;
-                const n = out.dims[2]!;
-                for (let i = 0; i < n; i++) {
-                    const score = data[4 * n + i]!;
-                    if (!(score >= FACE_SCORE_MIN)) continue;
-                    const cx = data[i]!;
-                    const cy = data[n + i]!;
-                    const w = data[2 * n + i]!;
-                    const h = data[3 * n + i]!;
-                    if (w / lb.scale < FACE_MIN_WIDTH_PX) continue;
-                    detections.push({
-                        x: (cx - w / 2 - lb.dx) / lb.scale + tile.sx,
-                        y: (cy - h / 2 - lb.dy) / lb.scale + tile.sy,
-                        w: w / lb.scale,
-                        h: h / lb.scale,
-                        score,
-                    });
-                }
-            } finally {
-                if (resolved) {
-                    for (const tensor of Object.values(resolved)) tensor.dispose();
-                }
-            }
-        };
-        try {
-            for (let tileIdx = 0; tileIdx < tiles.length; tileIdx++) {
-                const tile = tiles[tileIdx]!;
-                const lb = letterboxInto(
-                    this.scratch,
-                    frame,
-                    tile.sx,
-                    tile.sy,
-                    tile.sw,
-                    tile.sh,
-                    INPUT_SIZE,
-                    LETTERBOX_FILL,
-                    true,
-                );
-                const tensor = this.toTensor(this.inputSlots[tileIdx & 1]!);
-                // Slot N-2 is no longer owned by ORT after collect resolves, so
-                // it is safe for the next iteration to reuse it.
-                await collect();
-                inFlight = { outputs: this.session.run({ [this.session.inputNames[0]!]: tensor }), lb, tile };
-            }
-            await collect();
-        } catch (error) {
-            // If canvas readback/packing failed while the previous run was
-            // pending, still drain and dispose that run's outputs.
-            try {
-                await collect();
-            } catch {
-                // Preserve the original failure.
-            }
-            throw error;
-        }
-        return suppressOverlaps(detections, NMS_IOU);
-    }
-
-    /** RGB planes, /255 (the ultralytics export's expected normalization). */
-    private toTensor(slot: InputSlot): OrtTensor {
-        const ctx = this.scratch.getContext("2d", { alpha: false });
-        if (!ctx) throw new Error("face-detector: scratch ctx unavailable");
-        const rgba = ctx.getImageData(0, 0, INPUT_SIZE, INPUT_SIZE).data;
-        packRgbPlanarNormalized(rgba, slot.data);
-        return slot.tensor;
-    }
+export function createFaceDetector(runtime: OrtRuntime, modelUrl: string, wasmDir: string): Promise<TiledDetector> {
+    return TiledDetector.create(runtime, modelUrl, wasmDir, {
+        name: "face",
+        inputSize: INPUT_SIZE,
+        overlapIou: NMS_IOU,
+        collect: collectFaceDetections,
+    });
 }

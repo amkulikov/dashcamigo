@@ -19,28 +19,12 @@
 //
 // Runs in a worker. No logging - per-frame hot path.
 
-import {
-    letterboxInto,
-    type LetterboxMap,
-    packRgbPlanarNormalized,
-    type RawDetection,
-    suppressOverlaps,
-    type TileRect,
-    tileRects,
-} from "./detect-common.js";
-import { loadOrt, type OrtModule, type OrtRuntime } from "./ort-runtime.js";
-
-type OrtTensor = InstanceType<OrtModule["Tensor"]>;
-
-interface InputSlot {
-    readonly data: Float32Array;
-    readonly tensor: OrtTensor;
-}
+import type { RawDetection } from "./detect-common.js";
+import type { OrtRuntime } from "./ort-runtime.js";
+import { type DetectionTileOutput, TiledDetector } from "./tiled-detector.js";
 
 /** The model variant's static input side. */
 const INPUT_SIZE = 608;
-/** YOLO letterbox convention the model was trained with: centered, 114-gray. */
-const LETTERBOX_FILL = "rgb(114,114,114)";
 /** Raw score floor - junk cut only. The PRODUCT floor - what may seed a track or
  *  count as confirmation evidence - is DETECT_SEED_SCORE_MIN in
  *  tracker-worker.ts. The band between the two floors is returned on purpose:
@@ -68,128 +52,29 @@ export function plateBoxPlausible(box: RawDetection, frameW: number, frameH: num
     return box.w / frameW <= PLATE_MAX_WIDTH_FRAC && (box.w * box.h) / (frameW * frameH) <= PLATE_MAX_AREA_FRAC;
 }
 
-export class PlateDetector {
-    /** Reused letterbox target - one allocation per detector. */
-    private readonly scratch = new OffscreenCanvas(INPUT_SIZE, INPUT_SIZE);
-    /** Two slots are required by the one-run-deep CPU/GPU pipeline: while ORT
-     *  owns one tensor, the next tile is packed into the other. */
-    private readonly inputSlots: readonly [InputSlot, InputSlot];
-
-    private constructor(
-        ort: OrtModule,
-        private readonly session: Awaited<ReturnType<OrtModule["InferenceSession"]["create"]>>,
-    ) {
-        const makeSlot = (): InputSlot => {
-            const data = new Float32Array(3 * INPUT_SIZE * INPUT_SIZE);
-            return { data, tensor: new ort.Tensor("float32", data, [1, 3, INPUT_SIZE, INPUT_SIZE]) };
-        };
-        this.inputSlots = [makeSlot(), makeSlot()];
+/** Decodes the model's rows of [batch, x1, y1, x2, y2, class, score]. */
+export function collectPlateDetections(
+    { data, dims, lb, tile, frameW, frameH }: DetectionTileOutput,
+    detections: RawDetection[],
+): void {
+    const cols = dims[dims.length - 1]!;
+    for (let r = 0; r * cols < data.length; r++) {
+        const score = data[r * cols + 6]!;
+        if (!(score >= PLATE_SCORE_MIN)) continue;
+        const x1 = (data[r * cols + 1]! - lb.dx) / lb.scale + tile.sx;
+        const y1 = (data[r * cols + 2]! - lb.dy) / lb.scale + tile.sy;
+        const x2 = (data[r * cols + 3]! - lb.dx) / lb.scale + tile.sx;
+        const y2 = (data[r * cols + 4]! - lb.dy) / lb.scale + tile.sy;
+        const box: RawDetection = { x: x1, y: y1, w: x2 - x1, h: y2 - y1, score };
+        if (plateBoxPlausible(box, frameW, frameH)) detections.push(box);
     }
+}
 
-    /** Loads the model and prepares a session on the given runtime. `wasmDir`
-     *  must host the matching ort binaries (see vite-plugins/tracker-assets). The
-     *  caller enforces the webgpu-only rule (see header) - a create on "wasm"
-     *  would work but is never requested. */
-    static async create(runtime: OrtRuntime, modelUrl: string, wasmDir: string): Promise<PlateDetector> {
-        const ort = await loadOrt(runtime, wasmDir);
-        const session = await ort.InferenceSession.create(modelUrl, {
-            executionProviders: [runtime],
-            // Errors only: on webgpu ORT warns about per-node CPU fallback (the
-            // in-graph NMS - expected) straight to console.error, which both
-            // noises real consoles and trips the fail-loud e2e invariant.
-            logSeverityLevel: 3,
-        });
-        return new PlateDetector(ort, session);
-    }
-
-    /** All plate candidates over `tiles` (default: the full grid), in frame
-     *  pixels, deduped across tiles, scores >= PLATE_SCORE_MIN, implausibly
-     *  large boxes dropped (plateBoxPlausible). */
-    async detect(
-        frame: CanvasImageSource,
-        frameW: number,
-        frameH: number,
-        tiles: readonly TileRect[] = tileRects(frameW, frameH),
-    ): Promise<RawDetection[]> {
-        const detections: RawDetection[] = [];
-        // Pipelined tiles: the NEXT tile's letterbox + tensor pack (CPU) runs
-        // while the CURRENT tile's inference is in flight on the GPU - the
-        // pack writes the other ping-pong slot, so the scratch is reusable
-        // immediately. One inference in flight at a time (ort sessions are not
-        // reentrant).
-        let inFlight: {
-            outputs: ReturnType<PlateDetector["session"]["run"]>;
-            lb: LetterboxMap;
-            tile: TileRect;
-        } | null = null;
-        const collect = async (): Promise<void> => {
-            if (!inFlight) return;
-            const { outputs, lb, tile } = inFlight;
-            inFlight = null;
-            let resolved: Awaited<typeof outputs> | null = null;
-            try {
-                resolved = await outputs;
-                const out = resolved[this.session.outputNames[0]!];
-                if (!out) return;
-                // Rows of [batch, x1, y1, x2, y2, class, score] in input pixels.
-                const data = out.data as Float32Array;
-                const cols = out.dims[out.dims.length - 1]!;
-                for (let r = 0; r * cols < data.length; r++) {
-                    const score = data[r * cols + 6]!;
-                    if (!(score >= PLATE_SCORE_MIN)) continue;
-                    const x1 = (data[r * cols + 1]! - lb.dx) / lb.scale + tile.sx;
-                    const y1 = (data[r * cols + 2]! - lb.dy) / lb.scale + tile.sy;
-                    const x2 = (data[r * cols + 3]! - lb.dx) / lb.scale + tile.sx;
-                    const y2 = (data[r * cols + 4]! - lb.dy) / lb.scale + tile.sy;
-                    const box: RawDetection = { x: x1, y: y1, w: x2 - x1, h: y2 - y1, score };
-                    if (plateBoxPlausible(box, frameW, frameH)) detections.push(box);
-                }
-            } finally {
-                if (resolved) {
-                    for (const tensor of Object.values(resolved)) tensor.dispose();
-                }
-            }
-        };
-        try {
-            for (let tileIdx = 0; tileIdx < tiles.length; tileIdx++) {
-                const tile = tiles[tileIdx]!;
-                const lb = letterboxInto(
-                    this.scratch,
-                    frame,
-                    tile.sx,
-                    tile.sy,
-                    tile.sw,
-                    tile.sh,
-                    INPUT_SIZE,
-                    LETTERBOX_FILL,
-                    true,
-                );
-                const tensor = this.toTensor(this.inputSlots[tileIdx & 1]!);
-                // Slot N-2 is no longer owned by ORT after collect resolves, so
-                // it is safe for the next iteration to reuse it.
-                await collect();
-                inFlight = { outputs: this.session.run({ [this.session.inputNames[0]!]: tensor }), lb, tile };
-            }
-            await collect();
-        } catch (error) {
-            // If canvas readback/packing failed while the previous run was
-            // pending, still drain and dispose that run's outputs.
-            try {
-                await collect();
-            } catch {
-                // Preserve the original failure.
-            }
-            throw error;
-        }
-        return suppressOverlaps(detections, DEDUPE_IOU);
-    }
-
-    /** RGB planes, /255 (the YOLO export's expected normalization). */
-    private toTensor(slot: InputSlot): OrtTensor {
-        const ctx = this.scratch.getContext("2d", { alpha: false });
-        if (!ctx) throw new Error("plate-detector: scratch ctx unavailable");
-        const rgba = ctx.getImageData(0, 0, INPUT_SIZE, INPUT_SIZE).data;
-        packRgbPlanarNormalized(rgba, slot.data);
-        return slot.tensor;
-    }
+export function createPlateDetector(runtime: OrtRuntime, modelUrl: string, wasmDir: string): Promise<TiledDetector> {
+    return TiledDetector.create(runtime, modelUrl, wasmDir, {
+        name: "plate",
+        inputSize: INPUT_SIZE,
+        overlapIou: DEDUPE_IOU,
+        collect: collectPlateDetections,
+    });
 }

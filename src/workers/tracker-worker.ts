@@ -28,9 +28,9 @@ import {
     type TrackKeyframe,
 } from "../tracking/detect-track.js";
 import { intervalsContain, totalIntervalSec, unionIntervals } from "../tracking/interval-set.js";
-import { FaceDetector } from "../tracking/face-detector.js";
+import { createFaceDetector } from "../tracking/face-detector.js";
 import { type OrtRuntime } from "../tracking/ort-runtime.js";
-import { PlateDetector } from "../tracking/plate-detector.js";
+import { createPlateDetector } from "../tracking/plate-detector.js";
 import { boxVisibleFraction, EXIT_CONFIRM_SEC, EXIT_VISIBLE_FRACTION } from "../tracking/track-guards.js";
 import { type VitTrack, VitTrackerSession, VITTRACK_SCORE_THRESHOLD, type TrackBox } from "../tracking/vittrack.js";
 import { clampTsGpsTrailer } from "../ts-trailer.js";
@@ -107,22 +107,15 @@ async function getTrackerSession(
 // failing HERE despite the main-thread probe (adapter missing/broken in this
 // worker) fails the pass loudly instead of silently delivering an unusably
 // slow wasm one (face ~600 ms/tile, plate ~140 ms/tile single-thread).
-let cachedPlate: { key: string; detector: PlateDetector } | null = null;
-let cachedFace: { key: string; detector: FaceDetector } | null = null;
+const detectorFactories = { plate: createPlateDetector, face: createFaceDetector };
+const cachedDetectors = new Map<DetectKind, { key: string; detector: FrameDetector }>();
 
-async function getPlateDetector(modelUrl: string, wasmDir: string): Promise<PlateDetector> {
+async function getDetector(kind: DetectKind, modelUrl: string, wasmDir: string): Promise<FrameDetector> {
     const key = `${wasmDir}|${modelUrl}`;
-    if (cachedPlate?.key === key) return cachedPlate.detector;
-    const detector = await PlateDetector.create("webgpu", modelUrl, wasmDir);
-    cachedPlate = { key, detector };
-    return detector;
-}
-
-async function getFaceDetector(modelUrl: string, wasmDir: string): Promise<FaceDetector> {
-    const key = `${wasmDir}|${modelUrl}`;
-    if (cachedFace?.key === key) return cachedFace.detector;
-    const detector = await FaceDetector.create("webgpu", modelUrl, wasmDir);
-    cachedFace = { key, detector };
+    const cached = cachedDetectors.get(kind);
+    if (cached?.key === key) return cached.detector;
+    const detector = await detectorFactories[kind]("webgpu", modelUrl, wasmDir);
+    cachedDetectors.set(kind, { key, detector });
     return detector;
 }
 
@@ -467,9 +460,7 @@ async function runDetectPass(
     for (const kind of req.kinds) {
         detectors.set(
             kind,
-            kind === "plate"
-                ? await getPlateDetector(req.plateModelUrl, req.ortWasmDir)
-                : await getFaceDetector(req.faceModelUrl, req.ortWasmDir),
+            await getDetector(kind, kind === "plate" ? req.plateModelUrl : req.faceModelUrl, req.ortWasmDir),
         );
         live.set(kind, []);
         finished.set(kind, []);

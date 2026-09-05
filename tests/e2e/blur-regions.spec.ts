@@ -273,42 +273,34 @@ test.describe("blur regions", () => {
         await expect(page.locator('.video-tile[data-channel="front"] .blur-box:not([hidden])')).toBeVisible();
     });
 
-    test("plate checkbox gates on the model download, scans the range and reports a count", async ({ page }) => {
-        // Real model download (webgpu ort runtime + plate model, from the
-        // local server) + a real detector pass over the 4 s sample - headless
-        // Chromium's SwiftShader adapter is what the pass runs on, same
-        // webgpu-only path as production (no wasm fallback exists). The
-        // synthetic clip has no plates, so the
-        // honest settled state is a zero count - the assertion is the LIFECYCLE
-        // (consent -> download -> scan -> count row), not detections.
-        //
-        // Detection is WebGPU-only; without a real adapter the checkbox is
-        // disabled and .check() below would hang the whole 180 s. Skip cleanly
-        // instead (CI's SwiftShader provides an adapter, so it runs there).
-        test.skip(!(await hasWebGpuAdapter(page)), "WebGPU adapter unavailable - plate detection is WebGPU-only");
-        test.setTimeout(180_000);
-        const platesCb = page.locator("#export-panel-blur-plates");
-        await expect(platesCb).toBeVisible();
-        // A pending scan must gate stream-copy - the top tier stops claiming
-        // "Original" the moment the checkbox is on (privacy over copy speed).
-        const topTier = page.locator('.export-panel__radio:has(input[value="original"]) strong');
-        await expect(topTier).toHaveText("Original");
-        await platesCb.check();
-        await expect(topTier).toHaveText("High");
+    for (const [kind, label] of [
+        ["plates", "Plates"],
+        ["faces", "Faces"],
+    ] as const) {
+        test(`${kind} checkbox gates on the model download, scans the range and reports a count`, async ({ page }) => {
+            // A real model pass over the local synthetic clip verifies the
+            // complete download/inference lifecycle; the clip contains neither
+            // faces nor plates, so stream-copy becomes available again.
+            test.skip(!(await hasWebGpuAdapter(page)), "WebGPU adapter unavailable - detection is WebGPU-only");
+            test.setTimeout(180_000);
+            const checkbox = page.locator(`#export-panel-blur-${kind}`);
+            await expect(checkbox).toBeVisible();
+            const topTier = page.locator('.export-panel__radio:has(input[value="original"]) strong');
+            await expect(topTier).toHaveText("Original");
+            await checkbox.check();
+            await expect(topTier).toHaveText("High");
 
-        // Fresh device: the detect consent strip appears; the Follow strip stays out.
-        const strip = page.locator(".export-panel__blur-detect-strip");
-        await expect(strip).toBeVisible();
-        await expect(page.locator(".export-panel__blur-tracker")).toBeHidden();
-        await strip.getByRole("button", { name: "Download & scan" }).click();
+            const strip = page.locator(".export-panel__blur-detect-strip");
+            await expect(strip).toBeVisible();
+            await expect(page.locator(".export-panel__blur-tracker")).toBeHidden();
+            await strip.getByRole("button", { name: "Download & scan" }).click();
 
-        // Scan settles into the found-count row; nothing found -> stream-copy
-        // is honestly available again.
-        const status = page.locator(".export-panel__blur-detect-status");
-        await expect(status).toHaveText(/Plates: 0/, { timeout: 120_000 });
-        await expect(strip).toBeHidden();
-        await expect(topTier).toHaveText("Original");
-    });
+            const status = page.locator(".export-panel__blur-detect-status");
+            await expect(status).toHaveText(new RegExp(`${label}: 0`), { timeout: 120_000 });
+            await expect(strip).toBeHidden();
+            await expect(topTier).toHaveText("Original");
+        });
+    }
 
     test("detect consent 'Not now' unchecks the box and hides the strip", async ({ page }) => {
         // Same WebGPU gate as the scan test: a disabled checkbox makes .check() hang.
