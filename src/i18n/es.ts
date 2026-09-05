@@ -348,6 +348,9 @@ export const esDict = {
     "codecUnsupported.hint.windowsChrome": "Prueba a abrir la misma carpeta en Microsoft Edge con el complemento {link} de Microsoft Store.",
     "codecUnsupported.hint.windowsEdge": "Instala el complemento {link} desde Microsoft Store y recarga la página. O abre la misma carpeta en Chrome — suele reproducir estos vídeos sin complementos.",
     "codecUnsupported.stillWorks": "El mapa, el gráfico de velocidad y la exportación de clips sin cambios siguen funcionando.",
+    "playbackFailed.title": "No se pudo reproducir este vídeo",
+    "playbackFailed.hint": "Inténtalo de nuevo. Si sigue sin reproducirse, informa del problema para que podamos revisarlo.",
+    "playbackFailed.retry": "Reintentar",
 
     "unsupported.modal.title": "Algunos archivos no se pueden abrir",
     "unsupported.modal.body": "Tu navegador no reproduce estos formatos:",

@@ -347,6 +347,9 @@ export const enDict = {
     "codecUnsupported.hint.windowsChrome": "Try opening the same folder in Microsoft Edge with the {link} add-on from the Microsoft Store.",
     "codecUnsupported.hint.windowsEdge": "Install the {link} add-on from the Microsoft Store, then reload this page. Or open the same folder in Chrome — it usually plays these videos without add-ons.",
     "codecUnsupported.stillWorks": "The map, speed chart and export without edits still work.",
+    "playbackFailed.title": "Couldn't play this video",
+    "playbackFailed.hint": "Try again. If it still won't play, report the problem so we can look into it.",
+    "playbackFailed.retry": "Try again",
 
     "unsupported.modal.title": "Some files couldn't be opened",
     "unsupported.modal.body": "Your browser doesn't play these formats:",

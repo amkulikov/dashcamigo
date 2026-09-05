@@ -350,6 +350,9 @@ export const frDict = {
     "codecUnsupported.hint.windowsChrome": "Essaie d’ouvrir le même dossier dans Microsoft Edge avec le module {link} du Microsoft Store.",
     "codecUnsupported.hint.windowsEdge": "Installe le module {link} depuis le Microsoft Store, puis recharge la page. Ou ouvre le même dossier dans Chrome — il lit en général ces vidéos sans module.",
     "codecUnsupported.stillWorks": "La carte, le graphique de vitesse et l'export de clips sans modification fonctionnent toujours.",
+    "playbackFailed.title": "Impossible de lire cette vidéo",
+    "playbackFailed.hint": "Réessaie. Si la vidéo ne se lance toujours pas, signale le problème pour que nous puissions le vérifier.",
+    "playbackFailed.retry": "Réessayer",
 
     "unsupported.modal.title": "Certains fichiers n'ont pas pu être ouverts",
     "unsupported.modal.body": "Ton navigateur ne lit pas ces formats :",

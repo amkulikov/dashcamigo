@@ -434,6 +434,9 @@ export type I18nKey =
     | "codecUnsupported.hint.windowsChrome"
     | "codecUnsupported.hint.windowsEdge"
     | "codecUnsupported.stillWorks"
+    | "playbackFailed.title"
+    | "playbackFailed.hint"
+    | "playbackFailed.retry"
 
     // Browser-compatibility surfacing (src/capabilities.ts + ui/capability-gate.ts).
     // - caps.gate.* - the full blocking gate shown when a FATAL Web API is

@@ -1,5 +1,4 @@
-// What to show over the player before a trip is selected or when the codec is unsupported.
-// Both are "negative" viewer states, kept together.
+// Viewer placeholders for missing selection, unsupported video and playback failure.
 
 import { t } from "../i18n/index.js";
 import type { VideoCodec } from "mediabunny";
@@ -80,7 +79,13 @@ export function syncEmptyState(): void {
  */
 export function showCodecUnsupportedOverlay(codec: VideoCodec | null): void {
     if (!dom.viewer) return;
+    dom.viewer.classList.remove("playback-failed");
     dom.viewer.classList.add("codec-unsupported");
+    const retry = document.getElementById("playback-failed-retry") as HTMLButtonElement | null;
+    if (retry) {
+        retry.hidden = true;
+        retry.onclick = null;
+    }
     const titleEl = document.getElementById("codec-unsupported-title");
     if (titleEl) {
         titleEl.textContent = t("codecUnsupported.title");
@@ -93,7 +98,29 @@ export function showCodecUnsupportedOverlay(codec: VideoCodec | null): void {
     }
 }
 
-export function hideCodecUnsupportedOverlay(): void {
+/** Runtime faults offer another attempt without claiming the format is unsupported. */
+export function showPlaybackFailureOverlay(onRetry: () => void): void {
     if (!dom.viewer) return;
     dom.viewer.classList.remove("codec-unsupported");
+    dom.viewer.classList.add("playback-failed");
+    const title = document.getElementById("codec-unsupported-title");
+    const hint = document.getElementById("codec-unsupported-hint");
+    if (title) title.textContent = t("playbackFailed.title");
+    if (hint) hint.textContent = t("playbackFailed.hint");
+    const retry = document.getElementById("playback-failed-retry") as HTMLButtonElement | null;
+    if (retry) {
+        retry.hidden = false;
+        retry.textContent = t("playbackFailed.retry");
+        retry.onclick = onRetry;
+    }
+}
+
+export function hideCodecUnsupportedOverlay(): void {
+    if (!dom.viewer) return;
+    dom.viewer.classList.remove("codec-unsupported", "playback-failed");
+    const retry = document.getElementById("playback-failed-retry") as HTMLButtonElement | null;
+    if (retry) {
+        retry.hidden = true;
+        retry.onclick = null;
+    }
 }

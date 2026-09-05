@@ -356,6 +356,9 @@ export const jaDict = {
     "codecUnsupported.hint.windowsChrome": "Microsoft Store の {link} アドオンを入れた Microsoft Edge で、同じフォルダーを開いてみてください。",
     "codecUnsupported.hint.windowsEdge": "Microsoft Store から {link} アドオンをインストールして、このページを再読み込みしてください。または Chrome で同じフォルダーを開いてみてください — たいていアドオンなしで再生できます。",
     "codecUnsupported.stillWorks": "地図、速度グラフ、無編集でのクリップ書き出しは引き続き使えます。",
+    "playbackFailed.title": "この動画を再生できませんでした",
+    "playbackFailed.hint": "もう一度お試しください。再生できない場合は、調査できるよう問題をご報告ください。",
+    "playbackFailed.retry": "再試行",
 
     "unsupported.modal.title": "一部のファイルは開けません",
     "unsupported.modal.body": "このブラウザでは次の形式が再生できません：",

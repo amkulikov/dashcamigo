@@ -347,6 +347,9 @@ export const deDict = {
     "codecUnsupported.hint.windowsChrome": "Versuche, denselben Ordner in Microsoft Edge mit der Erweiterung {link} aus dem Microsoft Store zu öffnen.",
     "codecUnsupported.hint.windowsEdge": "Installiere die Erweiterung {link} aus dem Microsoft Store und lade die Seite neu. Oder öffne denselben Ordner in Chrome — dort laufen solche Videos meistens ohne Zusätze.",
     "codecUnsupported.stillWorks": "Karte, Geschwindigkeitsdiagramm und der Export unveränderter Clips funktionieren weiterhin.",
+    "playbackFailed.title": "Das Video konnte nicht abgespielt werden",
+    "playbackFailed.hint": "Versuch es noch einmal. Wenn es weiterhin nicht klappt, melde das Problem, damit wir es prüfen können.",
+    "playbackFailed.retry": "Erneut versuchen",
 
     "unsupported.modal.title": "Manche Dateien konnten nicht geöffnet werden",
     "unsupported.modal.body": "Dein Browser spielt diese Formate nicht ab:",

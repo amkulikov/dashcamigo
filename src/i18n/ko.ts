@@ -355,6 +355,9 @@ export const koDict = {
     "codecUnsupported.hint.windowsChrome": "Microsoft Store의 {link} 추가 기능을 설치한 Microsoft Edge에서 같은 폴더를 열어 보세요.",
     "codecUnsupported.hint.windowsEdge": "Microsoft Store에서 {link} 추가 기능을 설치한 뒤 페이지를 새로고침해 주세요. 또는 Chrome에서 같은 폴더를 열어 보세요 — 보통 추가 기능 없이도 재생돼요.",
     "codecUnsupported.stillWorks": "지도, 속도 그래프, 변경 없는 클립 내보내기는 계속 사용할 수 있어요.",
+    "playbackFailed.title": "이 동영상을 재생하지 못했어요",
+    "playbackFailed.hint": "다시 시도해 보세요. 계속 재생되지 않으면 문제를 신고해 주세요. 확인해 볼게요.",
+    "playbackFailed.retry": "다시 시도",
 
     "unsupported.modal.title": "일부 파일은 못 열어요",
     "unsupported.modal.body": "이 브라우저는 다음 형식을 재생하지 못해요:",

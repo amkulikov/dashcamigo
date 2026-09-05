@@ -351,6 +351,9 @@ export const ruDict = {
     "codecUnsupported.hint.windowsChrome": "Попробуй открыть ту же папку в Microsoft Edge с дополнением {link} из Microsoft Store.",
     "codecUnsupported.hint.windowsEdge": "Установи дополнение {link} из Microsoft Store и перезагрузи страницу. Или открой эту же папку в Chrome — он обычно играет такие видео без дополнений.",
     "codecUnsupported.stillWorks": "Карта, график скорости и экспорт клипов без изменений работают.",
+    "playbackFailed.title": "Не удалось воспроизвести видео",
+    "playbackFailed.hint": "Попробуй ещё раз. Если видео не заработает, сообщи о проблеме — разберёмся.",
+    "playbackFailed.retry": "Повторить",
 
     "unsupported.modal.title": "Эти форматы не открою",
     "unsupported.modal.body": "Браузер не воспроизводит эти форматы:",

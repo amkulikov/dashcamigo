@@ -345,6 +345,9 @@ export const zhDict = {
     "codecUnsupported.hint.windowsChrome": "请尝试在 Microsoft Edge 中打开同一个文件夹，并从 Microsoft Store 安装 {link} 扩展。",
     "codecUnsupported.hint.windowsEdge": "从 Microsoft Store 安装 {link} 扩展，然后刷新此页面。或者在 Chrome 中打开同一个文件夹 — 它通常无需扩展即可播放这类视频。",
     "codecUnsupported.stillWorks": "地图、速度图表和不作修改的剪辑导出仍然可用。",
+    "playbackFailed.title": "无法播放此视频",
+    "playbackFailed.hint": "请重试。如果仍无法播放，请反馈问题，我们会进行排查。",
+    "playbackFailed.retry": "重试",
 
     "unsupported.modal.title": "有些文件打不开",
     "unsupported.modal.body": "你的浏览器不能播放这些格式：",

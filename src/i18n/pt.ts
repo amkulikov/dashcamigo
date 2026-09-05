@@ -348,6 +348,9 @@ export const ptDict = {
     "codecUnsupported.hint.windowsChrome": "Tente abrir a mesma pasta no Microsoft Edge com a extensão {link} da Microsoft Store.",
     "codecUnsupported.hint.windowsEdge": "Instale a extensão {link} da Microsoft Store e recarregue a página. Ou abra a mesma pasta no Chrome — ele normalmente reproduz estes vídeos sem extensões.",
     "codecUnsupported.stillWorks": "O mapa, o gráfico de velocidade e a exportação de clipes sem alterações continuam funcionando.",
+    "playbackFailed.title": "Não foi possível reproduzir este vídeo",
+    "playbackFailed.hint": "Tenta novamente. Se continuar sem reproduzir, comunica o problema para podermos investigar.",
+    "playbackFailed.retry": "Tentar novamente",
 
     "unsupported.modal.title": "Alguns arquivos não puderam ser abertos",
     "unsupported.modal.body": "Seu navegador não reproduz estes formatos:",

@@ -66,7 +66,7 @@ import {
     SLAVE_DRIFT_MAX_SEC,
     swapActiveSlot,
 } from "./dom.js";
-import { hideCodecUnsupportedOverlay, showCodecUnsupportedOverlay } from "./empty-state.js";
+import { hideCodecUnsupportedOverlay, showCodecUnsupportedOverlay, showPlaybackFailureOverlay } from "./empty-state.js";
 import { channelDisplayLabel, formatDuration, formatTime } from "./format.js";
 import { registerGpsSyncRefreshListener } from "./gps-sync-refresh.js";
 import { notify } from "./notifications.js";
@@ -300,7 +300,7 @@ function schedulePreloadNext(): void {
         return;
     }
     const cand = picked.candidate;
-    if (requiresMseBackend(cand) || !cand.canPlay) {
+    if (requiresMseBackend(cand) || !cand.canPlay || runtimePlaybackFailures.has(cand)) {
         clearPreloadSlot(masterCh);
         return;
     }
@@ -328,7 +328,7 @@ function tryPromotePreloadAsActive(nextFrameIdx: number): boolean {
     const picked = pickFrameChannel(nextFrame, mainChannel());
     if (!picked || picked.channel !== masterCh) return false;
     const cand = picked.candidate;
-    if (requiresMseBackend(cand) || !cand.canPlay) return false;
+    if (requiresMseBackend(cand) || !cand.canPlay || runtimePlaybackFailures.has(cand)) return false;
 
     const newActive = preloadPlayer(masterCh);
     if (videoAttachedFile.get(newActive) !== cand.file) return false;
@@ -606,6 +606,14 @@ export function playFrame(
         }
         return;
     }
+    if (runtimePlaybackFailures.has(video)) {
+        syncFrameToGrid(frame, picked.channel, startOffsetSec);
+        showRuntimePlaybackFailure(video, picked.channel);
+        if (tripChanged) resyncMetricsForTrip();
+        updatePlayerProgressUi();
+        if (tripChanged) emitLifecycle("player-failed", { tripIndex: tripIdx, reason: "playback-failed" });
+        return;
+    }
     hideCodecUnsupportedOverlay();
 
     // Re-activating an already loaded native file changes no src, so there will
@@ -713,53 +721,133 @@ function markCandidateUnplayable(cand: VideoCandidate, ch: Channel): void {
     playFrame(state.active.trip, state.active.frame, 0, wasPlaying);
 }
 
-/**
- * Retry budget for a candidate whose runtime decode failed TRANSIENTLY (decoder
- * pool exhausted while trip-card previews churn, a cold-read init timeout).
- * Keyed by the candidate so it resets on re-ingest (fresh candidates) and is
- * cleared on a successful play (see the "playing" handler) so the budget is per
- * failure episode, not per session. WeakMap so a GC'd candidate is not retained.
- */
+interface PlaybackRetryPosition {
+    offsetSec: number;
+    autoPlay: boolean;
+}
+
+// Runtime failure says nothing about the file's playback/export capabilities.
+// Keep it separate until the user retries; UI syncs must not reopen it in a loop.
+const runtimePlaybackFailures = new WeakMap<VideoCandidate, PlaybackRetryPosition>();
 const decodeRetryCount = new WeakMap<VideoCandidate, number>();
-/** One retry rides out a momentary decoder-pool spike or a cold read (the
- *  re-read is warm); a genuinely broken clip still stops after the second
- *  failure and gets the permanent overlay instead of looping. */
+const recoveringCandidates = new WeakSet<VideoCandidate>();
 const MAX_DECODE_RETRIES = 1;
 
-/**
- * Runtime decode/backend failure handler. A GENUINE codec rejection (native
- * SRC_NOT_SUPPORTED, MSE mime-not-supported) is permanent: the file cannot play,
- * so mark it unplayable and show the overlay. A TRANSIENT failure (native DECODE,
- * any other MSE reason - a cold-read worker-ready timeout, decoder-pool
- * exhaustion under preview contention, sourceopen/quota) is recoverable:
- * re-attach the same frame once instead of poisoning the candidate for the whole
- * session, which used to force a full re-ingest to clear. Only after
- * MAX_DECODE_RETRIES does a still-failing file fall through to the permanent mark.
- */
-function handleRuntimeDecodeFailure(cand: VideoCandidate, ch: Channel, recoverable: boolean, reason: string): void {
-    if (!cand.canPlay) return; // already permanently marked
-    const used = decodeRetryCount.get(cand) ?? 0;
-    if (recoverable && used < MAX_DECODE_RETRIES) {
-        decodeRetryCount.set(cand, used + 1);
-        log.warn("transient decode failure, re-attaching frame", { file: cand.file.name, channel: ch, reason });
-        if (!state.active) return;
-        const wasPlaying = !dom.player.paused;
-        // Force a genuinely fresh attach: dispose any MSE backend AND clear the
-        // native src marker - setVideoSrcFromFile is idempotent by file, so a
-        // bare re-attach on the same file would skip and never re-decode.
-        void disposeChannelBackend(ch);
-        clearVideoSrc(channelPlayers[ch]);
-        playFrame(state.active.trip, state.active.frame, 0, wasPlaying);
+function attachedCandidate(v: HTMLVideoElement, ch: Channel): VideoCandidate | null {
+    const trip = activeTrip();
+    const file = videoAttachedFile.get(v);
+    if (!trip || !file) return null;
+    return tripCandidatesByChannel(trip, ch).find((candidate) => candidate.file === file) ?? null;
+}
+
+function playbackRetryPosition(v: HTMLVideoElement): PlaybackRetryPosition {
+    const isMaster = v === activePlayer();
+    const trip = activeTrip();
+    const seek =
+        isMaster && trip && pendingSeekTripSec !== null ? contentToFrame(trip.timeline, pendingSeekTripSec) : null;
+    const offsetSec =
+        seek && seek.index === state.active?.frame
+            ? seek.offsetInFrame
+            : isMaster && pendingFileOffset > 0
+              ? pendingFileOffset
+              : v.currentTime;
+    return {
+        offsetSec: Math.max(0, offsetSec),
+        autoPlay: isMaster ? pendingPlay || resumeAfterSeekTarget !== null || !v.paused : !activePlayer().paused,
+    };
+}
+
+function showRuntimePlaybackFailure(cand: VideoCandidate, ch: Channel): void {
+    clearPendingSeek();
+    disarmResumeAfterSeek();
+    pendingPlay = false;
+    pendingFileOffset = 0;
+    hideLoadingOverlay();
+    showPlaybackFailureOverlay(() => retryPlaybackCandidate(cand, ch));
+    syncCaptureButton();
+    syncPlayButton();
+}
+
+/** Reopen only the failed camera; healthy cameras keep their sources and time. */
+async function restartCandidate(cand: VideoCandidate, ch: Channel, position: PlaybackRetryPosition): Promise<void> {
+    const v = channelPlayers[ch];
+    const attachedFile = videoAttachedFile.get(v);
+    const seqAtStart = playFrameSeq;
+    recoveringCandidates.add(cand);
+    try {
+        await disposeChannelBackend(ch);
+        if (playFrameSeq !== seqAtStart || channelPlayers[ch] !== v || videoAttachedFile.get(v) !== attachedFile)
+            return;
+        clearVideoSrc(v);
+        runtimePlaybackFailures.delete(cand);
+        const isMaster = v === activePlayer();
+        if (isMaster) {
+            hideCodecUnsupportedOverlay();
+            pendingPlay = position.autoPlay;
+            pendingFileOffset = position.offsetSec;
+        }
+        attachCandidateToVideo(ch, v, cand, isMaster, position.offsetSec);
+        const af = activeFrame();
+        if (af) applyTileLayoutRoles(af.frame, effectiveMasterChannel());
+    } finally {
+        recoveringCandidates.delete(cand);
+    }
+}
+
+function retryPlaybackCandidate(cand: VideoCandidate, ch: Channel): void {
+    const af = activeFrame();
+    const position = runtimePlaybackFailures.get(cand);
+    if (!af || !position || recoveringCandidates.has(cand)) return;
+    if (!tripCandidatesByChannel(af.trip, ch).includes(cand)) return;
+    const isMaster = ch === effectiveMasterChannel();
+    if (isMaster && af.frame.channels[ch] !== cand) return;
+    // A failed slave may have held a neighbour file at its drift boundary.
+    // Rejoin the camera at the master's current time, even after that boundary.
+    const target = isMaster ? null : activeSlaveTarget(ch, activePlayer().currentTime);
+    const retryCand = target?.cand ?? af.frame.channels[ch];
+    if (!retryCand) return;
+    runtimePlaybackFailures.delete(cand);
+    decodeRetryCount.delete(cand);
+    const retryPosition = isMaster
+        ? position
+        : {
+              offsetSec: Math.max(0, target?.positionSec ?? activePlayer().currentTime),
+              autoPlay: !activePlayer().paused,
+          };
+    void restartCandidate(retryCand, ch, retryPosition);
+}
+
+/** Retry a transient failure once, then offer an explicit retry without
+ * changing source capabilities. Only a genuine codec rejection is permanent. */
+function handleRuntimeDecodeFailure(
+    cand: VideoCandidate,
+    ch: Channel,
+    recoverable: boolean,
+    reason: string,
+    position = playbackRetryPosition(channelPlayers[ch]),
+): void {
+    const v = channelPlayers[ch];
+    if (!cand.canPlay || runtimePlaybackFailures.has(cand) || recoveringCandidates.has(cand)) return;
+    if (videoAttachedFile.get(v) !== cand.file) return;
+    if (!recoverable) {
+        markCandidateUnplayable(cand, ch);
         return;
     }
-    if (recoverable) {
-        log.warn("transient decode failure exhausted retries, marking unplayable", {
-            file: cand.file.name,
-            channel: ch,
-            reason,
-        });
+    const isMaster = v === activePlayer();
+    const used = decodeRetryCount.get(cand) ?? 0;
+    if (used < MAX_DECODE_RETRIES) {
+        decodeRetryCount.set(cand, used + 1);
+        log.warn("transient decode failure, re-attaching camera", { file: cand.file.name, channel: ch, reason });
+        void restartCandidate(cand, ch, position);
+        return;
     }
-    markCandidateUnplayable(cand, ch);
+    log.warn("transient decode failure exhausted retries", { file: cand.file.name, channel: ch, reason });
+    runtimePlaybackFailures.set(cand, position);
+    void disposeChannelBackend(ch);
+    clearVideoSrc(v);
+    const af = activeFrame();
+    if (af) applyTileLayoutRoles(af.frame, effectiveMasterChannel());
+    if (isMaster) showRuntimePlaybackFailure(cand, ch);
 }
 
 /**
@@ -812,6 +900,7 @@ function attachCandidateToVideo(
     startSec: number = 0,
     forceReseek = false,
 ): AttachOutcome {
+    if (runtimePlaybackFailures.has(cand)) return "skip";
     // Every trigger forces the same code path - PerFileMseBackend handles hev1
     // remux, MPEG-TS and Matroska demux uniformly (mediabunny picks the input format).
     const useMseBackend = requiresMseBackend(cand);
@@ -882,6 +971,9 @@ function attachCandidateToVideo(
                     } catch (e) {
                         log.warn("mse seekTo threw", { file: cand.file.name, e });
                     }
+                    // Recovery can replace this backend for the same file and
+                    // playFrame sequence while its failed seek unwinds.
+                    if (state.channelBackends[ch] !== existing || existing.isFailed) return;
                     if (playFrameSeq !== seqAtStart) return;
                     if (videoAttachedFile.get(v) !== cand.file) return;
                     // SourceBuffer now holds the fragment starting from the
@@ -954,7 +1046,10 @@ function attachCandidateToVideo(
                 // it (AAC, else Opus, else drops it) instead of stream-copying
                 // (mediabunny cannot read ADPCM). Video is still a stream-copy.
                 transcodeAdpcmAudio: cand.audioNeedsTranscode,
-                onError: (reason) => onBackendError(cand, ch, reason),
+                onError: (reason) => {
+                    if (state.channelBackends[ch] !== backend || videoAttachedFile.get(v) !== cand.file) return;
+                    onBackendError(cand, ch, reason);
+                },
             });
             state.channelBackends[ch] = backend;
             await backend.attach(v);
@@ -1067,7 +1162,7 @@ function reattachBackendsAtOffset(frame: TripFrame, offsetInFrame: number, wasPl
  * data-channel-count shrinks (CSS templates key off it). Does NOT touch
  * <video>.src / backends - only syncFrameToGrid attaches/disposes media.
  */
-function applyTileLayoutRoles(frame: TripFrame, activeCh: Channel): void {
+function applyTileLayoutRoles(frame: TripFrame, activeCh: Channel, masterOffsetSec = activePlayer().currentTime): void {
     const isFocus = isFocusLayout(state.composition.layout);
     const channelOrder = state.composition.channelOrder;
     // Grid sizing follows the COMPOSITION (visible slots), not the frame's raw
@@ -1085,7 +1180,9 @@ function applyTileLayoutRoles(frame: TripFrame, activeCh: Channel): void {
         const cand = frame.channels[ch];
         const slotIdx = channelOrder.indexOf(ch);
         const inComposition = slotIdx >= 0;
-        const playable = !!cand?.canPlay;
+        const playbackCand = ch === activeCh ? cand : (activeSlaveTarget(ch, masterOffsetSec)?.cand ?? cand);
+        const failed = !!playbackCand && runtimePlaybackFailures.has(playbackCand);
+        const playable = !!playbackCand?.canPlay && !failed;
         // Three tile states (not a binary visible/hidden):
         //   - absent (no candidate this frame) or excluded (slotIdx < 0): hidden.
         //   - present but failed to play, yet still in the composition: KEEP the
@@ -1098,6 +1195,22 @@ function applyTileLayoutRoles(frame: TripFrame, activeCh: Channel): void {
         const visible = (playable && inComposition) || unplayable;
         tile.hidden = !visible;
         tile.classList.toggle("tile-unplayable", unplayable);
+        let retry = tile.querySelector<HTMLButtonElement>(".tile-playback-retry");
+        if (failed && playbackCand) {
+            if (!retry) {
+                retry = document.createElement("button");
+                retry.type = "button";
+                retry.className = "dc-btn dc-btn--primary tile-playback-retry";
+                tile.querySelector(".tile-unplayable-msg")?.append(retry);
+            }
+            retry.textContent = t("playbackFailed.retry");
+            retry.onclick = (event) => {
+                event.stopPropagation();
+                retryPlaybackCandidate(playbackCand, ch);
+            };
+        } else {
+            retry?.remove();
+        }
         if (visible) {
             // Only a playable tile can be the active (audio/large) one.
             tile.classList.toggle("active", playable && ch === activeCh);
@@ -1127,11 +1240,12 @@ function syncFrameToGrid(frame: TripFrame, activeCh: Channel, masterOffsetSec = 
     // is media only. Media is attached for every playable frame channel, even
     // ones excluded from the composition, so toggling a camera back on is
     // instant (no re-attach / MSE re-seek) - it only un-hides the tile.
-    applyTileLayoutRoles(frame, activeCh);
+    applyTileLayoutRoles(frame, activeCh, masterOffsetSec);
     for (const ch of ALL_CHANNELS) {
         const v = channelPlayers[ch];
         const cand = frame.channels[ch];
-        if (cand?.canPlay) {
+        const attachCand = ch === activeCh ? cand : (activeSlaveTarget(ch, masterOffsetSec)?.cand ?? cand);
+        if (attachCand?.canPlay && !runtimePlaybackFailures.has(attachCand)) {
             // Mute/volume: audio source = composition.audioChannel (decoupled
             // from the visual main slot). preferredMuted still wins globally;
             // non-audio channels are muted with volume=0 as a dirty fallback.
@@ -1142,7 +1256,6 @@ function syncFrameToGrid(frame: TripFrame, activeCh: Channel, masterOffsetSec = 
             // this master position (resolveSlaveTarget) - on a natural frame
             // advance that keeps the previous file playing out its matching
             // tail instead of freezing on the new file's first frame.
-            const attachCand = ch === activeCh ? cand : (activeSlaveTarget(ch, masterOffsetSec)?.cand ?? cand);
             // Backend: per-file MSE (mediabunny remux) for needsHevcRemux /
             // MPEG-TS candidates, native <video>.src otherwise. The helper
             // decides whether a re-attach is needed.
@@ -1557,6 +1670,12 @@ function flashPlaybackToggle(forcePlaying?: boolean): void {
  */
 function syncGridLayoutOnly(frame: TripFrame, activeCh: Channel): void {
     applyTileLayoutRoles(frame, activeCh);
+    const picked = pickFrameChannel(frame, activeCh);
+    if (picked && runtimePlaybackFailures.has(picked.candidate)) {
+        showRuntimePlaybackFailure(picked.candidate, picked.channel);
+    } else if (dom.viewer.classList.contains("playback-failed")) {
+        hideCodecUnsupportedOverlay();
+    }
     syncOutputAspect();
 }
 
@@ -2104,15 +2223,13 @@ export function initPlayer(): void {
     onActivePlayerEvent("waiting", showLoadingOverlay);
     onActivePlayerEvent("playing", hideLoadingOverlay);
     onActivePlayerEvent("canplay", hideLoadingOverlay);
-    onActivePlayerEvent("loadeddata", () => {
-        hideLoadingOverlay();
-        // The active frame decoded (readyState >= HAVE_CURRENT_DATA): clear its
-        // transient-retry budget so a later, independent decode failure gets a
-        // fresh retry instead of an immediate permanent mark. Fires on both the
-        // play and pause paths, so a retry that lands paused still resets.
-        const af = activeFrame();
-        const cand = af ? (pickFrameChannel(af.frame, effectiveMasterChannel())?.candidate ?? null) : null;
-        if (cand) decodeRetryCount.delete(cand);
+    onActivePlayerEvent("loadeddata", hideLoadingOverlay);
+    forEachVideoSlot((v, ch) => {
+        v.addEventListener("loadeddata", () => {
+            if (!isActiveSlot(v) || v.readyState < v.HAVE_CURRENT_DATA) return;
+            const cand = attachedCandidate(v, ch);
+            if (cand) decodeRetryCount.delete(cand);
+        });
     });
     onActivePlayerEvent("emptied", hideLoadingOverlay);
     // Release the in-flight seek pin once the offset-seek lands (native + MSE
@@ -2120,61 +2237,63 @@ export function initPlayer(): void {
     // early 'seeked' while the file is still at its start.
     onActivePlayerEvent("seeked", clearPendingSeekIfLanded);
     onActivePlayerEvent("seeked", resumePlaybackIfSeekLanded);
-    onActivePlayerEvent("error", () => {
-        hideLoadingOverlay();
-        // A failed load will never fire the landing 'seeked' - drop the pin now
-        // so the playhead is not frozen at the target until the safety timeout.
-        clearPendingSeek();
-        // Same for the seekThenPlay latch: the target will never land.
-        disarmResumeAfterSeek();
-        // Log MediaError for diagnosing runtime-decode failures. This does not overlap with MSE backend errors
-        // (those go through onError callbacks, a separate path). This catches: native-decode failures,
-        // network errors on blob URLs (theoretically impossible for File-based blobs, but defensive),
-        // codec failures on a specific file even if the canPlay check passed. MediaError.code:
-        //   1 MEDIA_ERR_ABORTED        (user cancelled via play() promise)
-        //   2 MEDIA_ERR_NETWORK        (for blob:File - should not happen)
-        //   3 MEDIA_ERR_DECODE         (decoder crashed on a packet)
-        //   4 MEDIA_ERR_SRC_NOT_SUPPORTED (browser does not support the codec)
-        const v = activePlayer();
-        const err = v.error;
-        if (!err) return;
-        log.warn("video element error", {
-            code: err.code,
-            message: err.message,
-            file: videoAttachedFile.get(v)?.name ?? null,
-            currentTime: v.currentTime,
-        });
-        // Surface a real decode/source failure to the user, mirroring the MSE
-        // path (onBackendError). Only DECODE(3) and SRC_NOT_SUPPORTED(4) are
-        // genuine - ABORTED(1) is the benign play()/source-swap interruption and
-        // NETWORK(2) cannot happen for a blob:File source; both stay silent.
-        // DECODE(3) is transient (a crashed decoder, an exhausted decoder pool
-        // under preview contention) -> retry; SRC_NOT_SUPPORTED(4) is a genuine
-        // codec rejection -> permanent overlay.
-        if (err.code === MediaError.MEDIA_ERR_DECODE || err.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
-            const ch = effectiveMasterChannel();
-            const af = activeFrame();
-            const cand = af ? (pickFrameChannel(af.frame, ch)?.candidate ?? null) : null;
-            if (cand) {
+    forEachVideoSlot((v, ch) =>
+        v.addEventListener("error", () => {
+            if (!isActiveSlot(v)) return;
+            const cand = attachedCandidate(v, ch);
+            const err = v.error;
+            if (!cand || !err) return;
+            const position = playbackRetryPosition(v);
+            if (v === activePlayer()) {
+                hideLoadingOverlay();
+                // A failed load will never fire the landing 'seeked' - drop the pin now
+                // so the playhead is not frozen at the target until the safety timeout.
+                clearPendingSeek();
+                // Same for the seekThenPlay latch: the target will never land.
+                disarmResumeAfterSeek();
+            }
+            // Log MediaError for diagnosing runtime-decode failures. This does not overlap with MSE backend errors
+            // (those go through onError callbacks, a separate path). This catches: native-decode failures,
+            // network errors on blob URLs (theoretically impossible for File-based blobs, but defensive),
+            // codec failures on a specific file even if the canPlay check passed. MediaError.code:
+            //   1 MEDIA_ERR_ABORTED        (user cancelled via play() promise)
+            //   2 MEDIA_ERR_NETWORK        (for blob:File - should not happen)
+            //   3 MEDIA_ERR_DECODE         (decoder crashed on a packet)
+            //   4 MEDIA_ERR_SRC_NOT_SUPPORTED (browser does not support the codec)
+            log.warn("video element error", {
+                code: err.code,
+                message: err.message,
+                file: videoAttachedFile.get(v)?.name ?? null,
+                currentTime: v.currentTime,
+            });
+            // Surface a real decode/source failure to the user, mirroring the MSE
+            // path (onBackendError). Only DECODE(3) and SRC_NOT_SUPPORTED(4) are
+            // genuine - ABORTED(1) is the benign play()/source-swap interruption and
+            // NETWORK(2) cannot happen for a blob:File source; both stay silent.
+            // DECODE(3) is transient (a crashed decoder, an exhausted decoder pool
+            // under preview contention) -> retry; SRC_NOT_SUPPORTED(4) is a genuine
+            // codec rejection -> permanent overlay.
+            if (err.code === MediaError.MEDIA_ERR_DECODE || err.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
                 handleRuntimeDecodeFailure(
                     cand,
                     ch,
                     err.code === MediaError.MEDIA_ERR_DECODE,
                     `native-mediaerror-${err.code}`,
+                    position,
                 );
+                // Native-pipeline decode failure: which broken-container quirk slipped
+                // past ingest repair (the err.message often names it, e.g.
+                // DEMUXER_ERROR_COULD_NOT_OPEN / PIPELINE_ERROR_DECODE). The message
+                // is scrubbed before send; no filename leaves.
+                captureSentryMessage("native video decode failed", {
+                    level: "warning",
+                    fingerprint: ["video_decode_error", String(err.code), cand?.codec ?? "unknown"],
+                    tags: { code: String(err.code), codec: cand?.codec ?? "unknown" },
+                    extra: { mediaErrorMessage: err.message },
+                });
             }
-            // Native-pipeline decode failure: which broken-container quirk slipped
-            // past ingest repair (the err.message often names it, e.g.
-            // DEMUXER_ERROR_COULD_NOT_OPEN / PIPELINE_ERROR_DECODE). The message
-            // is scrubbed before send; no filename leaves.
-            captureSentryMessage("native video decode failed", {
-                level: "warning",
-                fingerprint: ["video_decode_error", String(err.code), cand?.codec ?? "unknown"],
-                tags: { code: String(err.code), codec: cand?.codec ?? "unknown" },
-                extra: { mediaErrorMessage: err.message },
-            });
-        }
-    });
+        }),
+    );
 
     onActivePlayerEvent("loadedmetadata", () => {
         // Restore the saved playback rate - the browser resets it to 1 on every src change.

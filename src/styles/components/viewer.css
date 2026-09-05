@@ -560,6 +560,14 @@ body.export-mode .player-wrap:not(:fullscreen):not(.map-expanded) {
     user-select: none;
 }
 
+.tile-playback-retry {
+    display: flex;
+    position: relative;
+    margin: var(--dc-space-2) auto 0;
+    pointer-events: auto;
+    z-index: 2;
+}
+
 .player-wrap video {
     width: 100%;
     height: 100%;

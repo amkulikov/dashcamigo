@@ -216,10 +216,12 @@
     background: var(--bg);
     padding: var(--dc-space-6);
 }
-.viewer.codec-unsupported .codec-unsupported-state {
+.viewer.codec-unsupported .codec-unsupported-state,
+.viewer.playback-failed .codec-unsupported-state {
     display: flex;
 }
-.viewer.codec-unsupported .player-wrap {
+.viewer.codec-unsupported .player-wrap,
+.viewer.playback-failed .player-wrap {
     display: none;
 }
 
@@ -289,4 +291,9 @@
     .codec-unsupported-card {
         padding: var(--dc-space-4);
     }
+}
+
+.playback-failed-retry {
+    margin-top: var(--dc-space-4);
+    margin-right: var(--dc-space-3);
 }

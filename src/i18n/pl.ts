@@ -346,6 +346,9 @@ export const plDict = {
     "codecUnsupported.hint.windowsChrome": "Spróbuj otworzyć ten sam folder w Microsoft Edge z dodatkiem {link} ze sklepu Microsoft Store.",
     "codecUnsupported.hint.windowsEdge": "Zainstaluj dodatek {link} ze sklepu Microsoft Store i odśwież stronę. Albo otwórz ten sam folder w Chrome — zwykle odtwarza takie wideo bez dodatków.",
     "codecUnsupported.stillWorks": "Mapa, wykres prędkości i eksport klipów bez zmian nadal działają.",
+    "playbackFailed.title": "Nie udało się odtworzyć tego filmu",
+    "playbackFailed.hint": "Spróbuj ponownie. Jeśli film nadal się nie odtwarza, zgłoś problem, żebyśmy mogli go sprawdzić.",
+    "playbackFailed.retry": "Spróbuj ponownie",
 
     "unsupported.modal.title": "Nie udało się otworzyć części plików",
     "unsupported.modal.body": "Twoja przeglądarka nie odtwarza tych formatów:",
