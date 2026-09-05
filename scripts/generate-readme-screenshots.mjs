@@ -116,7 +116,13 @@ const HEADFUL = process.env.HEADFUL === "1";
 
 const CLIP_SEC = 45; // per-clip footage length; 45s makes trip cards read as real
 // multi-minute drives ("18:05 -> 18:08"), not "18:05 -> 18:05"
-const FPS = 15; // modest fps keeps 16 encodes fast; the frame is a still anyway
+// Every scene is a still. One frame per second preserves seeking and the full
+// timeline without encoding hundreds of identical frames per clip.
+const FPS = 1;
+// The phone's video occupies about 880 physical pixels in the 3x screenshot.
+// Other trips only appear in sidebar previews, which decode to 320px wide.
+const HERO_VIDEO_WIDTH = 960;
+const PREVIEW_VIDEO_WIDTH = 320;
 
 // 70mai $V02 firmware writes field[0] 8h behind UTC; the parser adds +8h back
 // (src/parsers/primitives/csv-70mai.ts GPS_TIMESTAMP_FIRMWARE_OFFSET_SEC). So the
@@ -386,20 +392,17 @@ function buildGpsLog(clips) {
     return `${lines.join("\n")}\n`;
 }
 
-// Encodes one still-loop clip. H.264 yuv420p is the smallest simple format the app
-// plays (macOS Chromium decodes it via the OS). scale=1280:-2 keeps 4:3 with even
-// dims and cuts encode time over 16 clips. -an: no audio (not needed for shots).
-function encodeClip(frame, out) {
+// Decode, scale and convert the JPEG once, then loop the prepared frame in
+// memory. An image2 input loop would repeat that work for every video frame.
+function encodeClip(frame, out, width) {
     const args = [
         "-y",
-        "-loop",
-        "1",
+        "-framerate",
+        String(FPS),
         "-i",
         frame,
         "-t",
         String(CLIP_SEC),
-        "-r",
-        String(FPS),
         "-c:v",
         "libx264",
         "-preset",
@@ -409,7 +412,7 @@ function encodeClip(frame, out) {
         "-pix_fmt",
         "yuv420p",
         "-vf",
-        "scale=1280:-2",
+        `scale=${width}:-2,format=yuv420p,loop=loop=-1:size=1:start=0`,
         "-an",
         "-movflags",
         "+faststart",
@@ -423,6 +426,7 @@ function encodeClip(frame, out) {
 // root. The caller owns the dir so its finally-cleanup covers a mid-encode
 // ffmpeg failure too - no throwaway clips left behind in os.tmpdir().
 function buildFixture(root, baseDay) {
+    const startedAt = performance.now();
     const frontDir = join(root, "Normal", "Front");
     const backDir = join(root, "Normal", "Back");
     mkdirSync(frontDir, { recursive: true });
@@ -430,22 +434,27 @@ function buildFixture(root, baseDay) {
 
     const clips = planClips(baseDay);
     const encodedFrames = new Map();
-    const materializeClip = (frame, out) => {
-        const encoded = encodedFrames.get(frame);
+    const materializeClip = (frame, out, width) => {
+        const key = `${frame}:${width}`;
+        const encoded = encodedFrames.get(key);
         if (encoded) {
             copyFileSync(encoded, out);
         } else {
-            encodeClip(frame, out);
-            encodedFrames.set(frame, out);
+            encodeClip(frame, out, width);
+            encodedFrames.set(key, out);
         }
     };
-    console.log(`encoding ${clips.length * 2} clips (front + back)...`);
+    console.log(`preparing ${clips.length * 2} clips (front + back)...`);
     for (const clip of clips) {
-        materializeClip(join(FRAMES_DIR, clip.frontFrame), join(frontDir, clip.frontName));
-        materializeClip(REAR_FRAME, join(backDir, clip.backName));
+        const frontWidth = clip.tripIdx === HERO_TRIP_INDEX ? HERO_VIDEO_WIDTH : PREVIEW_VIDEO_WIDTH;
+        materializeClip(join(FRAMES_DIR, clip.frontFrame), join(frontDir, clip.frontName), frontWidth);
+        materializeClip(REAR_FRAME, join(backDir, clip.backName), HERO_VIDEO_WIDTH);
     }
     writeFileSync(join(root, "GPSData000001.txt"), buildGpsLog(clips));
-    console.log(`fixture ready at ${root} (track length ${TRACK_LENGTH_M.toFixed(0)} m)`);
+    const elapsedSec = ((performance.now() - startedAt) / 1000).toFixed(2);
+    console.log(
+        `fixture ready in ${elapsedSec}s (${encodedFrames.size} encodes, track length ${TRACK_LENGTH_M.toFixed(0)} m)`,
+    );
 }
 
 // --- server + browser bootstrap -------------------------------------------
@@ -496,69 +505,64 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // theme: explicit "dark"/"light" override (src/ui/theme.ts ThemeChoice) - the
 // shots must not depend on the machine's OS scheme.
 async function presetLocalStorage(context, theme = "dark", marker = null) {
-    await context.addInitScript(({ chosenTheme, mapMarker }) => {
-        try {
-            const now = String(Date.now());
-            localStorage.setItem("dc-theme", chosenTheme);
-            localStorage.setItem("dashcamigo:upload-warning-shown-at", now);
-            localStorage.setItem("dashcamigo:pwa:toast:shown", "1");
-            localStorage.setItem("dashcamigo:pwa:toast:dismissedAt", now);
-            localStorage.setItem("dashcamigo:lang-banner-dismissed", "1");
-            for (const id of ["ingest", "player", "export", "multichannel"]) {
-                localStorage.setItem(`dashcamigo:onboarding:${id}`, "1");
+    await context.addInitScript(
+        ({ chosenTheme, mapMarker }) => {
+            try {
+                const now = String(Date.now());
+                localStorage.setItem("dc-theme", chosenTheme);
+                localStorage.setItem("dashcamigo:upload-warning-shown-at", now);
+                localStorage.setItem("dashcamigo:pwa:toast:shown", "1");
+                localStorage.setItem("dashcamigo:pwa:toast:dismissedAt", now);
+                localStorage.setItem("dashcamigo:lang-banner-dismissed", "1");
+                for (const id of ["ingest", "player", "export", "multichannel"]) {
+                    localStorage.setItem(`dashcamigo:onboarding:${id}`, "1");
+                }
+                localStorage.setItem("dashcamigo:lang", "en");
+                // Metric units: the synthetic track is a German forest road - km/h
+                // readouts keep the shot internally consistent (en-US defaults to mph).
+                localStorage.setItem("dashcamigo:units", "metric");
+                if (mapMarker) localStorage.setItem("dashcamigo:mapMarker", JSON.stringify(mapMarker));
+            } catch {
+                /* private mode - ignore */
             }
-            localStorage.setItem("dashcamigo:lang", "en");
-            // Metric units: the synthetic track is a German forest road - km/h
-            // readouts keep the shot internally consistent (en-US defaults to mph).
-            localStorage.setItem("dashcamigo:units", "metric");
-            if (mapMarker) localStorage.setItem("dashcamigo:mapMarker", JSON.stringify(mapMarker));
-        } catch {
-            /* private mode - ignore */
-        }
-    }, { chosenTheme: theme, mapMarker: marker });
+        },
+        { chosenTheme: theme, mapMarker: marker },
+    );
 }
 
-// Waits for MapLibre to reach an idle frame (tiles finished) then a short settle
-// so the raster is committed - a half-loaded map is a failed screenshot.
-async function waitForMapIdle(page, timeoutMs = 12_000) {
-    await page.evaluate((to) => {
-        return new Promise((res) => {
+// The initial empty style can be idle before the real map loads. Require the
+// basemap and route, then let labels finish fading into the rendered tiles.
+async function waitForMapIdle(page) {
+    await page.waitForFunction(
+        () => {
             const map = window.__dashcamigo?.state?.map;
-            if (!map) return res(undefined);
-            let done = false;
-            const finish = () => {
-                if (done) return;
-                done = true;
-                res(undefined);
-            };
-            // idle fires once tiles+labels for the current view are fully rendered.
-            map.once("idle", finish);
-            // Belt: if already idle (no further events), a poll on areTilesLoaded.
-            const poll = setInterval(() => {
-                try {
-                    if (map.loaded() && map.areTilesLoaded()) {
-                        clearInterval(poll);
-                        finish();
-                    }
-                } catch {
-                    /* map torn down */
-                }
-            }, 200);
-            setTimeout(() => {
-                clearInterval(poll);
-                finish();
-            }, to);
-        });
-    }, timeoutMs);
+            if (!map?.getSource("trip-line")) return false;
+            const hasBasemap = Object.values(map.getStyle()?.sources ?? {}).some(
+                (source) => source.type === "vector" || source.type === "raster",
+            );
+            return hasBasemap && map.isStyleLoaded() && map.loaded() && map.areTilesLoaded();
+        },
+        undefined,
+        { timeout: 30_000 },
+    );
     await page.waitForTimeout(800);
+}
+
+async function waitForPaint(page) {
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
 
 // Ingests the fixture folder and waits for the trip cards to appear. Returns the
 // count of real trip cards (excludes the "unindexed" note li).
 async function ingest(page, fixtureRoot) {
     await page.locator("#folder-input").setInputFiles(fixtureRoot);
-    const firstTrip = page.locator("li.trip:not(.unindexed-note)").first();
-    await firstTrip.waitFor({ state: "visible", timeout: 30_000 });
+    await page.waitForFunction(
+        (count) =>
+            document.querySelectorAll("li.trip:not(.unindexed-note)").length === count &&
+            document.querySelectorAll("li.trip:not(.unindexed-note) .trip-header.has-preview").length === count,
+        TRIPS.length,
+        { timeout: 30_000 },
+    );
     return page.locator("li.trip:not(.unindexed-note)").count();
 }
 
@@ -574,6 +578,15 @@ async function selectTopTrip(page) {
             const total = document.getElementById("player-total");
             return total !== null && total.textContent !== null && total.textContent !== "0:00";
         },
+        undefined,
+        { timeout: 15_000 },
+    );
+    await page.waitForFunction(
+        () => {
+            const button = document.getElementById("player-map");
+            return window.__dashcamigo?.state?.hasTrack && button instanceof HTMLButtonElement && !button.disabled;
+        },
+        undefined,
         { timeout: 15_000 },
     );
 }
@@ -590,13 +603,30 @@ async function seekToHeroBrake(page) {
     // 4 jumps to 40% of this 180 s trip (72 s). Unlike a pixel click this is
     // immune to the chart's dynamic left/right plot gutters.
     await page.keyboard.press("4");
+    await page.waitForFunction(() => {
+        const value = Number(document.getElementById("player-mini-progress")?.getAttribute("aria-valuenow"));
+        return Number.isFinite(value) && Math.abs(value - 40) < 1;
+    });
+    // The progress readout can advance before the new clip has decoded. Wait
+    // for both active channel slots, excluding preload and background videos.
     await page.waitForFunction(
-        () => {
-            const value = Number(document.getElementById("player-mini-progress")?.getAttribute("aria-valuenow"));
-            return Number.isFinite(value) && Math.abs(value - 40) < 1;
-        },
+        (offset) =>
+            ["front", "rear"].every((channel) => {
+                const video = document.querySelector(
+                    `.video-tile[data-channel="${channel}"] > video[id]:not(.preload-slot)`,
+                );
+                return (
+                    video instanceof HTMLVideoElement &&
+                    video.readyState >= 2 &&
+                    !video.seeking &&
+                    video.paused &&
+                    Math.abs(video.currentTime - offset) < 0.1
+                );
+            }),
+        HERO_BRAKE_SEC % CLIP_SEC,
+        { timeout: 15_000 },
     );
-    await page.waitForTimeout(700);
+    await waitForPaint(page);
 }
 
 // --- per-screenshot flows --------------------------------------------------
@@ -623,11 +653,8 @@ async function shotDesktop(browser, fixtureRoot) {
     // Split view: focus is the default; the toggle is shown only on multichannel
     // trips. Flip to split so BOTH cameras show at equal size.
     await page.locator("#player-view-mode").click();
-    await page
-        .locator("#video-grid")
-        .waitFor({ state: "visible" })
-        .catch(() => {});
-    await page.waitForFunction(() => document.getElementById("video-grid")?.dataset.viewMode === "split", {
+    await page.locator("#video-grid").waitFor({ state: "visible" });
+    await page.waitForFunction(() => document.getElementById("video-grid")?.dataset.viewMode === "split", undefined, {
         timeout: 5_000,
     });
 
@@ -635,9 +662,11 @@ async function shotDesktop(browser, fixtureRoot) {
     // player-wrap must stay > 768px wide or the container query collapses the
     // expanded layout to map-only (hides the video) - safe at 1440 minus sidebar.
     await page.locator("#mini-map").click();
-    await page.waitForFunction(() => document.getElementById("player-wrap")?.classList.contains("map-expanded"), {
-        timeout: 5_000,
-    });
+    await page.waitForFunction(
+        () => document.getElementById("player-wrap")?.classList.contains("map-expanded"),
+        undefined,
+        { timeout: 5_000 },
+    );
     // The expand grows the map container via a CSS layout change; fitBounds run
     // before that settles frames against stale (mini-sized) dimensions and pushes
     // the track off-screen. Wait for the layout, then force a resize so fitBounds
@@ -674,8 +703,8 @@ async function shotDesktop(browser, fixtureRoot) {
             { padding: 72, animate: false },
         );
     });
-    await waitForMapIdle(page);
     await seekToHeroBrake(page);
+    await waitForMapIdle(page);
 
     const out = join(OUT_DIR, "app-desktop.png");
     await page.screenshot({ path: out, fullPage: false });
@@ -703,16 +732,6 @@ async function shotMobilePlayer(browser, fixtureRoot) {
     if (tripCount < 3) throw new Error(`mobile-player: expected >=3 trips, got ${tripCount}`);
     await selectTopTrip(page);
 
-    // Wait for a real decoded frame on the front tile before shooting.
-    await page
-        .waitForFunction(
-            () => {
-                const v = document.querySelector('.video-tile[data-channel="front"] video');
-                return v instanceof HTMLVideoElement && v.videoWidth > 0;
-            },
-            { timeout: 10_000 },
-        )
-        .catch(() => {});
     await seekToHeroBrake(page);
 
     // Narrow touch toolbars move the map action into the overflow menu.
@@ -723,9 +742,12 @@ async function shotMobilePlayer(browser, fixtureRoot) {
         await page.locator("#player-overflow").click();
         await page.locator("#player-overflow-menu").getByRole("button", { name: /map/i }).click();
     }
-    await page.waitForTimeout(500);
+    await page.waitForFunction(
+        () =>
+            document.getElementById("player-wrap")?.classList.contains("map-expanded") &&
+            !document.body.classList.contains("map-morphing"),
+    );
     await waitForMapIdle(page);
-    await page.waitForTimeout(700);
 
     const out = join(OUT_DIR, "app-mobile-player.png");
     await page.screenshot({ path: out, fullPage: false });
@@ -844,9 +866,8 @@ async function composeHero(browser, desktopPng, mobilePng) {
     await page.setContent(html);
     // data: URIs decode async - a shot before both images are painted would
     // show gradient-only gaps.
-    await page.waitForFunction(() =>
-        Array.from(document.images).every((img) => img.complete && img.naturalWidth > 0),
-    );
+    await page.waitForFunction(() => Array.from(document.images).every((img) => img.complete && img.naturalWidth > 0));
+    await waitForPaint(page);
     const heroPng = await page.screenshot({ fullPage: false });
     await context.close();
     // No downscale (null width): the 2000px output is the retina budget picked
@@ -874,6 +895,7 @@ function checkPreconditions() {
 }
 
 async function main() {
+    const startedAt = performance.now();
     checkPreconditions();
     mkdirSync(OUT_DIR, { recursive: true });
 
@@ -899,7 +921,10 @@ async function main() {
         const hero = await composeHero(browser, desktop, mobilePlayer);
         console.log(`wrote ${hero}`);
         await writeLandingVariants(browser, { desktop, mobile: mobilePlayer });
-        console.log("done: 2 screenshots + hero in docs/screenshots/, landing WebP set in public/landing/");
+        const elapsedSec = ((performance.now() - startedAt) / 1000).toFixed(2);
+        console.log(
+            `done in ${elapsedSec}s: 2 screenshots + hero in docs/screenshots/, landing WebP set in public/landing/`,
+        );
     } finally {
         if (browser) await browser.close().catch(() => {});
         if (server) server.kill("SIGTERM");
