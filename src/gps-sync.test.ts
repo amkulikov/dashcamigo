@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
     _resetForTests,
@@ -84,6 +84,8 @@ beforeEach(() => {
     storage.clear();
     _resetForTests();
 });
+
+afterEach(() => vi.restoreAllMocks());
 
 describe("GPS synchronization", () => {
     it("always shifts from immutable candidate records and restores points hidden by a previous trim", () => {
@@ -193,6 +195,54 @@ describe("GPS synchronization", () => {
         applyStoredGpsSyncToTrip(reopened);
         expect(reopened.gpsOffsetSec).toBe(0);
         expect(resolvedGpsSyncForTrip(reopened).hasOffsetOverride).toBe(false);
+    });
+
+    it("keeps calibration and trimming in the session when an existing storage entry cannot be overwritten", () => {
+        const value = trip();
+        setTripGpsOffsetSec(value, 1);
+        vi.spyOn(localStorage, "setItem").mockImplementation(() => {
+            throw new DOMException("quota exceeded", "QuotaExceededError");
+        });
+
+        setTripGpsOffsetSec(value, 5);
+        setTripGpsTrimToVideo(value, true);
+        applyStoredGpsSyncToTrip(value);
+        expect(resolvedGpsSyncForTrip(value)).toEqual({ offsetSec: 5, trimToVideo: true, hasOffsetOverride: true });
+        expect(
+            value.records.map((item) => item.unixSeconds),
+            "unsaved trim applies to the unsaved offset",
+        ).toEqual([1000, 1005, 1015]);
+
+        setTripGpsOffsetSec(value, null);
+        setTripGpsTrimToVideo(value, false);
+        applyStoredGpsSyncToTrip(value);
+        expect(resolvedGpsSyncForTrip(value), "reset cannot resurrect the stale stored offset").toEqual({
+            offsetSec: 0,
+            trimToVideo: false,
+            hasOffsetOverride: false,
+        });
+        expect(value.records.map((item) => item.unixSeconds)).toEqual([995, 1000, 1010, 1025]);
+    });
+
+    it("persists all pending trip calibrations when storage writes recover", () => {
+        const first = trip(2001);
+        const second = trip(2002);
+        setTripGpsOffsetSec(first, 1);
+        const setItemSpy = vi.spyOn(localStorage, "setItem").mockImplementation(() => {
+            throw new DOMException("quota exceeded", "QuotaExceededError");
+        });
+        setTripGpsOffsetSec(first, 5);
+        setTripGpsOffsetSec(second, 9);
+        setItemSpy.mockRestore();
+
+        setTripGpsTrimToVideo(first, true);
+        _resetForTests();
+        const reopenedFirst = trip(2001);
+        const reopenedSecond = trip(2002);
+        applyStoredGpsSyncToTrips([reopenedFirst, reopenedSecond]);
+        expect(reopenedFirst.gpsOffsetSec, "the first pending calibration survives reload").toBe(5);
+        expect(reopenedFirst.gpsTrimToVideo).toBe(true);
+        expect(reopenedSecond.gpsOffsetSec, "the second pending calibration survives reload").toBe(9);
     });
 
     it("loads the stored-entry snapshot once for a bulk apply", () => {

@@ -56,8 +56,8 @@ export function normalizeMapMarkerAppearance(value: unknown): MapMarkerAppearanc
 }
 
 function readStoredAppearance(): MapMarkerAppearance {
-    if (typeof localStorage === "undefined") return { ...DEFAULT_MAP_MARKER_APPEARANCE };
     try {
+        if (typeof localStorage === "undefined") return { ...DEFAULT_MAP_MARKER_APPEARANCE };
         const raw = localStorage.getItem(STORAGE_KEY);
         return raw === null ? { ...DEFAULT_MAP_MARKER_APPEARANCE } : normalizeMapMarkerAppearance(JSON.parse(raw));
     } catch {
@@ -75,12 +75,12 @@ export function setMapMarkerAppearance(appearance: MapMarkerAppearance): void {
     const current = getMapMarkerAppearance();
     if (current.shape === next.shape && current.color === next.color && current.size === next.size) return;
     sessionAppearance = next;
-    if (typeof localStorage !== "undefined") {
-        try {
+    try {
+        if (typeof localStorage !== "undefined") {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-        } catch {
-            // Storage may be unavailable; the choice still survives this session.
         }
+    } catch {
+        // Storage may be unavailable; the choice still survives this session.
     }
     for (const listener of listeners) listener({ ...next });
 }

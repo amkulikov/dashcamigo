@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
     _resetForTests,
@@ -11,6 +11,7 @@ import {
 
 describe("map marker preference", () => {
     beforeEach(() => _resetForTests());
+    afterEach(() => vi.unstubAllGlobals());
 
     it("falls back field by field for malformed stored values", () => {
         expect(normalizeMapMarkerAppearance({ shape: "suv", color: "#2F7EE6" })).toEqual({
@@ -27,5 +28,23 @@ describe("map marker preference", () => {
         setMapMarkerAppearance({ shape: "truck", color: "#E5484D", size: "large" });
         expect(getMapMarkerAppearance()).toEqual({ shape: "truck", color: "#e5484d", size: "large" });
         expect(seen).toEqual(["truck:#e5484d"]);
+    });
+
+    it("keeps markers usable when the storage getter is blocked", () => {
+        vi.stubGlobal("localStorage", undefined);
+        Object.defineProperty(globalThis, "localStorage", {
+            configurable: true,
+            get: () => {
+                throw new DOMException("storage blocked", "SecurityError");
+            },
+        });
+        expect(getMapMarkerAppearance()).toEqual(DEFAULT_MAP_MARKER_APPEARANCE);
+        const seen: string[] = [];
+        subscribeMapMarkerAppearance((appearance) => seen.push(appearance.shape));
+
+        setMapMarkerAppearance({ shape: "suv", color: "#2f7ee6", size: "small" });
+
+        expect(getMapMarkerAppearance()).toEqual({ shape: "suv", color: "#2f7ee6", size: "small" });
+        expect(seen).toEqual(["suv"]);
     });
 });

@@ -8,9 +8,18 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type { StyleSpecification } from "maplibre-gl";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { applyStreetLabelDensity, scaleStyleTextSizes } from "./map-label-scale.js";
+import {
+    _resetForTests,
+    applyStreetLabelDensity,
+    applyViewerLabelPrefs,
+    getMapLabelScale,
+    getStreetLabelDensity,
+    scaleStyleTextSizes,
+    setMapLabelScale,
+    setStreetLabelDensity,
+} from "./map-label-scale.js";
 
 const STYLE_NAMES = ["light", "dark", "neon"] as const;
 
@@ -18,6 +27,39 @@ function loadStyle(name: string): StyleSpecification {
     const raw = readFileSync(join(__dirname, "..", "..", "public", "styles", `${name}.json`), "utf8");
     return JSON.parse(raw) as StyleSpecification;
 }
+
+describe("map label preferences", () => {
+    beforeEach(() => _resetForTests());
+    afterEach(() => {
+        _resetForTests();
+        vi.unstubAllGlobals();
+    });
+
+    it("applies the current choices when storage writes fail", () => {
+        vi.stubGlobal("localStorage", {
+            getItem: () => null,
+            setItem: () => {
+                throw new DOMException("storage full", "QuotaExceededError");
+            },
+        });
+        setMapLabelScale(2);
+        setStreetLabelDensity("max");
+
+        expect(getMapLabelScale()).toBe(2);
+        expect(getStreetLabelDensity()).toBe("max");
+        const style = loadStyle("light");
+        expect(applyViewerLabelPrefs(style)).toEqual(applyStreetLabelDensity(scaleStyleTextSizes(style, 2), "max"));
+    });
+
+    it("restores stored preferences before a session choice", () => {
+        vi.stubGlobal("localStorage", {
+            getItem: (key: string) => (key === "dashcamigo:mapLabelScale" ? "1.5" : "more"),
+        });
+
+        expect(getMapLabelScale()).toBe(1.5);
+        expect(getStreetLabelDensity()).toBe("more");
+    });
+});
 
 /** Flattens one text-size value into its size outputs (the numbers that must
  *  scale) and its zoom breakpoints (the numbers that must not). */

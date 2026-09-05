@@ -33,6 +33,7 @@ export interface ResolvedGpsSync {
 }
 
 let memoryEntries: StoredTripGpsSync[] = [];
+let hasUnsavedEntries = false;
 
 export function normalizeGpsOffsetSec(value: number): number {
     if (!Number.isFinite(value)) return 0;
@@ -57,6 +58,8 @@ function isStoredEntry(value: unknown): value is StoredTripGpsSync {
 }
 
 function loadEntries(): StoredTripGpsSync[] {
+    // A readable stale copy must not undo a calibration whose write failed.
+    if (hasUnsavedEntries) return memoryEntries;
     try {
         const raw = localStorage.getItem(TRIP_SYNC_STORAGE_KEY);
         if (raw === null) return memoryEntries;
@@ -74,8 +77,10 @@ function loadEntries(): StoredTripGpsSync[] {
 
 function saveEntries(entries: StoredTripGpsSync[]): void {
     memoryEntries = [...entries].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, MAX_STORED_TRIPS);
+    hasUnsavedEntries = true;
     try {
         localStorage.setItem(TRIP_SYNC_STORAGE_KEY, JSON.stringify(memoryEntries));
+        hasUnsavedEntries = false;
     } catch {
         // Storage blocked: preferences remain in memory for this session.
     }
@@ -231,4 +236,5 @@ export function gpsTrackOverhangSec(trip: Trip, offsetSec: number): number {
 /** Clears module-level fallbacks between deterministic unit tests. */
 export function _resetForTests(): void {
     memoryEntries = [];
+    hasUnsavedEntries = false;
 }

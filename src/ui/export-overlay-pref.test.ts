@@ -130,4 +130,22 @@ describe("export overlay preferences", () => {
         expect(fallback.overlayMap.marker.shape).toBe("arrow");
         expect(fallback.overlaySpeed.enabled).toBe(false);
     });
+
+    it("reads and changes overlays when the storage getter is blocked", () => {
+        vi.stubGlobal("localStorage", undefined);
+        Object.defineProperty(globalThis, "localStorage", {
+            configurable: true,
+            get: () => {
+                throw new DOMException("storage blocked", "SecurityError");
+            },
+        });
+        const fallback = defaults();
+        const restored = readStoredOverlayPreferences(fallback);
+        expect(restored).toEqual(fallback);
+        restored.overlayMap.enabled = true;
+
+        expect(() => persistOverlayPreferences(restored, fallback)).not.toThrow();
+        expect(() => persistOverlayPreferences(fallback, fallback)).not.toThrow();
+        expect(restored.overlayMap.enabled).toBe(true);
+    });
 });

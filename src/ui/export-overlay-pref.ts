@@ -117,8 +117,8 @@ export function overlayPreferencesKey(preferences: OverlayPreferences): string {
 }
 
 export function readStoredOverlayPreferences(defaults: OverlayPreferences): OverlayPreferences {
-    if (typeof localStorage === "undefined") return cloneOverlayPreferences(defaults);
     try {
+        if (typeof localStorage === "undefined") return cloneOverlayPreferences(defaults);
         const raw = localStorage.getItem(OVERLAY_PREFERENCES_STORAGE_KEY);
         return raw === null
             ? cloneOverlayPreferences(defaults)
@@ -131,8 +131,8 @@ export function readStoredOverlayPreferences(defaults: OverlayPreferences): Over
 /** Default layouts need no storage entry. This also makes Reset remove the
  *  preference instead of leaving a redundant copy that could mask new defaults. */
 export function persistOverlayPreferences(current: OverlayPreferences, defaults: OverlayPreferences): void {
-    if (typeof localStorage === "undefined") return;
     try {
+        if (typeof localStorage === "undefined") return;
         if (overlayPreferencesKey(current) === overlayPreferencesKey(defaults)) {
             localStorage.removeItem(OVERLAY_PREFERENCES_STORAGE_KEY);
         } else {

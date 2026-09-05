@@ -17,6 +17,7 @@ export const MAP_LABEL_SCALE_VALUES = [1, 1.25, 1.5, 2] as const;
 export type MapLabelScale = (typeof MAP_LABEL_SCALE_VALUES)[number];
 
 const STORAGE_KEY = "dashcamigo:mapLabelScale";
+let sessionLabelScale: MapLabelScale | null = null;
 
 function isMapLabelScale(value: number): value is MapLabelScale {
     return (MAP_LABEL_SCALE_VALUES as readonly number[]).includes(value);
@@ -25,6 +26,7 @@ function isMapLabelScale(value: number): value is MapLabelScale {
 /** Stored label-scale preference for the live viewer maps; 1 when unset or
  *  the stored value is not one of the presets. */
 export function getMapLabelScale(): MapLabelScale {
+    if (sessionLabelScale !== null) return sessionLabelScale;
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (raw !== null) {
@@ -40,6 +42,7 @@ export function getMapLabelScale(): MapLabelScale {
 /** Persists the label-scale preference. The caller re-applies the style to the
  *  live maps (reapplyMapLabelPrefs in map.ts) - there are no subscribers. */
 export function setMapLabelScale(scale: MapLabelScale): void {
+    sessionLabelScale = scale;
     try {
         localStorage.setItem(STORAGE_KEY, String(scale));
     } catch {
@@ -53,6 +56,7 @@ export const STREET_LABEL_DENSITY_VALUES = ["standard", "more", "max"] as const;
 export type StreetLabelDensity = (typeof STREET_LABEL_DENSITY_VALUES)[number];
 
 const DENSITY_STORAGE_KEY = "dashcamigo:streetLabelDensity";
+let sessionStreetLabelDensity: StreetLabelDensity | null = null;
 
 // Per level: how much denser a road name repeats along its line (spacing
 // multiplier) and how many zoom levels earlier the road-name layers turn on.
@@ -79,6 +83,7 @@ function isStreetLabelDensity(value: string): value is StreetLabelDensity {
 /** Stored street-name density preference for the live viewer maps; "standard"
  *  when unset or the stored value is not one of the presets. */
 export function getStreetLabelDensity(): StreetLabelDensity {
+    if (sessionStreetLabelDensity !== null) return sessionStreetLabelDensity;
     try {
         const raw = localStorage.getItem(DENSITY_STORAGE_KEY);
         if (raw !== null && isStreetLabelDensity(raw)) return raw;
@@ -91,11 +96,17 @@ export function getStreetLabelDensity(): StreetLabelDensity {
 /** Persists the street-name density preference. The caller re-applies the
  *  style to the live maps (reapplyMapLabelPrefs in map.ts). */
 export function setStreetLabelDensity(density: StreetLabelDensity): void {
+    sessionStreetLabelDensity = density;
     try {
         localStorage.setItem(DENSITY_STORAGE_KEY, String(density));
     } catch {
         // private mode - won't survive reload but works in this session.
     }
+}
+
+export function _resetForTests(): void {
+    sessionLabelScale = null;
+    sessionStreetLabelDensity = null;
 }
 
 /**
