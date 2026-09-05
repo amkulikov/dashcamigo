@@ -40,7 +40,8 @@ import { computeOutputSize } from "../transcode/compose.js";
 import { createExportHeartbeat } from "../transcode/export-heartbeat.js";
 import { MAP_BASE_WIDTH_PCT } from "../transcode/map-overlay.js";
 import { recordsInWallWindow } from "../transcode/overlay-pipeline-helpers.js";
-import { type ChasePrewarmOpts, createExportMapSnapshotter, type ExportMapSnapshotter } from "./export-map-snapshot.js";
+import { type ChasePrewarmOpts, createExportMapSnapshotter } from "./export-map-snapshot.js";
+import { MapSnapshotSession } from "./map-snapshot-session.js";
 
 const log = createLogger("transcode-shim");
 
@@ -116,19 +117,8 @@ function runInWorker(
         sinkError: writableSinkError,
     } = createWorkerWritableProxy(writable, onDiskCommit);
 
-    // Map snapshot bridge. Created eagerly at export start when the map overlay
-    // is enabled (see the kick-off below ensureSnapshotter) and never allocated
-    // otherwise - the hidden MapLibre instance is not free. The snapshotter
-    // promise is cached so a burst of per-frame requests does not race the
-    // creation.
-    //
-    // Tracking via the promise (not a resolved instance) ensures cleanup runs
-    // dispose() even when the user cancels the export DURING MapLibre
-    // initialization - otherwise the hidden div + WebGL context would leak
-    // until page reload.
-    let snapshotterPromise: Promise<ExportMapSnapshotter> | null = null;
-    const ensureSnapshotter = (): Promise<ExportMapSnapshotter> => {
-        if (snapshotterPromise) return snapshotterPromise;
+    // Initialize once and serialize renders on the map's shared compositor.
+    const snapshotSession = new MapSnapshotSession(() => {
         const records = overlays?.gpsRecords ?? [];
         // Snapshot-render concerns stay on the main thread, but still come from
         // the same immutable Save-time contract as the worker args. Reading the
@@ -149,7 +139,7 @@ function runInWorker(
         // mirrors the worker's own output-width derivation (same aspect + height).
         const outputWidthPx = computeOutputSize(transferArgs.output.height, transferArgs.output.aspect).width;
         const targetSlotWidthPx = outputWidthPx * MAP_BASE_WIDTH_PCT * (overlayMap.scalePct / 100);
-        snapshotterPromise = createExportMapSnapshotter(records, "export", mapTheme, targetSlotWidthPx, {
+        return createExportMapSnapshotter(records, "export", mapTheme, targetSlotWidthPx, {
             labelScalePct: overlayMap.labelScalePct,
             labelDensity: overlayMap.labelDensity,
             markerAppearance: overlayMap.marker,
@@ -177,14 +167,13 @@ function runInWorker(
             }
             return snap;
         });
-        return snapshotterPromise;
-    };
+    });
     // Eager start: kick off MapLibre init + prewarm at export start instead of
     // on the worker's first snapshot request, overlapping them with worker
     // startup and the first decodes. The catch only silences the unhandled
     // rejection - the cached rejected promise resurfaces on the first snapshot
     // request, which turns it into an error response for the pipeline.
-    if (overlays?.map) void ensureSnapshotter().catch(() => {});
+    if (overlays?.map) void snapshotSession.preload().catch(() => {});
 
     // Main-thread twin of the worker-side heartbeat: same cadence, this
     // isolate's heap. The FSA writes happen HERE (proxy sink callbacks), so a
@@ -206,32 +195,17 @@ function runInWorker(
             }
             if (msg.type === TRANSCODE_NOTIFY_MAP_SNAPSHOT_REQUEST) {
                 const req = msg.data as MapSnapshotRequestNotification;
-                enqueueMapSnapshotRequest(req);
+                void renderOneSnapshot(req);
                 return;
             }
         },
     });
 
-    // Serialize snapshot rendering. The snapshotter is ONE MapLibre instance with
-    // ONE reused composite canvas, so two snapshot() calls running concurrently
-    // would interleave their jumpTo/redraw/drawImage on that shared canvas and
-    // corrupt each other. The worker's per-frame prefetch (pipeline.ts) keeps the
-    // NEXT frame's request in flight while encoding the current frame, so two
-    // requests can now overlap on the wire - chain them through this tail so the
-    // map still renders exactly one frame at a time. The overlap we actually want
-    // (main-thread map render vs worker-thread encode) is across threads and is
-    // unaffected by this single-thread ordering. renderOneSnapshot swallows all
-    // errors into a response, so the tail never rejects and the chain never breaks.
-    let snapshotTail: Promise<void> = Promise.resolve();
-    const enqueueMapSnapshotRequest = (req: MapSnapshotRequestNotification): void => {
-        snapshotTail = snapshotTail.then(() => renderOneSnapshot(req));
-    };
-
     const renderOneSnapshot = async (req: MapSnapshotRequestNotification): Promise<void> => {
         try {
-            const snap = await ensureSnapshotter();
+            if (client.disposed || signal.aborted) return;
             if (!mapConfig) throw new Error("map overlay config missing from export snapshot");
-            const bitmap = await snap.snapshot({
+            const bitmap = await snapshotSession.snapshot({
                 lat: req.lat,
                 lon: req.lon,
                 bearingDeg: req.bearingDeg,
@@ -275,26 +249,9 @@ function runInWorker(
 
     const cleanup = (success: boolean): void => {
         client.dispose();
-        // Dispose via the promise so a still-initializing snapshotter (user
-        // cancelled mid-init) still gets cleaned up once MapLibre finishes
-        // loading the style. Without this the hidden div + WebGL context
-        // outlive the export.
-        const pendingSnap = snapshotterPromise;
-        snapshotterPromise = null;
-        if (pendingSnap) {
-            pendingSnap.then(
-                (snap) => {
-                    try {
-                        snap.dispose();
-                    } catch (err) {
-                        log.warn("snapshotter dispose threw", { err: String(err) });
-                    }
-                },
-                () => {
-                    // Init rejected - nothing to dispose.
-                },
-            );
-        }
+        void snapshotSession.dispose().catch((err: unknown) => {
+            log.warn("snapshotter dispose threw", { err: err instanceof Error ? err.message : String(err) });
+        });
         state.transcodeInProgress = false;
         if (typeof document !== "undefined") {
             document.body.classList.remove("dc-transcode-busy");
