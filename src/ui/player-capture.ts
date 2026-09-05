@@ -208,7 +208,7 @@ export function syncCaptureButton(): void {
     const video = activeCandidate();
     if (video && !video.canPlay) {
         btn.disabled = true;
-        btn.title = t("player.captureDisabled.codec", { codec: video.codec ?? "?" });
+        btn.title = t("player.captureDisabled.codec");
         return;
     }
     btn.disabled = false;

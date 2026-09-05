@@ -24,7 +24,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
             "h1": "Eine kostenlose Dashcam Viewer-Alternative — im Browser, nichts zu installieren",
             "lead": "Dashcam Viewer ist ein ausgereifter Desktop-Player für viele Marken mit Free-, Plus- und Pro-Tarifen. dashcamigo deckt die alltägliche Sichtung kostenlos im Browser ab: SD-Karte öffnen, Route und Diagramme ansehen, mehrere Kameras synchron abspielen und einen Clip schneiden. Ohne Installation, Konto oder Upload.",
             "cardHint": "Ausgereifter Desktop-Player; wir decken die schnelle Sichtung im Browser ab",
-            "whatItIs": "Dashcam Viewer von Earthshine Software ist eine aktiv gepflegte App für Windows und macOS mit den Tarifen Free, Plus und Pro. Sie unterstützt viele Dashcam-Modelle, synchronisierte Videos, eine OpenStreetMap-Routenkarte, detaillierte Diagramme und GPS-Export in mehreren Formaten. Es ist das tiefere Desktop-Analysewerkzeug; dashcamigo konzentriert sich auf die schnelle lokale Sichtung ohne Installation.",
+            "whatItIs": "Dashcam Viewer von Earthshine Software ist eine aktiv gepflegte App für Windows und macOS mit den Tarifen Free, Plus und Pro. Sie unterstützt viele Dashcam-Modelle, synchronisierte Videos, eine OpenStreetMap-Routenkarte, detaillierte Diagramme und GPS-Export in mehreren Formaten. Es ist das umfangreichere Desktop-Analysewerkzeug; dashcamigo konzentriert sich auf die schnelle lokale Sichtung ohne Installation.",
             "comparisonIntro": "Dashcam Viewer geht bei forensischen Details tiefer. Hier hat ein kostenloses Browser-Tool beim alltäglichen Anschauen die Nase vorn.",
             "compareRows": [
                 {
@@ -64,7 +64,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                     "dimension": "GPS-Karte",
                     "us": {
                         "mark": "yes",
-                        "note": "Schlüssellos — kein API-Schlüssel, der ablaufen kann"
+                        "note": "Interaktive Routenkarte"
                     },
                     "them": {
                         "mark": "yes",
@@ -72,14 +72,14 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                     }
                 },
                 {
-                    "dimension": "Kanäle gleichzeitig",
+                    "dimension": "Kameras gleichzeitig",
                     "us": {
                         "mark": "yes",
                         "note": "Mehrkamera-Layouts"
                     },
                     "them": {
                         "mark": "partial",
-                        "note": "Bis zu 2 Kanäle"
+                        "note": "Bis zu 2 Kameras"
                     }
                 },
                 {
@@ -128,7 +128,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
             "h1": "Una alternativa gratuita a Dashcam Viewer — en tu navegador, sin nada que instalar",
             "lead": "Dashcam Viewer es un visor de escritorio maduro para muchas marcas, con planes Free, Plus y Pro. dashcamigo cubre gratis la revisión diaria en el navegador: abre la tarjeta SD, consulta la ruta y los gráficos, sincroniza varias cámaras y recorta un clip. Sin instalar, sin cuenta y sin subir archivos.",
             "cardHint": "Visor de escritorio maduro; cubrimos la revisión rápida en el navegador",
-            "whatItIs": "Dashcam Viewer de Earthshine Software es una aplicación para Windows y macOS con mantenimiento activo y planes Free, Plus y Pro. Admite muchos modelos de dashcam, vídeo sincronizado, un mapa de ruta de OpenStreetMap, gráficos detallados y exportación GPS en varios formatos. Es la herramienta de análisis de escritorio más profunda; dashcamigo se centra en la revisión local rápida sin instalar nada.",
+            "whatItIs": "Dashcam Viewer de Earthshine Software es una aplicación para Windows y macOS con mantenimiento activo y planes Free, Plus y Pro. Admite muchos modelos de dashcam, vídeo sincronizado, un mapa de ruta de OpenStreetMap, gráficos detallados y exportación GPS en varios formatos. Es una herramienta de escritorio para análisis más detallados; dashcamigo se centra en la revisión local rápida sin instalar nada.",
             "comparisonIntro": "Dashcam Viewer profundiza más en el detalle forense. Aquí es donde una herramienta gratuita en el navegador tiene ventaja para la visualización del día a día.",
             "compareRows": [
                 {
@@ -139,7 +139,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                     },
                     "them": {
                         "mark": "no",
-                        "note": "De pago, licencia única (capa gratuita limitada)"
+                        "note": "De pago, licencia única (versión gratuita limitada)"
                     }
                 },
                 {
@@ -168,7 +168,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                     "dimension": "Mapa GPS",
                     "us": {
                         "mark": "yes",
-                        "note": "Sin claves — ninguna clave de API que pueda caducar"
+                        "note": "Mapa de ruta interactivo"
                     },
                     "them": {
                         "mark": "yes",
@@ -176,14 +176,14 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                     }
                 },
                 {
-                    "dimension": "Canales a la vez",
+                    "dimension": "Cámaras a la vez",
                     "us": {
                         "mark": "yes",
                         "note": "Diseños multicámara"
                     },
                     "them": {
                         "mark": "partial",
-                        "note": "Hasta 2 canales"
+                        "note": "Hasta 2 cámaras"
                     }
                 },
                 {
@@ -227,13 +227,13 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
         "fr": {
             "title": "Alternative à Dashcam Viewer dans le navigateur | dashcamigo",
             "metaDescription": "Alternative gratuite à Dashcam Viewer dans le navigateur : carte GPS, graphiques, caméras synchronisées et traitement local sans installation.",
-            "ogTitle": "Alternative gratuite à Dashcam Viewer — dans votre navigateur",
+            "ogTitle": "Alternative gratuite à Dashcam Viewer — dans ton navigateur",
             "ogDescription": "Dashcam Viewer propose des formules Free, Plus et Pro. dashcamigo couvre gratuitement la consultation locale rapide dans le navigateur.",
-            "h1": "Une alternative gratuite à Dashcam Viewer — dans votre navigateur, rien à installer",
-            "lead": "Dashcam Viewer est un lecteur de bureau abouti et multimarque, avec des formules Free, Plus et Pro. dashcamigo couvre gratuitement la consultation courante dans le navigateur : ouvrez la carte SD, affichez l’itinéraire et les graphiques, synchronisez plusieurs caméras et découpez un extrait. Sans installation, compte ni envoi de fichiers.",
+            "h1": "Une alternative gratuite à Dashcam Viewer — dans ton navigateur, rien à installer",
+            "lead": "Dashcam Viewer est un lecteur de bureau abouti et multimarque, avec des formules Free, Plus et Pro. dashcamigo couvre gratuitement la consultation courante dans le navigateur : ouvre la carte SD, affiche l’itinéraire et les graphiques, synchronise plusieurs caméras et découpe un extrait. Sans installation, compte ni envoi de fichiers.",
             "cardHint": "Lecteur de bureau abouti ; nous couvrons la consultation rapide dans le navigateur",
             "whatItIs": "Dashcam Viewer d’Earthshine Software est une application Windows et macOS activement maintenue, proposée en formules Free, Plus et Pro. Elle prend en charge de nombreux modèles, la vidéo synchronisée, une carte d’itinéraire OpenStreetMap, des graphiques détaillés et l’export GPS dans plusieurs formats. C’est l’outil d’analyse de bureau le plus poussé ; dashcamigo vise la consultation locale rapide sans installation.",
-            "comparisonIntro": "Dashcam Viewer va plus loin dans le détail forensique. Voici là où un outil gratuit dans le navigateur prend l'avantage pour le visionnage de tous les jours.",
+            "comparisonIntro": "Dashcam Viewer va plus loin dans le détail forensique. Voici où un outil gratuit dans le navigateur prend l'avantage pour le visionnage de tous les jours.",
             "compareRows": [
                 {
                     "dimension": "Prix",
@@ -272,7 +272,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                     "dimension": "Carte GPS",
                     "us": {
                         "mark": "yes",
-                        "note": "Sans clé — aucune clé d'API qui puisse expirer"
+                        "note": "Carte interactive de l’itinéraire"
                     },
                     "them": {
                         "mark": "yes",
@@ -280,14 +280,14 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                     }
                 },
                 {
-                    "dimension": "Canaux en même temps",
+                    "dimension": "Caméras en même temps",
                     "us": {
                         "mark": "yes",
                         "note": "Dispositions multicaméra"
                     },
                     "them": {
                         "mark": "partial",
-                        "note": "Jusqu'à 2 canaux"
+                        "note": "Jusqu'à 2 caméras"
                     }
                 },
                 {
@@ -325,8 +325,8 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 }
             ],
             "whenStayTitle": "Quand Dashcam Viewer est le meilleur achat",
-            "whenStay": "Si vous voulez la plus large couverture de caméras, un détail forensique poussé — altitude, nombre de satellites, HDOP, géotags géocodés en inverse — ou une application de bureau dédiée que vous pouvez lancer hors ligne sans navigateur, Dashcam Viewer vaut son prix. Il est activement maintenu et prend en charge de nombreuses marques que dashcamigo ne gère pas encore. dashcamigo vise le cas courant : gratuit, instantané, dans le navigateur.",
-            "ctaPrimary": "Ouvrir vos enregistrements",
+            "whenStay": "Si tu veux la plus large couverture de caméras, un détail forensique poussé — altitude, nombre de satellites, HDOP, géotags géocodés en inverse — ou une application de bureau dédiée que tu peux lancer hors ligne sans navigateur, Dashcam Viewer vaut son prix. Il est activement maintenu et prend en charge de nombreuses marques que dashcamigo ne gère pas encore. dashcamigo vise le cas courant : gratuit, instantané, dans le navigateur.",
+            "ctaPrimary": "Ouvrir tes enregistrements",
         },
         "ja": {
             "title": "Dashcam Viewerの代替 — 無料、インストール不要、ブラウザで | dashcamigo",
@@ -334,7 +334,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
             "ogTitle": "無料のDashcam Viewer代替 — ブラウザで",
             "ogDescription": "Dashcam Viewer には Free・Plus・Pro があります。dashcamigo はブラウザでの素早いローカル確認を無料で行えます。",
             "h1": "無料のDashcam Viewer代替 — ブラウザで、インストール不要",
-            "lead": "Dashcam Viewer は多くのブランドに対応する成熟したデスクトッププレーヤーで、Free・Plus・Pro のプランがあります。dashcamigo は日常的な確認をブラウザで無料に行えます。SD カードを開き、ルートとグラフを確認し、複数カメラを同期再生してクリップを書き出せます。インストール、アカウント、アップロードは不要です。",
+            "lead": "Dashcam Viewer は多くのブランドに対応する成熟したデスクトッププレーヤーで、Free・Plus・Pro のプランがあります。dashcamigo は日常的な確認をブラウザで無料で行えます。SD カードを開き、ルートとグラフを確認し、複数カメラを同期再生してクリップを書き出せます。インストール、アカウント、アップロードは不要です。",
             "cardHint": "成熟したデスクトップ版。dashcamigo はブラウザでの素早い確認向け",
             "whatItIs": "Earthshine Software の Dashcam Viewer は、Windows と macOS 向けに継続開発されているアプリで、Free・Plus・Pro のプランがあります。幅広いドラレコ、同期再生、OpenStreetMap のルート地図、詳細なグラフ、複数形式の GPS 書き出しに対応します。デスクトップで詳しく分析するなら Dashcam Viewer、インストールせず素早くローカル確認するなら dashcamigo という違いです。",
             "comparisonIntro": "Dashcam Viewerはフォレンジックな細部でより深く掘り下げます。日常的な視聴では無料のブラウザツールに分があるところを示します。",
@@ -376,7 +376,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                     "dimension": "GPSマップ",
                     "us": {
                         "mark": "yes",
-                        "note": "キー不要 — 期限切れになるAPIキーなし"
+                        "note": "操作できるルート地図"
                     },
                     "them": {
                         "mark": "yes",
@@ -384,14 +384,14 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                     }
                 },
                 {
-                    "dimension": "同時表示チャンネル数",
+                    "dimension": "同時表示カメラ数",
                     "us": {
                         "mark": "yes",
                         "note": "マルチカメラ表示"
                     },
                     "them": {
                         "mark": "partial",
-                        "note": "最大2チャンネル"
+                        "note": "最大2台のカメラ"
                     }
                 },
                 {
@@ -480,7 +480,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                     "dimension": "GPS 지도",
                     "us": {
                         "mark": "yes",
-                        "note": "키 없음 — 만료될 API 키 없음"
+                        "note": "확대·이동할 수 있는 경로 지도"
                     },
                     "them": {
                         "mark": "yes",
@@ -488,14 +488,14 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                     }
                 },
                 {
-                    "dimension": "동시 채널 수",
+                    "dimension": "동시에 볼 수 있는 카메라 수",
                     "us": {
                         "mark": "yes",
                         "note": "멀티 카메라 레이아웃"
                     },
                     "them": {
                         "mark": "partial",
-                        "note": "최대 2채널"
+                        "note": "최대 2대의 카메라"
                     }
                 },
                 {
@@ -544,7 +544,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
             "h1": "Darmowa alternatywa dla Dashcam Viewer — w przeglądarce, nic do zainstalowania",
             "lead": "Dashcam Viewer to dojrzały, wielomarkowy odtwarzacz desktopowy z planami Free, Plus i Pro. dashcamigo bezpłatnie obsługuje codzienny przegląd w przeglądarce: otwiera kartę SD, pokazuje trasę i wykresy, synchronizuje kilka kamer i przycina klip. Bez instalacji, konta i wysyłania plików.",
             "cardHint": "Dojrzały odtwarzacz desktopowy; my obsługujemy szybki przegląd w przeglądarce",
-            "whatItIs": "Dashcam Viewer firmy Earthshine Software to aktywnie rozwijana aplikacja na Windows i macOS z planami Free, Plus i Pro. Obsługuje wiele modeli kamer, zsynchronizowane wideo, mapę trasy OpenStreetMap, szczegółowe wykresy i eksport GPS w kilku formatach. To głębsze narzędzie desktopowe; dashcamigo skupia się na szybkim lokalnym przeglądzie bez instalacji.",
+            "whatItIs": "Dashcam Viewer firmy Earthshine Software to aktywnie rozwijana aplikacja na Windows i macOS z planami Free, Plus i Pro. Obsługuje wiele modeli kamer, zsynchronizowane wideo, mapę trasy OpenStreetMap, szczegółowe wykresy i eksport GPS w kilku formatach. To narzędzie komputerowe do bardziej szczegółowej analizy; dashcamigo skupia się na szybkim lokalnym przeglądzie bez instalacji.",
             "comparisonIntro": "Dashcam Viewer idzie głębiej w szczegóły śledcze. Oto gdzie darmowe narzędzie w przeglądarce ma przewagę w codziennym oglądaniu.",
             "compareRows": [
                 {
@@ -584,7 +584,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                     "dimension": "Mapa GPS",
                     "us": {
                         "mark": "yes",
-                        "note": "Bez kluczy — żaden klucz API nie wygaśnie"
+                        "note": "Interaktywna mapa trasy"
                     },
                     "them": {
                         "mark": "yes",
@@ -592,14 +592,14 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                     }
                 },
                 {
-                    "dimension": "Kanały jednocześnie",
+                    "dimension": "Kamery jednocześnie",
                     "us": {
                         "mark": "yes",
                         "note": "Układy wielokamerowe"
                     },
                     "them": {
                         "mark": "partial",
-                        "note": "Do 2 kanałów"
+                        "note": "Do 2 kamer"
                     }
                 },
                 {
@@ -648,7 +648,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
             "h1": "Uma alternativa gratuita ao Dashcam Viewer — no seu navegador, sem nada para instalar",
             "lead": "O Dashcam Viewer é um visualizador maduro para desktop e várias marcas, com planos Free, Plus e Pro. O dashcamigo cobre grátis a revisão do dia a dia no navegador: abra o cartão SD, veja a rota e os gráficos, sincronize várias câmeras e corte um clipe. Sem instalação, conta ou upload.",
             "cardHint": "Visualizador maduro para desktop; cobrimos a revisão rápida no navegador",
-            "whatItIs": "O Dashcam Viewer, da Earthshine Software, é um app para Windows e macOS com manutenção ativa e planos Free, Plus e Pro. Ele aceita muitos modelos de dashcam, vídeo sincronizado, mapa de rota do OpenStreetMap, gráficos detalhados e exportação de GPS em vários formatos. É a ferramenta de análise mais profunda no desktop; o dashcamigo foca na revisão local rápida sem instalação.",
+            "whatItIs": "O Dashcam Viewer, da Earthshine Software, é um app para Windows e macOS com manutenção ativa e planos Free, Plus e Pro. Ele aceita muitos modelos de dashcam, vídeo sincronizado, mapa de rota do OpenStreetMap, gráficos detalhados e exportação de GPS em vários formatos. É uma ferramenta para análises mais detalhadas no computador; o dashcamigo foca na revisão local rápida sem instalação.",
             "comparisonIntro": "O Dashcam Viewer vai mais fundo no detalhe forense. Veja onde uma ferramenta gratuita no navegador leva vantagem na visualização do dia a dia.",
             "compareRows": [
                 {
@@ -688,7 +688,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                     "dimension": "Mapa GPS",
                     "us": {
                         "mark": "yes",
-                        "note": "Sem chave — nenhuma chave de API para expirar"
+                        "note": "Mapa interativo da rota"
                     },
                     "them": {
                         "mark": "yes",
@@ -696,14 +696,14 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                     }
                 },
                 {
-                    "dimension": "Canais ao mesmo tempo",
+                    "dimension": "Câmeras ao mesmo tempo",
                     "us": {
                         "mark": "yes",
                         "note": "Layouts multicâmera"
                     },
                     "them": {
                         "mark": "partial",
-                        "note": "Até 2 canais"
+                        "note": "Até 2 câmeras"
                     }
                 },
                 {
@@ -792,7 +792,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                     "dimension": "GPS 地图",
                     "us": {
                         "mark": "yes",
-                        "note": "无需密钥——不会失效"
+                        "note": "可交互的路线地图"
                     },
                     "them": {
                         "mark": "yes",
@@ -800,14 +800,14 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                     }
                 },
                 {
-                    "dimension": "同时显示的通道数",
+                    "dimension": "同时显示的摄像头数量",
                     "us": {
                         "mark": "yes",
                         "note": "多摄像头布局"
                     },
                     "them": {
                         "mark": "partial",
-                        "note": "最多 2 个通道"
+                        "note": "最多 2 个摄像头"
                     }
                 },
                 {
@@ -856,7 +856,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
             "ogTitle": "Kostenlose Telemetry Overlay-Alternative für Dashcam-Aufnahmen",
             "ogDescription": "Telemetry Overlay ist ein kostenpflichtiges Desktop-Overlay-Tool. Für Dashcam-Aufnahmen liest dashcamigo das GPS und brennt ein Geschwindigkeits-/Karten-Overlay ein — kostenlos, im Browser.",
             "h1": "Eine kostenlose Alternative zu Telemetry Overlay im Browser — für Dashcam-Aufnahmen",
-            "lead": "Telemetry Overlay ist ein leistungsstarkes, kostenpflichtiges Desktop-Tool, um Anzeigen auf Action-Cam-Videos zu brennen. Wenn deine Aufnahmen von einer Dashcam stammen und du einfach nur Route, Geschwindigkeit und G-Kraft sehen willst — und vielleicht ein einfaches Geschwindigkeits- und Karten-Overlay einbrennen — dann macht dashcamigo das kostenlos, in deinem Browser, und liest das GPS direkt von der Karte. Keine Lizenz, keine Installation. Für tiefgehende Anzeigen-Produktion ist Telemetry Overlay weiterhin das fähigere Tool.",
+            "lead": "Telemetry Overlay ist ein leistungsstarkes, kostenpflichtiges Desktop-Tool, um Anzeigen auf Action-Cam-Videos zu brennen. Wenn deine Aufnahmen von einer Dashcam stammen und du einfach nur Route, Geschwindigkeit und G-Kraft sehen willst — und vielleicht ein einfaches Geschwindigkeits- und Karten-Overlay einbrennen — dann macht dashcamigo das kostenlos, in deinem Browser, und liest das GPS direkt von der Karte. Keine Lizenz, keine Installation. Für aufwendige Videos mit Datenanzeigen ist Telemetry Overlay weiterhin das fähigere Tool.",
             "cardHint": "Kostenpflichtiges Desktop-Overlay-Tool; wir lesen Dashcam-GPS kostenlos im Browser",
             "whatItIs": "Telemetry Overlay von Goprotelemetryextractor ist eine kostenpflichtige Desktop-App für Windows, macOS und Linux. Sie kombiniert Video mit Telemetrie aus Action-Cams und externen Dateien wie GPX, FIT und NMEA, bietet Hunderte anpassbare Anzeigen und exportiert das gerenderte Ergebnis. Die offizielle Testversion läuft drei Tage und versieht Exporte mit einem Wasserzeichen. Es ist ein Produktionswerkzeug für Overlays; dashcamigo ist ein interaktiver Player mit einfachem Clip-Export.",
             "comparisonIntro": "Telemetry Overlay geht bei den Anzeigen tiefer. Hier hat ein kostenloses Browser-Tool speziell für Dashcam-Aufnahmen die Nase vorn.",
@@ -891,11 +891,11 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                     },
                     "them": {
                         "mark": "yes",
-                        "note": "Tiefe Anzeigen-Bibliothek"
+                        "note": "Umfangreiche Anzeigen-Bibliothek"
                     }
                 },
                 {
-                    "dimension": "Anzeigen-Tiefe & zusätzliche Sensoren",
+                    "dimension": "Anpassbare Anzeigen & zusätzliche Sensoren",
                     "us": {
                         "mark": "partial",
                         "note": "Geschwindigkeit, GPS, G-Kraft"
@@ -907,7 +907,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 }
             ],
             "whenStayTitle": "Wann Telemetry Overlay das bessere Tool ist",
-            "whenStay": "Telemetry Overlay ist das bessere Tool, wenn du ein ausgefeiltes Overlay-Video produzieren willst — es hat eine weitaus tiefere Anzeigen-Bibliothek, unterstützt Action-Cams (GoPro, DJI, Insta360) und viele externe Datenformate (GPX, FIT, NMEA) und exportiert in sendetaugliche Formate (ProRes, Alpha-PNG). Das Overlay von dashcamigo ist bewusst einfach gehalten: Geschwindigkeit, Koordinaten und eine Minikarte, eingebrannt auf deinen Dashcam-Clip. Für die Anzeigen-Produktion bei Action-Cams ist Telemetry Overlay (ein kostenpflichtiges, installiertes Tool) die richtige Wahl; für kostenlose, sofortige Dashcam-Durchsicht und ein einfaches Overlay im Browser passt dashcamigo.",
+            "whenStay": "Telemetry Overlay ist das bessere Tool, wenn du ein ausgefeiltes Overlay-Video produzieren willst — es hat eine weitaus umfangreichere Anzeigen-Bibliothek, unterstützt Action-Cams (GoPro, DJI, Insta360) und viele externe Datenformate (GPX, FIT, NMEA) und exportiert in sendetaugliche Formate (ProRes, Alpha-PNG). Das Overlay von dashcamigo ist bewusst einfach gehalten: Geschwindigkeit, Koordinaten und eine Minikarte, eingebrannt auf deinen Dashcam-Clip. Für die Anzeigen-Produktion bei Action-Cams ist Telemetry Overlay (ein kostenpflichtiges, installiertes Tool) die richtige Wahl; für kostenlose, sofortige Dashcam-Durchsicht und ein einfaches Overlay im Browser passt dashcamigo.",
             "ctaPrimary": "Deine Aufnahmen öffnen",
         },
         "es": {
@@ -916,7 +916,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
             "ogTitle": "Alternativa gratis a Telemetry Overlay para dashcam",
             "ogDescription": "Telemetry Overlay es una herramienta de overlay de escritorio de pago. Para grabaciones de dashcam, dashcamigo lee el GPS y quema un overlay de velocidad/mapa gratis, en tu navegador.",
             "h1": "Una alternativa gratuita y en el navegador a Telemetry Overlay — para grabaciones de dashcam",
-            "lead": "Telemetry Overlay es una potente herramienta de escritorio de pago para quemar indicadores sobre vídeo de cámaras de acción. Si tu material es de una dashcam y solo quieres ver la ruta, la velocidad y la fuerza G — y quizá quemar un overlay sencillo de velocidad y mapa — dashcamigo lo hace gratis, en tu navegador, leyendo el GPS directamente desde la tarjeta. Sin licencia, sin instalar. Para una producción profunda de indicadores, Telemetry Overlay sigue siendo la herramienta más capaz.",
+            "lead": "Telemetry Overlay es una potente herramienta de escritorio de pago para quemar indicadores sobre vídeo de cámaras de acción. Si tu material es de una dashcam y solo quieres ver la ruta, la velocidad y la fuerza G — y quizá quemar un overlay sencillo de velocidad y mapa — dashcamigo lo hace gratis, en tu navegador, leyendo el GPS directamente desde la tarjeta. Sin licencia, sin instalar. Para crear vídeos con indicadores más elaborados, Telemetry Overlay sigue siendo la herramienta más capaz.",
             "cardHint": "Herramienta de overlay de escritorio de pago; nosotros leemos el GPS de la dashcam gratis en el navegador",
             "whatItIs": "Telemetry Overlay de Goprotelemetryextractor es una aplicación de pago para Windows, macOS y Linux. Combina vídeo con telemetría de cámaras de acción y archivos externos como GPX, FIT y NMEA, ofrece cientos de indicadores personalizables y exporta el resultado renderizado. La prueba oficial dura tres días y añade una marca de agua. Es una herramienta de producción de overlays; dashcamigo es un visor interactivo con exportación sencilla de clips.",
             "comparisonIntro": "Telemetry Overlay va más a fondo en los indicadores. Aquí es donde una herramienta gratuita en el navegador tiene ventaja específicamente para grabaciones de dashcam.",
@@ -951,11 +951,11 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                     },
                     "them": {
                         "mark": "yes",
-                        "note": "Biblioteca profunda de indicadores"
+                        "note": "Amplia biblioteca de indicadores"
                     }
                 },
                 {
-                    "dimension": "Profundidad de indicadores y sensores extra",
+                    "dimension": "Personalización de indicadores y sensores adicionales",
                     "us": {
                         "mark": "partial",
                         "note": "Velocidad, GPS, fuerza G"
@@ -967,19 +967,19 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 }
             ],
             "whenStayTitle": "Cuándo Telemetry Overlay es la mejor herramienta",
-            "whenStay": "Telemetry Overlay es la mejor herramienta cuando quieres producir un vídeo con overlay pulido — tiene una biblioteca de indicadores mucho más profunda, admite cámaras de acción (GoPro, DJI, Insta360) y muchos formatos de datos externos (GPX, FIT, NMEA), y exporta en formatos de calidad profesional (ProRes, PNG con alfa). El overlay de dashcamigo es deliberadamente sencillo: velocidad, coordenadas y un minimapa quemados sobre tu clip de dashcam. Para la producción de indicadores con cámara de acción, Telemetry Overlay (una herramienta de pago e instalada) es la opción correcta; para una revisión de dashcam gratuita e instantánea y un overlay básico en el navegador, dashcamigo encaja.",
+            "whenStay": "Telemetry Overlay es la mejor herramienta cuando quieres producir un vídeo con overlay pulido — tiene una biblioteca de indicadores mucho más amplia, admite cámaras de acción (GoPro, DJI, Insta360) y muchos formatos de datos externos (GPX, FIT, NMEA), y exporta en formatos de calidad profesional (ProRes, PNG con alfa). El overlay de dashcamigo es deliberadamente sencillo: velocidad, coordenadas y un minimapa quemados sobre tu clip de dashcam. Para la producción de indicadores con cámara de acción, Telemetry Overlay (una herramienta de pago e instalada) es la opción correcta; para una revisión de dashcam gratuita e instantánea y un overlay básico en el navegador, dashcamigo encaja.",
             "ctaPrimary": "Abre tus grabaciones",
         },
         "fr": {
             "title": "Alternative à Telemetry Overlay dans le navigateur | dashcamigo",
             "metaDescription": "Alternative gratuite à Telemetry Overlay : lit le GPS de la dashcam, affiche carte et vitesse, puis exporte des incrustations simples.",
             "ogTitle": "Alternative gratuite à Telemetry Overlay pour dashcam",
-            "ogDescription": "Telemetry Overlay est un outil d'overlay payant pour le bureau. Pour les vidéos de dashcam, dashcamigo lit le GPS et incruste un overlay vitesse/carte gratuitement, dans votre navigateur.",
+            "ogDescription": "Telemetry Overlay est un outil d'overlay payant pour le bureau. Pour les vidéos de dashcam, dashcamigo lit le GPS et incruste un overlay vitesse/carte gratuitement, dans ton navigateur.",
             "h1": "Une alternative gratuite à Telemetry Overlay, dans le navigateur — pour les vidéos de dashcam",
-            "lead": "Telemetry Overlay est un outil de bureau puissant et payant qui incruste des jauges sur les vidéos d'action-cam. Si vos images viennent d'une dashcam et que vous voulez simplement voir le trajet, la vitesse et la force G — et peut-être incruster un overlay simple vitesse-et-carte — dashcamigo le fait gratuitement, dans votre navigateur, en lisant le GPS directement sur la carte SD. Pas de licence, pas d'installation. Pour la production poussée de jauges, Telemetry Overlay reste l'outil le plus capable.",
+            "lead": "Telemetry Overlay est un outil de bureau puissant et payant qui incruste des jauges sur les vidéos d'action-cam. Si tes images viennent d'une dashcam et que tu veux simplement voir le trajet, la vitesse et la force G — et peut-être incruster un overlay simple vitesse-et-carte — dashcamigo le fait gratuitement, dans ton navigateur, en lisant le GPS directement sur la carte SD. Pas de licence, pas d'installation. Pour la production poussée de jauges, Telemetry Overlay reste l'outil le plus capable.",
             "cardHint": "Outil d'overlay payant pour le bureau ; nous lisons le GPS de la dashcam gratuitement dans le navigateur",
             "whatItIs": "Telemetry Overlay de Goprotelemetryextractor est une application payante pour Windows, macOS et Linux. Elle combine la vidéo avec la télémétrie de caméras d’action et de fichiers externes comme GPX, FIT et NMEA, propose des centaines de jauges personnalisables et exporte le rendu. L’essai officiel dure trois jours et ajoute un filigrane. C’est un outil de production d’overlays ; dashcamigo est un lecteur interactif avec un export simple de clips.",
-            "comparisonIntro": "Telemetry Overlay va plus loin sur les jauges. Voici là où un outil gratuit dans le navigateur prend l'avantage, spécifiquement pour les vidéos de dashcam.",
+            "comparisonIntro": "Telemetry Overlay va plus loin sur les jauges. Voici où un outil gratuit dans le navigateur prend l'avantage, spécifiquement pour les vidéos de dashcam.",
             "compareRows": [
                 {
                     "dimension": "Prix",
@@ -1027,17 +1027,17 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 }
             ],
             "whenStayTitle": "Quand Telemetry Overlay est le meilleur outil",
-            "whenStay": "Telemetry Overlay est le meilleur outil quand vous voulez produire une vidéo soignée avec overlay — il dispose d'une bibliothèque de jauges bien plus profonde, prend en charge les caméras d'action (GoPro, DJI, Insta360) et de nombreux formats de données externes (GPX, FIT, NMEA), et exporte dans des formats de qualité broadcast (ProRes, PNG alpha). L'overlay de dashcamigo est volontairement simple : vitesse, coordonnées et mini-carte incrustées sur votre clip de dashcam. Pour la production de jauges en action-cam, Telemetry Overlay (un outil payant et installé) est le bon choix ; pour une consultation gratuite et instantanée des vidéos de dashcam avec un overlay basique dans le navigateur, dashcamigo convient.",
-            "ctaPrimary": "Ouvrir vos enregistrements",
+            "whenStay": "Telemetry Overlay est le meilleur outil quand tu veux produire une vidéo soignée avec overlay — il dispose d'une bibliothèque de jauges bien plus riche, prend en charge les caméras d'action (GoPro, DJI, Insta360) et de nombreux formats de données externes (GPX, FIT, NMEA), et exporte dans des formats de qualité broadcast (ProRes, PNG alpha). L'overlay de dashcamigo est volontairement simple : vitesse, coordonnées et mini-carte incrustées sur ton clip de dashcam. Pour la production de jauges en action-cam, Telemetry Overlay (un outil payant et installé) est le bon choix ; pour une consultation gratuite et instantanée des vidéos de dashcam avec un overlay basique dans le navigateur, dashcamigo convient.",
+            "ctaPrimary": "Ouvrir tes enregistrements",
         },
         "ja": {
             "title": "Telemetry Overlay の代替 — ブラウザで動く無料のドラレコGPSオーバーレイ | dashcamigo",
             "metaDescription": "ドラレコ映像向けの、ブラウザで動く無料のTelemetry Overlay代替。カードからGPSを読み取り、ライブマップを表示し、速度＆ミニマップのオーバーレイを焼き込みます。インストール不要、ライセンス料不要。",
             "ogTitle": "ドラレコ映像向け無料のTelemetry Overlay代替",
             "ogDescription": "Telemetry Overlay は有料のデスクトップ用オーバーレイツール。ドラレコ映像なら、dashcamigo がGPSを読み取り、速度／マップのオーバーレイをブラウザで無料で焼き込みます。",
-            "h1": "Telemetry Overlay の無料・ブラウザ代替 — ドラレコ映像のために",
+            "h1": "Telemetry Overlay の無料の代替ツール — ドラレコ映像をブラウザで確認",
             "lead": "Telemetry Overlay は、アクションカメラ映像にゲージを焼き込む強力な有料デスクトップツールです。映像がドラレコのもので、ルート・速度・G値をただ見たいだけ — そしてシンプルな速度とマップのオーバーレイを焼き込みたい程度 — なら、dashcamigo がそれをブラウザで無料で行い、GPSをカードから直接読み取ります。ライセンスも、インストールも不要です。本格的なゲージ制作なら、Telemetry Overlay のほうが依然として高機能なツールです。",
-            "cardHint": "有料のデスクトップ用オーバーレイツール。当方はドラレコGPSをブラウザで無料で読み取り",
+            "cardHint": "有料のデスクトップ用オーバーレイツール。dashcamigoはドラレコのGPSをブラウザで無料で読み取ります",
             "whatItIs": "Goprotelemetryextractor の Telemetry Overlay は Windows・macOS・Linux 向けの有料アプリです。アクションカメラや GPX・FIT・NMEA などの外部ファイルのテレメトリを動画と組み合わせ、数百種類のカスタマイズ可能なゲージを使ってレンダリング結果を書き出します。公式トライアルは 3 日間で、透かしが入ります。Overlay 制作用のツールであり、dashcamigo は対話的な確認と簡単なクリップ書き出し向けです。",
             "comparisonIntro": "Telemetry Overlay はゲージの面でより深掘りしています。ドラレコ映像に限れば、無料のブラウザツールが優位に立つのはこんなところです。",
             "compareRows": [
@@ -1071,11 +1071,11 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                     },
                     "them": {
                         "mark": "yes",
-                        "note": "奥行きのあるゲージライブラリ"
+                        "note": "豊富なゲージライブラリ"
                     }
                 },
                 {
-                    "dimension": "ゲージの深さと追加センサー",
+                    "dimension": "ゲージのカスタマイズと追加センサー",
                     "us": {
                         "mark": "partial",
                         "note": "速度、GPS、G値"
@@ -1087,7 +1087,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 }
             ],
             "whenStayTitle": "Telemetry Overlay のほうが優れているとき",
-            "whenStay": "洗練されたオーバーレイ動画を制作したいときは、Telemetry Overlay のほうが優れたツールです。はるかに奥行きのあるゲージライブラリを持ち、アクションカメラ（GoPro、DJI、Insta360）や多数の外部データ形式（GPX、FIT、NMEA）に対応し、放送品質の形式（ProRes、アルファ付きPNG）で書き出せます。dashcamigo のオーバーレイはあえてシンプルです — ドラレコのクリップに速度・座標・ミニマップを焼き込みます。アクションカメラのゲージ制作には、Telemetry Overlay（有料・インストール型のツール）が正解です。無料で即座に、ブラウザでドラレコ映像を確認し、基本的なオーバーレイを乗せたいなら、dashcamigo が合います。",
+            "whenStay": "洗練されたオーバーレイ動画を制作したいときは、Telemetry Overlay のほうが優れたツールです。はるかに豊富なゲージライブラリを持ち、アクションカメラ（GoPro、DJI、Insta360）や多数の外部データ形式（GPX、FIT、NMEA）に対応し、放送品質の形式（ProRes、アルファ付きPNG）で書き出せます。dashcamigo のオーバーレイはあえてシンプルです — ドラレコのクリップに速度・座標・ミニマップを焼き込みます。アクションカメラのゲージ制作には、Telemetry Overlay（有料・インストール型のツール）が正解です。無料で即座に、ブラウザでドラレコ映像を確認し、基本的なオーバーレイを乗せたいなら、dashcamigo が合います。",
             "ctaPrimary": "録画を開く",
         },
         "ko": {
@@ -1095,7 +1095,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
             "metaDescription": "블랙박스 영상을 위한 무료 브라우저 기반 Telemetry Overlay 대안 — 카드에서 GPS를 읽어 실시간 지도를 보여주고 속도·미니맵 오버레이를 입힙니다. 설치 불필요, 라이선스 비용 없음.",
             "ogTitle": "블랙박스 영상을 위한 무료 Telemetry Overlay 대안",
             "ogDescription": "Telemetry Overlay는 유료 데스크톱 오버레이 도구입니다. 블랙박스 영상이라면, dashcamigo가 GPS를 읽어 속도/지도 오버레이를 무료로, 브라우저에서 입혀 줍니다.",
-            "h1": "무료 브라우저 기반 Telemetry Overlay 대안 — 블랙박스 영상을 위한",
+            "h1": "블랙박스 영상을 위한 무료 Telemetry Overlay 대안 — 브라우저에서 바로",
             "lead": "Telemetry Overlay는 액션캠 영상에 게이지를 입혀 주는 강력한 유료 데스크톱 도구입니다. 영상이 블랙박스에서 나온 것이고 그저 경로, 속도, G 포스를 보고 싶을 뿐이라면 — 그리고 어쩌면 간단한 속도·지도 오버레이를 입히고 싶다면 — dashcamigo가 그 일을 무료로, 브라우저에서, 카드에서 GPS를 바로 읽어 해냅니다. 라이선스도, 설치도 없습니다. 깊이 있는 게이지 제작이라면 Telemetry Overlay가 여전히 더 강력한 도구입니다.",
             "cardHint": "유료 데스크톱 오버레이 도구; 우리는 블랙박스 GPS를 브라우저에서 무료로 읽습니다",
             "whatItIs": "Goprotelemetryextractor의 Telemetry Overlay는 Windows, macOS, Linux용 유료 앱입니다. 액션캠과 GPX, FIT, NMEA 같은 외부 파일의 텔레메트리를 영상과 결합하고 수백 개의 맞춤형 게이지로 렌더링 결과를 내보냅니다. 공식 체험판은 3일 동안 사용할 수 있으며 워터마크가 붙습니다. 오버레이 제작 도구이고, dashcamigo는 대화형 확인과 간단한 클립 내보내기에 맞춰져 있습니다.",
@@ -1131,11 +1131,11 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                     },
                     "them": {
                         "mark": "yes",
-                        "note": "깊이 있는 게이지 라이브러리"
+                        "note": "다양한 게이지 라이브러리"
                     }
                 },
                 {
-                    "dimension": "게이지 깊이와 추가 센서",
+                    "dimension": "게이지 맞춤 설정과 추가 센서",
                     "us": {
                         "mark": "partial",
                         "note": "속도, GPS, G 포스"
@@ -1147,7 +1147,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 }
             ],
             "whenStayTitle": "Telemetry Overlay가 더 나은 도구일 때",
-            "whenStay": "정교하게 다듬은 오버레이 영상을 만들고 싶다면 Telemetry Overlay가 더 나은 도구입니다 — 훨씬 깊이 있는 게이지 라이브러리를 갖췄고, 액션캠(GoPro, DJI, Insta360)과 다양한 외부 데이터 형식(GPX, FIT, NMEA)을 지원하며, 방송급 형식(ProRes, 알파 PNG)으로 내보냅니다. dashcamigo의 오버레이는 의도적으로 단순합니다 — 블랙박스 클립에 속도, 좌표, 미니맵을 입히는 정도죠. 액션캠 게이지 제작이라면 Telemetry Overlay(유료, 설치형 도구)가 올바른 선택입니다. 무료로 즉시 블랙박스를 살펴보고 브라우저에서 기본 오버레이를 입히는 일이라면 dashcamigo가 잘 맞습니다.",
+            "whenStay": "정교하게 다듬은 오버레이 영상을 만들고 싶다면 Telemetry Overlay가 더 나은 도구입니다 — 훨씬 다양한 게이지 라이브러리를 갖췄고, 액션캠(GoPro, DJI, Insta360)과 다양한 외부 데이터 형식(GPX, FIT, NMEA)을 지원하며, 방송급 형식(ProRes, 알파 PNG)으로 내보냅니다. dashcamigo의 오버레이는 의도적으로 단순합니다 — 블랙박스 클립에 속도, 좌표, 미니맵을 입히는 정도죠. 액션캠 게이지 제작이라면 Telemetry Overlay(유료, 설치형 도구)가 올바른 선택입니다. 무료로 즉시 블랙박스를 살펴보고 브라우저에서 기본 오버레이를 입히는 일이라면 dashcamigo가 잘 맞습니다.",
             "ctaPrimary": "내 녹화 영상 열기",
         },
         "pl": {
@@ -1156,7 +1156,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
             "ogTitle": "Darmowa alternatywa dla Telemetry Overlay do nagrań z wideorejestratora",
             "ogDescription": "Telemetry Overlay to płatne narzędzie desktopowe do nakładek. Dla nagrań z wideorejestratora dashcamigo czyta GPS i nakłada prędkość/mapę za darmo, w przeglądarce.",
             "h1": "Darmowa, działająca w przeglądarce alternatywa dla Telemetry Overlay — do nagrań z wideorejestratora",
-            "lead": "Telemetry Overlay to potężne, płatne narzędzie desktopowe do wypalania wskaźników na wideo z kamer sportowych. Jeśli Twoje nagranie pochodzi z wideorejestratora i chcesz po prostu zobaczyć trasę, prędkość i przeciążenia — a może wypalić prostą nakładkę z prędkością i mapą — dashcamigo robi to za darmo, w przeglądarce, czytając GPS prosto z karty. Bez licencji, bez instalacji. Do głębokiej produkcji wskaźników Telemetry Overlay wciąż jest bardziej wszechstronnym narzędziem.",
+            "lead": "Telemetry Overlay to potężne, płatne narzędzie desktopowe do wypalania wskaźników na wideo z kamer sportowych. Jeśli Twoje nagranie pochodzi z wideorejestratora i chcesz po prostu zobaczyć trasę, prędkość i przeciążenia — a może wypalić prostą nakładkę z prędkością i mapą — dashcamigo robi to za darmo, w przeglądarce, czytając GPS prosto z karty. Bez licencji, bez instalacji. Do tworzenia bardziej rozbudowanych nakładek ze wskaźnikami Telemetry Overlay wciąż jest bardziej wszechstronnym narzędziem.",
             "cardHint": "Płatne narzędzie desktopowe do nakładek; my czytamy GPS z wideorejestratora za darmo w przeglądarce",
             "whatItIs": "Telemetry Overlay firmy Goprotelemetryextractor to płatna aplikacja na Windows, macOS i Linux. Łączy wideo z telemetrią kamer sportowych i plików zewnętrznych, takich jak GPX, FIT i NMEA, oferuje setki konfigurowalnych wskaźników i eksportuje wyrenderowany wynik. Oficjalna wersja próbna działa trzy dni i dodaje znak wodny. To narzędzie do produkcji nakładek; dashcamigo jest interaktywnym odtwarzaczem z prostym eksportem klipów.",
             "comparisonIntro": "Telemetry Overlay idzie głębiej w kwestii wskaźników. Oto gdzie darmowe narzędzie przeglądarkowe ma przewagę konkretnie przy nagraniach z wideorejestratora.",
@@ -1195,7 +1195,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                     }
                 },
                 {
-                    "dimension": "Głębia wskaźników i dodatkowe czujniki",
+                    "dimension": "Konfiguracja wskaźników i dodatkowe czujniki",
                     "us": {
                         "mark": "partial",
                         "note": "Prędkość, GPS, przeciążenia"
@@ -1251,11 +1251,11 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                     },
                     "them": {
                         "mark": "yes",
-                        "note": "Biblioteca de medidores profunda"
+                        "note": "Ampla biblioteca de medidores"
                     }
                 },
                 {
-                    "dimension": "Profundidade de medidores e sensores extras",
+                    "dimension": "Personalização de medidores e sensores extras",
                     "us": {
                         "mark": "partial",
                         "note": "Velocidade, GPS, força G"
@@ -1267,7 +1267,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 }
             ],
             "whenStayTitle": "Quando o Telemetry Overlay é a melhor ferramenta",
-            "whenStay": "O Telemetry Overlay é a melhor ferramenta quando você quer produzir um vídeo com overlay caprichado — ele tem uma biblioteca de medidores muito mais profunda, dá suporte a câmeras de ação (GoPro, DJI, Insta360) e a muitos formatos de dados externos (GPX, FIT, NMEA), e exporta formatos de qualidade de transmissão (ProRes, PNG com alfa). O overlay do dashcamigo é deliberadamente simples: velocidade, coordenadas e um minimapa gravados sobre o seu clipe de dashcam. Para produção de medidores de câmera de ação, o Telemetry Overlay (uma ferramenta paga e instalada) é a escolha certa; para uma revisão de dashcam gratuita e instantânea e um overlay básico no navegador, o dashcamigo encaixa.",
+            "whenStay": "O Telemetry Overlay é a melhor ferramenta quando você quer produzir um vídeo com overlay caprichado — ele tem uma biblioteca de medidores muito mais ampla, dá suporte a câmeras de ação (GoPro, DJI, Insta360) e a muitos formatos de dados externos (GPX, FIT, NMEA), e exporta formatos de qualidade de transmissão (ProRes, PNG com alfa). O overlay do dashcamigo é deliberadamente simples: velocidade, coordenadas e um minimapa gravados sobre o seu clipe de dashcam. Para produção de medidores de câmera de ação, o Telemetry Overlay (uma ferramenta paga e instalada) é a escolha certa; para uma revisão de dashcam gratuita e instantânea e um overlay básico no navegador, o dashcamigo encaixa.",
             "ctaPrimary": "Abra suas gravações",
         },
         "zh": {
@@ -1276,7 +1276,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
             "ogTitle": "面向行车记录仪素材的免费 Telemetry Overlay 替代方案",
             "ogDescription": "Telemetry Overlay 是一款付费的桌面叠加工具。针对行车记录仪素材，dashcamigo 在浏览器里免费读取 GPS 并烧录速度/地图叠加。",
             "h1": "免费、在浏览器里运行的 Telemetry Overlay 替代方案 — 面向行车记录仪素材",
-            "lead": "Telemetry Overlay 是一款功能强大的付费桌面工具，用于把仪表烧录到运动相机视频上。如果你的素材来自行车记录仪，而你只想看路线、速度和 G 力 — 也许再烧录一个简单的速度加地图叠加 — dashcamigo 在浏览器里免费完成这件事，直接从存储卡读取 GPS。无需授权，无需安装。论深度仪表制作，Telemetry Overlay 仍然是更强的工具。",
+            "lead": "Telemetry Overlay 是一款功能强大的付费桌面工具，用于把仪表烧录到运动相机视频上。如果你的素材来自行车记录仪，而你只想看路线、速度和 G 力 — 也许再烧录一个简单的速度加地图叠加 — dashcamigo 在浏览器里免费完成这件事，直接从存储卡读取 GPS。无需授权，无需安装。在制作复杂的仪表叠加视频方面，Telemetry Overlay 仍然是更强的工具。",
             "cardHint": "付费的桌面叠加工具；我们在浏览器里免费读取行车记录仪 GPS",
             "whatItIs": "Goprotelemetryextractor 的 Telemetry Overlay 是一款面向 Windows、macOS 和 Linux 的付费应用。它把视频与运动相机以及 GPX、FIT、NMEA 等外部文件的遥测数据结合起来，提供数百种可自定义仪表并导出渲染结果。官方试用期为三天，导出会带水印。它是叠加层制作工具；dashcamigo 则是交互式播放器和简单的片段导出工具。",
             "comparisonIntro": "Telemetry Overlay 在仪表上更深入。下面看看在行车记录仪素材这件事上，一个免费浏览器工具的优势在哪里。",
@@ -1311,11 +1311,11 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                     },
                     "them": {
                         "mark": "yes",
-                        "note": "深厚的仪表库"
+                        "note": "丰富的仪表库"
                     }
                 },
                 {
-                    "dimension": "仪表深度与额外传感器",
+                    "dimension": "仪表自定义与额外传感器",
                     "us": {
                         "mark": "partial",
                         "note": "速度、GPS、G 力"
@@ -1327,7 +1327,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
                 }
             ],
             "whenStayTitle": "什么时候 Telemetry Overlay 是更好的工具",
-            "whenStay": "当你想制作一段精致的叠加视频时，Telemetry Overlay 是更好的工具 — 它拥有深厚得多的仪表库，支持运动相机（GoPro、DJI、Insta360）和许多外部数据格式（GPX、FIT、NMEA），并能导出广播级格式（ProRes、alpha PNG）。dashcamigo 的叠加是有意保持简单的：把速度、坐标和一张小地图烧录到你的行车记录仪片段上。对于运动相机的仪表制作，Telemetry Overlay（一款付费、需安装的工具）是正确的选择；对于免费、即时的行车记录仪查看以及浏览器里的基础叠加，dashcamigo 正合适。",
+            "whenStay": "当你想制作一段精致的叠加视频时，Telemetry Overlay 是更好的工具 — 它拥有丰富得多的仪表库，支持运动相机（GoPro、DJI、Insta360）和许多外部数据格式（GPX、FIT、NMEA），并能导出广播级格式（ProRes、alpha PNG）。dashcamigo 的叠加是有意保持简单的：把速度、坐标和一张小地图烧录到你的行车记录仪片段上。对于运动相机的仪表制作，Telemetry Overlay（一款付费、需安装的工具）是正确的选择；对于免费、即时的行车记录仪查看以及浏览器里的基础叠加，dashcamigo 正合适。",
             "ctaPrimary": "打开你的录像",
         }
     },
@@ -1438,7 +1438,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
     },
     "es": {
         "title": "Alternativa a CamGeoPlayer en el navegador | dashcamigo",
-        "metaDescription": "Alternativa gratuita a CamGeoPlayer en el navegador: mapa GPS, velocidad, multicanal y exportación. Sin .NET ni instalación.",
+        "metaDescription": "Alternativa gratuita a CamGeoPlayer en el navegador: mapa GPS, velocidad, cámaras sincronizadas y exportación. Sin .NET ni instalación.",
         "ogTitle": "Alternativa gratis a CamGeoPlayer — en tu navegador",
         "ogDescription": "CamGeoPlayer es un visor indie gratuito para Windows que muestra el GPS de tu dashcam en un mapa. dashcamigo lo hace en el navegador — además de un gráfico de velocidad y exportación de clips.",
         "h1": "Una alternativa gratuita a CamGeoPlayer — en tu navegador, y hace más",
@@ -1542,14 +1542,14 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
     },
     "fr": {
         "title": "Alternative à CamGeoPlayer dans le navigateur | dashcamigo",
-        "metaDescription": "Alternative gratuite à CamGeoPlayer dans le navigateur : carte GPS, vitesse, multicanal et export de clips. Sans .NET ni installation.",
+        "metaDescription": "Alternative gratuite à CamGeoPlayer dans le navigateur : carte GPS, vitesse, caméras synchronisées et export de clips. Sans .NET ni installation.",
         "ogTitle": "Alternative gratuite à CamGeoPlayer — dans le navigateur",
-        "ogDescription": "CamGeoPlayer est un lecteur Windows indé et gratuit qui montre le GPS de votre dashcam sur une carte. dashcamigo le fait dans le navigateur — avec en plus une courbe de vitesse et l'export de clip.",
-        "h1": "Une alternative gratuite à CamGeoPlayer — dans votre navigateur, et qui fait plus",
+        "ogDescription": "CamGeoPlayer est un lecteur Windows indé et gratuit qui montre le GPS de ta dashcam sur une carte. dashcamigo le fait dans le navigateur — avec en plus une courbe de vitesse et l'export de clip.",
+        "h1": "Une alternative gratuite à CamGeoPlayer — dans ton navigateur, et qui fait plus",
         "lead": "CamGeoPlayer est un lecteur Windows gratuit avec vidéo et carte GPS. dashcamigo fait cela dans le navigateur et ajoute les graphiques de vitesse et de force G, la synchronisation des caméras, le regroupement des trajets et l’export — sans téléchargement.",
         "cardHint": "Lecteur GPS Windows gratuit ; nous ajoutons graphiques, synchronisation et export",
         "whatItIs": "CamGeoPlayer est une application Windows gratuite qui nécessite .NET 4.8. Elle lit une file de vidéos, extrait le GPS intégré avec ExifTool et trace le trajet sur OpenStreetMap avec Leaflet. Il n’y a pas d’installeur : il faut décompresser puis lancer le zip officiel. La page du projet indique Beta 1.1, datée du 30 janvier 2024, comme dernière version.",
-        "comparisonIntro": "Les deux sont gratuits et les deux lisent votre GPS sur une carte. Voici ce que dashcamigo ajoute — et là où il est plus simple à faire tourner.",
+        "comparisonIntro": "Les deux sont gratuits et affichent ton itinéraire GPS sur une carte. Voici ce que dashcamigo ajoute — et là où il est plus simple à faire tourner.",
         "compareRows": [
             {
                 "dimension": "Prix",
@@ -1642,11 +1642,11 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
         ],
         "whenStayTitle": "Quand CamGeoPlayer est un bon choix",
         "whenStay": "CamGeoPlayer convient sous Windows pour lire des vidéos à la suite d’un itinéraire GPS. Une fois décompressé, il fonctionne en local sans compte. dashcamigo ajoute le multiplateforme, les graphiques, la synchronisation, le regroupement des trajets et l’export.",
-        "ctaPrimary": "Ouvrir vos enregistrements",
+        "ctaPrimary": "Ouvrir tes enregistrements",
     },
     "ja": {
         "title": "CamGeoPlayerの代替 — 無料、ダウンロード不要、ブラウザで | dashcamigo",
-        "metaDescription": "ブラウザで動くCamGeoPlayerの無料代替。.NETもインストールも不要。GPSマップ、速度グラフ、マルチチャンネル、クリップのエクスポート。",
+        "metaDescription": "ブラウザで動くCamGeoPlayerの無料代替。.NETもインストールも不要。GPSマップ、速度グラフ、複数カメラの同時再生、クリップのエクスポート。",
         "ogTitle": "CamGeoPlayerの無料代替 — ブラウザで",
         "ogDescription": "CamGeoPlayerはドラレコのGPSをマップに表示する無料のインディーWindowsビューア。dashcamigoはそれをブラウザで実現 — さらに速度グラフとクリップのエクスポートも。",
         "h1": "CamGeoPlayerの無料代替 — ブラウザで動き、もっとできる",
@@ -1750,7 +1750,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
     },
     "ko": {
         "title": "CamGeoPlayer 대안 — 무료, 다운로드 없이 브라우저에서 | dashcamigo",
-        "metaDescription": "브라우저에서 돌아가는 무료 CamGeoPlayer 대안. .NET이나 설치 없이 GPS 지도, 속도 차트, 멀티채널, 클립 내보내기를 제공합니다.",
+        "metaDescription": "브라우저에서 돌아가는 무료 CamGeoPlayer 대안. .NET이나 설치 없이 GPS 지도, 속도 차트, 여러 카메라 동시 재생, 클립 내보내기를 제공합니다.",
         "ogTitle": "무료 CamGeoPlayer 대안 — 브라우저에서",
         "ogDescription": "CamGeoPlayer는 블랙박스 GPS를 지도에 보여주는 무료 인디 Windows 뷰어입니다. dashcamigo는 이를 브라우저에서 — 게다가 속도 차트와 클립 내보내기까지 — 해냅니다.",
         "h1": "무료 CamGeoPlayer 대안 — 브라우저에서, 게다가 더 많은 일을",
@@ -1958,7 +1958,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
     },
     "pt": {
         "title": "Alternativa ao CamGeoPlayer no navegador | dashcamigo",
-        "metaDescription": "Alternativa gratuita ao CamGeoPlayer no navegador: mapa GPS, velocidade, multicanal e exportação de clipes. Sem .NET nem instalação.",
+        "metaDescription": "Alternativa gratuita ao CamGeoPlayer no navegador: mapa GPS, velocidade, várias câmeras e exportação de clipes. Sem .NET nem instalação.",
         "ogTitle": "Alternativa gratuita ao CamGeoPlayer — no navegador",
         "ogDescription": "O CamGeoPlayer é um visualizador indie gratuito para Windows que mostra o GPS da sua dashcam num mapa. O dashcamigo faz isso no navegador — e ainda traz gráfico de velocidade e exportação de clipe.",
         "h1": "Uma alternativa gratuita ao CamGeoPlayer — no navegador, e que faz mais",
@@ -2062,7 +2062,7 @@ export const COMMUNITY_ALT_CONTENT: Record<AltSlug, Partial<Record<Lang, AltLoca
     },
     "zh": {
         "title": "CamGeoPlayer 替代方案——免费、无需下载，在浏览器里运行 | dashcamigo",
-        "metaDescription": "免费的 CamGeoPlayer 浏览器替代方案：无需 .NET 或安装，提供 GPS 地图、速度图表、多通道播放和片段导出。",
+        "metaDescription": "免费的 CamGeoPlayer 浏览器替代方案：无需 .NET 或安装，提供 GPS 地图、速度图表、多摄像头同步播放和片段导出。",
         "ogTitle": "免费 CamGeoPlayer 替代方案——在浏览器里",
         "ogDescription": "CamGeoPlayer 是一款免费的独立 Windows 播放器，把你的行车记录仪 GPS 显示在地图上。dashcamigo 在浏览器里做到这一点——还多了速度图表和片段导出。",
         "h1": "免费的 CamGeoPlayer 替代方案——在浏览器里运行，而且能做得更多",
@@ -2220,9 +2220,9 @@ export const COMMUNITY_ALT_LABELS: Partial<Record<Lang, AltSharedLabels>> = {
         "officialSiteLabel": "Site officiel ↗",
         "howHeading": "Passer à dashcamigo",
         "howSteps": [
-            "Sortez la carte SD de la dashcam et branchez-la sur votre ordinateur.",
-            "Ouvrez dashcamigo.app dans n'importe quel navigateur moderne.",
-            "Glissez tout le dossier de la carte SD sur la page — il détecte, regroupe et lit tout seul."
+            "Sors la carte SD de la dashcam et branche-la sur ton ordinateur.",
+            "Ouvre dashcamigo.app dans n'importe quel navigateur moderne.",
+            "Glisse tout le dossier de la carte SD sur la page — il détecte, regroupe et lit tout seul."
         ],
         "howSecondaryCta": "Essayer maintenant",
         "otherToolsHeading": "Les autres outils que dashcamigo remplace",
@@ -2343,47 +2343,47 @@ export const COMMUNITY_ALT_INDEX: Partial<Record<Lang, AltIndexLocale>> = {
         "title": "Kostenlose Alternativen zu Dashcam-Playern — im Browser | dashcamigo",
         "metaDescription": "Vergleiche dashcamigo mit Dashcam Viewer, CamGeoPlayer und Telemetry Overlay: GPS-Karte, Tempo-Diagramm und lokale Wiedergabe im Browser.",
         "ogTitle": "Kostenlose Dashcam-Player-Alternative im Browser",
-        "ogDescription": "So schlägt sich dashcamigo gegen Dashcam Viewer, CamGeoPlayer und Telemetry Overlay — kostenlos, im Browser, mit einer GPS-Karte ohne API-Schlüssel, der ablaufen kann.",
+        "ogDescription": "Vergleiche dashcamigo mit Dashcam Viewer, CamGeoPlayer und Telemetry Overlay — kostenlos und direkt im Browser.",
         "h1": "Kostenlose Alternativen zu beliebten Dashcam-Tools — direkt im Browser",
-        "lead": "Du steigst von einem anderen Dashcam-Player um? dashcamigo spielt deine Aufnahmen im Browser ab — kostenlos, ohne Installation — mit synchroner GPS-Karte, einem Geschwindigkeits- und G-Kraft-Diagramm und Mehrkanal-Wiedergabe. So schlägt es sich gegen die Tools, die heute im Einsatz sind."
+        "lead": "Du steigst von einem anderen Dashcam-Player um? dashcamigo spielt deine Aufnahmen im Browser ab — kostenlos, ohne Installation — mit synchroner GPS-Karte, einem Geschwindigkeits- und G-Kraft-Diagramm und Wiedergabe mehrerer Kameras. So schlägt es sich gegen die Tools, die heute im Einsatz sind."
     },
     "es": {
         "title": "Alternativas a visores de dashcam | dashcamigo",
         "metaDescription": "Compara dashcamigo con Dashcam Viewer, CamGeoPlayer y Telemetry Overlay: mapa GPS, velocidad y reproducción local, sin instalar.",
         "ogTitle": "Alternativa gratuita en el navegador a los visores de dashcam",
-        "ogDescription": "Mira cómo se compara dashcamigo con Dashcam Viewer, CamGeoPlayer y Telemetry Overlay — gratis, en el navegador y con un mapa GPS sin clave de API que pueda caducar.",
+        "ogDescription": "Compara dashcamigo con Dashcam Viewer, CamGeoPlayer y Telemetry Overlay — gratis y en tu navegador.",
         "h1": "Alternativas gratuitas y en el navegador a las herramientas de dashcam más populares",
-        "lead": "¿Vienes de otro visor de dashcam? dashcamigo reproduce tus grabaciones en el navegador — gratis, sin instalar nada — con un mapa GPS sincronizado, un gráfico de velocidad y fuerza G y reproducción multicanal. Así es como se compara con las herramientas que la gente usa hoy."
+        "lead": "¿Vienes de otro visor de dashcam? dashcamigo reproduce tus grabaciones en el navegador — gratis, sin instalar nada — con un mapa GPS sincronizado, un gráfico de velocidad y fuerza G y reproducción de varias cámaras. Así es como se compara con las herramientas que la gente usa hoy."
     },
     "fr": {
         "title": "Alternatives aux lecteurs dashcam | dashcamigo",
         "metaDescription": "Compare dashcamigo à Dashcam Viewer, CamGeoPlayer et Telemetry Overlay : carte GPS, vitesse et lecture locale dans le navigateur.",
         "ogTitle": "Alternative gratuite aux lecteurs de dashcam, dans le navigateur",
-        "ogDescription": "Découvrez comment dashcamigo se compare à Dashcam Viewer, CamGeoPlayer et Telemetry Overlay — gratuit, dans le navigateur, avec une carte GPS sans clé d'API qui puisse expirer.",
+        "ogDescription": "Compare dashcamigo à Dashcam Viewer, CamGeoPlayer et Telemetry Overlay — gratuitement, dans ton navigateur.",
         "h1": "Des alternatives gratuites et dans le navigateur aux outils dashcam populaires",
-        "lead": "Vous quittez un autre lecteur de dashcam ? dashcamigo lit vos enregistrements dans le navigateur — gratuit, rien à installer — avec une carte GPS synchronisée, une courbe de vitesse et de force G, et une lecture multicanal. Voici comment il se compare aux outils que les gens utilisent aujourd'hui."
+        "lead": "Tu quittes un autre lecteur de dashcam ? dashcamigo lit tes enregistrements dans le navigateur — gratuit, rien à installer — avec une carte GPS synchronisée, une courbe de vitesse et de force G, et une lecture de plusieurs caméras. Voici comment il se compare aux outils que les gens utilisent aujourd'hui."
     },
     "ja": {
         "title": "ドライブレコーダー再生ソフトの無料代替 — ブラウザで動く | dashcamigo",
         "metaDescription": "dashcamigoは、Dashcam Viewer・CamGeoPlayer・Telemetry Overlayといった人気のドラレコツールの無料ブラウザ代替 — GPSマップ、速度グラフ、インストール不要。",
         "ogTitle": "ドラレコ再生ソフトの無料ブラウザ代替",
-        "ogDescription": "dashcamigoがDashcam Viewer・CamGeoPlayer・Telemetry Overlayとどう違うかを比較 — 無料、ブラウザで動作、期限切れになるAPIキーのないGPSマップ付き。",
+        "ogDescription": "dashcamigoをDashcam Viewer、CamGeoPlayer、Telemetry Overlayと比較 — 無料で、ブラウザで使えます。",
         "h1": "人気のドラレコツールの、無料でブラウザで動く代替",
-        "lead": "別のドラレコ再生ソフトから乗り換え？ dashcamigoはあなたの録画をブラウザで再生します — 無料、インストール不要 — 同期したGPSマップ、速度とGフォースのグラフ、マルチチャンネル再生付き。今みんなが使っているツールとどう比べられるか、ここで確かめてください。"
+        "lead": "別のドラレコ再生ソフトから乗り換え？ dashcamigoはあなたの録画をブラウザで再生します — 無料、インストール不要 — 同期したGPSマップ、速度とGフォースのグラフ、複数カメラの同時再生付き。今みんなが使っているツールとどう比べられるか、ここで確かめてください。"
     },
     "ko": {
         "title": "블랙박스 뷰어의 무료 대안 — 브라우저에서 바로 | dashcamigo",
         "metaDescription": "dashcamigo는 Dashcam Viewer, CamGeoPlayer, Telemetry Overlay 같은 인기 블랙박스 도구의 무료 브라우저 대안입니다 — GPS 지도, 속도 차트, 설치 불필요.",
         "ogTitle": "블랙박스 뷰어의 무료 브라우저 대안",
-        "ogDescription": "dashcamigo가 Dashcam Viewer, CamGeoPlayer, Telemetry Overlay와 어떻게 다른지 비교해 보세요 — 무료, 브라우저에서, 만료될 API 키가 없는 GPS 지도까지.",
+        "ogDescription": "dashcamigo를 Dashcam Viewer, CamGeoPlayer, Telemetry Overlay와 비교해 보세요 — 무료로, 브라우저에서 바로 사용할 수 있어요.",
         "h1": "인기 블랙박스 도구의 무료 브라우저 대안",
-        "lead": "다른 블랙박스 뷰어에서 갈아타시나요? dashcamigo는 녹화 영상을 브라우저에서 바로 재생합니다 — 무료, 설치 불필요 — 동기화된 GPS 지도, 속도와 G 포스 차트, 다채널 재생까지 갖췄습니다. 오늘날 사람들이 쓰는 도구들과 어떻게 비교되는지 확인해 보세요."
+        "lead": "다른 블랙박스 뷰어에서 갈아타시나요? dashcamigo는 녹화 영상을 브라우저에서 바로 재생합니다 — 무료, 설치 불필요 — 동기화된 GPS 지도, 속도와 G 포스 차트, 여러 카메라 동시 재생까지 갖췄습니다. 오늘날 사람들이 쓰는 도구들과 어떻게 비교되는지 확인해 보세요."
     },
     "pl": {
         "title": "Alternatywy dla odtwarzaczy wideorejestratorów | dashcamigo",
         "metaDescription": "Porównaj dashcamigo z Dashcam Viewer, CamGeoPlayer i Telemetry Overlay: mapa GPS, prędkość i lokalne odtwarzanie w przeglądarce.",
         "ogTitle": "Darmowa alternatywa dla odtwarzaczy kamer — w przeglądarce",
-        "ogDescription": "Zobacz, jak dashcamigo wypada na tle Dashcam Viewer, CamGeoPlayer i Telemetry Overlay — za darmo, w przeglądarce, z mapą GPS bez klucza API, który mógłby wygasnąć.",
+        "ogDescription": "Porównaj dashcamigo z Dashcam Viewer, CamGeoPlayer i Telemetry Overlay — za darmo, w przeglądarce.",
         "h1": "Darmowe alternatywy dla popularnych narzędzi do kamer samochodowych — w przeglądarce",
         "lead": "Przesiadasz się z innego odtwarzacza nagrań z kamery samochodowej? dashcamigo odtwarza Twoje nagrania w przeglądarce — za darmo, bez instalacji — z synchronizowaną mapą GPS, wykresem prędkości i przeciążeń oraz odtwarzaniem wielokanałowym. Oto jak wypada na tle narzędzi, których ludzie używają dzisiaj."
     },
@@ -2391,16 +2391,16 @@ export const COMMUNITY_ALT_INDEX: Partial<Record<Lang, AltIndexLocale>> = {
         "title": "Alternativas a players de dashcam | dashcamigo",
         "metaDescription": "Compare o dashcamigo com Dashcam Viewer, CamGeoPlayer e Telemetry Overlay — mapa GPS, gráfico de velocidade e sem instalação.",
         "ogTitle": "Alternativa gratuita no navegador a visualizadores de dashcam",
-        "ogDescription": "Veja como o dashcamigo se compara ao Dashcam Viewer, CamGeoPlayer e Telemetry Overlay — grátis e direto no navegador.",
+        "ogDescription": "Compare o dashcamigo com Dashcam Viewer, CamGeoPlayer e Telemetry Overlay — grátis, no seu navegador.",
         "h1": "Alternativas gratuitas e no navegador a ferramentas populares de dashcam",
-        "lead": "Vindo de outro visualizador de dashcam? O dashcamigo reproduz suas gravações no navegador — grátis, sem nada para instalar — com um mapa GPS sincronizado, um gráfico de velocidade e força G, e reprodução multicanal. Veja como ele se compara às ferramentas que as pessoas usam hoje."
+        "lead": "Vindo de outro visualizador de dashcam? O dashcamigo reproduz suas gravações no navegador — grátis, sem nada para instalar — com um mapa GPS sincronizado, um gráfico de velocidade e força G, e reprodução de várias câmeras. Veja como ele se compara às ferramentas que as pessoas usam hoje."
     },
     "zh": {
         "title": "行车记录仪播放器的免费替代方案——就在你的浏览器里 | dashcamigo",
         "metaDescription": "dashcamigo 是 Dashcam Viewer、CamGeoPlayer、Telemetry Overlay 等热门行车记录仪工具的免费浏览器版替代方案——GPS 地图、速度图表，无需安装。",
         "ogTitle": "行车记录仪播放器的免费浏览器版替代方案",
-        "ogDescription": "看看 dashcamigo 与 Dashcam Viewer、CamGeoPlayer 和 Telemetry Overlay 的对比——免费、在浏览器里运行，配一张不会失效的 GPS 地图。",
+        "ogDescription": "比较 dashcamigo 与 Dashcam Viewer、CamGeoPlayer 和 Telemetry Overlay — 免费，直接在浏览器中使用。",
         "h1": "热门行车记录仪工具的免费浏览器版替代方案",
-        "lead": "正打算从别的行车记录仪播放器换过来？dashcamigo 直接在浏览器里播放你的录像——免费，无需安装——配有同步的 GPS 地图、速度与 G 力图表，以及多通道播放。下面看看它与大家今天在用的工具相比如何。"
+        "lead": "正打算从别的行车记录仪播放器换过来？dashcamigo 直接在浏览器里播放你的录像——免费，无需安装——配有同步的 GPS 地图、速度与 G 力图表，以及多摄像头同步播放。下面看看它与大家今天在用的工具相比如何。"
     }
 };

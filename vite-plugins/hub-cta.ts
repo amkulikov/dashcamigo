@@ -31,8 +31,8 @@ const HUB_CTA: Record<Lang, HubCtaCopy> = {
         button: "Abre tus grabaciones",
     },
     fr: {
-        lead: "Essayez avec vos propres enregistrements — gratuit, directement dans le navigateur.",
-        button: "Ouvrir vos enregistrements",
+        lead: "Essaie avec tes propres enregistrements — gratuitement, directement dans le navigateur.",
+        button: "Ouvrir tes enregistrements",
     },
     pl: {
         lead: "Wypróbuj na własnych nagraniach — za darmo, prosto w przeglądarce.",
@@ -51,7 +51,7 @@ const HUB_CTA: Record<Lang, HubCtaCopy> = {
         button: "録画を開く",
     },
     ko: {
-        lead: "내 녹화 영상으로 바로 써 보세요 — 무료, 브라우저에서 그대로.",
+        lead: "내 녹화 영상으로 바로 써 보세요 — 무료로, 브라우저에서 바로.",
         button: "내 녹화 영상 열기",
     },
 };

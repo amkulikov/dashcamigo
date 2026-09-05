@@ -21,7 +21,7 @@
     <!-- English-baseline description for SERP / unfurl. Localized variants
          exist in the article[data-lang] body but the meta description stays
          English since the URL is language-neutral. -->
-    <meta name="description" content="dashcamigo privacy policy: how recordings are handled, what analytics we collect (none by default), data retention and your rights under GDPR / CCPA.">
+    <meta name="description" content="dashcamigo privacy policy: how recordings are handled, analytics and crash reporting, data retention and your rights under GDPR / CCPA.">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="alternate icon" href="/favicon.ico" sizes="any">
     <link rel="stylesheet" href="/privacy.css">
@@ -162,7 +162,7 @@
                 которое поддерживает <strong>индивидуальный разработчик</strong> ("мы"). По любым
                 вопросам защиты данных и для реализации прав, описанных ниже, пиши на
                 <a href="mailto:privacy@dashcamigo.app">privacy@dashcamigo.app</a>.
-                Data Protection Officer не назначен (критерии GDPR ст. 37 к нам не применяются).
+                Ответственный за защиту данных не назначен (критерии GDPR ст. 37 к нам не применяются).
             </p>
 
             <h2>2. Что собираем</h2>
@@ -170,11 +170,11 @@
                 <strong>Видеофайлы и GPS-логи не уходят с твоего устройства.</strong>
                 Приложение работает целиком в браузере.
             </p>
-            <p>Мы собираем только обезличенные агрегаты о том, как используется само приложение:</p>
+            <p>Мы собираем только обезличенную сводную статистику об использовании приложения:</p>
             <ul>
                 <li>
-                    <strong>Cloudflare Web Analytics</strong> - подсчёт page view'ов, реферреры,
-                    агрегаты по браузеру/ОС на edge-уровне. Без cookies.
+                    <strong>Cloudflare Web Analytics</strong> - число просмотров страниц, источники переходов,
+                    сводные данные о браузерах и ОС на пограничных узлах сети. Без cookies.
                     Интеграция зависит от конкретного развёртывания и работает только там, где включена.
                     Юридическое основание: <strong>законный интерес</strong> (GDPR ст. 6(1)(f)).
                 </li>
@@ -183,10 +183,10 @@
                 </li>
             </ul>
             <p>
-                Мы <strong>не</strong> собираем видео-контент, GPS-координаты, имена файлов,
+                Мы <strong>не</strong> собираем содержимое видеозаписей, GPS-координаты, имена файлов,
                 аккаунты, платёжные данные и особые категории (GDPR ст. 9). Мы не продаём
-                персональные данные, не строим remarketing-аудитории и не передаём сигналы для
-                персонализации рекламы в рекламные платформы. Предоставлять данные не обязательно -
+                персональные данные, не создаём аудитории для повторного показа рекламы и не передаём сигналы для
+                персонализации рекламы рекламным платформам. Предоставлять данные не обязательно -
                 приложение работает в любом случае. Сервис не предназначен для детей.
             </p>
             <p>
@@ -210,14 +210,14 @@
 
             <h2>4. Сроки хранения и международная передача</h2>
             <p>
-                <strong>Хранение:</strong> агрегаты Cloudflare Web Analytics - по условиям
+                <strong>Хранение:</strong> сводная статистика Cloudflare Web Analytics - по условиям
                 провайдера; отчёты о сбоях - около 30 дней.
             </p>
             <p>
                 <strong>Передача:</strong> данные Cloudflare Web Analytics анонимны и
-                агрегируются на edge-уровне сети; отчёты о сбоях обрабатывает Sentry на
+                объединяются на пограничных узлах сети; отчёты о сбоях обрабатывает Sentry на
                 серверах в ЕС (Германия). Ни то, ни другое не требует дополнительных
-                safeguards.
+                мер защиты при передаче данных.
             </p>
 
             <h2>5. Твои права</h2>
@@ -237,7 +237,7 @@
                     (ответ в течение месяца, ст. 12(3)).
                 </li>
             </ul>
-            <p>Мы не профилируем юзеров и не принимаем автоматизированных решений о них (ст. 22).</p>
+            <p>Мы не составляем профили пользователей и не принимаем автоматизированных решений о них (ст. 22).</p>
 
             <h2>6. Сторонние сервисы</h2>
             <p>
@@ -336,7 +336,9 @@
                 Du hast die durch DSGVO Art. 15-21 gewährten Rechte (und entsprechende UK GDPR-Rechte)
                 und das Recht, Beschwerde bei deiner Aufsichtsbehörde einzulegen
                 (<a href="https://edpb.europa.eu/about-edpb/about-edpb/members_en" target="_blank" rel="noopener">Liste beim EDPB</a>).
-                Die gleichen Rechte gelten für Einwohner Kaliforniens.
+                Einwohner Kaliforniens haben Rechte nach CCPA/CPRA, darunter das Recht auf Auskunft,
+                Löschung und Berichtigung sowie das Recht, dem „Verkauf“ oder der „Weitergabe“
+                personenbezogener Daten zu widersprechen (wir verkaufen solche Daten nicht und geben sie nicht weiter).
             </p>
             <p>Zur Ausübung:</p>
             <ul>
@@ -552,7 +554,10 @@
                 Tu disposes des droits accordés par les Art. 15-21 du RGPD (et des droits équivalents
                 UK GDPR), et du droit d'introduire une réclamation auprès de ton autorité de contrôle
                 (<a href="https://edpb.europa.eu/about-edpb/about-edpb/members_en" target="_blank" rel="noopener">liste à l'EDPB</a>).
-                Les mêmes droits s'appliquent aux résidents de Californie.
+                Les résidents de Californie disposent de droits au titre du CCPA/CPRA, notamment
+                les droits de savoir quelles données sont collectées, de les supprimer ou de les rectifier,
+                et de refuser la « vente » ou le « partage » de leurs informations personnelles
+                (nous ne vendons ni ne partageons ces informations).
             </p>
             <p>Pour les exercer :</p>
             <ul>
@@ -663,7 +668,9 @@
                 GDPR) e o direito de apresentar
                 reclamação à tua autoridade de controlo
                 (<a href="https://edpb.europa.eu/about-edpb/about-edpb/members_en" target="_blank" rel="noopener">lista no EDPB</a>).
-                Os mesmos direitos aplicam-se aos residentes da Califórnia.
+                Os residentes da Califórnia têm direitos ao abrigo do CCPA/CPRA, incluindo o direito
+                à informação, à eliminação e à correção dos dados e a recusar a «venda» ou
+                «partilha» de informações pessoais (não vendemos nem partilhamos informações pessoais).
             </p>
             <p>Para exercer:</p>
             <ul>
@@ -760,7 +767,9 @@
                 Masz prawa wynikające z art. 15-21 RODO (oraz równoważne prawa z UK GDPR)
                 i prawo do złożenia skargi w organie nadzorczym
                 (<a href="https://edpb.europa.eu/about-edpb/about-edpb/members_en" target="_blank" rel="noopener">lista przy EDPB</a>).
-                Te same prawa stosują się do rezydentów Kalifornii.
+                Mieszkańcom Kalifornii przysługują prawa wynikające z CCPA/CPRA, w tym prawo do
+                informacji, usunięcia i poprawienia danych oraz do sprzeciwu wobec „sprzedaży”
+                lub „udostępniania” danych osobowych (nie sprzedajemy ani nie udostępniamy danych osobowych).
             </p>
             <p>Aby skorzystać:</p>
             <ul>
@@ -849,7 +858,8 @@
                 你享有 GDPR 第 15-21 条赋予的权利（以及 UK GDPR 等效权利），以及向你所在
                 监管机构投诉的权利
                 （<a href="https://edpb.europa.eu/about-edpb/about-edpb/members_en" target="_blank" rel="noopener">EDPB 名单</a>）。
-                加州居民享有相同权利。
+                加州居民享有 CCPA/CPRA 规定的权利，包括知情权、删除权、更正权，
+                以及拒绝“出售”或“共享”个人信息的权利（我们不会出售或共享个人信息）。
             </p>
             <p>如何行使：</p>
             <ul>
@@ -943,7 +953,9 @@
                 GDPR 第 15-21 条（および UK GDPR の同等の権利）に基づく権利、および所管の
                 監督機関へ苦情を申し立てる権利
                 （<a href="https://edpb.europa.eu/about-edpb/about-edpb/members_en" target="_blank" rel="noopener">EDPB のリスト</a>）
-                があります。カリフォルニア州住民にも同じ権利が適用されます。
+                があります。カリフォルニア州の居住者には、CCPA/CPRA に基づき、個人情報について知る権利、
+                削除・訂正を求める権利、および個人情報の「販売」または「共有」を拒否する権利があります
+                （当サービスは個人情報を販売・共有しません）。
             </p>
             <p>行使方法：</p>
             <ul>
@@ -1035,7 +1047,9 @@
                 GDPR 제 15-21 조 (및 UK GDPR 의 동등한 권리)에 의해 부여된 권리, 감독 기관에
                 진정을 제기할 권리
                 (<a href="https://edpb.europa.eu/about-edpb/about-edpb/members_en" target="_blank" rel="noopener">EDPB 목록</a>)
-                가 있습니다. 캘리포니아 거주자에게도 동일한 권리가 적용됩니다.
+                가 있습니다. 캘리포니아 거주자는 CCPA/CPRA에 따라 개인정보에 대해 알 권리,
+                삭제 및 정정을 요청할 권리, 개인정보의 “판매” 또는 “공유”를 거부할 권리가 있습니다
+                (우리는 개인정보를 판매하거나 공유하지 않습니다).
             </p>
             <p>행사 방법:</p>
             <ul>

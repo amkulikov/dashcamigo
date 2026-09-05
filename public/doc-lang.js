@@ -1,8 +1,8 @@
 // Minimal lang-switcher shared by the standalone doc pages (privacy.html,
-// add-my-camera.html, terms.html), no framework. External file (not inline)
+// add-my-camera.html, terms.html, 404.html), no framework. External file (not inline)
 // to keep CSP script-src clean.
 //
-// Initial pick: ?lang= in URL > localStorage > navigator.language > en.
+// Initial pick: ?lang= > URL path > saved doc/app language > browser language > en.
 // Supported languages match the app (see src/i18n/index.ts LANGS). EN+RU are
 // first-class; the other 8 are community translations with an EN-prevails
 // disclaimer at the top of each article.
@@ -30,6 +30,10 @@
             btns[j].setAttribute("aria-selected", active ? "true" : "false");
         }
         document.documentElement.lang = code;
+        var homeLinks = document.querySelectorAll("[data-locale-home]");
+        for (var k = 0; k < homeLinks.length; k++) {
+            homeLinks[k].setAttribute("href", "/" + code + "/");
+        }
         try { localStorage.setItem(STORE_KEY, code); } catch (e) { /* private mode */ }
     }
 
@@ -42,9 +46,13 @@
             var fromUrl = params.get("lang");
             if (fromUrl && isSupported(fromUrl)) return fromUrl;
         } catch (e) { /* malformed URL */ }
+        var fromPath = window.location.pathname.split("/")[1];
+        if (fromPath && isSupported(fromPath)) return fromPath;
         try {
             var stored = localStorage.getItem(STORE_KEY);
             if (stored && isSupported(stored)) return stored;
+            var appLang = localStorage.getItem("dashcamigo:lang");
+            if (appLang && isSupported(appLang)) return appLang;
         } catch (e) { /* private mode */ }
         var nav = (navigator.language || "").toLowerCase().split("-")[0];
         if (isSupported(nav)) return nav;

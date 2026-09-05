@@ -81,11 +81,9 @@ export function syncEmptyState(): void {
 export function showCodecUnsupportedOverlay(codec: VideoCodec | null): void {
     if (!dom.viewer) return;
     dom.viewer.classList.add("codec-unsupported");
-    // Localize the whole title via t(); {codec} placeholder is substituted with the codec name.
     const titleEl = document.getElementById("codec-unsupported-title");
     if (titleEl) {
-        const codecName = codec ? codec.toUpperCase() : t("codecUnsupported.unknown");
-        titleEl.textContent = t("codecUnsupported.title", { codec: codecName });
+        titleEl.textContent = t("codecUnsupported.title");
     }
     // The hint is per-codec/per-browser, so it is filled here rather than left
     // to the static data-i18n default (which stays as the generic fallback).

@@ -114,7 +114,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
             "breadcrumbName": "Kameras in einem Video vereinen",
             "introHeading": "Eine Datei statt drei",
             "introBody": "Einen Front-Clip und einen Heck-Clip für dieselbe Minute anzusehen heißt, mit Fenstern zu jonglieren. In einem Video vereint, werden sie zu einer einzigen Datei, die du teilen, als Beweismittel einreichen oder behalten kannst — jede Kamera im selben Bild, synchron.",
-            "introBody2": "dashcamigo macht das, ohne irgendetwas an einen Server zu schicken. Deine Aufnahmen werden lokal im Browser-Tab gelesen und vereint, und das fertige Video landet direkt auf deinem Computer.",
+            "introBody2": "dashcamigo macht das, ohne deine Aufnahmen hochzuladen. Deine Aufnahmen werden lokal im Browser-Tab gelesen und vereint, und das fertige Video landet direkt auf deinem Computer.",
             "optionsHeading": "Layouts",
             "options": [
                 {
@@ -143,7 +143,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
                 "Steck die SD-Karte in deinen Computer und zieh den ganzen Ordner auf dashcamigo.app.",
                 "Öffne die Fahrt — Front, Heck und Innenraum reihen sich automatisch auf einer Zeitleiste ein.",
                 "Öffne den Export, wähl ein Layout (nebeneinander, Raster oder Bild-in-Bild) und den Bereich, den du speichern willst.",
-                "Speichern — das vereinte Video wird direkt auf deinen Computer geschrieben, mit der GPS-Spur darin."
+                "Speichern — das vereinte Video wird direkt auf deinen Computer geschrieben, mit dem GPS-Track darin."
             ],
             "brandsHeading": "Front und Heck in einer Datei — auch wenn die Kamera-App das nicht kann",
             "brandsBody": "Hersteller-Apps hören hier meist auf: Sie spielen Front und Heck zusammen ab, exportieren aber jede Kamera als eigene Datei, nicht als einen vereinten Clip. dashcamigo ist ein kostenloser Dashcam-Player, der BlackVue, Viofo, 70mai, Vantrue, Thinkware, Garmin und mehr liest — und das vereinte Video schreibt, das ihre Apps auslassen. Dieselbe Fahrt, jede Kamera, eine Datei.",
@@ -153,7 +153,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
             "faq": [
                 {
                     "q": "Kann ich Front- und Heckvideo der Dashcam in einer Datei vereinen?",
-                    "a": "Ja. Öffne die Fahrt, wähl ein Layout nebeneinander, übereinander oder als Bild-in-Bild, leg den Bereich fest und speichere. Front- und Heckkamera werden in ein Video geschrieben, synchron, mit der GPS-Spur in der Datei."
+                    "a": "Ja. Öffne die Fahrt, wähl ein Layout nebeneinander, übereinander oder als Bild-in-Bild, leg den Bereich fest und speichere. Front- und Heckkamera werden in ein Video geschrieben, synchron, mit dem GPS-Track in der Datei."
                 },
                 {
                     "q": "Geht das mit drei Kameras (Front, Heck und Innenraum)?",
@@ -161,7 +161,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
                 },
                 {
                     "q": "Wird mein Video irgendwohin hochgeladen?",
-                    "a": "Nein. Es gibt keinen Server. Deine Aufnahmen werden lokal in deinem Browser gelesen und vereint, und die fertige Datei landet direkt auf deinem Computer. Nichts verlässt dein Gerät."
+                    "a": "Nein. Deine Aufnahmen werden lokal in deinem Browser gelesen und vereint, und die fertige Datei landet direkt auf deinem Computer."
                 },
                 {
                     "q": "Welche Dashcams werden unterstützt?",
@@ -184,7 +184,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
             "breadcrumbName": "Unir cámaras en un solo vídeo",
             "introHeading": "Un archivo en vez de tres",
             "introBody": "Ver un clip de la frontal y otro de la trasera del mismo minuto significa hacer malabares con las ventanas. Unidos en un solo vídeo, se convierten en un único archivo que puedes compartir, presentar como prueba o guardar — con todas las cámaras en el mismo cuadro y sincronizadas.",
-            "introBody2": "dashcamigo hace esto sin enviar nada a un servidor. Tus grabaciones se leen y se unen en local, en la pestaña del navegador, y el vídeo final se guarda directamente en tu ordenador.",
+            "introBody2": "dashcamigo hace esto sin subir tus grabaciones. Tus grabaciones se leen y se unen en local, en la pestaña del navegador, y el vídeo final se guarda directamente en tu ordenador.",
             "optionsHeading": "Disposiciones",
             "options": [
                 {
@@ -217,7 +217,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
             ],
             "brandsHeading": "Frontal y trasera en un archivo — incluso cuando la app de la cámara no puede",
             "brandsBody": "Las apps de los fabricantes suelen quedarse cortas aquí: reproducen la frontal y la trasera juntas, pero exportan cada cámara en su propio archivo, no un único clip combinado. dashcamigo es un reproductor de dashcam gratuito que lee BlackVue, Viofo, 70mai, Vantrue, Thinkware, Garmin y más — y escribe el vídeo combinado que sus apps dejan fuera. El mismo viaje, todas las cámaras, un solo archivo.",
-            "noteHeading": "Bueno saberlo",
+            "noteHeading": "Conviene saberlo",
             "noteBody": "Unir las cámaras recodifica el vídeo, así que no es instantáneo — un tramo largo lleva su tiempo. Para la exportación más fluida, usa Chrome, Edge u otro navegador Chromium en un ordenador. Esto junta las cámaras en un mismo cuadro; encadenar los clips cortos de un viaje uno tras otro en un archivo continuo se hace solo cuando eliges un tramo.",
             "faqHeading": "Preguntas frecuentes",
             "faq": [
@@ -231,7 +231,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
                 },
                 {
                     "q": "¿Se sube mi vídeo a algún sitio?",
-                    "a": "No. No hay servidor. Tus grabaciones se leen y se unen en local en tu navegador, y el archivo final se guarda directamente en tu ordenador. Nada sale de tu dispositivo."
+                    "a": "No. Tus grabaciones se leen y se unen en local en tu navegador, y el archivo final se guarda directamente en tu ordenador."
                 },
                 {
                     "q": "¿Qué dashcams admite?",
@@ -254,7 +254,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
             "breadcrumbName": "Réunir les caméras en une seule vidéo",
             "introHeading": "Un seul fichier au lieu de trois",
             "introBody": "Regarder un clip avant et un clip arrière pour la même minute, c'est jongler entre les fenêtres. Réunis en une seule vidéo, ils deviennent un fichier unique à partager, à fournir comme preuve ou à garder — chaque caméra dans la même image, synchronisée.",
-            "introBody2": "dashcamigo fait ça sans rien envoyer à un serveur. Tes enregistrements sont lus et réunis en local, dans l'onglet du navigateur, et la vidéo finale est enregistrée directement sur ton ordinateur.",
+            "introBody2": "dashcamigo fait ça sans envoyer tes enregistrements à un serveur. Tes enregistrements sont lus et réunis en local, dans l'onglet du navigateur, et la vidéo finale est enregistrée directement sur ton ordinateur.",
             "optionsHeading": "Dispositions",
             "options": [
                 {
@@ -301,7 +301,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
                 },
                 {
                     "q": "Ma vidéo est-elle envoyée quelque part ?",
-                    "a": "Non. Il n'y a aucun serveur. Tes enregistrements sont lus et réunis en local dans ton navigateur, et le fichier final est enregistré directement sur ton ordinateur. Rien ne quitte ton appareil."
+                    "a": "Non. Tes enregistrements sont lus et réunis en local dans ton navigateur, et le fichier final est enregistré directement sur ton ordinateur."
                 },
                 {
                     "q": "Quelles dashcams sont compatibles ?",
@@ -324,7 +324,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
             "breadcrumbName": "カメラ映像を1本の動画にまとめる",
             "introHeading": "3本ではなく1本のファイルに",
             "introBody": "同じ時間帯の前方クリップと後方クリップを見るには、ウィンドウをいくつも切り替えなければなりません。1本の動画にまとめれば、共有したり、証拠として提出したり、そのまま保存したりできる1つのファイルになります。すべてのカメラが同じフレームの中で、ぴったり同期して収まります。",
-            "introBody2": "dashcamigoはこの処理を、サーバーに何も送らずに行います。映像はブラウザのタブ内でローカルに読み込まれてまとめられ、できあがった動画はそのままお使いのパソコンに保存されます。",
+            "introBody2": "dashcamigoは録画をアップロードせずにこの処理を行います。映像はブラウザのタブ内でローカルに読み込まれてまとめられ、できあがった動画はそのままお使いのパソコンに保存されます。",
             "optionsHeading": "レイアウト",
             "options": [
                 {
@@ -371,7 +371,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
                 },
                 {
                     "q": "映像はどこかにアップロードされますか？",
-                    "a": "いいえ。サーバーはありません。映像はブラウザの中でローカルに読み込まれてまとめられ、できあがったファイルはそのままパソコンに保存されます。お使いの端末から何も出ていきません。"
+                    "a": "いいえ。映像はブラウザの中でローカルに読み込まれてまとめられ、できあがったファイルはそのままパソコンに保存されます。"
                 },
                 {
                     "q": "どのドラレコに対応していますか？",
@@ -394,7 +394,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
             "breadcrumbName": "카메라를 영상 하나로 합치기",
             "introHeading": "세 개 대신 파일 하나",
             "introBody": "같은 시간대의 전방 클립과 후방 클립을 같이 보려면 창을 이리저리 옮겨야 하죠. 영상 하나로 합치면 공유하거나, 증거로 제출하거나, 보관하기 좋은 파일 하나가 돼요 — 모든 카메라가 같은 화면 안에, 딱 맞춰진 채로요.",
-            "introBody2": "dashcamigo는 서버로 아무것도 보내지 않고 이걸 해요. 영상은 브라우저 탭 안에서 직접 읽히고 합쳐지며, 완성된 영상은 곧바로 컴퓨터에 저장돼요.",
+            "introBody2": "dashcamigo는 녹화 영상을 업로드하지 않고 이 작업을 해요. 영상은 브라우저 탭 안에서 직접 읽히고 합쳐지며, 완성된 영상은 곧바로 컴퓨터에 저장돼요.",
             "optionsHeading": "배치 방식",
             "options": [
                 {
@@ -441,7 +441,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
                 },
                 {
                     "q": "제 영상이 어딘가로 업로드되나요?",
-                    "a": "아니요. 서버가 없어요. 영상은 브라우저 안에서 직접 읽히고 합쳐지며, 완성된 파일은 곧바로 컴퓨터에 저장돼요. 어떤 것도 기기 밖으로 나가지 않아요."
+                    "a": "아니요. 영상은 브라우저 안에서 직접 읽히고 합쳐지며, 완성된 파일은 곧바로 컴퓨터에 저장돼요."
                 },
                 {
                     "q": "어떤 블랙박스를 지원하나요?",
@@ -464,7 +464,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
             "breadcrumbName": "Połącz kamery w jedno wideo",
             "introHeading": "Jeden plik zamiast trzech",
             "introBody": "Oglądanie nagrania z przodu i z tyłu na tę samą minutę to żonglerka oknami. Połączone w jedno wideo stają się jednym plikiem, który udostępnisz, złożysz jako dowód albo zachowasz — z każdą kamerą w tym samym kadrze, zsynchronizowaną.",
-            "introBody2": "dashcamigo robi to bez wysyłania czegokolwiek na serwer. Twoje nagrania są odczytywane i łączone lokalnie, w karcie przeglądarki, a gotowe wideo zapisuje się prosto na twój komputer.",
+            "introBody2": "dashcamigo robi to bez wysyłania twoich nagrań na serwer. Twoje nagrania są odczytywane i łączone lokalnie, w karcie przeglądarki, a gotowe wideo zapisuje się prosto na twój komputer.",
             "optionsHeading": "Układy",
             "options": [
                 {
@@ -511,7 +511,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
                 },
                 {
                     "q": "Czy moje wideo jest gdzieś wysyłane?",
-                    "a": "Nie. Nie ma żadnego serwera. Twoje nagrania są odczytywane i łączone lokalnie w przeglądarce, a gotowy plik zapisuje się prosto na twój komputer. Nic nie opuszcza twojego urządzenia."
+                    "a": "Nie. Twoje nagrania są odczytywane i łączone lokalnie w przeglądarce, a gotowy plik zapisuje się prosto na twój komputer."
                 },
                 {
                     "q": "Które wideorejestratory są obsługiwane?",
@@ -534,7 +534,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
             "breadcrumbName": "Juntar câmeras em um vídeo",
             "introHeading": "Um arquivo no lugar de três",
             "introBody": "Assistir a um clipe da frontal e a um da traseira do mesmo minuto vira um malabarismo de janelas. Juntos num vídeo só, viram um único arquivo pra compartilhar, apresentar como prova ou guardar — com todas as câmeras no mesmo quadro, sincronizadas.",
-            "introBody2": "O dashcamigo faz isso sem mandar nada pra nenhum servidor. Suas gravações são lidas e juntadas localmente, ali na aba do navegador, e o vídeo pronto é salvo direto no seu computador.",
+            "introBody2": "O dashcamigo faz isso sem enviar suas gravações a um servidor. Suas gravações são lidas e juntadas localmente, ali na aba do navegador, e o vídeo pronto é salvo direto no seu computador.",
             "optionsHeading": "Disposições",
             "options": [
                 {
@@ -581,7 +581,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
                 },
                 {
                     "q": "Meu vídeo vai pra algum lugar?",
-                    "a": "Não. Não tem servidor. Suas gravações são lidas e juntadas localmente no seu navegador, e o arquivo pronto é salvo direto no seu computador. Nada sai do seu dispositivo."
+                    "a": "Não. Suas gravações são lidas e juntadas localmente no seu navegador, e o arquivo pronto é salvo direto no seu computador."
                 },
                 {
                     "q": "Quais dashcams têm suporte?",
@@ -604,7 +604,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
             "breadcrumbName": "把多路摄像头合成一段视频",
             "introHeading": "一个文件，不用三个",
             "introBody": "同一分钟里前路一段、后路一段，要一起看就得在好几个窗口之间来回切。合成一段视频后，它们就变成一个能分享、能当证据提交、也能留存的文件 — 每路画面都在同一帧里，分毫不差地同步。",
-            "introBody2": "dashcamigo 做这件事时不会把任何东西发到服务器。你的录像在本地、在这个浏览器标签页里被读取和合成，做好的视频直接存到你的电脑上。",
+            "introBody2": "dashcamigo 无需上传录像就能完成这项操作。你的录像在本地、在这个浏览器标签页里被读取和合成，做好的视频直接存到你的电脑上。",
             "optionsHeading": "排布方式",
             "options": [
                 {
@@ -651,7 +651,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
                 },
                 {
                     "q": "我的视频会被上传到哪里吗？",
-                    "a": "不会。这里没有服务器。你的录像在本地、在浏览器里被读取和合成，做好的文件直接存到你的电脑上。什么都不会离开你的设备。"
+                    "a": "不会。你的录像在本地、在浏览器里被读取和合成，做好的文件直接存到你的电脑上。"
                 },
                 {
                     "q": "它支持哪些行车记录仪？",
@@ -706,7 +706,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
             "brandsHeading": "Kostenlos, im Browser, für Dashcam-Aufnahmen",
             "brandsBody": "Tempo und eine Karte aufs Video zu brennen, ist sonst der Job teurer Desktop-Tools für Action-Kameras. dashcamigo macht die Dashcam-Variante kostenlos, in einem Browser-Tab: es liest das GPS von 70mai, BlackVue, Viofo, Garmin, Vantrue und mehr und zeichnet Tempo, Koordinaten und eine mitlaufende Karte auf den Export — keine Installation, kein Konto, nichts wird hochgeladen.",
             "noteHeading": "Gut zu wissen",
-            "noteBody": "Das Overlay braucht GPS in deiner Aufnahme — hat eine Aufnahme keine GPS-Spur, gibt es nichts zu zeichnen. Neben Tempo, Koordinaten und der mitlaufenden Karte kann es auch die Uhrzeit, deine Fahrtrichtung, die zurückgelegte Strecke und eine G-Kraft-Anzeige zeigen — alles aus demselben GPS errechnet, nicht von einem separaten Sensor. Beim Rendern wird das Video neu kodiert, ein langer Bereich braucht also etwas Zeit; Chrome, Edge oder ein anderer Chromium-Browser am Computer läuft am flüssigsten.",
+            "noteBody": "Das Overlay braucht GPS in deiner Aufnahme — hat eine Aufnahme keinen GPS-Track, gibt es nichts zu zeichnen. Neben Tempo, Koordinaten und der mitlaufenden Karte kann es auch die Uhrzeit, deine Fahrtrichtung, die zurückgelegte Strecke und eine G-Kraft-Anzeige zeigen — alles aus demselben GPS errechnet, nicht von einem separaten Sensor. Beim Rendern wird das Video neu kodiert, ein langer Bereich braucht also etwas Zeit; Chrome, Edge oder ein anderer Chromium-Browser am Computer läuft am flüssigsten.",
             "faqHeading": "Häufige Fragen",
             "faq": [
                 {
@@ -719,11 +719,11 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
                 },
                 {
                     "q": "Braucht es GPS in der Aufnahme?",
-                    "a": "Ja. Das Overlay entsteht aus dem GPS, das deine Dashcam gespeichert hat. Hat ein Clip keine GPS-Spur, gibt es nichts einzublenden — das Video wird trotzdem exportiert, nur ohne Tempo, Koordinaten oder Karte."
+                    "a": "Ja. Das Overlay entsteht aus dem GPS, das deine Dashcam gespeichert hat. Hat ein Clip keinen GPS-Track, gibt es nichts einzublenden — das Video wird trotzdem exportiert, nur ohne Tempo, Koordinaten oder Karte."
                 },
                 {
                     "q": "Wird mein Video hochgeladen?",
-                    "a": "Nein. Es gibt keinen Server. Das Overlay wird lokal in deinem Browser gerendert, und das fertige Video landet direkt auf deinem Computer."
+                    "a": "Nein. Das Overlay wird lokal in deinem Browser gerendert, und das fertige Video landet direkt auf deinem Computer."
                 },
                 {
                     "q": "Kann es auch Uhrzeit, Fahrtrichtung oder G-Kraft zeigen?",
@@ -771,7 +771,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
             ],
             "brandsHeading": "Gratis, en el navegador, para grabaciones de dashcam",
             "brandsBody": "Grabar la velocidad y un mapa sobre el vídeo suele ser cosa de herramientas de escritorio de pago pensadas para cámaras de acción. dashcamigo hace la versión para dashcam gratis, en una pestaña del navegador: lee el GPS de 70mai, BlackVue, Viofo, Garmin, Vantrue y más, y dibuja velocidad, coordenadas y un mapa en movimiento sobre la exportación — sin instalar nada, sin cuenta, sin subir nada.",
-            "noteHeading": "Bueno saberlo",
+            "noteHeading": "Conviene saberlo",
             "noteBody": "La capa necesita GPS en tu grabación — si una grabación no tiene traza GPS, no hay nada que dibujar. Además de la velocidad, las coordenadas y el mapa en movimiento, también puede mostrar la hora, tu rumbo, la distancia recorrida y una lectura de fuerza G — todo calculado a partir del mismo GPS, no de un sensor aparte. Renderizar recodifica el vídeo, así que un tramo largo lleva su tiempo; Chrome, Edge u otro navegador Chromium en un ordenador es lo más fluido.",
             "faqHeading": "Preguntas frecuentes",
             "faq": [
@@ -789,7 +789,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
                 },
                 {
                     "q": "¿Se sube mi vídeo?",
-                    "a": "No. No hay servidor. La capa se renderiza en local en tu navegador y el vídeo final se guarda directamente en tu ordenador."
+                    "a": "No. La capa se renderiza en local en tu navegador y el vídeo final se guarda directamente en tu ordenador."
                 },
                 {
                     "q": "¿También puede mostrar la hora, el rumbo o la fuerza G?",
@@ -855,7 +855,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
                 },
                 {
                     "q": "Ma vidéo est-elle envoyée ?",
-                    "a": "Non. Il n'y a aucun serveur. L'incrustation est rendue en local dans ton navigateur et la vidéo finale est enregistrée directement sur ton ordinateur."
+                    "a": "Non. L'incrustation est rendue en local dans ton navigateur et la vidéo finale est enregistrée directement sur ton ordinateur."
                 },
                 {
                     "q": "Peut-elle aussi afficher l'heure, le cap ou la force G ?",
@@ -921,7 +921,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
                 },
                 {
                     "q": "映像はアップロードされますか？",
-                    "a": "いいえ。サーバーはありません。オーバーレイはブラウザの中でローカルに描画され、できあがった動画はそのままパソコンに保存されます。"
+                    "a": "いいえ。オーバーレイはブラウザの中でローカルに描画され、できあがった動画はそのままパソコンに保存されます。"
                 },
                 {
                     "q": "時刻や進行方位、Gフォースも表示できますか？",
@@ -987,7 +987,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
                 },
                 {
                     "q": "제 영상이 업로드되나요?",
-                    "a": "아니요. 서버가 없어요. 오버레이는 브라우저 안에서 직접 렌더링되고, 완성된 영상은 곧바로 컴퓨터에 저장돼요."
+                    "a": "아니요. 오버레이는 브라우저 안에서 직접 렌더링되고, 완성된 영상은 곧바로 컴퓨터에 저장돼요."
                 },
                 {
                     "q": "시간이나 진행 방위, G-포스도 보여줄 수 있나요?",
@@ -1053,7 +1053,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
                 },
                 {
                     "q": "Czy moje wideo jest wysyłane?",
-                    "a": "Nie. Nie ma żadnego serwera. Nakładka jest renderowana lokalnie w twojej przeglądarce, a gotowe wideo zapisuje się prosto na twój komputer."
+                    "a": "Nie. Nakładka jest renderowana lokalnie w twojej przeglądarce, a gotowe wideo zapisuje się prosto na twój komputer."
                 },
                 {
                     "q": "Czy może też pokazać godzinę, kurs albo przeciążenia?",
@@ -1119,7 +1119,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
                 },
                 {
                     "q": "Meu vídeo vai pra nuvem?",
-                    "a": "Não. Não tem servidor. A sobreposição é renderizada localmente no seu navegador e o vídeo pronto é salvo direto no seu computador."
+                    "a": "Não. A sobreposição é renderizada localmente no seu navegador e o vídeo pronto é salvo direto no seu computador."
                 },
                 {
                     "q": "Dá pra mostrar a hora, a direção ou a força G também?",
@@ -1185,7 +1185,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
                 },
                 {
                     "q": "我的视频会被上传吗？",
-                    "a": "不会。这里没有服务器。叠加层在你的浏览器里本地渲染，做好的视频直接存到你的电脑上。"
+                    "a": "不会。叠加层在你的浏览器里本地渲染，做好的视频直接存到你的电脑上。"
                 },
                 {
                     "q": "也能显示时间、方向或 G 值吗？",
@@ -1206,7 +1206,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
             "breadcrumbName": "Kennzeichen & Gesichter verbergen",
             "introHeading": "Zeig den Vorfall, nicht die Unbeteiligten",
             "introBody": "Ein Fall für die Versicherung, eine Anzeige, ein Clip fürs Forum — der Vorfall zählt, die Identitäten drumherum nicht. Eine eingebrannte Abdeckung hält fremde Kennzeichen und die Gesichter von Passanten raus: Die Pixel selbst werden ersetzt, es gibt also keine versteckte Ebene, die sich in der gespeicherten Datei wieder ablösen ließe.",
-            "introBody2": "Und weil dashcamigo keinen Server hat, bleibt die Originalaufnahme auf deinem Gerät. Das Abdecken passiert direkt im Browser-Tab, und das fertige Video wird direkt auf deinem Computer gespeichert.",
+            "introBody2": "dashcamigo verarbeitet Videos lokal, sodass die Originalaufnahme auf deinem Gerät bleibt. Das Abdecken passiert direkt im Browser-Tab, und das fertige Video wird direkt auf deinem Computer gespeichert.",
             "optionsHeading": "Was du machen kannst",
             "options": [
                 {
@@ -1257,7 +1257,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
                 },
                 {
                     "q": "Wird mein Video zum Abdecken hochgeladen?",
-                    "a": "Nein. Es gibt keinen Server. Die Aufnahme wird lokal gelesen, das Folgen läuft auf deinem Gerät, und das fertige Video wird direkt auf deinem Computer gespeichert. Nichts verlässt dein Gerät."
+                    "a": "Nein. Die Aufnahme wird lokal gelesen, das Folgen läuft auf deinem Gerät, und das fertige Video wird direkt auf deinem Computer gespeichert."
                 },
                 {
                     "q": "Ist es kostenlos?",
@@ -1276,7 +1276,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
             "breadcrumbName": "Difuminar matrículas y caras",
             "introHeading": "Comparte el incidente, no a los demás",
             "introBody": "Un parte para el seguro, una denuncia, un clip para un foro — lo que importa es el incidente, no las identidades de alrededor. Una máscara grabada deja fuera las matrículas de otros conductores y las caras de los peatones: se sustituyen los propios píxeles, así que en el archivo guardado no hay ninguna capa oculta que se pueda quitar.",
-            "introBody2": "Y como dashcamigo no tiene servidor, la grabación original se queda en tu dispositivo. El tapado ocurre directamente en la pestaña del navegador, y el vídeo final se guarda directamente en tu ordenador.",
+            "introBody2": "dashcamigo procesa los vídeos en local, así que la grabación original se queda en tu dispositivo. El tapado ocurre directamente en la pestaña del navegador, y el vídeo final se guarda directamente en tu ordenador.",
             "optionsHeading": "Qué puedes hacer",
             "options": [
                 {
@@ -1309,7 +1309,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
             ],
             "brandsHeading": "Funciona con las grabaciones de cualquier dashcam",
             "brandsBody": "Difuminar una matrícula suele ser trabajo de un editor de vídeo con plugin de seguimiento — artillería pesada para un clip de 30 segundos. dashcamigo lo hace en la misma página donde ves tus trayectos: lee grabaciones de 70mai, BlackVue, Viofo, Garmin, Vantrue, Nextbase y decenas más, y la máscara se dibuja sobre la propia imagen — así que funciona igual sin importar qué cámara escribió el archivo.",
-            "noteHeading": "Bueno saberlo",
+            "noteHeading": "Conviene saberlo",
             "noteBody": "El seguimiento automático descarga un pequeño archivo auxiliar la primera vez que lo usas (pide permiso antes) y después funciona sin conexión. Sigue un objeto por zona y puede perderlo en casos difíciles — reflejos, oscuridad, movimiento rápido —, así que echa un vistazo rápido al resultado antes de compartir; siempre puedes mover el recuadro a mano. Al guardar, el vídeo se recodifica, y el editor funciona al completo en Chrome, Edge u otro navegador Chromium en un ordenador. Para privacidad de verdad, elige los píxeles o el relleno sólido — el difuminado suave es el más débil de los tres.",
             "faqHeading": "Preguntas frecuentes",
             "faq": [
@@ -1327,7 +1327,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
                 },
                 {
                     "q": "¿Mi vídeo se sube a algún sitio para difuminarlo?",
-                    "a": "No. No hay servidor. La grabación se lee en local, el seguimiento se ejecuta en tu dispositivo y el vídeo final se guarda directamente en tu ordenador. Nada sale de tu dispositivo."
+                    "a": "No. La grabación se lee en local, el seguimiento se ejecuta en tu dispositivo y el vídeo final se guarda directamente en tu ordenador."
                 },
                 {
                     "q": "¿Es gratis?",
@@ -1346,7 +1346,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
             "breadcrumbName": "Flouter plaques et visages",
             "introHeading": "Partage l'incident, pas les passants",
             "introBody": "Un dossier d'assurance, un dépôt de plainte, un clip pour un forum — c'est l'incident qui compte, pas les identités autour. Un masque incrusté garde les plaques des autres conducteurs et les visages des piétons hors de l'image : les pixels eux-mêmes sont remplacés, il n'y a donc aucune couche cachée à retirer dans le fichier enregistré.",
-            "introBody2": "Et comme dashcamigo n'a pas de serveur, l'enregistrement original reste sur ton appareil. Le masquage se fait directement dans l'onglet du navigateur, et la vidéo finale est enregistrée directement sur ton ordinateur.",
+            "introBody2": "dashcamigo traite les vidéos en local, donc l'enregistrement original reste sur ton appareil. Le masquage se fait directement dans l'onglet du navigateur, et la vidéo finale est enregistrée directement sur ton ordinateur.",
             "optionsHeading": "Ce que tu peux faire",
             "options": [
                 {
@@ -1397,7 +1397,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
                 },
                 {
                     "q": "Ma vidéo est-elle envoyée quelque part pour le floutage ?",
-                    "a": "Non. Il n'y a aucun serveur. L'enregistrement est lu en local, le suivi tourne sur ton appareil, et la vidéo finale est enregistrée directement sur ton ordinateur. Rien ne quitte ton appareil."
+                    "a": "Non. L'enregistrement est lu en local, le suivi tourne sur ton appareil, et la vidéo finale est enregistrée directement sur ton ordinateur."
                 },
                 {
                     "q": "Est-ce gratuit ?",
@@ -1416,7 +1416,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
             "breadcrumbName": "ナンバーや顔をぼかす",
             "introHeading": "見せるのは出来事だけ、周りの人は写さない",
             "introBody": "保険の申請、警察への提出、フォーラムへの投稿 — 大事なのは出来事そのもので、周りの人の身元ではありません。焼き込まれたカバーなら、他の車のナンバーや歩行者の顔を映像から外せます。ピクセルそのものが置き換わるため、保存したファイルに剥がせる隠しレイヤーは残りません。",
-            "introBody2": "しかもdashcamigoにはサーバーがないので、元の録画はお使いの端末に残ったままです。隠す処理はブラウザのタブの中で行われ、完成した動画はそのままパソコンに保存されます。",
+            "introBody2": "dashcamigoは動画をローカルで処理するため、元の録画はお使いの端末に残ったままです。隠す処理はブラウザのタブの中で行われ、完成した動画はそのままパソコンに保存されます。",
             "optionsHeading": "できること",
             "options": [
                 {
@@ -1467,7 +1467,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
                 },
                 {
                     "q": "ぼかすために動画はアップロードされますか？",
-                    "a": "いいえ。サーバーはありません。録画はローカルで読み込まれ、追跡はお使いの端末上で動き、完成した動画はそのままパソコンに保存されます。端末の外には何も出ていきません。"
+                    "a": "いいえ。録画はローカルで読み込まれ、追跡はお使いの端末上で動き、完成した動画はそのままパソコンに保存されます。"
                 },
                 {
                     "q": "無料ですか？",
@@ -1486,7 +1486,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
             "breadcrumbName": "번호판·얼굴 블러",
             "introHeading": "사고만 보여주고, 지나가는 사람은 빼고",
             "introBody": "보험 청구, 경찰 신고, 커뮤니티에 올릴 클립 — 중요한 건 사고 자체지, 주변 사람들의 신원이 아니에요. 화면에 새겨진 커버는 다른 운전자의 번호판과 보행자의 얼굴을 영상에서 지워줘요: 픽셀 자체가 바뀌기 때문에, 저장된 파일에는 벗겨낼 수 있는 숨은 레이어가 없어요.",
-            "introBody2": "그리고 dashcamigo에는 서버가 없어서 원본 녹화는 기기에 그대로 남아요. 가리는 작업은 브라우저 탭 안에서 바로 이루어지고, 완성된 영상은 곧장 컴퓨터에 저장돼요.",
+            "introBody2": "dashcamigo는 영상을 기기에서 처리하므로 원본 녹화는 기기에 그대로 남아요. 가리는 작업은 브라우저 탭 안에서 바로 이루어지고, 완성된 영상은 곧장 컴퓨터에 저장돼요.",
             "optionsHeading": "할 수 있는 것",
             "options": [
                 {
@@ -1537,7 +1537,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
                 },
                 {
                     "q": "블러 처리를 하려면 영상이 업로드되나요?",
-                    "a": "아니요. 서버가 없어요. 녹화는 로컬에서 읽히고, 따라가기는 기기에서 돌아가고, 완성된 영상은 곧장 컴퓨터에 저장돼요. 기기 밖으로는 아무것도 나가지 않아요."
+                    "a": "아니요. 녹화는 로컬에서 읽히고, 따라가기는 기기에서 돌아가고, 완성된 영상은 곧장 컴퓨터에 저장돼요."
                 },
                 {
                     "q": "무료인가요?",
@@ -1556,7 +1556,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
             "breadcrumbName": "Zamazywanie tablic i twarzy",
             "introHeading": "Pokaż zdarzenie, nie przypadkowych ludzi",
             "introBody": "Zgłoszenie do ubezpieczyciela, zawiadomienie na policję, klip na forum — liczy się zdarzenie, nie tożsamości wokół niego. Wypalona zasłona usuwa z kadru cudze tablice i twarze pieszych: podmieniane są same piksele, więc w zapisanym pliku nie ma ukrytej warstwy, którą dałoby się zdjąć.",
-            "introBody2": "A ponieważ dashcamigo nie ma serwera, oryginalne nagranie zostaje na twoim urządzeniu. Zamazywanie dzieje się prosto w karcie przeglądarki, a gotowe wideo zapisuje się od razu na komputerze.",
+            "introBody2": "dashcamigo przetwarza wideo lokalnie, więc oryginalne nagranie zostaje na twoim urządzeniu. Zamazywanie dzieje się prosto w karcie przeglądarki, a gotowe wideo zapisuje się od razu na komputerze.",
             "optionsHeading": "Co możesz zrobić",
             "options": [
                 {
@@ -1607,7 +1607,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
                 },
                 {
                     "q": "Czy moje wideo jest gdzieś wysyłane do zamazania?",
-                    "a": "Nie. Nie ma serwera. Nagranie jest czytane lokalnie, podążanie działa na twoim urządzeniu, a gotowe wideo zapisuje się prosto na komputerze. Nic nie opuszcza twojego urządzenia."
+                    "a": "Nie. Nagranie jest czytane lokalnie, podążanie działa na twoim urządzeniu, a gotowe wideo zapisuje się prosto na komputerze."
                 },
                 {
                     "q": "Czy to darmowe?",
@@ -1626,7 +1626,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
             "breadcrumbName": "Desfocar placas e rostos",
             "introHeading": "Compartilhe o incidente, não quem passava por ali",
             "introBody": "Um acionamento do seguro, um boletim de ocorrência, um clipe para um fórum — o que importa é o incidente, não as identidades ao redor. Uma tarja gravada mantém de fora as placas de outros motoristas e os rostos dos pedestres: os próprios pixels são substituídos, então não há camada oculta para remover no arquivo salvo.",
-            "introBody2": "E como o dashcamigo não tem servidor, a gravação original fica no seu dispositivo. A cobertura acontece direto na aba do navegador, e o vídeo pronto é salvo direto no seu computador.",
+            "introBody2": "O dashcamigo processa o vídeo localmente, então a gravação original fica no seu dispositivo. A cobertura acontece direto na aba do navegador, e o vídeo pronto é salvo direto no seu computador.",
             "optionsHeading": "O que dá pra fazer",
             "options": [
                 {
@@ -1677,7 +1677,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
                 },
                 {
                     "q": "Meu vídeo é enviado para algum lugar para o desfoque?",
-                    "a": "Não. Não existe servidor. A gravação é lida localmente, o acompanhamento roda no seu dispositivo e o vídeo pronto é salvo direto no seu computador. Nada sai do seu dispositivo."
+                    "a": "Não. A gravação é lida localmente, o acompanhamento roda no seu dispositivo e o vídeo pronto é salvo direto no seu computador."
                 },
                 {
                     "q": "É grátis?",
@@ -1696,7 +1696,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
             "breadcrumbName": "车牌人脸打码",
             "introHeading": "分享事故本身，而不是路过的人",
             "introBody": "保险理赔、报警材料、发到论坛的片段 — 重要的是事故本身，不是周围人的身份。烧录进画面的遮罩能把其他车的车牌和行人的脸挡在外面：替换的是像素本身，所以保存的文件里没有任何可以揭掉的隐藏图层。",
-            "introBody2": "而且 dashcamigo 没有服务器，原始录像一直留在你的设备上。打码就在浏览器标签页里完成，成品视频直接保存到你的电脑。",
+            "introBody2": "dashcamigo 在本地处理视频，原始录像一直留在你的设备上。打码就在浏览器标签页里完成，成品视频直接保存到你的电脑。",
             "optionsHeading": "你可以做什么",
             "options": [
                 {
@@ -1747,7 +1747,7 @@ export const COMMUNITY_FEATURE_CONTENT: Record<FeatureSlug, Partial<Record<Lang,
                 },
                 {
                     "q": "打码时我的视频会被上传吗？",
-                    "a": "不会。没有服务器。录像在本地读取，跟随在你的设备上运行，成品视频直接保存到你的电脑。任何内容都不会离开你的设备。"
+                    "a": "不会。录像在本地读取，跟随在你的设备上运行，成品视频直接保存到你的电脑。"
                 },
                 {
                     "q": "免费吗？",

@@ -607,7 +607,8 @@ test.describe("progressive ingest", () => {
             .toBe(true);
         await expect(
             page.locator(".dc-toast__body", {
-                hasText: "Couldn't open this trip. The file may be damaged or no longer available.",
+                hasText:
+                    "Couldn't open this trip. Check that the memory card or drive is connected and open the folder again. If it still fails, report the problem.",
             }),
         ).toBeVisible();
 

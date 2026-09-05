@@ -45,6 +45,8 @@
 }
 
 .top-panel__label {
+    flex-shrink: 0;
+    white-space: nowrap;
     font-size: var(--dc-text-sm);
     font-weight: 500;
     color: var(--fg-dim);

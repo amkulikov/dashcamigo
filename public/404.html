@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>404 · dashcamigo</title>
 <meta name="robots" content="noindex, follow">
-<meta http-equiv="content-language" content="en">
 <meta name="theme-color" content="#000000">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="alternate icon" href="/favicon.ico" sizes="any">
@@ -95,17 +94,18 @@ main {
     place-items: center;
     padding: 48px 24px;
 }
+.stage[hidden] { display: none; }
 .stage {
     display: grid;
     justify-items: center;
-    gap: 36px;
+    gap: 24px;
     text-align: center;
 }
 
 /* Horizontal traffic signal - the metaphor is "flashing amber at an
    unmarked intersection: proceed with caution". Reads across cultures. */
 .signal {
-    --lamp: clamp(96px, 18vw, 170px);
+    --lamp: clamp(64px, 18vw, 170px);
     --gap:  clamp(14px, 2vw, 24px);
     --pad:  clamp(18px, 2.4vw, 28px);
     display: inline-flex;
@@ -175,6 +175,8 @@ main {
     }
 }
 
+.stage h1 { margin: 0; font-size: clamp(22px, 4vw, 32px); }
+
 .btn {
     background: var(--dc-orange);
     color: var(--dc-black);
@@ -206,7 +208,7 @@ main {
 <body>
 
 <header class="topbar">
-    <a href="/" aria-label="dashcamigo home">
+    <a href="/en/" data-locale-home aria-label="dashcamigo">
         <span class="dc-mark">dashcamigo<svg class="dc-mark__icon" viewBox="0 0 32 32" fill="none" aria-hidden="true">
             <rect x="3" y="7" width="26" height="20" rx="3" fill="currentColor"/>
             <rect x="14" y="4" width="4" height="3" rx="0.6" fill="currentColor"/>
@@ -219,14 +221,56 @@ main {
 
 <main>
     <div class="stage">
-        <div class="signal" role="img" aria-label="404 - flashing yellow signal">
+        <div class="signal" role="img" aria-label="404">
             <div class="lamp" aria-hidden="true">4</div>
             <div class="lamp lamp--on" aria-hidden="true"></div>
             <div class="lamp" aria-hidden="true">4</div>
         </div>
-        <a class="btn" href="/"><span class="arrow">&larr;</span> Back home</a>
+        <div>
+            <article data-lang="en" class="stage">
+                <h1>Page not found</h1>
+                <a class="btn" href="/en/"><span class="arrow" aria-hidden="true">&larr;</span> Back home</a>
+            </article>
+            <article data-lang="ru" class="stage" hidden>
+                <h1>Страница не найдена</h1>
+                <a class="btn" href="/ru/"><span class="arrow" aria-hidden="true">&larr;</span> На главную</a>
+            </article>
+            <article data-lang="de" class="stage" hidden>
+                <h1>Seite nicht gefunden</h1>
+                <a class="btn" href="/de/"><span class="arrow" aria-hidden="true">&larr;</span> Zur Startseite</a>
+            </article>
+            <article data-lang="es" class="stage" hidden>
+                <h1>Página no encontrada</h1>
+                <a class="btn" href="/es/"><span class="arrow" aria-hidden="true">&larr;</span> Volver al inicio</a>
+            </article>
+            <article data-lang="fr" class="stage" hidden>
+                <h1>Page introuvable</h1>
+                <a class="btn" href="/fr/"><span class="arrow" aria-hidden="true">&larr;</span> Retour à l’accueil</a>
+            </article>
+            <article data-lang="ja" class="stage" hidden>
+                <h1>ページが見つかりません</h1>
+                <a class="btn" href="/ja/"><span class="arrow" aria-hidden="true">&larr;</span> ホームに戻る</a>
+            </article>
+            <article data-lang="ko" class="stage" hidden>
+                <h1>페이지를 찾을 수 없어요</h1>
+                <a class="btn" href="/ko/"><span class="arrow" aria-hidden="true">&larr;</span> 홈으로 돌아가기</a>
+            </article>
+            <article data-lang="pl" class="stage" hidden>
+                <h1>Nie znaleziono strony</h1>
+                <a class="btn" href="/pl/"><span class="arrow" aria-hidden="true">&larr;</span> Wróć na stronę główną</a>
+            </article>
+            <article data-lang="pt" class="stage" hidden>
+                <h1>Página não encontrada</h1>
+                <a class="btn" href="/pt/"><span class="arrow" aria-hidden="true">&larr;</span> Voltar ao início</a>
+            </article>
+            <article data-lang="zh" class="stage" hidden>
+                <h1>找不到此页面</h1>
+                <a class="btn" href="/zh/"><span class="arrow" aria-hidden="true">&larr;</span> 返回首页</a>
+            </article>
+        </div>
     </div>
 </main>
 
+<script src="/doc-lang.js" defer></script>
 </body>
 </html>

@@ -6,6 +6,7 @@
 import { readFileSync } from "node:fs";
 
 import type { Page } from "@playwright/test";
+import { LANGS } from "../../src/i18n/languages.js";
 
 import { expect, gotoApp, loadTrip, presetLocalStorage, shot, test } from "./_fixtures.js";
 import { DESKTOP } from "./_fixtures.js";
@@ -57,6 +58,20 @@ test.describe("navigation & shell", () => {
         await expect(page.locator("#landing")).toBeVisible();
         await expect(page.locator("#landing h1")).toContainText(/[а-яё]/i);
         await shot(page, "nav-02-landing-ru");
+    });
+
+    test("404 stays in the requested language and fits a narrow screen", async ({ page }) => {
+        await page.setViewportSize({ width: 320, height: 640 });
+        for (const { code } of LANGS) {
+            await page.goto(`/404.html?lang=${code}`);
+            await expect(page.locator("html")).toHaveAttribute("lang", code);
+            await expect(page.locator("article:visible")).toHaveCount(1);
+            const article = page.locator(`article[data-lang="${code}"]`);
+            await expect(article.locator("h1")).toBeVisible();
+            await expect(article.getByRole("link")).toHaveAttribute("href", `/${code}/`);
+            await expect(page.locator(".topbar a")).toHaveAttribute("href", `/${code}/`);
+            expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+        }
     });
 
     test("vendor page /en/cameras/70mai/ is 200 with a self-canonical", async ({ page }) => {

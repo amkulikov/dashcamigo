@@ -52,8 +52,8 @@ export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
             de: "Die Einstellungen für Export-Einblendungen bleiben zwischen Besuchen erhalten und lassen sich zurücksetzen.",
             es: "La configuración de las superposiciones de exportación se conserva entre visitas y se puede restablecer.",
             fr: "Les réglages des incrustations d’export restent enregistrés entre les visites et peuvent être réinitialisés.",
-            pl: "Ustawienia nakładek eksportu są zachowywane między wizytami i można je przywrócić.",
-            pt: "As configurações das sobreposições de exportação são mantidas entre visitas e podem ser repostas.",
+            pl: "Ustawienia nakładek eksportu są zachowywane między wizytami i można je zresetować.",
+            pt: "As configurações das sobreposições de exportação são mantidas entre visitas e podem ser redefinidas.",
             zh: "导出叠加层设置会在下次访问时保留，也可重置。",
             ja: "書き出し用オーバーレイの設定は次回の利用時にも保持され、リセットできます。",
             ko: "내보내기 오버레이 설정은 다음 방문에도 유지되며 초기화할 수 있습니다.",
@@ -64,7 +64,7 @@ export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
         category: "improvement",
         text: {
             en: "A notes file in the opened recording folder takes priority; otherwise dashcamigo uses the last-used file.",
-            ru: "Файл заметок в открытой папке с записями имеет приоритет; иначе dashcamigo использует последний файл.",
+            ru: "Файл заметок в открытой папке с записями имеет приоритет; иначе dashcamigo использует последний выбранный файл.",
             de: "Eine Notizdatei im geöffneten Aufnahmeordner hat Vorrang; ist keine vorhanden, verwendet dashcamigo weiterhin die zuletzt verwendete Datei.",
             es: "El archivo de notas de la carpeta de grabaciones abierta tiene prioridad; si no hay uno, dashcamigo sigue usando el último archivo.",
             fr: "Le fichier de notes du dossier de vidéos ouvert est prioritaire ; s’il n’y en a pas, dashcamigo continue d’utiliser le dernier fichier.",
@@ -80,7 +80,7 @@ export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
         category: "improvement",
         text: {
             en: "On the first change to trip notes, favorites, or markers, you can now choose browser storage or a notes file.",
-            ru: "При первом изменении заметок, избранного или маркеров теперь можно выбрать хранение в браузере или в файле пометок.",
+            ru: "При первом изменении заметок, избранного или маркеров теперь можно выбрать хранение в браузере или в файле заметок.",
             de: "Bei der ersten Änderung an Fahrtnotizen, Favoriten oder Markierungen kannst du jetzt zwischen Browserspeicher und einer Notizdatei wählen.",
             es: "Al cambiar por primera vez las notas, los favoritos o los marcadores de un viaje, ahora puedes elegir entre guardarlos en el navegador o en un archivo de notas.",
             fr: "À la première modification des notes, favoris ou marqueurs d’un trajet, tu peux désormais choisir entre le navigateur et un fichier de notes.",
@@ -544,7 +544,7 @@ export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
         category: "fix",
         text: {
             en: "Fixed playback of some kinds of .ts recordings.",
-            ru: "Полечено проигрывание некоторых видов .ts-файлов.",
+            ru: "Исправлено воспроизведение некоторых видов .ts-записей.",
             de: "Wiedergabe einiger Arten von .ts-Dateien repariert.",
             es: "Arreglada la reproducción de algunos tipos de archivos .ts.",
             fr: "Lecture de certains types de fichiers .ts réparée.",
@@ -560,7 +560,7 @@ export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
         category: "support",
         text: {
             en: "Added support for new recording folder and file layouts.",
-            ru: "Добавлена поддержка новых форматов файловой структуры записей.",
+            ru: "Добавлена поддержка новых структур папок и файлов записей.",
             de: "Unterstützung für neue Ordner- und Dateistrukturen von Aufnahmen hinzugefügt.",
             es: "Añadido soporte para nuevas estructuras de carpetas y archivos de grabaciones.",
             fr: "Prise en charge de nouvelles structures de dossiers et de fichiers d'enregistrements ajoutée.",

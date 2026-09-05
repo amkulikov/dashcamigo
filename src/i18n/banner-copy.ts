@@ -58,7 +58,7 @@ export const BANNER_COPY: Record<Lang, BannerCopyEntry> = {
         regionLabel: "言語の提案",
     },
     ko: {
-        message: "페이지 언어: {urlLang}. {browserLang}(으)로 열까요?",
+        message: "현재 페이지 언어: {urlLang}. {browserLang} 버전으로 열까요?",
         open: "열기",
         dismiss: "닫기",
         regionLabel: "언어 제안",

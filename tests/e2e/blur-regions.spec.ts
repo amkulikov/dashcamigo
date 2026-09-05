@@ -116,7 +116,7 @@ test.describe("blur regions", () => {
         ).toHaveAttribute("aria-pressed", "true");
         await expect(page.locator(".export-panel__blur-row-actions button")).toHaveCount(3);
         // Whole-clip stays in manual timing; the setters remain.
-        await page.getByRole("button", { name: "Cover the whole clip" }).click();
+        await page.getByRole("button", { name: "Keep this zone active for the whole clip" }).click();
         await expect(
             seg.getByRole("button", { name: "Set the start and end yourself; tracked motion stays" }),
         ).toHaveAttribute("aria-pressed", "true");
