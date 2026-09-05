@@ -1,12 +1,55 @@
-import { DESKTOP, SAMPLE_70MAI, expect, gotoApp, loadTrip, openExport, presetLocalStorage, test } from "./_fixtures.js";
+import {
+    DESKTOP,
+    MOBILE,
+    SAMPLE_70MAI,
+    SCREENSHOT_DIR,
+    expect,
+    gotoApp,
+    loadTrip,
+    openExport,
+    presetLocalStorage,
+    test,
+} from "./_fixtures.js";
 
 test.describe("export controls", () => {
+    test.use({ viewport: DESKTOP });
+
     test.beforeEach(async ({ page }) => {
         await presetLocalStorage(page);
-        await page.setViewportSize(DESKTOP);
         await gotoApp(page, "en");
         await loadTrip(page, SAMPLE_70MAI);
-        await openExport(page);
+        await openExport(page, false);
+    });
+
+    test("desktop privacy and overlays start expanded and toggle from the keyboard", async ({ page }) => {
+        for (const [title, name] of [
+            ["Hide plates & faces", "privacy"],
+            ["Overlays", "overlays"],
+        ] as const) {
+            const section = page.locator(".export-panel__disclosure").filter({
+                has: page.locator("summary", { hasText: title }),
+            });
+            const summary = section.locator("summary");
+            const controls = section.locator(":scope > fieldset");
+            await expect(section).toHaveAttribute("open", "");
+            await expect(controls).toBeVisible();
+            await summary.focus();
+            await page.keyboard.press("Enter");
+            await expect(section).not.toHaveAttribute("open");
+            await expect(controls).toBeHidden();
+            await expect(summary).toBeFocused();
+            await page.keyboard.press("Space");
+            await expect(section).toHaveAttribute("open", "");
+            await expect(controls).toBeVisible();
+            await summary.evaluate((element) => element.blur());
+            await page.mouse.move(0, 0);
+            await section.screenshot({ path: `${SCREENSHOT_DIR}/export-disclosure-${name}.png` });
+        }
+        await page.locator('.theme-toggle-btn[data-theme="light"]').click();
+        await page.mouse.move(0, 0);
+        const sections = page.locator(".export-panel__disclosure");
+        await sections.nth(0).screenshot({ path: `${SCREENSHOT_DIR}/export-disclosure-privacy-light.png` });
+        await sections.nth(1).screenshot({ path: `${SCREENSHOT_DIR}/export-disclosure-overlays-light.png` });
     });
 
     test("output and overlay controls expose their labels and selected states", async ({ page }) => {
@@ -66,5 +109,20 @@ test.describe("export controls", () => {
         await expect(start).toBeFocused();
         await page.locator(".export-panel__blur-del-btn").click();
         await expect(page.locator(".export-panel__blur-add-btn")).toBeFocused();
+    });
+
+    test.describe("mobile", () => {
+        test.use({ viewport: MOBILE });
+
+        test("privacy and overlays start collapsed", async ({ page }) => {
+            for (const title of ["Hide plates & faces", "Overlays"]) {
+                const section = page.locator(".export-panel__disclosure").filter({
+                    has: page.locator("summary", { hasText: title }),
+                });
+                await expect(section).not.toHaveAttribute("open");
+                await expect(section.locator("summary")).toBeVisible();
+                await expect(section.locator(":scope > fieldset")).toBeHidden();
+            }
+        });
     });
 });

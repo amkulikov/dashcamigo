@@ -108,6 +108,8 @@ import {
 import { isMapAvailable } from "./map.js";
 import { STREET_LABEL_DENSITY_LABEL_KEYS, STREET_LABEL_DENSITY_VALUES } from "./map-label-scale.js";
 import { renderMapMarkerControl } from "./map-marker-control.js";
+import { buildLucideIcon } from "./icons.js";
+import { isMobileLayout } from "./media-queries.js";
 
 const log = createLogger("export-panel");
 
@@ -372,14 +374,22 @@ function syncGpsOptionsAvailability(): void {
 
 let actionsObserver: ResizeObserver | null = null;
 
-function renderDisclosure(group: HTMLElement): HTMLDetailsElement {
+function renderDisclosure(group: HTMLElement, iconPaths: string[]): HTMLDetailsElement {
     const details = document.createElement("details");
     details.className = "export-panel__disclosure";
+    details.open = !isMobileLayout();
     const summary = document.createElement("summary");
     const legend = group.querySelector("legend");
-    summary.textContent = legend?.textContent ?? "";
-    group.setAttribute("aria-label", summary.textContent);
-    legend?.remove();
+    const title = document.createElement("span");
+    title.className = "export-panel__disclosure-title";
+    title.textContent = legend?.textContent ?? "";
+    const icon = buildLucideIcon(iconPaths, 16);
+    icon.classList.add("export-panel__disclosure-icon");
+    icon.setAttribute("aria-hidden", "true");
+    const chevron = buildLucideIcon(["m9 5 7 7-7 7"], 14);
+    chevron.classList.add("export-panel__disclosure-chevron");
+    chevron.setAttribute("aria-hidden", "true");
+    summary.append(icon, title, chevron);
     details.append(summary, group);
     return details;
 }
@@ -420,9 +430,13 @@ function renderOptionsSection(): void {
     videoOnly.appendChild(renderQualityGroup());
     videoOnly.appendChild(renderSpeedGroup());
     videoOnly.appendChild(renderCropGroup());
-    videoOnly.appendChild(renderDisclosure(renderBlurGroup()));
+    videoOnly.appendChild(
+        renderDisclosure(renderBlurGroup(), ["M12 3 4 6v6c0 4 3 7 8 9 5-2 8-5 8-9V6Z", "m9 12 2 2 4-4"]),
+    );
     videoOnly.appendChild(renderToggleGroup());
-    videoOnly.appendChild(renderDisclosure(renderOverlaysGroup()));
+    videoOnly.appendChild(
+        renderDisclosure(renderOverlaysGroup(), ["m12 3 9 5-9 5-9-5Z", "m3 12 9 5 9-5", "m3 16 9 5 9-5"]),
+    );
     const estimate = renderEstimateGroup();
     estimate.id = "export-panel-action-estimate";
     actions.appendChild(estimate);

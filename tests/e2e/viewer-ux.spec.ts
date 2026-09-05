@@ -19,7 +19,7 @@ for (const viewport of [DESKTOP, MOBILE, { width: 360, height: 800 }, { width: 8
         await gotoApp(page);
         await loadTrip(page, SAMPLE_70MAI);
         await openExport(page, false);
-        await expect(page.locator(".export-panel__disclosure[open]")).toHaveCount(0);
+        await expect(page.locator(".export-panel__disclosure[open]")).toHaveCount(viewport === DESKTOP ? 2 : 0);
         const save = page.locator("#export-panel-save-btn");
         await expect(save).toBeInViewport();
         const initial = await boxOf(page, "#export-panel-save-btn");
