@@ -48,11 +48,6 @@ import {
 
 const log = createLogger("map");
 
-// One diagnostic per provider/failure keeps offline tile misses from flooding
-// the log or growing a set of every URL crossed by a long route.
-const seenMapErrors = new Set<string>();
-const seenMiniMapErrors = new Set<string>();
-
 import { isOffline, subscribeConnectivity } from "./connectivity.js";
 import { dom, onActivePlayerEvent } from "./dom.js";
 import { subscribeExportState } from "./export-state.js";
@@ -79,6 +74,7 @@ import {
     OSM_SHORTBREAD_SOURCE_ID,
 } from "./osm-fallback-style.js";
 import { buildMercatorCumulativeDistances, buildSpeedGradient, mercatorY } from "./speed-gradient.js";
+import { addSpeedTrack } from "./map-track.js";
 
 // --- lazy maplibre-gl loading (T9) ---
 //
@@ -636,6 +632,39 @@ function stubMissingStyleImages(map: maplibregl.Map): void {
     });
 }
 
+function observeViewerMap(map: maplibregl.Map, surface: "main" | "mini"): void {
+    // One diagnostic per provider/failure keeps offline tile misses bounded.
+    const seenErrors = new Set<string>();
+    const prefix = surface === "mini" ? "mini " : "";
+    map.on("error", (ev) => {
+        const error = ev?.error || ev;
+        const message = error?.message ?? String(error);
+        reportMapProviderTileError(error);
+        const key = mapProviderErrorKey(error);
+        if (seenErrors.has(key)) return;
+        seenErrors.add(key);
+        log.error(`maplibre ${prefix}error`, error instanceof Error ? error : { message });
+    });
+    // MapLibre restores its style after context loss; style.load redraws the
+    // local track. These handlers only measure whether recovery succeeds.
+    map.on("webglcontextlost", () => {
+        log.warn(`${prefix}webgl context lost`);
+        captureSentryMessage("map webgl context lost", {
+            level: "warning",
+            fingerprint: ["map_webgl_context_lost"],
+            tags: { map: surface },
+        });
+    });
+    map.on("webglcontextrestored", () => {
+        log.info(`${prefix}webgl context restored`);
+        captureSentryMessage("map webgl context restored", {
+            fingerprint: ["map_webgl_context_restored"],
+            tags: { map: surface },
+        });
+    });
+    stubMissingStyleImages(map);
+}
+
 // Set once when MapLibre cannot get a WebGL context (blocklisted/ancient GPU,
 // hardware acceleration off). Map + mini-map are then skipped, the in-panel
 // notice is shown, and every map-dependent path no-ops via the existing
@@ -754,43 +783,7 @@ export function ensureMap(): maplibregl.Map | null {
         state.mapReady = false;
     });
 
-    // Dedup per message: MapLibre fires error per failed tile fetch, so one
-    // unique message is logged once; repeats are dropped to protect the ring
-    // buffer (hot-path logging rule).
-    map.on("error", (ev) => {
-        const e = ev?.error || ev;
-        const message = e?.message ?? String(e);
-        reportMapProviderTileError(e);
-        const errorKey = mapProviderErrorKey(e);
-        if (seenMapErrors.has(errorKey)) return;
-        seenMapErrors.add(errorKey);
-        log.error("maplibre error", e instanceof Error ? e : { message });
-    });
-
-    // WebGL context loss (GPU process crash/reset; seen on Linux Chrome under
-    // heavy WebCodecs load). MapLibre self-heals: it stashes the style on loss
-    // and re-applies it on restore, which fires our style.load handler and
-    // redraws the track - nothing to rebuild here. These handlers exist for
-    // observability: the paired Sentry messages measure how often a loss
-    // happens and whether it recovers (the raw symptom - an unhandled empty-log
-    // shader-compile throw from MapLibre's rAF - is filtered in sentry-init.ts).
-    map.on("webglcontextlost", () => {
-        log.warn("webgl context lost");
-        captureSentryMessage("map webgl context lost", {
-            level: "warning",
-            fingerprint: ["map_webgl_context_lost"],
-            tags: { map: "main" },
-        });
-    });
-    map.on("webglcontextrestored", () => {
-        log.info("webgl context restored");
-        captureSentryMessage("map webgl context restored", {
-            fingerprint: ["map_webgl_context_restored"],
-            tags: { map: "main" },
-        });
-    });
-
-    stubMissingStyleImages(map);
+    observeViewerMap(map, "main");
 
     // Cache the container size for the follow loop (teleport guard). The
     // initial read is off the hot path; MapLibre fires 'resize' for both
@@ -1018,36 +1011,7 @@ export function ensureMiniMap(): maplibregl.Map | null {
         state.miniMapReady = false;
     });
 
-    mini.on("error", (ev) => {
-        const e = ev?.error || ev;
-        const message = e?.message ?? String(e);
-        reportMapProviderTileError(e);
-        const errorKey = mapProviderErrorKey(e);
-        if (seenMiniMapErrors.has(errorKey)) return;
-        seenMiniMapErrors.add(errorKey);
-        log.error("maplibre mini error", e instanceof Error ? e : { message });
-    });
-
-    // Same context-loss observability as the large map (see ensureMap). A GPU
-    // crash kills both contexts at once; a single-context eviction can hit just
-    // one - the map tag tells them apart in Sentry.
-    mini.on("webglcontextlost", () => {
-        log.warn("mini webgl context lost");
-        captureSentryMessage("map webgl context lost", {
-            level: "warning",
-            fingerprint: ["map_webgl_context_lost"],
-            tags: { map: "mini" },
-        });
-    });
-    mini.on("webglcontextrestored", () => {
-        log.info("mini webgl context restored");
-        captureSentryMessage("map webgl context restored", {
-            fingerprint: ["map_webgl_context_restored"],
-            tags: { map: "mini" },
-        });
-    });
-
-    stubMissingStyleImages(mini);
+    observeViewerMap(mini, "mini");
 
     // After every style change on the mini-map all sources/layers/markers are
     // cleared. Redraw from the snapshot in state.miniMapData - needed when
@@ -1151,25 +1115,16 @@ function isLoopRoute(start: LngLatTuple, end: LngLatTuple, bounds: maplibregl.Ln
     return startEndDist / diag < 0.3;
 }
 
-/**
- * Trip state update when the map cannot render (no WebGL). Mirrors the
- * GPS-presence decisions refreshMap makes - state.hasTrack and the View-menu
- * chart/strip availability - minus everything that touches the map. Keeps the
- * speed chart and inferred-event strip fully working without a map. applyMapLayout
- * shows the "map unavailable" notice in the map slot when GPS exists.
- */
-function refreshMapless(trip: Trip | null): void {
-    const hasUsableGps = (trip?.records ?? []).some(
-        (r) => r.active && Number.isFinite(r.lat) && Number.isFinite(r.lon),
-    );
-    state.hasTrack = hasUsableGps;
-    // The map row stays unavailable for the whole session - there is no WebGL.
-    setPanelAvailable("map", false);
-    setPanelAvailable("chart", hasUsableGps || hasAccelData(trip?.records ?? []));
-    setPanelAvailable("strip", hasUsableGps || hasAccelData(trip?.records ?? []));
+/** GPS and accelerometer panels stay usable even when WebGL is unavailable. */
+function syncMapPanels(trip: Trip | null, recordCount: number): void {
+    state.hasTrack = recordCount > 0;
+    const hasTelemetry = state.hasTrack || hasAccelData(trip?.records ?? []);
+    setPanelAvailable("map", state.hasTrack && state.map !== null);
+    setPanelAvailable("chart", hasTelemetry);
+    setPanelAvailable("strip", hasTelemetry);
     applyMapLayout();
     callbacks.onChartLayoutChange();
-    emitLifecycle("map-tracks-rendered", { recordCount: hasUsableGps ? (trip?.records.length ?? 0) : 0 });
+    emitLifecycle("map-tracks-rendered", { recordCount });
 }
 
 export function refreshMap(trip: Trip | null): void {
@@ -1178,7 +1133,9 @@ export function refreshMap(trip: Trip | null): void {
         // No WebGL: the map can't render, but the chart + inferred strip depend
         // only on GPS data and must still work. Drive their state without
         // touching the (absent) map.
-        refreshMapless(trip);
+        const records = trip?.records ?? [];
+        const hasUsableGps = records.some((r) => r.active && Number.isFinite(r.lat) && Number.isFinite(r.lon));
+        syncMapPanels(trip, hasUsableGps ? records.length : 0);
         return;
     }
     // style.load permits local source/layer writes. isStyleLoaded(), load and
@@ -1275,17 +1232,7 @@ export function refreshMap(trip: Trip | null): void {
         // the map, the source would stay registered in MapLibre's style.
         refreshEventsLayer(map, null);
         refreshMiniMap(null);
-        state.hasTrack = false;
-        // GPS and accelerometer availability are independent. Preserve panel preferences.
-        setPanelAvailable("map", false);
-        const hasAccel = hasAccelData(trip?.records ?? []);
-        setPanelAvailable("chart", hasAccel);
-        setPanelAvailable("strip", hasAccel);
-        applyMapLayout();
-        callbacks.onChartLayoutChange();
-        // Lifecycle: stage finished. We still fire the event so external
-        // observers (perf harness) don't wait forever on tracks-less trips.
-        emitLifecycle("map-tracks-rendered", { recordCount: 0 });
+        syncMapPanels(trip, 0);
         return;
     }
 
@@ -1317,28 +1264,7 @@ export function refreshMap(trip: Trip | null): void {
     trackCumDist = trailProgress.cumDist;
     trackTotalDist = trailProgress.total;
 
-    // lineMetrics:true enables line-progress for line-gradient.
-    map.addSource(TRIP_SOURCE_ID, {
-        type: "geojson",
-        lineMetrics: true,
-        data: {
-            type: "Feature",
-            geometry: { type: "LineString", coordinates: coords },
-            properties: {},
-        },
-    });
-    // Base track layer: speed gradient over the whole route.
-    map.addLayer({
-        id: TRIP_SOURCE_ID,
-        type: "line",
-        source: TRIP_SOURCE_ID,
-        layout: { "line-join": "round", "line-cap": "round" },
-        paint: {
-            "line-width": 4,
-            "line-opacity": 0.9,
-            "line-gradient": gradient as never,
-        },
-    });
+    addSpeedTrack(map, { coords, gradient }, { sourceId: TRIP_SOURCE_ID, width: 4, opacity: 0.9 });
     // Trail overlay: same geometry, line-gradient is a 4-stop transparent ->
     // dim mask. setTrailProgress() rewrites it on every rAF tick so the un-
     // driven part of the track fades toward the map background. The driven
@@ -1420,20 +1346,7 @@ export function refreshMap(trip: Trip | null): void {
     // UX-19: event dots on the large map only - mini-map is too small to read them.
     refreshEventsLayer(map, trip);
 
-    // Track present - show maps and icons.
-    state.hasTrack = true;
-    setPanelAvailable("map", true);
-    setPanelAvailable("chart", true);
-    setPanelAvailable("strip", true);
-    applyMapLayout();
-    // chart-layout removes the no-gps class, making the chart visible again.
-    callbacks.onChartLayoutChange();
-
-    // Lifecycle: the polyline + markers + mini-map are committed to the map.
-    // Subscribers (perf harness) pair this with trip-activated to time map
-    // rendering. Tracks-less branch above returns early - that case does not
-    // fire the event (there is nothing to render).
-    emitLifecycle("map-tracks-rendered", { recordCount: dedupedRecs.length });
+    syncMapPanels(trip, dedupedRecs.length);
 }
 
 // -- Named handlers for delegated map.on(type, layerId) listeners. -----------
@@ -1595,29 +1508,10 @@ function refreshMiniMap(data: MiniMapData | null): void {
     }
 
     if (!data || data.coords.length === 0) return;
-    const { coords, gradient } = data;
+    const { coords } = data;
 
-    mini.addSource(TRIP_SOURCE_ID, {
-        type: "geojson",
-        lineMetrics: true,
-        data: {
-            type: "Feature",
-            geometry: { type: "LineString", coordinates: coords },
-            properties: {},
-        },
-    });
     // Thinner line on mini-map: at small scale a 4 px line turns into a blob.
-    mini.addLayer({
-        id: TRIP_SOURCE_ID,
-        type: "line",
-        source: TRIP_SOURCE_ID,
-        layout: { "line-join": "round", "line-cap": "round" },
-        paint: {
-            "line-width": 3,
-            "line-opacity": 0.95,
-            "line-gradient": gradient as never,
-        },
-    });
+    addSpeedTrack(mini, data, { sourceId: TRIP_SOURCE_ID, width: 3, opacity: 0.95 });
 
     state.miniMapMarker = new mlg!.Marker({
         element: buildCarMarkerElement(),

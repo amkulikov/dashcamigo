@@ -51,6 +51,8 @@ import {
     subscribeMapProvider,
 } from "./map-provider.js";
 import { transformMapTileRequest } from "./map-tile-cache.js";
+import { waitForMapEvent } from "./map-events.js";
+import { addSpeedTrack } from "./map-track.js";
 
 const log = createLogger("export-map-snapshot");
 
@@ -426,16 +428,18 @@ export async function createExportMapSnapshotter(
             // Per-waypoint bearing (only in chase) so the tilted frustum we cache
             // points the same way the per-frame snapshot will; pitch extends it
             // forward to the horizon, which is the tiles a top-down walk misses.
-            await jumpAndIdle(
-                map,
-                lastLat,
-                lastLon,
-                targetZoom,
-                signal,
-                4000,
-                headingUp ? usable[0]!.bearingDeg : 0,
-                pitch,
-            );
+            const visit = (record: GpsRecord, timeoutMs: number): Promise<void> =>
+                waitForMapEvent(map, "idle", timeoutMs, {
+                    signal,
+                    start: () =>
+                        map.jumpTo({
+                            center: [record.lon, record.lat],
+                            zoom: targetZoom,
+                            bearing: headingUp ? record.bearingDeg : 0,
+                            pitch,
+                        }),
+                });
+            await visit(usable[0]!, 4000);
             for (const r of usable) {
                 if (signal.aborted) throw new DOMException("aborted", "AbortError");
                 if (Date.now() - startedAtMs > PREWARM_BUDGET_MS) {
@@ -447,7 +451,7 @@ export async function createExportMapSnapshotter(
                     break;
                 }
                 if (distanceM(lastLat, lastLon, r.lat, r.lon) < stepMeters) continue;
-                await jumpAndIdle(map, r.lat, r.lon, targetZoom, signal, 2000, headingUp ? r.bearingDeg : 0, pitch);
+                await visit(r, 2000);
                 lastLat = r.lat;
                 lastLon = r.lon;
             }
@@ -500,7 +504,7 @@ export async function createExportMapSnapshotter(
             // it waits for idle (tiles loaded) instead, capped so a down tile
             // server still resolves on the blank layer per the offline invariant.
             if (opts?.waitForIdle) {
-                await waitForIdleOrTimeout(map, 2500);
+                await waitForMapEvent(map, "idle", 2500);
             } else {
                 // Export hot loop: force a SYNCHRONOUS paint instead of awaiting a
                 // whole requestAnimationFrame for the next 'render' event. redraw()
@@ -519,7 +523,7 @@ export async function createExportMapSnapshotter(
                 // render. This keeps us strictly no worse than the old 80ms wait on
                 // the rare gray-fill frame, while the common case pays zero wait.
                 if (!map.areTilesLoaded()) {
-                    await waitForRenderOrTimeout(map, 30);
+                    await waitForMapEvent(map, "render", 30);
                     map.redraw();
                 }
             }
@@ -542,34 +546,18 @@ export async function createExportMapSnapshotter(
             // the car points straight up (screen bearing 0) and sits wherever the
             // tilted, padded projection puts it - map.project() returns that exact
             // CSS pixel; scale it to drawing-buffer pixels for the composite.
-            if (headingUp) {
-                const ratioX = composite.width / SNAPSHOT_WIDTH;
-                const ratioY = composite.height / SNAPSHOT_HEIGHT;
-                const pt = map.project([req.lon, req.lat]);
-                await drawMapMarker(
-                    cctx,
-                    activeMarkerAppearance,
-                    pt.x * ratioX,
-                    pt.y * ratioY,
-                    0,
-                    Math.min(composite.width, composite.height) *
-                        0.105 *
-                        mapMarkerSizeScale(activeMarkerAppearance.size),
-                    pitch,
-                );
-            } else {
-                await drawMapMarker(
-                    cctx,
-                    activeMarkerAppearance,
-                    composite.width / 2,
-                    composite.height / 2,
-                    req.bearingDeg,
-                    Math.min(composite.width, composite.height) *
-                        0.105 *
-                        mapMarkerSizeScale(activeMarkerAppearance.size),
-                    pitch,
-                );
-            }
+            const markerPoint = headingUp
+                ? map.project([req.lon, req.lat])
+                : { x: SNAPSHOT_WIDTH / 2, y: SNAPSHOT_HEIGHT / 2 };
+            await drawMapMarker(
+                cctx,
+                activeMarkerAppearance,
+                markerPoint.x * (composite.width / SNAPSHOT_WIDTH),
+                markerPoint.y * (composite.height / SNAPSHOT_HEIGHT),
+                headingUp ? 0 : req.bearingDeg,
+                Math.min(composite.width, composite.height) * 0.105 * mapMarkerSizeScale(activeMarkerAppearance.size),
+                pitch,
+            );
 
             return await createImageBitmap(composite);
         },
@@ -621,94 +609,6 @@ function waitForStyleLoad(map: maplibregl.Map, style?: maplibregl.StyleSpecifica
 // JSON parsing must settle even if the WebGL context disappears during setup.
 const MAP_LOAD_TIMEOUT_MS = 20_000;
 
-/**
- * Centers + zooms the map, then waits for `idle` (all tiles loaded + no
- * animation in flight) up to timeoutMs. Used by prewarm where we genuinely
- * want full tile coverage at each waypoint before moving on.
- */
-function jumpAndIdle(
-    map: maplibregl.Map,
-    lat: number,
-    lon: number,
-    zoom: number,
-    signal: AbortSignal,
-    timeoutMs: number,
-    bearing = 0,
-    pitch = 0,
-): Promise<void> {
-    return new Promise((resolve, reject) => {
-        if (signal.aborted) {
-            reject(new DOMException("aborted", "AbortError"));
-            return;
-        }
-        let done = false;
-        const finish = (): void => {
-            if (done) return;
-            done = true;
-            map.off("idle", finish);
-            signal.removeEventListener("abort", abortHandler);
-            clearTimeout(timeoutId);
-            resolve();
-        };
-        const abortHandler = (): void => {
-            if (done) return;
-            done = true;
-            map.off("idle", finish);
-            clearTimeout(timeoutId);
-            reject(new DOMException("aborted", "AbortError"));
-        };
-        const timeoutId = setTimeout(finish, timeoutMs);
-        signal.addEventListener("abort", abortHandler, { once: true });
-        map.once("idle", finish);
-        map.jumpTo({ center: [lon, lat], zoom, bearing, pitch });
-    });
-}
-
-/**
- * Hot-loop wait: resolves on the first 'render' event OR after timeoutMs.
- * We do not wait for full `idle` here - sub-pixel tile decoding can push idle
- * beyond a couple of seconds on a slow link, which would stall the encode
- * loop. The render after jumpTo paints whatever tiles are currently in
- * memory; missing tiles appear as light gray fills, which is acceptable on a
- * <1% of frames during long sustained pans.
- */
-function waitForRenderOrTimeout(map: maplibregl.Map, timeoutMs: number): Promise<void> {
-    return new Promise((resolve) => {
-        let done = false;
-        const finish = (): void => {
-            if (done) return;
-            done = true;
-            map.off("render", finish);
-            clearTimeout(timeoutId);
-            resolve();
-        };
-        const timeoutId = setTimeout(finish, timeoutMs);
-        map.once("render", finish);
-    });
-}
-
-/**
- * Resolves on the first 'idle' (all tiles for the current view loaded and
- * painted) OR after timeoutMs. Used by the preview snapshot, which is a
- * one-shot per playhead move - it can afford to wait for tiles, unlike the
- * export hot loop. The timeout caps the wait so a down tile server (idle never
- * fires) still resolves on the blank base layer.
- */
-function waitForIdleOrTimeout(map: maplibregl.Map, timeoutMs: number): Promise<void> {
-    return new Promise((resolve) => {
-        let done = false;
-        const finish = (): void => {
-            if (done) return;
-            done = true;
-            map.off("idle", finish);
-            clearTimeout(timeoutId);
-            resolve();
-        };
-        const timeoutId = setTimeout(finish, timeoutMs);
-        map.once("idle", finish);
-    });
-}
-
 /** Active records with finite coords - the only ones safe to feed to MapLibre
  *  (geometry, gradient, prewarm jumps). trip.records may carry inactive
  *  lost-fix entries with stale/zero/NaN coords; the main map filters the same
@@ -723,29 +623,10 @@ function addTrackLayer(map: maplibregl.Map, records: GpsRecord[]): void {
     const usable = finiteActiveRecords(records);
     if (usable.length < 2) return;
     const coords: [number, number][] = usable.map((r) => [r.lon, r.lat]);
-    map.addSource(TRACK_SOURCE_ID, {
-        type: "geojson",
-        // lineMetrics=true is required for line-gradient (line-progress driver).
-        lineMetrics: true,
-        data: {
-            type: "Feature",
-            properties: {},
-            geometry: { type: "LineString", coordinates: coords },
-        },
-    });
     // Same usable list for geometry AND gradient so line-progress stops align
     // with the actual line vertices; mercator cumdist so the stop fractions use
     // the same metric MapLibre measures line-progress in.
     const { cumDist, total } = buildMercatorCumulativeDistances(usable);
     const gradient = buildSpeedGradient(usable, cumDist, total);
-    map.addLayer({
-        id: TRACK_LAYER_ID,
-        type: "line",
-        source: TRACK_SOURCE_ID,
-        layout: { "line-join": "round", "line-cap": "round" },
-        paint: {
-            "line-width": 5,
-            "line-gradient": gradient as never,
-        },
-    });
+    addSpeedTrack(map, { coords, gradient }, { sourceId: TRACK_SOURCE_ID, layerId: TRACK_LAYER_ID, width: 5 });
 }
