@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-09-05.2",
+        category: "improvement",
+        text: {
+            en: "Updated the interface and simplified common actions.",
+            ru: "Обновлён интерфейс и упрощены основные действия.",
+            de: "Die Oberfläche wurde überarbeitet und häufige Aktionen wurden vereinfacht.",
+            es: "Se actualizó la interfaz y se simplificaron las acciones habituales.",
+            fr: "L’interface a été revue et les actions courantes simplifiées.",
+            pl: "Odświeżono interfejs i uproszczono często wykonywane czynności.",
+            pt: "A interface foi atualizada e as ações comuns foram simplificadas.",
+            zh: "更新了界面，简化了常用操作。",
+            ja: "画面を更新し、よく使う操作をシンプルにしました。",
+            ko: "화면 구성을 개편하고 자주 쓰는 조작을 간소화했습니다.",
+        },
+    },
+    {
         id: "2026-09-05.1",
         category: "support",
         text: {

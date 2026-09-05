@@ -9,6 +9,7 @@ release tag. Localized texts ship inside the app (the "What's new" panel).
 
 ## 2026-09-05
 
+- **Improved:** Updated the interface and simplified common actions.
 - **New camera support:** Added GPS track and speed for iZEEKER iD300 recordings.
 
 ## 2026-09-03
