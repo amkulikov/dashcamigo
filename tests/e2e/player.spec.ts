@@ -194,6 +194,13 @@ test.describe("player", () => {
     });
 
     test("capture button downloads a JPEG frame", async ({ page }) => {
+        // The viewer can appear before the initial video attachment settles.
+        // Capture a paused, playable frame outside any source/seek transition.
+        const play = page.locator("#player-play");
+        if ((await play.getAttribute("data-paused")) === "false") await play.click();
+        await expect(play).toHaveAttribute("data-paused", "true");
+        await seekToTripStart(page);
+
         const downloadPromise = page.waitForEvent("download", { timeout: 10_000 });
         await page.locator("#player-capture").click();
         const dl = await downloadPromise;
