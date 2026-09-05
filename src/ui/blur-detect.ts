@@ -36,7 +36,7 @@ import {
 
 import {
     type BlurAssetGroupId,
-    blurAssetsNeedDownload,
+    blurAssetsReady,
     downloadBlurAssets,
     FACE_MODEL_URL,
     PLATE_MODEL_URL,
@@ -371,9 +371,8 @@ function scheduleEnsureDetectPass(): void {
 /**
  * Reconciles the running pass with the current params: cancels a pass whose
  * key (or trip) no longer matches, starts one when enabled kinds have no fresh
- * result. No-op when everything matches, and while the models still need a
- * consent download (the panel's strip owns that; starting a pass here would
- * make the worker pull megabytes the user never agreed to).
+ * result. The panel owns asset warming and its cancellation; starting a worker
+ * before warming finishes would bypass the progress strip and its Cancel button.
  */
 export function ensureDetectPass(opts?: { auto?: boolean }): void {
     const trip = activeTrip();
@@ -396,7 +395,7 @@ function ensureDetectPassFor(
 ): void {
     if (opts?.auto && lastFailedRun?.trip === trip && lastFailedRun.key === params.key) return; // no auto retry loops
     if (!opts?.auto) lastFailedRun = null;
-    if (blurAssetsNeedDownload(detectAssetGroups(params.kinds))) return;
+    if (!blurAssetsReady(detectAssetGroups(params.kinds))) return;
     if (running) {
         if (running.trip === trip && running.key === params.key) {
             if (opts?.protectForExport) running.exportProtected = true;
@@ -432,7 +431,7 @@ export async function ensureDetectRegionsForExport(
     // with the checkbox on counts as the go-ahead - the strip already told the
     // user the size, and the pass right after makes the download visible.
     const assetGroups = detectAssetGroups(params.kinds);
-    if (blurAssetsNeedDownload(assetGroups)) {
+    if (!blurAssetsReady(assetGroups)) {
         const ok = await downloadBlurAssets(assetGroups, signal);
         if (signal.aborted) throw new DOMException("aborted", "AbortError");
         if (!ok) throw new Error("detect model download failed");

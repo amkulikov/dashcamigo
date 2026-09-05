@@ -17,7 +17,6 @@
 // remembered per FILE in localStorage. No UI here - the panel subscribes.
 
 import { createLogger } from "../log.js";
-import { isOffline } from "./connectivity.js";
 
 const log = createLogger("blur-assets");
 
@@ -140,9 +139,11 @@ export interface BlurAssetsState {
 
 const stateRef: BlurAssetsState = { phase: "idle", progress: 0, activeGroups: null };
 
-// URLs fully drained THIS session - the strong readiness signal (bytes are in
-// the HTTP/SW cache for sure, a worker fetch will not hit the network).
+// URLs fully drained this session. Storage remains best-effort: the browser
+// can evict cached responses independently of the download history.
 const sessionWarmed = new Set<string>();
+const cachedAssets = new Set<string>();
+let cacheCheck: Promise<void> | null = null;
 
 type Listener = () => void;
 const listeners = new Set<Listener>();
@@ -150,7 +151,23 @@ const listeners = new Set<Listener>();
 /** Subscribes to readiness/progress changes (panel strip re-render hook). */
 export function subscribeBlurAssets(listener: Listener): () => void {
     listeners.add(listener);
+    cacheCheck ??= checkCachedAssets();
     return () => listeners.delete(listener);
+}
+
+async function checkCachedAssets(): Promise<void> {
+    if (typeof caches === "undefined") return;
+    try {
+        for (const { url } of assetsOf(["track", "detect-plate", "detect-face"])) {
+            const response = await caches.match(url);
+            if (response && isAssetResponse(response)) cachedAssets.add(url);
+        }
+        // Download history can be missing even though Cache Storage survived.
+        // Notify after the scan so cached features become available offline.
+        if (cachedAssets.size > 0) emit();
+    } catch (err) {
+        log.warn("blur asset cache check failed", { error: err instanceof Error ? err.message : String(err) });
+    }
 }
 
 function emit(): void {
@@ -204,6 +221,15 @@ function rememberDownloaded(url: string): void {
     }
 }
 
+function forgetDownloaded(url: string): void {
+    cachedAssets.delete(url);
+    try {
+        localStorage.removeItem(ASSET_DOWNLOADED_KEY_PREFIX + url);
+    } catch {
+        // Storage may be disabled independently of Cache Storage.
+    }
+}
+
 /** True once every asset of `groups` is warmed this session - the pass can run
  *  without any wait. */
 export function blurAssetsReady(groups: readonly BlurAssetGroupId[]): boolean {
@@ -218,28 +244,52 @@ export function blurAssetsReady(groups: readonly BlurAssetGroupId[]): boolean {
  * "~N MB" consent prompt.
  */
 export function blurAssetsNeedDownload(groups: readonly BlurAssetGroupId[]): boolean {
-    return assetsOf(groups).some((a) => !sessionWarmed.has(a.url) && !everDownloaded(a.url));
+    return assetsOf(groups).some(
+        (a) => !sessionWarmed.has(a.url) && !cachedAssets.has(a.url) && !everDownloaded(a.url),
+    );
 }
 
 /** Rounded MB the consent prompt should quote: only the files this device has
  *  never pulled. Display only. */
 export function blurAssetsDownloadMb(groups: readonly BlurAssetGroupId[]): number {
     const mb = assetsOf(groups)
-        .filter((a) => !sessionWarmed.has(a.url) && !everDownloaded(a.url))
+        .filter((a) => !sessionWarmed.has(a.url) && !cachedAssets.has(a.url) && !everDownloaded(a.url))
         .reduce((sum, a) => sum + a.approxMb, 0);
     return Math.max(1, Math.round(mb));
 }
 
-/**
- * True when a pass cannot be satisfied: some asset is not cached anywhere on
- * this device and there is no connection to fetch it. The only honest answer is
- * "reconnect once". A device that HAS cached everything stays usable offline.
- */
+/** Hard offline prevents a first download. Saved history or cached responses
+ *  allow a warm attempt; a failed attempt corrects stale download history. */
 export function blurAssetsBlockedOffline(groups: readonly BlurAssetGroupId[]): boolean {
-    return blurAssetsNeedDownload(groups) && isOffline();
+    // A tile-provider outage says nothing about these same-origin files.
+    return blurAssetsNeedDownload(groups) && navigator.onLine === false;
 }
 
 let inFlight: Promise<boolean> | null = null;
+
+async function waitForWarm(pending: Promise<unknown>, signal?: AbortSignal): Promise<boolean> {
+    if (signal?.aborted) return false;
+    if (!signal) {
+        await pending;
+        return true;
+    }
+    let onAbort!: () => void;
+    const cancelled = new Promise<false>((resolve) => {
+        onAbort = () => resolve(false);
+        signal.addEventListener("abort", onAbort, { once: true });
+    });
+    try {
+        return await Promise.race([pending.then(() => true), cancelled]);
+    } finally {
+        signal.removeEventListener("abort", onAbort);
+    }
+}
+
+export interface BlurAssetDownloadOptions {
+    /** False limits automatic warming to files already downloaded, after
+     *  awaiting cache discovery. Explicit downloads allow new files. */
+    canDownloadNew?: boolean;
+}
 
 /**
  * Warms the groups' assets into cache with a determinate progress bar, updating
@@ -251,16 +301,22 @@ let inFlight: Promise<boolean> | null = null;
  * first - warms are serial, and a follow-up request usually finds its shared
  * files already warmed. Safe to call when already ready (resolves true).
  */
-export async function downloadBlurAssets(groups: readonly BlurAssetGroupId[], signal?: AbortSignal): Promise<boolean> {
+export async function downloadBlurAssets(
+    groups: readonly BlurAssetGroupId[],
+    signal?: AbortSignal,
+    options?: BlurAssetDownloadOptions,
+): Promise<boolean> {
+    cacheCheck ??= checkCachedAssets();
+    if (!(await waitForWarm(cacheCheck, signal))) return false;
     // Serialize behind any in-flight warm (shared files make overlap wasteful
     // and the progress bar ambiguous). Loop: the finished warm may have covered
     // us entirely, or not at all.
     while (inFlight) {
-        await inFlight.catch(() => undefined);
-        if (signal?.aborted) return false;
+        if (!(await waitForWarm(inFlight, signal))) return false;
     }
     if (blurAssetsReady(groups)) return true;
-    // Known-offline (hard offline, or map-detected limbo): do not even start.
+    if (options?.canDownloadNew === false && blurAssetsNeedDownload(groups)) return false;
+    // Hard offline with no downloaded assets: do not even start.
     // Leave the phase at idle - the panel shows the offline story live, and a
     // reconnect lets the very next click through.
     if (blurAssetsBlockedOffline(groups)) return false;
@@ -273,12 +329,12 @@ export async function downloadBlurAssets(groups: readonly BlurAssetGroupId[], si
             // A user cancel resets cleanly; anything else (network drop, a stalled
             // limbo fetch that hit WARM_STALL_TIMEOUT_MS) is an error the strip
             // can retry. Offline-ness is re-derived live, not pinned to a phase.
-            if ((err as DOMException)?.name === "AbortError") {
+            if (err instanceof Error && err.name === "AbortError") {
                 setState("idle", 0, null);
                 return false;
             }
             setState("error", 0, stateRef.activeGroups);
-            log.warn("blur asset download failed", { groups, err: String(err) });
+            log.warn("blur asset download failed", { groups, error: err instanceof Error ? err.message : String(err) });
             return false;
         })
         .finally(() => {
@@ -299,9 +355,14 @@ async function warmAll(groups: readonly BlurAssetGroupId[], signal?: AbortSignal
     setState("downloading", 0, groups);
     let baseMb = 0;
     for (const asset of todo) {
-        await warmOne(asset.url, signal, (frac) => {
-            setState("downloading", Math.min(1, (baseMb + asset.approxMb * frac) / totalMb), groups);
-        });
+        try {
+            await warmOne(asset.url, signal, (frac) => {
+                setState("downloading", Math.min(1, (baseMb + asset.approxMb * frac) / totalMb), groups);
+            });
+        } catch (err) {
+            if (!(err instanceof Error && err.name === "AbortError")) forgetDownloaded(asset.url);
+            throw err;
+        }
         sessionWarmed.add(asset.url);
         rememberDownloaded(asset.url);
         baseMb += asset.approxMb;
@@ -309,9 +370,8 @@ async function warmAll(groups: readonly BlurAssetGroupId[], signal?: AbortSignal
     }
 }
 
-/** Streams one asset, reporting 0..1 of ITS bytes. Draining the stream to the
- *  end is what forces the browser (and the SW's stale-while-revalidate) to store
- *  the complete response, so the worker's later fetch is a cache hit.
+/** Streams one asset, reporting 0..1 of its bytes. Read the complete response
+ *  before marking it ready so an interrupted download remains retriable.
  *
  *  Bounded by a per-chunk stall timeout: the fetch is aborted if no bytes (or
  *  no response headers) arrive within WARM_STALL_TIMEOUT_MS, so a limbo hang
@@ -331,7 +391,7 @@ async function warmOne(url: string, signal: AbortSignal | undefined, onFrac: (fr
     armStall();
     try {
         const res = await fetch(url, { signal: merged });
-        if (!res.ok || !res.body) {
+        if (!isAssetResponse(res) || !res.body) {
             throw new Error(`blur asset ${url}: ${res.status}`);
         }
         const total = Number(res.headers.get("content-length")) || 0;
@@ -350,4 +410,20 @@ async function warmOne(url: string, signal: AbortSignal | undefined, onFrac: (fr
     } finally {
         if (stallTimer) clearTimeout(stallTimer);
     }
+}
+
+function isAssetResponse(response: Response): boolean {
+    return (
+        response.status === 200 &&
+        !/\b(?:text\/html|application\/xhtml\+xml)\b/i.test(response.headers.get("content-type") ?? "")
+    );
+}
+
+export function _resetForTests(): void {
+    sessionWarmed.clear();
+    cachedAssets.clear();
+    cacheCheck = null;
+    inFlight = null;
+    listeners.clear();
+    setState("idle", 0, null);
 }

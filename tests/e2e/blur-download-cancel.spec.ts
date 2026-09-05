@@ -1,0 +1,156 @@
+import type { Page } from "@playwright/test";
+import { computeTrackerAssets } from "../../vite-plugins/tracker-assets.js";
+import { DESKTOP, expect, gotoApp, loadTrip, openExport, presetLocalStorage, test } from "./_fixtures.js";
+
+const assets = computeTrackerAssets("build");
+const runtimeUrl = `${assets.app.ortDir}ort-wasm-simd-threaded.asyncify.wasm`;
+const faceUrl = assets.app.models.face;
+
+test.use({ serviceWorkers: "block" });
+
+async function openDetection(page: Page, { delayedCache = false } = {}): Promise<void> {
+    await page.clock.install();
+    await presetLocalStorage(page);
+    await page.setViewportSize(DESKTOP);
+    await page.addInitScript(
+        ({ urls, gatedUrls, delayedCache }) => {
+            // The download gate runs before inference and must work without a
+            // physical GPU. A worker starting during this test is a failure.
+            Object.defineProperty(navigator, "gpu", {
+                value: { requestAdapter: async () => ({}) },
+                configurable: true,
+            });
+            if (delayedCache) {
+                const discovered = new Promise<void>((resolve) => {
+                    window.addEventListener("e2e:release-blur-cache", () => resolve(), { once: true });
+                });
+                const nativeCacheMatch = caches.match.bind(caches);
+                caches.match = async (input, options) => {
+                    const url = new URL(input instanceof Request ? input.url : String(input), location.href).pathname;
+                    if (!urls.includes(url)) return nativeCacheMatch(input, options);
+                    await discovered;
+                    return new Response(new Uint8Array([1, 2, 3]));
+                };
+            } else {
+                for (const url of urls) localStorage.setItem(`dashcamigo:blurAssetDownloaded:${url}`, "1");
+            }
+            const nativeFetch = window.fetch.bind(window);
+            const requests: string[] = [];
+            const aborted: string[] = [];
+            window.fetch = (input, init) => {
+                const url = new URL(input instanceof Request ? input.url : String(input), location.href).pathname;
+                if (!urls.includes(url)) return nativeFetch(input, init);
+                requests.push(url);
+                document.documentElement.dataset.blurWarmRequests = JSON.stringify(requests);
+                if (!gatedUrls.includes(url)) return nativeFetch(input, init);
+                const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
+                return new Promise<Response>((resolve, reject) => {
+                    const cleanup = (): void => {
+                        signal?.removeEventListener("abort", onAbort);
+                        window.removeEventListener("e2e:release-blur-asset", onRelease);
+                    };
+                    const onAbort = (): void => {
+                        cleanup();
+                        aborted.push(url);
+                        document.documentElement.dataset.blurWarmAborted = JSON.stringify(aborted);
+                        reject(signal?.reason ?? new DOMException("aborted", "AbortError"));
+                    };
+                    const onRelease = (event: Event): void => {
+                        if (!(event instanceof CustomEvent) || event.detail !== url) return;
+                        cleanup();
+                        resolve(nativeFetch(input, init));
+                    };
+                    signal?.addEventListener("abort", onAbort, { once: true });
+                    window.addEventListener("e2e:release-blur-asset", onRelease);
+                    if (signal?.aborted) onAbort();
+                });
+            };
+        },
+        { urls: assets.urls, gatedUrls: [runtimeUrl, faceUrl], delayedCache },
+    );
+    await gotoApp(page, "en");
+    await loadTrip(page);
+    await openExport(page);
+}
+
+test("Cancel stops a remembered download and its queued checkbox without starting detection", async ({ page }) => {
+    const trackerWorkers: string[] = [];
+    page.on("worker", (worker) => {
+        if (worker.url().includes("tracker-worker-")) trackerWorkers.push(worker.url());
+    });
+    await openDetection(page);
+    await page.locator("#export-panel-blur-plates").check();
+    const strip = page.locator(".export-panel__blur-detect-strip");
+    await expect(strip.getByRole("progressbar")).toBeVisible();
+    await page.locator("#export-panel-blur-faces").check();
+    await page.clock.fastForward(2000);
+    expect(trackerWorkers, "the debounce cannot bypass an unfinished warm").toEqual([]);
+    await strip.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-blur-warm-aborted", JSON.stringify([runtimeUrl]));
+    await expect(strip).toBeHidden();
+    await page.clock.fastForward(2000);
+    await expect(page.locator("html")).toHaveAttribute("data-blur-warm-requests", JSON.stringify([runtimeUrl]));
+    expect(trackerWorkers, "Cancel also prevents the queued detection pass").toEqual([]);
+});
+
+test("a second checkbox warms its model after the first download and remains cancellable", async ({ page }) => {
+    const trackerWorkers: string[] = [];
+    page.on("worker", (worker) => {
+        if (worker.url().includes("tracker-worker-")) trackerWorkers.push(worker.url());
+    });
+    await openDetection(page);
+    await page.locator("#export-panel-blur-plates").check();
+    const strip = page.locator(".export-panel__blur-detect-strip");
+    await expect(strip.getByRole("progressbar")).toBeVisible();
+    await page.locator("#export-panel-blur-faces").check();
+    await page.evaluate(
+        (url) => window.dispatchEvent(new CustomEvent("e2e:release-blur-asset", { detail: url })),
+        runtimeUrl,
+    );
+    await expect
+        .poll(() => page.evaluate(() => JSON.parse(document.documentElement.dataset.blurWarmRequests ?? "[]")))
+        .toContain(faceUrl);
+    await expect(strip.getByRole("progressbar")).toBeVisible();
+    await page.clock.fastForward(2000);
+    expect(trackerWorkers, "the first checkbox cannot start a pass before the second model is ready").toEqual([]);
+    await strip.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-blur-warm-aborted", JSON.stringify([faceUrl]));
+    await expect(strip).toBeHidden();
+    expect(trackerWorkers).toEqual([]);
+});
+
+test("cached detection warms after delayed discovery without remembered download history", async ({ page }) => {
+    await openDetection(page, { delayedCache: true });
+    const checkbox = page.locator("#export-panel-blur-plates");
+    const strip = page.locator(".export-panel__blur-detect-strip");
+    await checkbox.check();
+    await expect(strip.getByRole("button", { name: "Download & scan", exact: true })).toBeVisible();
+    await expect(page.locator("html")).not.toHaveAttribute("data-blur-warm-requests");
+    await page.evaluate(() => window.dispatchEvent(new Event("e2e:release-blur-cache")));
+    await expect(strip.getByRole("progressbar")).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("data-blur-warm-requests", JSON.stringify([runtimeUrl]));
+    await expect(checkbox).toBeChecked();
+    await strip.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(strip).toBeHidden();
+    await page.clock.fastForward(2000);
+    await expect(page.locator("html")).toHaveAttribute("data-blur-warm-requests", JSON.stringify([runtimeUrl]));
+});
+
+for (const action of ["Not now", "uncheck"] as const) {
+    test(`${action} cancels detection while cached models are still being discovered`, async ({ page }) => {
+        await openDetection(page, { delayedCache: true });
+        const checkbox = page.locator("#export-panel-blur-plates");
+        const strip = page.locator(".export-panel__blur-detect-strip");
+        await checkbox.check();
+        await expect(strip.getByRole("button", { name: "Download & scan", exact: true })).toBeVisible();
+        if (action === "Not now") await strip.getByRole("button", { name: action, exact: true }).click();
+        else await checkbox.uncheck();
+        await expect(checkbox).not.toBeChecked();
+        await expect(strip).toBeHidden();
+        await page.evaluate(() => window.dispatchEvent(new Event("e2e:release-blur-cache")));
+        await page.clock.fastForward(2000);
+        await expect(page.locator("html")).not.toHaveAttribute("data-blur-warm-requests");
+        await expect(checkbox).not.toBeChecked();
+        await expect(strip).toBeHidden();
+    });
+}

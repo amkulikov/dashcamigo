@@ -94,6 +94,7 @@ import {
 } from "./blur-detect.js";
 import {
     type BlurAssetGroupId,
+    type BlurAssetDownloadOptions,
     blurAssetsBlockedOffline,
     blurAssetsDownloadMb,
     blurAssetsNeedDownload,
@@ -102,7 +103,6 @@ import {
     downloadBlurAssets,
     subscribeBlurAssets,
 } from "./blur-assets.js";
-import { subscribeConnectivity } from "./connectivity.js";
 import { isMapAvailable } from "./map.js";
 import { STREET_LABEL_DENSITY_LABEL_KEYS, STREET_LABEL_DENSITY_VALUES } from "./map-label-scale.js";
 import { renderMapMarkerControl } from "./map-marker-control.js";
@@ -164,12 +164,13 @@ export function initExportPanel(opts: { onCompositionApply: () => void }): void 
     });
     // Detect pass lifecycle (progress %, fresh counts) re-renders its status row.
     subscribeBlurDetect(syncDetectGroup);
-    // A reconnect (or a drop into limbo) flips the offline story live - re-render
-    // the strips so a stuck "reconnect once" message clears the moment we're back.
-    subscribeConnectivity(() => {
+    // Model files are same-origin; a tile provider outage does not block them.
+    const syncAssetConnectivity = (): void => {
         syncTrackerStrip();
         syncDetectStrip();
-    });
+    };
+    window.addEventListener("online", syncAssetConnectivity);
+    window.addEventListener("offline", syncAssetConnectivity);
     // The device encode ceiling resolves asynchronously (a WebCodecs probe). When
     // it lands, re-run the estimate so the size / device-cap note / Save state
     // reflect what this device can actually encode - without a full panel notify
@@ -1168,8 +1169,8 @@ let detectReviewTrip: ReturnType<typeof activeTrip> = null;
 let blurDetectPlatesCbEl: HTMLInputElement | null = null;
 let blurDetectFacesCbEl: HTMLInputElement | null = null;
 let blurDetectGpuNoteEl: HTMLDivElement | null = null;
-// Live controller for an in-flight detect-model warm (strip Cancel).
-let detectDownloadCtrl: AbortController | null = null;
+// The second checkbox can queue a warm behind the first; Cancel owns both.
+const detectDownloadControllers = new Set<AbortController>();
 // Zones a user asked to Follow that are waiting on the one-time tracker download.
 // A Set (not one slot) so Follow on two zones before the download lands both get
 // followed, not just the last click. Held across re-renders; drained on success,
@@ -1461,7 +1462,7 @@ function syncTrackerStrip(): void {
     }
     if (offlineNow) {
         // Retry is honored the moment the connection is back (it re-checks live);
-        // subscribeConnectivity also re-renders this strip on reconnect.
+        // The online listener also re-renders this strip on reconnect.
         strip.append(
             trackerMessageNode(t("export.blur.tracker.offline")),
             trackerActionsNode([
@@ -1515,15 +1516,8 @@ function enabledDetectKinds(): DetectKind[] {
  *  and its Download button starts the scan. */
 function onDetectToggle(kind: DetectKind, on: boolean): void {
     setDetectEnabled(kind, on);
-    if (on) {
-        const groups = detectAssetGroups(enabledDetectKinds());
-        if (!blurAssetsNeedDownload(groups)) {
-            void downloadBlurAssets(groups).then((ok) => {
-                if (ok) ensureDetectPass();
-                syncDetectStrip();
-            });
-        }
-    }
+    if (on) void startDetectDownload({ canDownloadNew: false });
+    else if (enabledDetectKinds().length === 0) cancelDetectDownload();
     syncDetectGroup();
     // The re-encode gate + size estimate flip with the checkbox (a pending scan
     // is assumed to find something - see anyBlurRegionInExport).
@@ -1532,17 +1526,16 @@ function onDetectToggle(kind: DetectKind, on: boolean): void {
 
 /** Runs the detect-model download (progress + Cancel land on the detect strip)
  *  and starts the scan on success. */
-async function startDetectDownload(): Promise<void> {
-    if (detectDownloadCtrl) return; // a warm is already in flight
+async function startDetectDownload(options?: BlurAssetDownloadOptions): Promise<void> {
     const ctrl = new AbortController();
-    detectDownloadCtrl = ctrl;
+    detectDownloadControllers.add(ctrl);
     let ok = false;
     try {
-        ok = await downloadBlurAssets(detectAssetGroups(enabledDetectKinds()), ctrl.signal);
+        ok = await downloadBlurAssets(detectAssetGroups(enabledDetectKinds()), ctrl.signal, options);
     } finally {
-        detectDownloadCtrl = null;
+        detectDownloadControllers.delete(ctrl);
     }
-    if (ok) ensureDetectPass();
+    if (ok && !ctrl.signal.aborted && blurAssetsReady(detectAssetGroups(enabledDetectKinds()))) ensureDetectPass();
     syncDetectStrip();
     syncDetectGroup();
 }
@@ -1550,16 +1543,18 @@ async function startDetectDownload(): Promise<void> {
 /** "Not now": un-check the kinds that still need a download - a checked box
  *  with no model would silently protect nothing. */
 function dismissDetectStrip(): void {
+    cancelDetectDownload();
     for (const kind of enabledDetectKinds()) {
         if (blurAssetsNeedDownload(detectAssetGroups([kind]))) setDetectEnabled(kind, false);
     }
+    if (enabledDetectKinds().length > 0) void startDetectDownload({ canDownloadNew: false });
     syncDetectGroup();
     syncDetectStrip();
     notifyExportStateChanged();
 }
 
 function cancelDetectDownload(): void {
-    detectDownloadCtrl?.abort();
+    for (const controller of detectDownloadControllers) controller.abort();
     syncDetectStrip();
 }
 
