@@ -31,6 +31,7 @@
 import { BufferTarget, EncodedPacketSink, EncodedVideoPacketSource, Input, Mp4OutputFormat, Output } from "mediabunny";
 import { createLogger } from "../log.js";
 import { createRetryingBlobSource } from "../retrying-blob-source.js";
+import { isSourceReadError } from "../source-read-error.js";
 import { isMatroskaName } from "../video-format-names.js";
 import { VIDEO_INPUT_FORMATS } from "../video-formats.js";
 
@@ -49,8 +50,8 @@ export interface VideoSourceResolver {
      * multi-segment range of one file remuxes once). For any other container -
      * or when the remux is not possible - returns `file` unchanged.
      *
-     * Never throws: a remux failure logs and falls back to the original, leaving
-     * the caller no worse off than before this normalization existed.
+     * A malformed stream falls back to the original. Cancellation and source
+     * read failures propagate so they cannot be mistaken for a damaged stream.
      */
     resolve(file: File): Promise<File>;
 }
@@ -60,17 +61,19 @@ export interface VideoSourceResolver {
  * clean MP4s on demand, memoizing by File identity. One instance per pipeline
  * run; drop the reference when the export ends to release the cached buffers.
  */
-export function createVideoSourceResolver(): VideoSourceResolver {
+export function createVideoSourceResolver(signal?: AbortSignal): VideoSourceResolver {
     // Cache the PROMISE (not the File) so concurrent slots/segments asking for the
-    // same file dedupe onto one remux. Each entry always resolves (failures are
-    // mapped to the original file below), so a cached miss never rejects.
+    // same file dedupe onto one remux.
     const cache = new Map<File, Promise<File>>();
     return {
         resolve(file: File): Promise<File> {
+            if (signal?.aborted) return Promise.reject(new DOMException("aborted", "AbortError"));
             if (!isMatroskaName(file.name)) return Promise.resolve(file);
             let pending = cache.get(file);
             if (!pending) {
-                pending = normalizeToCleanMp4(file).catch((err) => {
+                pending = normalizeToCleanMp4(file, signal).catch((err) => {
+                    if (err instanceof DOMException && err.name === "AbortError") throw err;
+                    if (isSourceReadError(err)) throw err;
                     log.warn("degenerate-video normalize failed, using original source", {
                         file: file.name,
                         err: String(err),
@@ -91,8 +94,9 @@ export function createVideoSourceResolver(): VideoSourceResolver {
  * the original file untouched when there is nothing to normalize or the copy is
  * not possible (no video track / unreadable codec config / unmuxable codec).
  */
-async function normalizeToCleanMp4(file: File): Promise<File> {
-    const input = new Input({ source: createRetryingBlobSource(file), formats: VIDEO_INPUT_FORMATS });
+async function normalizeToCleanMp4(file: File, signal?: AbortSignal): Promise<File> {
+    const input = new Input({ source: createRetryingBlobSource(file, signal), formats: VIDEO_INPUT_FORMATS });
+    let output: Output | null = null;
     try {
         const track = await input.getPrimaryVideoTrack();
         if (!track) return file;
@@ -107,7 +111,7 @@ async function normalizeToCleanMp4(file: File): Promise<File> {
         const rotation = await track.getRotation();
 
         const target = new BufferTarget();
-        const output = new Output({ format: new Mp4OutputFormat({ fastStart: false }), target });
+        output = new Output({ format: new Mp4OutputFormat({ fastStart: false }), target });
         const videoSource = new EncodedVideoPacketSource(codec);
         output.addVideoTrack(videoSource, { rotation });
         await output.start();
@@ -120,6 +124,7 @@ async function normalizeToCleanMp4(file: File): Promise<File> {
         let pushedAny = false;
         let dropped = 0;
         while (packet) {
+            if (signal?.aborted) throw new DOMException("aborted", "AbortError");
             if (packet.byteLength <= DEGENERATE_VIDEO_PACKET_MAX_BYTES) {
                 dropped++;
                 packet = await sink.getNextPacket(packet, { verifyKeyPackets: true });
@@ -146,5 +151,6 @@ async function normalizeToCleanMp4(file: File): Promise<File> {
         return new File([buffer], `${file.name}.clean.mp4`, { type: "video/mp4" });
     } finally {
         input.dispose();
+        if (output && output.state !== "finalized") await output.cancel();
     }
 }

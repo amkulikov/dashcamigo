@@ -25,6 +25,7 @@ import {
 import { createLogger } from "../log.js";
 import { createExportHeartbeat } from "./export-heartbeat.js";
 import { isSourceReadError } from "../source-read-error.js";
+import { getInputTimeOrigin } from "../media-time.js";
 import type { AudioTrackFormat } from "../export-range.js";
 import { type AdpcmAudioReader, openAdpcmAudioAuto } from "./adpcm-audio.js";
 import { createEncodeAudioSource, resolveEncodeAudioCodec } from "./capabilities.js";
@@ -293,50 +294,64 @@ export async function feedSegmentAudio(opts: {
         );
         return;
     }
+    const origin = await getInputTimeOrigin(input);
+    const rangeStart = startInFile + origin;
+    const rangeEnd = endInFile + origin;
     const audioSink = new AudioSampleSink(audioTrack);
-    const audioIter = audioSink.samples(startInFile, endInFile)[Symbol.asyncIterator]();
-    for (;;) {
-        const pull = await nextTolerant(audioIter);
-        if (pull.done) {
-            if (pull.truncated) {
-                onTruncated();
-                log.warn("audio decode stopped early on damaged source", { file: fileName });
-                await audioIter.return?.();
+    const audioIter = audioSink.samples(rangeStart, rangeEnd)[Symbol.asyncIterator]();
+    try {
+        for (;;) {
+            const pull = await nextTolerant(audioIter);
+            if (pull.done) {
+                if (pull.truncated) {
+                    onTruncated();
+                    log.warn("audio decode stopped early on damaged source", { file: fileName });
+                }
+                break;
             }
-            break;
-        }
-        const aSample = pull.value;
-        // try/finally: audioSource.add or the abort check can throw before
-        // close(). The source reads the sample throughout its (awaited) add,
-        // so closing only after it resolves is safe.
-        try {
-            if (signal.aborted) throw new DOMException("aborted", "AbortError");
-            // Track the real decoded format so silence for later gaps matches it
-            // (the container probe can misreport HE-AAC/SBR - see SilenceFormat).
-            if (
-                aSample.sampleRate !== silenceFormat.sampleRate ||
-                aSample.numberOfChannels !== silenceFormat.numberOfChannels
-            ) {
-                silenceFormat.sampleRate = aSample.sampleRate;
-                silenceFormat.numberOfChannels = aSample.numberOfChannels;
+            const aSample = pull.value;
+            // try/finally: audioSource.add or the abort check can throw before
+            // close(). The source reads the sample throughout its (awaited) add,
+            // so closing only after it resolves is safe.
+            try {
+                if (signal.aborted) throw new DOMException("aborted", "AbortError");
+                // Track the real decoded format so silence for later gaps matches it
+                // (the container probe can misreport HE-AAC/SBR - see SilenceFormat).
+                if (
+                    aSample.sampleRate !== silenceFormat.sampleRate ||
+                    aSample.numberOfChannels !== silenceFormat.numberOfChannels
+                ) {
+                    silenceFormat.sampleRate = aSample.sampleRate;
+                    silenceFormat.numberOfChannels = aSample.numberOfChannels;
+                }
+                const firstFrame = Math.max(0, Math.ceil((rangeStart - aSample.timestamp) * aSample.sampleRate - 1e-6));
+                const endFrame = Math.min(
+                    aSample.numberOfFrames,
+                    Math.ceil((rangeEnd - aSample.timestamp) * aSample.sampleRate - 1e-6),
+                );
+                if (endFrame <= firstFrame) continue;
+                const trimmed =
+                    firstFrame > 0 || endFrame < aSample.numberOfFrames ? aSample.trim(firstFrame, endFrame) : aSample;
+                try {
+                    trimmed.setTimestamp(Math.max(0, segBaseOutSec + trimmed.timestamp - rangeStart));
+                    await audioSource.add(trimmed);
+                } finally {
+                    if (trimmed !== aSample) trimmed.close();
+                }
+            } finally {
+                aSample.close();
             }
-            const shifted = segBaseOutSec + (aSample.timestamp - startInFile);
-            // Drop samples that begin before the segment in-point; clamp the
-            // boundary one to >= 0 so the muxer never sees a negative start.
-            if (shifted < -1e-3) continue;
-            aSample.setTimestamp(Math.max(0, shifted));
-            await audioSource.add(aSample);
-        } finally {
-            aSample.close();
         }
+    } finally {
+        await audioIter.return?.();
     }
 }
 
 /**
  * IMA-ADPCM counterpart of feedSegmentAudio: feeds one segment's audio when the
  * source codec is the Mio/Navman ADPCM that mediabunny cannot read. `reader` is
- * this segment's decoder (the caller opens it - reusing the range's first reader
- * for segment 0, opening a fresh one per later file); null means the segment has
+ * this segment's decoder (the caller reuses the probed audio-bearing file's
+ * reader and opens other files separately); null means the segment has
  * no ADPCM audio, so its span is filled with silence to keep A/V aligned.
  *
  * Decodes the file-time range [startInFile, endInFile) to PCM-s16 and feeds it to
@@ -369,36 +384,11 @@ export async function feedSegmentAudioAdpcm(opts: {
 }
 
 /**
- * Stream-copies one segment's encoded audio packets onto the output timeline -
- * the passthrough path (source codec already MP4-muxable: AAC/MP3, at 1x). No
- * decode/encode: the original packets are cloned with shifted timestamps, so the
- * export needs NO audio encoder at all. That is the whole point - it is what
- * makes audio survive on a codec-stripped Chromium that cannot encode AAC, and it
- * avoids the generation loss of decode->re-encode for every overlay/crop export.
- *
- * Timeline & monotonicity: this segment's audio anchors at
- * `base = max(segBaseOutSec, audioLastEndSec)`. segBaseOutSec (the same base this
- * segment's re-encoded video uses) re-syncs audio to the video each segment; the
- * max() floor keeps the track non-decreasing across segments - a previous segment
- * whose packets overran its video span would otherwise overlap and trip
- * mediabunny's non-decreasing-PTS check. The first packet is the one covering
- * startInFile (getPacket snaps to pts <= startInFile) and is emitted WHOLE at
- * `base` - encoded packets cannot be sub-trimmed, so the lead-in before startInFile
- * is NOT dropped: at a non-packet-aligned in-point audio can lead video by up to
- * one packet (~21ms @ 48kHz AAC). Direction of the forward-only floor: when a
- * segment's audio outruns its video span the lead carries forward and accumulates
- * (audio drifts ahead, never behind), at most ~1 packet per file boundary; when
- * audio is shorter the floor re-syncs down to the video base and leaves a gap.
- * Bounded and sub-100ms on typical short ranges; matters only on long multi-file
- * passthrough exports.
- *
- * A segment with no audio track leaves a gap (passthrough cannot synthesize
- * encoded silence); the next segment's base keeps later audio aligned. Returns
- * the updated audioLastEndSec and whether the decoder config was pushed - the
- * caller threads both across segments (config is pushed once, with the first
- * emitted packet of the whole track). Sibling of exportClip's stream-copy audio
- * loop in export.ts, which uses a measured-range accumulator instead (its video
- * is also stream-copied, so a different sync trade-off applies there).
+ * Copies AAC/MP3 onto the segment's video timeline, preserving any initial audio
+ * delay. Encoded packets cannot be trimmed, so boundary overlaps are omitted
+ * rather than shifting all later audio and accumulating drift across files.
+ * An audio-less segment leaves a gap. The caller owns the input and carries
+ * the last emitted end and decoder-config state across segments.
  */
 export async function feedSegmentAudioCopy(opts: {
     audioSource: EncodedAudioPacketSource;
@@ -418,43 +408,45 @@ export async function feedSegmentAudioCopy(opts: {
 
     const decoderConfig = opts.pushDecoderConfig ? await audioTrack.getDecoderConfig() : null;
     const sink = new EncodedPacketSink(audioTrack);
+    const origin = await getInputTimeOrigin(input);
+    const rangeStart = startInFile + origin;
+    const rangeEnd = endInFile + origin;
 
-    // getPacket(t) returns the packet with pts <= t (latest by presentation
-    // time) - the one covering startInFile. nextTolerant-style: a decode error on
-    // a damaged tail ends this segment's audio gracefully instead of aborting.
+    // A track can begin after the in-point; null means there is no earlier
+    // packet, not that the track is empty.
     let startPacket: EncodedPacket | null;
     try {
-        startPacket = await sink.getPacket(startInFile);
+        startPacket = (await sink.getPacket(rangeStart)) ?? (await sink.getFirstPacket());
     } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") throw err;
+        if (isSourceReadError(err)) throw err;
         onTruncated();
         return { audioLastEndSec: opts.audioLastEndSec, configPushed: false };
     }
     if (!startPacket) return { audioLastEndSec: opts.audioLastEndSec, configPushed: false };
 
-    const base = Math.max(segBaseOutSec, opts.audioLastEndSec);
-    const startShift = startPacket.timestamp;
     let lastEnd = opts.audioLastEndSec;
     let configPushed = false;
     let pkt: EncodedPacket | null = startPacket;
     while (pkt) {
         if (signal.aborted) throw new DOMException("aborted", "AbortError");
-        if (pkt.timestamp >= endInFile) break;
-        // clone carries data/type/duration/sideData; only the timestamp is
-        // shifted onto the continuous output timeline. Clamp to >= 0 defensively
-        // (base >= 0 and pkt.timestamp >= startShift, so this is belt-and-braces).
-        const shifted = pkt.clone({ timestamp: Math.max(0, pkt.timestamp - startShift + base) });
-        // Push the audio decoder config exactly once, with the first emitted
-        // packet of the whole track (mediabunny populates the sample entry then).
-        const meta =
-            opts.pushDecoderConfig && !configPushed ? { decoderConfig: decoderConfig ?? undefined } : undefined;
-        await audioSource.add(shifted, meta);
-        if (opts.pushDecoderConfig && !configPushed) configPushed = true;
-        lastEnd = base + (pkt.timestamp + pkt.duration - startShift);
+        if (pkt.timestamp >= rangeEnd) break;
+        const timestamp = segBaseOutSec + pkt.timestamp - rangeStart;
+        // Encoded boundary packets cannot be trimmed. Omit an overlapping packet
+        // instead of moving all later audio and accumulating drift at every file.
+        if (timestamp >= lastEnd - 1e-6) {
+            const shifted = pkt.clone({ timestamp: Math.max(0, timestamp) });
+            const meta =
+                opts.pushDecoderConfig && !configPushed ? { decoderConfig: decoderConfig ?? undefined } : undefined;
+            await audioSource.add(shifted, meta);
+            if (opts.pushDecoderConfig && !configPushed) configPushed = true;
+            lastEnd = shifted.timestamp + shifted.duration;
+        }
         try {
             pkt = await sink.getNextPacket(pkt);
         } catch (err) {
             if (err instanceof DOMException && err.name === "AbortError") throw err;
+            if (isSourceReadError(err)) throw err;
             onTruncated();
             break;
         }
@@ -717,10 +709,10 @@ export async function finalizeTranscodeOutput(opts: {
     onProgress: (p: TranscodeProgress) => void;
     framesDone: number;
     framesTotal: number;
-    bytesWritten: number;
+    getBytesWritten: () => number;
     durationSec: number;
 }): Promise<TranscodeResult> {
-    const { out, writable, signal, onProgress, framesDone, framesTotal, bytesWritten, durationSec } = opts;
+    const { out, writable, signal, onProgress, framesDone, framesTotal, getBytesWritten, durationSec } = opts;
 
     if (signal.aborted) {
         await discardOutputQuietly(out, writable);
@@ -734,7 +726,7 @@ export async function finalizeTranscodeOutput(opts: {
         framesDone,
         framesTotal,
         etaSec: 0,
-        bytesWritten,
+        bytesWritten: getBytesWritten(),
     });
 
     // Breadcrumbs around finalize: encoder flush + moov write + writable close
@@ -743,8 +735,14 @@ export async function finalizeTranscodeOutput(opts: {
     // even returned - i.e. moov+close completed - or hung. The actual close
     // watchdog lives in the writable wrapper (writable-finalize.ts).
     const finalizeStartMs = performance.now();
-    log.debug("finalize start", { framesDone, bytesWritten });
-    await out.finalize();
+    log.debug("finalize start", { framesDone, bytesWritten: getBytesWritten() });
+    try {
+        await out.finalize();
+    } catch (err) {
+        await discardOutputQuietly(out, writable);
+        throw err;
+    }
+    const bytesWritten = getBytesWritten();
     log.info("finalize done", { framesDone, bytesWritten, ms: Math.round(performance.now() - finalizeStartMs) });
 
     onProgress({
@@ -763,8 +761,8 @@ export async function finalizeTranscodeOutput(opts: {
 /**
  * Builds the mediabunny Output that streams the muxed MP4 into writable in
  * 4 MiB chunks, counting bytes as they go. onBytesWritten is called with each
- * chunk's size AFTER the write resolves; the caller keeps the running total so
- * its progress/return code can read a plain local.
+ * chunk's size and position AFTER the write resolves. The position lets callers
+ * measure file length without counting rewritten MP4 headers twice.
  *
  * byteLength is captured before write: the worker bridge transfers ownership
  * of full chunk buffers, detaching them from this scope.
@@ -772,7 +770,7 @@ export async function finalizeTranscodeOutput(opts: {
 export function createMp4StreamOutput(
     writable: FileSystemWritableFileStream,
     signal: AbortSignal,
-    onBytesWritten: (sizeBytes: number) => void,
+    onBytesWritten: (sizeBytes: number, position: number) => void,
     // Optional moov capture (fires inside finalize, when the moov box is
     // written). The pipelines relay it in TranscodeResult so the GPMF
     // post-process can skip re-reading the finished file.
@@ -787,7 +785,7 @@ export function createMp4StreamOutput(
                 position: chunk.position,
                 data: chunk.data as Uint8Array<ArrayBuffer>,
             });
-            onBytesWritten(sizeBytes);
+            onBytesWritten(sizeBytes, chunk.position);
         },
         async close() {
             await writable.close();
@@ -815,11 +813,14 @@ export function createMp4StreamOutput(
  * unhandled. Settling both first costs nothing on the happy path - both tasks
  * observe the same AbortSignal.
  */
-export async function joinAllOrThrowFirst(tasks: ReadonlyArray<Promise<void>>): Promise<void> {
+export async function joinAllOrThrowFirst<T>(tasks: ReadonlyArray<Promise<T>>): Promise<T[]> {
     const results = await Promise.allSettled(tasks);
+    const values: T[] = [];
     for (const r of results) {
         if (r.status === "rejected") throw r.reason;
+        values.push(r.value);
     }
+    return values;
 }
 
 /**
