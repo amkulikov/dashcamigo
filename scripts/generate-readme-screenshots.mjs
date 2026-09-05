@@ -808,14 +808,8 @@ async function writeLandingVariants(browser, shots) {
 
 // --- composite hero ---------------------------------------------------------
 
-// Brand palette for the hero backdrop - mirrors src/styles/tokens.css raw
-// tokens the same way scripts/generate-og-cover.mjs does: kept in sync by
-// hand, so the generator does not depend on the app build.
-const BRAND = {
-    bg: "#0a0a0a",
-    bgWarm: "#141210", // near-black with a warm cast for the gradient's light end
-    accent: "255, 144, 0", // --dc-accent as raw rgb for rgba() glows
-};
+// Match --dc-accent without depending on the app build for the hero artwork.
+const HERO_ACCENT_RGB = "255, 144, 0";
 
 // Composes the two screenshots on a brand-gradient backdrop into the single
 // image README.md embeds. Rendered by the same Playwright Chromium as the
@@ -828,24 +822,29 @@ async function composeHero(browser, desktopPng, mobilePng) {
     const html = `<!doctype html>
 <html><head><meta charset="utf-8"><style>
   * { box-sizing: border-box; margin: 0; }
-  html, body { width: 1600px; height: 780px; overflow: hidden; }
-  body {
+  html, body { width: 1600px; height: 780px; overflow: hidden; background: transparent; }
+  .composition {
+    width: 100%; height: 100%;
     display: flex; align-items: center; justify-content: center;
     background:
-      radial-gradient(900px 620px at 16% 0%, rgba(${BRAND.accent}, 0.16), rgba(${BRAND.accent}, 0) 70%),
-      radial-gradient(820px 640px at 94% 100%, rgba(${BRAND.accent}, 0.10), rgba(${BRAND.accent}, 0) 70%),
-      linear-gradient(165deg, ${BRAND.bgWarm} 0%, ${BRAND.bg} 55%, ${BRAND.bg} 100%);
+      radial-gradient(ellipse 700px 440px at 24% 26%, rgba(${HERO_ACCENT_RGB}, 0.20), rgba(${HERO_ACCENT_RGB}, 0) 75%),
+      radial-gradient(ellipse 620px 410px at 82% 76%, rgba(${HERO_ACCENT_RGB}, 0.14), rgba(${HERO_ACCENT_RGB}, 0) 75%);
+    /* Fade the glows and shadows into any host theme, keeping both shots opaque. */
+    mask-image:
+      linear-gradient(to right, transparent, #000 6%, #000 94%, transparent),
+      linear-gradient(to bottom, transparent, #000 6%, #000 94%, transparent);
+    mask-composite: intersect;
   }
   img { display: block; }
   .desktop {
     width: 1120px; border-radius: 14px;
     border: 1px solid rgba(255,255,255,0.10);
-    box-shadow: 0 30px 80px rgba(0,0,0,0.65);
+    box-shadow: 0 30px 80px rgba(0,0,0,0.30);
   }
   .phone {
     width: 260px; border-radius: 24px;
     border: 1px solid rgba(255,255,255,0.14);
-    box-shadow: 0 24px 60px rgba(0,0,0,0.70);
+    box-shadow: 0 24px 60px rgba(0,0,0,0.35);
     /* Overlap the desktop's right edge and hang below its bottom - reads as a
        foreground device, not two pasted rectangles. */
     margin-left: -56px; margin-top: 100px;
@@ -853,8 +852,10 @@ async function composeHero(browser, desktopPng, mobilePng) {
   }
 </style></head>
 <body>
-  <img class="desktop" src="data:image/png;base64,${b64(desktopPng)}">
-  <img class="phone" src="data:image/png;base64,${b64(mobilePng)}">
+  <div class="composition">
+    <img class="desktop" src="data:image/png;base64,${b64(desktopPng)}">
+    <img class="phone" src="data:image/png;base64,${b64(mobilePng)}">
+  </div>
 </body></html>`;
 
     const context = await browser.newContext({
@@ -868,10 +869,10 @@ async function composeHero(browser, desktopPng, mobilePng) {
     // show gradient-only gaps.
     await page.waitForFunction(() => Array.from(document.images).every((img) => img.complete && img.naturalWidth > 0));
     await waitForPaint(page);
-    const heroPng = await page.screenshot({ fullPage: false });
+    const heroPng = await page.screenshot({ fullPage: false, omitBackground: true });
     await context.close();
-    // No downscale (null width): the 2000px output is the retina budget picked
-    // above; WebP alone brings the file under ~150 KB where PNG was ~1 MB.
+    // Keep retina dimensions and alpha: flattening onto a fixed color would
+    // bring back a visible rectangle on other host themes.
     const out = join(OUT_DIR, "readme-hero.webp");
     await pngToWebp(browser, heroPng, out, null, 0.9);
     return out;
