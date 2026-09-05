@@ -4,6 +4,7 @@
 import { createHash, webcrypto } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { setImmediate } from "node:timers/promises";
 import vm from "node:vm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -226,6 +227,25 @@ function loadSw(options: LoadOptions = {}) {
         },
     };
 }
+async function finishRetries(assertion: Promise<unknown>): Promise<void> {
+    let isSettled = false;
+    const results = await Promise.allSettled([
+        assertion.finally(() => {
+            isSettled = true;
+        }),
+        (async () => {
+            while (!isSettled) {
+                // Native crypto can schedule the next retry after the timer queue empties.
+                await setImmediate();
+                if (!isSettled) await vi.runAllTimersAsync();
+            }
+        })(),
+    ]);
+    for (const result of results) {
+        if (result.status === "rejected") throw result.reason;
+    }
+}
+
 afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
@@ -347,16 +367,18 @@ describe("service worker install and repair", () => {
     it.each(["/assets/app-AAAA.js", "/en/", "/", "/styles/light.json"])(
         "rejects an incomplete offline graph when %s is missing",
         async (url) => {
+            vi.useFakeTimers();
             const sw = loadSw({
                 manifest: [entry(url, "expected")],
                 fetch: async () => res("not found", { ok: false, status: 404 }),
             });
-            await expect(sw.fire("install")).rejects.toThrow("precache incomplete");
+            await finishRetries(expect(sw.fire("install")).rejects.toThrow("precache incomplete"));
             expect(await sw.cached(url)).toBeUndefined();
         },
     );
 
     it("does not overwrite the active shell when an update cannot download its code", async () => {
+        vi.useFakeTimers();
         const storage = new Map<string, MemoryCache>();
         const old = loadSw({
             storage,
@@ -370,18 +392,19 @@ describe("service worker install and repair", () => {
                 return req.url.endsWith("/en/") ? res("new-shell") : res("not found", { ok: false, status: 404 });
             },
         });
-        await expect(next.fire("install")).rejects.toThrow("precache incomplete");
+        await finishRetries(expect(next.fire("install")).rejects.toThrow("precache incomplete"));
         expect((await old.navigate("/en/")).response._tag).toBe("old-shell");
         expect((await old.dispatchFetch("/assets/old.js")).response?._tag).toBe("old-code");
         expect((await next.cached("/en/"))?._tag).toBe("new-shell");
     });
 
     it("retries a failed changed shell instead of labeling the old response fresh", async () => {
+        vi.useFakeTimers();
         const storage = new Map<string, MemoryCache>();
         loadSw({ storage, pre: { "/en/": res("old-shell") } });
         const manifest = [entry("/en/", "new-shell")];
         const failed = loadSw({ storage, manifest, fetch: async () => res("not found", { ok: false, status: 404 }) });
-        await expect(failed.fire("install")).rejects.toThrow("precache incomplete");
+        await finishRetries(expect(failed.fire("install")).rejects.toThrow("precache incomplete"));
         const retried = loadSw({ storage, manifest, fetch: async () => res("new-shell") });
         await retried.fire("install");
         expect(retried.fetchSpy).toHaveBeenCalledTimes(1);
@@ -395,12 +418,13 @@ describe("service worker install and repair", () => {
     });
 
     it("reuses HTTP cache only for the first attempt at an immutable asset", async () => {
+        vi.useFakeTimers();
         let calls = 0;
         const sw = loadSw({
             manifest: [entry("/assets/app.js", "right-code")],
             fetch: async () => res(++calls === 1 ? "wrong-code" : "right-code"),
         });
-        await sw.fire("install");
+        await finishRetries(expect(sw.fire("install")).resolves.toBeUndefined());
         expect(sw.fetchSpy.mock.calls.map(([req]) => (req as unknown as Request).cache)).toEqual([
             "force-cache",
             "reload",
@@ -408,11 +432,12 @@ describe("service worker install and repair", () => {
     });
 
     it("rejects a successful response with bytes from another deployment", async () => {
+        vi.useFakeTimers();
         const sw = loadSw({
             manifest: [entry("/assets/app.js", "expected-code")],
             fetch: async () => res("<html>server fallback</html>"),
         });
-        await expect(sw.fire("install")).rejects.toThrow("precache incomplete");
+        await finishRetries(expect(sw.fire("install")).rejects.toThrow("precache incomplete"));
         expect(await sw.cached("/assets/app.js")).toBeUndefined();
     });
 
@@ -485,10 +510,11 @@ describe("service worker response validation", () => {
     });
 
     it("rejects a shell from another build during cache repair", async () => {
+        vi.useFakeTimers();
         const transformed = shell.replace(marker, "fedcba9876543210");
         const sw = loadSw({ manifest: [shellEntry], fetch: async () => res(transformed) });
         const result = await sw.navigate("/en/");
-        await result.settled();
+        await finishRetries(expect(result.settled()).resolves.toBeUndefined());
         expect(result.response._tag).toBe(transformed);
         expect(await sw.cached("/en/")).toBeUndefined();
     });

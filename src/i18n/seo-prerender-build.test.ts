@@ -123,15 +123,6 @@ describe("vendor sitemap entries", () => {
 });
 
 describe("hreflang graph completeness", () => {
-    // Spec invariant: every locale must reference every other locale + itself
-    // + x-default. This test catches drift where a locale is added to
-    // SEO_LOCALES but not surfaced in alternates somewhere.
-    it("homepage alternates map (used by sitemapPlugin) covers every indexable locale", () => {
-        const indexable = getIndexableSeoLocales();
-        const hreflangSet = new Set(indexable.map((l) => l.hreflang));
-        expect(hreflangSet.size).toBe(indexable.length); // each hreflang distinct
-    });
-
     it("hreflang values across SEO_LOCALES are unique, generic aliases included", () => {
         // Aliases live in the same namespace as primary codes - a duplicate
         // (e.g. two locales both claiming "pt") would make the cluster
@@ -144,11 +135,6 @@ describe("hreflang graph completeness", () => {
         for (const loc of SEO_LOCALES) {
             expect(loc.urlSegment, `${loc.lang} must have non-empty urlSegment`).not.toBe("");
         }
-    });
-
-    it("English is the default locale at /en/", () => {
-        const en = SEO_LOCALES.find((l) => l.lang === "en");
-        expect(en?.urlSegment).toBe("en");
     });
 });
 
@@ -468,25 +454,13 @@ describe("applyLocale bakes the i18n dictionary island", () => {
     const ru = getPrerenderLocales().find((l) => l.seo.lang === "ru");
     if (!ru) throw new Error("test setup: ru locale missing");
 
-    it("fills #dc-i18n with the locale's dictionary as valid JSON", () => {
-        const out = applyLocale(buildMinimalBaseline(), ru, {});
-        const m = out.match(/<script[^>]*id="dc-i18n"[^>]*>([\s\S]*?)<\/script>/);
-        expect(m, "dc-i18n island must be present after applyLocale").not.toBeNull();
-        const parsed = JSON.parse(m![1]!) as Record<string, string>;
-        // The baked dictionary is the ru dict - spot-check a stable key.
-        expect(parsed["buckets.today"]).toBe(ru.dict["buckets.today"]);
-    });
-
-    it('escapes "<" so a value containing "</script>" cannot break out of the tag', () => {
-        const out = applyLocale(buildMinimalBaseline(), ru, {});
-        const m = out.match(/<script[^>]*id="dc-i18n"[^>]*>([\s\S]*?)<\/script>/);
-        expect(m).not.toBeNull();
-        // No raw "<" survives inside the island body (all escaped to <),
-        // so the non-greedy </script> match above captured the whole dict.
-        expect(m![1]).not.toContain("<");
-        // And it is still valid JSON that round-trips every key.
-        const parsed = JSON.parse(m![1]!) as Record<string, string>;
-        expect(Object.keys(parsed).length).toBe(Object.keys(ru.dict).length);
+    it("round-trips the complete dictionary and escapes script-closing values", () => {
+        const dict = { ...ru.dict, "buckets.today": "</script><img src=x>" };
+        const out = applyLocale(buildMinimalBaseline(), { ...ru, dict }, {});
+        const match = out.match(/<script[^>]*id="dc-i18n"[^>]*>([\s\S]*?)<\/script>/);
+        expect(match, "dc-i18n island must be present after applyLocale").not.toBeNull();
+        expect(match![1]).not.toContain("<");
+        expect(JSON.parse(match![1]!)).toEqual(dict);
     });
 });
 

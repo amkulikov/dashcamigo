@@ -53,6 +53,7 @@ test.describe("export run", () => {
 
         await page.locator("#export-panel-save-btn").click();
         await expect(page.locator("#export-panel-done-summary")).toBeVisible({ timeout: 60_000 });
+        await expect(page.locator("#export-panel-done-summary")).toBeFocused();
 
         const r = await readExportResult(page);
         expect(r, "export must have written bytes through the stubbed handle").not.toBeNull();
@@ -62,6 +63,12 @@ test.describe("export run", () => {
         expect(r!.mdat, "MP4 must have media data").toBe(true);
         expect(r!.gpmd, "GPMF telemetry track (gpmd handler) must be injected").toBe(true);
         expect(r!.soun, "audio must be copied into the stream-copy export").toBe(true);
+
+        await page.keyboard.press("Tab");
+        await expect(page.locator("#export-panel-done button")).toBeFocused();
+        await page.keyboard.press("Enter");
+        await expect(page.locator("#export-panel")).toBeHidden();
+        await expect(page.locator("#player-export")).toBeFocused();
     });
 
     test("re-encode split-screen writes a valid MP4 (compositing pipeline)", async ({ page, browserName }) => {
@@ -173,6 +180,7 @@ test.describe("export run (the destination goes away)", () => {
 
         const status = page.locator(".export-panel__error-status");
         await expect(status).toBeVisible({ timeout: 60_000 });
+        await expect(status).toBeFocused();
         await expect(status, "a lost destination must not read as the generic failure").toContainText(
             "the file being written is gone",
         );
@@ -183,6 +191,10 @@ test.describe("export run (the destination goes away)", () => {
         await expect(report).toBeVisible();
         await report.click();
         await expect(page.locator("#feedback-modal")).toBeVisible();
+        await page.locator("#feedback-cancel").click();
+        await expect(page.locator("#feedback-modal")).toBeHidden();
+        await page.locator("#export-panel-error .export-panel__primary-btn").click();
+        await expect(page.locator("#export-panel-save-btn")).toBeFocused();
     });
 
     test("re-encode: the failure keeps its class across the worker bridge", async ({ page, browserName }) => {

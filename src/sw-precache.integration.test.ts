@@ -9,19 +9,17 @@
 //
 //   2. All prerendered locale shells (/<lang>/) are in the manifest.
 //
-//   3. The placeholder in dist/sw.js was actually replaced at build time
-//      (injection happened) and the minified result is syntactically valid
-//      JavaScript. Catches a plugin-order regression (injector after the SW
-//      minifier) or a minifier change that breaks the SW.
+//   3. The manifest and tracker URLs evaluated from the minified dist/sw.js
+//      match the final artifacts. This also catches invalid JavaScript and
+//      placeholders left behind by the build pipeline.
 //
 // Like csp-hash.integration.test.ts this runs against artifacts on disk: it
 // needs `npm run build` first. Missing dist/ skips locally but THROWS in CI.
 
-import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { runInNewContext } from "node:vm";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { SEO_LOCALES } from "./i18n/seo-config.js";
 import { collectPrecacheEntries } from "../vite-plugins/sw-precache.js";
 import { computeTrackerAssets } from "../vite-plugins/tracker-assets.js";
@@ -57,18 +55,30 @@ function bootAssetsOf(html: string): string[] {
     return [...new Set(out)];
 }
 
-function injectedValue(name: "PRECACHE_MANIFEST" | "TRACKER_ASSET_URLS"): unknown {
-    return runInNewContext(`${readFileSync(SW, "utf-8")}\n;${name};`, {
-        URL,
-        self: { location: { origin: "https://dashcamigo.test" }, addEventListener() {} },
-    });
+function injectedValues(): { manifest: unknown; trackerUrls: unknown } {
+    return runInNewContext(
+        `${readFileSync(SW, "utf-8")}\n;({ manifest: PRECACHE_MANIFEST, trackerUrls: TRACKER_ASSET_URLS });`,
+        {
+            URL,
+            self: { location: { origin: "https://dashcamigo.test" }, addEventListener() {} },
+        },
+    );
 }
 
 describe("sw-precache integration: manifest covers the real boot graph", () => {
-    itIf("every /en/ boot asset (entry, preloads, css) is in the precache manifest", () => {
-        const segments = SEO_LOCALES.map((l) => l.urlSegment);
-        const urls = new Set(collectPrecacheEntries(DIST_DIR, segments).map((e) => e.url));
+    const segments = SEO_LOCALES.map((locale) => locale.urlSegment);
+    let entries: ReturnType<typeof collectPrecacheEntries>;
+    let urls: Set<string>;
+    let injected: ReturnType<typeof injectedValues>;
 
+    beforeAll(() => {
+        if (!hasDist) return;
+        entries = collectPrecacheEntries(DIST_DIR, segments);
+        urls = new Set(entries.map((entry) => entry.url));
+        injected = injectedValues();
+    });
+
+    itIf("every /en/ boot asset (entry, preloads, css) is in the precache manifest", () => {
         const boot = bootAssetsOf(readFileSync(EN_HTML, "utf-8"));
         expect(boot.length, "parsed at least the entry script + css from /en/").toBeGreaterThanOrEqual(2);
         for (const asset of boot) {
@@ -77,8 +87,6 @@ describe("sw-precache integration: manifest covers the real boot graph", () => {
     });
 
     itIf("every emitted JS/CSS file is in the precache manifest", () => {
-        const segments = SEO_LOCALES.map((l) => l.urlSegment);
-        const urls = new Set(collectPrecacheEntries(DIST_DIR, segments).map((e) => e.url));
         const assets = readdirSync(resolve(DIST_DIR, "assets"), { recursive: true, encoding: "utf8" })
             .filter((file) => /\.(?:m?js|css)$/.test(file))
             .map((file) => file.replaceAll("\\", "/"));
@@ -89,8 +97,6 @@ describe("sw-precache integration: manifest covers the real boot graph", () => {
     });
 
     itIf("all local map styles and sprite variants are available before opening the map", () => {
-        const segments = SEO_LOCALES.map((locale) => locale.urlSegment);
-        const urls = new Set(collectPrecacheEntries(DIST_DIR, segments).map((entry) => entry.url));
         const styles = readdirSync(resolve(DIST_DIR, "styles"), { recursive: true, encoding: "utf8" })
             .filter((file) => /\.(?:json|png)$/.test(file))
             .map((file) => file.replaceAll("\\", "/"));
@@ -108,8 +114,6 @@ describe("sw-precache integration: manifest covers the real boot graph", () => {
     });
 
     itIf("self-hosted fonts stay out of the precache manifest", () => {
-        const segments = SEO_LOCALES.map((l) => l.urlSegment);
-        const urls = new Set(collectPrecacheEntries(DIST_DIR, segments).map((e) => e.url));
         const fonts = readdirSync(resolve(DIST_DIR, "fonts"));
         expect(fonts.length, "dist/fonts has self-hosted fonts").toBeGreaterThan(0);
         for (const f of fonts) {
@@ -118,8 +122,6 @@ describe("sw-precache integration: manifest covers the real boot graph", () => {
     });
 
     itIf("all prerendered locale shells are in the precache manifest", () => {
-        const segments = SEO_LOCALES.map((l) => l.urlSegment);
-        const entries = collectPrecacheEntries(DIST_DIR, segments);
         for (const url of ["/", ...segments.map((segment) => `/${segment}/`)]) {
             expect(
                 entries.find((entry) => entry.url === url),
@@ -131,17 +133,13 @@ describe("sw-precache integration: manifest covers the real boot graph", () => {
     });
 
     itIf("the injected manifest contains every final artifact and its current content revision", () => {
-        const expected = collectPrecacheEntries(
-            DIST_DIR,
-            SEO_LOCALES.map((locale) => locale.urlSegment),
-        );
-        expect(injectedValue("PRECACHE_MANIFEST")).toEqual(expected);
+        expect(injected.manifest).toEqual(entries);
     });
 
     itIf("the injected tracker URLs match the emitted runtime and model bytes", () => {
         const root = resolve(DIST_DIR, "..");
         const assets = computeTrackerAssets("build", root);
-        expect(injectedValue("TRACKER_ASSET_URLS")).toEqual(assets.urls);
+        expect(injected.trackerUrls).toEqual(assets.urls);
         for (const url of assets.urls) {
             const emitted = readFileSync(resolve(DIST_DIR, url.slice(1)));
             const model = assets.modelEmit.find((entry) => entry.url === url);
@@ -150,10 +148,5 @@ describe("sw-precache integration: manifest covers the real boot graph", () => {
                 : resolve(root, "node_modules/onnxruntime-web/dist", url.slice(url.lastIndexOf("/") + 1));
             expect(emitted.equals(readFileSync(source)), `tracker asset ${url} matches its source bytes`).toBe(true);
         }
-    });
-
-    itIf("the minified dist/sw.js is syntactically valid JavaScript", () => {
-        // Throws (non-zero exit) if the minified SW does not parse.
-        expect(() => execFileSync("node", ["--check", SW], { stdio: "ignore" })).not.toThrow();
     });
 });

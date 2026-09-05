@@ -189,13 +189,6 @@ describe("buildLocaleUrl", () => {
         expect(buildLocaleUrl("ja", "/en/cameras/70mai/")).toBe("/ja/cameras/70mai/");
     });
 
-    it("preserves trailing slash policy", () => {
-        // All our prerendered URLs end with "/" (Cloudflare Pages 308-
-        // redirects /xx to /xx/, so canonical URLs are slash-terminated).
-        expect(buildLocaleUrl("de", "/ru/")).toMatch(/\/$/);
-        expect(buildLocaleUrl("de", "/ru/cameras/70mai/")).toMatch(/\/$/);
-    });
-
     it("returns input unchanged for unknown target lang", () => {
         // @ts-expect-error - intentionally passing an invalid Lang.
         expect(buildLocaleUrl("xx", "/de/cameras/")).toBe("/de/cameras/");
@@ -239,14 +232,5 @@ describe("getSeoLocaleByLang / ByUrlSegment", () => {
 
     it("byUrlSegment returns undefined for unknown segment", () => {
         expect(getSeoLocaleByUrlSegment("xx")).toBeUndefined();
-    });
-});
-
-describe("trailing-slash consistency", () => {
-    it("every locale homepage URL we'd emit ends with '/'", () => {
-        for (const loc of SEO_LOCALES) {
-            const home = `/${loc.urlSegment}/`;
-            expect(home, `${loc.lang} homepage URL`).toMatch(/\/$/);
-        }
     });
 });

@@ -1,15 +1,4 @@
-import {
-    DESKTOP,
-    SAMPLE_70MAI,
-    SAMPLE_NOGPS,
-    expect,
-    gotoApp,
-    installExportCapture,
-    loadTrip,
-    openExport,
-    presetLocalStorage,
-    test,
-} from "./_fixtures.js";
+import { DESKTOP, SAMPLE_70MAI, expect, gotoApp, loadTrip, openExport, presetLocalStorage, test } from "./_fixtures.js";
 
 test.describe("export controls", () => {
     test.beforeEach(async ({ page }) => {
@@ -77,58 +66,5 @@ test.describe("export controls", () => {
         await expect(start).toBeFocused();
         await page.locator(".export-panel__blur-del-btn").click();
         await expect(page.locator(".export-panel__blur-add-btn")).toBeFocused();
-    });
-});
-
-test("GPS overlay settings are disabled together with their checkboxes on a trip without GPS", async ({ page }) => {
-    await presetLocalStorage(page);
-    await page.setViewportSize(DESKTOP);
-    await gotoApp(page, "en");
-    await loadTrip(page, SAMPLE_NOGPS);
-    await openExport(page);
-    const rows = page.locator(".export-panel__ov-row");
-    expect(await rows.count()).toBeGreaterThan(0);
-    for (const row of await rows.all()) {
-        await expect(row.locator("input")).toBeDisabled();
-        await expect(row.locator("button")).toBeDisabled();
-    }
-});
-
-test("finishing an export moves focus to the result and keeps Close reachable", async ({ page }) => {
-    await presetLocalStorage(page);
-    await installExportCapture(page);
-    await page.setViewportSize(DESKTOP);
-    await gotoApp(page, "en");
-    await loadTrip(page, SAMPLE_70MAI);
-    await openExport(page);
-    const includes = page.locator(".top-panel__channel-include");
-    await includes.nth(2).click();
-    await includes.nth(1).click();
-    await page.locator("#export-panel-save-btn").click();
-    await expect(page.locator("#export-panel-done-summary")).toBeFocused({ timeout: 60_000 });
-    await page.keyboard.press("Tab");
-    await expect(page.locator("#export-panel-done button")).toBeFocused();
-    await page.keyboard.press("Enter");
-    await expect(page.locator("#export-panel")).toBeHidden();
-    await expect(page.locator("#player-export")).toBeFocused();
-});
-
-test.describe("export errors", () => {
-    test.use({ tolerateConsole: [/the destination is gone/] });
-
-    test("an export failure moves focus to its explanation and back to the available options", async ({ page }) => {
-        await presetLocalStorage(page);
-        await installExportCapture(page, { afterBytes: 0, errorName: "NotFoundError" });
-        await page.setViewportSize(DESKTOP);
-        await gotoApp(page, "en");
-        await loadTrip(page, SAMPLE_70MAI);
-        await openExport(page);
-        const includes = page.locator(".top-panel__channel-include");
-        await includes.nth(2).click();
-        await includes.nth(1).click();
-        await page.locator("#export-panel-save-btn").click();
-        await expect(page.locator(".export-panel__error-status")).toBeFocused({ timeout: 60_000 });
-        await page.locator("#export-panel-error .export-panel__primary-btn").click();
-        await expect(page.locator("#export-panel-save-btn")).toBeFocused();
     });
 });

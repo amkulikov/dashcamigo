@@ -215,22 +215,20 @@ describe("createWorkerClient + createWorkerServer", () => {
 
     it("multiple concurrent requests stay correlated by id", async () => {
         const { mainEndpoint, workerEndpoint } = makePairedEndpoints();
+        const replies = new Map<number, (result: number) => void>();
         createWorkerServer(workerEndpoint, {
-            onRequest: async (_type, data) => {
-                const n = data as number;
-                // Reverse latency so reply order does not match request order -
-                // proves correlation by id, not by FIFO.
-                await new Promise((r) => setTimeout(r, 10 - n));
-                return n * 2;
-            },
+            onRequest: (_type, data) => new Promise<number>((resolve) => replies.set(data as number, resolve)),
         });
         const client = createWorkerClient(mainEndpoint, { name: "test-concurrent" });
-        const results = await Promise.all([
+        const requests = [
             client.request<number>("double", 1),
             client.request<number>("double", 2),
             client.request<number>("double", 3),
-        ]);
-        expect(results).toEqual([2, 4, 6]);
+        ];
+        await flushMicrotasks();
+        // Resolve in reverse order to prove correlation by id, not by FIFO.
+        for (const n of [3, 2, 1]) replies.get(n)!(n * 2);
+        expect(await Promise.all(requests)).toEqual([2, 4, 6]);
     });
 
     it("rejects new requests after dispose with a clear error", async () => {

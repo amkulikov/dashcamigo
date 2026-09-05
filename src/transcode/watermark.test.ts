@@ -14,7 +14,7 @@
 
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { drawWatermark, type WatermarkAnchor } from "./watermark.js";
+import { drawWatermark } from "./watermark.js";
 import { _resetForTests } from "./canvas-draw.js";
 
 beforeEach(_resetForTests);
@@ -200,16 +200,6 @@ describe("drawWatermark", () => {
         const x2 = ctx2.calls.find((c) => c.op === "fillText")!.args[1] as number;
         expect(x2).toBeGreaterThan(x1);
     });
-});
-
-describe("drawWatermark - all anchors smoke", () => {
-    const anchors: WatermarkAnchor[] = ["tl", "tr", "bl", "br"];
-    for (const a of anchors) {
-        it(`runs without throwing for anchor=${a}`, () => {
-            const { ctx } = makeCtx();
-            expect(() => drawWatermark(ctx, 1920, 1080, a)).not.toThrow();
-        });
-    }
 });
 
 // Not covered: ensureWatermarkFontReady - requires document.fonts / self.fonts

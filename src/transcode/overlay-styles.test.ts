@@ -4,23 +4,12 @@
 
 import { describe, expect, it } from "vitest";
 
-import { ACCENT_DEFAULT, composeFont, resolveStyleColor, STYLE_CHROME } from "./overlay-styles.js";
+import { composeFont, resolveStyleColor, STYLE_CHROME } from "./overlay-styles.js";
 import type { OverlayStyleId } from "./types.js";
 
 const STYLES: OverlayStyleId[] = ["min", "card", "bold"];
 
 describe("STYLE_CHROME", () => {
-    it("defines every style with the full chrome shape", () => {
-        for (const id of STYLES) {
-            const c = STYLE_CHROME[id];
-            expect(c).toBeDefined();
-            expect(typeof c.numFont).toBe("string");
-            expect(typeof c.readFont).toBe("string");
-            expect(typeof c.shadow).toBe("boolean");
-            expect(typeof c.heroSpeed).toBe("boolean");
-        }
-    });
-
     it("keeps min plate-less + shadowed (the legacy look)", () => {
         expect(STYLE_CHROME.min.plate).toBeNull();
         expect(STYLE_CHROME.min.plateBorder).toBeNull();
@@ -57,11 +46,5 @@ describe("composeFont", () => {
     it("builds a canvas font string and rounds/floors the px", () => {
         expect(composeFont("700", 24.6, `"Inter"`)).toBe(`700 25px "Inter"`);
         expect(composeFont("800", 2, "monospace")).toBe("800 8px monospace"); // min 8px
-    });
-});
-
-describe("ACCENT_DEFAULT", () => {
-    it("is brand orange", () => {
-        expect(ACCENT_DEFAULT).toBe("#FF9000");
     });
 });

@@ -664,9 +664,9 @@ describe("loadSamples: adaptive strategy", () => {
         const buffers = await loadSamples(file, samples, 10);
         for (let index = 0; index < samples.length; index++) {
             const sample = samples[index]!;
-            expect(Buffer.from(buffers[index]!), `sample ${index}`).toEqual(
-                bytes.subarray(sample.offset, sample.offset + sample.size),
-            );
+            const actual = Buffer.from(buffers[index]!);
+            const expected = bytes.subarray(sample.offset, sample.offset + sample.size);
+            expect(actual.equals(expected), `sample ${index} matches its source bytes`).toBe(true);
         }
         expect(new Set(buffers).size).toBe(buffers.length);
     });

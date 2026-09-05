@@ -64,6 +64,12 @@ test.describe("no-GPS export gate", () => {
             await expect(page.locator(id), `${id} must be disabled with no GPS`).toBeDisabled();
             await expect(page.locator(id), `${id} must be cleared with no GPS`).not.toBeChecked();
         }
+        const rows = page.locator(".export-panel__ov-row");
+        expect(await rows.count()).toBeGreaterThan(0);
+        for (const row of await rows.all()) {
+            await expect(row.locator("input")).toBeDisabled();
+            await expect(row.locator("button")).toBeDisabled();
+        }
         // The map-overlay zoom + shape controls live in the per-widget inspector,
         // which only renders for a selected, enabled widget - on a no-GPS trip
         // nothing is enabled, so the inspector stays hidden.

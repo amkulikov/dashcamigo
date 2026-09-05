@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { getAlternativeSitemapEntries, matchAlternativeRoute, renderAlternativePage, renderAlternativesIndexPage } from "../../vite-plugins/alternative-pages.js";
 import { getFeatureSitemapEntries, matchFeatureRoute, renderFeaturePage } from "../../vite-plugins/feature-pages.js";
 import { renderBreadcrumbs } from "../../vite-plugins/seo-navigation.js";
@@ -29,11 +29,19 @@ function decodeText(text: string): string {
 }
 
 const entries = [...getVendorSitemapEntries(), ...getAlternativeSitemapEntries(), ...getFeatureSitemapEntries()];
+const surfaces = new Map<string, string>();
+
+beforeAll(() => {
+    for (const entry of entries) {
+        const path = new URL(entry.loc).pathname;
+        surfaces.set(path, renderSurface(path));
+    }
+});
 
 describe("SEO surface navigation", () => {
     it("helps visitors choose cameras using real model families instead of untranslated GPS descriptions", () => {
         for (const locale of getIndexableSeoLocales()) {
-            const html = renderCamerasIndexPage(locale.lang, {});
+            const html = surfaces.get(`/${locale.urlSegment}/cameras/`)!;
             const cards = [...html.matchAll(/<a class="vp-vendor-card" href="([^"]+)">([\s\S]*?)<\/a>/g)];
             expect(cards.length, locale.lang).toBeGreaterThan(0);
             for (const [, path, card] of cards) {
@@ -52,7 +60,7 @@ describe("SEO surface navigation", () => {
 
     it("connects every published page to its hierarchy with visible breadcrumbs that match JSON-LD", () => {
         for (const entry of entries) {
-            const html = renderSurface(new URL(entry.loc).pathname);
+            const html = surfaces.get(new URL(entry.loc).pathname)!;
             const breadcrumbHtml = /<nav class="vp-breadcrumbs"[^>]*>([\s\S]*?)<\/nav>/.exec(html)?.[1];
             expect(breadcrumbHtml, entry.loc).toBeDefined();
             const documents = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((match) => JSON.parse(match[1]!) as BreadcrumbList);
@@ -76,7 +84,7 @@ describe("SEO surface navigation", () => {
     it("offers ordinary same-origin language links for exactly the published page variants", () => {
         for (const entry of entries) {
             const path = new URL(entry.loc).pathname;
-            const html = renderSurface(path);
+            const html = surfaces.get(path)!;
             const navigation = /<nav class="vp-languages"[^>]*>([\s\S]*?)<\/nav>/.exec(html)?.[1];
             expect(navigation, path).toBeDefined();
             const links = [...navigation!.matchAll(/<a href="([^"]+)" hreflang="([^"]+)" lang="([^"]+)"([^>]*)>([^<]+)<\/a>/g)];
@@ -98,7 +106,7 @@ describe("SEO surface navigation", () => {
 
     it("keeps content pages free of application scripts and unused font preloads", () => {
         for (const entry of entries) {
-            const html = renderSurface(new URL(entry.loc).pathname);
+            const html = surfaces.get(new URL(entry.loc).pathname)!;
             expect(html, entry.loc).not.toMatch(/<script[^>]*\bsrc=/);
             expect(html, entry.loc).not.toMatch(/<link[^>]*\brel="preload"[^>]*\bas="font"/);
         }
