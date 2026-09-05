@@ -56,6 +56,12 @@ test.beforeAll(async () => {
         await mkdir(directory);
         await writeFile(join(directory, "clip.mkv"), await createMseFixture({ ...options, format: "matroska" }));
     }
+    const tsDirectory = join(fixtureDirectory, "ts-audio");
+    await mkdir(tsDirectory);
+    await writeFile(
+        join(tsDirectory, "clip.ts"),
+        await createMseFixture({ format: "mpegts", gopCount: 30, audioDurationSec: 30 }),
+    );
 });
 
 test.afterAll(async () => {
@@ -151,6 +157,29 @@ test("retains an ordinary matched audio track in MSE playback", async ({ page })
         return count;
     });
     expect(audioTracks).toBe(1);
+});
+
+test("plays MPEG-TS video with AAC sound before and after a seek", async ({ page }) => {
+    await loadTrip(page, join(fixtureDirectory, "ts-audio"));
+    await expect
+        .poll(() => page.locator("#player").evaluate((video: HTMLVideoElement) => video.currentTime))
+        .toBeGreaterThan(1);
+    await page.keyboard.press("5");
+    await expect
+        .poll(() => page.locator("#player").evaluate((video: HTMLVideoElement) => video.currentTime))
+        .toBeGreaterThan(16);
+    const audioTracks = await page.locator("#player").evaluate((video: HTMLVideoElement) => {
+        const stream = (video as HTMLVideoElement & { captureStream(): MediaStream }).captureStream();
+        const count = stream.getAudioTracks().length;
+        for (const track of stream.getTracks()) track.stop();
+        return count;
+    });
+    expect(audioTracks).toBe(1);
+    expect(
+        await page.evaluate(() =>
+            window.__dashcamigo.dumpLog().filter((entry) => entry.msg.startsWith("backend fail")),
+        ),
+    ).toEqual([]);
 });
 
 test("seeks back to the initial position after MSE trims it", async ({ page }) => {

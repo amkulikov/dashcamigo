@@ -142,9 +142,8 @@ interface PerFileMseBackendOptions {
      */
     transcodeAdpcmAudio?: boolean;
     /**
-     * Defensive fallback callback. Called on any failure (init or runtime).
-     * Caller should mark the candidate unplayable and show an "unsupported
-     * file" overlay instead of a black screen.
+     * Called on init or runtime failure. The caller decides whether to retry
+     * or show a playback error; a runtime fault does not imply an unsupported codec.
      */
     onError?: (reason: string, error?: unknown) => void;
 }
@@ -777,9 +776,14 @@ export class PerFileMseBackend {
     }
 
     private fail(reason: string, error?: unknown): void {
-        if (this.failed) return;
+        if (this.disposed || this.failed) return;
         this.failed = true;
-        this.logger.warn("backend fail", { file: this._file.name, reason, error });
+        const message = error instanceof Error ? error.message : error !== undefined ? String(error) : undefined;
+        this.logger.warn(`backend fail: ${reason}${message ? `: ${message}` : ""}`, {
+            file: this._file.name,
+            reason,
+            error: message,
+        });
         // Which container/codec quirks refuse to play in the wild that the
         // canPlay pre-check missed. A classified message (not an exception);
         // reason is a closed enum, including mime-not-supported:<mime> (safe).

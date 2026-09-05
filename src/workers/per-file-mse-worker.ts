@@ -120,6 +120,7 @@ let videoCodec: VideoCodec | null = null;
 let audioCodec: AudioCodec | null = null;
 let videoDecoderConfig: VideoDecoderConfig | null = null;
 let audioDecoderConfig: AudioDecoderConfig | null = null;
+let audioConfigPrimingPacket: EncodedPacket | undefined;
 let videoRotation: Rotation = 0;
 let startSec = 0;
 let sourceTimeOrigin = 0;
@@ -304,7 +305,11 @@ function fail(reason: string, error?: unknown): void {
     input?.dispose();
     input = null;
     const message = error instanceof Error ? error.message : error !== undefined ? String(error) : undefined;
-    log.warn("worker fail", { file: workerFile?.name, reason, error });
+    log.warn(`worker fail: ${reason}${message ? `: ${message}` : ""}`, {
+        file: workerFile?.name,
+        reason,
+        error: message,
+    });
     const ntf: ErrorNotificationData = { reason, message };
     server.notify(MSE_NOTIFY_ERROR, ntf);
 }
@@ -417,6 +422,9 @@ async function onInit(
                     audioCodec = ac;
                     audioCodecParam = acParam;
                     audioDecoderConfig = adc;
+                    // Some codecs carry muxing metadata in their first packet instead
+                    // of decoderConfig. Keep it ready before start() on every cycle.
+                    audioConfigPrimingPacket = (await new EncodedPacketSink(at).getFirstPacket()) ?? undefined;
                 } else {
                     // Audio track present but codec params unparseable - drop audio.
                     // Silent video beats a black screen.
@@ -620,7 +628,9 @@ async function startNewFeedCycle(cycleId: number, armSeekDone: boolean): Promise
         // Keep the track set stable even when a seek has no remaining audio packets.
         cycle.output.addAudioTrack(
             cycle.audioSource,
-            audioDecoderConfig ? { decoderConfig: audioDecoderConfig } : undefined,
+            audioDecoderConfig
+                ? { decoderConfig: audioDecoderConfig, primingPacket: audioConfigPrimingPacket }
+                : undefined,
         );
     }
 

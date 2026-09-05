@@ -138,8 +138,8 @@ export interface SeekDoneNotificationData {
     cycleId: number;
 }
 
-/** "error" notification: terminal failure inside the worker. Main side
- *  calls onError on the candidate so player.ts can mark the file unplayable. */
+/** "error" notification: terminal failure inside the worker. The player
+ *  classifies the failure before retrying or showing a playback error. */
 export interface ErrorNotificationData {
     reason: string;
     message?: string;
