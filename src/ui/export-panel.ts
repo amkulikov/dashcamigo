@@ -188,6 +188,8 @@ function openOrCloseExportMode(): void {
 }
 
 let wasExportModeOpen = false;
+let previousPhase = exportPanelState.phase;
+let shouldFocusPhase = false;
 
 function syncExportPanel(): void {
     const hasJustOpened = state.exportModeOpen && !wasExportModeOpen;
@@ -198,6 +200,12 @@ function syncExportPanel(): void {
     // stale results) - keep the checkbox block honest alongside the zones.
     syncDetectGroup();
     const phase = exportPanelState.phase;
+    if (phase !== previousPhase) {
+        shouldFocusPhase =
+            document.activeElement === document.body || !!dom.exportPanel?.contains(document.activeElement);
+        previousPhase = phase;
+    }
+    if (!state.exportModeOpen) shouldFocusPhase = false;
     if (dom.exportPanelOptions) {
         dom.exportPanelOptions.hidden = phase !== "options";
         dom.exportPanelOptions.inert = exportPanelState.configurationLocked;
@@ -249,6 +257,18 @@ function syncExportPanel(): void {
         syncWatermarkOpt();
     } else {
         syncGpxSummary();
+    }
+    if (shouldFocusPhase && (phase !== "options" || !exportPanelState.configurationLocked)) {
+        shouldFocusPhase = false;
+        const target =
+            phase === "progress"
+                ? progressStatusEl
+                : phase === "done"
+                  ? document.getElementById("export-panel-done-summary")
+                  : phase === "error"
+                    ? errorStatusEl
+                    : saveBtnEl;
+        target?.focus();
     }
 }
 
@@ -313,6 +333,11 @@ function syncGpsOptionsAvailability(): void {
         const cb = document.getElementById(id) as HTMLInputElement | null;
         if (!cb) continue;
         cb.disabled = !hasGps;
+        const name = cb.closest(".export-panel__ov-row")?.querySelector<HTMLButtonElement>("button");
+        if (name) {
+            name.disabled = !hasGps;
+            if (!hasGps) name.setAttribute("aria-expanded", "false");
+        }
         // No GPS -> show every box cleared, so a stale tick carried from a
         // previous trip never reads as "this will happen"; with GPS, mirror the
         // live state.
@@ -432,6 +457,11 @@ function renderOptionsSection(): void {
     root.appendChild(cancelBtn);
 }
 
+function setToggleSelected(button: Element, selected: boolean, activeClass = "is-active"): void {
+    button.classList.toggle(activeClass, selected);
+    button.setAttribute("aria-pressed", String(selected));
+}
+
 // "What to export" switch: the video clip (with all the controls below) or just
 // the GPS track as a .gpx. A compact segmented toggle - low visual weight for
 // the common (video) case, while staying discoverable. Always built; hidden on
@@ -516,7 +546,7 @@ function syncOutputKindUi(): void {
     if (videoOnlyEl) videoOnlyEl.hidden = gpx;
     if (gpxSummaryEl) gpxSummaryEl.hidden = !gpx;
     for (const btn of modeButtons) {
-        btn.classList.toggle("active", btn.dataset.mode === exportPanelState.outputKind);
+        setToggleSelected(btn, btn.dataset.mode === exportPanelState.outputKind, "active");
     }
     if (saveBtnEl) {
         saveBtnEl.textContent = gpx ? t("export.gpx.start") : t("export.start");
@@ -771,6 +801,7 @@ function renderManualBitrate(): HTMLElement {
     const input = document.createElement("input");
     input.type = "number";
     input.id = "export-panel-bitrate";
+    input.className = "settings-number-input";
     // Numeric soft keyboard; the value is whole megabits (clampManualBitrateMbps).
     input.inputMode = "numeric";
     input.min = String(MANUAL_BITRATE_MIN_MBPS);
@@ -1371,9 +1402,7 @@ async function startTrackerDownload(): Promise<void> {
     syncTrackerStrip();
 }
 
-// Last-rendered strip signature - skips the innerHTML rebuild on every download
-// progress chunk (only the rounded percent changes, so ~100 rebuilds max, not
-// one per network chunk). null until the first render.
+// Progress updates preserve the Cancel button; only phase changes rebuild the strip.
 let trackerStripSig: string | null = null;
 
 /** Renders the consent / progress / offline / error strip from tracker state +
@@ -1397,7 +1426,7 @@ function syncTrackerStrip(): void {
     // microtask the set is still non-empty would only flash.
     const sig =
         phase === "downloading" && followDownload
-            ? `d${Math.round(progress * 100)}`
+            ? "downloading"
             : blurAssetsReady(FOLLOW_GROUPS) || !pending
               ? "hidden"
               : offlineNow
@@ -1405,7 +1434,10 @@ function syncTrackerStrip(): void {
                 : phase === "error" && followDownload
                   ? "error"
                   : "consent";
-    if (sig === trackerStripSig) return;
+    if (sig === trackerStripSig) {
+        if (sig === "downloading") syncTrackerProgress(strip, progress);
+        return;
+    }
     trackerStripSig = sig;
     strip.innerHTML = "";
     strip.classList.remove("is-error");
@@ -1414,7 +1446,7 @@ function syncTrackerStrip(): void {
     // must be escapable), even the silent cached warm.
     if (phase === "downloading" && followDownload) {
         strip.append(
-            trackerProgressNode(progress, t("export.blur.tracker.progress", { pct: Math.round(progress * 100) })),
+            trackerProgressNode(progress),
             trackerActionsNode([
                 { label: t("export.blur.tracker.cancel"), onClick: cancelTrackerDownload, secondary: true },
             ]),
@@ -1547,7 +1579,7 @@ function syncDetectStrip(): void {
     const offlineNow = kinds.length > 0 && blurAssetsBlockedOffline(groups);
     const sig =
         phase === "downloading" && detectDownload
-            ? `d${Math.round(progress * 100)}`
+            ? "downloading"
             : !need
               ? "hidden"
               : offlineNow
@@ -1555,14 +1587,17 @@ function syncDetectStrip(): void {
                 : phase === "error" && detectDownload
                   ? "error"
                   : "consent";
-    if (sig === detectStripSig) return;
+    if (sig === detectStripSig) {
+        if (sig === "downloading") syncTrackerProgress(strip, progress);
+        return;
+    }
     detectStripSig = sig;
     strip.innerHTML = "";
     strip.classList.remove("is-error");
 
     if (phase === "downloading" && detectDownload) {
         strip.append(
-            trackerProgressNode(progress, t("export.blur.tracker.progress", { pct: Math.round(progress * 100) })),
+            trackerProgressNode(progress),
             trackerActionsNode([
                 { label: t("export.blur.tracker.cancel"), onClick: cancelDetectDownload, secondary: true },
             ]),
@@ -1700,26 +1735,35 @@ function trackerMessageNode(text: string): HTMLElement {
     return el;
 }
 
-function trackerProgressNode(progress: number, labelText: string): HTMLElement {
+function trackerProgressNode(progress: number, labelText?: string): HTMLElement {
     const wrap = document.createElement("div");
     wrap.setAttribute("aria-live", "polite");
     const label = document.createElement("div");
     label.className = "export-panel__blur-tracker-msg";
-    label.textContent = labelText;
     const bar = document.createElement("div");
     bar.className = "export-panel__blur-tracker-bar";
-    const pct = Math.max(0, Math.min(100, Math.round(progress * 100)));
     bar.setAttribute("role", "progressbar");
-    bar.setAttribute("aria-label", labelText);
     bar.setAttribute("aria-valuemin", "0");
     bar.setAttribute("aria-valuemax", "100");
-    bar.setAttribute("aria-valuenow", String(pct));
     const fill = document.createElement("div");
     fill.className = "export-panel__blur-tracker-bar-fill";
-    fill.style.width = `${pct}%`;
     bar.appendChild(fill);
     wrap.append(label, bar);
+    syncTrackerProgress(wrap, progress, labelText);
     return wrap;
+}
+
+function syncTrackerProgress(root: HTMLElement, progress: number, labelText?: string): void {
+    const pct = Math.max(0, Math.min(100, Math.round(progress * 100)));
+    const bar = root.querySelector<HTMLElement>(".export-panel__blur-tracker-bar");
+    if (!bar || bar.getAttribute("aria-valuenow") === String(pct)) return;
+    const progressLabel = labelText ?? t("export.blur.tracker.progress", { pct });
+    const label = root.querySelector(".export-panel__blur-tracker-msg");
+    if (label) label.textContent = progressLabel;
+    bar.setAttribute("aria-label", progressLabel);
+    bar.setAttribute("aria-valuenow", String(pct));
+    const fill = bar.querySelector<HTMLElement>(".export-panel__blur-tracker-bar-fill");
+    if (fill) fill.style.width = `${pct}%`;
 }
 
 function trackerActionsNode(
@@ -1808,10 +1852,25 @@ function syncBlurGroup(): void {
     // The keyframe hint refers to a box that exists - hide it until the first
     // zone (the empty list needs no note: the Add button IS the empty state).
     if (blurMoveHintEl) blurMoveHintEl.hidden = regions.length === 0;
+    const focused = document.activeElement;
+    const focusedRow =
+        focused instanceof HTMLElement && list.contains(focused)
+            ? focused.closest<HTMLElement>("[data-region-id]")
+            : null;
+    const focusedAction = focused instanceof HTMLElement ? focused.dataset.action : undefined;
     list.innerHTML = "";
     regions.forEach((region, i) => {
         list.appendChild(renderBlurRow(region, i));
     });
+    if (focusedRow && focusedAction) {
+        const row = Array.from(list.children).find(
+            (el) => el instanceof HTMLElement && el.dataset.regionId === focusedRow.dataset.regionId,
+        );
+        const target = Array.from(row?.querySelectorAll<HTMLButtonElement>("button") ?? []).find(
+            (button) => button.dataset.action === focusedAction,
+        );
+        (target ?? blurAddBtnEl)?.focus({ preventScroll: true });
+    }
 }
 
 /** Manual timing mode: the user owns the start/end, while tracked motion and
@@ -1874,6 +1933,7 @@ function renderBlurRow(region: BlurRegion, index: number): HTMLElement {
 
     const row = document.createElement("div");
     row.className = "export-panel__blur-row";
+    row.dataset.regionId = region.id;
 
     // --- header: name + badge (left), time-range + delete (right) -------------
     const head = document.createElement("div");
@@ -1889,6 +1949,7 @@ function renderBlurRow(region: BlurRegion, index: number): HTMLElement {
     // next to the player's real play button and read as play.
     const range = document.createElement("button");
     range.type = "button";
+    range.dataset.action = "jump";
     range.className = "export-panel__blur-row-range";
     range.textContent = `${formatTime(region.startSec)}-${formatTime(region.endSec)}`;
     range.title = t("export.blur.row.jump");
@@ -1898,6 +1959,7 @@ function renderBlurRow(region: BlurRegion, index: number): HTMLElement {
 
     const del = document.createElement("button");
     del.type = "button";
+    del.dataset.action = "delete";
     del.className = "export-panel__blur-del-btn";
     del.textContent = "✕";
     del.title = t("export.blur.row.delete");
@@ -1928,9 +1990,16 @@ function renderBlurRow(region: BlurRegion, index: number): HTMLElement {
     // --- mode: Follow-owned vs user-owned timing -------------------------------
     const seg = document.createElement("div");
     seg.className = "export-panel__segmented export-panel__blur-duration";
-    const mkSeg = (label: string, title: string, active: boolean, onClick: () => void): HTMLButtonElement => {
+    const mkSeg = (
+        action: string,
+        label: string,
+        title: string,
+        active: boolean,
+        onClick: () => void,
+    ): HTMLButtonElement => {
         const b = document.createElement("button");
         b.type = "button";
+        b.dataset.action = action;
         b.className = "export-panel__seg-btn";
         b.textContent = label;
         b.title = title;
@@ -1948,6 +2017,7 @@ function renderBlurRow(region: BlurRegion, index: number): HTMLElement {
     // The percent tracks footage decoded; on early loss it ends before 100%
     // (loss-defined span), which is honest.
     const followSeg = mkSeg(
+        "follow",
         running
             ? t("export.blur.tracker.working", { pct: Math.round((pass?.fractionDone ?? 0) * 100) })
             : t("export.blur.follow"),
@@ -1959,7 +2029,7 @@ function renderBlurRow(region: BlurRegion, index: number): HTMLElement {
     followSeg.classList.toggle("is-running", running);
     seg.appendChild(followSeg);
     seg.appendChild(
-        mkSeg(t("export.blur.mode.fixed"), t("export.blur.mode.fixedHint"), !region.autoEnd, () =>
+        mkSeg("fixed", t("export.blur.mode.fixed"), t("export.blur.mode.fixedHint"), !region.autoEnd, () =>
             setBlurManualTimeMode(region),
         ),
     );
@@ -1969,9 +2039,10 @@ function renderBlurRow(region: BlurRegion, index: number): HTMLElement {
     if (!region.autoEnd) {
         const fixed = document.createElement("div");
         fixed.className = "export-panel__blur-row-actions";
-        const mkBtn = (label: string, title: string, onClick: () => void): HTMLButtonElement => {
+        const mkBtn = (action: string, label: string, title: string, onClick: () => void): HTMLButtonElement => {
             const b = document.createElement("button");
             b.type = "button";
+            b.dataset.action = action;
             b.className = "export-panel__blur-row-btn";
             b.textContent = label;
             b.title = title;
@@ -1980,11 +2051,13 @@ function renderBlurRow(region: BlurRegion, index: number): HTMLElement {
             return b;
         };
         fixed.appendChild(
-            mkBtn(t("export.blur.setStart"), t("export.blur.row.setStart"), () => setBlurStartHere(region)),
+            mkBtn("start", t("export.blur.setStart"), t("export.blur.row.setStart"), () => setBlurStartHere(region)),
         );
-        fixed.appendChild(mkBtn(t("export.blur.setEnd"), t("export.blur.row.setEnd"), () => setBlurEndHere(region)));
         fixed.appendChild(
-            mkBtn(t("export.blur.mode.wholeClip"), t("export.blur.wholeClip"), () =>
+            mkBtn("end", t("export.blur.setEnd"), t("export.blur.row.setEnd"), () => setBlurEndHere(region)),
+        );
+        fixed.appendChild(
+            mkBtn("whole", t("export.blur.mode.wholeClip"), t("export.blur.wholeClip"), () =>
                 setBlurWholeClip(region, exportRange.startTripSec, exportRange.endTripSec),
             ),
         );
@@ -2217,14 +2290,12 @@ function renderStyleSegment(): HTMLElement {
         btn.type = "button";
         btn.textContent = t(key);
         btn.dataset.style = id;
-        btn.setAttribute("aria-pressed", String(exportPanelState.overlayStyle === id));
-        btn.classList.toggle("is-active", exportPanelState.overlayStyle === id);
+        setToggleSelected(btn, exportPanelState.overlayStyle === id);
         btn.addEventListener("click", () => {
             exportPanelState.overlayStyle = id;
             for (const b of Array.from(seg.children)) {
                 const active = (b as HTMLElement).dataset.style === id;
-                b.classList.toggle("is-active", active);
-                b.setAttribute("aria-pressed", String(active));
+                setToggleSelected(b, active);
             }
             notifyExportStateChanged();
         });
@@ -2251,6 +2322,7 @@ function renderWidgetList(): HTMLElement {
         const cb = document.createElement("input");
         cb.type = "checkbox";
         cb.id = overlayCbId(def.id);
+        cb.setAttribute("aria-label", t(def.labelKey));
         cb.checked = def.state().enabled;
         cb.addEventListener("change", () => {
             def.state().enabled = cb.checked;
@@ -2269,6 +2341,8 @@ function renderWidgetList(): HTMLElement {
         name.type = "button";
         name.className = "export-panel__ov-name";
         name.textContent = t(def.labelKey);
+        name.setAttribute("aria-expanded", "false");
+        name.setAttribute("aria-controls", "export-panel-overlay-inspector");
         name.addEventListener("click", () => {
             // Accordion toggle: clicking the open widget collapses its settings
             // (the widget stays enabled - the checkbox owns on/off).
@@ -2330,11 +2404,11 @@ function renderAccentRow(): HTMLElement {
         btn.style.setProperty("--swatch", color);
         btn.dataset.color = color;
         btn.setAttribute("aria-label", color);
-        btn.classList.toggle("is-active", exportPanelState.overlayAccent.toLowerCase() === color.toLowerCase());
+        setToggleSelected(btn, exportPanelState.overlayAccent.toLowerCase() === color.toLowerCase());
         btn.addEventListener("click", () => {
             exportPanelState.overlayAccent = color;
             for (const b of Array.from(row.children)) {
-                b.classList.toggle("is-active", (b as HTMLElement).dataset.color === color);
+                setToggleSelected(b, (b as HTMLElement).dataset.color === color);
             }
             notifyExportStateChanged();
         });
@@ -2352,7 +2426,9 @@ function refreshOverlayInspector(): void {
     if (!root) return;
     // Reflect the current selection on the widget rows.
     for (const r of Array.from(document.querySelectorAll<HTMLElement>(".export-panel__ov-row"))) {
-        r.classList.toggle("is-selected", r.dataset.widget === selectedOverlayKey);
+        const expanded = r.dataset.widget === selectedOverlayKey && activeTripHasGps();
+        r.classList.toggle("is-selected", expanded);
+        r.querySelector("button")?.setAttribute("aria-expanded", String(expanded));
     }
     root.innerHTML = "";
     const id = selectedOverlayKey;
@@ -2448,6 +2524,8 @@ function renderMapShapeSegment(): HTMLElement {
     wrap.appendChild(label);
     const seg = document.createElement("div");
     seg.className = "export-panel__segment";
+    seg.setAttribute("role", "group");
+    seg.setAttribute("aria-label", label.textContent);
     const shapes: Array<[MapShape, I18nKey]> = [
         ["rect", "export.overlays.shape.rect"],
         ["circle", "export.overlays.shape.circle"],
@@ -2457,11 +2535,11 @@ function renderMapShapeSegment(): HTMLElement {
         btn.type = "button";
         btn.textContent = t(key);
         btn.dataset.shape = shape;
-        btn.classList.toggle("is-active", exportPanelState.overlayMap.shape === shape);
+        setToggleSelected(btn, exportPanelState.overlayMap.shape === shape);
         btn.addEventListener("click", () => {
             exportPanelState.overlayMap.shape = shape;
             for (const b of Array.from(seg.children)) {
-                b.classList.toggle("is-active", (b as HTMLElement).dataset.shape === shape);
+                setToggleSelected(b, (b as HTMLElement).dataset.shape === shape);
             }
             notifyExportStateChanged();
         });
@@ -2482,6 +2560,8 @@ function renderMapThemeSegment(): HTMLElement {
     wrap.appendChild(label);
     const seg = document.createElement("div");
     seg.className = "export-panel__segment";
+    seg.setAttribute("role", "group");
+    seg.setAttribute("aria-label", label.textContent);
     const themes: Array<[MapStyleId, I18nKey]> = [
         ["light", "export.overlays.mapTheme.light"],
         ["dark", "export.overlays.mapTheme.dark"],
@@ -2492,11 +2572,11 @@ function renderMapThemeSegment(): HTMLElement {
         btn.type = "button";
         btn.textContent = t(key);
         btn.dataset.maptheme = theme;
-        btn.classList.toggle("is-active", exportPanelState.overlayMap.theme === theme);
+        setToggleSelected(btn, exportPanelState.overlayMap.theme === theme);
         btn.addEventListener("click", () => {
             exportPanelState.overlayMap.theme = theme;
             for (const b of Array.from(seg.children)) {
-                b.classList.toggle("is-active", (b as HTMLElement).dataset.maptheme === theme);
+                setToggleSelected(b, (b as HTMLElement).dataset.maptheme === theme);
             }
             notifyExportStateChanged();
         });
@@ -2519,16 +2599,18 @@ function renderMapLabelSizeSegment(): HTMLElement {
     wrap.appendChild(label);
     const seg = document.createElement("div");
     seg.className = "export-panel__segment";
+    seg.setAttribute("role", "group");
+    seg.setAttribute("aria-label", label.textContent);
     for (const pct of MAP_LABEL_SIZE_PCT_VALUES) {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.textContent = `${pct}%`;
         btn.dataset.maplabelsize = String(pct);
-        btn.classList.toggle("is-active", exportPanelState.overlayMap.labelScalePct === pct);
+        setToggleSelected(btn, exportPanelState.overlayMap.labelScalePct === pct);
         btn.addEventListener("click", () => {
             exportPanelState.overlayMap.labelScalePct = pct;
             for (const b of Array.from(seg.children)) {
-                b.classList.toggle("is-active", (b as HTMLElement).dataset.maplabelsize === String(pct));
+                setToggleSelected(b, (b as HTMLElement).dataset.maplabelsize === String(pct));
             }
             notifyExportStateChanged();
         });
@@ -2551,16 +2633,18 @@ function renderMapStreetNamesSegment(): HTMLElement {
     wrap.appendChild(label);
     const seg = document.createElement("div");
     seg.className = "export-panel__segment";
+    seg.setAttribute("role", "group");
+    seg.setAttribute("aria-label", label.textContent);
     for (const density of STREET_LABEL_DENSITY_VALUES) {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.textContent = t(STREET_LABEL_DENSITY_LABEL_KEYS[density]);
         btn.dataset.mapstreetnames = density;
-        btn.classList.toggle("is-active", exportPanelState.overlayMap.labelDensity === density);
+        setToggleSelected(btn, exportPanelState.overlayMap.labelDensity === density);
         btn.addEventListener("click", () => {
             exportPanelState.overlayMap.labelDensity = density;
             for (const b of Array.from(seg.children)) {
-                b.classList.toggle("is-active", (b as HTMLElement).dataset.mapstreetnames === density);
+                setToggleSelected(b, (b as HTMLElement).dataset.mapstreetnames === density);
             }
             notifyExportStateChanged();
         });
@@ -2588,6 +2672,8 @@ function renderMapModeControls(): HTMLElement {
     modeField.appendChild(modeLabel);
     const seg = document.createElement("div");
     seg.className = "export-panel__segment";
+    seg.setAttribute("role", "group");
+    seg.setAttribute("aria-label", modeLabel.textContent);
     const modes: Array<[MapViewMode, I18nKey]> = [
         ["north", "export.overlays.mapMode.north"],
         ["chase", "export.overlays.mapMode.chase"],
@@ -2602,11 +2688,11 @@ function renderMapModeControls(): HTMLElement {
         btn.type = "button";
         btn.textContent = t(key);
         btn.dataset.mapmode = mode;
-        btn.classList.toggle("is-active", om.mode === mode);
+        setToggleSelected(btn, om.mode === mode);
         btn.addEventListener("click", () => {
             om.mode = mode;
             for (const b of Array.from(seg.children)) {
-                b.classList.toggle("is-active", (b as HTMLElement).dataset.mapmode === mode);
+                setToggleSelected(b, (b as HTMLElement).dataset.mapmode === mode);
             }
             extras.hidden = mode !== "chase";
             notifyExportStateChanged();
@@ -2668,6 +2754,8 @@ function renderOverlaySlider(
 
     const input = document.createElement("input");
     input.type = "range";
+    input.setAttribute("aria-label", labelText);
+    input.setAttribute("aria-valuetext", fmt(value));
     input.min = String(min);
     input.max = String(max);
     input.step = String(step);
@@ -2680,6 +2768,7 @@ function renderOverlaySlider(
         const snapped = Math.round(Math.round(raw / step) * step * 1000) / 1000;
         const clamped = Math.max(min, Math.min(max, snapped));
         val.textContent = fmt(clamped);
+        input.setAttribute("aria-valuetext", fmt(clamped));
         onInput(clamped);
     });
     row.appendChild(input);
@@ -2816,7 +2905,6 @@ async function onSaveClick(): Promise<void> {
             // the outer finally block unlocks it when the flow settles.
             onExportStart: () => {
                 exportPanelState.phase = "progress";
-                notifyExportStateChanged();
                 setProgressStatus(t("export.status.preparing"));
                 // A previous run can end with the indeterminate sweep still on (the
                 // disk-commit tick is the last progress event) - reset it here or it
@@ -2824,20 +2912,21 @@ async function onSaveClick(): Promise<void> {
                 setProgressIndeterminate(false);
                 setProgressFill(0);
                 setProgressMeta("");
+                notifyExportStateChanged();
             },
             onDone: (s) => {
+                renderDoneSummary(s);
                 exportPanelState.phase = "done";
                 notifyExportStateChanged();
-                renderDoneSummary(s);
             },
             onError: (messageKey, params) => {
                 // Move to a terminal error phase with a way back to the configure
                 // view - staying in "progress" left a frozen bar and a dead Cancel
                 // button as the only controls. messageKey is already one of the
                 // friendly export.error.* keys; show it directly, no "Error:" wrap.
+                setErrorStatus(t(messageKey, params));
                 exportPanelState.phase = "error";
                 notifyExportStateChanged();
-                setErrorStatus(t(messageKey, params));
             },
             onCancel: () => {
                 exportPanelState.phase = "options";
@@ -2891,6 +2980,7 @@ function renderProgressSection(): void {
     const status = document.createElement("div");
     status.className = "export-panel__progress-status";
     status.id = "export-panel-progress-status";
+    status.tabIndex = -1;
     status.setAttribute("role", "status");
     status.setAttribute("aria-live", "polite");
     progressStatusEl = status;
@@ -2962,6 +3052,7 @@ function renderDoneSection(): void {
     const summary = document.createElement("div");
     summary.id = "export-panel-done-summary";
     summary.className = "export-panel__done-summary";
+    summary.tabIndex = -1;
     root.appendChild(summary);
 
     const closeBtn = document.createElement("button");
@@ -2987,6 +3078,7 @@ function renderErrorSection(): void {
 
     const status = document.createElement("div");
     status.className = "export-panel__error-status";
+    status.tabIndex = -1;
     errorStatusEl = status;
     root.appendChild(status);
 

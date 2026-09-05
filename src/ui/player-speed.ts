@@ -5,6 +5,8 @@
 
 import { t } from "../i18n/index.js";
 import { dom } from "./dom.js";
+import { initMenuKeyboard } from "./menu-keyboard.js";
+import { initPlayerPopoverPosition } from "./player-popover.js";
 import { state } from "./state.js";
 
 // Speed values for "<" / ">" hotkeys and the dropdown menu. Must match
@@ -41,6 +43,7 @@ function toggleSpeedMenu(): void {
 function openSpeedMenu(): void {
     dom.playerBar.speedMenu.hidden = false;
     dom.playerBar.speed.setAttribute("aria-expanded", "true");
+    dom.playerBar.speedMenu.querySelector<HTMLElement>(".active")?.focus();
 }
 
 export function closeSpeedMenu(): void {
@@ -67,7 +70,9 @@ export function syncSpeedButton(): void {
     dom.playerBar.speed.title = t("player.speed.title");
     // Highlight the current item in the menu.
     for (const item of dom.playerBar.speedMenu.querySelectorAll("[data-rate]")) {
-        item.classList.toggle("active", Number(item.getAttribute("data-rate")) === r);
+        const selected = Number(item.getAttribute("data-rate")) === r;
+        item.classList.toggle("active", selected);
+        item.setAttribute("aria-checked", String(selected));
     }
 }
 
@@ -76,9 +81,24 @@ export function syncSpeedButton(): void {
  * the central hotkeys handler (player.ts) - it just calls cyclePlaybackRate.
  */
 export function initPlayerSpeed(): void {
+    initPlayerPopoverPosition(dom.playerBar.speed, dom.playerBar.speedMenu);
+    const items = [...dom.playerBar.speedMenu.querySelectorAll<HTMLElement>("[data-rate]")];
+    for (const item of items) {
+        item.tabIndex = -1;
+        item.setAttribute("role", "menuitemradio");
+    }
+    syncSpeedButton();
     dom.playerBar.speed.addEventListener("click", (e) => {
         e.stopPropagation();
         toggleSpeedMenu();
+    });
+
+    initMenuKeyboard({
+        button: dom.playerBar.speed,
+        menu: dom.playerBar.speedMenu,
+        itemSelector: "[data-rate]",
+        onOpen: openSpeedMenu,
+        onClose: closeSpeedMenu,
     });
 
     dom.playerBar.speedMenu.addEventListener("click", (e) => {
@@ -94,6 +114,7 @@ export function initPlayerSpeed(): void {
             dom.player.playbackRate = rate;
         }
         closeSpeedMenu();
+        focusSpeedButton();
     });
 
     // Close the menu on click outside - standard dropdown UX.

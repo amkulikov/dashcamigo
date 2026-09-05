@@ -17,6 +17,11 @@ const log = createLogger("player");
 
 const FULLSCREEN_HIDE_DELAY_MS = 2000;
 let fullscreenHideTimer: ReturnType<typeof setTimeout> | null = null;
+const CONTROL_SELECTOR = ".player-bar, .player-chart, .player-readout";
+const OPEN_MENU_SELECTOR =
+    ".player-speed-menu:not([hidden]), .view-menu-popover:not([hidden]), .overflow-menu:not([hidden])";
+let isPointerOverControls = false;
+const activeTouchPointers = new Set<number>();
 
 export async function toggleFullscreen(): Promise<void> {
     try {
@@ -37,6 +42,18 @@ function scheduleHideFullscreenControls(): void {
     fullscreenHideTimer = setTimeout(() => {
         fullscreenHideTimer = null;
         if (!document.fullscreenElement) return;
+        const focused = document.activeElement;
+        const hasKeyboardFocus =
+            focused instanceof HTMLElement && focused.matches(":focus-visible") && focused.closest(CONTROL_SELECTOR);
+        if (
+            isPointerOverControls ||
+            activeTouchPointers.size ||
+            hasKeyboardFocus ||
+            dom.playerWrap.querySelector(OPEN_MENU_SELECTOR)
+        ) {
+            scheduleHideFullscreenControls();
+            return;
+        }
         dom.playerWrap.classList.remove("controls-visible");
     }, FULLSCREEN_HIDE_DELAY_MS);
 }
@@ -74,6 +91,13 @@ export function initPlayerFullscreen(): void {
 
     dom.playerWrap.addEventListener("mousemove", () => {
         if (!document.fullscreenElement) return;
+        dom.playerWrap.classList.add("controls-visible");
+        scheduleHideFullscreenControls();
+    });
+
+    dom.playerWrap.addEventListener("focusin", (event) => {
+        if (!document.fullscreenElement || !(event.target instanceof Element)) return;
+        if (!event.target.closest(CONTROL_SELECTOR)) return;
         dom.playerWrap.classList.add("controls-visible");
         scheduleHideFullscreenControls();
     });
@@ -119,9 +143,10 @@ export function initPlayerFullscreen(): void {
     // otherwise buttons run away from the cursor. mousemove on playerWrap also
     // fires here, but we additionally cancel the timer on bar mouseenter so
     // controls don't disappear between events.
-    for (const el of [dom.playerBar.play.parentElement, document.getElementById("player-chart")]) {
-        if (!el) continue;
-        el.addEventListener("mouseenter", () => {
+    for (const el of dom.playerWrap.querySelectorAll<HTMLElement>(CONTROL_SELECTOR)) {
+        el.addEventListener("pointerenter", (event) => {
+            if (event.pointerType !== "mouse") return;
+            isPointerOverControls = true;
             if (!document.fullscreenElement) return;
             if (fullscreenHideTimer) {
                 clearTimeout(fullscreenHideTimer);
@@ -129,7 +154,9 @@ export function initPlayerFullscreen(): void {
             }
             dom.playerWrap.classList.add("controls-visible");
         });
-        el.addEventListener("mouseleave", () => {
+        el.addEventListener("pointerleave", (event) => {
+            if (event.pointerType !== "mouse") return;
+            isPointerOverControls = false;
             if (!document.fullscreenElement) return;
             scheduleHideFullscreenControls();
         });
@@ -138,15 +165,18 @@ export function initPlayerFullscreen(): void {
         // release. Without this the controls vanish mid-drag on a phone.
         el.addEventListener("pointerdown", (e) => {
             if (!document.fullscreenElement || e.pointerType === "mouse") return;
+            activeTouchPointers.add(e.pointerId);
             if (fullscreenHideTimer) {
                 clearTimeout(fullscreenHideTimer);
                 fullscreenHideTimer = null;
             }
             dom.playerWrap.classList.add("controls-visible");
         });
-        el.addEventListener("pointerup", (e) => {
-            if (!document.fullscreenElement || e.pointerType === "mouse") return;
-            scheduleHideFullscreenControls();
-        });
     }
+    const releasePointer = (event: PointerEvent): void => {
+        if (!activeTouchPointers.delete(event.pointerId)) return;
+        if (document.fullscreenElement) scheduleHideFullscreenControls();
+    };
+    document.addEventListener("pointerup", releasePointer);
+    document.addEventListener("pointercancel", releasePointer);
 }

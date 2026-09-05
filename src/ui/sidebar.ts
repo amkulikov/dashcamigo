@@ -68,7 +68,7 @@ export function renderTrips(): void {
     // Preserve reading position + keyboard focus across the full-list rebuild.
     // The final regroup sweep / user actions re-render the whole list; without
     // this the viewport jumps to the top and focus is lost.
-    const prevScrollTop = dom.list.scrollTop;
+    const prevScrollTop = dom.sidebar.scrollTop;
     const focus = captureListFocus(dom.list);
 
     dom.list.innerHTML = "";
@@ -166,7 +166,7 @@ export function renderTrips(): void {
     syncBrowseState();
 
     // Restore reading position + focus captured before the rebuild.
-    dom.list.scrollTop = prevScrollTop;
+    dom.sidebar.scrollTop = prevScrollTop;
     restoreListFocus(focus, dom.list);
 
     // Tell assistive tech the list is still updating while any card is provisional.

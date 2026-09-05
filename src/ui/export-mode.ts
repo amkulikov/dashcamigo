@@ -74,16 +74,26 @@ function closeExportAndCancelIfRunning(): void {
  * animation code here.
  */
 let wasExportModeOpen = false;
+let exportOpener: HTMLElement | null = null;
 
 function syncExportModeChrome(): void {
     const open = state.exportModeOpen;
+    const isOpening = open && !wasExportModeOpen;
+    const isClosing = !open && wasExportModeOpen;
+    const focusWasInExport =
+        !!dom.exportPanel?.contains(document.activeElement) ||
+        !!dom.exportTrimBar?.contains(document.activeElement) ||
+        !!dom.topPanel?.contains(document.activeElement);
+    if (isOpening) {
+        exportOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    }
     document.body.classList.toggle("export-mode", open);
 
     // On entering export mode, reset digital zoom: the crop preview owns the
     // main-video transform here (player-crop), so a leftover zoom transform
     // would fight it, and the zoom mini-preview is irrelevant while configuring
     // the export. Only on the transition - not every subscriber tick.
-    if (open && !wasExportModeOpen) {
+    if (isOpening) {
         state.videoZoom = { scale: 1, offsetX: 0, offsetY: 0 };
         if (dom.videoMinimap) dom.videoMinimap.hidden = true;
         // First-run onboarding for the export panel. Self-guarded; deferred so
@@ -99,12 +109,33 @@ function syncExportModeChrome(): void {
     // immediately after the close transition.
     if (dom.exportPanel) {
         dom.exportPanel.hidden = !open;
+        dom.exportPanel.inert = !open;
+    }
+
+    if (isClosing && (focusWasInExport || document.activeElement === document.body)) {
+        const candidates = [
+            exportOpener,
+            dom.exportBtn,
+            document.getElementById("player-overflow"),
+            document.getElementById("player-play"),
+        ];
+        candidates
+            .find(
+                (el) =>
+                    el &&
+                    el !== document.body &&
+                    el.getClientRects().length > 0 &&
+                    !el.matches(":disabled") &&
+                    !el.closest("[inert]"),
+            )
+            ?.focus();
+        exportOpener = null;
     }
 
     // Pause playback on entering export mode: the user is configuring, and
     // background audio is distracting. Matches the previous modal behavior
     // (export-modal.ts paused dom.player on openExportClick).
-    if (open && dom.player && !dom.player.paused) {
+    if (isOpening && dom.player && !dom.player.paused) {
         dom.player.pause();
     }
 }

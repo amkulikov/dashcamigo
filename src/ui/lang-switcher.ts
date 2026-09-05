@@ -23,6 +23,7 @@ import { buildLocaleUrl } from "../i18n/seo-config.js";
 import { getCurrentLang, LANGS, persistLangChoice, type Lang } from "../i18n/index.js";
 
 import { dom } from "./dom.js";
+import { initMenuKeyboard } from "./menu-keyboard.js";
 import { markIntentionalNavigation } from "./nav-intent.js";
 import { showSwitchLangConfirm } from "./switch-lang-modal.js";
 
@@ -57,10 +58,16 @@ function renderLangMenu(): void {
     const current = getCurrentLang();
     for (const { code, endonym } of LANGS) {
         const li = document.createElement("li");
-        li.setAttribute("role", "menuitem");
-        li.dataset.lang = code;
-        li.textContent = endonym;
-        if (code === current) li.classList.add("active");
+        li.setAttribute("role", "none");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.tabIndex = -1;
+        button.setAttribute("role", "menuitemradio");
+        button.setAttribute("aria-checked", String(code === current));
+        button.dataset.lang = code;
+        button.lang = code;
+        button.textContent = endonym;
+        li.appendChild(button);
         dom.langMenu.appendChild(li);
     }
 }
@@ -68,17 +75,26 @@ function renderLangMenu(): void {
 function openLangMenu(): void {
     dom.langMenu.hidden = false;
     dom.langToggle.setAttribute("aria-expanded", "true");
+    dom.langMenu.querySelector<HTMLElement>('[aria-checked="true"]')?.focus();
 }
 
-function closeLangMenu(): void {
+function closeLangMenu(restoreFocus = false): void {
     dom.langMenu.hidden = true;
     dom.langToggle.setAttribute("aria-expanded", "false");
+    if (restoreFocus) dom.langToggle.focus();
 }
 
 export function initLangSwitcher(): void {
     // Button is the static SVG icon from index.html; no text code is injected.
     // Active language is visible in the popover as the highlighted item.
     renderLangMenu();
+    initMenuKeyboard({
+        button: dom.langToggle,
+        menu: dom.langMenu,
+        itemSelector: 'button[role="menuitemradio"]',
+        onOpen: openLangMenu,
+        onClose: () => closeLangMenu(),
+    });
     dom.langToggle.addEventListener("click", (ev) => {
         ev.stopPropagation();
         if (dom.langMenu.hidden) openLangMenu();
@@ -91,7 +107,7 @@ export function initLangSwitcher(): void {
         if (!code || !isLang(code)) return;
         const from = getCurrentLang();
         // Always close the popover - user made an explicit selection.
-        closeLangMenu();
+        closeLangMenu(true);
         if (from === code) return;
         if (isLandingMode()) {
             // Nothing loaded to lose - navigate straight to /<lang>/.
@@ -116,6 +132,9 @@ export function initLangSwitcher(): void {
     // Escape closes the popover - parity with the sibling header popovers
     // (overflow bar, view menu, notifications drawer).
     document.addEventListener("keydown", (ev) => {
-        if (ev.key === "Escape" && !dom.langMenu.hidden) closeLangMenu();
+        if (ev.key === "Escape" && !dom.langMenu.hidden) {
+            ev.preventDefault();
+            closeLangMenu(true);
+        }
     });
 }

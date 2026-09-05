@@ -170,21 +170,10 @@ body.export-mode .player-wrap:not(:fullscreen):not(.map-expanded) {
     display: none;
 }
 
-/* On a narrow player-wrap (map open in a small window, or a squeezed
-   sidebar) map-expanded takes over the whole viewer - 38% for the map makes
-   no sense, and in desktop mode the map used to just hide (display:none),
-   so tapping the mini-map "expanded the map but you can't see it" - that
-   was the actual bug. Container query: video/chart/scrub hide, the map
-   takes the whole grid + bar at the bottom. To go back - the ✕ button in
-   the map's corner (map-collapse-btn). The breakpoint measures the
-   player's width, not the window's, and is strictly-below --dc-bp-mobile
-   (767, same boundary as the mobile @media) - a player at exactly the
-   desktop minimum must get the side-by-side grid, not the takeover.
-   This is the last resort: on a 768-1088 window the sidebar column yields
-   first (see sidebar.css), which keeps the player wide enough for the
-   side-by-side grid - foldables and portrait tablets live there. The
-   takeover remains reachable via a hand-widened sidebar on a mid window. */
-@container pwrap (max-width: 767px) {
+/* A narrow desktop viewer gives the map the whole content area. Query the
+   parent when changing the player's grid: a size container cannot query itself.
+   Children query pwrap separately because fullscreen can widen it beyond viewer. */
+@container viewer (max-width: 767px) {
     .player-wrap.map-expanded {
         grid-template-rows: minmax(0, 1fr) auto;
         grid-template-columns: 1fr;
@@ -192,6 +181,8 @@ body.export-mode .player-wrap:not(:fullscreen):not(.map-expanded) {
             "map"
             "bar";
     }
+}
+@container pwrap (max-width: 767px) {
     .player-wrap.map-expanded .video-frame,
     .player-wrap.map-expanded .player-chart,
     .player-wrap.map-expanded .player-readout,

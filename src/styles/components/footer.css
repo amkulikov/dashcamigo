@@ -73,7 +73,7 @@
 }
 
 .site-footer-link {
-    color: var(--fg-mute);
+    color: var(--fg-dim);
     /* A label never breaks mid-phrase: "Privacy policy" wrapping between its
        two words reads as two separate links. The longest label in any locale
        still fits a 320px-wide phone line. */
@@ -84,7 +84,6 @@
     transition:
         color var(--dc-dur-base) var(--dc-ease),
         text-decoration-color var(--dc-dur-base) var(--dc-ease);
-    opacity: 0.7;
 }
 .site-footer-link:hover,
 .site-footer-link:focus-visible {
@@ -118,18 +117,13 @@
     opacity: 0.55;
 }
 
-/* Half a step quieter than the links row: it is attribution, not navigation. */
-.site-footer-credits {
-    opacity: 0.75;
-}
 .site-footer-credits-label {
-    opacity: 0.7;
+    color: var(--fg-dim);
     margin-inline-end: 0.15em;
 }
 .site-footer-credit {
-    color: var(--fg-mute);
+    color: var(--fg-dim);
     text-decoration: none;
-    opacity: 0.75;
     /* The name must not be split from its logo when the row wraps. */
     white-space: nowrap;
     transition:

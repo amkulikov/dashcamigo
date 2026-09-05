@@ -9,6 +9,7 @@
 // via a FLIP, teaching where the list now lives. See syncBrowseState.
 
 import { dom } from "./dom.js";
+import { subscribeExportState } from "./export-state.js";
 import { flipCollapse } from "./flip.js";
 import { focusableWithin } from "./modal-helper.js";
 import { state } from "./state.js";
@@ -49,14 +50,15 @@ function setInert(el: HTMLElement, on: boolean): void {
  *   - open drawer (mobile): inert the scrim-covered viewer so Tab cannot escape
  *     behind the drawer (the scrim only blocks pointer events). The topbar
  *     (burger) stays live - it sits above the drawer and closes it.
- *   - browse full-screen list and desktop: everything live.
+ *   - desktop export: inert the sidebar while it is visually hidden.
+ *   - browse full-screen list and ordinary desktop: everything live.
  */
 export function syncDrawerA11y(): void {
     const mobile = isMobileViewport();
     const browsing =
         document.body.classList.contains("browsing") && !document.body.classList.contains("preparing-trip");
     const open = dom.sidebar.dataset.drawerOpen === "true";
-    setInert(dom.sidebar, mobile && !browsing && !open);
+    setInert(dom.sidebar, mobile ? !browsing && !open : state.exportModeOpen);
     setInert(dom.viewer, mobile && open);
 }
 
@@ -169,6 +171,7 @@ export function initMobileDrawer(): void {
     // list is empty (no focusable child to land on when the drawer opens). Not in
     // the Tab order, so desktop is unaffected.
     dom.sidebar.tabIndex = -1;
+    subscribeExportState(syncDrawerA11y);
 
     dom.topbarBurger.addEventListener("click", () => {
         const isOpen = dom.sidebar.dataset.drawerOpen === "true";

@@ -12,7 +12,29 @@ const SIDEBAR_MAX = 600;
 // Defense-in-depth: sidebar-resize is hidden via display:none on mobile,
 // but DevTools touch emulation can still fire pointer events.
 // In drawer mode --sidebar-width is not used by CSS so resizing would be meaningless.
-const isMobileLayout = (): boolean => typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
+const isMobileLayout = (): boolean =>
+    window.matchMedia("(max-width: 767px), (max-height: 500px) and (orientation: landscape)").matches;
+
+function maxSidebarWidth(): number {
+    // Match layout.css's viewport cap so keyboard steps start at the visible edge.
+    return Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, window.innerWidth - 320));
+}
+
+function syncResizeValue(): void {
+    if (isMobileLayout()) return;
+    const width = dom.sidebar.getBoundingClientRect().width;
+    if (width < SIDEBAR_MIN) return;
+    dom.sidebarResize.setAttribute("aria-valuemin", String(SIDEBAR_MIN));
+    dom.sidebarResize.setAttribute("aria-valuemax", String(maxSidebarWidth()));
+    dom.sidebarResize.setAttribute("aria-valuenow", String(Math.round(width)));
+}
+
+function applySidebarWidth(width: number): number {
+    const clamped = Math.max(SIDEBAR_MIN, Math.min(maxSidebarWidth(), width));
+    document.documentElement.style.setProperty("--sidebar-width", `${clamped}px`);
+    syncResizeValue();
+    return clamped;
+}
 
 function lsGet(key: string): string | null {
     try {
@@ -56,6 +78,10 @@ function setSidebarCollapsed(collapsed: boolean): void {
 
 export function initSidebarResize(): void {
     restoreSidebarWidth();
+    dom.sidebarResize.setAttribute("aria-controls", dom.sidebar.id);
+    syncResizeValue();
+    new ResizeObserver(syncResizeValue).observe(dom.sidebar);
+    window.addEventListener("resize", syncResizeValue);
     // Session-only on purpose (no persistence): a fresh page always shows the
     // list - it is the only way to pick a trip to watch.
     dom.sidebarCollapseBtn.addEventListener("click", () => setSidebarCollapsed(true));
@@ -64,7 +90,7 @@ export function initSidebarResize(): void {
     let sidebarDragging = false;
 
     dom.sidebarResize.addEventListener("mousedown", (e) => {
-        if (isMobileLayout()) return;
+        if (e.button !== 0 || isMobileLayout()) return;
         e.preventDefault();
         sidebarDragging = true;
         dom.sidebarResize.classList.add("dragging");
@@ -73,11 +99,10 @@ export function initSidebarResize(): void {
 
     document.addEventListener("mousemove", (e) => {
         if (!sidebarDragging) return;
-        const w = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, e.clientX));
-        document.documentElement.style.setProperty("--sidebar-width", `${w}px`);
+        applySidebarWidth(e.clientX);
     });
 
-    document.addEventListener("mouseup", () => {
+    const finishDrag = (): void => {
         if (!sidebarDragging) return;
         sidebarDragging = false;
         dom.sidebarResize.classList.remove("dragging");
@@ -85,17 +110,19 @@ export function initSidebarResize(): void {
         const cur = document.documentElement.style.getPropertyValue("--sidebar-width");
         const w = parseInt(cur, 10);
         if (Number.isFinite(w)) lsSet(SIDEBAR_WIDTH_KEY, String(w));
-    });
+    };
+    document.addEventListener("mouseup", finishDrag);
+    window.addEventListener("blur", finishDrag);
 
     // Arrow keys when the handle is focused shift by 16 px for accessibility.
     dom.sidebarResize.addEventListener("keydown", (e) => {
-        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
         if (isMobileLayout()) return;
         e.preventDefault();
-        const cur = parseInt(document.documentElement.style.getPropertyValue("--sidebar-width"), 10) || 280;
+        const cur = dom.sidebar.getBoundingClientRect().width;
         const step = e.key === "ArrowLeft" ? -16 : 16;
-        const w = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, cur + step));
-        document.documentElement.style.setProperty("--sidebar-width", `${w}px`);
+        const target = e.key === "Home" ? SIDEBAR_MIN : e.key === "End" ? maxSidebarWidth() : cur + step;
+        const w = applySidebarWidth(target);
         lsSet(SIDEBAR_WIDTH_KEY, String(w));
     });
 }

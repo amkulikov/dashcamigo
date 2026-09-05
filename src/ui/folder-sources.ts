@@ -850,6 +850,8 @@ function buildMenuShell(
     // toggle, so a listener bound to the menu would never see the key.
     wrap.addEventListener("keydown", (event) => {
         if (event.key !== "Escape" || !isOpen) return;
+        event.preventDefault();
+        event.stopPropagation();
         setOpen(false);
         toggle.focus();
     });

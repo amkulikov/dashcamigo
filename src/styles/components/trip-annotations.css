@@ -87,6 +87,7 @@
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    overflow-wrap: anywhere;
 }
 
 .trip-meta-field {
@@ -140,6 +141,7 @@
 
 .trip-meta-field input,
 .trip-meta-field textarea {
+    min-width: 0;
     font: inherit;
     color: var(--fg);
     background: var(--bg);
@@ -178,6 +180,7 @@
        behind the modal. */
     max-height: 50vh;
     overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 .marker-list-row {
@@ -247,6 +250,25 @@
     margin: 0 0 var(--dc-space-3);
     color: var(--fg-dim);
     font-size: var(--dc-text-sm);
+}
+
+@media (pointer: coarse) {
+    .trip-meta-field input,
+    .trip-meta-field textarea,
+    .marker-list-text {
+        font-size: var(--dc-text-lg);
+        min-height: 44px;
+    }
+
+    .marker-list-seek,
+    .marker-list-delete,
+    .annotation-storage-action {
+        min-height: 44px;
+    }
+
+    .marker-list-delete {
+        width: 44px;
+    }
 }
 
 /* --- Timeline marker pins ------------------------------------------------ */

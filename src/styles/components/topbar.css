@@ -209,6 +209,9 @@ body.no-trips .topbar-iconbtn {
     border-radius: var(--dc-radius-md);
     box-shadow: var(--dc-shadow-popup);
     min-width: 140px;
+    max-height: calc(100dvh - var(--dc-topbar-h-mobile) - var(--dc-space-4));
+    overflow-y: auto;
+    overscroll-behavior: contain;
     /* Above the export-panel drawer (z=50): the panel is fixed at z=50 in the
        root stacking context, the topbar creates no stacking context, so this
        popover sits in the same root context and z=8 lost to the panel - the
@@ -218,7 +221,12 @@ body.no-trips .topbar-iconbtn {
 .lang-menu[hidden] {
     display: none;
 }
-.lang-menu li {
+.lang-menu button {
+    display: block;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    text-align: start;
     padding: var(--dc-space-1) var(--dc-space-3);
     cursor: pointer;
     font-family: var(--dc-font-body);
@@ -227,13 +235,22 @@ body.no-trips .topbar-iconbtn {
     white-space: nowrap;
     transition: background var(--dc-dur-fast) var(--dc-ease);
 }
-.lang-menu li:hover {
+.lang-menu button:hover {
     background: var(--bg-hover);
 }
-.lang-menu li.active {
+.lang-menu button[aria-checked="true"] {
     color: var(--accent);
     background: color-mix(in srgb, var(--accent) 12%, transparent);
     font-weight: 700;
+}
+.lang-menu button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+@media (pointer: coarse) {
+    .lang-menu button {
+        min-height: var(--dc-iconbtn-touch);
+    }
 }
 
 /* ---------- icon-only header buttons (shared class) ---------- */

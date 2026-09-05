@@ -55,6 +55,7 @@ body.export-mode .export-panel {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: var(--dc-space-2);
     padding: var(--dc-space-3);
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
@@ -81,6 +82,7 @@ body.export-mode .export-panel {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
 }
 
 .export-panel__close:hover {
@@ -90,7 +92,10 @@ body.export-mode .export-panel {
 
 .export-panel__section {
     flex: 1;
+    min-height: 0;
+    min-width: 0;
     overflow-y: auto;
+    overflow-wrap: anywhere;
     padding: var(--dc-space-3);
 }
 
@@ -416,6 +421,7 @@ fieldset.export-panel__group {
 .export-panel__checkbox input[type="checkbox"] {
     margin: 0;
     cursor: pointer;
+    flex-shrink: 0;
 }
 
 /* Disabled checkbox row (audio while the clip is sped up - audio is muted then). */
@@ -449,6 +455,14 @@ fieldset.export-panel__group {
 
 .export-panel__seg-btn:hover {
     background: var(--bg-hover);
+}
+
+.export-panel__seg-btn:focus-visible,
+.export-panel__close:focus-visible,
+.export-panel__chromium-banner:focus-visible,
+.export-panel__slider input[type="range"]:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
 }
 /* Press feedback on touch (no :hover, OS flash suppressed). Momentary - the
    selected chip keeps its .active accent fill. */
@@ -559,6 +573,11 @@ fieldset.export-panel__group {
 }
 
 .export-panel__done-summary p:last-child {
+    margin-bottom: 0;
+}
+
+.export-panel__done-summary .export-panel__primary-btn {
+    margin-top: var(--dc-space-3);
     margin-bottom: 0;
 }
 
@@ -709,6 +728,9 @@ fieldset.export-panel__group {
     .export-panel__section {
         overflow-y: visible;
         padding-bottom: max(var(--dc-space-3), env(safe-area-inset-bottom, 0px));
+    }
+    .export-panel {
+        flex-shrink: 0;
     }
     /* In export-mode let the player shrink to its content so the panel peeks
        below it (discoverable) instead of sitting a full viewport down. Normal
@@ -1011,6 +1033,14 @@ fieldset.export-panel__group {
     .export-panel__secondary-btn {
         min-height: 44px;
     }
+    .export-panel__radio,
+    .export-panel__checkbox,
+    .export-panel__manual-bitrate > summary,
+    .export-panel__output-select,
+    .export-panel__output-custom input[type="number"],
+    .export-panel__manual-bitrate-row input[type="number"] {
+        min-height: 44px;
+    }
     .export-panel__ov-name {
         min-height: 44px;
         display: flex;
@@ -1043,7 +1073,8 @@ fieldset.export-panel__group {
         transition: none;
     }
 
-    .export-panel {
+    .export-panel,
+    body.export-mode .export-panel {
         animation: none;
     }
 

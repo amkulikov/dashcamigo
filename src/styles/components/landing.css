@@ -606,6 +606,7 @@ body.no-trips .viewer {
     display: flex;
     align-items: center;
     gap: var(--dc-space-3);
+    width: max-content;
     max-width: calc(100vw - 2 * var(--dc-space-3));
     padding: var(--dc-space-2) var(--dc-space-2) var(--dc-space-2) var(--dc-space-4);
     background: var(--bg-elev);
@@ -622,6 +623,9 @@ body.no-trips .viewer {
     flex: none;
 }
 .landing-dock-hint {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     font-size: var(--dc-text-md);
     color: var(--fg-dim);
     white-space: nowrap;
@@ -634,6 +638,11 @@ body.no-trips .viewer {
    .dc-btn radius stays untouched. */
 .landing-dock .landing-dock-cta {
     border-radius: 999px;
+}
+@media (max-width: 640px) {
+    .landing-dock-hint {
+        display: none;
+    }
 }
 @media (prefers-reduced-motion: no-preference) {
     /* Replays on every unhide: [hidden] toggles display, which restarts

@@ -40,6 +40,7 @@
 .settings-select:hover,
 .top-panel__audio-select:hover,
 .export-panel__output-select:hover,
+.export-panel__blur-style-select:hover,
 .gpx-assignment-select:hover {
     border-color: var(--accent);
 }
@@ -47,6 +48,7 @@
 .settings-select:focus-visible,
 .top-panel__audio-select:focus-visible,
 .export-panel__output-select:focus-visible,
+.export-panel__blur-style-select:focus-visible,
 .gpx-assignment-select:focus-visible,
 .settings-number-input:focus-visible,
 .export-panel__output-custom input[type="number"]:focus-visible,

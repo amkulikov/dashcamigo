@@ -191,7 +191,7 @@
 
 .folder-source__menu-wrap {
     grid-column: 4;
-    position: relative;
+    position: static;
     flex-shrink: 0;
     display: inline-flex;
 }
@@ -215,13 +215,18 @@
     background: var(--bg-hover);
 }
 
-/* Touch: grow the tap target through a pseudo-element so the 22px control
-   keeps its size and the row keeps its height (see trip-annotations.css). */
+/* Keep adjacent folder actions apart when a finger replaces the pointer. */
 @media (pointer: coarse) {
-    .folder-source__menu::before {
-        content: "";
-        position: absolute;
-        inset: -11px -6px;
+    .folder-source__menu,
+    .folder-sources-help summary {
+        width: 44px;
+        height: 44px;
+    }
+
+    .folder-source__load,
+    .folder-source__remember,
+    .notes-file-status__action {
+        min-height: 44px;
     }
 }
 
@@ -230,7 +235,32 @@
 .folder-source__popup {
     top: calc(100% + 2px);
     right: 0;
-    min-width: 12rem;
+    min-width: 0;
+    width: min(12rem, 100%);
+}
+
+@container sidebar (max-width: 240px) {
+    .folder-source {
+        grid-template-columns: 7px minmax(0, 1fr) auto;
+    }
+
+    .folder-source__status,
+    .folder-source__label {
+        grid-row: 1;
+    }
+
+    .folder-source__load,
+    .folder-source__remember,
+    .folder-source__state {
+        grid-column: 2;
+        grid-row: 2;
+        justify-self: start;
+    }
+
+    .folder-source__menu-wrap {
+        grid-column: 3;
+        grid-row: 1 / span 2;
+    }
 }
 
 .notes-file {

@@ -9,6 +9,7 @@
 import { createLogger } from "../log.js";
 
 import { isAnyModalOpen } from "./modal-helper.js";
+import { initPlayerPopoverPosition } from "./player-popover.js";
 
 const STORAGE_KEY = "dc.viewer.panels";
 const HOTKEY_BY_PANEL = { chart: "KeyC", strip: "KeyT", map: "KeyM", readout: "KeyG" } as const;
@@ -187,6 +188,7 @@ export function setPanelAvailable(panel: Panel, available: boolean): void {
  * Returns a dispose() function for tests.
  */
 export function initViewMenu(opts: ViewMenuOptions): () => void {
+    const disposePosition = initPlayerPopoverPosition(opts.button, opts.popover);
     currentOpts = opts;
     const loaded = loadFromStorage();
     currentPanels = loaded.panels;
@@ -250,6 +252,7 @@ export function initViewMenu(opts: ViewMenuOptions): () => void {
             if (event.key === "End") nextIndex = visibleModes.length - 1;
             if (nextIndex === null) return;
             event.preventDefault();
+            event.stopPropagation();
             visibleModes[(nextIndex + visibleModes.length) % visibleModes.length]?.focus();
         });
     });
@@ -277,6 +280,7 @@ export function initViewMenu(opts: ViewMenuOptions): () => void {
         if (e.key === "Escape" && !opts.popover.hidden) {
             e.preventDefault();
             togglePopover(false);
+            opts.button.focus();
             return;
         }
         // Modifier keys are reserved for browser/system shortcuts - skip rebinds.
@@ -296,6 +300,7 @@ export function initViewMenu(opts: ViewMenuOptions): () => void {
     document.addEventListener("keydown", onKeyDown);
 
     return () => {
+        disposePosition();
         document.removeEventListener("click", onDocClick);
         document.removeEventListener("keydown", onKeyDown);
     };

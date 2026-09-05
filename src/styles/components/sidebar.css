@@ -2,6 +2,7 @@
    4. SIDEBAR + SORT + TRIP CARDS
    ========================================================================= */
 .sidebar {
+    container: sidebar / inline-size;
     background: var(--bg-elev);
     border-right: 1px solid var(--border);
     padding: var(--dc-space-3);
@@ -12,8 +13,10 @@
 
 .sidebar-header {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
+    gap: var(--dc-space-2);
     margin-bottom: var(--dc-space-2);
 }
 
@@ -91,8 +94,12 @@
 .sort-controls {
     display: flex;
     gap: var(--dc-space-1);
+    min-width: 0;
+    max-width: 100%;
+    margin-left: auto;
 }
 .sort-select {
+    flex: 1 1 auto;
     background: var(--bg-elev-2);
     border: 1px solid var(--border);
     color: var(--fg);
@@ -102,6 +109,7 @@
     border-radius: var(--dc-radius-sm);
     cursor: pointer;
     max-width: 110px;
+    min-width: 0;
 }
 .sort-select:focus-visible {
     outline: 2px solid var(--accent);
@@ -110,6 +118,7 @@
 }
 
 .sort-btn {
+    flex-shrink: 0;
     background: transparent;
     border: 1px solid var(--border);
     color: var(--fg-dim);
@@ -138,6 +147,11 @@
    so iOS does not auto-zoom on focus. Keyed on coarse pointer (an iPad in
    portrait is touch yet >=768px); desktop keeps the compact toolbar density. */
 @media (pointer: coarse) {
+    .sort-controls {
+        width: 100%;
+        flex-wrap: wrap;
+    }
+
     .sort-btn {
         min-height: 44px;
         min-width: 44px;
@@ -153,6 +167,7 @@
            the 110px fine-pointer cap clips them, but the drawer has space at 16px font. */
         max-width: none;
         min-width: 0;
+        flex-basis: 160px;
     }
     /* Grow the corner badges to the 44px touch floor WITHOUT enlarging the small
        visible discs: expand only the tap area via a pseudo-element, each biased
@@ -598,6 +613,7 @@
     margin-top: var(--dc-space-1);
     font-variant-numeric: tabular-nums;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: var(--dc-space-1);
@@ -610,8 +626,9 @@
    stays grouped together under .file-meta's justify-content: space-between,
    instead of being spread to opposite ends of the row. */
 .file-meta-chips {
-    flex-shrink: 0;
     display: flex;
+    flex-wrap: wrap;
+    max-width: 100%;
     align-items: center;
     gap: var(--dc-space-1);
 }
@@ -715,7 +732,8 @@
    case. .mixed is a modifier for a trip where files were recognized by
    different plugins. */
 .vendor-chip {
-    flex-shrink: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
     font-family: var(--dc-font-ui);
     font-size: var(--dc-text-3xs);
     line-height: 1;
@@ -919,7 +937,7 @@
    ========================================================================= */
 .drawer-scrim {
     position: fixed;
-    inset: 0;
+    inset: var(--dc-topbar-h-mobile) 0 0;
     background: rgba(0, 0, 0, 0.55);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);

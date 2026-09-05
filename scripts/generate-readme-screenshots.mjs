@@ -715,10 +715,14 @@ async function shotMobilePlayer(browser, fixtureRoot) {
         .catch(() => {});
     await seekToHeroBrake(page);
 
-    // Open the map (on mobile the #player-map button is the only way in - the
-    // mini-map circle is hidden there). It fills the otherwise-empty area under
-    // the chart, so the shot shows video + chart + route instead of black void.
-    await page.locator("#player-map").click();
+    // Narrow touch toolbars move the map action into the overflow menu.
+    const mapButton = page.locator("#player-map");
+    if (await mapButton.isVisible()) {
+        await mapButton.click();
+    } else {
+        await page.locator("#player-overflow").click();
+        await page.locator("#player-overflow-menu").getByRole("button", { name: /map/i }).click();
+    }
     await page.waitForTimeout(500);
     await waitForMapIdle(page);
     await page.waitForTimeout(700);

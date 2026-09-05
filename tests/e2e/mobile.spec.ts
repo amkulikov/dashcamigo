@@ -4,6 +4,8 @@
 // map expansion, and the export panel sitting in-flow (not as a right drawer
 // that shoves the player off-screen).
 
+import type { Page } from "@playwright/test";
+
 import {
     MOBILE,
     MOBILE_LANDSCAPE,
@@ -17,6 +19,17 @@ import {
     shot,
     test,
 } from "./_fixtures.js";
+
+async function expandMobileMap(page: Page): Promise<void> {
+    const button = page.locator("#player-map");
+    if (await button.isVisible()) {
+        await button.click();
+    } else {
+        await page.locator("#player-overflow").click();
+        await page.locator("#player-overflow-menu").getByRole("button", { name: /map/i }).click();
+    }
+    await expect(page.locator("#player-wrap")).toHaveClass(/map-expanded/);
+}
 
 test.describe("mobile portrait", () => {
     test.beforeEach(async ({ page }) => {
@@ -118,11 +131,8 @@ test.describe("mobile portrait", () => {
 
     test("map expands from the player bar", async ({ page }) => {
         await loadTrip(page, SAMPLE_70MAI);
-        // The mini-map circle is hidden on mobile; #player-map is the entry point.
-        // Expansion is the documented state toggle: #player-wrap gets .map-expanded.
         await expect(page.locator("#player-wrap")).not.toHaveClass(/map-expanded/);
-        await page.locator("#player-map").click();
-        await expect(page.locator("#player-wrap")).toHaveClass(/map-expanded/);
+        await expandMobileMap(page);
         await shot(page, "mobile-07-map-expanded");
     });
 });
@@ -251,8 +261,7 @@ test.describe("mobile landscape", () => {
         // The map runs MapLibre cooperative gestures in this layout even on a
         // fine pointer - the overlay hint (with the Ctrl/Cmd message) exists,
         // which means the wheel is not trapped by the map either.
-        await page.locator("#player-map").click();
-        await expect(page.locator("#player-wrap")).toHaveClass(/map-expanded/);
+        await expandMobileMap(page);
         await expect(page.locator(".maplibregl-cooperative-gesture-screen")).toBeAttached();
     });
 

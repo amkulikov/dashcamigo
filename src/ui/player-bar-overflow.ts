@@ -19,6 +19,7 @@
 
 import { t } from "../i18n/index.js";
 import { dom } from "./dom.js";
+import { isMobileLayout } from "./media-queries.js";
 import { type OverflowableItem, initOverflowBar } from "./overflow-bar.js";
 import { state } from "./state.js";
 import { applyVolumeLevel } from "./player-volume.js";
@@ -38,6 +39,7 @@ export function initPlayerBarOverflow() {
     const addMarker = document.getElementById("player-add-marker") as HTMLButtonElement | null;
     const markerList = document.getElementById("player-marker-list") as HTMLButtonElement | null;
     const map = document.getElementById("player-map") as HTMLButtonElement | null;
+    const gpsSync = document.getElementById("gps-sync-pill-mobile") as HTMLButtonElement | null;
     const fullscreen = document.getElementById("player-fullscreen") as HTMLButtonElement | null;
     const exportBtn = document.getElementById("player-export") as HTMLButtonElement | null;
     const items: OverflowableItem[] = [];
@@ -127,17 +129,22 @@ export function initPlayerBarOverflow() {
             isAvailable: () => !fullscreen.hidden,
         });
     }
-    // Map toggle: mobile-only (the mini-map circle is hidden there). It is
-    // display:none on desktop via CSS - offsetParent is null then - so isAvailable
-    // gates it on actual visibility, not the `hidden` attribute (it never carries
-    // one). Kept longest of the collapsibles so it stays inline on common phone
-    // widths; on the narrowest bars the kebab clone preserves access.
+    // Availability must ignore overflow's own display:none so a wider bar can
+    // restore the map button without requiring the user to reload.
     if (map) {
         items.push({
             el: map,
             priority: 4,
             label: () => t("miniMap.expandAria"),
-            isAvailable: () => map.offsetParent !== null,
+            isAvailable: () => isMobileLayout() && !map.hidden,
+        });
+    }
+    if (gpsSync) {
+        items.push({
+            el: gpsSync,
+            priority: 3,
+            label: () => t("gpsSync.open"),
+            isAvailable: () => isMobileLayout() && !gpsSync.hidden,
         });
     }
     // Export is the LAST control to leave the bar (lowest priority): the secondary

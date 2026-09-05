@@ -175,6 +175,18 @@
     min-width: 0;
     flex: 0 1 auto;
 }
+.player-readout .gps-sync-pill {
+    flex: 0 1 auto;
+    min-width: 0;
+}
+.player-readout .gps-sync-pill svg {
+    flex-shrink: 0;
+}
+.player-readout .gps-sync-pill span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 .readout-file {
     appearance: none;
     background: none;
@@ -251,6 +263,25 @@
     align-items: center;
     justify-content: center;
     color: var(--accent);
+}
+
+/* Export and a wide sidebar can narrow the desktop player independently of
+   the viewport. Give speed and GPS calibration priority over secondary values. */
+@container pwrap (max-width: 647px) {
+    .player-readout .pm-coords,
+    .player-readout .pm-coords + .pm-sep {
+        display: none;
+    }
+    .player-readout,
+    .player-readout__context {
+        gap: var(--dc-space-2);
+    }
+}
+@container pwrap (max-width: 479px) {
+    .player-readout .pm-time,
+    .player-readout .pm-time + .pm-sep {
+        display: none;
+    }
 }
 
 /* The readout row is a desktop surface. On a phone the video row is already
