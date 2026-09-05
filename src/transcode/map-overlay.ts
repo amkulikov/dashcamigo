@@ -26,6 +26,21 @@ export interface MapOverlayDrawOpts {
 export const MAP_BASE_WIDTH_PCT = 0.25;
 /** Slot aspect (width/height), mirroring the mini-map proportions. */
 export const MAP_SLOT_ASPECT = 4 / 3;
+
+/** Shared output-pixel geometry for the preview, snapshot, and no-fix plate. */
+export function mapOverlayRect(
+    frameWidth: number,
+    frameHeight: number,
+    opts: MapOverlayDrawOpts,
+): { x: number; y: number; width: number; height: number } {
+    const scale = clamp(opts.scalePct, 50, 200) / 100;
+    const width = Math.max(40, Math.round(frameWidth * MAP_BASE_WIDTH_PCT * scale));
+    const height = opts.shape === "circle" ? width : Math.max(30, Math.round(width / MAP_SLOT_ASPECT));
+    const x = clamp(clamp(opts.xPct, 0, 1) * frameWidth, 0, Math.max(0, frameWidth - width));
+    const y = clamp(clamp(opts.yPct, 0, 1) * frameHeight, 0, Math.max(0, frameHeight - height));
+    return { x, y, width, height };
+}
+
 /** Edge-feather band as a fraction of the slot dimension (rect) - the map fades
  *  to transparent over this band on each side. Small + smoothstep-shaped so the
  *  dissolve is gentle with no hard threshold. Kept in sync with the CSS preview
@@ -124,14 +139,12 @@ export function drawMapOverlay(
     frameHeight: number,
     opts: MapOverlayDrawOpts,
 ): void {
-    const scale = clamp(opts.scalePct, 50, 200) / 100;
-    const widthPx = Math.max(40, Math.round(frameWidth * MAP_BASE_WIDTH_PCT * scale));
-    // Circle wants a square slot so it stays symmetric; rect keeps 4:3.
-    const heightPx = opts.shape === "circle" ? widthPx : Math.max(30, Math.round(widthPx / MAP_SLOT_ASPECT));
-    const xLeft = clamp(opts.xPct, 0, 1) * frameWidth;
-    const yTop = clamp(opts.yPct, 0, 1) * frameHeight;
-    const xClamped = Math.min(Math.max(0, xLeft), Math.max(0, frameWidth - widthPx));
-    const yClamped = Math.min(Math.max(0, yTop), Math.max(0, frameHeight - heightPx));
+    const {
+        x: xClamped,
+        y: yClamped,
+        width: widthPx,
+        height: heightPx,
+    } = mapOverlayRect(frameWidth, frameHeight, opts);
 
     // High-quality downscale: maplibre source is 640×480, slot is typically
     // 200-500 px wide. Default smoothing is bilinear - fine at this size.
@@ -166,13 +179,12 @@ export function drawMapPlaceholder(
     frameHeight: number,
     opts: MapOverlayDrawOpts,
 ): void {
-    const scale = clamp(opts.scalePct, 50, 200) / 100;
-    const widthPx = Math.max(40, Math.round(frameWidth * MAP_BASE_WIDTH_PCT * scale));
-    const heightPx = opts.shape === "circle" ? widthPx : Math.max(30, Math.round(widthPx / MAP_SLOT_ASPECT));
-    const xLeft = clamp(opts.xPct, 0, 1) * frameWidth;
-    const yTop = clamp(opts.yPct, 0, 1) * frameHeight;
-    const xClamped = Math.min(Math.max(0, xLeft), Math.max(0, frameWidth - widthPx));
-    const yClamped = Math.min(Math.max(0, yTop), Math.max(0, frameHeight - heightPx));
+    const {
+        x: xClamped,
+        y: yClamped,
+        width: widthPx,
+        height: heightPx,
+    } = mapOverlayRect(frameWidth, frameHeight, opts);
 
     const iconPx = Math.min(widthPx, heightPx) * 0.36;
     const sctx = getScratch(widthPx, heightPx);

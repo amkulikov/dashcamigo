@@ -109,7 +109,7 @@ const OUTPUT_PRESETS: Record<string, PresetSpec> = {
  * metadata; otherwise 1920x1080 as a sane default). "custom" uses
  * outputCustomW/H clamped to [240, 3840] and rounded to even.
  */
-function resolveOutputDims(): OutputDims {
+export function resolveOutputDims(): OutputDims {
     const id = exportPanelState.outputPresetId;
     if (id === "custom") {
         const w = clampCustomDim(exportPanelState.outputCustomW);

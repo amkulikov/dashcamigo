@@ -15,7 +15,7 @@
 import { createLogger } from "../log.js";
 import { interpolatePosition } from "../parser.js";
 import type { GpsRecord } from "../parsers/types.js";
-import { MAP_BASE_WIDTH_PCT, MAP_SLOT_ASPECT } from "../transcode/map-overlay.js";
+import { MAP_BASE_WIDTH_PCT, mapOverlayRect } from "../transcode/map-overlay.js";
 import { drawTelemetryOverlays } from "../transcode/telemetry-overlays.js";
 import { isFinitePosition } from "../transcode/overlay-pipeline-helpers.js";
 import { hasFixAt, interpScalar, resolveFramePos, resolveNoFixFramePos } from "../transcode/frame-pos.js";
@@ -32,7 +32,7 @@ import {
     subscribeExportState,
     type OverlayTextState,
 } from "./export-state.js";
-import { buildOverlayPipelineArgs } from "./export-flow.js";
+import { buildOverlayPipelineArgs, resolveOutputDims } from "./export-flow.js";
 import { registerGpsSyncRefreshListener } from "./gps-sync-refresh.js";
 import { isCoarsePointer } from "./media-queries.js";
 import { attachPointerDrag } from "./pointer-drag.js";
@@ -524,15 +524,14 @@ function resyncPlayerOverlaysForGpsSync(): void {
 function sizeMapOverlay(): void {
     const mp = dom.playerMapOverlay;
     if (!mp || mp.hidden) return;
-    const w = overlayFrameEl()?.clientWidth ?? 0;
-    if (w <= 0) return;
     const overlayMap = exportPanelState.overlayMap;
-    const wPx = MAP_BASE_WIDTH_PCT * (overlayMap.scalePct / 100) * w;
+    const output = resolveOutputDims();
+    const rect = mapOverlayRect(output.width, output.height, overlayMap);
     mp.dataset.shape = overlayMap.shape;
-    mp.style.width = `${wPx}px`;
-    mp.style.height = `${overlayMap.shape === "circle" ? wPx : wPx / MAP_SLOT_ASPECT}px`;
-    mp.style.left = `${overlayMap.xPct * 100}%`;
-    mp.style.top = `${overlayMap.yPct * 100}%`;
+    mp.style.width = `${(rect.width / output.width) * 100}%`;
+    mp.style.height = `${(rect.height / output.height) * 100}%`;
+    mp.style.left = `${(rect.x / output.width) * 100}%`;
+    mp.style.top = `${(rect.y / output.height) * 100}%`;
 }
 
 function applyAnchor(el: HTMLElement, anchor: string): void {
@@ -758,6 +757,8 @@ function attachCaptureStream(master: HTMLVideoElement, blur: HTMLVideoElement): 
 let mapSnapshotter: ExportMapSnapshotter | null = null;
 let mapSnapshotterPromise: Promise<ExportMapSnapshotter | null> | null = null;
 let mapSnapshotterTripUtc: number | null = null;
+let mapSnapshotterRecords: GpsRecord[] | null = null;
+let mapSnapshotterRecordCount = 0;
 // Base-layer theme the cached snapshotter was built for. A theme switch must
 // rebuild the hidden MapLibre instance (the style is fixed at construction), so
 // it invalidates the cache the same way a trip change does.
@@ -792,20 +793,24 @@ async function refreshMapSnapshot(
     // included only when adaptive zoom is on (it changes the zoom then).
     const speedBucket = headingUp && om.adaptiveZoom ? Math.round(pos.speedMs) : 0;
     const key = `${pos.lat.toFixed(4)}|${pos.lon.toFixed(4)}|${zoomKm}|${Math.round(pos.bearingDeg)}|${theme}|${om.labelScalePct}|${om.labelDensity}|${om.mode}|${om.pitchDeg}|${om.adaptiveZoom ? 1 : 0}|${speedBucket}|${mapMarkerAppearanceKey(om.marker)}|${om.marker.size}`;
-    if (key === mapLastRequestKey) return;
+    const shouldRebuild =
+        !mapSnapshotterPromise ||
+        mapSnapshotterTripUtc !== tripStartUtc ||
+        mapSnapshotterRecords !== records ||
+        mapSnapshotterRecordCount !== records.length ||
+        mapSnapshotterTheme !== theme ||
+        mapSnapshotterLabelScalePct !== om.labelScalePct ||
+        mapSnapshotterLabelDensity !== om.labelDensity;
+    if (!shouldRebuild && key === mapLastRequestKey) return;
     mapLastRequestKey = key;
     const seqAtStart = ++mapSnapshotSeq;
 
-    if (
-        !mapSnapshotterPromise ||
-        mapSnapshotterTripUtc !== tripStartUtc ||
-        mapSnapshotterTheme !== theme ||
-        mapSnapshotterLabelScalePct !== om.labelScalePct ||
-        mapSnapshotterLabelDensity !== om.labelDensity
-    ) {
+    if (shouldRebuild) {
         disposeMapSnapshotter();
         mapLastRequestKey = key;
         mapSnapshotterTripUtc = tripStartUtc;
+        mapSnapshotterRecords = records;
+        mapSnapshotterRecordCount = records.length;
         mapSnapshotterTheme = theme;
         mapSnapshotterLabelScalePct = om.labelScalePct;
         mapSnapshotterLabelDensity = om.labelDensity;
@@ -825,7 +830,10 @@ async function refreshMapSnapshot(
                 return s;
             },
             (err) => {
-                if (myPromise === mapSnapshotterPromise) mapSnapshotterPromise = null;
+                if (myPromise === mapSnapshotterPromise) {
+                    mapSnapshotterPromise = null;
+                    mapLastRequestKey = "";
+                }
                 log.warn("preview map snapshotter init failed", { err: String(err) });
                 return null;
             },
@@ -900,6 +908,8 @@ function disposeMapSnapshotter(): void {
     mapSnapshotter = null;
     mapSnapshotterPromise = null;
     mapSnapshotterTripUtc = null;
+    mapSnapshotterRecords = null;
+    mapSnapshotterRecordCount = 0;
     mapSnapshotterTheme = null;
     mapSnapshotterLabelScalePct = null;
     mapSnapshotterLabelDensity = null;
