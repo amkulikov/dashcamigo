@@ -758,31 +758,19 @@ export async function prepareTripForPlayback(tripIdx: number, frameIdx?: number)
     return preparationResult(tripIdx, frameIdx);
 }
 
-function frameIsReady(tripIdx: number, frameIdx: number): boolean {
-    const frame = state.trips[tripIdx]?.frames[frameIdx];
-    if (!frame) return false;
-    return Object.values(frame.channels).some(
-        (candidate) => candidate.metadataFailed !== true && candidate.metadataReady !== false,
-    );
-}
-
 function preparationResult(tripIdx: number, requestedFrameIdx?: number): TripPreparationResult {
-    if (requestedFrameIdx !== undefined) {
-        return readyFrameResult(tripIdx, requestedFrameIdx);
+    const frames = state.trips[tripIdx]?.frames ?? [];
+    const start = requestedFrameIdx ?? 0;
+    const end = requestedFrameIdx === undefined ? frames.length : start + 1;
+    for (let frameIdx = start; frameIdx < end; frameIdx++) {
+        const frame = frames[frameIdx];
+        if (!frame) continue;
+        const recordingKeys = Object.values(frame.channels)
+            .filter((candidate) => candidate.metadataFailed !== true && candidate.metadataReady !== false)
+            .map((candidate) => vendorFileKey(candidate));
+        if (recordingKeys.length > 0) return { status: "ready", frameIdx, recordingKeys };
     }
-    const trip = state.trips[tripIdx];
-    if (!trip) return { status: "unreadable" };
-    const frameIdx = trip.frames.findIndex((_frame, index) => frameIsReady(tripIdx, index));
-    return frameIdx >= 0 ? readyFrameResult(tripIdx, frameIdx) : { status: "unreadable" };
-}
-
-function readyFrameResult(tripIdx: number, frameIdx: number): TripPreparationResult {
-    const frame = state.trips[tripIdx]?.frames[frameIdx];
-    if (!frame) return { status: "unreadable" };
-    const recordingKeys = Object.values(frame.channels)
-        .filter((candidate) => candidate.metadataFailed !== true && candidate.metadataReady !== false)
-        .map((candidate) => vendorFileKey(candidate));
-    return recordingKeys.length > 0 ? { status: "ready", frameIdx, recordingKeys } : { status: "unreadable" };
+    return { status: "unreadable" };
 }
 
 async function readRecordingData(

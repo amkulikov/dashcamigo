@@ -287,6 +287,22 @@ export async function dispatchParseSidecarsViaPool(
         }
     };
 
+    const parseGpx = async (target: ClassifiedFile): Promise<void> => {
+        if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+        try {
+            const recs = await gpxSidecar.parse(target.file, target.sidecarMp4!, signal);
+            collect(target, recs, gpxSidecar.id);
+        } catch (err) {
+            // Cancellation must not appear as a corrupt sidecar.
+            if (err instanceof DOMException && err.name === "AbortError") throw err;
+            errors.push({
+                file: target.file.file.name,
+                sidecarId: gpxSidecar.id,
+                message: err instanceof Error ? err.message : String(err),
+            });
+        }
+    };
+
     const gpxTargets: ClassifiedFile[] = [];
     const workerTargets: ClassifiedFile[] = [];
     for (const c of classified) {
@@ -302,20 +318,7 @@ export async function dispatchParseSidecarsViaPool(
     // handful, sequential is simpler than parallel and the user already
     // sees parallelism on the worker side.
     for (const c of gpxTargets) {
-        if (signal?.aborted) throw new DOMException("aborted", "AbortError");
-        try {
-            const recs = await gpxSidecar.parse(c.file, c.sidecarMp4!, signal);
-            collect(c, recs, gpxSidecar.id);
-        } catch (err) {
-            // AbortError bubbles up - propagate so ingest.ts handles cancel
-            // instead of recording the cancellation as a corrupt sidecar.
-            if (err instanceof DOMException && err.name === "AbortError") throw err;
-            errors.push({
-                file: c.file.file.name,
-                sidecarId: gpxSidecar.id,
-                message: err instanceof Error ? err.message : String(err),
-            });
-        }
+        await parseGpx(c);
     }
 
     if (workerTargets.length > 0) {
@@ -339,19 +342,7 @@ export async function dispatchParseSidecarsViaPool(
                 // DDPai gps dir must still load (nmea-sidecar.ts:106). This is
                 // control flow, not an error, so it is never recorded as one.
                 if (c.sidecarId === "ddpai-gpx") {
-                    if (signal?.aborted) throw new DOMException("aborted", "AbortError");
-                    try {
-                        const recs = await gpxSidecar.parse(c.file, c.sidecarMp4!, signal);
-                        collect(c, recs, gpxSidecar.id);
-                    } catch (err) {
-                        // Same AbortError propagation as the primary gpx loop.
-                        if (err instanceof DOMException && err.name === "AbortError") throw err;
-                        errors.push({
-                            file: c.file.file.name,
-                            sidecarId: gpxSidecar.id,
-                            message: err instanceof Error ? err.message : String(err),
-                        });
-                    }
+                    await parseGpx(c);
                 }
                 continue;
             }
