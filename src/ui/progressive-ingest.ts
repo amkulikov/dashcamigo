@@ -202,6 +202,7 @@ export interface ProgressiveIngestContext {
     /** All loaded + current videos, indexed once for O(1) basename lookup. */
     videoAssociation: VideoAssociationIndex;
     errorCounts: {
+        classify: number;
         logs: number;
         sidecars: number;
         accelSidecars: number;

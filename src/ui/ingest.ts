@@ -115,7 +115,7 @@ export async function ingestFiles(vfiles: VendorFile[], origin: IngestOrigin | n
         await ingestFilesInternal(vfiles, controller.signal, origin);
     } catch (err) {
         // AbortError means the user clicked Cancel; partial state stays in the sidebar.
-        if (err instanceof DOMException && err.name === "AbortError") {
+        if (err instanceof Error && err.name === "AbortError") {
             // Log so we can distinguish "it hung" vs "user cancelled" in bug reports.
             log.info("ingest cancelled");
             cancelled = true;
@@ -287,7 +287,10 @@ async function ingestFilesInternal(
 
     // Sidecar classification looks at already-known videos (state.trips + newly classified) so the user can drop a GPX later for a previously loaded MP4.
     const existingVideoNames = new Set<string>(alreadyLoaded.map((vf) => vf.file.name));
-    const classified = await mark("classify", () => dispatchClassifyFiles(vfiles, existingVideoNames, signal));
+    const { classified, errors: classificationErrors } = await mark("classify", () =>
+        dispatchClassifyFiles(vfiles, existingVideoNames, signal),
+    );
+    reportParseErrors("classify", classificationErrors);
 
     const classifiedVideos = classified.filter((item) => item.role === "video");
 
@@ -493,6 +496,7 @@ async function ingestFilesInternal(
             gpsLog: state.gpsLog,
             extractorByFileKey: [logsResult.extractorByFileKey, sidecarResult.extractorByFileKey],
             areValid:
+                classificationErrors.length === 0 &&
                 logsResult.errors.length === 0 &&
                 sidecarResult.errors.length === 0 &&
                 accelSidecarResult.errors.length === 0,
@@ -605,6 +609,7 @@ async function ingestFilesInternal(
         cacheWriteBlockLeaseByFileKey: writeBlockLeaseByFileKey,
         videoAssociation,
         errorCounts: {
+            classify: classificationErrors.length,
             logs: logsResult.errors.length,
             sidecars: sidecarResult.errors.length,
             accelSidecars: accelSidecarResult.errors.length,

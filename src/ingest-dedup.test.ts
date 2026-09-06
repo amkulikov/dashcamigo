@@ -359,6 +359,53 @@ describe("dropDuplicateFiles", () => {
         await expect(dropDuplicateFiles(incoming, [], controller.signal)).rejects.toThrowError(/aborted/);
     });
 
+    it("honors cancellation even when no duplicate probes are needed", async () => {
+        const controller = new AbortController();
+        controller.abort();
+        await expect(
+            dropDuplicateFiles([vf("X.MP4", makeContent(1024, 4))], [], controller.signal),
+        ).rejects.toMatchObject({
+            name: "AbortError",
+        });
+    });
+
+    it("honors cancellation during the final content probe", async () => {
+        const content = makeContent(1024, 4);
+        const incoming = [vf("a/X.MP4", content), vf("b/X.MP4", content)];
+        const controller = new AbortController();
+        const originalSlice = File.prototype.slice;
+        const sliceSpy = vi.spyOn(File.prototype, "slice").mockImplementation(function (
+            this: File,
+            start?: number,
+            end?: number,
+            contentType?: string,
+        ) {
+            controller.abort();
+            return originalSlice.call(this, start, end, contentType);
+        });
+        try {
+            await expect(dropDuplicateFiles(incoming, [], controller.signal)).rejects.toMatchObject({
+                name: "AbortError",
+            });
+        } finally {
+            sliceSpy.mockRestore();
+        }
+    });
+
+    it("propagates an AbortError from a content read unchanged", async () => {
+        const content = makeContent(1024, 4);
+        const incoming = [vf("a/X.MP4", content), vf("b/X.MP4", content)];
+        const error = Object.assign(new Error("read cancelled"), { name: "AbortError" });
+        const sliceSpy = vi.spyOn(File.prototype, "slice").mockImplementation(() => {
+            throw error;
+        });
+        try {
+            await expect(dropDuplicateFiles(incoming, [])).rejects.toBe(error);
+        } finally {
+            sliceSpy.mockRestore();
+        }
+    });
+
     it("returns empty result for an empty drop", async () => {
         const { kept, dropped } = await dropDuplicateFiles([], []);
         expect(kept).toEqual([]);

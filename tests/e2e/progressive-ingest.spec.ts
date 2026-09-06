@@ -101,6 +101,42 @@ test.describe("progressive ingest", () => {
     });
 
     test.beforeEach(async ({ page }, testInfo) => {
+        if (testInfo.title.includes("auxiliary classifier worker crashes")) {
+            await page.addInitScript(() => {
+                const NativeWorker = window.Worker;
+                window.Worker = class extends NativeWorker {
+                    readonly trackedName: string;
+
+                    constructor(scriptURL: string | URL, options?: WorkerOptions) {
+                        super(scriptURL, options);
+                        this.trackedName = options?.name ?? "unnamed";
+                    }
+
+                    override postMessage(message: unknown, transfer: Transferable[]): void;
+                    override postMessage(message: unknown, options?: StructuredSerializeOptions): void;
+                    override postMessage(
+                        message: unknown,
+                        transferOrOptions: Transferable[] | StructuredSerializeOptions = [],
+                    ): void {
+                        if (
+                            this.trackedName === "ingest-worker" &&
+                            typeof message === "object" &&
+                            message !== null &&
+                            "__k" in message &&
+                            message.__k === "req"
+                        ) {
+                            (
+                                window as typeof window & { __classifierCrashInjected?: boolean }
+                            ).__classifierCrashInjected = true;
+                            this.dispatchEvent(new Event("error"));
+                            return;
+                        }
+                        if (Array.isArray(transferOrOptions)) super.postMessage(message, transferOrOptions);
+                        else super.postMessage(message, transferOrOptions);
+                    }
+                };
+            });
+        }
         if (testInfo.title.includes("damaged leading clip")) {
             await page.route("**/assets/maplibre-gl-*.js", async (route) => {
                 await new Promise((resolve) => setTimeout(resolve, 1200));
@@ -285,6 +321,38 @@ test.describe("progressive ingest", () => {
         ).toBe(4);
 
         await shot(page, "progressive-01-ready");
+    });
+
+    test("loads playable videos when an auxiliary classifier worker crashes", async ({ page }) => {
+        const directory = makeTemporaryDirectory("dashcamigo-classifier-crash-");
+        copyFileSync(path.join(SAMPLE_NOGPS, "clip-no-gps.mp4"), path.join(directory, "clip-no-gps.mp4"));
+        writeFileSync(
+            path.join(directory, "GPSData.txt"),
+            "$V02,1700000000,1,40.0,N,74.0,W,0,0,clip-no-gps.mp4,0,0,0\n",
+        );
+        await page.locator("#folder-input").setInputFiles(directory);
+
+        const trip = page.locator("li.trip:not(.unindexed-note)").first();
+        await expect(trip).toBeVisible({ timeout: 30_000 });
+        expect(
+            await page.evaluate(
+                () => (window as typeof window & { __classifierCrashInjected?: boolean }).__classifierCrashInjected,
+            ),
+            "the classifier request reaches the injected failure",
+        ).toBe(true);
+        await expect(page.locator("#trip-list")).toHaveAttribute("aria-busy", "false", { timeout: 20_000 });
+        await trip.locator(".trip-title").click();
+        await expect(page.locator("#player-wrap")).toBeVisible();
+        await expect
+            .poll(async () => (await page.locator("#player-total").textContent())?.trim(), { timeout: 20_000 })
+            .not.toBe("0:00");
+        const master = page.locator(".video-tile.active video:not(.preload-slot):not(.tile-blur-bg)");
+        await expect(master).toHaveCount(1);
+        await expect
+            .poll(() => master.evaluate((video: HTMLVideoElement) => video.readyState))
+            .toBeGreaterThanOrEqual(2);
+        expect(await page.evaluate(() => window.__dashcamigo.state.unindexed.size)).toBe(0);
+        expect(await page.evaluate(() => window.__dashcamigo.state.trips[0]?.records.length)).toBe(0);
     });
 
     test("waits for the selected trip GPS before starting playback", async ({ page }) => {

@@ -42,6 +42,7 @@ import {
     type ParseSidecarResult,
 } from "../workers/ingest-protocol.js";
 import { createWorkerClient } from "../workers/_protocol/worker-client.js";
+import { isWorkerUnavailableError } from "../workers/_protocol/worker-error.js";
 import { createWorkerPool } from "../workers/_protocol/worker-pool.js";
 
 const log = createLogger("ingest-shim");
@@ -81,6 +82,11 @@ export function prewarmIngest(): void {
 
 // ===== classify =====
 
+interface ClassifiedFilesResult {
+    classified: ClassifiedFile[];
+    errors: Array<{ file: string; extractor: string; message: string }>;
+}
+
 /**
  * Classifies files via the worker pool. Video files (by extension) are
  * classified on main - no need for a round-trip for an extension check.
@@ -92,11 +98,13 @@ export async function classifyFilesViaPool(
     files: VendorFile[],
     existingVideoNames: Iterable<string> = [],
     signal?: AbortSignal,
-): Promise<ClassifiedFile[]> {
+): Promise<ClassifiedFilesResult> {
+    if (signal?.aborted) throw new DOMException("aborted", "AbortError");
     const { videoEntries, knownVideos, nonVideo } = splitVideosByExtension(files, existingVideoNames);
     const result: ClassifiedFile[] = [...videoEntries];
+    const errors: ClassifiedFilesResult["errors"] = [];
 
-    if (nonVideo.length === 0) return result;
+    if (nonVideo.length === 0) return { classified: result, errors };
 
     // Shard non-video files evenly across pool slots. Each shard ships
     // knownVideoNames once instead of per-file.
@@ -108,7 +116,7 @@ export async function classifyFilesViaPool(
     }
     const knownVideoNames = [...knownVideos];
 
-    const subResults = await Promise.all(
+    const subResults = await Promise.allSettled(
         chunks.map((chunk, shardIdx) => {
             const req: ClassifyBatchRequestData = {
                 files: chunk,
@@ -120,12 +128,27 @@ export async function classifyFilesViaPool(
             });
         }),
     );
+    if (signal?.aborted) throw new DOMException("aborted", "AbortError");
 
     // Stitch sub-results back into the original order is not required - the
     // caller (ingest.ts) does not depend on file order in classified[]. We
     // append in shard order, which is fine.
-    for (const sub of subResults) {
-        for (const cf of sub) result.push(cf);
+    for (let i = 0; i < subResults.length; i++) {
+        const sub = subResults[i]!;
+        if (sub.status === "fulfilled") {
+            for (const cf of sub.value) result.push(cf);
+            continue;
+        }
+        // Auxiliary telemetry must not prevent known videos from loading, but
+        // parser invariants and cancellation still belong to the caller.
+        if (!isWorkerUnavailableError(sub.reason)) throw sub.reason;
+        const message = sub.reason instanceof Error ? sub.reason.message : String(sub.reason);
+        const chunk = chunks[i]!;
+        log.warn("auxiliary file classification unavailable", { files: chunk.length, err: message });
+        for (const file of chunk) {
+            errors.push({ file: file.file.name, extractor: "ingest-worker", message });
+            result.push({ file, role: "unknown", sidecarId: null, sidecarMp4: null, logExtractorId: null });
+        }
     }
 
     // Second pass on main: gpxSidecar.matches for files the worker returned
@@ -145,7 +168,11 @@ export async function classifyFilesViaPool(
         };
     }
 
-    return result;
+    return { classified: result, errors };
+}
+
+export function _resetForTests(): void {
+    pool.disposeAll();
 }
 
 // ===== pool dispatch helper =====
@@ -185,7 +212,7 @@ async function dispatchViaPool<Target, Result>(
             continue;
         }
         // AbortError bubbles up - propagate so ingest.ts handles cancel.
-        if (item.err instanceof DOMException && item.err.name === "AbortError") throw item.err;
+        if (item.err instanceof Error && item.err.name === "AbortError") throw item.err;
         failures.push({
             target: item.target,
             message: item.err instanceof Error ? item.err.message : String(item.err),
@@ -294,7 +321,7 @@ export async function dispatchParseSidecarsViaPool(
             collect(target, recs, gpxSidecar.id);
         } catch (err) {
             // Cancellation must not appear as a corrupt sidecar.
-            if (err instanceof DOMException && err.name === "AbortError") throw err;
+            if (err instanceof Error && err.name === "AbortError") throw err;
             errors.push({
                 file: target.file.file.name,
                 sidecarId: gpxSidecar.id,

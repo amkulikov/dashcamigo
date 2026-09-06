@@ -139,6 +139,7 @@ export async function dropDuplicateFiles(
     alreadyLoaded: VendorFile[],
     signal?: AbortSignal,
 ): Promise<DedupResult> {
+    if (signal?.aborted) throw new DOMException("ingest aborted", "AbortError");
     const keep = new Set<VendorFile>();
     const groups = new Map<string, VendorFile[]>();
     for (const vf of incoming) {
@@ -254,11 +255,13 @@ export async function dropDuplicateFiles(
                 if (!equal) {
                     try {
                         equal = await sameContent(unique.file, vf.file, readProbe);
-                    } catch {
+                    } catch (err) {
+                        if (err instanceof Error && err.name === "AbortError") throw err;
                         // Read failure - keep the file; indexing will surface the
                         // real error with proper user-facing reporting.
                         equal = false;
                     }
+                    if (signal?.aborted) throw new DOMException("ingest aborted", "AbortError");
                 }
                 if (equal) {
                     duplicateOf ??= unique;
