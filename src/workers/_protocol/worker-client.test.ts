@@ -4,6 +4,7 @@ import { _resetForTests } from "../../log.js";
 import { captureSentryException } from "../../sentry.js";
 import { makePairedEndpoints, flushMicrotasks } from "./test-helpers.js";
 import { createWorkerClient } from "./worker-client.js";
+import { isWorkerUnavailableError } from "./worker-error.js";
 import { createWorkerServer } from "./worker-server.js";
 
 // Spy on the Sentry capture so the crash-path tests can assert WHAT gets
@@ -19,6 +20,27 @@ afterEach(() => {
 });
 
 describe("createWorkerClient + createWorkerServer", () => {
+    it("distinguishes a worker crash from a request handler failure", async () => {
+        const pair = makePairedEndpoints();
+        const sourceError = new TypeError("invalid state");
+        createWorkerServer(pair.workerEndpoint, {
+            onRequest: (type) => {
+                if (type === "invalid") throw sourceError;
+                return new Promise<never>(() => undefined);
+            },
+        });
+        const client = createWorkerClient(pair.mainEndpoint, { name: "failure-kind" });
+        const handlerError = await client.request("invalid").catch((err: unknown) => err);
+        expect(isWorkerUnavailableError(handlerError)).toBe(false);
+        expect(handlerError).toMatchObject({ name: "TypeError", message: "invalid state" });
+        const pending = client.request("hang").catch((err: unknown) => err);
+        pair.fireMainError({ error: sourceError });
+        const crashError = await pending;
+        expect(isWorkerUnavailableError(crashError)).toBe(true);
+        expect(crashError).toMatchObject({ message: "invalid state", cause: { name: "TypeError" } });
+        expect(pair.terminated()).toBe(true);
+    });
+
     it("round-trips a request and resolves with the handler's result", async () => {
         const { mainEndpoint, workerEndpoint } = makePairedEndpoints();
         createWorkerServer(workerEndpoint, {
@@ -304,6 +326,39 @@ describe("createWorkerClient + createWorkerServer", () => {
         await flushMicrotasks();
         // The client is still functional - no poisoning from the dropped reply.
         expect(client.disposed).toBe(false);
+    });
+
+    it("releases late transferred results while keeping delivered results owned by the caller", async () => {
+        const { mainEndpoint, workerEndpoint } = makePairedEndpoints();
+        const close = vi.fn();
+        const lateResult = { bitmaps: [{ close }] };
+        let release: (() => void) | undefined;
+        createWorkerServer(workerEndpoint, {
+            onRequest: async (type) => {
+                if (type === "late") {
+                    await new Promise<void>((resolve) => {
+                        release = resolve;
+                    });
+                }
+                return lateResult;
+            },
+        });
+        const onDiscardedResult = vi.fn((result) => {
+            expect(result).toBe(lateResult);
+            close();
+        });
+        const client = createWorkerClient(mainEndpoint, { name: "late-resource", onDiscardedResult });
+        const controller = new AbortController();
+        const pending = client.request("late", undefined, { signal: controller.signal });
+        await flushMicrotasks();
+        controller.abort();
+        await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+        release!();
+        // A round trip drains the earlier response through the actual client/server path.
+        await expect(client.request("fresh")).resolves.toBe(lateResult);
+        expect(onDiscardedResult).toHaveBeenCalledExactlyOnceWith(lateResult);
+        expect(close).toHaveBeenCalledOnce();
+        client.dispose();
     });
 
     it("postMessage throwing on non-cloneable data cleans up and rejects", async () => {

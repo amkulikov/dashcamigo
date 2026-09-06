@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { _resetForTests } from "../../log.js";
 import { makePairedEndpoints, flushMicrotasks } from "./test-helpers.js";
 import { createWorkerClient } from "./worker-client.js";
+import { isWorkerUnavailableError } from "./worker-error.js";
 import { createWorkerPool } from "./worker-pool.js";
 import { createWorkerServer } from "./worker-server.js";
 
@@ -232,6 +233,40 @@ describe("error propagation across pool boundary", () => {
 });
 
 describe("createWorkerPool race conditions", () => {
+    it.each(["crash", "dispose"])("keeps replacement load when old requests settle after %s", async (failure) => {
+        const spawned: SpawnedSlot[] = [];
+        const pool = createWorkerPool({
+            name: "replacement",
+            capacity: 2,
+            factory: (idx, opts) => {
+                const pair = makePairedEndpoints();
+                spawned.push({ idx, pair });
+                createWorkerServer(pair.workerEndpoint, {
+                    onRequest: async () => new Promise<never>(() => undefined),
+                });
+                return createWorkerClient(pair.mainEndpoint, { name: `replacement-${idx}`, onCrash: opts.onCrash });
+            },
+        });
+        const oldRequest = pool.request("work");
+        const oldResult = Promise.allSettled([oldRequest]);
+        if (failure === "crash") spawned[0]!.pair.fireMainError({ message: "worker stopped" });
+        else pool.disposeAll();
+
+        const replacement = pool.request("work");
+        const replacementResult = Promise.allSettled([replacement]);
+        await oldResult;
+        expect(pool.inspect()[0]!.inflight, "old settlement does not clear replacement load").toBe(1);
+        const concurrent = pool.request("work");
+        const concurrentResult = Promise.allSettled([concurrent]);
+        expect(
+            spawned.map((slot) => slot.idx),
+            "new work uses the free slot",
+        ).toEqual([0, 0, 1]);
+        pool.disposeAll();
+        await Promise.all([replacementResult, concurrentResult]);
+        expect(pool.inspect().every((slot) => slot.inflight === 0)).toBe(true);
+    });
+
     it("disposeAll during a crash respawn cycle leaves the pool fully terminated", async () => {
         const spawned: SpawnedSlot[] = [];
         const pool = createWorkerPool({
@@ -328,6 +363,39 @@ describe("createWorkerPool race conditions", () => {
 });
 
 describe("createWorkerPool guards", () => {
+    it("reports worker construction failure separately and retries on next use", async () => {
+        const spawned: SpawnedSlot[] = [];
+        const sourceError = new DOMException("worker blocked", "SecurityError");
+        let attempts = 0;
+        const factory = makeFactory(spawned);
+        const pool = createWorkerPool({
+            name: "construction",
+            capacity: 1,
+            factory: (idx, opts) => {
+                if (attempts++ === 0) throw sourceError;
+                return factory(idx, opts);
+            },
+        });
+        const failure = await pool.request("ping").catch((err: unknown) => err);
+        expect(isWorkerUnavailableError(failure)).toBe(true);
+        expect(failure).toMatchObject({ message: "worker blocked", cause: sourceError });
+        await expect(pool.request("ping")).resolves.toMatchObject({ type: "ping" });
+        pool.disposeAll();
+    });
+
+    it("does not create a worker for a cancelled request", async () => {
+        const factory = vi.fn(() => {
+            throw new Error("worker unavailable");
+        });
+        const pool = createWorkerPool({ name: "cancelled", capacity: 1, factory });
+        const controller = new AbortController();
+        controller.abort();
+        await expect(pool.request("ping", undefined, { signal: controller.signal })).rejects.toMatchObject({
+            name: "AbortError",
+        });
+        expect(factory).not.toHaveBeenCalled();
+    });
+
     it("guards against capacity=0 by clamping to 1", () => {
         const pool = createWorkerPool({
             name: "tiny",

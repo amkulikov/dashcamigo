@@ -18,6 +18,7 @@
 
 import { createLogger, installWorkerLogBridge } from "../../log.js";
 import { captureSentryException } from "../../sentry.js";
+import { workerUnavailableError } from "./worker-error.js";
 
 import {
     type WireAbort,
@@ -66,6 +67,8 @@ export interface WorkerClientOptions {
      * Optional - some shims only do request/response.
      */
     onNotification?: (msg: WireNotification) => void;
+    /** Releases transferred resources in successful replies arriving after cancellation. */
+    onDiscardedResult?: (result: unknown) => void;
     /**
      * Called when the worker fires an `error` event (uncaught exception in
      * worker scope, module-load failure). After onCrash returns the client
@@ -169,8 +172,17 @@ export function createWorkerClient(endpoint: WorkerEndpoint, opts: WorkerClientO
     const handleResponse = (msg: WireResponse): void => {
         const entry = pending.get(msg.id);
         if (!entry) {
-            // Late reply after cleanup (abort race, dispose race). The worker
-            // tried to be polite but we already moved on. Drop quietly.
+            // Cancellation can race a response already transferred by the worker.
+            if (msg.ok && opts.onDiscardedResult) {
+                try {
+                    opts.onDiscardedResult(msg.result);
+                } catch (err) {
+                    log.warn("discarded result cleanup failed", {
+                        worker: opts.name,
+                        err: err instanceof Error ? err.message : String(err),
+                    });
+                }
+            }
             return;
         }
         pending.delete(msg.id);
@@ -287,7 +299,7 @@ export function createWorkerClient(endpoint: WorkerEndpoint, opts: WorkerClientO
     function crash(err: Error): void {
         if (disposed) return;
         disposed = true;
-        rejectAll(err);
+        rejectAll(workerUnavailableError(err));
         // Mirror dispose's teardown: real Worker objects GC away with their
         // listener registry after terminate(), but in tests with paired
         // endpoints the listeners would leak otherwise.

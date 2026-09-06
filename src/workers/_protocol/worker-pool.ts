@@ -14,6 +14,7 @@
 // Pending requests in that slot reject via the client's normal error path.
 
 import { createLogger } from "../../log.js";
+import { workerUnavailableError } from "./worker-error.js";
 
 import {
     type WorkerClient,
@@ -106,21 +107,27 @@ export function createWorkerPool(opts: WorkerPoolOptions): WorkerPool {
     function ensureSlot(idx: number): WorkerClient {
         const slot = slots[idx]!;
         if (slot.client && !slot.client.disposed) return slot.client;
-        const client = opts.factory(idx, {
-            onCrash: (err) => {
-                // Mark the slot empty so next ensureSlot respawns. Pending
-                // requests have already been rejected by the client itself.
-                // Key is `pool`, not `name`: *name*-keys get masked to "***" by
-                // the Sentry breadcrumb scrubber (sentry-scrub.ts FILENAME_KEY_RE).
-                log.warn("pool slot crashed, will respawn on next use", {
-                    pool: opts.name,
-                    idx,
-                    err: err.message,
-                });
-                slot.client = null;
-                slot.inflight = 0;
-            },
-        });
+        let client: WorkerClient;
+        try {
+            client = opts.factory(idx, {
+                onCrash: (err) => {
+                    // Mark the slot empty so next ensureSlot respawns. Pending
+                    // requests have already been rejected by the client itself.
+                    // Key is `pool`, not `name`: *name*-keys get masked to "***" by
+                    // the Sentry breadcrumb scrubber (sentry-scrub.ts FILENAME_KEY_RE).
+                    log.warn("pool slot crashed, will respawn on next use", {
+                        pool: opts.name,
+                        idx,
+                        err: err.message,
+                    });
+                    slot.client = null;
+                    slot.inflight = 0;
+                },
+            });
+        } catch (err) {
+            if (err instanceof Error && err.name === "AbortError") throw err;
+            throw workerUnavailableError(err);
+        }
         slot.client = client;
         return client;
     }
@@ -144,6 +151,7 @@ export function createWorkerPool(opts: WorkerPoolOptions): WorkerPool {
 
     return {
         async request<TResult = unknown>(type: string, data?: unknown, reqOpts?: PoolRequestOptions): Promise<TResult> {
+            if (reqOpts?.signal?.aborted) throw new DOMException("aborted", "AbortError");
             const idx = pickSlotIdx(reqOpts?.shardKey);
             const slot = slots[idx]!;
             const client = ensureSlot(idx);
@@ -154,7 +162,8 @@ export function createWorkerPool(opts: WorkerPoolOptions): WorkerPool {
                     transfer: reqOpts?.transfer,
                 });
             } finally {
-                slot.inflight = Math.max(0, slot.inflight - 1);
+                // A crashed or disposed worker may already have a replacement.
+                if (slot.client === client) slot.inflight = Math.max(0, slot.inflight - 1);
             }
         },
         prewarm(count = 1): void {

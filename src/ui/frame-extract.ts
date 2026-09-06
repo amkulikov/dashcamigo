@@ -28,6 +28,10 @@ function getClient(): WorkerClient {
     });
     client = createWorkerClient(worker, {
         name: "frame-extract",
+        onDiscardedResult: (result) => {
+            const { bitmaps } = result as ExtractResult;
+            for (const bitmap of bitmaps) bitmap?.close();
+        },
         onCrash: () => {
             // Force re-spawn on next call.
             client = null;

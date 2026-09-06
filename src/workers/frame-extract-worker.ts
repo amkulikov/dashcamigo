@@ -145,10 +145,7 @@ async function canvasToImageBitmap(wrapped: WrappedCanvas): Promise<ImageBitmap 
  */
 async function extractFrames(file: File, timestamps: number[], signal: AbortSignal): Promise<(ImageBitmap | null)[]> {
     const bitmaps: (ImageBitmap | null)[] = new Array(timestamps.length).fill(null);
-    // Closes any bitmaps already collected and returns the all-null array.
-    // On main, the response from a canceled request is dropped silently
-    // (handleResponse finds no pending entry) - without closing here the
-    // bitmaps would sit in the MessageEvent.data until GC reaps it.
+    // Release cancelled output here without transferring GPU surfaces to main.
     const dropAndReturn = (): (ImageBitmap | null)[] => {
         for (let i = 0; i < bitmaps.length; i++) {
             bitmaps[i]?.close();
@@ -198,10 +195,7 @@ async function extractFrames(file: File, timestamps: number[], signal: AbortSign
         bitmaps[i] = bitmap;
     }
 
-    // Final-iteration abort: if the signal fired during the last frame's decode,
-    // the loop exits without re-checking, and returning here would transfer the
-    // bitmaps into a response the client has already dropped (it closes nothing
-    // it does not know about), leaking the GPU surfaces. Close them instead.
+    // The final decode can be cancelled without another loop iteration.
     if (signal.aborted) return dropAndReturn();
 
     return bitmaps;
