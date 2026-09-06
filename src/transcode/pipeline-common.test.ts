@@ -3,6 +3,7 @@ import { type AudioSample, type AudioSampleSource } from "mediabunny";
 
 import {
     createMp4StreamOutput,
+    consumeMapSnapshot,
     discardOutputQuietly,
     emitSilence,
     frameNeedsNoComposite,
@@ -96,6 +97,11 @@ describe("nextTolerant", () => {
         await expect(nextTolerant(it)).rejects.toThrow("aborted");
     });
 
+    it("preserves cancellation reconstructed as an Error across a worker boundary", async () => {
+        const aborted = Object.assign(new Error("cancelled"), { name: "AbortError" });
+        await expect(nextTolerant(fakeIterator<number>([], aborted))).rejects.toBe(aborted);
+    });
+
     it("rethrows Chromium's blob read failure instead of masking it as a damaged tail", async () => {
         // The literal Blink throws when a source file stops being readable
         // mid-export (card dropped, scanner lock) - see source-read-error.ts.
@@ -108,6 +114,22 @@ describe("nextTolerant", () => {
         const readErr = new DOMException("read failed", "NotReadableError");
         const it = fakeIterator<number>([], readErr);
         await expect(nextTolerant(it)).rejects.toBe(readErr);
+    });
+});
+
+describe("consumeMapSnapshot", () => {
+    it("preserves cancellation reconstructed as an Error across a worker boundary", async () => {
+        const aborted = Object.assign(new Error("cancelled"), { name: "AbortError" });
+        await expect(
+            consumeMapSnapshot(
+                {} as OffscreenCanvasRenderingContext2D,
+                1920,
+                1080,
+                { xPct: 75, yPct: 75, scalePct: 100, zoomKm: 1, shape: "circle" },
+                Promise.reject(aborted),
+                1,
+            ),
+        ).rejects.toBe(aborted);
     });
 });
 

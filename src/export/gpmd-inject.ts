@@ -62,7 +62,7 @@ export interface CapturedMoov {
  */
 export async function injectClipGpmf(args: {
     handle: FileSystemFileHandle;
-    trip: Trip;
+    trip: Pick<Trip, "records" | "timeline">;
     // Clip range on the trip's FOOTAGE (content) axis - the same axis the
     // stream-copy video track is built on (pauses removed). Keeping gpmd and
     // video on one axis is what guarantees they stay the same length and in sync.
@@ -87,18 +87,21 @@ export async function injectClipGpmf(args: {
     // a player that aligns the meta track by track-relative offset would see
     // telemetry shifted by the snap; not worth changing the produced track (and
     // re-baselining) for that uncommon case.
-    const samples = packGpmfSamples(
-        trip.records,
-        trip.timeline,
-        clipContentStartSec,
-        clipContentEndSec - clipContentStartSec,
-        { includeAccel: true },
-    );
+    let sampleCount = 0;
     try {
+        signal?.throwIfAborted();
+        const samples = packGpmfSamples(
+            trip.records,
+            trip.timeline,
+            clipContentStartSec,
+            clipContentEndSec - clipContentStartSec,
+            { includeAccel: true },
+        );
+        sampleCount = samples.length;
         await injectGpmdTrack(handle, samples, signal, capturedMoov);
         return true;
     } catch (err) {
-        if (err instanceof DOMException && err.name === "AbortError") throw err;
+        if (err instanceof Error && err.name === "AbortError") throw err;
         log.error("gpmd injection failed", err);
         // Swallowed (the clip is saved WITHOUT telemetry, user gets only a warn
         // toast) - so this never reaches the export funnel. But GPMF is a hard
@@ -106,7 +109,7 @@ export async function injectClipGpmf(args: {
         // silent failure here is a real defect worth seeing.
         captureSentryException(err, {
             fingerprint: ["gpmd_inject_failed", err instanceof Error ? err.name : "unknown"],
-            tags: { sample_count: String(samples.length) },
+            tags: { sample_count: String(sampleCount) },
         });
         return false;
     }
@@ -272,6 +275,7 @@ export async function injectGpmdTrack(
             position: newMdatAbsStart,
             data: tail as Uint8Array<ArrayBuffer>,
         });
+        throwIfAborted();
         const newFileSize = newMdatAbsStart + tail.byteLength;
 
         log.info("gpmd track injected", {
@@ -282,6 +286,7 @@ export async function injectGpmdTrack(
         });
         await writable.close();
         closed = true;
+        throwIfAborted();
     } catch (err) {
         // Drop the swap. Without abort, FSA may still flush the buffered
         // truncate on GC and corrupt the file. Skip if close already ran.

@@ -345,7 +345,10 @@ export async function exportClip({
                     // muxer on the first audio packet (which would throw mid-export).
                     const firstAudioDecoderConfig = audioCodec ? await firstAudioTrack.getDecoderConfig() : null;
                     audioDecoderConfig = firstAudioDecoderConfig;
-                    if (audioCodec && firstAudioDecoderConfig) {
+                    if (audioCodec && !output.format.getSupportedAudioCodecs().includes(audioCodec)) {
+                        log.warn("audio codec cannot be stored in mp4, exporting without audio", { codec: audioCodec });
+                        audioCodec = null;
+                    } else if (audioCodec && firstAudioDecoderConfig) {
                         audioSource = new EncodedAudioPacketSource(audioCodec);
                         output.addAudioTrack(audioSource);
                     } else if (audioCodec) {

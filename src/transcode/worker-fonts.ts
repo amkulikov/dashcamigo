@@ -11,6 +11,8 @@ import { createLogger } from "../log.js";
 
 const log = createLogger("transcode:fonts");
 
+const FONT_LOAD_TIMEOUT_MS = 5_000;
+
 export interface FontSpec {
     family: string;
     /** CSS weight descriptor - a single weight ("700") or a variable range ("100 900"). */
@@ -25,7 +27,7 @@ export interface FontSpec {
  * throughout: a missing FontFaceSet, a missing FontFace constructor (very old
  * engines), or a failed fetch each degrade to the ctx.font system fallback
  * rather than throwing - burned-in text (overlays, watermark) is cosmetic and
- * must never abort an export. Never rejects.
+ * must not block an export. Cancellation still propagates.
  */
 export async function loadFontsIntoScope(specs: readonly FontSpec[]): Promise<void> {
     const fontsApi: FontFaceSet | undefined =
@@ -37,12 +39,28 @@ export async function loadFontsIntoScope(specs: readonly FontSpec[]): Promise<vo
     }
     await Promise.all(
         specs.map(async (spec) => {
+            let timer: ReturnType<typeof setTimeout> | undefined;
             try {
                 const face = new FontFaceCtor(spec.family, `url(${spec.url})`, { weight: spec.weight });
-                await face.load();
+                // FontFace.load has no timeout or cancellation API. A stalled
+                // request must release the exporter to its system-font fallback.
+                await Promise.race([
+                    face.load(),
+                    new Promise<never>((_, reject) => {
+                        timer = setTimeout(() => reject(new Error("font load timed out")), FONT_LOAD_TIMEOUT_MS);
+                    }),
+                ]);
+                // Do not register a timed-out face later: that would change text
+                // metrics halfway through the exported clip.
                 fontsApi.add(face);
             } catch (err) {
-                log.info("font load failed, using fallback", { family: spec.family, err: String(err) });
+                if (err instanceof Error && err.name === "AbortError") throw err;
+                log.info("font load failed, using fallback", {
+                    family: spec.family,
+                    err: err instanceof Error ? err.message : String(err),
+                });
+            } finally {
+                if (timer !== undefined) clearTimeout(timer);
             }
         }),
     );

@@ -2,12 +2,14 @@ import { readFileSync } from "node:fs";
 import {
     BlobSource,
     BufferTarget,
+    EncodedAudioPacketSource,
+    EncodedPacket,
     EncodedPacketSink,
     EncodedVideoPacketSource,
     Input,
     Mp4OutputFormat,
+    MovOutputFormat,
     Output,
-    type EncodedPacket,
     type InputTrack,
 } from "mediabunny";
 import { describe, expect, it, vi } from "vitest";
@@ -108,10 +110,10 @@ async function save(files: File[], end?: number) {
     return { result, file: await handle.getFile() };
 }
 
-async function withoutAudio(file: File): Promise<File> {
+async function remuxFixture(file: File, withPcm8Audio = false): Promise<File> {
     const input = open(file);
     const target = new BufferTarget();
-    const output = new Output({ target, format: new Mp4OutputFormat() });
+    const output = new Output({ target, format: withPcm8Audio ? new MovOutputFormat() : new Mp4OutputFormat() });
     try {
         const track = await input.getPrimaryVideoTrack();
         if (!track) throw new Error("fixture has no video track");
@@ -120,14 +122,21 @@ async function withoutAudio(file: File): Promise<File> {
         if (!codec || !config) throw new Error("fixture has no video config");
         const source = new EncodedVideoPacketSource(codec);
         output.addVideoTrack(source);
+        const audioSource = withPcm8Audio ? new EncodedAudioPacketSource("pcm-u8") : null;
+        if (audioSource) output.addAudioTrack(audioSource);
         await output.start();
         let first = true;
         for (const packet of await packets(track)) {
             await source.add(packet, first ? { decoderConfig: config } : undefined);
             first = false;
         }
+        if (audioSource) {
+            await audioSource.add(new EncodedPacket(new Uint8Array(8000).fill(128), "key", 0, 1), {
+                decoderConfig: { codec: "pcm-u8", sampleRate: 8000, numberOfChannels: 1 },
+            });
+        }
         await output.finalize();
-        return new File([target.buffer!], "silent.mp4");
+        return new File([target.buffer!], withPcm8Audio ? "pcm8.mov" : "silent.mp4");
     } finally {
         input.dispose();
     }
@@ -200,7 +209,7 @@ describe("stream-copy export", () => {
 
     it("starts the audio track when the first audio-bearing file starts", async () => {
         const file = fixture(H264_FIXTURE);
-        const silent = await withoutAudio(file);
+        const silent = await remuxFixture(file);
         const probe = await probeAudioUniformity([silent, file]);
         expect(probe.uniform).toBe(true);
         expect(probe.firstFile).toBe(file);
@@ -213,6 +222,23 @@ describe("stream-copy export", () => {
             expect(await audio!.getFirstTimestamp()).toBeCloseTo(2);
             expect(await audio!.computeDuration()).toBeCloseTo(4);
         } finally {
+            output.dispose();
+        }
+    });
+
+    it("keeps video when MOV audio cannot be represented in an MP4 track", async () => {
+        const file = await remuxFixture(fixture(H264_FIXTURE), true);
+        const source = open(file);
+        const output = open((await save([file])).file);
+        try {
+            expect(await (await source.getPrimaryAudioTrack())!.getCodec()).toBe("pcm-u8");
+            expect(await output.getPrimaryAudioTrack()).toBeNull();
+            const expected = await packets((await source.getPrimaryVideoTrack())!);
+            const actual = await packets((await output.getPrimaryVideoTrack())!);
+            expect(actual).toHaveLength(expected.length);
+            expect(actual.map((packet) => packet.data)).toEqual(expected.map((packet) => packet.data));
+        } finally {
+            source.dispose();
             output.dispose();
         }
     });
@@ -238,7 +264,7 @@ describe("stream-copy export", () => {
 
     it("rejects packet framing changes with an otherwise identical video configuration", async () => {
         const file = fixture("./parsers/__fixtures__/juscar/real-anonymized.TS");
-        const remuxed = await withoutAudio(file);
+        const remuxed = await remuxFixture(file);
         const source = open(file);
         const mp4 = open(remuxed);
         try {

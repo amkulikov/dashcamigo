@@ -16,7 +16,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { injectGpmdTrack } from "./gpmd-inject.js";
+import { injectClipGpmf, injectGpmdTrack } from "./gpmd-inject.js";
 import { packGpmfSamples } from "../parsers/internal/gpmf-pack.js";
 import { buildMp4Index } from "../parsers/internal/mp4-index.js";
 import { extractFromGpmdTrack, findGpmdTrack } from "../parsers/internal/gpmf-extract.js";
@@ -45,7 +45,7 @@ const FIXTURE_MP4 = resolve(REPO_ROOT, "tests/testdata/dashcam-viewer-corpus/MOV
  * a File; createWritable() returns a writable that mutates the buffer at
  * absolute positions (required for the position field in FSA-write chunks).
  */
-function makeFakeHandle(initial: Uint8Array): FileSystemFileHandle {
+function makeFakeHandle(initial: Uint8Array, onWrite?: () => void): FileSystemFileHandle {
     let buf = new Uint8Array(initial);
 
     const handle = {
@@ -70,6 +70,7 @@ function makeFakeHandle(initial: Uint8Array): FileSystemFileHandle {
                         writeBuf = grown;
                     }
                     writeBuf.set(chunk.data, chunk.position);
+                    onWrite?.();
                 },
                 async truncate(size: number): Promise<void> {
                     if (size === writeBuf.byteLength) return;
@@ -254,5 +255,49 @@ describe("injectGpmdTrack - end-to-end round-trip on real mp4 fixture", () => {
         expect(newIndex.tracks.filter((t) => t.handlerType === "vide").length).toBe(origVideoCount);
         expect(newIndex.tracks.filter((t) => t.handlerType === "soun").length).toBe(origAudioCount);
         expect(newIndex.tracks.filter((t) => t.handlerType === "meta").length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("keeps the finished video when metadata exceeds the GPMF sample limit", async () => {
+        const original = new Uint8Array(readFileSync(FIXTURE_MP4));
+        const handle = makeFakeHandle(original);
+        const frame: TripFrame = { startUtc: baseUtc, durationSec: 1, wallDurationSec: 1, channels: {} };
+        const trip = {
+            timeline: buildTripTimeline([frame]),
+            records: Array.from({ length: 4096 }, (_, i) =>
+                makeRecord({ unixSeconds: baseUtc + i / 4096, lat: 55, lon: 37 }),
+            ),
+        };
+        expect(() => packGpmfSamples(trip.records, trip.timeline, 0, 1)).toThrow("repeat out of uint16 range");
+        await expect(injectClipGpmf({ handle, trip, clipContentStartSec: 0, clipContentEndSec: 1 })).resolves.toBe(
+            false,
+        );
+        expect(Buffer.from(await (await handle.getFile()).arrayBuffer()).equals(original)).toBe(true);
+    });
+
+    it("rolls back telemetry writes when cancellation arrives before commit", async () => {
+        const original = new Uint8Array(readFileSync(FIXTURE_MP4));
+        const controller = new AbortController();
+        const handle = makeFakeHandle(original, () => controller.abort());
+        const samples = packAtUtc(records, baseUtc, 3, { includeAccel: false });
+        await expect(injectGpmdTrack(handle, samples, controller.signal)).rejects.toMatchObject({ name: "AbortError" });
+        expect(Buffer.from(await (await handle.getFile()).arrayBuffer()).equals(original)).toBe(true);
+    });
+
+    it("propagates a non-DOM AbortError from the file boundary", async () => {
+        const original = new Uint8Array(readFileSync(FIXTURE_MP4));
+        const handle = makeFakeHandle(original);
+        const aborted = Object.assign(new Error("cancelled"), { name: "AbortError" });
+        handle.getFile = async () => {
+            throw aborted;
+        };
+        const frame: TripFrame = { startUtc: baseUtc, durationSec: 3, wallDurationSec: 3, channels: {} };
+        await expect(
+            injectClipGpmf({
+                handle,
+                trip: { records, timeline: buildTripTimeline([frame]) },
+                clipContentStartSec: 0,
+                clipContentEndSec: 3,
+            }),
+        ).rejects.toBe(aborted);
     });
 });

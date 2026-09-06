@@ -418,7 +418,7 @@ export async function feedSegmentAudioCopy(opts: {
     try {
         startPacket = (await sink.getPacket(rangeStart)) ?? (await sink.getFirstPacket());
     } catch (err) {
-        if (err instanceof DOMException && err.name === "AbortError") throw err;
+        if (err instanceof Error && err.name === "AbortError") throw err;
         if (isSourceReadError(err)) throw err;
         onTruncated();
         return { audioLastEndSec: opts.audioLastEndSec, configPushed: false };
@@ -445,7 +445,7 @@ export async function feedSegmentAudioCopy(opts: {
         try {
             pkt = await sink.getNextPacket(pkt);
         } catch (err) {
-            if (err instanceof DOMException && err.name === "AbortError") throw err;
+            if (err instanceof Error && err.name === "AbortError") throw err;
             if (isSourceReadError(err)) throw err;
             onTruncated();
             break;
@@ -542,7 +542,7 @@ export async function consumeMapSnapshot(
         drawMapOverlay(ctx, bitmap, widthPx, heightPx, mapOpts);
         return false;
     } catch (mapErr) {
-        if (mapErr instanceof DOMException && mapErr.name === "AbortError") throw mapErr;
+        if (mapErr instanceof Error && mapErr.name === "AbortError") throw mapErr;
         log.warn("map overlay disabled after snapshot failure", { err: String(mapErr), framesDone });
         return true;
     } finally {
@@ -583,7 +583,7 @@ export async function nextTolerant<T>(iterator: AsyncIterator<T>): Promise<Toler
         const r = await iterator.next();
         return r.done ? { done: true, truncated: false } : { done: false, value: r.value };
     } catch (err) {
-        if (err instanceof DOMException && err.name === "AbortError") throw err;
+        if (err instanceof Error && err.name === "AbortError") throw err;
         if (isSourceReadError(err)) throw err;
         return { done: true, truncated: true };
     }
