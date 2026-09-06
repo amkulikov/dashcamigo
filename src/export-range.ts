@@ -11,7 +11,7 @@ import type { AudioCodec } from "mediabunny";
 import type { GpsRecord } from "./parsers/types.js";
 import { serializeGpx } from "./parsers/sidecars/gpx.js";
 import type { Trip, TripTimeline, VideoCandidate } from "./trips.js";
-import { contentToWallUtc, displayClockDate, wallToContentSec } from "./trips.js";
+import { contentToWallUtc, displayClockDate, wallToContentSec, wallToContentSecIfCovered } from "./trips.js";
 
 export interface FileSegment {
     file: File;
@@ -161,33 +161,17 @@ export function rangeSourceBitrateBps(segments: readonly FileSegment[]): number 
 }
 
 /**
- * GPS records whose FOOTAGE (content-axis) projection falls inside
- * [startContentSec, endContentSec]. A record recorded during a pause projects
- * onto a divider and is excluded (no video covers it). Single source of truth
+ * GPS records covered by footage whose content-axis projection falls inside
+ * [startContentSec, endContentSec]. Single source of truth
  * for "which points belong to this clip" - shared by buildClipGpx (the .gpx
  * itself) and the export panel's GPS-track summary, so the point count the user
  * sees matches the file they get.
  */
 export function clipRecordsForRange(trip: Trip, startContentSec: number, endContentSec: number): GpsRecord[] {
-    const { timeline } = trip;
-    // contentStart -> wallStart per segment, to detect divider clamps without
-    // an O(segments) scan per record.
-    const dividerWallStart = new Map<number, number>();
-    for (const seg of timeline.segments) dividerWallStart.set(seg.contentStart, seg.wallStart);
     return trip.records.filter((r) => {
         if (!r.active) return false;
-        const c = wallToContentSec(timeline, r.unixSeconds);
-        if (c < startContentSec || c > endContentSec) return false;
-        // Exclude records recorded DURING a pause: wallToContentSec clamps
-        // them onto the next segment's divider, which can sit inside the
-        // range, but no exported video covers those moments (the contract
-        // above; the plain range check alone let them through). The clamp is
-        // detected directly - the record's wall time precedes the segment
-        // whose divider it landed on - mirroring wallToContentSec's logic
-        // instead of re-deriving pause windows with an epsilon.
-        const wallStart = dividerWallStart.get(c);
-        if (wallStart !== undefined && r.unixSeconds < wallStart) return false;
-        return true;
+        const c = wallToContentSecIfCovered(trip.timeline, r.unixSeconds);
+        return c !== null && c >= startContentSec && c <= endContentSec;
     });
 }
 

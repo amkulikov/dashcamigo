@@ -995,14 +995,7 @@ const GAP_DIVIDER_MIN_SEC = 60;
  * pauses >= GAP_DIVIDER_MIN_SEC become dividers. Pure - no Trip dependency, so
  * it can be unit-tested on raw frames.
  *
- * Mapping contract (kept identical for chart projection and export filtering so
- * they never disagree):
- *  - a record inside a gap clamps to the preceding segment's contentEnd (the
- *    divider) rather than being dropped - dropping leaves a hole in the speed
- *    chart and breaks distance continuity;
- *  - a record before the first frame clamps to 0, after the last to
- *    contentDurationSec;
- *  - on overlapping frames (negative gap) the earliest containing segment wins.
+ * See wallToContentSec and wallToContentSecIfCovered for projection contracts.
  */
 export function buildTripTimeline(frames: readonly TripFrame[]): TripTimeline {
     const segments: ContentSegment[] = [];
@@ -1067,15 +1060,31 @@ export function wallToContentSec(timeline: TripTimeline, unixSeconds: number): n
         if (unixSeconds < wallEnd) {
             // inside this segment, or in the pause before it (clamp to divider)
             if (unixSeconds >= seg.wallStart) {
-                // On a time-lapse frame one content second covers several wall
-                // seconds - compress by the segment's ratio (1 for realtime).
-                const scale = seg.wallDurationSec > 0 ? seg.durationSec / seg.wallDurationSec : 0;
-                return seg.contentStart + (unixSeconds - seg.wallStart) * scale;
+                return projectWallWithinSegment(seg, unixSeconds);
             }
             return seg.contentStart;
         }
     }
     return contentDurationSec;
+}
+
+/** Projects only instants covered by footage. Segment starts are inclusive
+ *  and ends exclusive; overlaps use the earliest containing segment,
+ *  as in wallToContentSec. */
+export function wallToContentSecIfCovered(timeline: TripTimeline, unixSeconds: number): number | null {
+    for (const seg of timeline.segments) {
+        if (unixSeconds < seg.wallStart) return null;
+        if (seg.durationSec > 0 && unixSeconds < seg.wallStart + seg.wallDurationSec) {
+            return projectWallWithinSegment(seg, unixSeconds);
+        }
+    }
+    return null;
+}
+
+function projectWallWithinSegment(seg: ContentSegment, unixSeconds: number): number {
+    // A time-lapse content second covers several wall seconds.
+    const scale = seg.wallDurationSec > 0 ? seg.durationSec / seg.wallDurationSec : 0;
+    return seg.contentStart + (unixSeconds - seg.wallStart) * scale;
 }
 
 /** Footage second -> absolute UTC of that moment (skips paused time; runs at

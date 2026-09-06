@@ -8,6 +8,7 @@
 import { describe, it, expect } from "vitest";
 import {
     applyTimelapseCadenceWallSpans,
+    buildTripTimeline,
     deriveStartUtc,
     deriveWallDurationSec,
     displayClockDate,
@@ -24,6 +25,7 @@ import {
     tripCandidatesByChannel,
     tripAllCandidates,
     wallToContentSec,
+    wallToContentSecIfCovered,
     contentToWallUtc,
     contentToFrame,
     type TzSample,
@@ -854,6 +856,71 @@ describe("TripTimeline (footage-time projection)", () => {
         const tl = groupTrips([a, b], ONE_TRIP)[0]!.timeline;
         expect(tl.gaps).toHaveLength(0);
         expect(tl.contentDurationSec).toBe(120);
+    });
+});
+
+describe("wallToContentSecIfCovered", () => {
+    it("excludes records outside footage and in pauses without clamping them", () => {
+        const timeline = buildTripTimeline([
+            { startUtc: 1000, durationSec: 60, wallDurationSec: 60, channels: {} },
+            { startUtc: 1360, durationSec: 60.37, wallDurationSec: 60.37, channels: {} },
+        ]);
+
+        for (const unixSeconds of [500, 999.999, 1060, 1200, 1359.999, 1420.37, 99999]) {
+            expect(wallToContentSecIfCovered(timeline, unixSeconds), `uncovered instant ${unixSeconds}`).toBeNull();
+        }
+        expect(wallToContentSecIfCovered(timeline, 1000)).toBe(0);
+        expect(wallToContentSecIfCovered(timeline, 1059.5)).toBeCloseTo(59.5, 6);
+        expect(wallToContentSecIfCovered(timeline, 1360)).toBe(60);
+        expect(wallToContentSecIfCovered(timeline, 1420.36)).toBeCloseTo(120.36, 6);
+    });
+
+    it("includes a contiguous segment boundary in the following segment", () => {
+        const timeline = buildTripTimeline([
+            { startUtc: 1000, durationSec: 60, wallDurationSec: 60, channels: {} },
+            { startUtc: 1060, durationSec: 60, wallDurationSec: 60, channels: {} },
+        ]);
+
+        expect(wallToContentSecIfCovered(timeline, 1060)).toBe(60);
+        expect(wallToContentSecIfCovered(timeline, 1120)).toBeNull();
+    });
+
+    it("keeps the earliest containing segment across overlapping footage", () => {
+        const timeline = buildTripTimeline([
+            { startUtc: 1000, durationSec: 120, wallDurationSec: 120, channels: {} },
+            { startUtc: 1030, durationSec: 30, wallDurationSec: 30, channels: {} },
+            { startUtc: 1100, durationSec: 60, wallDurationSec: 60, channels: {} },
+        ]);
+
+        for (const unixSeconds of [1035, 1080, 1119.5, 1120, 1159.5]) {
+            expect(wallToContentSecIfCovered(timeline, unixSeconds), `covered instant ${unixSeconds}`).toBe(
+                wallToContentSec(timeline, unixSeconds),
+            );
+        }
+        expect(wallToContentSecIfCovered(timeline, 1035)).toBe(35);
+        expect(wallToContentSecIfCovered(timeline, 1120)).toBe(170);
+        expect(wallToContentSecIfCovered(timeline, 1160)).toBeNull();
+    });
+
+    it("compresses covered time-lapse instants by the footage ratio", () => {
+        const timeline = buildTripTimeline([{ startUtc: 1000, durationSec: 6.5, wallDurationSec: 98, channels: {} }]);
+
+        expect(wallToContentSecIfCovered(timeline, 1000)).toBe(0);
+        expect(wallToContentSecIfCovered(timeline, 1049)).toBeCloseTo(3.25, 6);
+        expect(wallToContentSecIfCovered(timeline, 1098)).toBeNull();
+    });
+
+    it("excludes empty footage while retaining overlapping nonempty footage", () => {
+        const emptyTimeline = buildTripTimeline([]);
+        expect(wallToContentSecIfCovered(emptyTimeline, 1000)).toBeNull();
+
+        const timeline = buildTripTimeline([
+            { startUtc: 1000, durationSec: 0, wallDurationSec: 60, channels: {} },
+            { startUtc: 1030, durationSec: 30, wallDurationSec: 30, channels: {} },
+        ]);
+        expect(wallToContentSecIfCovered(timeline, 1010)).toBeNull();
+        expect(wallToContentSecIfCovered(timeline, 1040)).toBe(10);
+        expect(wallToContentSecIfCovered(timeline, 1060)).toBeNull();
     });
 });
 

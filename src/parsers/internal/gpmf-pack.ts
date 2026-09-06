@@ -26,8 +26,8 @@
 //       UNIT (3×c)                 m/s²×3
 //       ACCL (3×i32 ×N)            X/Y/Z, scaled (g -> m/s² via G_TO_MS2)
 //
-// Sampling: 1 GPMF sample = 1 second of FOOTAGE (content) timeline = 1 GpsRecord
-// (our source is 1 Hz). The clip timeline is footage-time, with recording pauses
+// Each GPMF sample holds the records within one FOOTAGE (content) second.
+// The clip timeline is footage-time, with recording pauses
 // removed - identical to the stream-copy video track, which also collapses gaps
 // (export.ts videoAccumSec). Both tracks therefore have the same length and the
 // telemetry stays in sync. Records are projected onto the content axis via the
@@ -43,7 +43,7 @@
 
 import { concat } from "../../bytes.js";
 import type { GpsRecord } from "../types.js";
-import { type TripTimeline, wallToContentSec, contentToWallUtc } from "../../trips.js";
+import { type TripTimeline, wallToContentSecIfCovered, contentToWallUtc } from "../../trips.js";
 
 /** g to m/s² conversion factor, matching GoPro's UNIT="m/s2" for the ACCL stream. */
 const G_TO_MS2 = 9.80665;
@@ -102,15 +102,19 @@ export function packGpmfSamples(
     opts: { includeAccel: boolean } = { includeAccel: true },
 ): GpmfSample[] {
     const totalSeconds = Math.max(1, Math.ceil(clipContentDurationSec));
+    const clipContentEndSec = clipContentStartSec + clipContentDurationSec;
     const samples: GpmfSample[] = [];
 
-    // Project each active record onto the content axis once, sorted ascending.
-    // wallToContentSec is monotonic in unixSeconds (piecewise-linear, flat over
-    // pauses), so this order is stable for the forward-cursor bucketing below.
-    const projected = records
-        .filter((r) => r.active)
-        .map((r) => ({ record: r, contentSec: wallToContentSec(timeline, r.unixSeconds) }))
-        .sort((a, b) => a.contentSec - b.contentSec);
+    // Clamping records outside footage would pile a whole GPS-track tail into
+    // one sample at an edge or pause divider.
+    const projected: { record: GpsRecord; contentSec: number }[] = [];
+    for (const record of records) {
+        if (!record.active) continue;
+        const contentSec = wallToContentSecIfCovered(timeline, record.unixSeconds);
+        if (contentSec === null || contentSec < clipContentStartSec || contentSec >= clipContentEndSec) continue;
+        projected.push({ record, contentSec });
+    }
+    projected.sort((a, b) => a.contentSec - b.contentSec);
 
     // Decide whether to write ACCL once for the whole clip, not per-second.
     // If any record has non-zero accel, we write the ACCL stream on EVERY
@@ -128,12 +132,7 @@ export function packGpmfSamples(
     let cursor = 0;
     for (let sec = 0; sec < totalSeconds; sec++) {
         const winStart = clipContentStartSec + sec;
-        const winEnd = winStart + 1;
-        // Drop records before this footage second (incl. anything before the
-        // clip start); winStart only increases, so we never re-skip.
-        while (cursor < projected.length && projected[cursor]!.contentSec < winStart) {
-            cursor++;
-        }
+        const winEnd = Math.min(winStart + 1, clipContentEndSec);
         const inSecond: GpsRecord[] = [];
         while (cursor < projected.length && projected[cursor]!.contentSec < winEnd) {
             inSecond.push(projected[cursor]!.record);
@@ -170,7 +169,7 @@ function packDeviceSample(inSecond: GpsRecord[], secondStartUtc: number, writeAc
         packStringKlv("DVNM", "dashcamigo"),
         ...streams,
     ]);
-    return packKlv("DEVC", 0, 1, devcChildren.byteLength, devcChildren);
+    return packNestedKlv("DEVC", devcChildren);
 }
 
 /** STRM with GPS5 and associated tags. */
@@ -217,7 +216,7 @@ function packGpsStream(inSecond: GpsRecord[], secondStartUtc: number): Uint8Arra
         // GPS5: payload data.
         packKlv("GPS5", "l", 20, samples.length, gps5Payload),
     ]);
-    return packKlv("STRM", 0, 1, strmChildren.byteLength, strmChildren);
+    return packNestedKlv("STRM", strmChildren);
 }
 
 /** STRM with ACCL. */
@@ -254,7 +253,23 @@ function packAcclStream(inSecond: GpsRecord[]): Uint8Array {
         packKlv("UNIT", "c", 4, 3, encodeUnitArray(["m/s2", "m/s2", "m/s2"], 4)),
         packKlv("ACCL", "l", 12, records.length, acclPayload),
     ]);
-    return packKlv("STRM", 0, 1, strmChildren.byteLength, strmChildren);
+    return packNestedKlv("STRM", strmChildren);
+}
+
+function packNestedKlv(fourCC: string, payload: Uint8Array): Uint8Array {
+    // Nested blocks count chunks, not bytes. Grow the chunk so repeat fits in
+    // uint16, with zero END markers filling a partial chunk (GPMF writer).
+    let sampleSize = 1;
+    while (Math.ceil(payload.byteLength / sampleSize) > 0xffff) {
+        sampleSize *= 2;
+        if (sampleSize > 0xff) throw new Error(`nested payload too large for ${fourCC}: ${payload.byteLength}`);
+    }
+    const repeat = Math.ceil(payload.byteLength / sampleSize);
+    const paddedSize = sampleSize * repeat;
+    if (paddedSize === payload.byteLength) return packKlv(fourCC, 0, sampleSize, repeat, payload);
+    const padded = new Uint8Array(paddedSize);
+    padded.set(payload);
+    return packKlv(fourCC, 0, sampleSize, repeat, padded);
 }
 
 function hasAccel(records: readonly GpsRecord[]): boolean {

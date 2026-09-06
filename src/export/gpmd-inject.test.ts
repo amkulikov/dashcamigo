@@ -257,14 +257,42 @@ describe("injectGpmdTrack - end-to-end round-trip on real mp4 fixture", () => {
         expect(newIndex.tracks.filter((t) => t.handlerType === "meta").length).toBeGreaterThanOrEqual(1);
     });
 
-    it("keeps the finished video when metadata exceeds the GPMF sample limit", async () => {
+    it("round-trips a dense GPS and accel sample through an MP4", async () => {
+        const original = new Uint8Array(readFileSync(FIXTURE_MP4));
+        const handle = makeFakeHandle(original);
+        const count = 13_137;
+        const frame: TripFrame = { startUtc: baseUtc, durationSec: 1, wallDurationSec: 1, channels: {} };
+        const trip = {
+            timeline: buildTripTimeline([frame]),
+            records: Array.from({ length: count }, (_, i) =>
+                makeRecord({ unixSeconds: baseUtc + i / count, lat: 55 + i / count, lon: 37, accelXg: 0.5 }),
+            ),
+        };
+        await expect(injectClipGpmf({ handle, trip, clipContentStartSec: 0, clipContentEndSec: 1 })).resolves.toBe(
+            true,
+        );
+        const file = await handle.getFile();
+        const index = await buildMp4Index(file);
+        const track = findGpmdTrack(index);
+        expect(track).not.toBeNull();
+        const extracted = await extractFromGpmdTrack({ file, relativePath: "test.mp4" }, index, track!);
+        expect(extracted!.records).toHaveLength(count);
+        for (const i of [0, Math.floor(count / 2), count - 1]) {
+            const record = extracted!.records[i]!;
+            expect(record.lat, `latitude ${i}`).toBeCloseTo(trip.records[i]!.lat, 6);
+            expect(record.unixSeconds, `timestamp ${i}`).toBeCloseTo(trip.records[i]!.unixSeconds, 4);
+            expect(record.accelXg, `acceleration ${i}`).toBeCloseTo(0.5, 3);
+        }
+    });
+
+    it("keeps the finished video when metadata exceeds the GPMF record count limit", async () => {
         const original = new Uint8Array(readFileSync(FIXTURE_MP4));
         const handle = makeFakeHandle(original);
         const frame: TripFrame = { startUtc: baseUtc, durationSec: 1, wallDurationSec: 1, channels: {} };
         const trip = {
             timeline: buildTripTimeline([frame]),
-            records: Array.from({ length: 4096 }, (_, i) =>
-                makeRecord({ unixSeconds: baseUtc + i / 4096, lat: 55, lon: 37 }),
+            records: Array.from({ length: 65_536 }, (_, i) =>
+                makeRecord({ unixSeconds: baseUtc + i / 65_536, lat: 55, lon: 37 }),
             ),
         };
         expect(() => packGpmfSamples(trip.records, trip.timeline, 0, 1)).toThrow("repeat out of uint16 range");

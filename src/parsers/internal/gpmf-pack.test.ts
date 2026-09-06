@@ -68,6 +68,31 @@ describe("packGpmfSamples - structure", () => {
         expect(tokens[0]!.fourCC).toBe("DEVC");
         expect(tokens[0]!.type).toBe(0); // nested
     });
+
+    it.each([2040, 13_136, 13_137, 65_535])("preserves %i GPS and accel records in a dense second", (count) => {
+        const baseUtc = 1_700_000_000;
+        const records = Array.from({ length: count }, (_, i) =>
+            makeRecord({
+                unixSeconds: baseUtc + i / count,
+                lat: 50 + i / count,
+                lon: 30,
+                speedMs: i / count,
+                accelXg: 0.5,
+            }),
+        );
+        const samples = packAtUtc(records, baseUtc, 1, { includeAccel: true });
+        expect(samples).toHaveLength(1);
+        expect(samples[0]!.durationSec).toBe(1);
+        const gps = decodeFirstGps5(samples[0]!.payload);
+        const accel = decodeAccl(samples[0]!.payload);
+        expect(gps).toHaveLength(count);
+        expect(accel).toHaveLength(count);
+        for (const i of [0, Math.floor(count / 2), count - 1]) {
+            expect(gps[i]!.lat, `latitude ${i}`).toBeCloseTo(records[i]!.lat, 6);
+            expect(gps[i]!.speed2d, `speed ${i}`).toBeCloseTo(records[i]!.speedMs, 3);
+            expect(accel[i]!.x, `acceleration ${i}`).toBeCloseTo(0.5 * 9.80665, 2);
+        }
+    });
 });
 
 describe("packGpmfSamples - GPS round-trip", () => {
@@ -141,6 +166,31 @@ describe("packGpmfSamples - GPS round-trip", () => {
         expect(decoded[0]!.lat).toBeCloseTo(55.0, 6);
         expect(decoded[1]!.lat).toBeCloseTo(55.1, 6);
         expect(decoded[2]!.lat).toBeCloseTo(55.2, 6);
+    });
+
+    it("excludes records at and after a fractional clip end", () => {
+        const records = [
+            makeRecord({ unixSeconds: baseUtc + 0.2, lat: 55 }),
+            makeRecord({ unixSeconds: baseUtc + 0.375, lat: 56 }),
+            makeRecord({ unixSeconds: baseUtc + 0.5, lat: 57 }),
+        ];
+        const samples = packAtUtc(records, baseUtc, 0.375, { includeAccel: false });
+        expect(samples[0]!.durationSec).toBe(0.375);
+        expect(decodeFirstGps5(samples[0]!.payload).map((r) => r.lat)).toEqual([55]);
+    });
+
+    it("excludes a long GPS track outside footage instead of clamping it to the edges", () => {
+        const frame: TripFrame = { startUtc: baseUtc, durationSec: 1.375, wallDurationSec: 1.375, channels: {} };
+        const records = [
+            makeRecord({ unixSeconds: baseUtc - 1, lat: 54 }),
+            makeRecord({ unixSeconds: baseUtc, lat: 55 }),
+            makeRecord({ unixSeconds: baseUtc + 1.25, lat: 56 }),
+            ...Array.from({ length: 13_136 }, (_, i) => makeRecord({ unixSeconds: baseUtc + 1.375 + i, lat: 57 })),
+        ];
+        const samples = packGpmfSamples(records, buildTripTimeline([frame]), 0, 1.375, { includeAccel: false });
+        expect(samples).toHaveLength(2);
+        expect(decodeFirstGps5(samples[0]!.payload).map((r) => r.lat)).toEqual([55]);
+        expect(decodeFirstGps5(samples[1]!.payload).map((r) => r.lat)).toEqual([56]);
     });
 });
 
@@ -246,6 +296,17 @@ describe("packGpmfSamples - footage-time collapse across a pause", () => {
         // no real record there - placeholder no-fix.
         const gpsf60 = findFirstToken(samples[60]!.payload, "GPSF");
         expect(decodeNumeric(gpsf60!)?.[0]).toBe(0);
+    });
+
+    it("excludes pause records from the next footage second and the accel decision", () => {
+        const records = [
+            makeRecord({ unixSeconds: baseUtc + 60, lat: 54, accelXg: 1 }),
+            makeRecord({ unixSeconds: baseUtc + 200, lat: 55, accelXg: 1 }),
+            makeRecord({ unixSeconds: baseUtc + 360, lat: 56 }),
+        ];
+        const samples = packGpmfSamples(records, gappedTimeline(), 60, 1);
+        expect(decodeFirstGps5(samples[0]!.payload).map((r) => r.lat)).toEqual([56]);
+        expect(findFirstToken(samples[0]!.payload, "ACCL")).toBeNull();
     });
 });
 

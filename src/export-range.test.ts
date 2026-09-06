@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import {
     candidatesInRange,
+    clipRecordsForRange,
     type FileSegment,
     rangeSourceBitrateBps,
     rangeSourceFps,
     sliceCandidatesForRange,
 } from "./export-range.js";
-import { buildTripTimeline, type TripFrame, type VideoCandidate } from "./trips.js";
+import type { GpsRecord } from "./parsers/types.js";
+import { buildTripTimeline, groupTrips, type TripFrame, type VideoCandidate } from "./trips.js";
 
 /**
  * Segment over a synthetic file of `mb` megabytes lasting `fileSec`, of which
@@ -157,6 +159,59 @@ function makeCandidate(opts: {
 function frameOf(startUtc: number, durationSec: number, candidate: VideoCandidate): TripFrame {
     return { startUtc, durationSec, wallDurationSec: durationSec, channels: { rear: candidate } };
 }
+
+function makeGpsRecord(unixSeconds: number, active = true): GpsRecord {
+    return {
+        unixSeconds,
+        active,
+        lat: 51,
+        lon: 19,
+        bearingDeg: 0,
+        speedMs: 0,
+        accelXg: 0,
+        accelYg: 0,
+        accelZg: 0,
+        mp4Filename: "clip.mp4",
+    };
+}
+
+describe("clipRecordsForRange", () => {
+    it("excludes GPX points at and beyond the fractional footage end", () => {
+        const candidate = makeCandidate({ name: "clip.mp4", startUtc: 1000, durationSec: 60.37 });
+        const trip = groupTrips([candidate])[0]!;
+        trip.records = [999, 1000, 1020, 1060.36, 1060.37, 1100, 15000].map((unixSeconds) =>
+            makeGpsRecord(unixSeconds),
+        );
+
+        const records = clipRecordsForRange(trip, 0, trip.timeline.contentDurationSec);
+        expect(records.map((record) => record.unixSeconds)).toEqual([1000, 1020, 1060.36]);
+    });
+
+    it("keeps inclusive clip boundaries inside footage and excludes inactive points", () => {
+        const candidate = makeCandidate({ name: "clip.mp4", startUtc: 1000, durationSec: 60 });
+        const trip = groupTrips([candidate])[0]!;
+        trip.records = [
+            makeGpsRecord(1009),
+            makeGpsRecord(1010),
+            makeGpsRecord(1015, false),
+            makeGpsRecord(1020),
+            makeGpsRecord(1021),
+        ];
+
+        const records = clipRecordsForRange(trip, 10, 20);
+        expect(records.map((record) => record.unixSeconds)).toEqual([1010, 1020]);
+    });
+
+    it("excludes pause points while preserving the following footage start", () => {
+        const a = makeCandidate({ name: "a.mp4", startUtc: 1000, durationSec: 60 });
+        const b = makeCandidate({ name: "b.mp4", startUtc: 1360, durationSec: 60 });
+        const trip = groupTrips([a, b], Number.POSITIVE_INFINITY)[0]!;
+        trip.records = [1058, 1059, 1060, 1200, 1359.999, 1360, 1400].map((unixSeconds) => makeGpsRecord(unixSeconds));
+
+        const records = clipRecordsForRange(trip, 59, 100);
+        expect(records.map((record) => record.unixSeconds)).toEqual([1059, 1360, 1400]);
+    });
+});
 
 describe("sliceCandidatesForRange", () => {
     it("places files back-to-back and slices the overlap of each", () => {
