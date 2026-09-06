@@ -26,6 +26,9 @@ const DEFAULT_PANELS: ViewPanels = { chart: true, strip: true, map: true, readou
 
 /** In-memory mirror of the persisted state. */
 let currentPanels: ViewPanels = { ...DEFAULT_PANELS };
+type DetailPanels = Pick<ViewPanels, "chart" | "strip" | "readout">;
+let ordinaryDetails: DetailPanels | null = null;
+let expandedDetails: DetailPanels = { chart: false, strip: false, readout: false };
 let currentMapMode: MapViewMode = "mini";
 let preferredMapMode: MapViewMode = "mini";
 let mapModeRequestHandler: ((mode: MapViewMode) => void) | null = null;
@@ -42,6 +45,23 @@ export function subscribeViewPanels(handler: Listener): () => void {
 
 export function getViewPanels(): ViewPanels {
     return { ...currentPanels };
+}
+
+/** Expanded viewing keeps its detail choices for the session without changing
+ *  the ordinary viewer's saved layout. The map stays where the user put it. */
+export function setExpandedViewPanels(expanded: boolean): void {
+    if (expanded === (ordinaryDetails !== null)) return;
+    const details = { chart: currentPanels.chart, strip: currentPanels.strip, readout: currentPanels.readout };
+    if (expanded) {
+        ordinaryDetails = details;
+        Object.assign(currentPanels, expandedDetails);
+    } else {
+        expandedDetails = details;
+        Object.assign(currentPanels, ordinaryDetails);
+        ordinaryDetails = null;
+    }
+    if (currentOpts) applyPanels(currentOpts);
+    notifyListeners();
 }
 
 export function getPreferredMapMode(): MapViewMode {
@@ -91,7 +111,10 @@ function loadFromStorage(): LoadedViewPreferences {
 
 function saveToStorage(): void {
     try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...currentPanels, mapMode: preferredMapMode }));
+        localStorage.setItem(
+            STORAGE_KEY,
+            JSON.stringify({ ...currentPanels, ...ordinaryDetails, mapMode: preferredMapMode }),
+        );
     } catch {
         // private mode - silent
     }

@@ -88,6 +88,7 @@ export function initPlayerHotkeys(deps: HotkeyDeps): void {
         // Escape closes the speed menu ALWAYS, before any other filter - even
         // if focus moved into a speed-menu li, Escape must close it.
         if (e.key === "Escape" && deps.isSpeedMenuOpen()) {
+            e.preventDefault();
             deps.closeSpeedMenu();
             deps.focusSpeedButton();
             return;
@@ -113,7 +114,7 @@ export function initPlayerHotkeys(deps: HotkeyDeps): void {
         // Don't touch the player while the speed menu is open.
         if (deps.isSpeedMenuOpen()) return;
 
-        // Most shortcuts require an active file. Exception: F (fullscreen).
+        // Player shortcuts require an active recording.
         const hasActive = state.active !== null;
 
         // e.code is layout-independent (KeyM fires on a Russian 'ь' too);
@@ -177,6 +178,7 @@ export function initPlayerHotkeys(deps: HotkeyDeps): void {
 
         // F - fullscreen toggle.
         if (code === "KeyF") {
+            if (!hasActive || e.repeat) return;
             e.preventDefault();
             deps.toggleFullscreen();
             return;

@@ -156,19 +156,24 @@ test("expanded map fills a narrow desktop viewer after sidebar resizing", async 
 test("fullscreen controls remain available while hovered or keyboard focused", async ({ page }) => {
     await gotoApp(page);
     await loadTrip(page, SAMPLE_70MAI);
+    await page.keyboard.press("r");
+    await expect(page.locator("#player-loop")).toHaveAttribute("aria-label", "Loop on");
+    const play = page.locator("#player-play");
+    if ((await play.getAttribute("data-paused")) === "true") await play.click();
+    await expect(play).toHaveAttribute("data-paused", "false");
     await page.locator("#player-fullscreen").click();
     const player = page.locator("#player-wrap");
     await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
     const speed = await boxOf(page, "#player-speed");
     await page.mouse.move(speed.x + speed.width / 2, speed.y + speed.height / 2);
     // The idle deadline itself is under test: controls must survive beyond it.
-    await page.waitForTimeout(2300);
+    await page.waitForTimeout(3300);
     await expect(player).toHaveClass(/controls-visible/);
     await page.mouse.move(10, 10);
     await expect(player).not.toHaveClass(/controls-visible/);
     await page.keyboard.press("Tab");
     await expect(player).toHaveClass(/controls-visible/);
-    await page.waitForTimeout(2300);
+    await page.waitForTimeout(3300);
     await expect(player).toHaveClass(/controls-visible/);
     await page.locator("#player-fullscreen").click();
     await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(false);

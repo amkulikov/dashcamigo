@@ -46,7 +46,10 @@ function refreshGpsSyncSurfaces(): void {
 }
 
 function shouldUseModalPresentation(): boolean {
-    return document.fullscreenElement !== null || window.matchMedia(GPS_SYNC_MODAL_QUERY).matches;
+    return (
+        (document.fullscreenElement ?? document.querySelector(".player-expanded")) !== null ||
+        window.matchMedia(GPS_SYNC_MODAL_QUERY).matches
+    );
 }
 
 function syncPresentationMode(): void {
@@ -148,6 +151,7 @@ export function initGpsSyncModal(opts: { getTripCurrentTime: () => number }): vo
     wireBackdropDismiss(dom.gpsSyncModal, closeGpsSync, { cardSelector: ".gps-sync-card" });
     window.matchMedia(GPS_SYNC_MODAL_QUERY).addEventListener("change", syncPresentationMode);
     document.addEventListener("fullscreenchange", syncPresentationMode);
+    document.addEventListener("playerexpansionchange", syncPresentationMode);
     document.addEventListener(
         "keydown",
         (event) => {

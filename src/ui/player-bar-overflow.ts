@@ -5,11 +5,11 @@
 //
 // Mobile contract (see player-bar.css MOBILE PLAYER BAR comment): play +
 // current-time + speed metric + playback-speed + view-menu + Export + kebab stay
-// inline; help/capture/loop/view-mode/mute/fullscreen/map collapse into the kebab
+// inline; help/capture/loop/view-mode/mute/map collapse into the kebab
 // highest-priority-first. Export is priority 1 (last to leave), and the narrow-bar
 // gap shrink in player-bar.css keeps the mandatory floor under the viewport, so
 // Export is never the control forced out - the bug where it disappeared into the
-// kebab on narrow portrait. map/fullscreen are simple one-shot clicks, so the
+// kebab on narrow portrait. Map is a simple one-shot click, so the
 // default kebab row (el.click()) drives them - no popover-anchored control is
 // collapsed, so none needs a custom inline renderer.
 //
@@ -40,13 +40,12 @@ export function initPlayerBarOverflow() {
     const markerList = document.getElementById("player-marker-list") as HTMLButtonElement | null;
     const map = document.getElementById("player-map") as HTMLButtonElement | null;
     const gpsSync = document.getElementById("gps-sync-pill-mobile") as HTMLButtonElement | null;
-    const fullscreen = document.getElementById("player-fullscreen") as HTMLButtonElement | null;
     const exportBtn = document.getElementById("player-export") as HTMLButtonElement | null;
     const items: OverflowableItem[] = [];
 
     // Priorities: HIGH priority = drop FIRST (see overflow-bar.ts header). The
     // least-useful-on-mobile controls (help, capture, loop, view-mode) leave the
-    // bar first; mute/fullscreen next; the map toggle stays longest (it is the
+    // bar first; mute next; the map toggle stays longest (it is the
     // ONLY entry to the map on mobile, the mini-map circle being hidden there).
     // Export (priority 1) is always the last to go - so on every real phone width
     // it stays inline instead of disappearing into the kebab.
@@ -119,14 +118,6 @@ export function initPlayerBarOverflow() {
             label: () => (dom.player.muted ? t("player.unmute") : t("player.mute")),
             isAvailable: () => !muteWrap.hidden,
             customMenuRow: renderVolumeMenuRow,
-        });
-    }
-    if (fullscreen) {
-        items.push({
-            el: fullscreen,
-            priority: 5,
-            label: () => t("player.fullscreen.enter"),
-            isAvailable: () => !fullscreen.hidden,
         });
     }
     // Availability must ignore overflow's own display:none so a wider bar can

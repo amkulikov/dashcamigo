@@ -1,21 +1,10 @@
-// User input on video tiles:
-//   - click on the active tile = play/pause (debounced ~250ms to avoid the
-//     pointerup-after-dblclick double-fire).
-//   - dblclick on the active tile = fullscreen toggle.
-//   - click on a non-active tile = swap that channel to active.
-//   - click on the overlay channel-switcher (F/R/I/S + split) = swap or
-//     toggleViewMode.
-//   - native context menu suppressed (Chrome's "Show controls" forces native
-//     controls and breaks the custom player).
-//
-// Why a separate module: this is purely input plumbing for the multi-channel
-// grid - independent of the playback core, but needs four collaborators:
-// fullscreen toggle, view-mode toggle, channel swap, and the drag-click
-// suppression flag from zoom.
+// Video-tile gestures share one click delay so a fullscreen double-click
+// preserves playback and audio routing. Export-mode double-clicks belong to
+// the crop editor.
 
 import type { Channel } from "../parsers/types.js";
-import { activePlayer, dom, forEachVideoSlot, onActivePlayerEvent } from "./dom.js";
-import { setLayoutAndChannels, state } from "./state.js";
+import { activePlayer, dom, forEachVideoSlot, isActiveSlot, onActivePlayerEvent } from "./dom.js";
+import { activeTrip, setLayoutAndChannels, state } from "./state.js";
 
 interface TileInputDeps {
     toggleFullscreen: () => void;
@@ -39,6 +28,20 @@ interface TileInputDeps {
 let pendingSingleClick: ReturnType<typeof setTimeout> | null = null;
 const DBLCLICK_THRESHOLD_MS = 250;
 
+function cancelSingleClick(): void {
+    if (pendingSingleClick !== null) clearTimeout(pendingSingleClick);
+    pendingSingleClick = null;
+}
+
+function scheduleSingleClick(action: () => void): void {
+    cancelSingleClick();
+    const trip = activeTrip();
+    pendingSingleClick = setTimeout(() => {
+        pendingSingleClick = null;
+        if (state.active && activeTrip() === trip) action();
+    }, DBLCLICK_THRESHOLD_MS);
+}
+
 export function initPlayerTileInput(deps: TileInputDeps): void {
     // Click delegation on the grid. UX:
     //   - multi-channel: click on any tile swaps audio source to that
@@ -50,12 +53,14 @@ export function initPlayerTileInput(deps: TileInputDeps): void {
     // the channel-order chip in the top-panel controls slot ordering, and
     // tile click is dedicated to audio routing.
     dom.videoGrid.addEventListener("click", (ev) => {
+        if (!state.active) return;
         const target = ev.target;
         if (!(target instanceof HTMLElement)) return;
         // Reorder grip owns its own clicks (player-tile-reorder.ts swallows
         // them in the capture phase); never read a handle click as an audio
         // swap. Guarded here too in case listener order ever shifts.
         if (target.closest(".tile-drag-handle")) return;
+        if (target instanceof HTMLVideoElement && !isActiveSlot(target)) return;
         const tile = target.closest(".video-tile") as HTMLElement | null;
         if (!tile || tile.hidden) return;
         const ch = tile.dataset.channel as Channel | undefined;
@@ -70,8 +75,11 @@ export function initPlayerTileInput(deps: TileInputDeps): void {
         if (deps.consumeDragClickSuppress()) return;
         if (state.composition.audioChannel === ch) return;
         ev.stopPropagation();
-        setLayoutAndChannels({ audioChannel: ch });
-        deps.applyComposition();
+        scheduleSingleClick(() => {
+            if (tile.hidden || !state.composition.channelOrder.includes(ch)) return;
+            setLayoutAndChannels({ audioChannel: ch });
+            deps.applyComposition();
+        });
     });
 
     // Direct listener on each <video>, without the onActivePlayerEvent
@@ -97,23 +105,20 @@ export function initPlayerTileInput(deps: TileInputDeps): void {
             // Pan drag just ended - do NOT interpret pointerup-after-drag as
             // a play/pause toggle.
             if (deps.consumeDragClickSuppress()) return;
-            if (pendingSingleClick) clearTimeout(pendingSingleClick);
-            pendingSingleClick = setTimeout(() => {
-                pendingSingleClick = null;
+            scheduleSingleClick(() => {
+                if (v !== activePlayer() || state.composition.channelOrder.length > 1) return;
                 if (dom.player.paused) dom.player.play().catch(() => {});
                 else dom.player.pause();
                 deps.flashPlaybackToggle();
-            }, DBLCLICK_THRESHOLD_MS);
+            });
         });
-        v.addEventListener("dblclick", () => {
-            if (v !== activePlayer()) return;
-            if (pendingSingleClick) {
-                clearTimeout(pendingSingleClick);
-                pendingSingleClick = null;
-            }
+        v.addEventListener("dblclick", (event) => {
+            if (!state.active || !isActiveSlot(v) || v.closest<HTMLElement>(".video-tile")?.hidden) return;
+            cancelSingleClick();
             // In export-mode dblclick enters per-slot crop edit (handled by the
             // delegated listener in player-crop.ts), not fullscreen.
             if (state.exportModeOpen) return;
+            event.preventDefault();
             deps.toggleFullscreen();
         });
     });

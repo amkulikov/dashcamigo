@@ -30,6 +30,7 @@
 }
 
 .player-wrap {
+    --fullscreen-action-size: 38px;
     flex: 1;
     background: var(--bg);
     display: grid;
@@ -69,14 +70,14 @@
 /* Export mode: dock the trim bar (clip-range controls, #export-trim-bar) in
    its own row right above the timeline stack. Only the templates
    reachable in export mode grow the "trim" area; the two guards keep this
-   rule out of the templates that must survive intact: :not(:fullscreen) for
+   rule out of the templates that must survive intact: :not(.player-expanded) for
    the fullscreen video-only template (the fixed-position export panel cannot
    render inside the fullscreen subtree anyway), :not(.map-expanded) for the
    3-column map template. applyMapLayout already drops .map-expanded while
    exporting, so the second guard is CSS-side insurance for that JS invariant,
    not the primary mechanism. The mobile grid override lives in the mobile
    block below and carries the same guards. */
-body.export-mode .player-wrap:not(:fullscreen):not(.map-expanded) {
+body.export-mode .player-wrap:not(.player-expanded):not(.map-expanded) {
     grid-template-rows: minmax(0, 1fr) auto auto auto var(--chart-height);
     grid-template-areas:
         "video"
@@ -88,7 +89,7 @@ body.export-mode .player-wrap:not(:fullscreen):not(.map-expanded) {
 /* Belt for the fullscreen + export-mode combination: without a "trim" area in
    the template the bar would auto-place into an implicit row and shrink the
    fullscreen video. */
-.player-wrap:fullscreen .export-trim-bar {
+.player-wrap.player-expanded .export-trim-bar {
     display: none;
 }
 .player-wrap.map-expanded {
@@ -174,7 +175,7 @@ body.export-mode .player-wrap:not(:fullscreen):not(.map-expanded) {
    parent when changing the player's grid: a size container cannot query itself.
    Children query pwrap separately because fullscreen can widen it beyond viewer. */
 @container viewer (max-width: 767px) {
-    .player-wrap.map-expanded {
+    .player-wrap:not(.player-expanded).map-expanded {
         grid-template-rows: minmax(0, 1fr) auto;
         grid-template-columns: 1fr;
         grid-template-areas:
@@ -183,17 +184,18 @@ body.export-mode .player-wrap:not(:fullscreen):not(.map-expanded) {
     }
 }
 @container pwrap (max-width: 767px) {
-    .player-wrap.map-expanded .video-frame,
-    .player-wrap.map-expanded .player-chart,
-    .player-wrap.map-expanded .player-readout,
-    .player-wrap.map-expanded .player-col-resize {
+    .player-wrap:not(.player-expanded).map-expanded .video-frame,
+    .player-wrap:not(.player-expanded).map-expanded .player-fullscreen-actions,
+    .player-wrap:not(.player-expanded).map-expanded .player-chart,
+    .player-wrap:not(.player-expanded).map-expanded .player-readout,
+    .player-wrap:not(.player-expanded).map-expanded .player-col-resize {
         /* Map-expanded on a narrow player = map fills the whole grid. */
         display: none;
     }
     /* The base rule ".player-wrap:not(.map-expanded) .map-wrap { display: none }"
        no longer blocks map-wrap (since it's expanded), but display: block
        guarantees nothing inside this media query hides the map again. */
-    .player-wrap.map-expanded .map-wrap {
+    .player-wrap:not(.player-expanded).map-expanded .map-wrap {
         display: block;
     }
 }
@@ -891,137 +893,254 @@ body.export-mode .tile-drag-handle {
     box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
     pointer-events: none;
 }
-/* In fullscreen the mini-map is visible, but shifted inward from the screen edge. */
-.player-wrap:fullscreen .video-minimap {
-    top: var(--dc-space-4);
-    right: var(--dc-space-4);
-}
-
-/* Fullscreen mode: native controls are hidden, our .player-bar sits on top.
-   The video canvas stays black on every monitor, while the overlay surfaces
-   follow the selected theme. */
-/* Fullscreen layout: video fills the whole screen, chart + bar are an
-   overlay at the bottom, hidden by default. The user moves the mouse ->
-   the .controls-visible class is set by JS for 2 seconds -> controls slide
-   smoothly in from the bottom. The map/resize dividers are hidden - not
-   needed in fullscreen mode (the map has no dedicated fullscreen of its own). */
-.player-wrap:fullscreen {
-    background: var(--dc-black);
-    grid-template-rows: 1fr;
-    grid-template-columns: 1fr;
-    grid-template-areas: "video";
-}
-.player-wrap:fullscreen .video-frame {
+/* Entry stays visible over the common video surface; the same group carries
+   exit and pin in fullscreen, independent of toolbar overflow. */
+.player-fullscreen-actions {
+    position: absolute;
     grid-area: video;
-    width: 100vw;
-    height: 100vh;
+    top: var(--dc-space-3);
+    right: var(--dc-space-3);
+    z-index: 12;
+    display: flex;
+    align-items: center;
+    gap: var(--dc-space-2);
+    max-width: calc(100% - 2 * var(--dc-space-3));
 }
-.player-wrap:fullscreen .player-col-resize,
-.player-wrap:fullscreen .map-wrap {
+.player-fullscreen-actions .player-btn {
+    height: var(--fullscreen-action-size);
+    border: 1px solid color-mix(in srgb, var(--fg) 18%, transparent);
+    border-radius: var(--dc-radius-md);
+    background: color-mix(in srgb, var(--bg-elev) 90%, transparent);
+    color: var(--fg);
+    backdrop-filter: blur(12px);
+    box-shadow: var(--dc-shadow-card);
+}
+.player-fullscreen-actions .player-btn:hover {
+    background: var(--bg-hover);
+}
+.player-fullscreen-actions .player-btn[hidden],
+.player-fullscreen-actions svg[hidden] {
     display: none;
 }
-.player-wrap:fullscreen .player-chart,
-.player-wrap:fullscreen .player-readout,
-.player-wrap:fullscreen .player-bar {
+.player-fullscreen-actions .player-fullscreen-btn {
+    width: auto;
+    gap: var(--dc-space-2);
+    padding: 0 var(--dc-space-3);
+    font-family: var(--dc-font-ui);
+    font-size: var(--dc-text-sm);
+    font-weight: 600;
+    white-space: nowrap;
+}
+.fullscreen-key {
+    padding: 2px var(--dc-space-1);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-xs);
+    color: var(--fg-dim);
+    font-family: var(--dc-font-mono);
+    font-size: var(--dc-text-2xs);
+    line-height: 1.2;
+}
+.player-fullscreen-actions .player-controls-pin {
+    width: var(--fullscreen-action-size);
+}
+.player-controls-pin[aria-pressed="true"] {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-dim);
+}
+.player-fullscreen-hint {
     position: absolute;
-    left: 0;
+    top: calc(100% + var(--dc-space-2));
     right: 0;
-    z-index: 10;
-    transition:
-        transform var(--dc-dur-entrance) var(--dc-ease-out),
-        opacity var(--dc-dur-entrance) var(--dc-ease-out);
-    background: color-mix(in srgb, var(--bg) 78%, transparent);
-    backdrop-filter: blur(6px);
+    width: max-content;
+    max-width: min(320px, calc(100vw - 2 * var(--dc-space-4)));
+    padding: var(--dc-space-2) var(--dc-space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-md);
+    background: color-mix(in srgb, var(--bg-elev) 94%, transparent);
+    color: var(--fg-dim);
+    font: var(--dc-text-sm) / 1.5 var(--dc-font-ui);
+    box-shadow: var(--dc-shadow-card);
     pointer-events: none;
+}
+.video-minimap {
+    top: calc(var(--dc-space-3) + var(--fullscreen-action-size) + var(--dc-space-2));
+}
+
+/* The class covers native fullscreen and the viewport fallback. Absolute
+   controls never contribute implicit grid rows or resize the video. */
+body.has-expanded-player {
+    overflow: hidden;
+}
+body.has-expanded-player .viewer {
+    /* Size containment makes fixed descendants use the viewer's bounds. The
+       fallback needs the viewport while keeping live video elements in place. */
+    container-type: normal;
+    overflow: visible;
+    z-index: var(--dc-z-splash);
+}
+.player-wrap.player-expanded {
+    --fullscreen-inset: var(--dc-space-4);
+    --fullscreen-bottom: max(var(--fullscreen-inset), env(safe-area-inset-bottom, 0px));
+    --fullscreen-bar-h: calc(var(--player-transport-size) + 12px + 2px);
+    --fullscreen-side: max(var(--fullscreen-inset), calc((100% - 1120px) / 2));
+    position: fixed;
+    inset: 0;
+    z-index: var(--dc-z-splash);
+    width: 100%;
+    height: 100dvh;
+    min-height: 0;
+    margin: 0;
+    background: var(--dc-black);
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "video";
+}
+.player-wrap.player-expanded .video-frame {
+    grid-area: video;
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    max-width: none;
+    max-height: none;
+    aspect-ratio: auto;
+    margin: 0;
+}
+.player-wrap.player-expanded .player-col-resize,
+.player-wrap.player-expanded .map-wrap {
+    display: none;
+}
+.player-wrap.player-expanded .player-chart,
+.player-wrap.player-expanded .player-readout,
+.player-wrap.player-expanded .player-bar {
+    position: absolute;
+    grid-area: auto;
+    left: max(var(--fullscreen-side), env(safe-area-inset-left, 0px));
+    right: max(var(--fullscreen-side), env(safe-area-inset-right, 0px));
+    z-index: 10;
+    background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
+    backdrop-filter: blur(12px);
+}
+.player-wrap.player-expanded .player-chart,
+.player-wrap.player-expanded .player-readout,
+.player-wrap.player-expanded .player-bar,
+.player-wrap.player-expanded .player-fullscreen-actions {
+    transform: translateY(8px);
     opacity: 0;
+    pointer-events: none;
+    transition:
+        transform 180ms var(--dc-ease-out),
+        opacity 180ms var(--dc-ease-out);
 }
-/* Bottom-up overlay stack: bar, then readout, then chart. Each offset is the
-   sum of the heights below it, and every term is the var the corresponding
-   element lays out with - a literal here would silently lose its clearance
-   the next time one of them grows. --readout-stack-h is 0 when the row is
-   hidden (from the View menu or on mobile), which collapses the chart back
-   onto the bar without a separate rule. */
-.player-wrap:fullscreen .player-readout {
-    /* On mobile the bar is --mobile-bar-h (60px + the iOS safe area, set on
-       .player-wrap in the mobile media query and inherited here); on desktop
-       --player-bar-h, derived from the bar's own control and padding sizes in
-       player-bar.css. */
-    bottom: var(--mobile-bar-h, var(--player-bar-h, 48px));
-    /* Its own height plus the bar below it - a bare 100% on a ~25px row is a
-       twitch, not a slide-out. */
-    transform: translateY(calc(100% + var(--mobile-bar-h, var(--player-bar-h, 48px))));
+.player-wrap.player-expanded .player-fullscreen-actions {
+    grid-area: auto;
+    top: max(var(--fullscreen-inset), env(safe-area-inset-top, 0px));
+    right: max(var(--fullscreen-inset), env(safe-area-inset-right, 0px));
+    transform: translateY(-6px);
 }
-.player-wrap:fullscreen .player-chart {
-    bottom: calc(var(--mobile-bar-h, var(--player-bar-h, 48px)) + var(--readout-stack-h, 0px));
-    /* Same height as the in-grid chart row - the overlay must not clip or
-       letterbox the panel content. */
+.player-wrap.player-expanded .player-readout {
+    bottom: calc(var(--fullscreen-bottom) + var(--fullscreen-bar-h));
+    border-inline: 1px solid var(--border);
+}
+.player-wrap.player-expanded .player-chart {
+    bottom: calc(var(--fullscreen-bottom) + var(--fullscreen-bar-h) + var(--readout-stack-h, 0px));
     height: var(--chart-height);
-    transform: translateY(110%);
+    border: 1px solid var(--border);
+    border-bottom: 0;
+    border-radius: var(--dc-radius-lg) var(--dc-radius-lg) 0 0;
 }
-.player-wrap:fullscreen .player-bar {
-    bottom: 0;
-    transform: translateY(100%);
+.player-wrap.player-expanded .player-bar {
+    bottom: var(--fullscreen-bottom);
+    min-height: var(--fullscreen-bar-h);
+    padding: 6px var(--dc-space-3);
+    border: 1px solid var(--border);
+    border-radius: 0 0 var(--dc-radius-lg) var(--dc-radius-lg);
+    box-shadow: var(--dc-shadow-popup);
 }
-.player-wrap:fullscreen.controls-visible .player-chart,
-.player-wrap:fullscreen.controls-visible .player-readout,
-.player-wrap:fullscreen.controls-visible .player-bar {
+.player-wrap.player-expanded:is(.controls-visible, :has(:focus-visible)) .player-chart,
+.player-wrap.player-expanded:is(.controls-visible, :has(:focus-visible)) .player-readout,
+.player-wrap.player-expanded:is(.controls-visible, :has(:focus-visible)) .player-bar,
+.player-wrap.player-expanded:is(.controls-visible, :has(:focus-visible)) .player-fullscreen-actions {
     transform: translateY(0);
     opacity: 1;
     pointer-events: auto;
 }
-/* Cursor: hide it when controls are invisible - YouTube-style. Shown
-   again via the :hover class. */
-.player-wrap:fullscreen:not(.controls-visible) {
+.player-wrap.player-expanded:not(.controls-visible):not(:has(:focus-visible)) {
     cursor: none;
 }
-/* ...except over a dialog: modals are re-homed under the fullscreen element
-   while it is active (modal-helper.ts), and a dialog you cannot see the
-   pointer on is not usable. */
-.player-wrap:fullscreen:not(.controls-visible) .modal-overlay {
+/* Dialogs and map content remain usable while the transport is hidden. */
+.player-wrap.player-expanded:not(.controls-visible) .modal-overlay,
+.player-wrap.player-expanded:not(.controls-visible) .map-wrap {
     cursor: auto;
 }
-/* Fullscreen + expanded map: the same video|divider|map split as the desktop
-   template instead of the video-only overlay layout, so the mini-map's
-   click-to-expand works in fullscreen rather than "vanishing" into a map
-   that CSS keeps hidden. The map is content, not a control, so it stays
-   visible (and keeps its cursor) while the controls auto-hide. */
-.player-wrap:fullscreen.map-expanded {
-    grid-template-rows: 1fr;
+.player-wrap.player-expanded.map-expanded {
     grid-template-columns:
         minmax(0, 1fr)
         4px
         minmax(220px, var(--map-width, clamp(280px, 34%, 480px)));
     grid-template-areas: "video vmr map";
 }
-/* Confine the chart/bar overlays to the video column: an absolutely
-   positioned grid child with a named area gets that area as its containing
-   block, so left/right/bottom anchor inside "video". Full-width overlays
-   would sit on top of the map column and the divider - their bottom ~210px
-   stopped taking clicks whenever the controls were visible (and mousemoving
-   over the map keeps them visible). The mobile block restores auto: there
-   the split is vertical and the controls belong at the screen bottom. */
-.player-wrap:fullscreen.map-expanded .player-chart,
-.player-wrap:fullscreen.map-expanded .player-readout,
-.player-wrap:fullscreen.map-expanded .player-bar {
+/* Grid-area confines the overlays to the video column while the map is open. */
+.player-wrap.player-expanded.map-expanded .player-chart,
+.player-wrap.player-expanded.map-expanded .player-readout,
+.player-wrap.player-expanded.map-expanded .player-bar {
     grid-area: video;
 }
-.player-wrap:fullscreen.map-expanded .video-frame {
-    width: 100%;
-    height: 100%;
-}
-.player-wrap:fullscreen.map-expanded .player-col-resize,
-.player-wrap:fullscreen.map-expanded .map-wrap {
+.player-wrap.player-expanded.map-expanded .player-col-resize,
+.player-wrap.player-expanded.map-expanded .map-wrap {
     display: block;
 }
-.player-wrap:fullscreen:not(.controls-visible) .map-wrap {
-    cursor: default;
+.player-wrap.player-expanded .video-minimap {
+    top: calc(var(--fullscreen-inset) + var(--fullscreen-action-size) + var(--dc-space-2));
+    right: var(--fullscreen-inset);
 }
-/* Reduced motion: controls still appear/disappear, just without the slide. */
+@media (min-width: 768px), (max-height: 500px) and (orientation: landscape) {
+    .player-expanded.map-expanded {
+        --fullscreen-map-top: calc(var(--fullscreen-inset) + var(--fullscreen-action-size) + var(--dc-space-2));
+    }
+    .player-expanded .map-controls,
+    .player-expanded .map-collapse-btn {
+        top: calc(var(--fullscreen-map-top) + 8px);
+    }
+    .player-expanded .maplibregl-ctrl-top-right {
+        top: var(--fullscreen-map-top);
+    }
+}
+.player-wrap.fullscreen-entering .player-chart,
+.player-wrap.fullscreen-entering .player-readout,
+.player-wrap.fullscreen-entering .player-bar,
+.player-wrap.fullscreen-entering .player-fullscreen-actions {
+    animation: fullscreen-controls-enter 220ms var(--dc-ease-out);
+}
+.player-wrap.fullscreen-leaving .player-chart,
+.player-wrap.fullscreen-leaving .player-readout,
+.player-wrap.fullscreen-leaving .player-bar,
+.player-wrap.fullscreen-leaving .player-fullscreen-actions {
+    animation: fullscreen-controls-enter 160ms var(--dc-ease-out);
+}
+@keyframes fullscreen-controls-enter {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
 @media (prefers-reduced-motion: reduce) {
-    .player-wrap:fullscreen .player-chart,
-    .player-wrap:fullscreen .player-readout,
-    .player-wrap:fullscreen .player-bar {
+    .player-wrap.player-expanded .player-chart,
+    .player-wrap.player-expanded .player-readout,
+    .player-wrap.player-expanded .player-bar,
+    .player-wrap.player-expanded .player-fullscreen-actions {
         transition: none;
+    }
+    .player-wrap:is(.fullscreen-entering, .fullscreen-leaving) .player-chart,
+    .player-wrap:is(.fullscreen-entering, .fullscreen-leaving) .player-readout,
+    .player-wrap:is(.fullscreen-entering, .fullscreen-leaving) .player-bar,
+    .player-wrap:is(.fullscreen-entering, .fullscreen-leaving) .player-fullscreen-actions {
+        animation: none;
     }
 }
 
@@ -1057,7 +1176,7 @@ body.export-mode .tile-drag-handle {
        in landscape). Exposed as a var so the video-frame max-height calc
        below reads the same number - if the bar grows, video shrinks in
        sync and the full 16:9 frame stays above the bar. */
-    .player-wrap {
+    .player-wrap:not(.player-expanded) {
         flex: 0 0 auto;
         min-height: 100%;
         --chart-height: 166px;
@@ -1081,8 +1200,8 @@ body.export-mode .tile-drag-handle {
        a stable size that never resizes mid-scroll.
        Landscape horizontal split (map-expanded) re-clamps to the 50vh row -
        see MOBILE LANDSCAPE block below. */
-    .player-wrap:not(.map-expanded) .video-frame,
-    .player-wrap.map-expanded .video-frame {
+    .player-wrap:not(.player-expanded):not(.map-expanded) .video-frame,
+    .player-wrap:not(.player-expanded).map-expanded .video-frame {
         display: block;
         aspect-ratio: 16 / 9;
         width: 100%;
@@ -1121,7 +1240,7 @@ body.export-mode .tile-drag-handle {
        overflows (short landscape, map-expanded), the spacer collapses to 0 and
        the viewer scrolls with the bar sticky. Export is a player-bar button now
        (no separate exportbar row). */
-    .player-wrap:not(.map-expanded) {
+    .player-wrap:not(.player-expanded):not(.map-expanded) {
         grid-template-rows: auto var(--chart-height) minmax(0, 1fr) auto;
         grid-template-areas:
             "video"
@@ -1133,7 +1252,7 @@ body.export-mode .tile-drag-handle {
        between video and chart, mirroring the desktop rule near the base
        template (same guards, same specificity) - this one wins by cascade
        order (later in the file), so the spacer row survives on phones. */
-    body.export-mode .player-wrap:not(:fullscreen):not(.map-expanded) {
+    body.export-mode .player-wrap:not(.player-expanded):not(.map-expanded) {
         grid-template-rows: auto auto var(--chart-height) minmax(0, 1fr) auto;
         grid-template-areas:
             "video"
@@ -1147,7 +1266,7 @@ body.export-mode .tile-drag-handle {
        the user can still scrub the timeline; exportbar hides because the
        primary action in map-mode is exploring the route, not exporting.
        Landscape horizontal split is overridden in the block below. */
-    .player-wrap.map-expanded {
+    .player-wrap:not(.player-expanded).map-expanded {
         grid-template-rows: auto auto var(--chart-height) auto;
         grid-template-columns: 1fr;
         grid-template-areas:
@@ -1156,17 +1275,18 @@ body.export-mode .tile-drag-handle {
             "chart"
             "bar";
     }
-    .player-wrap.map-expanded .player-col-resize {
+    .player-wrap:not(.player-expanded).map-expanded .player-col-resize {
         display: none;
     }
     /* @container pwrap (max-width: 768px) earlier in the file sets
        display:none on .player-chart in map-expanded (the old "map fills
        the whole grid" pattern). Mobile rule needs to unhide both chart
        and video explicitly - in split mode the user expects both. */
-    .player-wrap.map-expanded .player-chart {
+    .player-wrap:not(.player-expanded).map-expanded .player-chart,
+    .player-wrap:not(.player-expanded).map-expanded .player-fullscreen-actions {
         display: flex;
     }
-    .player-wrap.map-expanded .map-wrap {
+    .player-wrap:not(.player-expanded).map-expanded .map-wrap {
         /* Explicit min-height: in the scrollable mobile model rows are
            auto, and a MapLibre container (absolute children inside) has
            no intrinsic height - without this the map collapses to 0.
@@ -1177,26 +1297,36 @@ body.export-mode .tile-drag-handle {
         display: block;
         min-height: 50svh;
     }
-    /* Fullscreen + expanded map on a phone: stack vertically (the desktop
-       side-by-side split leaves an unusable sliver of video on portrait).
-       Video keeps its 16:9 fit rules; the map takes the rest. */
-    .player-wrap:fullscreen.map-expanded {
+    /* Fullscreen portrait shares the viewport between video and map. */
+    .player-wrap.player-expanded.map-expanded {
         grid-template-columns: 1fr;
-        grid-template-rows: auto minmax(0, 1fr);
+        grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
         grid-template-areas:
             "video"
             "map";
     }
-    .player-wrap:fullscreen.map-expanded .player-col-resize {
+    .player-wrap.player-expanded.map-expanded .player-col-resize {
         display: none;
     }
     /* Vertical split: controls stay at the screen bottom (standard player
        muscle memory), overlapping the map's lower band only while visible -
        auto-hide gives the map back. The desktop video-column confinement
        would park them mid-screen here. */
-    .player-wrap:fullscreen.map-expanded .player-chart,
-    .player-wrap:fullscreen.map-expanded .player-bar {
+    .player-wrap.player-expanded.map-expanded .player-chart,
+    .player-wrap.player-expanded.map-expanded .player-readout,
+    .player-wrap.player-expanded.map-expanded .player-bar {
         grid-area: auto;
+    }
+    .player-wrap.player-expanded {
+        --fullscreen-inset: var(--dc-space-2);
+        --fullscreen-bar-h: 60px;
+        --fullscreen-side: var(--fullscreen-inset);
+    }
+    .player-wrap {
+        --fullscreen-action-size: 40px;
+    }
+    .fullscreen-key {
+        display: none;
     }
 }
 
@@ -1204,7 +1334,12 @@ body.export-mode .tile-drag-handle {
    MOBILE LANDSCAPE - horizontal-split overrides for map-expanded.
    ========================================================================== */
 @media (max-height: 500px) and (orientation: landscape) {
-    .player-wrap.map-expanded {
+    .player-wrap.player-expanded.map-expanded {
+        grid-template-rows: minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-areas: "video map";
+    }
+    .player-wrap:not(.player-expanded).map-expanded {
         /* 50svh (not vh): matches the video-frame max-height in the same
            layout block - both must reference the same unit so the row
            height and the video's height clamp stay in lock-step. */
@@ -1215,7 +1350,7 @@ body.export-mode .tile-drag-handle {
             "chart chart"
             "bar bar";
     }
-    .player-wrap.map-expanded .video-frame {
+    .player-wrap:not(.player-expanded).map-expanded .video-frame {
         /* Horizontal split: video shares its row height with the map at
            50svh. Same fit-in-box pattern as the base mobile rule, scaled
            to the split row instead of (viewport - bar). Width auto-shrinks
@@ -1227,7 +1362,7 @@ body.export-mode .tile-drag-handle {
         margin: 0 auto;
         min-height: 0;
     }
-    .player-wrap.map-expanded .map-wrap {
+    .player-wrap:not(.player-expanded).map-expanded .map-wrap {
         /* The 50vh row above already provides the height - drop the
            portrait min-height which would force extra rows. */
         min-height: 0;

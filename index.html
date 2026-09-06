@@ -1332,6 +1332,18 @@
             </div>
 
             <div class="player-wrap" id="player-wrap">
+                <div class="player-fullscreen-actions">
+                    <button id="player-controls-pin" class="player-btn player-controls-pin" type="button" hidden aria-pressed="false">
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 3H8l1 6-4 4v2h14v-2l-4-4 1-6Z"/><path d="M12 15v6"/></svg>
+                    </button>
+                    <button id="player-fullscreen" class="player-btn player-fullscreen-btn" type="button" aria-label="Fullscreen" aria-keyshortcuts="F">
+                        <svg class="fullscreen-enter-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H3v5"/><path d="M21 8V3h-5"/><path d="M3 16v5h5"/><path d="M16 21h5v-5"/></svg>
+                        <svg class="fullscreen-exit-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden><path d="M3 8h5V3"/><path d="M16 3v5h5"/><path d="M8 21v-5H3"/><path d="M21 16h-5v5"/></svg>
+                        <span class="fullscreen-label"></span>
+                        <span class="fullscreen-key" aria-hidden="true">F</span>
+                    </button>
+                    <span id="player-fullscreen-hint" class="player-fullscreen-hint" role="status" hidden></span>
+                </div>
                 <div class="video-frame">
                     <!-- Split-view grid for multi-channel trips. Each tile
                          statically represents a channel (front/rear/interior);
@@ -1999,10 +2011,6 @@
                             <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
                             <path d="M12 17h.01"/>
                         </svg>
-                    </button>
-                    <button id="player-fullscreen" class="player-btn" type="button" aria-label="Fullscreen" aria-keyshortcuts="F">
-                        <!-- maximize -->
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
                     </button>
                     <!-- Overflow kebab for player-bar. When the bar shrinks
                          (narrow sidebar+map or a mobile screen), the

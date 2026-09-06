@@ -6,7 +6,7 @@ export function initPlayerPopoverPosition(anchor: HTMLElement, popover: HTMLElem
 
     function position(): void {
         if (popover.hidden) return;
-        const fullscreen = document.fullscreenElement;
+        const fullscreen = document.fullscreenElement ?? document.querySelector(".player-expanded");
         const boundary = fullscreen?.contains(popover) ? fullscreen : viewer!;
         const bounds = boundary.getBoundingClientRect();
         const anchorBounds = anchor.getBoundingClientRect();
@@ -27,10 +27,12 @@ export function initPlayerPopoverPosition(anchor: HTMLElement, popover: HTMLElem
     resize.observe(popover);
     viewer.addEventListener("scroll", position, { passive: true });
     document.addEventListener("fullscreenchange", position);
+    document.addEventListener("playerexpansionchange", position);
     return () => {
         visibility.disconnect();
         resize.disconnect();
         viewer.removeEventListener("scroll", position);
         document.removeEventListener("fullscreenchange", position);
+        document.removeEventListener("playerexpansionchange", position);
     };
 }

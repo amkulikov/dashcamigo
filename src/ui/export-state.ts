@@ -10,6 +10,7 @@
 // here.
 
 import type { BlurStyle } from "../blur-regions.js";
+import { createLogger } from "../log.js";
 import type { MapShape, OverlayStyleId, WatermarkAnchor } from "../transcode/types.js";
 import type { Trip } from "../trips.js";
 
@@ -359,6 +360,15 @@ export const OVERLAY_STATE_ACCESSORS: ReadonlyArray<{
 
 type Listener = () => void;
 const listeners = new Set<Listener>();
+const log = createLogger("export-state");
+let prepareExportMode: (() => Promise<boolean> | null) | null = null;
+let pendingOpen: object | null = null;
+
+/** Lets the player leave its expanded presentation before exposing the editor.
+ *  Returning null keeps ordinary opens synchronous. */
+export function setExportModePreparation(handler: (() => Promise<boolean> | null) | null): void {
+    prepareExportMode = handler;
+}
 
 /** Subscribes to export-state changes (open/close + panel field edits).
  *  Returns an unsubscribe function. */
@@ -388,6 +398,36 @@ export function notifyExportStateChanged(): void {
  * audio/gpmf/gpx toggles survive panel closes only.
  */
 export function openExportMode(): void {
+    if (state.exportModeOpen || pendingOpen) return;
+    const trip = activeTrip();
+    // Callers can immediately trim a newly opened export, even while the
+    // browser is still leaving fullscreen. Seed the range before that wait.
+    if (!exportPanelState.range && trip) {
+        exportPanelState.range = { startTripSec: 0, endTripSec: trip.timeline.contentDurationSec };
+    }
+    const preparation = prepareExportMode?.();
+    if (preparation) {
+        const request = {};
+        pendingOpen = request;
+        void preparation.then(
+            (canOpen) => {
+                if (pendingOpen !== request) return;
+                pendingOpen = null;
+                if (canOpen && activeTrip() === trip) activateExportMode();
+            },
+            (err: unknown) => {
+                if (pendingOpen === request) pendingOpen = null;
+                log.warn("could not prepare export editor", {
+                    err: err instanceof Error ? err.message : String(err),
+                });
+            },
+        );
+        return;
+    }
+    activateExportMode();
+}
+
+function activateExportMode(): void {
     if (state.exportModeOpen) return;
     state.exportModeOpen = true;
     // Until the overlay constructor is customized, its marker follows the main
@@ -396,12 +436,6 @@ export function openExportMode(): void {
     if (!hasCustomOverlayPreferences()) {
         refreshDefaultOverlayMarker();
         exportPanelState.overlayMap.marker = { ...defaultOverlayPreferences.overlayMap.marker };
-    }
-    if (!exportPanelState.range) {
-        const trip = activeTrip();
-        if (trip) {
-            exportPanelState.range = { startTripSec: 0, endTripSec: trip.timeline.contentDurationSec };
-        }
     }
     notifyExportStateChanged();
 }
@@ -417,6 +451,7 @@ export function openExportMode(): void {
  * but retaining the phase is a defensive backstop for direct callers.
  */
 export function closeExportMode(): void {
+    pendingOpen = null;
     if (!state.exportModeOpen) return;
     state.exportModeOpen = false;
     if (exportPanelState.phase !== "progress") {
@@ -433,6 +468,7 @@ export function closeExportMode(): void {
  * trip matches what a first open of the panel would pick anyway.
  */
 export function resetExportRangeForTrip(trip: Trip): void {
+    pendingOpen = null;
     exportPanelState.range = { startTripSec: 0, endTripSec: trip.timeline.contentDurationSec };
     notifyExportStateChanged();
 }
@@ -535,4 +571,10 @@ export function toggleExportMode(): void {
     if (exportPanelState.phase === "progress" || exportPanelState.configurationLocked) return;
     if (state.exportModeOpen) closeExportMode();
     else openExportMode();
+}
+
+export function _resetForTests(): void {
+    pendingOpen = null;
+    prepareExportMode = null;
+    listeners.clear();
 }

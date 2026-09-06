@@ -1205,6 +1205,13 @@ test.describe("player", () => {
         await page.locator("#player-fullscreen").click();
         await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
 
+        await page.locator("#player-view-menu").click();
+        await page.locator('.view-menu-row[data-panel="chart"]').click();
+        await page.locator('.view-menu-row[data-panel="readout"]').click();
+        await page.locator("#player-view-menu").click();
+        await expect(page.locator("#player-chart")).toBeVisible();
+        await expect(page.locator("#player-readout")).toBeVisible();
+
         const palettes = await page.locator("#player-wrap").evaluate(() => {
             const rgba = (color: string): number[] => {
                 const canvas = document.createElement("canvas");

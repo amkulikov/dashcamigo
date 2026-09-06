@@ -172,7 +172,7 @@ export function maybeShowSupportPrompt(): boolean {
 
     const temporarilyBlocked =
         document.visibilityState !== "visible" ||
-        document.fullscreenElement !== null ||
+        (document.fullscreenElement ?? document.querySelector(".player-expanded")) !== null ||
         state.exportModeOpen ||
         isAnyModalOpen() ||
         hasCompetingBanner() ||
@@ -258,6 +258,7 @@ export function initSupportPrompt(): void {
     // surface that does not expose its close through [hidden]/DOM removal.
     document.addEventListener("visibilitychange", schedulePromptRetry);
     document.addEventListener("fullscreenchange", schedulePromptRetry);
+    document.addEventListener("playerexpansionchange", schedulePromptRetry);
     document.addEventListener("click", schedulePromptRetry);
     document.addEventListener("keydown", schedulePromptRetry, true);
 
