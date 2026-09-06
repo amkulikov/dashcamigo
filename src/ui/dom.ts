@@ -321,6 +321,7 @@ export const dom = {
         capture: $id<HTMLButtonElement>("player-capture"),
         loop: $id<HTMLButtonElement>("player-loop"),
         fullscreen: $id<HTMLButtonElement>("player-fullscreen"),
+        fullscreenExit: $id<HTMLButtonElement>("player-fullscreen-exit"),
         current: $id<HTMLElement>("player-current"),
         total: $id<HTMLElement>("player-total"),
     },

@@ -120,6 +120,12 @@ export function initPlayerBarOverflow() {
             customMenuRow: renderVolumeMenuRow,
         });
     }
+    items.push({
+        el: dom.playerBar.fullscreen,
+        priority: 5,
+        label: () => dom.playerBar.fullscreen.getAttribute("aria-label") ?? t("player.fullscreen.enter"),
+        isAvailable: () => !dom.playerBar.fullscreen.hidden,
+    });
     // Availability must ignore overflow's own display:none so a wider bar can
     // restore the map button without requiring the user to reload.
     if (map) {
@@ -158,6 +164,8 @@ export function initPlayerBarOverflow() {
         overflowMenu: menu,
         items,
     });
+    // Restore toolbar visibility before fullscreen returns keyboard focus.
+    document.addEventListener("playerexpansionchange", () => handle.remeasure({ immediate: true }));
 
     return handle;
 }

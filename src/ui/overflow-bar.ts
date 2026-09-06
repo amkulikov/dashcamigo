@@ -259,22 +259,19 @@ export function initOverflowBar(opts: OverflowBarOptions): OverflowBarHandle {
     // reconnect after - MO drops mutations emitted while disconnected, which
     // is exactly what we want (we know they came from us).
     function measure(opts?: { forceRender?: boolean }): void {
+        const wasOverflowFocused = document.activeElement === overflowButton;
         mo.disconnect();
         try {
             measureInner(opts?.forceRender ?? false);
         } finally {
             mo.observe(container, MO_OPTS);
         }
+        // Measuring temporarily hides the trigger, which clears browser focus.
+        if (wasOverflowFocused && !overflowButton.hidden) overflowButton.focus({ preventScroll: true });
     }
     function measureInner(forceRender: boolean): void {
-        // Reset hidden on all available items - we'll re-decide which overflow.
+        // Clear stale menu entries too when a control becomes unavailable.
         for (const it of items) {
-            const avail = it.isAvailable?.() ?? !it.el.hidden;
-            if (!avail) {
-                // Item unavailable: not counted toward overflow, not shown
-                // in menu. Original stays hidden via [hidden].
-                continue;
-            }
             it.el.dataset.overflowHidden = "false";
         }
 

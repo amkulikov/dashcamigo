@@ -90,13 +90,19 @@ function showHint(key: I18nKey, delay = HIDE_DELAY_MS): void {
     }, delay);
 }
 
-function saveViewerContext(): void {
-    savedFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+function saveViewerContext(focusReturn?: HTMLElement): void {
+    savedFocus = focusReturn ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     savedScroll = [];
     for (let element: Element | null = dom.playerWrap.parentElement; element; element = element.parentElement) {
         savedScroll.push({ element, left: element.scrollLeft, top: element.scrollTop });
     }
     shouldRestoreFocus = true;
+}
+
+function fullscreenEntryFocusTarget(): HTMLElement {
+    return dom.playerBar.fullscreen.offsetParent !== null
+        ? dom.playerBar.fullscreen
+        : (document.getElementById("player-overflow") ?? dom.playerBar.play);
 }
 
 function isolateViewportPlayer(): void {
@@ -131,6 +137,7 @@ function syncExpandedState(expanded: boolean): void {
     dom.playerWrap.classList.toggle("controls-visible", expanded);
     const pin = document.getElementById("player-controls-pin");
     if (pin) pin.hidden = !expanded;
+    syncFullscreenButton();
     setExpandedViewPanels(expanded);
     if (expanded) {
         if (isViewportExpanded) isolateViewportPlayer();
@@ -138,7 +145,13 @@ function syncExpandedState(expanded: boolean): void {
             showHint("player.fullscreen.hint");
             hasShownHint = true;
         }
-        if (!dom.playerWrap.contains(document.activeElement)) dom.playerBar.fullscreen.focus({ preventScroll: true });
+        if (
+            document.activeElement === dom.playerBar.fullscreen ||
+            document.activeElement?.closest("#player-overflow-menu") ||
+            !dom.playerWrap.contains(document.activeElement)
+        ) {
+            dom.playerBar.fullscreenExit.focus({ preventScroll: true });
+        }
         scheduleHideControls();
     } else {
         if (hintTimer !== null) clearTimeout(hintTimer);
@@ -152,12 +165,6 @@ function syncExpandedState(expanded: boolean): void {
             element.scrollTop = top;
         }
         savedScroll = [];
-        if (shouldRestoreFocus && !isAnyModalOpen()) {
-            const target =
-                savedFocus?.isConnected && savedFocus.offsetParent !== null ? savedFocus : dom.playerBar.fullscreen;
-            target.focus({ preventScroll: true });
-        }
-        savedFocus = null;
     }
     if (!prefersReducedMotion()) {
         const motionClass = expanded ? "fullscreen-entering" : "fullscreen-leaving";
@@ -170,9 +177,16 @@ function syncExpandedState(expanded: boolean): void {
             expanded ? 220 : 160,
         );
     }
-    syncFullscreenButton();
     applyMapLayout();
     document.dispatchEvent(new Event("playerexpansionchange"));
+    if (!expanded) {
+        if (shouldRestoreFocus && !isAnyModalOpen()) {
+            const target =
+                savedFocus?.isConnected && savedFocus.offsetParent !== null ? savedFocus : fullscreenEntryFocusTarget();
+            target.focus({ preventScroll: true });
+        }
+        savedFocus = null;
+    }
 }
 
 function runTransition(action: () => Promise<boolean>): Promise<boolean> {
@@ -204,14 +218,14 @@ function exitExpandedPlayer(restoreFocus = true): Promise<boolean> {
     });
 }
 
-export async function toggleFullscreen(): Promise<void> {
+export async function toggleFullscreen(focusReturn?: HTMLElement): Promise<void> {
     if (transition) return;
     if (isExpanded()) {
         await exitExpandedPlayer();
         return;
     }
     if (!state.active || state.exportModeOpen || isAnyModalOpen()) return;
-    saveViewerContext();
+    saveViewerContext(focusReturn);
     await runTransition(async () => {
         try {
             if (canUseNativeFullscreen()) {
@@ -238,23 +252,22 @@ export async function toggleFullscreen(): Promise<void> {
 export function syncFullscreenButton(): void {
     const expanded = isExpanded();
     const native = canUseNativeFullscreen();
-    const label = expanded
-        ? t(isViewportExpanded ? "player.fullscreen.restore" : "player.fullscreen.exit")
-        : t(native ? "player.fullscreen.enter" : "player.fullscreen.expand");
+    const label = t(native ? "player.fullscreen.enter" : "player.fullscreen.expand");
     const button = dom.playerBar.fullscreen;
     button.setAttribute("aria-label", label);
     button.title = label;
-    button.disabled = !expanded && (!state.active || state.exportModeOpen);
+    button.hidden = expanded;
+    button.disabled = !state.active || state.exportModeOpen;
     button.setAttribute("aria-busy", String(transition !== null));
-    button.querySelector(".fullscreen-enter-icon")?.toggleAttribute("hidden", expanded);
-    button.querySelector(".fullscreen-exit-icon")?.toggleAttribute("hidden", !expanded);
-    const text = button.querySelector(".fullscreen-label");
-    if (text) text.textContent = expanded ? t("player.fullscreen.exitShort") : label;
-    const key = button.querySelector<HTMLElement>(".fullscreen-key");
-    if (key) {
-        key.textContent = expanded ? "Esc" : "F";
-        key.hidden = isCoarsePointer();
-    }
+    const exit = dom.playerBar.fullscreenExit;
+    const exitLabel = t(isViewportExpanded ? "player.fullscreen.restore" : "player.fullscreen.exit");
+    exit.setAttribute("aria-label", exitLabel);
+    exit.title = exitLabel;
+    exit.setAttribute("aria-busy", String(transition !== null));
+    const text = exit.querySelector(".fullscreen-label");
+    if (text) text.textContent = t("player.fullscreen.exitShort");
+    const key = exit.querySelector<HTMLElement>(".fullscreen-key");
+    if (key) key.hidden = isCoarsePointer();
     const pin = document.getElementById("player-controls-pin");
     if (pin) {
         pin.setAttribute("aria-label", t("player.controls.pin"));
@@ -264,7 +277,11 @@ export function syncFullscreenButton(): void {
 }
 
 export function initPlayerFullscreen(): void {
-    dom.playerBar.fullscreen.addEventListener("click", toggleFullscreen);
+    dom.playerBar.fullscreen.addEventListener("click", () => {
+        // Overflow forwards clicks without focusing the hidden toolbar button.
+        void toggleFullscreen(fullscreenEntryFocusTarget());
+    });
+    dom.playerBar.fullscreenExit.addEventListener("click", () => void toggleFullscreen());
     document.getElementById("player-controls-pin")?.addEventListener("click", () => {
         isPinned = !isPinned;
         syncFullscreenButton();

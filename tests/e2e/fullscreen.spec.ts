@@ -46,9 +46,24 @@ async function disableNativeFullscreen(page: Page): Promise<void> {
 }
 
 async function enterFullscreen(page: Page): Promise<void> {
-    await page.locator("#player-fullscreen").click();
+    await activateFullscreenEntry(page);
     await expect(page.locator("#player-wrap")).toHaveClass(/player-expanded/);
     await expect.poll(() => page.evaluate(() => document.fullscreenElement?.id)).toBe("player-wrap");
+}
+
+async function activateFullscreenEntry(page: Page, touch = false): Promise<void> {
+    let entry = page.locator("#player-fullscreen");
+    if (!(await entry.isVisible())) {
+        const label = (await entry.getAttribute("aria-label")) ?? "";
+        expect(label).not.toBe("");
+        const overflow = page.locator("#player-overflow");
+        if (touch) await overflow.tap();
+        else await overflow.click();
+        entry = page.locator("#player-overflow-menu").getByRole("button", { name: label, exact: true });
+        await expect(entry).toBeVisible();
+    }
+    if (touch) await entry.tap();
+    else await entry.click();
 }
 
 async function moveAwayFromControls(page: Page): Promise<void> {
@@ -69,20 +84,35 @@ for (const copy of [
         await gotoApp(page, copy.locale);
         await loadTrip(page, SAMPLE_70MAI);
         await pausePlayback(page);
-        const button = page.locator("#player-fullscreen");
-        await expect(button).toHaveAccessibleName(copy.enter);
-        await expect(button.locator(".fullscreen-label")).toHaveText(copy.enter);
-        await expect(button.locator(".fullscreen-enter-icon")).toBeVisible();
-        await expect(button.locator(".fullscreen-exit-icon")).toBeHidden();
-        expect(await button.evaluate((element) => element.closest("#player-bar"))).toBeNull();
+        const entry = page.locator("#player-fullscreen");
+        const exit = page.locator("#player-fullscreen-exit");
+        const actions = page.locator(".player-fullscreen-actions");
+        await expect(page.locator("#player-bar #player-fullscreen")).toBeVisible();
+        await expect(entry).toHaveAccessibleName(copy.enter);
+        await expect(entry.locator(".fullscreen-label")).toBeHidden();
+        await expect(entry.locator(".fullscreen-enter-icon")).toBeVisible();
+        await expect(entry.locator(".fullscreen-exit-icon")).toBeHidden();
+        await expect(actions).toBeHidden();
+        await expect(exit).toBeHidden();
+        const barBounds = await boxOf(page, "#player-bar");
+        const entryBounds = await boxOf(page, "#player-fullscreen");
+        expect(entryBounds.x).toBeGreaterThanOrEqual(barBounds.x);
+        expect(entryBounds.y).toBeGreaterThanOrEqual(barBounds.y);
+        expect(entryBounds.x + entryBounds.width).toBeLessThanOrEqual(barBounds.x + barBounds.width);
+        expect(entryBounds.y + entryBounds.height).toBeLessThanOrEqual(barBounds.y + barBounds.height);
         await enterFullscreen(page);
-        await expect(button).toHaveAccessibleName(copy.exit);
-        await expect(button.locator(".fullscreen-label")).toHaveText(copy.shortExit);
-        await expect(button.locator(".fullscreen-enter-icon")).toBeHidden();
-        await expect(button.locator(".fullscreen-exit-icon")).toBeVisible();
-        await button.click();
+        await expect(entry).toBeHidden();
+        await expect(actions).toBeVisible();
+        await expect(actions.locator("#player-fullscreen-exit")).toBeVisible();
+        await expect(exit).toHaveAccessibleName(copy.exit);
+        await expect(exit.locator(".fullscreen-label")).toHaveText(copy.shortExit);
+        await expect(exit.locator(".fullscreen-enter-icon")).toBeHidden();
+        await expect(exit.locator(".fullscreen-exit-icon")).toBeVisible();
+        await exit.click();
         await expect(page.locator("#player-wrap")).not.toHaveClass(/player-expanded/);
-        await expect(button).toHaveAccessibleName(copy.enter);
+        await expect(entry).toHaveAccessibleName(copy.enter);
+        await expect(entry).toBeFocused();
+        await expect(actions).toBeHidden();
         await expect(page.locator("#player-controls-pin")).toBeHidden();
     });
 }
@@ -194,16 +224,39 @@ test.describe("touch fullscreen", () => {
             await gotoApp(page, "ru");
             await loadTrip(page, SAMPLE_70MAI);
             await pausePlayback(page);
-            await page.locator("#player-fullscreen").tap();
+            const entry = page.locator("#player-fullscreen");
+            if (viewport.width === 320) {
+                await expect(entry).toBeHidden();
+                await expect(entry).toHaveAttribute("data-overflow-hidden", "true");
+            }
+            await expect(page.locator(".player-fullscreen-actions")).toBeHidden();
+            await activateFullscreenEntry(page, true);
             await expect(page.locator("#player-wrap")).toHaveClass(/player-expanded/);
-            const exit = await boxOf(page, "#player-fullscreen");
+            await expect(entry).toBeHidden();
+            const exit = await boxOf(page, "#player-fullscreen-exit");
             expect(exit.x).toBeGreaterThanOrEqual(0);
             expect(exit.y).toBeGreaterThanOrEqual(0);
             expect(exit.x + exit.width).toBeLessThanOrEqual(viewport.width);
             expect(exit.y + exit.height).toBeLessThanOrEqual(viewport.height);
-            await expect(page.locator("#player-fullscreen")).toHaveAccessibleName("Выйти из полного экрана");
-            await page.locator("#player-fullscreen").tap();
+            await expect(page.locator("#player-fullscreen-exit")).toHaveAccessibleName("Выйти из полного экрана");
+            if (viewport.width === 320) {
+                await page.locator("#player-overflow").tap();
+                const menu = page.locator("#player-overflow-menu");
+                await expect(menu).toBeVisible();
+                await expect(menu.getByRole("button", { name: "На весь экран", exact: true })).toHaveCount(0);
+            }
+            await page.locator("#player-fullscreen-exit").tap();
             await expect(page.locator("#player-wrap")).not.toHaveClass(/player-expanded/);
+            await expect(page.locator(".player-fullscreen-actions")).toBeHidden();
+            await expect(page.locator("#player-overflow-menu")).toBeHidden();
+            const returnFocus = (await entry.isVisible()) ? entry : page.locator("#player-overflow");
+            await expect(returnFocus).toBeFocused();
+            if (viewport.width === 320) {
+                await activateFullscreenEntry(page, true);
+                await expect(page.locator("#player-wrap")).toHaveClass(/player-expanded/);
+                await page.locator("#player-fullscreen-exit").tap();
+                await expect(returnFocus).toBeFocused();
+            }
         });
     }
 
@@ -213,7 +266,7 @@ test.describe("touch fullscreen", () => {
         // A single-camera tap normally toggles playback; multichannel taps only route audio.
         await loadTrip(page, SAMPLE_GOPRO);
         await startLoopingPlayback(page);
-        await page.locator("#player-fullscreen").tap();
+        await activateFullscreenEntry(page, true);
         const player = page.locator("#player-wrap");
         await expect(player).toHaveClass(/player-expanded/);
         // Expansion can place controls under the setup's synthetic mouse pointer.
@@ -235,10 +288,12 @@ test("a browser without fullscreen offers an expanded player with button and Esc
     await pausePlayback(page);
     const player = page.locator("#player-wrap");
     const button = page.locator("#player-fullscreen");
+    const exit = page.locator("#player-fullscreen-exit");
     await expect(button).toHaveAccessibleName("Expand player");
     await button.click();
     await expect(player).toHaveClass(/player-expanded/);
-    await expect(button).toHaveAccessibleName("Back to viewer");
+    await expect(button).toBeHidden();
+    await expect(exit).toHaveAccessibleName("Back to viewer");
     expect(await page.evaluate(() => document.fullscreenElement)).toBeNull();
     const expanded = await boxOf(page, "#player-wrap");
     expect(expanded.x).toBe(0);
@@ -250,9 +305,11 @@ test("a browser without fullscreen offers an expanded player with button and Esc
     await expect(button).toBeFocused();
     await button.click();
     await expect(player).toHaveClass(/player-expanded/);
-    await button.click();
+    await exit.click();
     await expect(player).not.toHaveClass(/player-expanded/);
     await expect(button).toHaveAccessibleName("Expand player");
+    await expect(button).toBeFocused();
+    await expect(page.locator(".player-fullscreen-actions")).toBeHidden();
 });
 
 test("a rejected fullscreen request leaves the viewer usable and explains how to retry", async ({ page }) => {
@@ -286,7 +343,7 @@ test("a rejected exit keeps controls available and prevents a hidden clip editor
     await loadTrip(page, SAMPLE_70MAI);
     await pausePlayback(page);
     await enterFullscreen(page);
-    await page.locator("#player-fullscreen").click();
+    await page.locator("#player-fullscreen-exit").click();
     await expect(page.locator("#player-fullscreen-hint")).toHaveText("Couldn’t leave full screen. Try again.");
     await expect(page.locator("#player-wrap")).toHaveClass(/player-expanded/);
     await expect(page.locator("#player-wrap")).toHaveClass(/controls-visible/);
@@ -415,7 +472,7 @@ test("fallback Escape closes each open player menu before leaving the expanded v
     await gotoApp(page);
     await loadTrip(page, SAMPLE_70MAI);
     await pausePlayback(page);
-    await page.locator("#player-fullscreen").click();
+    await activateFullscreenEntry(page);
     const player = page.locator("#player-wrap");
     await expect(player).toHaveClass(/player-expanded/);
     const speed = page.locator("#player-speed");
@@ -434,4 +491,5 @@ test("fallback Escape closes each open player menu before leaving the expanded v
     await expect(player).toHaveClass(/player-expanded/);
     await page.keyboard.press("Escape");
     await expect(player).not.toHaveClass(/player-expanded/);
+    await expect(page.locator("#player-overflow")).toBeFocused();
 });

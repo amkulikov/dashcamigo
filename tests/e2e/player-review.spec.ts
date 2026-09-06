@@ -92,7 +92,7 @@ test("narrow desktop export keeps speed and GPS synchronization inside the reado
 test.describe("touch player toolbar", () => {
     test.use({ hasTouch: true, isMobile: true, locale: "ru-RU" });
 
-    test("a narrow phone keeps overflow and export reachable", async ({ page }) => {
+    test("a narrow phone keeps fullscreen and export reachable", async ({ page }) => {
         await page.setViewportSize({ width: 320, height: 568 });
         await gotoApp(page, "ru");
         await loadTrip(page, SAMPLE_70MAI);
@@ -102,8 +102,13 @@ test.describe("touch player toolbar", () => {
         const overflow = await boxOf(page, "#player-overflow");
         expect(overflow.x).toBeGreaterThanOrEqual(0);
         expect(overflow.x + overflow.width).toBeLessThanOrEqual(320);
+        await expect(page.locator("#player-fullscreen")).toBeHidden();
+        await expect(page.locator(".player-fullscreen-actions")).toBeHidden();
         await page.locator("#player-overflow").tap();
         await expect(page.locator("#player-overflow-menu")).toBeVisible();
+        await expect(
+            page.locator("#player-overflow-menu").getByRole("button", { name: "На весь экран", exact: true }),
+        ).toBeVisible();
         await expect(page.locator("#player-overflow-menu .overflow-menu-btn", { hasText: /карту/i })).toBeVisible();
         await page.locator("#player-overflow-menu .overflow-menu-btn", { hasText: "Сохранить фрагмент" }).tap();
         await expect(page.locator("#export-panel")).toBeVisible();
@@ -159,7 +164,7 @@ test("fullscreen controls remain available while hovered or keyboard focused", a
     await page.keyboard.press("r");
     await expect(page.locator("#player-loop")).toHaveAttribute("aria-label", "Loop on");
     const play = page.locator("#player-play");
-    if ((await play.getAttribute("data-paused")) === "true") await play.click();
+    // Trip autoplay settles after the chart appears; a toggle can race it.
     await expect(play).toHaveAttribute("data-paused", "false");
     await page.locator("#player-fullscreen").click();
     const player = page.locator("#player-wrap");
@@ -175,6 +180,6 @@ test("fullscreen controls remain available while hovered or keyboard focused", a
     await expect(player).toHaveClass(/controls-visible/);
     await page.waitForTimeout(3300);
     await expect(player).toHaveClass(/controls-visible/);
-    await page.locator("#player-fullscreen").click();
+    await page.locator("#player-fullscreen-exit").click();
     await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(false);
 });

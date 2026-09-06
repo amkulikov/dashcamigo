@@ -1336,11 +1336,10 @@
                     <button id="player-controls-pin" class="player-btn player-controls-pin" type="button" hidden aria-pressed="false">
                         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 3H8l1 6-4 4v2h14v-2l-4-4 1-6Z"/><path d="M12 15v6"/></svg>
                     </button>
-                    <button id="player-fullscreen" class="player-btn player-fullscreen-btn" type="button" aria-label="Fullscreen" aria-keyshortcuts="F">
-                        <svg class="fullscreen-enter-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H3v5"/><path d="M21 8V3h-5"/><path d="M3 16v5h5"/><path d="M16 21h5v-5"/></svg>
-                        <svg class="fullscreen-exit-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden><path d="M3 8h5V3"/><path d="M16 3v5h5"/><path d="M8 21v-5H3"/><path d="M21 16h-5v5"/></svg>
+                    <button id="player-fullscreen-exit" class="player-btn player-fullscreen-btn" type="button" data-i18n-attr="aria-label:player.fullscreen.exit" aria-keyshortcuts="Escape">
+                        <svg class="fullscreen-exit-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h5V3"/><path d="M16 3v5h5"/><path d="M8 21v-5H3"/><path d="M21 16h-5v5"/></svg>
                         <span class="fullscreen-label"></span>
-                        <span class="fullscreen-key" aria-hidden="true">F</span>
+                        <span class="fullscreen-key" aria-hidden="true">Esc</span>
                     </button>
                     <span id="player-fullscreen-hint" class="player-fullscreen-hint" role="status" hidden></span>
                 </div>
@@ -2001,6 +2000,10 @@
                             </button>
                         </div>
                     </div>
+                    <button id="player-fullscreen" class="player-btn" type="button"
+                            data-i18n-attr="aria-label:player.fullscreen.enter,title:player.fullscreen.enter" aria-keyshortcuts="F">
+                        <svg class="fullscreen-enter-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H3v5"/><path d="M21 8V3h-5"/><path d="M3 16v5h5"/><path d="M16 21h5v-5"/></svg>
+                    </button>
                     <!-- UX-10: ? button - opens a modal with the hotkey list. -->
                     <button id="player-help" class="player-btn" type="button"
                             data-i18n-attr="aria-label:player.help.title,title:player.help.title"

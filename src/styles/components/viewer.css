@@ -893,15 +893,14 @@ body.export-mode .tile-drag-handle {
     box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
     pointer-events: none;
 }
-/* Entry stays visible over the common video surface; the same group carries
-   exit and pin in fullscreen, independent of toolbar overflow. */
+/* Fullscreen exit and pin stay reachable independently of toolbar overflow. */
 .player-fullscreen-actions {
     position: absolute;
     grid-area: video;
     top: var(--dc-space-3);
     right: var(--dc-space-3);
     z-index: 12;
-    display: flex;
+    display: none;
     align-items: center;
     gap: var(--dc-space-2);
     max-width: calc(100% - 2 * var(--dc-space-3));
@@ -963,10 +962,6 @@ body.export-mode .tile-drag-handle {
     box-shadow: var(--dc-shadow-card);
     pointer-events: none;
 }
-.video-minimap {
-    top: calc(var(--dc-space-3) + var(--fullscreen-action-size) + var(--dc-space-2));
-}
-
 /* The class covers native fullscreen and the viewport fallback. Absolute
    controls never contribute implicit grid rows or resize the video. */
 body.has-expanded-player {
@@ -1034,6 +1029,7 @@ body.has-expanded-player .viewer {
         opacity 180ms var(--dc-ease-out);
 }
 .player-wrap.player-expanded .player-fullscreen-actions {
+    display: flex;
     grid-area: auto;
     top: max(var(--fullscreen-inset), env(safe-area-inset-top, 0px));
     right: max(var(--fullscreen-inset), env(safe-area-inset-right, 0px));
@@ -1282,8 +1278,7 @@ body.has-expanded-player .viewer {
        display:none on .player-chart in map-expanded (the old "map fills
        the whole grid" pattern). Mobile rule needs to unhide both chart
        and video explicitly - in split mode the user expects both. */
-    .player-wrap:not(.player-expanded).map-expanded .player-chart,
-    .player-wrap:not(.player-expanded).map-expanded .player-fullscreen-actions {
+    .player-wrap:not(.player-expanded).map-expanded .player-chart {
         display: flex;
     }
     .player-wrap:not(.player-expanded).map-expanded .map-wrap {
