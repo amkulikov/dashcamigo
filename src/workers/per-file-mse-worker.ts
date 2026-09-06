@@ -228,12 +228,12 @@ function waitForNextTick(signal: AbortSignal): Promise<void> {
 // operation (e.g. waiting on feedDonePromise) is mid-flight.
 let opQueue: Promise<unknown> = Promise.resolve();
 function serialize(fn: () => Promise<void>): void {
-    // catch the error both branches so the chain never goes into rejected
-    // state and silently drops later handlers.
-    opQueue = opQueue.then(
-        () => fn().catch((e) => log.warn("serial op threw", e)),
-        () => fn().catch((e) => log.warn("serial op threw", e)),
-    );
+    // Notifications have no reply; the main thread needs a failure signal
+    // when setup throws before a feed exists or its seek would wait forever.
+    opQueue = opQueue.then(fn).catch((error) => {
+        if (error instanceof Error && error.name === "AbortError") return;
+        fail("feed-setup-threw", error);
+    });
 }
 
 // init is request/reply (main awaits codecMime + hasAudio before opening
@@ -373,73 +373,93 @@ async function onInit(
         videoDecoderConfig = vdc;
 
         let audioCodecParam: string | null = null;
-        if (wantTranscodeAudio) {
-            // IMA-ADPCM (Mio/Navman): bypass mediabunny's audio track entirely - it
-            // cannot read the codec. We decode the ADPCM ourselves and re-encode.
-            // openAdpcmAudio re-reads the moov + chunk table; null means the file is
-            // not actually the ADPCM form we handle, in which case we just play video
-            // without audio.
-            adpcmReader = await openAdpcmAudioAuto(file);
-            if (
-                adpcmReader &&
-                !hasPlaybackAudioTail(await vt.computeDuration(), adpcmReader.totalFrames / adpcmReader.sampleRate)
-            ) {
-                adpcmReader = null;
-            }
-            if (adpcmReader) {
-                // Main has already filtered this preference list by what its MSE
-                // can play. Chromium/Firefox prefer the original, proven Opus path;
-                // Safari supplies AAC because it rejects Opus-in-MP4. The worker
-                // then picks the first candidate it can actually encode.
-                adpcmEncodeCodec = await resolveEncodeAudioCodec(adpcmPlaybackCodecs);
-                if (adpcmEncodeCodec) {
-                    transcodeAdpcmAudio = true;
-                    audioCodecParam = adpcmAudioMimeParam(adpcmEncodeCodec);
-                    log.info("audio: transcoding IMA-ADPCM", {
-                        file: file.name,
-                        encodeCodec: adpcmEncodeCodec,
-                        channels: adpcmReader.channels,
-                        sampleRate: adpcmReader.sampleRate,
-                    });
+        try {
+            if (wantTranscodeAudio) {
+                // IMA-ADPCM (Mio/Navman): bypass mediabunny's audio track entirely - it
+                // cannot read the codec. We decode the ADPCM ourselves and re-encode.
+                // openAdpcmAudio re-reads the moov + chunk table; null means the file is
+                // not actually the ADPCM form we handle, in which case we just play video
+                // without audio.
+                adpcmReader = await openAdpcmAudioAuto(file);
+                if (
+                    adpcmReader &&
+                    !hasPlaybackAudioTail(await vt.computeDuration(), adpcmReader.totalFrames / adpcmReader.sampleRate)
+                ) {
+                    adpcmReader = null;
+                }
+                if (adpcmReader) {
+                    // Main has already filtered this preference list by what its MSE
+                    // can play. Chromium/Firefox prefer the original, proven Opus path;
+                    // Safari supplies AAC because it rejects Opus-in-MP4. The worker
+                    // then picks the first candidate it can actually encode.
+                    adpcmEncodeCodec = await resolveEncodeAudioCodec(adpcmPlaybackCodecs);
+                    if (adpcmEncodeCodec) {
+                        transcodeAdpcmAudio = true;
+                        audioCodecParam = adpcmAudioMimeParam(adpcmEncodeCodec);
+                        log.info("audio: transcoding IMA-ADPCM", {
+                            file: file.name,
+                            encodeCodec: adpcmEncodeCodec,
+                            channels: adpcmReader.channels,
+                            sampleRate: adpcmReader.sampleRate,
+                        });
+                    } else {
+                        log.warn("audio is IMA-ADPCM but no audio encoder available, dropping audio", {
+                            file: file.name,
+                        });
+                    }
                 } else {
-                    log.warn("audio is IMA-ADPCM but no audio encoder available, dropping audio", { file: file.name });
+                    log.warn("ADPCM audio unavailable for playback, dropping audio", { file: file.name });
                 }
             } else {
-                log.warn("ADPCM audio unavailable for playback, dropping audio", { file: file.name });
-            }
-        } else {
-            let at = await input.getPrimaryAudioTrack();
-            if (at) {
-                const [videoEnd, audioEnd] = await Promise.all([vt.computeDuration(), at.computeDuration()]);
-                if (!hasPlaybackAudioTail(videoEnd, audioEnd)) at = null;
-            }
-            if (at) {
-                const ac = (await at.getCodec()) as AudioCodec;
-                const acParam = await at.getCodecParameterString();
-                const adc = await at.getDecoderConfig();
-                if (acParam && adc) {
-                    audioTrack = at;
-                    audioCodec = ac;
-                    audioCodecParam = acParam;
-                    audioDecoderConfig = adc;
-                    // Some codecs carry muxing metadata in their first packet instead
-                    // of decoderConfig. Keep it ready before start() on every cycle.
-                    audioConfigPrimingPacket = (await new EncodedPacketSink(at).getFirstPacket()) ?? undefined;
-                } else {
-                    // Audio track present but codec params unparseable - drop audio.
-                    // Silent video beats a black screen.
-                    log.warn("audio track present but no codec params, dropping audio", { file: file.name });
+                let at = await input.getPrimaryAudioTrack();
+                if (at) {
+                    const [videoEnd, audioEnd] = await Promise.all([vt.computeDuration(), at.computeDuration()]);
+                    if (!hasPlaybackAudioTail(videoEnd, audioEnd)) at = null;
+                }
+                if (at) {
+                    const ac = await at.getCodec();
+                    const acParam = await at.getCodecParameterString();
+                    const adc = await at.getDecoderConfig();
+                    if (ac && acParam && adc && new Mp4OutputFormat().getSupportedAudioCodecs().includes(ac)) {
+                        // Some codecs carry muxing metadata in their first packet instead
+                        // of decoderConfig. Keep it ready before start() on every cycle.
+                        const primer = await new EncodedPacketSink(at).getFirstPacket();
+                        if (primer) {
+                            audioTrack = at;
+                            audioCodec = ac;
+                            audioCodecParam = acParam;
+                            audioDecoderConfig = adc;
+                            audioConfigPrimingPacket = primer;
+                        } else {
+                            log.warn("audio track has no readable packets, dropping audio", { file: file.name });
+                        }
+                    } else {
+                        // Audio track present but codec params unparseable - drop audio.
+                        // Silent video beats a black screen.
+                        log.warn("audio track cannot be copied to mp4, dropping audio", { file: file.name, codec: ac });
+                    }
                 }
             }
+        } catch (error) {
+            signal.throwIfAborted();
+            if (error instanceof Error && error.name === "AbortError") throw error;
+            // Commit no partial audio state after a failed read or encoder probe.
+            audioTrack = null;
+            audioCodec = null;
+            audioDecoderConfig = null;
+            audioConfigPrimingPacket = undefined;
+            audioCodecParam = null;
+            adpcmReader = null;
+            adpcmEncodeCodec = null;
+            transcodeAdpcmAudio = false;
+            log.warn("audio setup failed, keeping video-only playback", {
+                file: file.name,
+                error: error instanceof Error ? error.message : String(error),
+            });
         }
 
         const videoOnlyMime = `video/mp4; codecs="${videoCodecParam}"`;
         const codecMime = audioCodecParam ? `video/mp4; codecs="${videoCodecParam},${audioCodecParam}"` : videoOnlyMime;
-        // hasAudio true for either a usable mediabunny track or an open ADPCM reader.
-        // audioTranscoded gates main's drop-audio fallback: only our re-encoded ADPCM
-        // is safe to silently drop (the video is the plain stream the user wants);
-        // a failing stream-copy mime usually means the VIDEO codec, where dropping
-        // audio would not help.
         signal.throwIfAborted();
         return {
             codecMime,

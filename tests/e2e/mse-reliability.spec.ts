@@ -159,6 +159,30 @@ test("retains an ordinary matched audio track in MSE playback", async ({ page })
     expect(audioTracks).toBe(1);
 });
 
+test("keeps video playing when MSE rejects the copied audio codec", async ({ page }) => {
+    await page.evaluate(() => {
+        const isTypeSupported = MediaSource.isTypeSupported.bind(MediaSource);
+        MediaSource.isTypeSupported = (mime) => (mime.includes("mp4a.40.2") ? false : isTypeSupported(mime));
+    });
+    await loadTrip(page, join(fixtureDirectory, "matched-audio"));
+    await expect
+        .poll(() => page.locator("#player").evaluate((video: HTMLVideoElement) => video.currentTime))
+        .toBeGreaterThan(0.5);
+    const audioTracks = await page.locator("#player").evaluate((video: HTMLVideoElement) => {
+        const stream = (video as HTMLVideoElement & { captureStream(): MediaStream }).captureStream();
+        const count = stream.getAudioTracks().length;
+        for (const track of stream.getTracks()) track.stop();
+        return count;
+    });
+    expect(audioTracks).toBe(0);
+    await expect(page.locator(".viewer")).not.toHaveClass(/playback-failed|codec-unsupported/);
+    expect(
+        await page.evaluate(() =>
+            window.__dashcamigo.dumpLog().filter((entry) => entry.msg.startsWith("backend fail")),
+        ),
+    ).toEqual([]);
+});
+
 test("plays MPEG-TS video with AAC sound before and after a seek", async ({ page }) => {
     await loadTrip(page, join(fixtureDirectory, "ts-audio"));
     await expect

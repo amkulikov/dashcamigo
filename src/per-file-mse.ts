@@ -323,18 +323,16 @@ export class PerFileMseBackend {
             clearTimeout(timeoutTimer);
             this.initAbort = null;
             if (this.disposed) return;
-            const hasAudio = initResult.hasAudio;
+            let hasAudio = initResult.hasAudio;
             // Pick the mime the SourceBuffer will actually use. The combined
             // (video+audio) mime is preferred. The per-codec preflight above is
             // necessarily audio-only; this final check catches a browser that
             // rejects the specific video+audio combination.
-            // When the audio came from our ADPCM re-encode (audioTranscoded), the
-            // video is a plain stream the user wants, so dropping audio and
-            // keeping video beats a hard "unsupported" overlay. We tell the worker
-            // to build a video-only Output so its moov matches this SourceBuffer.
+            // Audio support is independent of video support, including copied
+            // tracks. Keep playable video and make the worker's track set match.
             let codecMime = initResult.codecMime;
             if (!MediaSource.isTypeSupported(codecMime)) {
-                if (initResult.audioTranscoded && MediaSource.isTypeSupported(initResult.videoOnlyMime)) {
+                if (hasAudio && MediaSource.isTypeSupported(initResult.videoOnlyMime)) {
                     this.logger.warn("audio codec not MSE-playable, dropping audio and keeping video", {
                         file: this._file.name,
                         rejected: codecMime,
@@ -342,6 +340,7 @@ export class PerFileMseBackend {
                     });
                     this.client.notify(MSE_NOTIFY_DROP_AUDIO);
                     codecMime = initResult.videoOnlyMime;
+                    hasAudio = false;
                 } else {
                     return this.fail(`mime-not-supported: ${codecMime}`);
                 }

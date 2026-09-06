@@ -7,6 +7,7 @@ import { BlobSource, BufferSource, EncodedPacketSink, Input, type EncodedPacket 
 import { rolldown } from "rolldown";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createMseFixture } from "../../tests/helpers/mse-fixtures.js";
+import { findBox, iterBoxes, readHandlerType } from "../parsers/internal/mp4-walker.js";
 import { clampTsGpsTrailer } from "../ts-trailer.js";
 import { VIDEO_INPUT_FORMATS } from "../video-formats.js";
 import { isWireMessage, type WireMessage, type WireNotification } from "./_protocol/wire.js";
@@ -173,6 +174,77 @@ describe("per-file MSE worker with real encoded packets", () => {
         expect(harness.init).toMatchObject({ result: { hasAudio: true } });
         await harness.waitFor(() => harness.events.some((event) => event.__k === "ntf" && event.type === "feed-done"));
         expect((await readCycle(harness.events, 0)).duration).toBeCloseTo(2);
+    });
+
+    it("keeps the video when audio chunk offsets point past the file", async () => {
+        const bytes = await createMseFixture({ gopCount: 2, audioDurationSec: 2 });
+        const view = new DataView(bytes.buffer);
+        const moov = findBox(view, 0, bytes.length, "moov")!;
+        const audio = [...iterBoxes(view, moov.payloadStart, moov.end)].find(
+            (box) => box.type === "trak" && readHandlerType(view, box) === "soun",
+        )!;
+        let parent = audio;
+        for (const type of ["mdia", "minf", "stbl", "stco"]) {
+            parent = findBox(view, parent.payloadStart, parent.end, type)!;
+            expect(parent, type).toBeDefined();
+        }
+        const chunkCount = view.getUint32(parent.payloadStart + 4);
+        expect(chunkCount).toBeGreaterThan(0);
+        for (let i = 0; i < chunkCount; i++) {
+            view.setUint32(parent.payloadStart + 8 + i * 4, bytes.length + 1024);
+        }
+        const harness = await openWorker(bytes);
+        expect(harness.init).toMatchObject({ result: { hasAudio: false } });
+        await harness.waitFor(() => harness.events.some((event) => event.__k === "ntf" && event.type === "feed-done"));
+        const output = await readCycle(harness.events, 0);
+        expect(output.duration).toBeCloseTo(2);
+        expect(output.audioConfig).toBeNull();
+        expect(output.first?.type).toBe("key");
+    });
+
+    it("keeps the video when the audio decoder configuration cannot be read", async () => {
+        const bytes = await createMseFixture({ format: "matroska", gopCount: 2, audioDurationSec: 2 });
+        const intact = new Input({ source: new BufferSource(bytes), formats: VIDEO_INPUT_FORMATS });
+        let privateOffset: number;
+        try {
+            const description = (await (await intact.getPrimaryAudioTrack())?.getDecoderConfig())?.description;
+            if (!(description instanceof Uint8Array)) throw new Error("fixture has no audio decoder description");
+            expect(description.length).toBeLessThan(127);
+            privateOffset = Buffer.from(bytes).indexOf(
+                Buffer.from([0x63, 0xa2, 0x80 | description.length, ...description]),
+            );
+        } finally {
+            intact.dispose();
+        }
+        expect(privateOffset).toBeGreaterThan(0);
+        // Preserve the element's size and payload while making it unknown to the demuxer.
+        bytes[privateOffset + 1] = 0xa3;
+        const source = new Input({ source: new BufferSource(bytes), formats: VIDEO_INPUT_FORMATS });
+        let videoDuration: number;
+        try {
+            const audio = await source.getPrimaryAudioTrack();
+            expect(audio).not.toBeNull();
+            await expect(audio!.getDecoderConfig()).rejects.toThrow();
+            const video = await source.getPrimaryVideoTrack();
+            expect(await video?.getDecoderConfig()).not.toBeNull();
+            videoDuration = await video!.computeDuration();
+            expect(videoDuration).toBeGreaterThan(1);
+        } finally {
+            source.dispose();
+        }
+        const harness = await openWorker(bytes, 0, "sample.mkv");
+        expect(harness.init).toMatchObject({ result: { hasAudio: false } });
+        await harness.waitFor(() => harness.events.some((event) => event.__k === "ntf" && event.type === "feed-done"));
+        const output = await readCycle(harness.events, 0);
+        expect(output.duration).toBeCloseTo(videoDuration);
+        expect(output.audioConfig).toBeNull();
+    });
+
+    it("reports a rejected feed setup instead of leaving the player waiting", async () => {
+        const harness = await openWorker(await createMseFixture({ gopCount: 2 }));
+        await harness.waitFor(() => harness.media(0).length > 0);
+        harness.send("seek", null);
+        await expect(harness.waitFor(() => false)).rejects.toThrow("feed-setup-threw");
     });
 
     it("keeps TS playback and seeks on the same zero-based timeline", async () => {

@@ -71,11 +71,7 @@ export interface InitResult {
     videoOnlyMime: string;
     /** Whether the worker found a usable audio track - used by main for UI/log. */
     hasAudio: boolean;
-    /**
-     * True when the audio in codecMime came from our ADPCM re-encode (not a
-     * container stream-copy). Gates the drop-audio fallback: only re-encoded
-     * audio is safe to silently drop without losing the video the user wants.
-     */
+    /** True when the audio in codecMime came from our ADPCM re-encode. */
     audioTranscoded: boolean;
 }
 
