@@ -30,11 +30,17 @@ beforeAll(async () => {
     }
     await writeFile(
         join(tempDirectory, "endpoint.mjs"),
-        `import { parentPort } from "node:worker_threads";
+        `import { parentPort, workerData } from "node:worker_threads";
         globalThis.self = {
             postMessage(message, transfer) { parentPort.postMessage(message, transfer); },
             addEventListener(type, listener) {
-                if (type === "message") parentPort.on("message", data => listener({ data }));
+                if (type === "message") parentPort.on("message", data => {
+                    // Node 22 clones File as Blob; browser workers retain its name.
+                    if (data.__k === "req" && data.type === "init") {
+                        data.data.file = new File([data.data.file], workerData.fileName);
+                    }
+                    listener({ data });
+                });
             }
         };
         await import("./worker.mjs");
@@ -51,7 +57,7 @@ afterAll(async () => {
 });
 
 async function openWorker(bytes: Uint8Array<ArrayBuffer>, startSec = 0, fileName = "sample.mp4") {
-    const worker = new Worker(pathToFileURL(join(tempDirectory, "endpoint.mjs")));
+    const worker = new Worker(pathToFileURL(join(tempDirectory, "endpoint.mjs")), { workerData: { fileName } });
     workers.push(worker);
     const events: WireMessage[] = [];
     const listeners = new Set<() => void>();
@@ -97,7 +103,8 @@ async function openWorker(bytes: Uint8Array<ArrayBuffer>, startSec = 0, fileName
         );
     const send = (type: string, data: unknown) => worker.postMessage({ __k: "ntf", type, data });
     await waitFor(() => events.some((event) => event.__k === "ntf" && event.type === "ready"));
-    worker.postMessage({ __k: "req", id: 1, type: "init", data: { file: new File([bytes], fileName), startSec } });
+    // Exercise filename restoration even on Node versions that can clone File.
+    worker.postMessage({ __k: "req", id: 1, type: "init", data: { file: new Blob([bytes]), startSec } });
     await waitFor(() => events.some((event) => event.__k === "res"));
     const init = events.find((event) => event.__k === "res");
     expect(init, JSON.stringify(init)).toMatchObject({ ok: true });
