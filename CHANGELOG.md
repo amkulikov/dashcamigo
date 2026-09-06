@@ -9,6 +9,9 @@ release tag. Localized texts ship inside the app (the "What's new" panel).
 
 ## 2026-09-06
 
+- **Fixed:** Playback can be retried after errors or continue without unsupported audio.
+- **Fixed:** Recordings open even if extra GPS data cannot be read.
+- **Fixed:** Export continues when audio is unsupported or GPS cannot be added.
 - **Improved:** Blurring selected areas in exported videos.
 
 ## 2026-09-05

@@ -28,6 +28,54 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-09-06.4",
+        category: "fix",
+        text: {
+            en: "Playback can be retried after errors or continue without unsupported audio.",
+            ru: "После ошибки воспроизведение можно повторить; неподдерживаемый звук не мешает просмотру.",
+            de: "Die Wiedergabe lässt sich nach Fehlern erneut starten oder ohne nicht unterstützten Ton fortsetzen.",
+            es: "La reproducción se puede reintentar tras un error o continuar sin audio no compatible.",
+            fr: "La lecture peut être relancée après une erreur ou continuer sans le son non pris en charge.",
+            pl: "Odtwarzanie można ponowić po błędzie lub kontynuować bez nieobsługiwanego dźwięku.",
+            pt: "A reprodução pode ser retomada após erros ou continuar sem áudio não compatível.",
+            zh: "播放出错后可重试，音频不受支持时可继续无声播放。",
+            ja: "再生エラー後に再試行でき、対応していない音声がある場合は無音で再生を続けられます。",
+            ko: "재생 오류 후 다시 시도하거나 지원되지 않는 오디오 없이 재생을 계속할 수 있습니다.",
+        },
+    },
+    {
+        id: "2026-09-06.3",
+        category: "fix",
+        text: {
+            en: "Recordings open even if extra GPS data cannot be read.",
+            ru: "Записи открываются, даже если не удалось прочитать дополнительные данные GPS.",
+            de: "Aufnahmen lassen sich auch öffnen, wenn zusätzliche GPS-Daten nicht gelesen werden können.",
+            es: "Las grabaciones se abren aunque no se puedan leer los datos GPS adicionales.",
+            fr: "Les enregistrements s’ouvrent même si les données GPS supplémentaires ne peuvent pas être lues.",
+            pl: "Nagrania otwierają się nawet wtedy, gdy nie można odczytać dodatkowych danych GPS.",
+            pt: "As gravações abrem mesmo quando os dados GPS adicionais não podem ser lidos.",
+            zh: "即使无法读取附加 GPS 数据，也能打开录像。",
+            ja: "追加の GPS データを読み取れなくても録画を開けます。",
+            ko: "추가 GPS 데이터를 읽을 수 없어도 녹화를 열 수 있습니다.",
+        },
+    },
+    {
+        id: "2026-09-06.2",
+        category: "fix",
+        text: {
+            en: "Export continues when audio is unsupported or GPS cannot be added.",
+            ru: "Экспорт продолжается, если звук не поддерживается или не удалось добавить GPS.",
+            de: "Der Export wird fortgesetzt, wenn der Ton nicht unterstützt wird oder GPS-Daten nicht hinzugefügt werden können.",
+            es: "La exportación continúa si el audio no es compatible o no se pueden añadir los datos GPS.",
+            fr: "L’export continue si le son n’est pas pris en charge ou si les données GPS ne peuvent pas être ajoutées.",
+            pl: "Eksport jest kontynuowany, gdy dźwięk nie jest obsługiwany lub nie można dodać danych GPS.",
+            pt: "A exportação continua quando o áudio não é compatível ou os dados GPS não podem ser adicionados.",
+            zh: "音频不受支持或无法添加 GPS 数据时，导出仍会继续。",
+            ja: "音声に対応していない場合や GPS データを追加できない場合も、書き出しは続行されます。",
+            ko: "오디오가 지원되지 않거나 GPS 데이터를 추가할 수 없어도 내보내기가 계속됩니다.",
+        },
+    },
+    {
         id: "2026-09-06.1",
         category: "improvement",
         text: {
