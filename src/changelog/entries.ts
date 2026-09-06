@@ -28,6 +28,38 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-09-06.6",
+        category: "fix",
+        text: {
+            en: "Exports retain GPS data from tracks with many points.",
+            ru: "При экспорте треков с большим числом точек сохраняются данные GPS.",
+            de: "Exporte behalten GPS-Daten aus Tracks mit vielen Punkten.",
+            es: "La exportación conserva los datos GPS de tracks con muchos puntos.",
+            fr: "L’export conserve les données GPS des traces comportant de nombreux points.",
+            pl: "Eksport zachowuje dane GPS ze śladów z dużą liczbą punktów.",
+            pt: "A exportação preserva os dados GPS de trajetos com muitos pontos.",
+            zh: "导出时会保留点数较多轨迹中的 GPS 数据。",
+            ja: "点数の多い軌跡の GPS データも書き出し時に保持されます。",
+            ko: "포인트가 많은 트랙의 GPS 데이터도 내보낼 때 유지됩니다.",
+        },
+    },
+    {
+        id: "2026-09-06.5",
+        category: "improvement",
+        text: {
+            en: "Playback controls can stay visible in full screen.",
+            ru: "В полном экране можно закрепить управление воспроизведением.",
+            de: "Die Wiedergabesteuerung kann im Vollbild eingeblendet bleiben.",
+            es: "Los controles de reproducción pueden mantenerse visibles en pantalla completa.",
+            fr: "Les commandes de lecture peuvent rester visibles en plein écran.",
+            pl: "Elementy sterowania odtwarzaniem mogą pozostać widoczne na pełnym ekranie.",
+            pt: "Os controles de reprodução podem permanecer visíveis em tela cheia.",
+            zh: "全屏时可始终显示播放控件。",
+            ja: "フルスクリーンでも再生操作ボタンを常に表示できます。",
+            ko: "전체 화면에서도 재생 컨트롤을 항상 표시할 수 있습니다.",
+        },
+    },
+    {
         id: "2026-09-06.4",
         category: "fix",
         text: {

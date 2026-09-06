@@ -9,6 +9,8 @@ release tag. Localized texts ship inside the app (the "What's new" panel).
 
 ## 2026-09-06
 
+- **Fixed:** Exports retain GPS data from tracks with many points.
+- **Improved:** Playback controls can stay visible in full screen.
 - **Fixed:** Playback can be retried after errors or continue without unsupported audio.
 - **Fixed:** Recordings open even if extra GPS data cannot be read.
 - **Fixed:** Export continues when audio is unsupported or GPS cannot be added.
