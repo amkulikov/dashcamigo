@@ -10,15 +10,10 @@ import {
     gotoApp,
     loadTrip,
     masterVideoTime,
+    pausePlayback,
     presetLocalStorage,
     test,
 } from "./_fixtures.js";
-
-async function pausePlayback(page: Page): Promise<void> {
-    const play = page.locator("#player-play");
-    if ((await play.getAttribute("data-paused")) === "false") await play.click();
-    await expect(play).toHaveAttribute("data-paused", "true");
-}
 
 async function startLoopingPlayback(page: Page): Promise<void> {
     await pausePlayback(page);
@@ -220,6 +215,7 @@ for (const mode of ["native button", "native shortcut", "viewport"]) {
         if (mode === "viewport") await disableNativeFullscreen(page);
         await gotoApp(page);
         await loadTrip(page, SAMPLE_70MAI);
+        await pausePlayback(page);
         await page.locator("#player-export").click();
         const panel = page.locator("#export-panel");
         await expect(panel).toBeVisible();

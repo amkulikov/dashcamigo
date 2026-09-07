@@ -13,6 +13,7 @@ import {
     gotoApp,
     loadTrip,
     masterVideoTime,
+    pausePlayback,
     presetLocalStorage,
     shot,
     test,
@@ -75,10 +76,7 @@ test.describe("player", () => {
         // restart-from-end path, not the ordinary play toggle this test names.
         // Pause and seek to a known non-terminal frame before checking both
         // transitions so worker scheduling cannot change the branch under test.
-        if ((await play.getAttribute("data-paused")) === "false") {
-            await play.click();
-            await expect(play).toHaveAttribute("data-paused", "true");
-        }
+        await pausePlayback(page);
         await seekToTripStart(page);
 
         await play.click();
@@ -90,9 +88,7 @@ test.describe("player", () => {
 
     test("frame-step buttons step the paused player frame by frame, both ways", async ({ page }) => {
         const play = page.locator("#player-play");
-        // Pause deterministically whatever the auto-start state was.
-        if ((await play.getAttribute("data-paused")) === "false") await play.click();
-        await expect(play).toHaveAttribute("data-paused", "true");
+        await pausePlayback(page);
 
         // Measure the master tile only - a frame step is defined off it (see
         // masterVideoTime). Math.max over every tile flakes: slaves drift ahead
@@ -143,8 +139,7 @@ test.describe("player", () => {
         // full-suite worker finishes setup. Starting from EOF takes the
         // asynchronous restart path, so establish a known non-terminal frame
         // before asserting the ordinary playing -> frame-step transition.
-        if ((await play.getAttribute("data-paused")) === "false") await play.click();
-        await expect(play).toHaveAttribute("data-paused", "true");
+        await pausePlayback(page);
         await seekToTripStart(page);
 
         await play.click();
@@ -196,9 +191,7 @@ test.describe("player", () => {
     test("capture button downloads a JPEG frame", async ({ page }) => {
         // The viewer can appear before the initial video attachment settles.
         // Capture a paused, playable frame outside any source/seek transition.
-        const play = page.locator("#player-play");
-        if ((await play.getAttribute("data-paused")) === "false") await play.click();
-        await expect(play).toHaveAttribute("data-paused", "true");
+        await pausePlayback(page);
         await seekToTripStart(page);
 
         const downloadPromise = page.waitForEvent("download", { timeout: 10_000 });
@@ -944,9 +937,7 @@ test.describe("player", () => {
     });
 
     test("playhead turns neutral at an excluded zoom edge and restores inside", async ({ page }) => {
-        const play = page.locator("#player-play");
-        if ((await play.getAttribute("data-paused")) === "false") await play.click();
-        await expect(play).toHaveAttribute("data-paused", "true");
+        await pausePlayback(page);
         await seekToTripStart(page);
 
         const playerChart = page.locator("#player-chart");
@@ -1312,9 +1303,7 @@ test.describe("player", () => {
         // A wheel/keyboard zoom is inspection, not a bounded Preview-clip window:
         // seeks must roam the whole trip (isPreviewZoom stays false). Regression
         // for the old "any zoom traps playback in its window" behavior.
-        const play = page.locator("#player-play");
-        if ((await play.getAttribute("data-paused")) === "false") await play.click();
-        await expect(play).toHaveAttribute("data-paused", "true");
+        await pausePlayback(page);
 
         const chart = await boxOf(page, "#player-chart");
         await page.mouse.move(chart.x + chart.width * 0.2, chart.y + chart.height * 0.4);
@@ -1380,9 +1369,7 @@ test.describe("player", () => {
     test("playhead re-anchors when the chart resizes while paused", async ({ page }) => {
         // Export mode resizes the chart while playback is paused. The playhead
         // must retain its timeline fraction without another timeupdate.
-        const play = page.locator("#player-play");
-        if ((await play.getAttribute("data-paused")) !== "true") await play.click();
-        await expect(play).toHaveAttribute("data-paused", "true");
+        await pausePlayback(page);
 
         const playhead = page.locator("#player-chart-playhead");
         // Read the resolved CSS position so the assertion measures rendered
@@ -1630,14 +1617,9 @@ test.describe("single-clip playback endings", () => {
     });
 
     async function parkNearEnd(page: Page): Promise<void> {
-        const play = page.locator("#player-play");
-        if ((await play.getAttribute("data-paused")) === "false") await play.click();
-        await expect(play).toHaveAttribute("data-paused", "true");
+        await pausePlayback(page);
 
         const master = page.locator(".video-tile.active video:not(.preload-slot):not(.tile-blur-bg)");
-        await expect
-            .poll(() => master.evaluate((video: HTMLVideoElement) => video.readyState))
-            .toBeGreaterThanOrEqual(2);
         const target = await master.evaluate((video: HTMLVideoElement) => {
             video.playbackRate = 8;
             const next = Math.max(0, video.duration - Math.min(1, video.duration / 2));

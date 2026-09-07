@@ -338,6 +338,8 @@ export async function boxOf(
     return box!;
 }
 
+const MASTER_VIDEO = ".video-tile.active video:not(.preload-slot):not(.tile-blur-bg)";
+
 /**
  * Current playback position of the MASTER tile in seconds - the element a frame
  * step / seek actually moves (getTripCurrentTime / seekTripTime read dom.player,
@@ -353,9 +355,30 @@ export async function boxOf(
  * which reads as a step that went backwards and flakes the frame-step assertions.
  */
 export async function masterVideoTime(page: Page): Promise<number> {
-    const master = page.locator(".video-tile.active video:not(.preload-slot):not(.tile-blur-bg)");
+    const master = page.locator(MASTER_VIDEO);
     await expect(master).toHaveCount(1);
     return master.evaluate((v: HTMLVideoElement) => v.currentTime);
+}
+
+/** The chart can render before metadata starts autoplay. Wait for the media
+ * before pausing so a later load cannot move the position under an assertion. */
+export async function pausePlayback(page: Page): Promise<void> {
+    const master = page.locator(MASTER_VIDEO);
+    await expect
+        .poll(() => master.evaluate((video: HTMLVideoElement) => video.readyState >= 2 && !video.seeking), {
+            message: "the active video has a decoded frame before pausing",
+        })
+        .toBe(true);
+    if (!(await master.evaluate((video: HTMLVideoElement) => video.paused))) {
+        await page.locator("#player-play").click();
+    }
+    await expect
+        .poll(
+            () => master.evaluate((video: HTMLVideoElement) => video.paused && !video.seeking && video.readyState >= 2),
+            { message: "the active video is paused with no pending seek" },
+        )
+        .toBe(true);
+    await expect(page.locator("#player-play")).toHaveAttribute("data-paused", "true");
 }
 
 /** Makes the stubbed save target fail every write once it holds `afterBytes`,

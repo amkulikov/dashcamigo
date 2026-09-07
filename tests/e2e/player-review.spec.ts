@@ -8,6 +8,7 @@ import {
     loadTrip,
     masterVideoTime,
     openExport,
+    pausePlayback,
     presetLocalStorage,
     test,
 } from "./_fixtures.js";
@@ -40,9 +41,7 @@ test("playback speed supports keyboard selection and returns focus", async ({ pa
 test("map menu arrow navigation leaves playback position unchanged", async ({ page }) => {
     await gotoApp(page);
     await loadTrip(page, SAMPLE_70MAI);
-    const play = page.locator("#player-play");
-    if ((await play.getAttribute("data-paused")) === "false") await play.click();
-    await expect(play).toHaveAttribute("data-paused", "true");
+    await pausePlayback(page);
     await page.locator("#player-view-menu").click();
     await page.locator('[data-map-mode="mini"]').focus();
     const before = await masterVideoTime(page);

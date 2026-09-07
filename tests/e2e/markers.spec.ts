@@ -2,17 +2,9 @@
 // and delete it through the marker list. The list is the only surface that
 // works on touch (a pin needs contextmenu), so it is the one under a gate.
 
-import { DESKTOP, boxOf, expect, gotoApp, loadTrip, presetLocalStorage, test } from "./_fixtures.js";
+import { DESKTOP, boxOf, expect, gotoApp, loadTrip, pausePlayback, presetLocalStorage, test } from "./_fixtures.js";
 
 const MASTER_VIDEO = ".video-tile.active video:not(.preload-slot):not(.tile-blur-bg)";
-
-/** Pauses the player if it is running, so a time readout stays put between
- *  assertions. Idempotent - the play button is a toggle. */
-async function pausePlayback(page: import("@playwright/test").Page): Promise<void> {
-    const isPaused = (): Promise<boolean> => page.locator(MASTER_VIDEO).evaluate((v: HTMLVideoElement) => v.paused);
-    if (!(await isPaused())) await page.locator("#player-play").click();
-    await expect.poll(isPaused, { message: "playback must be paused" }).toBe(true);
-}
 
 /** Drops a marker and explicitly keeps notes in the browser when the first
  * completed write opens the mandatory app-wide storage decision. */
