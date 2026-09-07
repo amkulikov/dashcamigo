@@ -13,6 +13,7 @@ import { createLogger } from "../log.js";
 import { isAnyModalOpen } from "./modal-helper.js";
 import { isOnboardingSettledForSupportPrompt } from "./onboarding.js";
 import { state } from "./state.js";
+import { observePromptSurfaces } from "./prompt-surfaces.js";
 
 const log = createLogger("support-prompt");
 
@@ -133,18 +134,7 @@ function schedulePromptRetry(): void {
  */
 function observePromptBlockers(): void {
     if (blockerObserver || typeof MutationObserver === "undefined") return;
-    blockerObserver = new MutationObserver(schedulePromptRetry);
-
-    if (document.body) blockerObserver.observe(document.body, { childList: true });
-    for (const surface of document.querySelectorAll<HTMLElement>('.sticky-banner, [role="dialog"], #export-panel')) {
-        blockerObserver.observe(surface, { attributes: true, attributeFilter: ["hidden"] });
-    }
-
-    // The language suggestion is mounted inside .lang-wrap rather than body.
-    const langBannerParent = document.getElementById("lang-banner")?.parentElement;
-    if (langBannerParent && langBannerParent !== document.body) {
-        blockerObserver.observe(langBannerParent, { childList: true });
-    }
+    blockerObserver = observePromptSurfaces(schedulePromptRetry);
 }
 
 function armPromptRetry(): void {
