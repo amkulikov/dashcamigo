@@ -47,6 +47,11 @@ body.export-mode .export-panel {
     transition-delay: 0s, 0s;
 }
 
+body.has-expanded-player .export-panel {
+    visibility: hidden;
+    transition: none;
+}
+
 .export-panel[hidden] {
     display: flex;
 }
@@ -776,7 +781,7 @@ fieldset.export-panel__group {
        the children (not .viewer padding) so it holds regardless of whether
        .viewer's container-type makes it the containing block for the drawer. */
     body.export-mode .top-panel,
-    body.export-mode .player-wrap {
+    body.export-mode .player-wrap:not(.player-expanded) {
         margin-right: var(--dc-export-panel-w);
     }
 }

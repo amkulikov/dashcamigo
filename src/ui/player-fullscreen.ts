@@ -224,7 +224,7 @@ export async function toggleFullscreen(focusReturn?: HTMLElement): Promise<void>
         await exitExpandedPlayer();
         return;
     }
-    if (!state.active || state.exportModeOpen || isAnyModalOpen()) return;
+    if (!state.active || isAnyModalOpen()) return;
     saveViewerContext(focusReturn);
     await runTransition(async () => {
         try {
@@ -257,7 +257,7 @@ export function syncFullscreenButton(): void {
     button.setAttribute("aria-label", label);
     button.title = label;
     button.hidden = expanded;
-    button.disabled = !state.active || state.exportModeOpen;
+    button.disabled = !state.active;
     button.setAttribute("aria-busy", String(transition !== null));
     const exit = dom.playerBar.fullscreenExit;
     const exitLabel = t(isViewportExpanded ? "player.fullscreen.restore" : "player.fullscreen.exit");

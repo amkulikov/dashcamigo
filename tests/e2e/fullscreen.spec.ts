@@ -215,6 +215,51 @@ for (const method of ["button", "shortcut"]) {
     });
 }
 
+for (const mode of ["native button", "native shortcut", "viewport"]) {
+    test(`the clip editor preserves its range and settings across ${mode} fullscreen`, async ({ page }) => {
+        if (mode === "viewport") await disableNativeFullscreen(page);
+        await gotoApp(page);
+        await loadTrip(page, SAMPLE_70MAI);
+        await page.locator("#player-export").click();
+        const panel = page.locator("#export-panel");
+        await expect(panel).toBeVisible();
+        const start = page.locator('.export-trim-bar__input[data-range-edge="start"]');
+        await start.fill("00:01");
+        await start.press("Enter");
+        const rangeStart = await start.inputValue();
+        const quality = page.locator('.export-panel__radio input[value="low"]');
+        await quality.check();
+        const time = await masterVideoTime(page);
+        await expect(page.locator("#player-fullscreen")).toBeEnabled();
+        if (mode === "native shortcut") {
+            await page.locator("#player-play").focus();
+            await page.keyboard.press("f");
+        } else {
+            await activateFullscreenEntry(page);
+        }
+        const player = page.locator("#player-wrap");
+        await expect(player).toHaveClass(/player-expanded/);
+        await expect(panel).toBeHidden();
+        await expect(page.locator("#export-trim-bar")).toBeHidden();
+        const bounds = await boxOf(page, "#player-wrap");
+        expect(bounds.x).toBe(0);
+        expect(bounds.width).toBe(DESKTOP.width);
+        expect(bounds.height).toBe(DESKTOP.height);
+        if (mode !== "viewport") {
+            await expect.poll(() => page.evaluate(() => document.fullscreenElement?.id)).toBe("player-wrap");
+        }
+        if (mode === "viewport") await page.keyboard.press("Escape");
+        else if (mode === "native shortcut") await page.keyboard.press("f");
+        else await page.locator("#player-fullscreen-exit").click();
+        await expect(player).not.toHaveClass(/player-expanded/);
+        await expect(panel).toBeVisible();
+        await expect(page.locator("#export-trim-bar")).toBeVisible();
+        await expect(start).toHaveValue(rangeStart);
+        await expect(quality).toBeChecked();
+        expect(await masterVideoTime(page)).toBeCloseTo(time, 2);
+    });
+}
+
 test.describe("touch fullscreen", () => {
     test.use({ hasTouch: true, isMobile: true });
 

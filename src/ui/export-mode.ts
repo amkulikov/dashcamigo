@@ -46,6 +46,8 @@ export function initExportMode(): void {
         if (ev.key !== "Escape") return;
         if (ev.defaultPrevented) return;
         if (!state.exportModeOpen) return;
+        // Escape leaves the preview before it can close the editor.
+        if (dom.playerWrap.classList.contains("player-expanded")) return;
         if (exportPanelState.phase === "progress" || exportPanelState.configurationLocked) return;
         closeExportMode();
     });
