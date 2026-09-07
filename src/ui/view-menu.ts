@@ -249,6 +249,11 @@ export function initViewMenu(opts: ViewMenuOptions): () => void {
     // the user often switches several panels in one trip.
     opts.popover.querySelectorAll<HTMLButtonElement>(".view-menu-row").forEach((row) => {
         row.addEventListener("click", () => {
+            if (row.classList.contains("feedback-link")) {
+                togglePopover(false);
+                opts.button.focus();
+                return;
+            }
             const panel = row.dataset.panel as Panel | undefined;
             if (!panel) return;
             toggle(panel);

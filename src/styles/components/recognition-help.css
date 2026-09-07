@@ -1,0 +1,36 @@
+#recognition-banner .sticky-banner-lead,
+#recognition-later {
+    color: var(--fg-dim);
+}
+
+.recognition-help-link {
+    border: 0;
+    padding: var(--dc-space-1) 0;
+    background: transparent;
+    color: var(--fg-dim);
+    font: inherit;
+    font-size: var(--dc-text-sm);
+    line-height: var(--dc-leading-normal);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+}
+
+.recognition-help-link:hover {
+    color: var(--fg);
+}
+
+.recognition-help-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+}
+
+.player-no-gps .recognition-help-link {
+    display: block;
+    margin: var(--dc-space-1) auto 0;
+    pointer-events: auto;
+}
+
+#recognition-gps-menu[hidden] {
+    display: none;
+}

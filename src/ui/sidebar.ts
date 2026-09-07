@@ -34,6 +34,7 @@ import {
 import type { TripLoadingState } from "./format.js";
 import { setTripMeta, tripMetaFor } from "./annotations.js";
 import { isTripSortKey, state } from "./state.js";
+import { scheduleRecognitionHelp } from "./recognition-help.js";
 
 interface SidebarCallbacks {
     /** Opens the first playable frame, tolerating a damaged leading clip. */
@@ -158,7 +159,7 @@ export function renderTrips(): void {
     if (state.unindexed.size > 0) {
         const note = document.createElement("li");
         note.className = "trip unindexed-note";
-        note.innerHTML = `<div class="trip-header"><div class="trip-title">${t("sidebar.unindexed.title")}</div><div class="trip-meta">${t("sidebar.unindexed.note", { n: state.unindexed.size })}</div></div>`;
+        note.innerHTML = `<div class="trip-header"><div class="trip-title">${t("sidebar.unindexed.title")}</div><div class="trip-meta">${t("sidebar.unindexed.note", { n: state.unindexed.size })}</div></div><button type="button" class="recognition-help-link feedback-link" data-feedback-preset="load">${t("recognition.contact")}</button>`;
         dom.list.appendChild(note);
     }
 
@@ -173,6 +174,7 @@ export function renderTrips(): void {
 
     // Tell assistive tech the list is still updating while any card is provisional.
     dom.list.setAttribute("aria-busy", state.trips.some(tripHasPending) ? "true" : "false");
+    scheduleRecognitionHelp();
 }
 
 /** The card's annotation controls - favorite star, name/note pencil - as one

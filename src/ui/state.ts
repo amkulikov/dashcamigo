@@ -212,6 +212,8 @@ export interface AppState {
     // (same file-identity key as pendingHeavyEmbeddedGps, so the sidebar's
     // per-card lookup never confuses two same-basename files).
     inflightEmbeddedGps: Map<string, number>;
+    /** Confirmed failures from the last completed GPS attempt, keyed by recording identity. */
+    failedEmbeddedGps: Set<string>;
     // Trip indices whose mandatory metadata read is in flight. Indices stay
     // stable until the closing regroup and are cleared on cancellation.
     readingTrips: Set<number>;
@@ -473,6 +475,7 @@ export const state: AppState = {
     transcodeInProgress: false,
     pendingHeavyEmbeddedGps: new Map(),
     inflightEmbeddedGps: new Map(),
+    failedEmbeddedGps: new Set(),
     readingTrips: new Set(),
     recordingAnalysisProgress: null,
     channelBackends: {},

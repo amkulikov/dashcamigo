@@ -176,6 +176,9 @@ export interface DispatchedEmbeddedGpsResult {
     records: GpsRecord[];
     skipped: SkippedLine[];
     errors: Array<{ file: string; extractor: string; message: string }>;
+    /** Matched parsers failed without a successful parse from this file or its
+     * clone group. Empty parses, deferred work and format rejection are excluded. */
+    failedFileKeys: Set<string>;
     /**
      * vendorFileKey -> winning extractor id. Used by ingest to stash
      * appliedExtractors into diagnostics; UI does not look at this.
@@ -422,6 +425,7 @@ export async function dispatchParseVideoEmbeddedGps(
     const allRecords: GpsRecord[] = [];
     const allSkipped: SkippedLine[] = [];
     const errors: Array<{ file: string; extractor: string; message: string }> = [];
+    const failedFileKeys = new Set<string>();
     const used = new Set<string>();
     const winningExtractorByFileKey = new Map<string, string>();
     const sourceFileKeyByFileKey = new Map<string, string>();
@@ -442,13 +446,21 @@ export async function dispatchParseVideoEmbeddedGps(
         localClockOffsetHintSec: number | undefined;
         accelSamples: AccelSample[] | undefined;
     };
+    interface ParseEvidence {
+        failedKeys: Set<string>;
+        hasSuccessfulParse: boolean;
+    }
 
     // Classifies the index kind (with the Novatek MAX-probe escalation) and
     // walks the extractors. Returns the winning ParseResult, "heavy-deferred"
     // when a heavy file is skipped under light-only, or null when no extractor
     // claims the file. Split out from tryParseOne so the no-winner probe retry
     // can re-run it on the same index after an escalated marker probe.
-    const classifyAndWalk = async (vf: VendorFile, index: Mp4Index): Promise<ParseResult | "heavy-deferred" | null> => {
+    const classifyAndWalk = async (
+        vf: VendorFile,
+        index: Mp4Index,
+        evidence: ParseEvidence,
+    ): Promise<ParseResult | "heavy-deferred" | null> => {
         let kind = classifyEmbeddedGpsKind(index);
         if (kind === "none" && needsGpsProbeEscalation(vf.file.name)) {
             // Probe escalation: the default 4 MB probe can miss the first
@@ -477,6 +489,7 @@ export async function dispatchParseVideoEmbeddedGps(
             try {
                 matched = await extractor.marker(vf, index);
             } catch (err) {
+                if (err instanceof Error && err.name === "AbortError") throw err;
                 const message = err instanceof Error ? err.message : String(err);
                 errors.push({ file: vf.file.name, extractor: extractor.id, message });
                 log.debug("extractor marker threw", {
@@ -489,6 +502,7 @@ export async function dispatchParseVideoEmbeddedGps(
 
             try {
                 const parsed = await extractor.parse(vf, index, signal);
+                evidence.hasSuccessfulParse = true;
                 // Zero records + no hint = "matched the shape, carries no GPS":
                 // keep walking, a sibling extractor may still own the file's
                 // GPS (e.g. an empty gpmd track next to freeGPS in mdat). Zero
@@ -513,8 +527,9 @@ export async function dispatchParseVideoEmbeddedGps(
                 // AbortError propagates - the outer worker loop checks
                 // signal.aborted between work items, but a per-extractor
                 // signal-honoring parse can also raise it directly.
-                if (err instanceof DOMException && err.name === "AbortError") throw err;
+                if (err instanceof Error && err.name === "AbortError") throw err;
                 if (!(err instanceof WrongFormatError)) {
+                    evidence.failedKeys.add(vendorFileKey(vf));
                     errors.push({ file: vf.file.name, extractor: extractor.id, message });
                     log.warn("video extractor parse failed", {
                         extractor: extractor.id,
@@ -527,7 +542,10 @@ export async function dispatchParseVideoEmbeddedGps(
         return null;
     };
 
-    const tryParseOne = async (vf: VendorFile): Promise<ParseResult | "heavy-deferred" | null> => {
+    const tryParseOne = async (
+        vf: VendorFile,
+        evidence: ParseEvidence,
+    ): Promise<ParseResult | "heavy-deferred" | null> => {
         let index: Mp4Index;
         try {
             const prebuiltMoov = prebuiltMoovByPath?.get(vendorFileKey(vf));
@@ -536,6 +554,7 @@ export async function dispatchParseVideoEmbeddedGps(
             // literal scan is pure wasted IO - dominant cost on mobile SD/UFS.
             index = await buildMp4Index(vf.file, { prebuiltMoov, probeBytes: 0 });
         } catch (err) {
+            if (err instanceof Error && err.name === "AbortError") throw err;
             const message = err instanceof Error ? err.message : String(err);
             errors.push({ file: vf.file.name, extractor: "mp4-index", message });
             log.warn("mp4 index build failed", { file: vf.file.name, err: message });
@@ -553,7 +572,7 @@ export async function dispatchParseVideoEmbeddedGps(
             await probeMarkers(vf.file, index, DEFAULT_PROBE_BYTES);
         }
 
-        let outcome = await classifyAndWalk(vf, index);
+        let outcome = await classifyAndWalk(vf, index, evidence);
 
         // No-winner probe retry. embeddedGpsProbeNeeded returns false as soon as
         // ANY track/atom looks structural (sbtl/text track, gpmd sample format,
@@ -570,7 +589,7 @@ export async function dispatchParseVideoEmbeddedGps(
         // regression (__fixtures__/dispatch-gate.test.ts).
         if (outcome === null && probeSkipped) {
             await probeMarkers(vf.file, index, DEFAULT_PROBE_BYTES);
-            outcome = await classifyAndWalk(vf, index);
+            outcome = await classifyAndWalk(vf, index, evidence);
         }
         return outcome;
     };
@@ -585,8 +604,9 @@ export async function dispatchParseVideoEmbeddedGps(
             let result: ParseResult | null = null;
             let usedCandidate: ClassifiedFile | null = null;
             let deferred = false;
+            const evidence: ParseEvidence = { failedKeys: new Set(), hasSuccessfulParse: false };
             for (const cand of candidates) {
-                const r = await tryParseOne(cand.file);
+                const r = await tryParseOne(cand.file, evidence);
                 if (r === "heavy-deferred") {
                     for (const c of candidates) heavyFiles.push(c);
                     deferred = true;
@@ -597,6 +617,10 @@ export async function dispatchParseVideoEmbeddedGps(
                     usedCandidate = cand;
                     break;
                 }
+            }
+
+            if (!deferred && !result && !evidence.hasSuccessfulParse) {
+                for (const key of evidence.failedKeys) failedFileKeys.add(key);
             }
 
             if (!deferred && result && usedCandidate) {
@@ -662,6 +686,7 @@ export async function dispatchParseVideoEmbeddedGps(
         records: allRecords,
         skipped: allSkipped,
         errors,
+        failedFileKeys,
         winningExtractorByFileKey,
         sourceFileKeyByFileKey,
         videoStartUtcHintByFileKey,

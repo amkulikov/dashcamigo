@@ -98,6 +98,7 @@ import { initTimelineRange } from "./ui/timeline-range.js";
 import { initTopPanel } from "./ui/top-panel.js";
 import { initViewMenu } from "./ui/view-menu.js";
 import { initFeedbackModal } from "./ui/feedback.js";
+import { initRecognitionHelp } from "./ui/recognition-help.js";
 import { initLangSwitcher } from "./ui/lang-switcher.js";
 import { initTopbarOverflow } from "./ui/topbar-overflow.js";
 import { prewarmIndexer } from "./indexer.js";
@@ -503,6 +504,7 @@ subscribeBlurTripRegroup((_oldTrips, _newTrips, invalidatedRegionCount) => {
     if (invalidatedRegionCount > 0) notify({ severity: "warn", messageKey: "export.blur.regroupChanged" });
 });
 initFeedbackModal();
+initRecognitionHelp();
 // Hero-shot lightbox: landing right-column thumb -> full-size screenshot.
 initLandingShot();
 // The topbar shares the landing background until the landing starts scrolling.

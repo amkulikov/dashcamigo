@@ -101,6 +101,7 @@ export function mergeEmbeddedResults(results: readonly DispatchedEmbeddedGpsResu
     const records: GpsRecord[] = [];
     const skipped: SkippedLine[] = [];
     const errors: DispatchedEmbeddedGpsResult["errors"] = [];
+    const failedFileKeys = new Set<string>();
     const winningExtractorByFileKey = new Map<string, string>();
     const sourceFileKeyByFileKey = new Map<string, string>();
     const videoStartUtcHintByFileKey = new Map<string, number>();
@@ -113,6 +114,7 @@ export function mergeEmbeddedResults(results: readonly DispatchedEmbeddedGpsResu
         extendArray(records, result.records);
         extendArray(skipped, result.skipped);
         extendArray(errors, result.errors);
+        for (const key of result.failedFileKeys) failedFileKeys.add(key);
         for (const [key, value] of result.winningExtractorByFileKey) winningExtractorByFileKey.set(key, value);
         for (const [key, value] of result.sourceFileKeyByFileKey) sourceFileKeyByFileKey.set(key, value);
         for (const [key, value] of result.videoStartUtcHintByFileKey) videoStartUtcHintByFileKey.set(key, value);
@@ -122,11 +124,14 @@ export function mergeEmbeddedResults(results: readonly DispatchedEmbeddedGpsResu
         for (const [key, value] of result.accelByFileKey) accelByFileKey.set(key, value);
         extendArray(heavyFiles, result.heavyFiles);
     }
+    for (const key of winningExtractorByFileKey.keys()) failedFileKeys.delete(key);
+    for (const file of heavyFiles) failedFileKeys.delete(vendorFileKey(file.file));
     return {
         appliedExtractors: [...appliedSet],
         records,
         skipped,
         errors,
+        failedFileKeys,
         winningExtractorByFileKey,
         sourceFileKeyByFileKey,
         videoStartUtcHintByFileKey,

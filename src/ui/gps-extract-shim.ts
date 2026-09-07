@@ -120,6 +120,7 @@ export function dispatchParseVideoEmbeddedGpsViaWorker(
             records: [],
             skipped: [],
             errors: [],
+            failedFileKeys: new Set(),
             winningExtractorByFileKey: new Map(),
             sourceFileKeyByFileKey: new Map(),
             videoStartUtcHintByFileKey: new Map(),

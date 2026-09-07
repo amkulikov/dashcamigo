@@ -25,6 +25,7 @@
 @import "./components/viewer.css";
 @import "./components/player-composition.css";
 @import "./components/top-panel.css";
+@import "./components/recognition-help.css";
 @import "./components/export-panel.css";
 @import "./components/player-bar.css";
 @import "./components/player-readout.css";

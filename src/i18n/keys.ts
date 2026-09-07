@@ -246,7 +246,6 @@ export type I18nKey =
     // Ingest results surface through notifications (toast + bell drawer); live
     // progress stays in the relevant overlay instead of duplicating channels.
     | "status.filesNotSelected"
-    | "status.badFilesSkipped"
     | "status.duplicatesSkipped"
     | "status.hvccRepaired"
     | "status.audioDamaged"
@@ -715,7 +714,27 @@ export type I18nKey =
     | "theme.dark"
     | "theme.label"
 
-    // UX-26 - feedback modal ("report a problem")
+    // Invitations and help for incomplete recognition.
+    | "recognition.gps.title"
+    | "recognition.gps.body"
+    | "recognition.cameras.title"
+    | "recognition.cameras.body"
+    | "recognition.contact"
+    | "recognition.dismiss"
+    | "recognition.gps.help"
+    | "recognition.cameras.help"
+    | "recognition.cameras.hint"
+    | "recognition.gps.hint"
+    | "recognition.files.body"
+    | "feedback.step1.preset.gps"
+    | "feedback.step1.preset.cameras"
+    | "feedback.recognition.intro"
+    | "feedback.recognition.samples.title"
+    | "feedback.recognition.samples.gps"
+    | "feedback.recognition.samples.cameras"
+    | "feedback.recognition.mailPrompt"
+
+    // Feedback modal ("report a problem").
     | "feedback.entry.title"
     | "feedback.modal.title"
     | "feedback.thanks"

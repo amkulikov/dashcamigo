@@ -3,6 +3,9 @@
 .feedback-modal {
     z-index: var(--dc-z-modal-top);
 }
+.feedback-modal [hidden] {
+    display: none;
+}
 .feedback-modal-card {
     border-color: var(--border-strong);
     width: min(640px, 92vw);
@@ -163,10 +166,7 @@
 /* Feedback action buttons use the shared .dc-btn primitive
    (.dc-btn--primary / .dc-btn--secondary). */
 
-/* Post-download hand-off ("saved, now email it") - revealed inline below the
-   download button, separated by a rule. Holds the steps, the mail button and
-   the address (the address lives here, next to the file, never as a fileless
-   top-level action - mailto cannot attach). */
+/* The hand-off reminds the user to attach the report because mailto cannot. */
 .feedback-post-download {
     margin-top: var(--dc-space-4);
     padding-top: var(--dc-space-3);

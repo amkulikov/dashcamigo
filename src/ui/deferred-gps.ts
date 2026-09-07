@@ -16,7 +16,7 @@ import {
 } from "./ingest-cache.js";
 import { embeddedResultHasEffect, mergeAccelIntoCandidates } from "./ingest-core.js";
 import { commitRecordingTripsWhilePreservingIngest, reanchorRecordingCandidates } from "./ingest-regroup.js";
-import { applyEmbeddedGpsResult } from "./embedded-gps-state.js";
+import { applyEmbeddedGpsFailures, applyEmbeddedGpsResult } from "./embedded-gps-state.js";
 import { vendorFileKey } from "./ingest-candidate.js";
 import { hideTripPreparation, showTripPreparation, updateTripPreparationProgress } from "./trip-preparation.js";
 import { renderTrips } from "./sidebar.js";
@@ -276,6 +276,7 @@ async function runDeferredGpsLoadBody(
 
     const errorNames = new Set(result?.errors.map((err) => err.file) ?? []);
     if (result) {
+        applyEmbeddedGpsFailures(result, targets);
         for (const target of targets) {
             const key = vendorFileKey(target.file);
             if (errorNames.has(target.file.file.name) && !result.winningExtractorByFileKey.has(key)) {

@@ -5,6 +5,7 @@ import { vendorFileKey } from "../vendor-file-key.js";
 import {
     buildGpsExtractRequest,
     buildGpsExtractShardRequest,
+    mergeEmbeddedResults,
     mergeSettledGpsExtractShards,
     shardByCloneAffinity,
 } from "./gps-extract-artifacts.js";
@@ -25,6 +26,7 @@ function emptyResult(): DispatchedEmbeddedGpsResult {
         records: [],
         skipped: [],
         errors: [],
+        failedFileKeys: new Set(),
         winningExtractorByFileKey: new Map(),
         sourceFileKeyByFileKey: new Map(),
         videoStartUtcHintByFileKey: new Map(),
@@ -94,6 +96,39 @@ describe("GPS extraction artifact pipeline", () => {
             { file: "crashed-a.mp4", extractor: "gps-extract-worker", message: "worker died" },
             { file: "crashed-b.mp4", extractor: "gps-extract-worker", message: "worker died" },
         ]);
+        expect(merged.failedFileKeys.size).toBe(0);
+    });
+
+    it("merges confirmed failures by file identity without mutating shard results", () => {
+        const first = video("same.mp4");
+        const second = video("same.mp4");
+        second.file.sourceKey = "other-card";
+        const a = emptyResult();
+        const b = emptyResult();
+        a.failedFileKeys.add(vendorFileKey(first.file));
+        b.failedFileKeys.add(vendorFileKey(second.file));
+
+        const merged = mergeEmbeddedResults([a, b]);
+
+        expect(merged.failedFileKeys).toEqual(new Set([vendorFileKey(first.file), vendorFileKey(second.file)]));
+        merged.failedFileKeys.clear();
+        expect(a.failedFileKeys.size).toBe(1);
+        expect(b.failedFileKeys.size).toBe(1);
+    });
+
+    it("suppresses merged failures for recovered or deferred files regardless of result order", () => {
+        const recovered = video("recovered.mp4");
+        const deferred = video("deferred.mp4");
+        const failed = emptyResult();
+        failed.failedFileKeys.add(vendorFileKey(recovered.file));
+        failed.failedFileKeys.add(vendorFileKey(deferred.file));
+        const settled = emptyResult();
+        settled.winningExtractorByFileKey.set(vendorFileKey(recovered.file), "gpmf");
+        settled.heavyFiles.push(deferred);
+
+        expect(mergeEmbeddedResults([failed, settled]).failedFileKeys.size).toBe(0);
+        expect(mergeEmbeddedResults([settled, failed]).failedFileKeys.size).toBe(0);
+        expect(failed.failedFileKeys.size).toBe(2);
     });
 
     it("propagates cancellation instead of converting it to a cacheable shard error", () => {

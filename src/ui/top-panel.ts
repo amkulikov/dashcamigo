@@ -1,4 +1,5 @@
 import { syncMobileViewNav } from "./mobile-view-nav.js";
+import { scheduleRecognitionHelp } from "./recognition-help.js";
 // Top-panel: composition controls visible above the player.
 //
 // Visibility matrix (driven by trip channel count + export-mode flag):
@@ -104,6 +105,7 @@ export function initTopPanel(opts: { onCompositionApply: () => void; resetZoom?:
  * Cheap (~20 DOM writes worst case) - safe to call from any lifecycle hook.
  */
 export function syncTopPanel(): void {
+    scheduleRecognitionHelp();
     syncMobileViewNav();
     if (!dom.topPanel) return;
     const trip = activeTrip();
@@ -341,6 +343,12 @@ function renderChannelsList(trip: Trip): void {
         list.appendChild(buildChannelChip(ch, trip, list, { included: false, slot: -1, canExclude }));
     }
     host.appendChild(list);
+    const help = document.createElement("button");
+    help.type = "button";
+    help.className = "recognition-help-link feedback-link";
+    help.dataset.feedbackPreset = "cameras";
+    help.textContent = t("recognition.cameras.help");
+    host.appendChild(help);
 }
 
 /** One channel chip: an include checkbox plus, for included channels, a drag

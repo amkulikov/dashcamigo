@@ -1,18 +1,6 @@
-// "Report a problem" feedback flow. A small guided wizard, no free-text field
-// and no in-app attachments (the user writes in their own email; real recordings
-// are shared via a link). Three steps inside one modal:
-//
-//   1. recordings - real files help most; the user shares a download link
-//      (Google Drive/Dropbox/... - open list) or skips.
-//   2. report     - download a single .txt technical report (env + state +
-//      folder structure + recent log). One human-readable file, no zip, no JSON.
-//   3. hand-off   - the file is in Downloads; email it to feedback@ and attach
-//      it (plus the recordings link, if any).
-//
-// mailto cannot attach, so the address appears only in the hand-off, next to the
-// downloaded file - never as a fileless action. No Web Share (canShare is true
-// on desktop macOS too, where the OS sheet offers AirDrop/Messages - useless for
-// reaching feedback@). No backend anywhere.
+// General feedback asks for an optional recordings link, then offers a local
+// report and email hand-off. Recognition help opens directly at the report and
+// allows email immediately, so preparing sample recordings cannot block contact.
 
 import { collectDiagnostics, serializeDiagnosticsText, utcTimestampSlug } from "../diagnostics.js";
 import { downloadBlob } from "../download.js";
@@ -40,8 +28,18 @@ const REPORT_HEADER = [
     `Please email this file to ${FEEDBACK_EMAIL} — attach it to your message. It has no video and no location, just technical details that help us reproduce the problem or add your camera.`,
 ].join("\n");
 
-/** Selected error-entry-point topic; only tags the mail subject. */
-let preset: string | null = null;
+let preset: ValidPreset | null = null;
+
+interface FeedbackSnapshot {
+    context: string;
+    environment: string;
+    structure: string | null;
+    diagnostics: string;
+    recognitionIssue: string | null;
+}
+
+// Playback and background ingest can keep moving while the dialog is open.
+let openedSnapshot: FeedbackSnapshot | null = null;
 
 /** Name of the report .txt downloaded this session, if any - drives the mail
  *  body's "attach this file" reminder. Reset on every modal open. */
@@ -62,7 +60,7 @@ function getEl<T extends HTMLElement>(sel: string): T | null {
 }
 
 /** Valid preset keys - whitelist matches i18n/keys.ts (feedback.step1.preset.*). Unknown presets are ignored so t() does not throw MissingValueError on a corrupt data-attribute. */
-const VALID_PRESETS = ["load", "video", "map", "chart", "export", "other"] as const;
+const VALID_PRESETS = ["load", "video", "map", "chart", "export", "other", "gps", "cameras"] as const;
 type ValidPreset = (typeof VALID_PRESETS)[number];
 function isValidPreset(p: string): p is ValidPreset {
     return (VALID_PRESETS as readonly string[]).includes(p);
@@ -111,9 +109,13 @@ function loadCard(): void {
 
 /** The single report .txt: header + diagnostics (as text) + folder structure. */
 function buildReportText(): string {
-    const parts = [REPORT_HEADER, serializeDiagnosticsText(collectDiagnostics())];
-    const structure = cameraStructure();
-    if (structure) parts.push(structure);
+    const snapshot = openedSnapshot;
+    if (!snapshot) throw new Error("feedback context missing");
+    const parts = [REPORT_HEADER];
+    if (snapshot.recognitionIssue) parts.push(`== recognition issue ==\n${snapshot.recognitionIssue}`);
+    if (snapshot.context) parts.push(snapshot.context);
+    parts.push(snapshot.diagnostics);
+    if (snapshot.structure) parts.push(snapshot.structure);
     return parts.join("\n\n");
 }
 
@@ -121,21 +123,75 @@ function reportFilename(ts: Date): string {
     return `dashcamigo-report-${utcTimestampSlug(ts)}.txt`;
 }
 
-/** Opens the modal at step 1. Optionally pre-fills a preset (codec-unsupported -> "video", etc.). */
-function openFeedbackModal(opts: { preset?: string } = {}): void {
+function captureFeedbackSnapshot(recognitionIssue?: string): FeedbackSnapshot {
+    const snapshot: FeedbackSnapshot = {
+        context: "",
+        environment: "",
+        structure: null,
+        diagnostics: "",
+        recognitionIssue: recognitionIssue || null,
+    };
+    try {
+        snapshot.environment = envSummary();
+        snapshot.context = currentContextSummary();
+        snapshot.structure = cameraStructure();
+        snapshot.diagnostics = serializeDiagnosticsText(collectDiagnostics());
+    } catch (err) {
+        const error = err instanceof Error ? err.message : String(err);
+        log.error("feedback context snapshot failed", { error });
+        // Reporting a problem must stay possible even when diagnostics fail.
+        snapshot.diagnostics = `${snapshot.environment}\n\nDiagnostic snapshot failed: ${error}`;
+    }
+    return snapshot;
+}
+
+function openFeedbackModal(opts: { preset?: string; recognitionIssue?: string } = {}): void {
     const m = modalEl();
     if (!m) return;
     preset = opts.preset && isValidPreset(opts.preset) ? opts.preset : null;
     downloadedReportName = null;
     hasRecordingsLink = false;
+    openedSnapshot = captureFeedbackSnapshot(opts.recognitionIssue);
+
+    const isRecognitionHelp = preset === "gps" || preset === "cameras";
+    for (const selector of [
+        "#feedback-context-help",
+        "#feedback-context-recordings",
+        "#feedback-report-mail",
+        "#feedback-context-contact",
+    ]) {
+        getEl(selector)?.toggleAttribute("hidden", !isRecognitionHelp);
+    }
+    if (isRecognitionHelp) {
+        const hint = getEl("#feedback-context-hint");
+        if (hint) {
+            const reason = preset === "gps" ? "gps" : "cameras";
+            const key = opts.recognitionIssue
+                ? (`recognition.${reason}.body` as const)
+                : (`recognition.${reason}.hint` as const);
+            hint.dataset.i18n = key;
+            hint.textContent = t(key);
+        }
+        const samples = getEl("#feedback-context-samples");
+        if (samples) {
+            const key = preset === "gps" ? "feedback.recognition.samples.gps" : "feedback.recognition.samples.cameras";
+            samples.dataset.i18n = key;
+            samples.textContent = t(key);
+        }
+        const email = getEl<HTMLAnchorElement>("#feedback-context-email");
+        if (email) email.href = mailtoUrl();
+    }
 
     fillPreview();
-    showStep("recordings");
+    showStep(isRecognitionHelp ? "report" : "recordings");
     // No card loaded yet -> offer to open one first (empty report otherwise).
     getEl("#feedback-noingest")?.toggleAttribute("hidden", hasLoadedCard());
 
     m.hidden = false;
-    activateModal(m, { onClose: closeFeedbackModal, initialFocus: getEl<HTMLElement>("#feedback-recordings-yes") });
+    activateModal(m, {
+        onClose: closeFeedbackModal,
+        initialFocus: getEl<HTMLElement>(isRecognitionHelp ? "#feedback-primary" : "#feedback-recordings-yes"),
+    });
 }
 
 function closeFeedbackModal(): void {
@@ -157,16 +213,15 @@ function chooseRecordings(hasLink: boolean): void {
 function fillPreview(): void {
     const body = getEl("#feedback-preview-body");
     if (!body) return;
-    const structure = cameraStructure();
-    const text = structure
-        ? `${envSummary()}\n\n${structure}`
-        : `${envSummary()}\n\n${t("feedback.report.noFilesYet")}`;
+    const structure = openedSnapshot?.structure;
+    const environment = openedSnapshot?.environment ?? "";
+    const text = structure ? `${environment}\n\n${structure}` : `${environment}\n\n${t("feedback.report.noFilesYet")}`;
     body.textContent = text;
 }
 
 function currentSubject(): string {
     return t("feedback.subject", {
-        topic: preset ? t(`feedback.step1.preset.${preset}` as never) : t("feedback.modal.title"),
+        topic: preset ? t(`feedback.step1.preset.${preset}`) : t("feedback.modal.title"),
     });
 }
 
@@ -194,16 +249,13 @@ function downloadReport(): void {
     const step1 = getEl("#feedback-post-download-step1");
     if (step1) step1.textContent = t("feedback.success.step1", { filename: name });
     showStep("handoff");
+    getEl<HTMLButtonElement>("#feedback-post-download-mail")?.focus();
 }
 
 /** "Open email": a pre-filled mailto. mailto cannot attach, so the body reminds
  *  the user to attach the downloaded report (and paste a recordings link). */
 function sendEmail(): void {
-    const body = buildMailBody(downloadedReportName);
-    // The recipient is a literal addr-spec (RFC 6068 - a bare "@", no encoding).
-    // encodeURIComponent per query param, not URLSearchParams (the latter turns
-    // spaces into "+", which Apple Mail shows literally).
-    const url = `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent(currentSubject())}&body=${encodeURIComponent(body)}`;
+    const url = mailtoUrl();
     const win = window.open(url, "_blank");
     if (!win) {
         log.warn("mailto popup blocked, falling back to location.href");
@@ -211,11 +263,34 @@ function sendEmail(): void {
     }
 }
 
+function mailtoUrl(): string {
+    const body = buildMailBody(downloadedReportName);
+    // The recipient is a literal addr-spec (RFC 6068 - a bare "@", no encoding).
+    // encodeURIComponent per query param, not URLSearchParams (the latter turns
+    // spaces into "+", which Apple Mail shows literally).
+    return `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent(currentSubject())}&body=${encodeURIComponent(body)}`;
+}
+
+function recognitionMailSummary(issue: string): string {
+    // Keep full file lists in the report: long mailto URLs can fail in email clients.
+    return issue
+        .split(/\n\s*\n/, 2)
+        .map((section) => Array.from(section.split("\n", 1)[0]!.trim()).slice(0, 240).join(""))
+        .filter(Boolean)
+        .join("\n");
+}
+
 function buildMailBody(reportName: string | null): string {
     const parts: string[] = [];
-    const ctx = currentContextSummary();
+    if (preset === "gps" || preset === "cameras") {
+        parts.push(t("feedback.recognition.mailPrompt"));
+    }
+    const ctx = openedSnapshot?.context;
     if (ctx) parts.push(ctx);
-    parts.push(envSummary());
+    if (openedSnapshot?.recognitionIssue) {
+        parts.push(`Recognition issue: ${recognitionMailSummary(openedSnapshot.recognitionIssue)}`);
+    }
+    if (openedSnapshot?.environment) parts.push(openedSnapshot.environment);
     if (hasRecordingsLink) parts.push(t("feedback.recordings.mailPrompt"));
     if (reportName) {
         parts.push(t("feedback.body.attachReminder", { filename: reportName }));
@@ -344,7 +419,7 @@ export function initFeedbackModal(): void {
             parentDialog.hidden = true;
             deactivateModal(parentDialog);
         }
-        openFeedbackModal({ preset: link.dataset.feedbackPreset });
+        openFeedbackModal({ preset: link.dataset.feedbackPreset, recognitionIssue: link.dataset.recognitionIssue });
     });
 
     // Click on the backdrop (outside the card) closes the modal.
@@ -357,4 +432,9 @@ export function initFeedbackModal(): void {
     getEl<HTMLButtonElement>("#feedback-recordings-skip")?.addEventListener("click", () => chooseRecordings(false));
     getEl<HTMLButtonElement>("#feedback-primary")?.addEventListener("click", downloadReport);
     getEl<HTMLButtonElement>("#feedback-post-download-mail")?.addEventListener("click", sendEmail);
+    getEl<HTMLButtonElement>("#feedback-report-mail")?.addEventListener("click", sendEmail);
+    getEl<HTMLAnchorElement>("#feedback-context-email")?.addEventListener("click", (event) => {
+        event.preventDefault();
+        sendEmail();
+    });
 }

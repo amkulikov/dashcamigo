@@ -1,7 +1,7 @@
 // In-session notifications: toasts + bell drawer. Single store, two views.
 //
 // Use case:
-//   notify({ severity: "warn", messageKey: "status.badFilesSkipped", messageParams: { n: 3 } });
+//   notify({ severity: "warn", messageKey: "recognition.files.body", messageParams: { n: 3 } });
 //
 // Behavior:
 //   - A toast slides in top-right with the severity icon and message.

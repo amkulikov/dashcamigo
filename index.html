@@ -1532,7 +1532,11 @@
                     </div>
                 </div>
                 <div class="player-chart" id="player-chart">
-                    <p class="player-no-gps" data-i18n="player.noGps.message">No GPS data in this recording. You can still watch and save clips.</p>
+                    <div class="player-no-gps">
+                        <span data-i18n="player.noGps.message">GPS data not found. You can still watch and save clips.</span>
+                        <button type="button" class="recognition-help-link feedback-link" data-feedback-preset="gps"
+                                data-i18n="recognition.gps.help">Expected GPS in these recordings? Tell us</button>
+                    </div>
                     <!-- Cross-cutting pointers for the current moment and hover position
                          run through the viewport-mapped rows as single visual elements.
                          The playhead is orange while visible and neutral when its moment
@@ -1998,6 +2002,10 @@
                                 <span class="view-menu-row__label" data-i18n="viewMenu.readout">GPS readouts</span>
                                 <span class="view-menu-row__hint mono">G</span>
                             </button>
+                            <button type="button" class="view-menu-row feedback-link" role="menuitem"
+                                    data-feedback-preset="cameras" data-i18n="recognition.cameras.help">Missing a camera?</button>
+                            <button id="recognition-gps-menu" type="button" class="view-menu-row feedback-link" role="menuitem" hidden
+                                    data-feedback-preset="gps" data-i18n="recognition.gps.help">Expected GPS in these recordings? Tell us</button>
                         </div>
                     </div>
                     <button id="player-fullscreen" class="player-btn" type="button"
@@ -2315,10 +2323,7 @@
          the burger on narrow screens (< 768px). Click - closes it. -->
     <div id="drawer-scrim" class="drawer-scrim" hidden></div>
 
-    <!-- feedback modal. Opened by the #feedback-btn button in the header. A
-         guided three-step wizard (recordings → report → hand-off): downloads one
-         .txt report and walks the user through sending it to feedback@ by
-         email (details below in index.html and in src/ui/feedback.ts). -->
+    <!-- Local report download and email hand-off; see src/ui/feedback.ts. -->
     <div data-nosnippet id="feedback-modal" class="feedback-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="feedback-modal-title">
         <div class="feedback-modal-card modal-card">
             <div class="feedback-modal-header">
@@ -2333,10 +2338,8 @@
                 </button>
             </div>
 
-            <!-- Guided report wizard (feedback.ts): recordings -> report -> hand-off.
-                 No free-text field, no in-app attachments; the user writes in their
-                 own email and shares real recordings via a link. Error entry points
-                 tag the subject via data-feedback-preset. -->
+            <!-- Recognition help starts at the report; general feedback first
+                 asks for an optional recordings link. Nothing is uploaded here. -->
             <div class="feedback-modal-body" id="feedback-form">
 
                 <!-- Step 1: share real recordings via a link (optional). -->
@@ -2367,6 +2370,10 @@
 
                 <!-- Step 2: download the single .txt technical report. -->
                 <div class="feedback-step" id="feedback-step-report" hidden>
+                    <div id="feedback-context-help" hidden>
+                        <p class="feedback-step-body" id="feedback-context-hint"></p>
+                        <p class="feedback-step-body" data-i18n="feedback.recognition.intro">Tell us your dashcam model and what you expected to see. You can write now or download a report to attach.</p>
+                    </div>
                     <p class="feedback-report-lead" data-i18n="feedback.report.contents">Your browser, the app version, recent errors, and your card's file names, sizes and folder layout. No video, no location.</p>
                     <details class="feedback-disclosure">
                         <summary data-i18n="feedback.step2.what">What's inside?</summary>
@@ -2375,12 +2382,20 @@
                     <div class="feedback-modal-actions">
                         <button type="button" id="feedback-primary" class="dc-btn dc-btn--primary"
                                 data-i18n="feedback.download">Download the report →</button>
+                        <button type="button" id="feedback-report-mail" class="dc-btn dc-btn--secondary" hidden
+                                data-i18n="feedback.success.openMail">Open email</button>
                     </div>
+                    <div class="feedback-contact-direct" id="feedback-context-contact" hidden>
+                        <span class="feedback-contact-direct-label" data-i18n="feedback.contactDirect">Or write to us at</span>
+                        <a class="feedback-contact-direct-link" id="feedback-context-email" href="mailto:feedback@dashcamigo.app">feedback@dashcamigo.app</a>
+                    </div>
+                    <details class="feedback-disclosure" id="feedback-context-recordings" hidden>
+                        <summary tabindex="0" data-i18n="feedback.recognition.samples.title">Recordings you can share (optional)</summary>
+                        <p class="feedback-step-body" id="feedback-context-samples"></p>
+                    </details>
                 </div>
 
-                <!-- Step 3: hand-off after download. mailto cannot attach, so the
-                     address lives here - next to the downloaded file - never as a
-                     fileless action. -->
+                <!-- mailto cannot attach, so remind the user to add the downloaded file. -->
                 <div class="feedback-post-download" id="feedback-post-download" hidden>
                     <ol class="feedback-success-steps">
                         <li id="feedback-post-download-step1"></li>
@@ -2806,10 +2821,21 @@
         </div>
     </div>
 
-    <!-- Recurring project-support nudge. It is considered only after the second
-         successful recording load, waits until onboarding/modals/other banners
-         are out of the way, and observes a 30-day cooldown after each exposure
-         (src/ui/support-prompt.ts). -->
+    <div data-nosnippet id="recognition-banner" class="sticky-banner" hidden role="region" aria-labelledby="recognition-title">
+        <div class="sticky-banner-body" role="status">
+            <div class="sticky-banner-title" id="recognition-title"></div>
+            <p class="sticky-banner-lead" id="recognition-gps-body" hidden></p>
+            <p class="sticky-banner-lead" id="recognition-cameras-body" hidden></p>
+        </div>
+        <div class="sticky-banner-actions">
+            <button id="recognition-contact" type="button" class="dc-btn dc-btn--primary feedback-link"
+                    data-i18n="recognition.contact">Contact us</button>
+            <button id="recognition-later" type="button" class="dc-btn dc-btn--ghost"
+                    data-i18n="recognition.dismiss">Later</button>
+        </div>
+    </div>
+
+    <!-- Project-support prompt eligibility is owned by src/ui/support-prompt.ts. -->
     <div data-nosnippet id="support-banner" class="sticky-banner support-banner" hidden role="dialog" aria-modal="false"
         aria-labelledby="support-banner-title" aria-describedby="support-banner-body">
         <div class="sticky-banner-body">

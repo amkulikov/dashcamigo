@@ -59,7 +59,7 @@ import { countByExtension, embeddedResultHasEffect } from "./ingest-core.js";
 import { createRecordingAccelStore } from "./recording-accel.js";
 import { reportParseErrors, reportSkippedGpsRecords } from "./ingest-diagnostics.js";
 import { planEmbeddedGpsQueue } from "./embedded-gps-queue.js";
-import { applyEmbeddedGpsResult } from "./embedded-gps-state.js";
+import { applyEmbeddedGpsFailures, applyEmbeddedGpsResult } from "./embedded-gps-state.js";
 import {
     dispatchParseVideoEmbeddedGpsViaWorker as dispatchParseVideoEmbeddedGps,
     mergeEmbeddedResults,
@@ -999,6 +999,10 @@ async function readRecordingData(
             }
 
             const embeddedResult = mergeEmbeddedResults(fulfilled);
+            applyEmbeddedGpsFailures(
+                embeddedResult,
+                gpsTargets.filter((target) => !crashedGpsKeys.has(vendorFileKey(target.file))),
+            );
             registerEmbeddedGpsCacheArtifacts(gpsTargets, embeddedResult, crashedGpsKeys);
             if (embeddedResultHasEffect(embeddedResult)) {
                 applyEmbeddedGpsResult(embeddedResult, pending, recordingAssociation());
@@ -1277,7 +1281,7 @@ async function completeProgressiveRun(run: ProgressiveIngestRun, generation: num
     if (generation !== fillGeneration || activeRun !== run) return;
 
     if (run.metadataFailed > 0) {
-        notify({ severity: "warn", messageKey: "status.badFilesSkipped", messageParams: { n: run.metadataFailed } });
+        notify({ severity: "warn", messageKey: "recognition.files.body", messageParams: { n: run.metadataFailed } });
     }
     if (run.repairedHvcc > 0) {
         notify({ severity: "info", messageKey: "status.hvccRepaired", messageParams: { n: run.repairedHvcc } });
