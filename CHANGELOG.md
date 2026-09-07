@@ -7,6 +7,11 @@ User-facing changes, newest first. Dates are when the change landed on
 [beta](https://beta.dashcamigo.app); production picks it up with the next
 release tag. Localized texts ship inside the app (the "What's new" panel).
 
+## 2026-09-07
+
+- **Improved:** The viewer offers help with missing GPS or cameras.
+- **Fixed:** Full-screen preview opens while editing a clip.
+
 ## 2026-09-06
 
 - **Fixed:** Exports retain GPS data from tracks with many points.

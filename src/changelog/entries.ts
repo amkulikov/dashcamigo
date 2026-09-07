@@ -28,6 +28,38 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-09-07.2",
+        category: "improvement",
+        text: {
+            en: "The viewer offers help with missing GPS or cameras.",
+            ru: "В окне просмотра можно обратиться за помощью, если не хватает GPS или камер.",
+            de: "Im Betrachter gibt es Hilfe bei fehlendem GPS oder fehlenden Kameras.",
+            es: "El visor ofrece ayuda si faltan el GPS o alguna cámara.",
+            fr: "Le lecteur propose de l’aide si le GPS ou des caméras manquent.",
+            pl: "Odtwarzacz oferuje pomoc, gdy brakuje GPS lub kamer.",
+            pt: "O visualizador oferece ajuda quando faltam GPS ou câmeras.",
+            zh: "查看器提供 GPS 或摄像头缺失问题的求助入口。",
+            ja: "GPS やカメラが表示されない場合、プレーヤーから問い合わせができます。",
+            ko: "GPS나 카메라가 표시되지 않으면 뷰어에서 도움을 요청할 수 있어요.",
+        },
+    },
+    {
+        id: "2026-09-07.1",
+        category: "fix",
+        text: {
+            en: "Full-screen preview opens while editing a clip.",
+            ru: "Полноэкранный просмотр доступен при редактировании фрагмента.",
+            de: "Beim Bearbeiten eines Clips lässt sich die Vollbildvorschau öffnen.",
+            es: "La vista previa a pantalla completa se abre al editar un clip.",
+            fr: "L’aperçu en plein écran s’ouvre pendant l’édition d’un clip.",
+            pl: "Podczas edycji klipu można otworzyć podgląd pełnoekranowy.",
+            pt: "A prévia em tela cheia abre durante a edição de um clipe.",
+            zh: "编辑片段时可以打开全屏预览。",
+            ja: "クリップの編集中にフルスクリーンプレビューを開けます。",
+            ko: "클립을 편집하는 동안 전체 화면 미리보기를 열 수 있어요.",
+        },
+    },
+    {
         id: "2026-09-06.6",
         category: "fix",
         text: {
