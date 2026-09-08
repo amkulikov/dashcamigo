@@ -31,6 +31,6 @@ export const VIDEO_EMBEDDED_PRIMITIVE_CACHE_REVISIONS = [
     { id: "ligogps-trailer-ts", revision: "6cd5ecb92c99aad5" },
     { id: "novatek-ts", revision: "ff7ad30010dc9cf0" },
     { id: "ts-pes-gps", revision: "2d3e8c6877765768" },
-    { id: "freegps-70mai", revision: "6849e1de88339330" },
-    { id: "freegps", revision: "4519f08a86b21a60" },
+    { id: "freegps-70mai", revision: "951e4bcfcf51cbc5" },
+    { id: "freegps", revision: "f6381eff57dec7ac" },
 ] as const;

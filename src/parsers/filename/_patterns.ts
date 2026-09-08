@@ -8,16 +8,16 @@
 // 70mai: NO (normal) / EV (event) / LA / PA (A510 parking timelapse /
 // parking event) prefix + 8-digit date + - + 6-digit time + optional
 // -counter + optional trailing 14-digit wall-clock timestamp (M500 and app
-// exports) + optional F/B/R/I channel letter. The channel letter sits either
+// exports) + optional F/B/R/I/C channel letter. The channel letter sits either
 // BEFORE the trailing timestamp (app-export shape `...-000195R-<14d>.mp4`,
 // group m[8]) or at the very end (group m[9]); a file carries at most one of
-// the two, so consumers read `m[8] ?? m[9]`. R is the A810 lite rear (B is
-// rear on the older multi-channel S500/A810/T800 and on the A510). The
-// prefix is a NON-capturing group so the m[1..9] group indices stay stable
+// the two, so consumers read `m[8] ?? m[9]`. B/R are rear aliases and I/C
+// are interior aliases. The prefix is a NON-capturing group so the m[1..9]
+// group indices stay stable
 // for every consumer (time / channel / sequence / camera-key all key off
 // this one regex): m[1..6] datetime, m[7] counter, m[8]/m[9] channel.
 export const RX_70MAI =
-    /^(?:NO|EV|VL|LA|PA)(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(?:-(\d+))?([FBIR])?(?:-\d{14})?([FBIR])?\.mp4$/i;
+    /^(?:NO|EV|VL|LA|PA)(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(?:-(\d+))?([FBIRC])?(?:-\d{14})?([FBIRC])?\.mp4$/i;
 export const RX_70MAI_PATH_CHANNEL = /(?:^|\/)(Front|Back|Interior)\//i;
 // Recording-mode folders on a 70mai card. Single source for both the path-mode
 // regex and camera-key's parent-dir strip list - a mode folder added here
@@ -39,7 +39,7 @@ export const RX_70MAI_PREFIX_MODE = /^(NO|EV|VL|LA|PA)/i;
 // ("VL...F.MP4G4"). The core survives both, and it is unique per card
 // (timestamp + sequence + channel), so it is the join key for rebinding log
 // records to loaded videos (rebindOrphanLogRecords in parser.ts).
-const RX_70MAI_NAME_CORE = /^[A-Z]{2}(\d{8}-\d{6}(?:-\d+)?[FBIR]?)\.MP4/i;
+const RX_70MAI_NAME_CORE = /^[A-Z]{2}(\d{8}-\d{6}(?:-\d+)?[FBIRC]?)\.MP4/i;
 
 /** Returns the invariant 70mai name core (uppercased), or null for a name
  *  that does not have the 70mai shape. */
@@ -48,12 +48,12 @@ export function mai70NameCore(name: string): string | null {
     return m ? m[1]!.toUpperCase() : null;
 }
 
-// Channel-letter strip for camera fingerprinting: removes the F/B/I/R letter
+// Channel-letter strip for camera fingerprinting: removes the F/B/I/R/C letter
 // from BOTH positions RX_70MAI accepts (terminal, or before the app-export
 // 14-digit stamp). Must stay in lockstep with RX_70MAI's tail grammar - it is
 // self-gating on names RX_70MAI matched (the char in that slot is otherwise a
 // digit), so callers apply it unconditionally after a match.
-export const RX_70MAI_CHANNEL_STRIP = /[FBIR]((?:-\d{14})?\.mp4)$/i;
+export const RX_70MAI_CHANNEL_STRIP = /[FBIRC]((?:-\d{14})?\.mp4)$/i;
 
 // BlackVue DR-series: YYYYMMDD_HHMMSS_<Mode><Channel>.mp4.
 // Mode in N/E/P/M, Channel in F/R/I.

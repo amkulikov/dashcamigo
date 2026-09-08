@@ -33,6 +33,7 @@ import {
 } from "./trips.js";
 import { cameraFingerprint } from "./parsers/camera-fingerprint.js";
 import {
+    classifyFilenameChannel,
     classifyFilenameClockTimelapse,
     classifyFilenameMode,
     classifyFilenameSequence,
@@ -126,6 +127,51 @@ describe("groupTrips: single-channel (legacy x800)", () => {
         expect(trips).toHaveLength(2);
         expect(trips[0]!.frames).toHaveLength(1);
         expect(trips[1]!.frames).toHaveLength(1);
+    });
+});
+
+describe("groupTrips: 70mai T800 cabin files", () => {
+    it.each(["flat", "folders"])("joins front, rear and cabin across normal/event clips in %s drops", (layout) => {
+        const candidates = [
+            { prefix: "NO", folder: "Normal", time: "120000", sequence: "000042" },
+            { prefix: "EV", folder: "Event", time: "120300", sequence: "000043" },
+        ].flatMap(({ prefix, folder, time, sequence }) =>
+            [
+                { suffix: "F", folder: "Front" },
+                { suffix: "R", folder: "Rear" },
+                { suffix: "C", folder: "Cabin" },
+            ].map(({ suffix, folder: channelFolder }) => {
+                const name = `${prefix}20260101-${time}-${sequence}${suffix}.MP4`;
+                const relativePath = layout === "flat" ? name : `card/${folder}/${channelFolder}/${name}`;
+                const file = { file: new File([], name), relativePath };
+                const channel = classifyFilenameChannel(file);
+                return makeCandidate({
+                    name,
+                    relativePath,
+                    startUtc: classifyFilenameTime(file)!.getTime() / 1000,
+                    durationSec: 180,
+                    channel: channel?.channel,
+                    channelConfident: channel?.confident,
+                    fingerprint: cameraFingerprint(file),
+                    sequence: classifyFilenameSequence(file),
+                    recordingMode: classifyFilenameMode(file),
+                });
+            }),
+        );
+        const trips = groupTrips(candidates);
+        expect(trips).toHaveLength(1);
+        expect(trips[0]!.frames).toHaveLength(2);
+        expect(tripAllCandidates(trips[0]!)).toHaveLength(6);
+        for (const frame of trips[0]!.frames) {
+            expect(Object.keys(frame.channels).sort()).toEqual(["front", "interior", "rear"]);
+            expect(frame.channels.interior?.file.name).toMatch(/C\.MP4$/);
+        }
+        if (layout === "folders") {
+            const cabin = candidates[2]!;
+            expect(
+                cameraFingerprint({ ...cabin, relativePath: cabin.relativePath.replace("card/", "other-card/") }),
+            ).not.toBe(cabin.fingerprint);
+        }
     });
 });
 

@@ -81,12 +81,8 @@ const mai70Channel: FilenameChannelTechnique = {
             if (suffix !== undefined) {
                 const ch = suffix.toUpperCase();
                 if (ch === "F") return sure("front");
-                // B and R both mean rear: the older multi-channel models (S500/
-                // A810/T800) suffix the rear file B, the A810 lite uses R. A given
-                // unit uses one or the other, never both, so they cannot collide
-                // on the rear slot within one camera.
                 if (ch === "B" || ch === "R") return sure("rear");
-                if (ch === "I") return sure("interior");
+                if (ch === "I" || ch === "C") return sure("interior");
             }
         }
         // Multi-channel S500/A810/T800 use Normal/Front, Normal/Back, Normal/Interior.

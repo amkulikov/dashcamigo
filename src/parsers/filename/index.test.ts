@@ -22,6 +22,7 @@ import {
     RX_REC_SINGLE,
     RX_REDTIGER,
     RX_VUEROID,
+    mai70NameCore,
 } from "./_patterns.js";
 import {
     classifyFilenameChannel,
@@ -586,10 +587,44 @@ describe("navitel .TS variant", () => {
     });
 });
 
-// 70mai A810 lite: 2-channel model whose rear file uses an "R" suffix (the
-// older multi-channel S500/A810/T800 use "B"), and whose event clips carry an
-// "EV" prefix instead of "NO". Both variants must resolve through the shared
-// 70mai techniques so front/rear/event converge to pairable fingerprints.
+describe("70mai T800 cabin channel", () => {
+    it.each(["NO", "EV"])("%s cabin files resolve through all 70mai filename techniques", (prefix) => {
+        const file = vf(`${prefix}20260101-120000-000042C.MP4`);
+        expect(matchFilenameTime(file)).toEqual({
+            matchedId: "70mai-time",
+            value: new Date("2026-01-01T12:00:00Z"),
+        });
+        expect(matchFilenameChannel(file)).toEqual({
+            matchedId: "70mai-channel",
+            value: { channel: "interior", confident: true },
+        });
+        expect(matchFilenameSequence(file)).toEqual({ matchedId: "70mai-sequence", value: 42 });
+        expect(classifyFilenameMode(file)).toBe(prefix === "NO" ? "normal" : "event");
+    });
+
+    it("handles a lowercase cabin suffix and both app-export suffix positions", () => {
+        for (const name of [
+            "NO20260101-120000-000042c.mp4",
+            "NO20260101-120000-000042C-20260101120300.mp4",
+            "NO20260101-120000-000042-20260101120300C.mp4",
+        ]) {
+            expect(classifyFilenameChannel(vf(name))).toEqual({ channel: "interior", confident: true });
+            expect(cameraFingerprint(vf(name))).toBe(cameraFingerprint(vf(name.replace(/c(?=[-.])/i, "F"))));
+        }
+    });
+
+    it("preserves the cabin channel in the log rebinding key", () => {
+        expect(mai70NameCore("EV20260101-120000-000042C.MP4")).toBe("20260101-120000-000042C");
+        expect(mai70NameCore("NO20260101-120000-000042C.MP4G4")).toBe("20260101-120000-000042C");
+    });
+
+    it("does not claim unrelated C-suffixed files or Cabin folders", () => {
+        for (const name of ["clipC.MP4", "NO20260101-120000-000042X.MP4", "PH20260101-120000-000042C.JPG"]) {
+            expect(matchFilenameChannel(vf(name, `Cabin/${name}`)).matchedId).not.toBe("70mai-channel");
+        }
+    });
+});
+
 describe("70mai A810 lite rear (R) + event (EV) variants", () => {
     it("normal rear NO...R: 70mai-time + rear channel (confident) + sequence", () => {
         const name = "NO20260101-120000-000042R.MP4";

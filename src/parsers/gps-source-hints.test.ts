@@ -62,6 +62,7 @@ describe("classifyGpsSource", () => {
         // 70mai: embedded for newer 4K models (A810/M500). Older $V02-CSV models
         // are handled first by the csv-70mai log-sidecar pass.
         expect(classifyGpsSource(vf("NO20240702-094820-000029F.MP4"))).toBe("embedded"); // 70mai A810
+        expect(classifyGpsSource(vf("NO20260101-120000-000042C.MP4"))).toBe("embedded"); // 70mai T800 cabin
         expect(classifyGpsSource(vf("NO20260428-200501-000897-20260429120347.mp4"))).toBe("embedded"); // 70mai M500
     });
 

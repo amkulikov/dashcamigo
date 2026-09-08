@@ -118,7 +118,7 @@ export function maskName(name: string): string {
     return name.replace(/\d+/g, "#");
 }
 
-// Channel folders (Front/Back/Rear/Interior) AND recording-mode folders
+// Channel folders (Front/Back/Rear/Interior/Cabin) AND recording-mode folders
 // (MAI70_MODE_FOLDERS, shared with RX_70MAI_PATH_MODE) both strip from the
 // 70mai parent path. Layout is `.../<Mode>/<Channel>/<file>`: the mode folder
 // sits ABOVE the channel folder, so strippedParentDir's bottom-up walk pops the
@@ -126,7 +126,7 @@ export function maskName(name: string): string {
 // not camera identity - an event clip must land in the same trip as its normal
 // siblings (the A810 lite interleaves them). Scoped to mai70CameraKey; other
 // vendors keep their own strip sets.
-const MAI70_STRIP_FOLDERS = ["front", "back", "rear", "interior", ...MAI70_MODE_FOLDERS];
+const MAI70_STRIP_FOLDERS = ["front", "back", "rear", "interior", "cabin", ...MAI70_MODE_FOLDERS];
 
 const mai70CameraKey: FilenameCameraKeyTechnique = {
     id: "70mai-camera-key",
