@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-09-08.1",
+        category: "support",
+        text: {
+            en: "Recordings from 70mai interior cameras are supported.",
+            ru: "Добавлена поддержка салонных камер 70mai.",
+            de: "Aufnahmen von 70mai-Innenraumkameras werden unterstützt.",
+            es: "Se admiten grabaciones de las cámaras interiores de 70mai.",
+            fr: "Les enregistrements des caméras d’habitacle 70mai sont pris en charge.",
+            pl: "Nagrania z kamer wnętrza 70mai są obsługiwane.",
+            pt: "Há suporte para gravações das câmeras internas da 70mai.",
+            zh: "支持 70mai 车内摄像头的录像。",
+            ja: "70mai の車内カメラの録画に対応しました。",
+            ko: "70mai 실내 카메라의 녹화를 지원합니다.",
+        },
+    },
+    {
         id: "2026-09-07.2",
         category: "improvement",
         text: {

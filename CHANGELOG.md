@@ -7,6 +7,10 @@ User-facing changes, newest first. Dates are when the change landed on
 [beta](https://beta.dashcamigo.app); production picks it up with the next
 release tag. Localized texts ship inside the app (the "What's new" panel).
 
+## 2026-09-08
+
+- **New camera support:** Recordings from 70mai interior cameras are supported.
+
 ## 2026-09-07
 
 - **Improved:** The viewer offers help with missing GPS or cameras.
