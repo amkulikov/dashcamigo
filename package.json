@@ -68,19 +68,19 @@
     "onnxruntime-web": "1.29.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.10",
-    "@maplibre/maplibre-gl-style-spec": "^26.2.1",
-    "@playwright/test": "^1.62.1",
+    "@biomejs/biome": "2.5.13",
+    "@maplibre/maplibre-gl-style-spec": "^26.4.2",
+    "@playwright/test": "^1.63.0",
     "@sentry/vite-plugin": "^5.4.0",
     "@types/html-minifier-terser": "^7.0.2",
-    "@types/node": "^26.2.0",
-    "@vitest/coverage-v8": "^4.1.11",
-    "@xmldom/xmldom": "^0.9.10",
+    "@types/node": "^26.5.1",
+    "@vitest/coverage-v8": "^5.0.0",
+    "@xmldom/xmldom": "^0.9.12",
     "html-minifier-terser": "^7.2.0",
-    "knip": "^6.32.2",
-    "rolldown": "1.2.5",
+    "knip": "^6.35.1",
+    "rolldown": "1.2.8",
     "typescript": "^7.0.2",
-    "vite": "^8.2.2",
-    "vitest": "^4.1.11"
+    "vite": "^8.3.0",
+    "vitest": "^5.0.0"
   }
 }
