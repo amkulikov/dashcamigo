@@ -16,18 +16,11 @@
 // already be aborted by the time the gate releases - extractFrames checks
 // at every iteration boundary.
 
-import {
-    BlobSource,
-    CanvasSink,
-    Input,
-    InputDisposedError,
-    type InputVideoTrack,
-    type WrappedCanvas,
-} from "mediabunny";
+import { CanvasSink, Input, InputDisposedError, type InputVideoTrack, type WrappedCanvas } from "mediabunny";
 
 import { createLogger } from "../log.js";
 import { getInputTimeOrigin } from "../media-time.js";
-import { clampTsGpsTrailer } from "../ts-trailer.js";
+import { createBlobSource } from "../blob-source.js";
 import { VIDEO_INPUT_FORMATS } from "../video-formats.js";
 
 import { getCanvasNearestForward } from "./canvas-seek.js";
@@ -88,7 +81,7 @@ async function getOrOpenDecoder(file: File): Promise<DecoderEntry | null> {
     let input: Input | null = null;
     try {
         input = new Input({
-            source: new BlobSource(await clampTsGpsTrailer(file)),
+            source: await createBlobSource(file),
             formats: VIDEO_INPUT_FORMATS,
         });
         const track = await input.getPrimaryVideoTrack();

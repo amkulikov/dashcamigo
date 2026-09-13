@@ -8,10 +8,10 @@
 // each Input opens and closes independently. This lets the main-thread pool
 // balance load across N workers without cross-talk.
 
-import { BlobSource, CanvasSink, Input, InputDisposedError, UnsupportedInputFormatError } from "mediabunny";
+import { CanvasSink, Input, InputDisposedError, UnsupportedInputFormatError } from "mediabunny";
 
 import { PREVIEW_HEIGHT_PX, PREVIEW_JPEG_QUALITY, PREVIEW_WIDTH_PX } from "../preview-config.js";
-import { clampTsGpsTrailer } from "../ts-trailer.js";
+import { createBlobSource } from "../blob-source.js";
 import { VIDEO_INPUT_FORMATS } from "../video-formats.js";
 
 import {
@@ -33,7 +33,7 @@ declare const self: WorkerScopeEndpoint;
 async function extractFirstFrameDataUrl(file: File): Promise<string | null> {
     let input: Input | null = null;
     try {
-        input = new Input({ source: new BlobSource(await clampTsGpsTrailer(file)), formats: VIDEO_INPUT_FORMATS });
+        input = new Input({ source: await createBlobSource(file), formats: VIDEO_INPUT_FORMATS });
         const track = await input.getPrimaryVideoTrack();
         if (!track) return null;
 

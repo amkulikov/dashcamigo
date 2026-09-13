@@ -17,6 +17,7 @@
 
 import { CustomSource } from "mediabunny";
 
+import { createBackgroundReadErrorHandler } from "./blob-source.js";
 import { identifyBrowser } from "./capabilities.js";
 import { createLogger } from "./log.js";
 import { isSourceReadError } from "./source-read-error.js";
@@ -318,5 +319,6 @@ export function createRetryingBlobSource(blob: Blob, signal?: AbortSignal): Cust
         // what it hard-codes for local reads.
         maxCacheSize: 8 * 2 ** 20,
         prefetchProfile: "fileSystem",
+        handleUnhandledError: createBackgroundReadErrorHandler(blob, readSignal),
     });
 }

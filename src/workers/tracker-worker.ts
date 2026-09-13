@@ -12,7 +12,7 @@
 // is ~200 ms; re-tracks after a correction are the common case). The DECODE
 // side opens fresh per request - files change between passes.
 
-import { BlobSource, CanvasSink, Input } from "mediabunny";
+import { CanvasSink, Input } from "mediabunny";
 import { getInputTimeOrigin } from "../media-time.js";
 
 import { analysisIntervalTransition } from "../tracking/analysis-interval.js";
@@ -36,7 +36,7 @@ import { createPlateDetector } from "../tracking/plate-detector.js";
 import { boxVisibleFraction, EXIT_CONFIRM_SEC, EXIT_VISIBLE_FRACTION } from "../tracking/track-guards.js";
 import { appendTrackObservation, type PendingTrackHold, recordTrackHold } from "../tracking/track-observations.js";
 import { type VitTrack, VitTrackerSession, VITTRACK_SCORE_THRESHOLD, type TrackBox } from "../tracking/vittrack.js";
-import { clampTsGpsTrailer } from "../ts-trailer.js";
+import { createBlobSource } from "../blob-source.js";
 import { VIDEO_INPUT_FORMATS } from "../video-formats.js";
 import type { CropRect } from "../transcode/compose.js";
 
@@ -156,7 +156,7 @@ async function runTrackPass(
         if (endLocal - seedLocal <= 0) continue;
 
         const input = new Input({
-            source: new BlobSource(await clampTsGpsTrailer(seg.file)),
+            source: await createBlobSource(seg.file, signal),
             formats: VIDEO_INPUT_FORMATS,
         });
         try {
@@ -476,7 +476,7 @@ async function runDetectPass(
             if (endLocal - startLocal <= 0) continue;
 
             const input = new Input({
-                source: new BlobSource(await clampTsGpsTrailer(seg.file)),
+                source: await createBlobSource(seg.file, signal),
                 formats: VIDEO_INPUT_FORMATS,
             });
             try {

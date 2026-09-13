@@ -14,7 +14,6 @@
 
 import {
     AudioSampleSource,
-    BlobSource,
     EncodedAudioPacketSource,
     EncodedPacketSink,
     EncodedVideoPacketSource,
@@ -34,7 +33,7 @@ import { getInputTimeOrigin } from "../media-time.js";
 import { cleanHvccDescription, hasVideoContent } from "../hevc-remux.js";
 import { type AdpcmAudioReader, openAdpcmAudioAuto } from "../transcode/adpcm-audio.js";
 import { createEncodeAudioSource, resolveEncodeAudioCodec } from "../transcode/capabilities.js";
-import { clampTsGpsTrailer } from "../ts-trailer.js";
+import { createBlobSource } from "../blob-source.js";
 import { VIDEO_INPUT_FORMATS } from "../video-formats.js";
 import {
     MSE_NOTIFY_DROP_AUDIO,
@@ -341,7 +340,7 @@ async function onInit(
 ): Promise<InitResult> {
     workerFile = file;
     startSec = Math.max(0, initialStartSec);
-    input = new Input({ source: new BlobSource(await clampTsGpsTrailer(file)), formats: VIDEO_INPUT_FORMATS });
+    input = new Input({ source: await createBlobSource(file), formats: VIDEO_INPUT_FORMATS });
     const openedInput = input;
     const abortInput = () => openedInput.dispose();
     signal.addEventListener("abort", abortInput, { once: true });
