@@ -859,14 +859,14 @@ function rewriteWebApplicationJsonLd(
     selfUrl: string,
     canonicalOrigin: string,
 ): string {
-    const re = /<script\b[^>]*\bid="webapp-jsonld"[^>]*>([\s\S]*?)<\/script>/i;
+    const re = /(<script\b[^>]*\bid="webapp-jsonld"[^>]*>)([\s\S]*?)(<\/script>)/i;
     if (!re.test(html)) {
         throw new Error(
             'seo-prerender: <script id="webapp-jsonld"> not found in baseline HTML - ' +
                 "WebApplication JSON-LD anchor is required for per-locale rewrite",
         );
     }
-    return html.replace(re, (match, body: string) => {
+    return html.replace(re, (match, openTag: string, body: string, closeTag: string) => {
         try {
             const parsed: Record<string, unknown> = JSON.parse(body);
             if (parsed["@type"] !== "WebApplication") return match;
@@ -876,10 +876,7 @@ function rewriteWebApplicationJsonLd(
             parsed.isPartOf = { "@id": `${canonicalOrigin}/#website` };
             parsed.inLanguage = getIndexableSeoLocales().map((l) => l.hreflang);
             parsed.featureList = rewriteFeatureList(parsed.featureList);
-            const openMatch = /^(<script\b[^>]*>)/.exec(match);
-            const closeMatch = /(<\/script>)$/.exec(match);
-            if (!openMatch || !closeMatch) return match;
-            return `${openMatch[1]}${stringifyJsonLd(parsed)}${closeMatch[1]}`;
+            return `${openTag}${stringifyJsonLd(parsed)}${closeTag}`;
         } catch {
             // JSON-LD malformed (e.g. someone added a comment inside the
             // script block during edit). Leave it as-is rather than
@@ -894,23 +891,20 @@ function rewriteWebApplicationJsonLd(
 // deriving this node from the locale's canonical owner rather than the host
 // that happens to serve the build.
 function rewriteWebsiteJsonLd(html: string, canonicalOrigin: string): string {
-    const re = /<script\b[^>]*\bid="website-jsonld"[^>]*>([\s\S]*?)<\/script>/i;
+    const re = /(<script\b[^>]*\bid="website-jsonld"[^>]*>)([\s\S]*?)(<\/script>)/i;
     if (!re.test(html)) {
         throw new Error(
             'seo-prerender: <script id="website-jsonld"> not found in baseline HTML - ' +
                 "WebSite JSON-LD is required for canonical origin ownership",
         );
     }
-    return html.replace(re, (match, body: string) => {
+    return html.replace(re, (match, openTag: string, body: string, closeTag: string) => {
         try {
             const parsed: Record<string, unknown> = JSON.parse(body);
             if (parsed["@type"] !== "WebSite") return match;
             parsed["@id"] = `${canonicalOrigin}/#website`;
             parsed.url = `${canonicalOrigin}/`;
-            const openMatch = /^(<script\b[^>]*>)/.exec(match);
-            const closeMatch = /(<\/script>)$/.exec(match);
-            if (!openMatch || !closeMatch) return match;
-            return `${openMatch[1]}${stringifyJsonLd(parsed)}${closeMatch[1]}`;
+            return `${openTag}${stringifyJsonLd(parsed)}${closeTag}`;
         } catch {
             return match;
         }

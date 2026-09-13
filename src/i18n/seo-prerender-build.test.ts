@@ -144,7 +144,7 @@ describe("hreflang graph completeness", () => {
 // meta with content tags, WebApplication JSON-LD anchored by id, FAQ JSON-LD,
 // one data-i18n element, one data-i18n-attr element, one /cameras/ link.
 // Kept here (not in a fixture file) so a single test can verify all rewrites.
-function buildMinimalBaseline(): string {
+function buildMinimalBaseline(jsonLdTags = { open: "script", close: "script" }): string {
     return [
         '<!doctype html><html lang="en"><head>',
         '<link href="https://dashcamigo.app/" rel="canonical">',
@@ -167,8 +167,8 @@ function buildMinimalBaseline(): string {
         '<meta name="twitter:description" content="Old EN twitter">',
         '<meta name="twitter:image" content="https://dashcamigo.app/og-cover.png">',
         // WebApplication JSON-LD with explicit id
-        '<script id="webapp-jsonld" type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","description":"OLD EN","url":"https://dashcamigo.app/","inLanguage":["en","ru"],"featureList":["x"]}</script>',
-        '<script id="website-jsonld" type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","@id":"https://dashcamigo.app/#website","name":"dashcamigo","url":"https://dashcamigo.app/"}</script>',
+        `<${jsonLdTags.open} id="webapp-jsonld" type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","description":"OLD EN","url":"https://dashcamigo.app/","inLanguage":["en","ru"],"featureList":["x"]}</${jsonLdTags.close}>`,
+        `<${jsonLdTags.open} id="website-jsonld" type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","@id":"https://dashcamigo.app/#website","name":"dashcamigo","url":"https://dashcamigo.app/"}</${jsonLdTags.close}>`,
         // FAQ JSON-LD (different id, should not be confused with WebApp)
         '<script id="faq-jsonld" type="application/ld+json">{"@type":"FAQPage","mainEntity":[]}</script>',
         "</head><body>",
@@ -380,7 +380,12 @@ describe("mirror JSON-LD ownership", () => {
     const de = getPrerenderLocales().find((locale) => locale.seo.lang === "de");
     if (!de) throw new Error("test setup: de locale missing");
 
-    it("moves linked WebApplication and WebSite identifiers to the canonical origin", () => {
+    it.each([
+        { open: "script", close: "script" },
+        { open: "SCRIPT", close: "script" },
+        { open: "script", close: "SCRIPT" },
+        { open: "ScRiPt", close: "sCrIpT" },
+    ])("rewrites linked JSON-LD inside <$open> and </$close> for the locale and canonical origin", (tags) => {
         vi.stubEnv("DEPLOYMENT_PROFILE", "mirror");
         vi.stubEnv("SEO_CUTOVER", "1");
         vi.stubEnv(
@@ -392,14 +397,15 @@ describe("mirror JSON-LD ownership", () => {
             }),
         );
 
-        const out = applyLocale(buildMinimalBaseline(), de, {});
-        const webappMatch = /<script[^>]*id="webapp-jsonld"[^>]*>([\s\S]*?)<\/script>/.exec(out);
-        const websiteMatch = /<script[^>]*id="website-jsonld"[^>]*>([\s\S]*?)<\/script>/.exec(out);
+        const out = applyLocale(buildMinimalBaseline(tags), de, {});
+        const webappMatch = /<script[^>]*id="webapp-jsonld"[^>]*>([\s\S]*?)<\/script>/i.exec(out);
+        const websiteMatch = /<script[^>]*id="website-jsonld"[^>]*>([\s\S]*?)<\/script>/i.exec(out);
         expect(webappMatch).not.toBeNull();
         expect(websiteMatch).not.toBeNull();
         const webapp = JSON.parse(webappMatch![1]!);
         const website = JSON.parse(websiteMatch![1]!);
         expect(webapp["@id"]).toBe("https://mirror.example.test/#webapp");
+        expect(webapp.description).toBe(de.dict["meta.description"]);
         expect(webapp.url).toBe("https://mirror.example.test/de/");
         expect(webapp.isPartOf).toEqual({ "@id": "https://mirror.example.test/#website" });
         expect(website["@id"]).toBe("https://mirror.example.test/#website");
