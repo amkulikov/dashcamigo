@@ -18,9 +18,9 @@
 // a shifted timestamp (shift = realStart of current file + sum of previous
 // durations). Mediabunny assembles a correct MP4 with a continuous timeline.
 //
-// Trim precision: one GOP (~1 s for 70mai). getKeyPacket() snaps the range
-// start to the nearest preceding keyframe - without the snap the first frame
-// of the output range cannot be decoded.
+// The first segment keeps its preceding keyframe at a negative timestamp.
+// The MP4 edit list hides this decoder preroll and preserves the selected start.
+// End references may extend past the selection to keep B-frames decodable.
 //
 // We intentionally do NOT use the sink.packets(startPacket) async iterator
 // (reverted in the same commit as seamless.ts): in seamless the regression was
@@ -427,7 +427,7 @@ export async function exportClip({
         // Each subsequent source file shifts timestamps forward by the sum of
         // already-added durations to produce a continuous output timeline.
         let videoAccumSec = 0;
-        let audioLastEndSec = 0;
+        let audioLastEndSec = -Infinity;
         // Decoder config (avcC/hvcC payload, audio config) is submitted exactly
         // once with the first packet - mediabunny populates the sample entry in moov.
         let videoDecoderConfigPushed = false;
@@ -483,7 +483,10 @@ export async function exportClip({
                 if (!videoEndPacket || videoEndPacket.sequenceNumber < videoStartPacket.sequenceNumber) {
                     throw new Error(`no video packets in selected range in file ${seg.file.name}`);
                 }
-                const videoStartShift = videoStartPacket.timestamp;
+                // Only the output head can hide decoder preroll with an edit list.
+                // Internal joins keep complete GOPs, but retain any video delay
+                // relative to the source clock so audio and GPS stay aligned.
+                const videoStartShift = segIdx === 0 ? sourceStart : Math.min(sourceStart, videoStartPacket.timestamp);
                 let videoLastEndSec = videoStartShift;
                 let videoCount = 0;
 
@@ -522,15 +525,18 @@ export async function exportClip({
                 }
                 if (videoCount === 0) throw new Error(`no decodable video packets in file ${seg.file.name}`);
 
-                // Align audio to the real video start (after keyframe snap)
-                // to keep AV in sync. getPacket(t) returns the packet with
-                // pts <= t (latest by presentation time).
+                // Both tracks share the same shift. Keep the first audio packet
+                // crossing zero: the edit list hides its negative portion.
                 let audioCount = 0;
-                const videoSegDur = videoLastEndSec - videoStartShift;
+                // A following file starts on the recording clock, including any
+                // audio-only tail. B-frame references can still extend that span.
+                const segmentEnd =
+                    segIdx + 1 < segments.length ? Math.max(sourceEnd, videoLastEndSec) : videoLastEndSec;
+                const videoSegDur = segmentEnd - videoStartShift;
                 if (adpcmSource && adpcmReader) {
                     const reader = seg.file === adpcmFile ? adpcmReader : await openAdpcmAudioAuto(seg.file);
                     if (reader) {
-                        await reader.feedRange(adpcmSource, videoStartShift, videoLastEndSec, videoAccumSec, signal);
+                        await reader.feedRange(adpcmSource, videoStartShift, segmentEnd, videoAccumSec, signal);
                     }
                 } else if (audioSink && audioSource) {
                     const audioStartPacket =
@@ -539,7 +545,7 @@ export async function exportClip({
                         let apkt: EncodedPacket | null = audioStartPacket;
                         while (apkt) {
                             if (signal?.aborted) throw new DOMException("aborted", "AbortError");
-                            if (apkt.timestamp >= videoLastEndSec) break;
+                            if (apkt.timestamp >= segmentEnd) break;
                             const timestamp = apkt.timestamp - videoStartShift + videoAccumSec;
                             // Keep the source A/V offset; dropping a boundary frame avoids
                             // accumulating audio-frame rounding at every file join.

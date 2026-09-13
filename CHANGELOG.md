@@ -9,6 +9,7 @@ release tag. Localized texts ship inside the app (the "What's new" panel).
 
 ## 2026-09-13
 
+- **Improved:** Export is faster.
 - **New camera support:** Route and speed are available for iBOX RoadScan 2K recordings.
 
 ## 2026-09-08

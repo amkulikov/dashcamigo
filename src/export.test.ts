@@ -18,6 +18,9 @@ import { getInputTimeOrigin } from "./media-time.js";
 import { groupTrips, type VideoCandidate } from "./trips.js";
 import { createInMemoryFileHandle } from "./ui/in-memory-file.js";
 import { VIDEO_INPUT_FORMATS } from "./video-formats.js";
+import { buildMp4Index } from "./parsers/internal/mp4-index.js";
+import { findGpmdTrack } from "./parsers/internal/gpmf-extract.js";
+import { findBox, readMediaTimescale, readSampleDurationsInTicks } from "./parsers/internal/mp4-walker.js";
 
 const H264_FIXTURE = "../tests/testdata/70mai-multichannel/Normal/Front/NO20260101-120000-000001F.MP4";
 
@@ -90,7 +93,7 @@ async function tripOf(files: File[]) {
     return trips[0]!;
 }
 
-async function save(files: File[], end?: number) {
+async function save(files: File[], options: { start?: number; end?: number; withGpmf?: boolean } = {}) {
     const trip = await tripOf(files);
     const handle = createInMemoryFileHandle(
         "export.mp4",
@@ -99,11 +102,12 @@ async function save(files: File[], end?: number) {
     const result = await exportClip({
         trip,
         channel: "front",
-        startTripSec: 0,
-        endTripSec: end ?? trip.timeline.contentDurationSec,
+        startTripSec: options.start ?? 0,
+        endTripSec: options.end ?? trip.timeline.contentDurationSec,
         withAudio: true,
-        withGpmf: false,
+        withGpmf: options.withGpmf ?? false,
         mp4Writable: await handle.createWritable(),
+        mp4Handle: handle,
         onProgress() {},
         signal: new AbortController().signal,
     });
@@ -158,12 +162,98 @@ describe("stream-copy export", () => {
             expect(outputAudio).not.toBeNull();
             const sourcePackets = await packets(sourceVideo);
             const outputPackets = await packets(outputVideo!);
+            const origin = await getInputTimeOrigin(source);
+            const firstVideoOffset = sourcePackets[0]!.timestamp - origin;
+            const sourceDuration = (await source.computeDuration()) - origin;
             expect(outputPackets).toHaveLength(sourcePackets.length * 2);
-            expect(outputPackets[0]!.timestamp).toBeCloseTo(0);
+            expect(firstVideoOffset).toBeGreaterThan(0);
+            expect(outputPackets[0]!.timestamp).toBeCloseTo(firstVideoOffset);
+            expect(outputPackets[sourcePackets.length]!.timestamp).toBeCloseTo(sourceDuration + firstVideoOffset);
             expect(outputPackets[sourcePackets.length]!.data).toEqual(outputPackets[0]!.data);
             expect((await packets(outputAudio!)).length).toBeGreaterThan(1);
         } finally {
             source.dispose();
+            output.dispose();
+        }
+    });
+
+    it("hides decoder preroll and preserves the selected start after GPS injection", async () => {
+        const file = fixture(H264_FIXTURE);
+        const source = open(file);
+        const start = 0.35;
+        const saved = await save([file], { start, withGpmf: true });
+        const output = open(saved.file);
+        try {
+            const sourceVideo = (await source.getPrimaryVideoTrack())!;
+            const video = (await output.getPrimaryVideoTrack())!;
+            const sourcePackets = await packets(sourceVideo);
+            const outputPackets = await packets(video);
+            expect(outputPackets.map((packet) => packet.data)).toEqual(sourcePackets.map((packet) => packet.data));
+            for (let i = 0; i < outputPackets.length; i++) {
+                expect(outputPackets[i]!.timestamp).toBeCloseTo(sourcePackets[i]!.timestamp - start, 6);
+            }
+            expect(outputPackets[0]!.timestamp).toBeCloseTo(-start);
+            expect(await video.computeDuration()).toBeCloseTo(2 - start);
+
+            const sourceAudio = (await source.getPrimaryAudioTrack())!;
+            const sourceBoundary = (await new EncodedPacketSink(sourceAudio).getPacket(start))!;
+            const audio = (await output.getPrimaryAudioTrack())!;
+            const outputBoundary = (await new EncodedPacketSink(audio).getFirstPacket())!;
+            expect(outputBoundary.data).toEqual(sourceBoundary.data);
+            expect(outputBoundary.timestamp).toBeCloseTo(sourceBoundary.timestamp - start, 6);
+            expect(outputBoundary.timestamp).toBeLessThan(0);
+            expect(outputBoundary.timestamp + outputBoundary.duration).toBeGreaterThan(0);
+            expect(await audio.computeDuration()).toBeCloseTo(2 - start);
+
+            expect(saved.result.gpmfInjected).toBe(true);
+            const index = await buildMp4Index(saved.file);
+            const gpmd = findGpmdTrack(index)!;
+            expect(gpmd).not.toBeNull();
+            const timescale = readMediaTimescale(index.moovView!, gpmd.trakBox)!;
+            const durations = readSampleDurationsInTicks(index.moovView!, gpmd.trakBox)!;
+            expect(durations.reduce((sum, duration) => sum + duration, 0) / timescale).toBeCloseTo(2 - start);
+            const videoBox = index.tracks.find((track) => track.handlerType === "vide")!.trakBox;
+            expect(findBox(index.moovView!, videoBox.payloadStart, videoBox.end, "edts")).not.toBeNull();
+        } finally {
+            source.dispose();
+            output.dispose();
+        }
+    });
+
+    it("keeps trimmed B-frame joins aligned across a long export", async () => {
+        const file = fixture(H264_FIXTURE);
+        const start = 0.35;
+        const output = open((await save(Array<File>(30).fill(file), { start })).file);
+        try {
+            const video = (await output.getPrimaryVideoTrack())!;
+            const audio = (await output.getPrimaryAudioTrack())!;
+            const outputPackets = await packets(video);
+            expect(outputPackets).toHaveLength(1800);
+            expect(outputPackets[0]!.timestamp).toBeCloseTo(-start);
+            expect(await video.computeDuration()).toBeCloseTo(60 - start);
+            expect(await audio.computeDuration()).toBeCloseTo(60 - start);
+            for (let i = 1; i < 30; i++) {
+                expect(outputPackets[i * 60]!.timestamp).toBeCloseTo(i * 2 - start);
+            }
+            expect(new Set(outputPackets.map((packet) => packet.timestamp)).size).toBe(1800);
+        } finally {
+            output.dispose();
+        }
+    });
+
+    it("retains complete GOPs when joining files that already contain decoder preroll", async () => {
+        const file = (await save([fixture(H264_FIXTURE)], { start: 0.35 })).file;
+        const output = open((await save([file, file])).file);
+        try {
+            const video = (await output.getPrimaryVideoTrack())!;
+            const outputPackets = await packets(video);
+            expect(outputPackets).toHaveLength(120);
+            expect(outputPackets[0]!.timestamp).toBeCloseTo(-0.35);
+            expect(outputPackets[60]!.timestamp).toBeCloseTo(1.65);
+            expect(outputPackets[60]!.type).toBe("key");
+            expect(await video.computeDuration()).toBeCloseTo(3.65);
+            expect(new Set(outputPackets.map((packet) => packet.timestamp)).size).toBe(120);
+        } finally {
             output.dispose();
         }
     });
@@ -188,7 +278,7 @@ describe("stream-copy export", () => {
     it("retains in-range B-frames and the later-presented references they depend on", async () => {
         const file = fixture(H264_FIXTURE);
         const source = open(file);
-        const output = open((await save([file], 0.5)).file);
+        const output = open((await save([file], { end: 0.5 })).file);
         try {
             const sourcePackets = await packets((await source.getPrimaryVideoTrack())!);
             const outputPackets = await packets((await output.getPrimaryVideoTrack())!);

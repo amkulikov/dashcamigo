@@ -77,16 +77,9 @@ export async function injectClipGpmf(args: {
     capturedMoov?: CapturedMoov;
 }): Promise<boolean> {
     const { handle, trip, clipContentStartSec, clipContentEndSec, signal, capturedMoov } = args;
-    // The gpmd sample table is packed for exactly [clipContentStartSec,
-    // clipContentEndSec) on the footage axis, but the stream-copy video track
-    // starts at the keyframe BEFORE startInFile (getKeyPacket snaps backward), so
-    // the video front edge can sit up to ~1 GOP earlier than the gpmd front edge.
-    // Alignment is by ABSOLUTE GPSU UTC, which every GPMF block carries
-    // (encodeGpsuTimestamp) and which the mainstream readers (gpmf-parser,
-    // Telemetry Overlay, GoPro Quik) key off - so this is correct for them. Only
-    // a player that aligns the meta track by track-relative offset would see
-    // telemetry shifted by the snap; not worth changing the produced track (and
-    // re-baselining) for that uncommon case.
+    // Video's edit list hides its decoder preroll, so the requested footage
+    // start is also the metadata track's zero. Preserve that edit list when
+    // appending gpmd; GPSU carries the absolute UTC for external readers.
     let sampleCount = 0;
     try {
         signal?.throwIfAborted();

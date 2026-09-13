@@ -4,10 +4,13 @@
 //   - stream-copy (single channel, no transforms) + GPMF meta-track injection
 //   - re-encode / compositing (multichannel split-screen via WebCodecs)
 //
-// We assert container validity by ISO-BMFF box markers (ftyp/moov/mdat) and the
-// GPMF telemetry track by the 'gpmd' handler, rather than re-decoding pixels.
+// Container markers cover both paths; native playback checks the trimmed
+// stream-copy timeline against source frames before and after the file join.
 
 import type { Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { BufferSource, EncodedPacketSink, Input, MP4 } from "mediabunny";
 
 import {
     DESKTOP,
@@ -69,6 +72,67 @@ test.describe("export run", () => {
         await page.keyboard.press("Enter");
         await expect(page.locator("#export-panel")).toBeHidden();
         await expect(page.locator("#player-export")).toBeFocused();
+    });
+
+    test("stream-copy hides the preceding GOP and seeks across a trimmed file join", async ({ page }) => {
+        const includes = page.locator(".top-panel__channel-include");
+        await includes.nth(2).click();
+        await includes.nth(1).click();
+        await expect(page.locator(".top-panel__channel-include:checked")).toHaveCount(1);
+
+        // Both real H.264 streams contain B-frames and begin with their only keyframe.
+        // The selected range crosses their join at 2 s and starts inside the first GOP.
+        const firstPath = resolve(SAMPLE_70MAI, "Normal/Front/NO20260101-120000-000001F.MP4");
+        const secondPath = resolve(SAMPLE_70MAI, "Normal/Front/NO20260101-120002-000002F.MP4");
+        for (const [edge, time] of [
+            ["start", "1"],
+            ["end", "3"],
+        ] as const) {
+            const input = page.locator(`.export-trim-bar__input[data-range-edge="${edge}"]`);
+            await input.fill(time);
+            await input.press("Enter");
+        }
+        await expect(page.locator(".timeline-range__tab--start")).toHaveAttribute("aria-valuenow", "1");
+        await expect(page.locator(".timeline-range__tab--end")).toHaveAttribute("aria-valuenow", "3");
+        await page.locator("#export-panel-save-btn").click();
+        await expect(page.locator("#export-panel-done-summary")).toBeVisible({ timeout: 60_000 });
+
+        const container = await readExportResult(page);
+        expect(container?.gpmd, "trimmed export retains its GPS track").toBe(true);
+        expect(container?.soun, "trimmed export retains audio").toBe(true);
+        const bytes = await page.evaluate(() => {
+            const handle = (window as unknown as { __lastExportHandle?: { _buf: Uint8Array } }).__lastExportHandle;
+            if (!handle) throw new Error("export handle missing");
+            return Array.from(handle._buf);
+        });
+        const exported = new Input({ source: new BufferSource(new Uint8Array(bytes)), formats: [MP4] });
+        const original = new Input({ source: new BufferSource(readFileSync(firstPath)), formats: [MP4] });
+        try {
+            const outputVideo = (await exported.getPrimaryVideoTrack())!;
+            const sourceVideo = (await original.getPrimaryVideoTrack())!;
+            const outputHead = (await new EncodedPacketSink(outputVideo).getFirstPacket())!;
+            const sourceSink = new EncodedPacketSink(sourceVideo);
+            const sourceHead = (await sourceSink.getKeyPacket(1, { verifyKeyPackets: true }))!;
+            expect(sourceHead.timestamp, "trim point falls after the preceding keyframe").toBe(0);
+            expect(outputHead.timestamp, "preceding GOP is retained only as decoder preroll").toBeCloseTo(-1, 5);
+            expect(outputHead.data, "video is copied without re-encoding").toEqual(sourceHead.data);
+            const duration = await outputVideo.computeDuration();
+            expect(duration).toBeGreaterThanOrEqual(2);
+            expect(duration, "duration excludes the hidden second, allowing B-frame postroll").toBeLessThan(2.3);
+        } finally {
+            exported.dispose();
+            original.dispose();
+        }
+
+        const playback = await inspectTrimmedPlayback(page, [
+            Array.from(readFileSync(firstPath)),
+            Array.from(readFileSync(secondPath)),
+        ]);
+        expect(playback.duration).toBeGreaterThanOrEqual(2);
+        expect(playback.duration, "native playback respects the edit list").toBeLessThan(2.3);
+        expect(playback.headDifference, "first visible frames match the selected source time").toBeLessThan(0.5);
+        expect(playback.joinDifference, "seeking beyond the file join preserves the source timeline").toBeLessThan(0.5);
+        expect(playback.playedUntil, "native playback advances after seeking").toBeGreaterThan(1.35);
     });
 
     test("re-encode split-screen writes a valid MP4 (compositing pipeline)", async ({ page, browserName }) => {
@@ -148,6 +212,79 @@ test.describe("export run", () => {
         expect(done!.framesDirect, "every frame should have bypassed the canvas").toBe(done!.framesEncoded);
     });
 });
+
+async function inspectTrimmedPlayback(page: Page, sources: number[][]) {
+    return page.evaluate(async (sources) => {
+        const handle = (window as unknown as { __lastExportHandle?: { _buf: Uint8Array } }).__lastExportHandle;
+        if (!handle) throw new Error("export handle missing");
+        const url = URL.createObjectURL(new Blob([handle._buf.slice()], { type: "video/mp4" }));
+        const sourceUrls = sources.map((bytes) =>
+            URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: "video/mp4" })),
+        );
+        const videos: HTMLVideoElement[] = [];
+        const waitFor = (video: HTMLVideoElement, event: string) =>
+            new Promise<void>((resolve, reject) => {
+                const clear = () => {
+                    video.removeEventListener(event, done);
+                    video.removeEventListener("error", fail);
+                };
+                const done = () => {
+                    clear();
+                    resolve();
+                };
+                const fail = () => {
+                    clear();
+                    reject(new Error(video.error?.message || "native video failed"));
+                };
+                video.addEventListener(event, done);
+                video.addEventListener("error", fail);
+            });
+        const open = async (src: string) => {
+            const video = document.createElement("video");
+            videos.push(video);
+            video.muted = true;
+            video.preload = "auto";
+            const loaded = waitFor(video, "loadeddata");
+            video.src = src;
+            await loaded;
+            return video;
+        };
+        const canvas = document.createElement("canvas");
+        canvas.width = 96;
+        canvas.height = 54;
+        const context = canvas.getContext("2d", { willReadFrequently: true });
+        if (!context) throw new Error("canvas context unavailable");
+        const pixelsAt = async (video: HTMLVideoElement, seconds: number) => {
+            const sought = waitFor(video, "seeked");
+            video.currentTime = seconds;
+            await sought;
+            if (Math.abs(video.currentTime - seconds) > 1e-5) throw new Error("native video did not reach seek target");
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            return context.getImageData(0, 0, canvas.width, canvas.height).data;
+        };
+        const difference = (a: Uint8ClampedArray, b: Uint8ClampedArray) =>
+            a.reduce((sum, value, index) => sum + Math.abs(value - b[index]!), 0) / a.length;
+        try {
+            const output = await open(url);
+            const first = await open(sourceUrls[0]!);
+            const second = await open(sourceUrls[1]!);
+            const headDifference = difference(await pixelsAt(output, 0.05), await pixelsAt(first, 1.05));
+            const joinDifference = difference(await pixelsAt(output, 1.25), await pixelsAt(second, 0.25));
+            await output.play();
+            while (output.currentTime <= 1.35) await waitFor(output, "timeupdate");
+            output.pause();
+            return { duration: output.duration, headDifference, joinDifference, playedUntil: output.currentTime };
+        } finally {
+            for (const video of videos) {
+                video.pause();
+                video.removeAttribute("src");
+                video.load();
+            }
+            URL.revokeObjectURL(url);
+            for (const sourceUrl of sourceUrls) URL.revokeObjectURL(sourceUrl);
+        }
+    }, sources);
+}
 
 // The destination dying mid-write. A sink failure is the one class of export
 // failure the user can act on, and it reaches the error mapping only if its

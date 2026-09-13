@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-09-13.2",
+        category: "improvement",
+        text: {
+            en: "Export is faster.",
+            ru: "Ускорен экспорт.",
+            de: "Der Export ist schneller.",
+            es: "La exportación es más rápida.",
+            fr: "L’export est plus rapide.",
+            pl: "Eksport jest szybszy.",
+            pt: "A exportação está mais rápida.",
+            zh: "导出速度提升。",
+            ja: "書き出しが速くなりました。",
+            ko: "내보내기가 빨라졌어요.",
+        },
+    },
+    {
         id: "2026-09-13.1",
         category: "support",
         text: {
