@@ -9,8 +9,8 @@
 // (64..1024-byte encrypted chunks, internal/ligogps.ts), Chigee AIO-5 JPEG
 // previews (start ff d8 ff), and the Rove R2-4K accelerometer (12-byte float
 // triples, ExifTool QuickTimeStream.pl:339-343). The Rove GPS variant is the
-// only one with constant 32-byte samples - that size gate plus the content
-// probe keep the others out.
+// same size as SStar's DDmm dialect, whose flags fail the Rove date probe.
+// The size gate plus the content probe keep the other dialects out.
 //
 // Sample layout (32 bytes, little-endian), per ExifTool QuickTimeStream.pl:367-403
 // (%Image::ExifTool::QuickTime::RoveGPS, v13.59):

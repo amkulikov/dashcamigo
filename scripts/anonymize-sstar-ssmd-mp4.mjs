@@ -1,16 +1,18 @@
 #!/usr/bin/env node
-// Anonymize a real SStar-firmware MP4 with a supported 40-byte direct or
-// 56-byte KTRX `ssmd` GPS meta track into a public-safe fixture.
+// Anonymize a real SStar-firmware MP4 with a supported 32-byte DDmm,
+// 40-byte direct or 56-byte KTRX `ssmd` GPS meta track into a public-safe fixture.
 //
 // Anonymization (mirrors scripts/anonymize-rvmi-mp4.mjs):
 //   1. Walk the MP4, find the meta trak whose stsd entry is 'ssmd' and whose
-//      stsz is constant 40 or 56 bytes (sibling tracks are dropped entirely).
-//   2. Read all its samples from mdat. On 40-byte fix rows (flags base 0x047E or
+//      stsz is constant 32, 40 or 56 bytes (sibling tracks are dropped entirely).
+//   2. Read all its samples from mdat. On 32-byte DDmm rows (flags 0x097E at
+//      +22), decode and round coordinates to WHOLE degrees, then re-encode.
+//      On 40-byte fix rows (flags base 0x047E or
 //      0x067E at +22 with the 0x0100 fix bit) round the lat/lon doubles to
 //      WHOLE degrees (~110 km precision). On 56-byte KTRX rows decode, round,
 //      re-encode, and replace the appended 16-hex device/session identifier
-//      with zeroes. No-fix rows already carry the 0xFFFFFFFF sentinel in
-//      both slots - untouched. A row with a foreign
+//      with zeroes. No-fix rows get the 0xFFFFFFFF sentinel in both slots.
+//      A row with invalid coordinates or a foreign
 //      flags word is zeroed except the flags word: content this script
 //      cannot classify must never reach the fixture verbatim, and the
 //      scrubbed row still fails decode the same way.
@@ -26,12 +28,14 @@
 
 import { closeSync, openSync, readSync, statSync, writeFileSync } from "node:fs";
 
-const SUPPORTED_SAMPLE_SIZES = [40, 56];
+const SUPPORTED_SAMPLE_SIZES = [32, 40, 56];
 // Per-camera flags base + fix bit; mirrors SSTAR_FLAGS_* in
 // src/parsers/internal/sstar-ssmd-extract.ts.
 const FLAGS_FIX_BIT = 0x0100;
 const FLAGS_BASES = [0x047e, 0x067e];
+const DDMM_FLAGS_FIX = 0x097e;
 const KTRX_FLAGS_FIX = 0x087e;
+const NO_FIX_COORDINATE = 4294967295;
 const KTRX_FACTORS = [
     15, 25, 36, 63, 82, 13, 12, 15, 21, 31, 21, 57, 16, 29, 47, 26, 42, 26, 26, 12, 65, 28, 12, 26, 46, 24, 29, 25, 54,
     23, 87, 12, 46, 48, 35, 37, 68, 12, 24, 46, 76, 55, 26, 28, 67, 24, 43, 46, 68, 87, 23, 56, 78, 34, 16, 48, 27, 81,
@@ -88,6 +92,28 @@ function u32be(n) {
     const b = Buffer.alloc(4);
     b.writeUInt32BE(n, 0);
     return b;
+}
+
+function ddmmToDegrees(value) {
+    if (!Number.isFinite(value)) return Number.NaN;
+    const absolute = Math.abs(value);
+    const degrees = Math.floor(absolute / 100);
+    const minutes = absolute - degrees * 100;
+    if (minutes >= 60) return Number.NaN;
+    return Math.sign(value) * (degrees + minutes / 60);
+}
+
+function hasValidCoordinates(lat, lon) {
+    return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
+}
+
+function hasNoFixCoordinates(buf) {
+    return buf.readDoubleLE(0) === NO_FIX_COORDINATE && buf.readDoubleLE(8) === NO_FIX_COORDINATE;
+}
+
+function scrubSample(buf, flags) {
+    buf.fill(0);
+    buf.writeUInt16LE(flags, 22);
 }
 
 const [, , inputPath, outputPath] = process.argv;
@@ -233,7 +259,18 @@ const sampleBuffers = sampleAbsOffsets.map((off) => {
     const buf = Buffer.alloc(sampleSize);
     readSync(fd, buf, 0, sampleSize, off);
     const flags = buf.readUInt16LE(22);
-    if (sampleSize === 56) {
+    if (sampleSize === 32) {
+        const lat = ddmmToDegrees(buf.readDoubleLE(0));
+        const lon = ddmmToDegrees(buf.readDoubleLE(8));
+        if (flags !== DDMM_FLAGS_FIX || (!hasNoFixCoordinates(buf) && !hasValidCoordinates(lat, lon))) {
+            scrubSample(buf, flags);
+            junkCount++;
+        } else if (!hasNoFixCoordinates(buf)) {
+            buf.writeDoubleLE(Math.round(lat) * 100, 0);
+            buf.writeDoubleLE(Math.round(lon) * 100, 8);
+            fixCount++;
+        }
+    } else if (sampleSize === 56) {
         const hour = buf.readUInt8(25);
         const minute = buf.readUInt8(26);
         const second = buf.readUInt8(27);
@@ -245,10 +282,9 @@ const sampleBuffers = sampleAbsOffsets.map((off) => {
         // whose remaining content cannot be classified.
         buf.write("0000000000000000", 32, "ascii");
         if (flags !== KTRX_FLAGS_FIX || !tagged || hour > 23 || minute > 59 || second > 59) {
-            buf.fill(0);
-            buf.writeUInt16LE(flags, 22);
+            scrubSample(buf, flags);
             junkCount++;
-        } else if (buf.readDoubleLE(0) === 4294967295 && buf.readDoubleLE(8) === 4294967295) {
+        } else if (hasNoFixCoordinates(buf)) {
             // Tagged no-fix convention is supported defensively by the parser;
             // the real KTRX sample did not contain one.
         } else {
@@ -256,9 +292,8 @@ const sampleBuffers = sampleAbsOffsets.map((off) => {
             const lonFactor = KTRX_FACTORS[minute] / 10;
             const lat = (buf.readDoubleLE(0) - 114.712) / latFactor;
             const lon = (buf.readDoubleLE(8) - 224.222) / lonFactor;
-            if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
-                buf.fill(0);
-                buf.writeUInt16LE(flags, 22);
+            if (!hasValidCoordinates(lat, lon)) {
+                scrubSample(buf, flags);
                 junkCount++;
             } else {
                 buf.writeDoubleLE(Math.round(lat) * latFactor + 114.712, 0);
@@ -269,14 +304,24 @@ const sampleBuffers = sampleAbsOffsets.map((off) => {
     } else if (!FLAGS_BASES.includes(flags & ~FLAGS_FIX_BIT)) {
         // Unclassifiable row: scrub everything but the flags word, so unknown
         // content never reaches the fixture while the row still fails decode.
-        buf.fill(0);
-        buf.writeUInt16LE(flags, 22);
+        scrubSample(buf, flags);
         junkCount++;
     } else if (flags & FLAGS_FIX_BIT) {
-        // Whole-degree rounding is the anonymization: ~110 km precision.
-        buf.writeDoubleLE(Math.round(buf.readDoubleLE(0)), 0);
-        buf.writeDoubleLE(Math.round(buf.readDoubleLE(8)), 8);
-        fixCount++;
+        const lat = buf.readDoubleLE(0);
+        const lon = buf.readDoubleLE(8);
+        if (!hasValidCoordinates(lat, lon)) {
+            scrubSample(buf, flags);
+            junkCount++;
+        } else {
+            // Whole-degree rounding is the anonymization: ~110 km precision.
+            buf.writeDoubleLE(Math.round(lat), 0);
+            buf.writeDoubleLE(Math.round(lon), 8);
+            fixCount++;
+        }
+    } else {
+        // Do not trust unused coordinate slots to be empty on a no-fix row.
+        buf.writeDoubleLE(NO_FIX_COORDINATE, 0);
+        buf.writeDoubleLE(NO_FIX_COORDINATE, 8);
     }
     return buf;
 });

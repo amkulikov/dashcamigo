@@ -17,7 +17,7 @@ import {
     hasSstarNoFixSentinel,
     hasSstarKtrxTag,
     localDateAnchorMsFromFilename,
-    localNaiveSecondsFromKtrxFilename,
+    localNaiveSecondsFromRecFilename,
     localNaiveSecondsFromNeolineFilename,
     looksLikeSstarSsmdSample,
     SSTAR_FLAGS_FIX,
@@ -374,7 +374,7 @@ describe("sstar-ssmd primitive on 56-byte KTRX fixtures", () => {
 
     it("marks and parses the coordinate transform, speed, course and UTC anchor", async () => {
         const { vf, index } = await loadFixture("synthetic-ktrx-happy.mp4", NAME);
-        expect(findSstarSsmdTrack(index)).not.toBeNull();
+        expect(await findSstarSsmdTrack(vf, index)).not.toBeNull();
         expect(await sstarSsmdPrimitive.marker(vf, index)).toBe(true);
         const result = await sstarSsmdPrimitive.parse(vf, index);
         expect(result.records).toHaveLength(5);
@@ -410,7 +410,7 @@ describe("sstar-ssmd primitive on the synthetic-happy fixture", () => {
 
     it("marker fires (first sample is a coherent no-fix row)", async () => {
         const { vf, index } = await loadFixture("synthetic-happy.mp4", NAME);
-        expect(findSstarSsmdTrack(index)).not.toBeNull();
+        expect(await findSstarSsmdTrack(vf, index)).not.toBeNull();
         expect(await sstarSsmdPrimitive.marker(vf, index)).toBe(true);
     });
 
@@ -600,16 +600,16 @@ describe("localNaiveSecondsFromNeolineFilename", () => {
     });
 });
 
-describe("localNaiveSecondsFromKtrxFilename", () => {
+describe("localNaiveSecondsFromRecFilename", () => {
     it("accepts only the strict REC shape and validates calendar fields", () => {
-        expect(localNaiveSecondsFromKtrxFilename("REC20260902-231922-661.mp4")).toBe(
+        expect(localNaiveSecondsFromRecFilename("REC20260902-231922-661.mp4")).toBe(
             Date.UTC(2026, 8, 2, 23, 19, 22) / 1000,
         );
-        expect(localNaiveSecondsFromKtrxFilename("backup REC20260902-231922-661.mp4")).toBe(
+        expect(localNaiveSecondsFromRecFilename("backup REC20260902-231922-661.mp4")).toBe(
             Date.UTC(2026, 8, 2, 23, 19, 22) / 1000,
         );
-        expect(localNaiveSecondsFromKtrxFilename("REC20260902-251922-661.mp4")).toBeNull();
-        expect(localNaiveSecondsFromKtrxFilename("clip-20260902-231922.mp4")).toBeNull();
+        expect(localNaiveSecondsFromRecFilename("REC20260902-251922-661.mp4")).toBeNull();
+        expect(localNaiveSecondsFromRecFilename("clip-20260902-231922.mp4")).toBeNull();
     });
 });
 
@@ -827,7 +827,7 @@ describe("sstar-ssmd disjointness with the other ssmd dwellers", () => {
         accel.writeUInt32LE(0x66, 4);
         accel.writeUInt32LE(0x27e, 8);
         const accelFile = await loadBytes(buildMp4([accel, accel, accel]), "INF20260315-203950-7-F.mp4");
-        expect(findSstarSsmdTrack(accelFile.index)).toBeNull();
+        expect(await findSstarSsmdTrack(accelFile.vf, accelFile.index)).toBeNull();
         expect(await sstarSsmdPrimitive.marker(accelFile.vf, accelFile.index)).toBe(false);
 
         const mixed = await loadBytes(

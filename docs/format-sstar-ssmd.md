@@ -1,13 +1,8 @@
 # SStar ssmd GPS formats
 
 GPS embedded as a dedicated `ssmd` meta track of constant samples at ~1 Hz,
-written by the SigmaStar ("SStar") firmware family. Two incompatible layouts
-are supported:
-
-- 40-byte direct-coordinate samples from Neoline Spectrum mirror cam and a
-  Spectrum-family 4K front cam
-- 56-byte KTRX samples with reversible coordinate obfuscation from iZEEKER
-  iD300
+written by the SigmaStar ("SStar") firmware family. Supported dialects and
+their byte layouts: `src/parsers/internal/sstar-ssmd-extract.ts`.
 
 Neoline files use handler names `SStar Video` / `SStar Audio` / `SStarMeta`
 and filenames `INF<YYYYMMDD>-<hhmmss>-<seq>-<F|R>.mp4`. iZEEKER files use
@@ -91,6 +86,29 @@ The 60-entry factor table is `SSTAR_KTRX_FACTORS` in
 `src/parsers/internal/sstar-ssmd-extract.ts`; keeping the values beside the
 decoder avoids a second source of truth. Direct Big-Endian (`>dd`) decoding
 does not produce plausible coordinates for this sample.
+
+## DDmm coordinate dialect
+
+The iBox RoadScan 2K carries DDmm coordinates with the SStar day/time and
+course conventions. It cannot use the equally sized Rove decoder: Rove
+interprets the flags as a year/month and the speed as knots. Compare
+[ExifTool's RoveGPS decoder](https://github.com/exiftool/exiftool/blob/master/lib/Image/ExifTool/QuickTimeStream.pl).
+The size-specific flags gate and shared DDmm conversion live beside
+`SSTAR_DDMM_FLAGS_FIX` and `decodeSstarSsmdRow`.
+
+Validation against the real clip's 60 fixes gives a mean speed error of
+0.72 km/h against successive positions; interpreting the speed as knots
+raises it to 33.10 km/h. The doubled course byte agrees with movement
+bearing to about 1.7 degrees on moving pairs. The GPS clock advances once
+per second and agrees with the filename's local clock at UTC+3 within a
+second. The shared REC date anchor therefore applies.
+
+The sample establishes only active fixes in the northern/eastern
+hemispheres. Signed DDmm for southern/western positions and a dual-coordinate
+no-fix sentinel are defensive conventions, without real sample validation;
+unknown flags remain rejected. The sibling `SS GSNR` track contains integer
+triples, but their units and mounting axes are unverified. Do not decode it
+without a calibration capture.
 
 ## The UTC-vs-RTC clock quirk
 

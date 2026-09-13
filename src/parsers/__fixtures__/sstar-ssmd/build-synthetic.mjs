@@ -9,6 +9,9 @@
 //   synthetic-ktrx-happy.mp4   - 56-byte iZEEKER KTRX rows
 //   synthetic-ktrx-edge.mp4    - valid marker plus corrupt KTRX rows
 //   synthetic-ktrx-wrong-format.mp4 - constant 56-byte foreign content
+//   synthetic-ddmm-happy.mp4   - 32-byte DDmm rows with an anchored UTC clock
+//   synthetic-ddmm-edge.mp4    - corrupt fields and defensive no-fix handling
+//   synthetic-ddmm-wrong-format.mp4 - constant 32-byte foreign content
 //
 // MP4 skeleton mirrors wolfbox/build-synthetic.mjs: ftyp + moov(mvhd, trak
 // with hdlr='meta' and stsd format 'ssmd') + mdat with N fixed-size samples.
@@ -32,6 +35,7 @@ const FLAGS_FIX = 0x057e;
 const FLAGS_NO_FIX = 0x047e;
 const SENTINEL = Buffer.from([0x00, 0x00, 0xe0, 0xff, 0xff, 0xff, 0xef, 0x41]);
 const KTRX_FLAGS_FIX = 0x087e;
+const DDMM_FLAGS_FIX = 0x097e;
 const KTRX_FACTORS = [
     15, 25, 36, 63, 82, 13, 12, 15, 21, 31, 21, 57, 16, 29, 47,
     26, 42, 26, 26, 12, 65, 28, 12, 26, 46, 24, 29, 25, 54, 23,
@@ -91,6 +95,18 @@ function ktrxFixSample({ lat, lon, speedKmh = 20, day, hour, min, sec, courseDeg
     Buffer.from([courseDeg / 2, 0x01, 0x01, 0x00]).copy(b, 28);
     Buffer.from("0000000000000000KTRX", "ascii").copy(b, 32);
     Buffer.from(`${String(hour).padStart(2, "0")}${String(min).padStart(2, "0")}`, "ascii").copy(b, 52);
+    return b;
+}
+
+function ddmmFixSample({ latDdmm, lonDdmm, speedKmh = 40, day = 2, hour = 21, min = 19, sec = 22, courseDeg = 76 }) {
+    const b = Buffer.alloc(32);
+    b.writeDoubleLE(latDdmm, 0);
+    b.writeDoubleLE(lonDdmm, 8);
+    b.writeInt32LE(300, 16);
+    b.writeUInt16LE(speedKmh, 20);
+    b.writeUInt16LE(DDMM_FLAGS_FIX, 22);
+    Buffer.from([day, hour, min, sec]).copy(b, 24);
+    Buffer.from([courseDeg / 2, 0x01, 0x01, 0x00]).copy(b, 28);
     return b;
 }
 
@@ -228,6 +244,46 @@ const ktrxEdge = buildMp4([
 const ktrxJunkRow = Buffer.alloc(56, 0x5a);
 const ktrxWrongFormat = buildMp4([ktrxJunkRow, Buffer.from(ktrxJunkRow)]);
 
+// Camera-local filename REC20260902-231922-661.mp4, GPS clock UTC+0.
+const ddmmHappyRows = Array.from({ length: 5 }, (_, i) => ddmmFixSample({
+    latDdmm: 5030 + i * 0.006,
+    lonDdmm: 3015 + i * 0.006,
+    speedKmh: 40 + i,
+    courseDeg: i === 4 ? 0 : 76 + Math.floor(i / 2) * 2,
+    sec: 22 + i,
+}));
+const ddmmHappy = buildMp4(ddmmHappyRows);
+
+const ddmmEdgeRows = Array.from({ length: 16 }, (_, i) => ddmmFixSample({
+    latDdmm: 5030 + i * 0.006,
+    lonDdmm: 3015 + i * 0.006,
+    sec: 22 + i,
+}));
+ddmmEdgeRows[1].writeDoubleLE(5060, 0);
+ddmmEdgeRows[2].writeDoubleLE(3060, 8);
+ddmmEdgeRows[3].writeDoubleLE(Number.NaN, 0);
+ddmmEdgeRows[4].writeDoubleLE(9100, 0);
+ddmmEdgeRows[5].writeDoubleLE(18100, 8);
+ddmmEdgeRows[6].writeUInt16LE(KTRX_FLAGS_FIX, 22);
+ddmmEdgeRows[7].writeUInt8(0, 24);
+ddmmEdgeRows[8].writeUInt8(24, 25);
+ddmmEdgeRows[9].writeUInt8(60, 26);
+ddmmEdgeRows[10].writeUInt8(60, 27);
+ddmmEdgeRows[11].writeUInt8(31, 24);
+// Defensive sentinel checks; no distinct no-fix flags word is assumed.
+SENTINEL.copy(ddmmEdgeRows[12], 0);
+SENTINEL.copy(ddmmEdgeRows[12], 8);
+SENTINEL.copy(ddmmEdgeRows[13], 0);
+SENTINEL.copy(ddmmEdgeRows[14], 0);
+SENTINEL.copy(ddmmEdgeRows[14], 8);
+ddmmEdgeRows[14].writeUInt16LE(KTRX_FLAGS_FIX, 22);
+ddmmEdgeRows[15].writeUInt16LE(0xffff, 20);
+ddmmEdgeRows[15].writeUInt8(0xff, 28);
+const ddmmEdge = buildMp4(ddmmEdgeRows);
+
+const ddmmJunkRow = Buffer.alloc(32, 0x5a);
+const ddmmWrongFormat = buildMp4([ddmmJunkRow, Buffer.from(ddmmJunkRow)]);
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 writeFileSync(resolve(__dirname, "synthetic-happy.mp4"), happy);
 writeFileSync(resolve(__dirname, "synthetic-edge.mp4"), edge);
@@ -235,7 +291,11 @@ writeFileSync(resolve(__dirname, "synthetic-wrong-format.mp4"), wrongFormat);
 writeFileSync(resolve(__dirname, "synthetic-ktrx-happy.mp4"), ktrxHappy);
 writeFileSync(resolve(__dirname, "synthetic-ktrx-edge.mp4"), ktrxEdge);
 writeFileSync(resolve(__dirname, "synthetic-ktrx-wrong-format.mp4"), ktrxWrongFormat);
+writeFileSync(resolve(__dirname, "synthetic-ddmm-happy.mp4"), ddmmHappy);
+writeFileSync(resolve(__dirname, "synthetic-ddmm-edge.mp4"), ddmmEdge);
+writeFileSync(resolve(__dirname, "synthetic-ddmm-wrong-format.mp4"), ddmmWrongFormat);
 console.error(
     `wrote ${happy.length} + ${edge.length} + ${wrongFormat.length} + ` +
-    `${ktrxHappy.length} + ${ktrxEdge.length} + ${ktrxWrongFormat.length} bytes`,
+    `${ktrxHappy.length} + ${ktrxEdge.length} + ${ktrxWrongFormat.length} + ` +
+    `${ddmmHappy.length} + ${ddmmEdge.length} + ${ddmmWrongFormat.length} bytes`,
 );

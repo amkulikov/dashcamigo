@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-09-13.1",
+        category: "support",
+        text: {
+            en: "Route and speed are available for iBOX RoadScan 2K recordings.",
+            ru: "Для записей iBOX RoadScan 2K доступны маршрут и скорость.",
+            de: "Route und Geschwindigkeit sind für iBOX RoadScan 2K-Aufnahmen verfügbar.",
+            es: "La ruta y la velocidad están disponibles para las grabaciones de iBOX RoadScan 2K.",
+            fr: "L’itinéraire et la vitesse sont disponibles pour les enregistrements iBOX RoadScan 2K.",
+            pl: "Trasa i prędkość są dostępne dla nagrań z iBOX RoadScan 2K.",
+            pt: "A rota e a velocidade estão disponíveis para as gravações da iBOX RoadScan 2K.",
+            zh: "iBOX RoadScan 2K 录像可显示路线和速度。",
+            ja: "iBOX RoadScan 2K の録画でルートと速度を表示できます。",
+            ko: "iBOX RoadScan 2K 녹화에서 경로와 속도를 볼 수 있어요.",
+        },
+    },
+    {
         id: "2026-09-08.1",
         category: "support",
         text: {
