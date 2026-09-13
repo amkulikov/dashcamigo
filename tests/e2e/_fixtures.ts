@@ -203,14 +203,27 @@ export const test = base.extend<{ tolerateConsole: RegExp[] }>({
     },
 });
 
-// Chromium 153's in-memory IndexedDB crashes on OPFS handle readback. File-system
-// specs use a fresh on-disk profile while keeping real handles and persistence.
+// Chromium 153's in-memory IndexedDB crashes on FileSystemHandle readback.
+// A fresh on-disk profile safely exercises the persistent-storage contract.
+// Report an unaffected engine so the app's crash workaround does not replace
+// that contract with session storage; file-handle-compat.spec uses the real
+// reported version and default incognito context to test the workaround.
 // Playwright applies test.use options and trace recording to this context too.
 export const persistentTest = test.extend({
     context: async ({ playwright, browserName }, use) => {
         // An empty path gives each test a temporary profile, removed on close.
         const context = await playwright[browserName].launchPersistentContext("");
         try {
+            if (browserName === "chromium") {
+                await context.addInitScript(() => {
+                    const userAgent = navigator.userAgent.replace(/(HeadlessChrome|Chrome)\/\d+/, "$1/152");
+                    Object.defineProperty(navigator, "userAgent", { configurable: true, value: userAgent });
+                    Object.defineProperty(navigator, "userAgentData", {
+                        configurable: true,
+                        value: { brands: [{ brand: "Chromium", version: "152" }] },
+                    });
+                });
+            }
             await use(context);
         } finally {
             await context.close();

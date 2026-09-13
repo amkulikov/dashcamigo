@@ -6,12 +6,14 @@ import { isIgnoredSegment } from "../ingest-filter.js";
 import { createLogger } from "../log.js";
 import type { VendorFile } from "../parsers/types.js";
 import { openPersistDb } from "./db.js";
+import { canPersistFileHandles } from "./file-handle-support.js";
 import type { RememberedFolder } from "./types.js";
 
 const log = createLogger("persist-folders");
 
 /** All remembered folders, most recently opened first. */
 export async function listFolders(): Promise<RememberedFolder[]> {
+    if (!canPersistFileHandles()) return [];
     const db = await openPersistDb();
     const all = await db.getAll("folders");
     return all.sort((a, b) => b.lastOpenedAt - a.lastOpenedAt);
@@ -23,6 +25,7 @@ export async function listFolders(): Promise<RememberedFolder[]> {
  * re-picking a folder never creates a duplicate). Marks it last-opened.
  */
 export async function rememberFolder(handle: FileSystemDirectoryHandle): Promise<RememberedFolder> {
+    if (!canPersistFileHandles()) throw new Error("folder access cannot be remembered in this browser");
     const db = await openPersistDb();
     const existing = await db.getAll("folders");
     for (const folder of existing) {
@@ -70,6 +73,7 @@ export async function forgetAllFolders(): Promise<void> {
 
 /** Stamps the folder as most recently opened; drives the chip ordering. */
 export async function markFolderOpened(id: string): Promise<void> {
+    if (!canPersistFileHandles()) return;
     const db = await openPersistDb();
     // Keep the read and write atomic so a concurrent Forget cannot be undone.
     const tx = db.transaction("folders", "readwrite");

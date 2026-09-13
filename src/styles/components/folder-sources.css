@@ -263,6 +263,14 @@
     }
 }
 
+.folder-source__reopen {
+    grid-column: 2 / -1;
+    grid-row: 2;
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
 .notes-file {
     margin-top: var(--dc-space-3);
 }

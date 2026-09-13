@@ -18,6 +18,7 @@ import { t } from "../i18n/index.js";
 import type { DuplicateSourceMatch } from "../ingest-dedup.js";
 import { createLogger } from "../log.js";
 import type { VendorFile } from "../parsers/types.js";
+import { canPersistFileHandles } from "../persist/file-handle-support.js";
 import {
     type FolderAvailability,
     forgetFolder,
@@ -563,7 +564,11 @@ function renderNotesPanel(): void {
                     actions.push(notesPanelAction(t("notesFile.choose"), () => connector.useExisting()));
                 }
             }
-            panel.replaceChildren(notesStatusLabel(label), ...actions);
+            const labels = [notesStatusLabel(label)];
+            if (!canPersistFileHandles() && (status.state === "ready" || status.state === "connected")) {
+                labels.push(notesStatusLabel(t("notesFile.reopenHint")));
+            }
+            panel.replaceChildren(...labels, ...actions);
         })
         .catch((err: unknown) => {
             log.warn("notes-file status failed", { err: err instanceof Error ? err.message : String(err) });
@@ -651,6 +656,15 @@ function buildRow(_sourceId: string, source: FolderSource, resolvedLabel?: strin
     row.appendChild(label);
 
     if (!source.handle) return row;
+
+    if (!canPersistFileHandles()) {
+        const hint = document.createElement("span");
+        hint.className = "folder-source__state folder-source__reopen";
+        hint.textContent = t("folderSources.reopen");
+        hint.title = t("folderSources.reopenHint");
+        row.appendChild(hint);
+        return row;
+    }
 
     if (source.folderId) {
         const badge = document.createElement("span");

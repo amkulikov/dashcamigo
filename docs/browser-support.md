@@ -139,6 +139,19 @@ version. The API existing does not mean a codec decodes - always probe.
 
 ## Known limitations
 
+- **Chromium file-handle persistence** - Chromium 153 can terminate the browser
+  when in-memory IndexedDB restores a `FileSystemHandle` (the pinned
+  [Chromium `CHECK`](https://github.com/chromium/chromium/blob/153.0.8010.12/content/browser/indexed_db/instance/sqlite/database_connection.cc#L2482)).
+  A round-trip probe can itself crash, and storage APIs do not expose this
+  backend. The temporary exception in
+  [`canPersistFileHandles`](../src/persist/file-handle-support.ts) therefore
+  disables remembered folders and saved notes-file connections in Chromium 153
+  and unverified later versions, in all contexts; it does not detect private
+  browsing. File opening, playback, export, live notes-file writes, and ordinary
+  annotation and index-cache storage remain available. Existing saved connections
+  stay untouched; newly selected connections last for the current tab. Before
+  narrowing or removing the guard, verify an upstream fix and round-trip native
+  file and directory handles through IndexedDB in regular and private contexts.
 - **Pre-ES-module browsers** (no `<script type=module>`: IE11, old Edge, Chrome
   <61, Safari <11) never execute our bundle, so the in-bundle gate cannot run.
   They get the static prerendered landing + the splash watchdog and non-working
@@ -184,8 +197,9 @@ version. The API existing does not mean a codec decodes - always probe.
 
 ## Manual verification (not automated)
 
-The e2e suite drives the export pipeline on a small synthetic sample under one
-engine (Chromium, or Chrome on CI for codecs). It validates *correctness* of the
+The e2e suite drives the export pipeline on a small synthetic sample under the
+browser selected by [`tests/playwright.e2e.config.ts`](../tests/playwright.e2e.config.ts).
+It validates *correctness* of the
 in-memory (no-native-FSA) export - resizable-buffer growth, staged GPMF
 injection, the Download button, byte-level container/`gpmd` markers - but it
 **cannot** validate two engine- and size-dependent things. Check these by hand

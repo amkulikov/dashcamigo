@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { NotesFileRecord, RememberedFolder } from "./types.js";
 
@@ -42,7 +42,15 @@ vi.mock("./db.js", () => ({
     })),
 }));
 
-import { _resetForTests, getNotesFileState, migrateLegacyNotesFileState } from "./notes-file.js";
+import { openPersistDb } from "./db.js";
+import { listFolders, markFolderOpened, rememberFolder } from "./folders.js";
+import {
+    _resetForTests,
+    getNotesFileState,
+    migrateLegacyNotesFileState,
+    setNotesFileHandle,
+    setNotesStorage,
+} from "./notes-file.js";
 
 function handle(name: string): FileSystemFileHandle {
     return { kind: "file", name } as FileSystemFileHandle;
@@ -60,10 +68,13 @@ function folder(id: string, legacy: Partial<LegacyFolder> = {}): LegacyFolder {
 }
 
 beforeEach(() => {
+    vi.clearAllMocks();
     _resetForTests();
     mocks.folders = [];
     mocks.notes = undefined;
 });
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("legacy notes-file connection migration", () => {
     it("promotes one explicitly picked file and removes notes state from folders", async () => {
@@ -102,5 +113,64 @@ describe("legacy notes-file connection migration", () => {
 
         await expect(migrateLegacyNotesFileState()).resolves.toEqual(current);
         expect(mocks.notes).toEqual(current);
+    });
+});
+
+describe("Chromium handle persistence fallback", () => {
+    beforeEach(() => {
+        vi.stubGlobal("navigator", { userAgent: "Chrome/153.0.8010.12" });
+    });
+
+    it("leaves saved handles and legacy state untouched without opening the database", async () => {
+        const savedFolder = folder("one", { sidecarHandle: handle("legacy.dashcamigo"), sidecarAccess: "file" });
+        const savedNotes: NotesFileRecord = { id: "global", handle: handle("saved.dashcamigo"), access: "file" };
+        mocks.folders = [savedFolder];
+        mocks.notes = savedNotes;
+
+        await expect(listFolders()).resolves.toEqual([]);
+        await expect(migrateLegacyNotesFileState()).resolves.toEqual({ id: "global" });
+        await expect(getNotesFileState()).resolves.toEqual({ id: "global" });
+        await markFolderOpened(savedFolder.id);
+        await expect(rememberFolder(savedFolder.handle)).rejects.toThrow("cannot be remembered");
+        await setNotesFileHandle(handle("live.dashcamigo"));
+        await setNotesStorage("browser");
+
+        expect(openPersistDb).not.toHaveBeenCalled();
+        expect(mocks.folders).toEqual([savedFolder]);
+        expect(savedFolder.sidecarHandle?.name).toBe("legacy.dashcamigo");
+        expect(mocks.notes).toBe(savedNotes);
+    });
+
+    it("keeps live notes access and storage choices until the tab is reset", async () => {
+        const live = handle("live.dashcamigo");
+        await setNotesFileHandle(live, "derived");
+        await setNotesStorage("browser");
+        await expect(getNotesFileState()).resolves.toEqual({
+            id: "global",
+            handle: live,
+            access: "derived",
+            storage: "browser",
+        });
+
+        await setNotesStorage(null);
+        const current = await getNotesFileState();
+        expect(current.storage).toBeUndefined();
+        current.storage = "browser";
+        expect((await getNotesFileState()).storage).toBeUndefined();
+
+        _resetForTests();
+        await expect(getNotesFileState()).resolves.toEqual({ id: "global" });
+        expect(openPersistDb).not.toHaveBeenCalled();
+    });
+
+    it("restores the saved connection when a compatible browser opens it", async () => {
+        const saved: NotesFileRecord = { id: "global", handle: handle("saved.dashcamigo"), access: "file" };
+        mocks.notes = saved;
+        await setNotesFileHandle(handle("live.dashcamigo"));
+        expect(openPersistDb).not.toHaveBeenCalled();
+
+        vi.stubGlobal("navigator", { userAgent: "Chrome/152.0.7977.83" });
+        await expect(getNotesFileState()).resolves.toEqual(saved);
+        expect(mocks.notes).toBe(saved);
     });
 });

@@ -3,6 +3,7 @@
 // otherwise this independent fallback is reused.
 
 import { openPersistDb } from "./db.js";
+import { canPersistFileHandles } from "./file-handle-support.js";
 import type { NotesFileRecord, RememberedFolder } from "./types.js";
 
 // Stable store key introduced with DB v4. Its value is an implementation
@@ -16,11 +17,15 @@ interface LegacyRememberedFolder extends RememberedFolder {
 }
 
 let migrationPromise: Promise<NotesFileRecord> | null = null;
+let sessionState: NotesFileRecord = { id: NOTES_FILE_STATE_ID };
 
 /** Removes folder-scoped notes state and promotes the most recently used
  * legacy file to the independent fallback. The folder records' last-opened
  * timestamps are the only old state that can represent "last used". */
 export function migrateLegacyNotesFileState(): Promise<NotesFileRecord> {
+    // Even a migration read can restore a handle and terminate Chromium. Leave
+    // saved records untouched so a compatible browser can restore them later.
+    if (!canPersistFileHandles()) return Promise.resolve({ ...sessionState });
     migrationPromise ??= runLegacyMigration().catch((err: unknown) => {
         migrationPromise = null;
         throw err;
@@ -61,6 +66,7 @@ async function runLegacyMigration(): Promise<NotesFileRecord> {
 }
 
 export async function getNotesFileState(): Promise<NotesFileRecord> {
+    if (!canPersistFileHandles()) return { ...sessionState };
     await migrateLegacyNotesFileState();
     const db = await openPersistDb();
     return (await db.get("notesFile", NOTES_FILE_STATE_ID)) ?? { id: NOTES_FILE_STATE_ID };
@@ -70,6 +76,10 @@ export async function setNotesFileHandle(
     handle: FileSystemFileHandle,
     access: "file" | "derived" = "file",
 ): Promise<void> {
+    if (!canPersistFileHandles()) {
+        sessionState = { id: NOTES_FILE_STATE_ID, handle, access };
+        return;
+    }
     await migrateLegacyNotesFileState();
     const db = await openPersistDb();
     await db.put("notesFile", { id: NOTES_FILE_STATE_ID, handle, access });
@@ -80,6 +90,10 @@ export async function setNotesStorage(storage: "browser" | null): Promise<void> 
     const next: NotesFileRecord = { ...current };
     if (storage === "browser") next.storage = storage;
     else delete next.storage;
+    if (!canPersistFileHandles()) {
+        sessionState = next;
+        return;
+    }
     const db = await openPersistDb();
     await db.put("notesFile", next);
 }
@@ -87,4 +101,5 @@ export async function setNotesStorage(storage: "browser" | null): Promise<void> 
 /** Test-only reset for the memoized migration. */
 export function _resetForTests(): void {
     migrationPromise = null;
+    sessionState = { id: NOTES_FILE_STATE_ID };
 }
