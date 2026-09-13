@@ -15,7 +15,7 @@
 // avoided sharp/png-to-ico as npm deps - they have no place in the project's
 // dependencies for a script that runs once a year.
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -44,52 +44,26 @@ console.log(`wrote ${OUT_SVG}`);
 // Density via -density: ImageMagick uses this to rasterize the SVG.
 // 384 = 128px virtual width × 3 for a square 384x384 canvas,
 // then resized to the target size.
-function rasterize(outPath, size) {
-    const cmd = [
-        "magick",
-        "-background", "none",
-        "-density", "384",
-        SOURCE,
-        "-resize", `${size}x${size}`,
-        outPath,
-    ];
-    execSync(cmd.join(" "), { stdio: "inherit" });
+function rasterize(source, outPath, size) {
+    const args = ["-background", "none", "-density", "384", source, "-resize", `${size}x${size}`, outPath];
+    execFileSync("magick", args, { stdio: "inherit" });
     console.log(`wrote ${outPath} (${size}x${size})`);
 }
 
-rasterize(OUT_PNG_32, 32);
-rasterize(OUT_PNG_192, 192);
-rasterize(OUT_PNG_512, 512);
+rasterize(SOURCE, OUT_PNG_32, 32);
+rasterize(SOURCE, OUT_PNG_192, 192);
+rasterize(SOURCE, OUT_PNG_512, 512);
 
 // Maskable icon. Per W3C App Manifest spec the OS may apply any shape mask
 // (circle, squircle, rounded square); significant content must sit inside the
 // inner circle of radius 0.4 * canvas. The companion SVG has that geometry
 // baked in - solid black fills the full quad and the glyph is pre-positioned
 // in the safe zone - so we just rasterize it straight without compositing.
-function rasterizeMaskable(outPath, size) {
-    const cmd = [
-        "magick",
-        "-background", "none",
-        "-density", "384",
-        MASKABLE_SOURCE,
-        "-resize", `${size}x${size}`,
-        outPath,
-    ];
-    execSync(cmd.join(" "), { stdio: "inherit" });
-    console.log(`wrote ${outPath} (${size}x${size}, maskable)`);
-}
-rasterizeMaskable(OUT_PNG_MASKABLE, 512);
+rasterize(MASKABLE_SOURCE, OUT_PNG_MASKABLE, 512);
 
 // ICO - multi-resolution container 16/32/48. Enough for Google; modern
 // browsers will use the SVG anyway. ImageMagick assembles the ICO from
 // several sizes in one command.
-const icoCmd = [
-    "magick",
-    "-background", "none",
-    "-density", "384",
-    SOURCE,
-    "-define", "icon:auto-resize=16,32,48",
-    OUT_ICO,
-];
-execSync(icoCmd.join(" "), { stdio: "inherit" });
+const icoArgs = ["-background", "none", "-density", "384", SOURCE, "-define", "icon:auto-resize=16,32,48", OUT_ICO];
+execFileSync("magick", icoArgs, { stdio: "inherit" });
 console.log(`wrote ${OUT_ICO} (multi-res 16/32/48)`);
