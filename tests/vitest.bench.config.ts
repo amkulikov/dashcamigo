@@ -15,16 +15,16 @@ export default defineConfig({
     test: {
         environment: "node",
         include: ["src/**/*.bench.ts"],
-        // Run benches serially - they share disk IO and CPU; concurrent runs
-        // would pollute each other's numbers. Vitest 4 removed
-        // poolOptions.forks.singleFork; the top-level fileParallelism:false is
-        // the replacement (forces maxWorkers=1, files run one at a time).
+        // Shared disk IO and CPU require serial runs for comparable timings.
         pool: "forks",
         fileParallelism: false,
+        // A comparison includes repeated warmups and every available vendor.
+        testTimeout: 0,
+        reporters: ["default", "json"],
+        // Preserve each run separately to compare the reported benchmarks.
+        outputFile: { json: "private/perf-results/bench-latest.json" },
         benchmark: {
             include: ["src/**/*.bench.ts"],
-            // JSON output for diff between runs via `--compare <path>`.
-            outputJson: "private/perf-results/bench-latest.json",
         },
     },
 });

@@ -1,4 +1,4 @@
-import { bench, describe } from "vitest";
+import { it } from "vitest";
 import { decodeImaAdpcmBlock, imaAdpcmFramesPerBlock } from "./ima-adpcm.js";
 
 // Camera-sized blocks with varied initial indices and nibble patterns. No I/O
@@ -11,8 +11,8 @@ const blocks = Array.from({ length: 256 }, (_, blockIndex) => {
 });
 const pcm = new Int16Array(imaAdpcmFramesPerBlock(blocks[0]!.length, 2) * 2);
 
-describe("IMA-ADPCM decode", () => {
-    bench("256 stereo blocks into reusable PCM", () => {
+it("decodes IMA-ADPCM into reusable PCM", async ({ bench }) => {
+    await bench("256 stereo blocks into reusable PCM", () => {
         for (const block of blocks) decodeImaAdpcmBlock(block, 2, pcm, 0);
-    });
+    }).run();
 });

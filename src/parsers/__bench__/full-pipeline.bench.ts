@@ -8,7 +8,8 @@
 // diversity across vendors is what gives the bench its coverage.
 //
 // Vendors without samples produce no benches (silently skipped). Run via
-// `npm run test:bench`. Compare two runs with vitest's --compare flag.
+// `npm run test:bench`. Save each JSON report before the next run to compare
+// the reported benchmarks manually.
 //
 // Numbers in the JSON output (private/perf-results/bench-latest.json)
 // can be diffed against a baseline; significant regressions in either stage
@@ -17,7 +18,7 @@
 import { existsSync, readFileSync, readdirSync, type Stats, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { bench, describe } from "vitest";
+import { describe, it } from "vitest";
 
 import { buildMp4Index } from "../internal/mp4-index.js";
 import { classifyFiles, dispatchParseVideoEmbeddedGps } from "../registry.js";
@@ -114,9 +115,12 @@ const fixtures = loadFixtures();
 describe("buildMp4Index per vendor", () => {
     if (fixtures.length === 0) return;
     for (const fx of fixtures) {
-        bench(`${fx.vendor} (${(fx.size / 1024 / 1024).toFixed(0)} MB)`, async () => {
-            const file = new File([fx.buffer], fx.name);
-            await buildMp4Index(file);
+        const label = `${fx.vendor} (${(fx.size / 1024 / 1024).toFixed(0)} MB)`;
+        it(`indexes ${label}`, async ({ bench }) => {
+            await bench(label, async () => {
+                const file = new File([fx.buffer], fx.name);
+                await buildMp4Index(file);
+            }).run();
         });
     }
 });
@@ -124,10 +128,19 @@ describe("buildMp4Index per vendor", () => {
 describe("dispatchParseVideoEmbeddedGps light-only per vendor", () => {
     if (fixtures.length === 0) return;
     for (const fx of fixtures) {
-        bench(`${fx.vendor} (${(fx.size / 1024 / 1024).toFixed(0)} MB)`, async () => {
-            const file = new File([fx.buffer], fx.name);
-            const classified = await classifyFiles([{ file, relativePath: fx.name }]);
-            await dispatchParseVideoEmbeddedGps(classified, undefined, /* concurrency */ 1, undefined, "light-only");
+        const label = `${fx.vendor} (${(fx.size / 1024 / 1024).toFixed(0)} MB)`;
+        it(`extracts GPS from ${label}`, async ({ bench }) => {
+            await bench(label, async () => {
+                const file = new File([fx.buffer], fx.name);
+                const classified = await classifyFiles([{ file, relativePath: fx.name }]);
+                await dispatchParseVideoEmbeddedGps(
+                    classified,
+                    undefined,
+                    /* concurrency */ 1,
+                    undefined,
+                    "light-only",
+                );
+            }).run();
         });
     }
 });

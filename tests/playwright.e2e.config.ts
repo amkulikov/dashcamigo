@@ -68,6 +68,8 @@ export default defineConfig({
             // player never activates. macOS chromium decodes H.264 via the OS, so
             // local runs work; on Linux CI set PW_CHANNEL=chrome (Google Chrome
             // ships the codecs).
+            // Bundled Chromium 153 traps when reading OPFS handles from IndexedDB;
+            // use PW_CHANNEL=chrome on affected hosts for the folder/notes tests.
             name: "chromium",
             use: { channel: process.env.PW_CHANNEL || "chromium" },
         },

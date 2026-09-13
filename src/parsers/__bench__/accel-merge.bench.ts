@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { bench, describe } from "vitest";
+import { it } from "vitest";
 import { mergeAccelSamples } from "../registry-light.js";
 import { parse3gfBuffer } from "../sidecars/blackvue-3gf.js";
 import type { AccelSample, GpsRecord } from "../types.js";
@@ -34,14 +34,16 @@ const sparse = recordsAtHz(1 / durationSec);
 const oneHz = recordsAtHz(1);
 const fiveHz = recordsAtHz(5);
 
-describe("ingest accelerometer merge", () => {
-    bench("one GPS row against one hour of 10 Hz IMU", () => {
-        mergeAccelSamples(sparse, accelByFileKey, starts);
-    });
-    bench("one hour of 1 Hz GPS and 10 Hz IMU", () => {
-        mergeAccelSamples(oneHz, accelByFileKey, starts);
-    });
-    bench("one hour of 5 Hz GPS and 10 Hz IMU", () => {
-        mergeAccelSamples(fiveHz, accelByFileKey, starts);
-    });
+it("merges accelerometer samples during ingest", async ({ bench }) => {
+    await bench.compare(
+        bench("one GPS row against one hour of 10 Hz IMU", () => {
+            mergeAccelSamples(sparse, accelByFileKey, starts);
+        }),
+        bench("one hour of 1 Hz GPS and 10 Hz IMU", () => {
+            mergeAccelSamples(oneHz, accelByFileKey, starts);
+        }),
+        bench("one hour of 5 Hz GPS and 10 Hz IMU", () => {
+            mergeAccelSamples(fiveHz, accelByFileKey, starts);
+        }),
+    );
 });

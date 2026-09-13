@@ -16,7 +16,7 @@
 import { existsSync, readFileSync, readdirSync, type Stats, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { bench, describe } from "vitest";
+import { describe, it } from "vitest";
 
 import { buildMp4Index } from "../internal/mp4-index.js";
 
@@ -115,13 +115,15 @@ const fixtures = loadFixtures();
 
 describe("buildMp4Index per vendor (real samples, header-only)", () => {
     if (fixtures.length === 0) {
-        // tinybench skips empty describes silently.
         return;
     }
     for (const fx of fixtures) {
-        bench(`${fx.vendor} (${(fx.size / 1024 / 1024).toFixed(0)} MB)`, async () => {
-            const file = new File([fx.buffer], fx.name);
-            await buildMp4Index(file);
+        const label = `${fx.vendor} (${(fx.size / 1024 / 1024).toFixed(0)} MB)`;
+        it(`indexes ${label}`, async ({ bench }) => {
+            await bench(label, async () => {
+                const file = new File([fx.buffer], fx.name);
+                await buildMp4Index(file);
+            }).run();
         });
     }
 });

@@ -16,7 +16,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { bench, describe } from "vitest";
+import { describe, it } from "vitest";
 
 import { BlobSource, EncodedPacketSink, Input, type Source } from "mediabunny";
 
@@ -81,9 +81,11 @@ if (samplePath) {
     const file = new File([bytes], samplePath.split("/").pop() ?? "sample.mp4");
     const label = `${file.name} (${Math.round(file.size / 1048576)} MB)`;
 
-    describe(`sequential packet walk over ${label}`, () => {
-        bench("BlobSource", () => walkAllPackets(new BlobSource(file)));
-        bench("RetryingBlobSource", () => walkAllPackets(createRetryingBlobSource(file)));
+    it(`walks packets sequentially over ${label}`, async ({ bench }) => {
+        await bench.compare(
+            bench("BlobSource", () => walkAllPackets(new BlobSource(file))),
+            bench("RetryingBlobSource", () => walkAllPackets(createRetryingBlobSource(file))),
+        );
     });
 } else {
     describe.skip("sequential packet walk (no sample available)", () => {});

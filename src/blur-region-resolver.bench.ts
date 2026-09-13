@@ -1,4 +1,4 @@
-import { bench, describe } from "vitest";
+import { it } from "vitest";
 
 import { createRegionBlurResolver } from "./blur-region-resolver.js";
 import { createBlurRegion, resolveRegionBlursAt } from "./blur-regions.js";
@@ -17,20 +17,22 @@ const regions = Array.from({ length: 2400 }, (_, i) => {
     });
 });
 
-describe("blur resolution: ten minutes, four cameras, 2400 tracks at 30 fps", () => {
-    bench("full scan", () => {
-        let covers = 0;
-        for (let frame = 0; frame < 18_000; frame++) {
-            for (const channel of channels) covers += resolveRegionBlursAt(regions, channel, frame / 30).length;
-        }
-        if (covers !== 361_180) throw new Error("unexpected blur coverage");
-    });
-    bench("indexed snapshot, including setup", () => {
-        const resolvers = channels.map((channel) => createRegionBlurResolver(regions, channel));
-        let covers = 0;
-        for (let frame = 0; frame < 18_000; frame++) {
-            for (const resolve of resolvers) covers += resolve(frame / 30).length;
-        }
-        if (covers !== 361_180) throw new Error("unexpected blur coverage");
-    });
+it("resolves ten minutes of blur across four cameras and 2400 tracks at 30 fps", async ({ bench }) => {
+    await bench.compare(
+        bench("full scan", () => {
+            let covers = 0;
+            for (let frame = 0; frame < 18_000; frame++) {
+                for (const channel of channels) covers += resolveRegionBlursAt(regions, channel, frame / 30).length;
+            }
+            if (covers !== 361_180) throw new Error("unexpected blur coverage");
+        }),
+        bench("indexed snapshot, including setup", () => {
+            const resolvers = channels.map((channel) => createRegionBlurResolver(regions, channel));
+            let covers = 0;
+            for (let frame = 0; frame < 18_000; frame++) {
+                for (const resolve of resolvers) covers += resolve(frame / 30).length;
+            }
+            if (covers !== 361_180) throw new Error("unexpected blur coverage");
+        }),
+    );
 });
