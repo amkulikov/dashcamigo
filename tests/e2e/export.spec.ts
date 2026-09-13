@@ -1519,11 +1519,7 @@ test.describe("export Chromium nudge - Chromium UA", () => {
     });
 });
 
-// GPS-track-only export: the mode switch reconfigures the panel to a single .gpx
-// download straight from the parsed GPS - no decode, so it runs on bundled
-// Chromium (no proprietary codecs) where the video export self-skips.
-// straight from the parsed GPS - no decode, so it runs on bundled Chromium (no
-// proprietary codecs) where the video export self-skips.
+// GPS-track-only export reads the parsed track without requiring video codecs.
 test.describe("export GPX-only mode", () => {
     test.beforeEach(async ({ page }) => {
         await presetLocalStorage(page);

@@ -90,9 +90,9 @@ version. The API existing does not mean a codec decodes - always probe.
 
 - **H.264 / AVC** - treat as a baseline everywhere, with two real exceptions:
   open-source **Chromium without proprietary codecs** has no software H.264
-  (Linux bundled Chromium fails; macOS Chromium decodes via the OS - which is
-  why CI uses Google Chrome on Linux), and **Linux Firefox** needs system
-  codecs (gstreamer/ffmpeg/OpenH264).
+  decoder, and **Linux Firefox** needs system codecs
+  (gstreamer/ffmpeg/OpenH264). For the e2e browser, see
+  [`tests/playwright.e2e.config.ts`](../tests/playwright.e2e.config.ts).
 - **HEVC / H.265** - reliable on Apple platforms and macOS Chromium (OS
   software fallback) and Android with a hardware HEVC decoder. On Windows the
   two Chromium decode paths differ (per Microsoft's Edge video-playback

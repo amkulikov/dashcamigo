@@ -4,9 +4,7 @@
 // `-chromium-<os>`), so a macOS-generated baseline does NOT match a Linux CI
 // run. This config is therefore NOT wired into the blocking CI job: it is a
 // local/opt-in pixel guard for stable layout regions. To run it in CI, first
-// commit Linux baselines generated in the Playwright Docker image:
-//   docker run --rm -v "$PWD":/w -w /w mcr.microsoft.com/playwright:v1.60.0-noble \
-//     sh -c "npm ci && npm run build && npx playwright test --config=tests/playwright.vrt.config.ts --update-snapshots"
+// generate, inspect and commit Linux baselines in the target runner environment.
 //
 // Targets only deterministic surfaces (landing, modals, export panel with the
 // live video grid masked). The map canvas and video frames are never snapshotted
@@ -46,7 +44,7 @@ export default defineConfig({
         toHaveScreenshot: { maxDiffPixelRatio: 0.02, animations: "disabled" },
     },
     use: {
-        // See playwright.e2e.config.ts: PW_CHANNEL=chrome on Linux for codecs.
+        // Browser selection follows playwright.e2e.config.ts.
         channel: process.env.PW_CHANNEL || "chromium",
         headless: true,
         baseURL: "http://localhost:4173",

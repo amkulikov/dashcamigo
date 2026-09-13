@@ -12,8 +12,8 @@ import {
     expect,
     gotoApp,
     mockDirectoryPicker,
+    persistentTest as test,
     presetLocalStorage,
-    test,
 } from "./_fixtures.js";
 
 interface LayoutShiftRecord {
@@ -187,7 +187,21 @@ test.describe("mobile offline layout stability", () => {
         await installLayoutShiftObserver(page);
         await gotoApp(page, "en");
         await expect(page.locator("#landing")).toBeVisible();
-        await page.evaluate(() => document.fonts.ready);
+        await expect(page.locator("#dc-loader")).toHaveCount(0);
+        const startupReport = await readLayoutShiftReport(page);
+        expect(
+            rawLayoutShiftScore(startupReport),
+            `mobile startup layout shifts: ${JSON.stringify(startupReport.records)}`,
+        ).toBeLessThanOrEqual(0.02);
+        // Measure the offline transition after startup and font layout settle.
+        await page.evaluate(() => {
+            const shiftWindow = window as Window & {
+                __layoutShiftObserver?: PerformanceObserver;
+                __layoutShiftRecords?: LayoutShiftRecord[];
+            };
+            shiftWindow.__layoutShiftObserver?.takeRecords();
+            shiftWindow.__layoutShiftRecords = [];
+        });
 
         const mainBefore = await page.locator("main.layout").boundingBox();
         expect(mainBefore, "main has settled mobile geometry").not.toBeNull();

@@ -2,15 +2,12 @@
 # (playwright). The e2e job is the assertion-driven replacement for manual
 # click-through testing - it builds dist/ and drives a real browser.
 #
-# Browser = Google Chrome (PW_CHANNEL=chrome), NOT the bundled Chromium: the
-# bundled open-source Chromium has no proprietary codecs, so an H.264 trip shows
-# the "no decoder" overlay and the player never activates (verified on a Linux
-# container). Chrome ships H.264/AAC, so playback + export work. HEVC decode is
-# still OS-dependent and the HEVC test self-skips when absent.
+# Use Playwright's pinned Chrome for Testing for reproducible browser runs.
+# It includes H.264/AAC codecs; HEVC decode remains OS-dependent.
 #
 # WebGL (MapLibre) runs via SwiftShader. The suite is hermetic (the tile server
 # is aborted in tests/e2e/_fixtures.ts), so no external network is needed;
-# retries: 2 on CI absorbs the occasional software-render hiccup.
+# Retry traces aid diagnosis; a retry-only pass still fails the job.
 
 name: CI
 
@@ -53,8 +50,8 @@ jobs:
       - name: Unit tests (vitest)
         run: npm test
 
-      - name: Install Playwright + Google Chrome
-        run: npx playwright install --with-deps chrome
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps --no-shell chromium
 
       # Bare `playwright test` instead of `npm run test:e2e` (which is
       # `npm run build && playwright test ...`): dist/ was built fresh by the
@@ -63,13 +60,9 @@ jobs:
       # and we skip a second identical build.
       - name: E2E tests (playwright)
         run: npx playwright test --config=tests/playwright.e2e.config.ts
-        env:
-          PW_CHANNEL: chrome
 
-      # always(), not failure(): retries: 2 means a flake can retry-then-pass and
-      # leave the job green. We still want its trace/report (a retry-only pass is a
-      # flake to investigate, per the config header). The github reporter also
-      # annotates failures inline in the PR diff.
+      # Preserve diagnostics for failed, flaky and cancelled runs. The GitHub
+      # reporter also annotates failures inline in the PR diff.
       - name: Upload e2e report (incl. flaky retries)
         if: always()
         uses: actions/upload-artifact@v7

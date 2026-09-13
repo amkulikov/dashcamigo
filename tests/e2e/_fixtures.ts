@@ -203,6 +203,21 @@ export const test = base.extend<{ tolerateConsole: RegExp[] }>({
     },
 });
 
+// Chromium 153's in-memory IndexedDB crashes on OPFS handle readback. File-system
+// specs use a fresh on-disk profile while keeping real handles and persistence.
+// Playwright applies test.use options and trace recording to this context too.
+export const persistentTest = test.extend({
+    context: async ({ playwright, browserName }, use) => {
+        // An empty path gives each test a temporary profile, removed on close.
+        const context = await playwright[browserName].launchPersistentContext("");
+        try {
+            await use(context);
+        } finally {
+            await context.close();
+        }
+    },
+});
+
 export { expect };
 
 /**
@@ -295,9 +310,8 @@ export async function loadTrip(page: Page, sampleDir: string = SAMPLE_70MAI): Pr
  *
  * Precondition: an ACTIVE player (a decodable trip). On a browser without an
  * H.264 decoder the viewer shows a "no decoder" overlay instead of the player
- * bar and there is no export button - see the codec note in the e2e README /
- * CI workflow (the suite needs Chrome, not the codec-less bundled Chromium, on
- * Linux).
+ * bar and there is no export button. The pinned Chrome for Testing includes
+ * the codecs required by the suite's H.264/AAC samples.
  */
 export async function openExport(page: Page, expandAdvanced = true): Promise<void> {
     const btn = page.locator("#player-export");

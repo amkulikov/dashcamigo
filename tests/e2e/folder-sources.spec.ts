@@ -15,8 +15,8 @@ import {
     expect,
     gotoApp,
     mockDirectoryPicker,
+    persistentTest as test,
     presetLocalStorage,
-    test,
 } from "./_fixtures.js";
 
 const sourceRow = "#folder-sources .folder-source";

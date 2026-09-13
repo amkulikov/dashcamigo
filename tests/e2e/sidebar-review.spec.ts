@@ -8,8 +8,8 @@ import {
     loadTrip,
     mockDirectoryPicker,
     openExport,
+    persistentTest as test,
     presetLocalStorage,
-    test,
 } from "./_fixtures.js";
 
 test("sidebar keyboard resizing follows the visible edge and reports its size", async ({ page }) => {

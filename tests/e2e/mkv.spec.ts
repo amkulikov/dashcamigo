@@ -89,7 +89,7 @@ test.describe("mkv (matroska) container", () => {
         // path (this clean fixture has no degenerate packets, so it exercises the
         // redirect plumbing itself), while AAC audio still reads the original file
         // through a separate input - the audioInput split. Self-skips where the
-        // runner cannot encode H.264 (bundled Chromium on Linux; CI uses Chrome).
+        // runner cannot encode High-profile H.264.
         await loadTrip(page, SAMPLE_MKV);
         await expect(page.locator("#player-export")).toBeEnabled({ timeout: 30_000 });
         const canEncode = await canEncodeHighProfileH264(page);

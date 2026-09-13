@@ -10,13 +10,9 @@
 //    browser contexts without making one export/player spec compete with itself.
 //  - channel "chromium" (full, not headless-shell) - WebGL (MapLibre) and
 //    WebCodecs (decode/transcode) need the real pipeline.
-//  - --autoplay-policy=no-user-gesture-required - headless Chrome blocks
-//    programmatic video.play(); we drive playback through real button clicks
-//    (trusted events) but the flag removes the gate for any rAF-driven preview.
 //  - trace on-first-retry - cheap post-mortem exactly when a flake/regression
 //    happens, per Playwright CI guidance.
-//  - retries 2 on CI only - a stabilizer for shared runners, NOT a substitute
-//    for web-first assertions. A retry-only pass is a flake to investigate.
+//  - retries on CI collect traces; retry-only passes still fail the job.
 
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -35,7 +31,7 @@ const isCI = !!process.env.CI;
 // CI); set PW_FIREFOX=1 to ALSO run on real Firefox - it natively lacks
 // showSaveFilePicker, so it is the only way to exercise the in-memory (RAM)
 // export path on a non-Chromium engine. Gated because Gecko's H.264 decode is
-// not guaranteed on every host (same class of caveat as PW_CHANNEL for Chromium)
+// not guaranteed on every host
 // and Firefox has no WebCodecs H.264 ENCODE (Bugzilla 1918769), so the re-encode
 // export specs self-skip there. See docs/browser-support.md and the e2e README.
 const withFirefox = !!process.env.PW_FIREFOX;
@@ -46,6 +42,7 @@ export default defineConfig({
     workers: 2,
     fullyParallel: false,
     forbidOnly: isCI,
+    failOnFlakyTests: true,
     retries: isCI ? 2 : 0,
     timeout: 60 * 1000,
     expect: { timeout: 10 * 1000 },
@@ -63,13 +60,8 @@ export default defineConfig({
     },
     projects: [
         {
-            // The bundled "chromium" lacks proprietary codecs (no H.264/AAC
-            // decode), so a real trip shows the "no decoder" overlay and the
-            // player never activates. macOS chromium decodes H.264 via the OS, so
-            // local runs work; on Linux CI set PW_CHANNEL=chrome (Google Chrome
-            // ships the codecs).
-            // Bundled Chromium 153 traps when reading OPFS handles from IndexedDB;
-            // use PW_CHANNEL=chrome on affected hosts for the folder/notes tests.
+            // Playwright's pinned Chrome for Testing includes H.264/AAC codecs.
+            // PW_CHANNEL allows local checks against another installed browser.
             name: "chromium",
             use: { channel: process.env.PW_CHANNEL || "chromium" },
         },

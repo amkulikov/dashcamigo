@@ -14,7 +14,15 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { DESKTOP, SAMPLE_GOPRO, expect, gotoApp, mockDirectoryPicker, presetLocalStorage, test } from "./_fixtures.js";
+import {
+    DESKTOP,
+    SAMPLE_GOPRO,
+    expect,
+    gotoApp,
+    mockDirectoryPicker,
+    persistentTest as test,
+    presetLocalStorage,
+} from "./_fixtures.js";
 
 const TRIP_NAME = "Named from notes file";
 
