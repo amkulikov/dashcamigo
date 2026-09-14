@@ -1094,20 +1094,22 @@ function isInVideoBuffer(v: HTMLVideoElement, targetSec: number): boolean {
  * Out-of-buffer seek within the current frame for channels with an active MSE backend.
  * The MSE backend keeps the SourceBuffer filled only BUFFER_AHEAD_SEC ahead of video.currentTime;
  * seeking far forward in the same file leaves no data in the SB and the browser stalls with
- * DEMUXER_UNDERFLOW. Fix: full re-attach - dispose + new PerFileMseBackend with startSec=offsetInFrame.
+ * DEMUXER_UNDERFLOW. Restart those feeds at offsetInFrame and return the channels
+ * whose asynchronous seek owns positioning; buffered channels still need a direct seek.
  *
  * Native channels are not touched - their seek is instant via the native demuxer (random access via mp4 atom table).
  */
-function reattachBackendsAtOffset(frame: TripFrame, offsetInFrame: number, wasPlaying: boolean): boolean {
-    let anyReattached = false;
-    let anyFullAttach = false;
+function reattachBackendsAtOffset(frame: TripFrame, offsetInFrame: number, wasPlaying: boolean): ReadonlySet<Channel> {
+    const reattachedChannels = new Set<Channel>();
+    const master = activePlayer();
+    let masterOutcome: AttachOutcome | null = null;
     for (const ch of ALL_CHANNELS) {
         const backend = state.channelBackends[ch];
         if (!backend) continue;
         const cand = frame.channels[ch];
         if (!cand) continue;
         const v = channelPlayers[ch];
-        const isMaster = ch === mainChannel();
+        const isMaster = v === master;
         // Target already in this channel's buffer - leave it; native currentTime seek handles it.
         if (isInVideoBuffer(v, offsetInFrame)) continue;
         log.debug("reattaching backend at offset", {
@@ -1122,25 +1124,17 @@ function reattachBackendsAtOffset(frame: TripFrame, offsetInFrame: number, wasPl
         // "full-attach" - dispose+new, pendingFileOffset is picked up in the
         // loadedmetadata handler.
         const outcome = attachCandidateToVideo(ch, v, cand, isMaster, offsetInFrame, true);
-        if (outcome === "full-attach") anyFullAttach = true;
-        anyReattached = true;
+        if (outcome === "skip") continue;
+        reattachedChannels.add(ch);
+        if (isMaster) masterOutcome = outcome;
     }
-    if (anyReattached && anyFullAttach) {
-        // pendingFileOffset is only needed for full-attach paths: loadedmetadata
-        // fires only on a MediaSource change. seek-in-place channels apply
-        // currentTime/play themselves inside the IIFE - without that
-        // pendingFileOffset would hang and apply to the next loadedmetadata (e.g.
-        // the switch to the next file), which throws the position off.
-        pendingFileOffset = offsetInFrame;
-        pendingPlay = wasPlaying;
-    } else if (anyReattached && !anyFullAttach) {
-        // All channels went seek-in-place; for wasPlaying each channel replays
-        // itself in the IIFE. We do NOT set pendingPlay here - it would hang.
-        // But wasPlaying for the master is needed in the IIFE - we pass it via
-        // pendingPlay; attachCandidateToVideo sees it and applies it before reset.
-        pendingPlay = wasPlaying;
+    if (reattachedChannels.size > 0) {
+        // Only the master's handlers consume these latches. A slave reload
+        // must not leave an offset or resume intent for a later master load.
+        pendingFileOffset = masterOutcome === "full-attach" ? offsetInFrame : 0;
+        pendingPlay = masterOutcome !== null && wasPlaying;
     }
-    return anyReattached;
+    return reattachedChannels;
 }
 
 /**
@@ -2023,21 +2017,21 @@ export function seekTripTime(targetSec: number): void {
         return;
     }
     // Same frame. If an active MSE backend exists and the target is outside its buffered range,
-    // a full re-attach is required (see reattachBackendsAtOffset). For pure native channels,
+    // a feed restart is required (see reattachBackendsAtOffset). For pure native channels,
     // writing currentTime is sufficient - the browser handles the seek natively.
     const wasPlaying = !dom.player.paused;
-    if (reattachBackendsAtOffset(frame, offsetInFrame, wasPlaying)) {
+    const reattachedChannels = reattachBackendsAtOffset(frame, offsetInFrame, wasPlaying);
+    if (reattachedChannels.size > 0) {
         // MSE re-attach reloads the backend (slow) - pin the playhead to target
         // like the cross-file path so it does not bounce to the frame start.
         setPendingSeek(target);
-        // currentTime will be applied in the active <video>'s loadedmetadata handler via pendingFileOffset.
-        // Native channels in this frame (without a backend) also need to be moved
-        // - their loadedmetadata won't fire because src didn't change.
+        // Each backend buffers independently. Channels whose target is already
+        // buffered need a direct seek even when another channel restarts its feed.
         for (const ch of ALL_CHANNELS) {
-            if (state.channelBackends[ch]) continue;
+            if (reattachedChannels.has(ch)) continue;
             const v = channelPlayers[ch];
             if (!v.getAttribute("src")) continue;
-            if (v === activePlayer()) {
+            if (v === activePlayer() || state.channelBackends[ch]) {
                 v.currentTime = offsetInFrame;
                 continue;
             }
