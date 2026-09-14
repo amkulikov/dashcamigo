@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
 import {
-    BlobSource,
     BufferTarget,
     EncodedAudioPacketSource,
     EncodedPacket,
@@ -15,6 +14,7 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import { exportClip, probeAudioUniformity } from "./export.js";
 import { getInputTimeOrigin } from "./media-time.js";
+import { createRetryingBlobSource } from "./retrying-blob-source.js";
 import { groupTrips, type VideoCandidate } from "./trips.js";
 import { createInMemoryFileHandle } from "./ui/in-memory-file.js";
 import { VIDEO_INPUT_FORMATS } from "./video-formats.js";
@@ -29,7 +29,7 @@ function fixture(path: string): File {
 }
 
 function open(file: File): Input {
-    return new Input({ source: new BlobSource(file), formats: VIDEO_INPUT_FORMATS });
+    return new Input({ source: createRetryingBlobSource(file), formats: VIDEO_INPUT_FORMATS });
 }
 
 async function packets(track: InputTrack): Promise<EncodedPacket[]> {
@@ -150,6 +150,8 @@ describe("stream-copy export", () => {
     it.each([
         "./parsers/__fixtures__/juscar/real-anonymized.TS",
         "./parsers/__fixtures__/novatek-ts/real-anonymized.TS",
+        "./parsers/__fixtures__/ligogps-trailer-ts/real-anonymized-count.TS",
+        "./parsers/__fixtures__/ligogps-trailer-ts/real-anonymized-empty.TS",
     ])("copies video and audio from a transport clock in %s", async (path) => {
         const file = fixture(path);
         const source = open(file);
