@@ -195,6 +195,22 @@ describe("cameraFingerprint - cross-channel identity", () => {
         expect(front).toBe(rear);
     });
 
+    it("Juscar: retains camera roots named after mode or channel folders", () => {
+        const roots = ["", "F", "R", "front", "rear", "video", "event", "park", "card/F", "card/R"];
+        for (const [folder, channel, suffix] of [
+            ["video", "F", ""],
+            ["event", "rear", "_SOS"],
+            ["park", "R", "_PARK"],
+        ]) {
+            const name = `20260904_202849${channel === "F" ? "F" : "R"}${suffix}.ts`;
+            const fingerprints = roots.map((root) =>
+                cameraFingerprint(vf(name, `${root}/${folder}/${channel}/${name}`)),
+            );
+            expect(new Set(fingerprints).size, `${folder}/${channel}`).toBe(roots.length);
+            expect(fingerprints).toEqual(roots.map((root) => `juscar|${root}|#_#.ts`));
+        }
+    });
+
     it("DDPai: normal front and `_A` rear share a fingerprint", () => {
         const front = cameraFingerprint(vf("20190719161640_0060.mp4", "DCIM/100video/20190719161640_0060.mp4"));
         const rear = cameraFingerprint(vf("20190719161640_0060_A.mp4", "DCIM/100video/20190719161640_0060_A.mp4"));

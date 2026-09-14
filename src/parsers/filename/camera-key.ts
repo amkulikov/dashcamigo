@@ -399,8 +399,15 @@ const juscarCameraKey: FilenameCameraKeyTechnique = {
         if (!m) return null;
         // Strip the channel and mode suffix so one camera keeps one key.
         const masked = maskName(`${m[1]}_${m[2]}.ts`);
-        const dir = strippedParentDir(file.relativePath, ["front", "rear", "f", "r", "video", "event", "park"]);
-        return `juscar|${dir}|${masked}`;
+        const dir = file.relativePath
+            .split("/")
+            .filter((segment) => segment.length > 0)
+            .slice(0, -1);
+        // Only the final channel and mode folders describe the clip. An
+        // enclosing camera root may itself be named F, R, video or event.
+        if (/^(?:front|rear|f|r)$/i.test(dir.at(-1) ?? "")) dir.pop();
+        if (/^(?:video|event|park)$/i.test(dir.at(-1) ?? "")) dir.pop();
+        return `juscar|${dir.join("/")}|${masked}`;
     },
 };
 
