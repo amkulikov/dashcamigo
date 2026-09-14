@@ -1,5 +1,5 @@
 // Regression tests on real-anonymized LigoGPS-TS-trailer fixtures. The video
-// bodies are generated from scratch (testsrc2 HEVC + sine AAC); each trailer
+// bodies are generated from scratch (testsrc2 + sine AAC); each trailer
 // retains its original structure, timestamps, speed and cadence while
 // coordinate fractions are zeroed to whole degrees.
 //
@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 
 import { buildMp4Index } from "../../internal/mp4-index.js";
 import { ligoGpsTrailerTsPrimitive } from "../../primitives/ligogps-trailer-ts.js";
-import { expectPlausibleGpsTrack } from "../helpers.ts";
+import { expectPlausibleGpsTrack } from "../helpers.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = resolve(HERE, "real-anonymized.TS");
@@ -22,6 +22,22 @@ const AMPERSAND_FIXTURE = resolve(HERE, "real-anonymized-ampersand.TS");
 const NAME = "20260813211138_0000002F.ts";
 
 describe("real-anonymized LigoGPS-TS-trailer fixture", () => {
+    it.each([
+        ["real-anonymized.TS", 120],
+        ["real-anonymized-ampersand.TS", 120],
+        ["real-anonymized-count.TS", 120],
+        ["real-anonymized-empty.TS", 0],
+    ])("keeps every trailer coordinate in %s at whole degrees", (name, count) => {
+        const bytes = readFileSync(resolve(HERE, name));
+        const trailerLength = bytes.readUInt32BE(bytes.length - 4);
+        const text = bytes.subarray(-trailerLength).toString("latin1");
+        const coordinates = [...text.matchAll(/[NSEW?]:(-?[\d.]+)/g)];
+        expect(coordinates).toHaveLength(count);
+        for (const coordinate of coordinates) {
+            expect(Number.isInteger(Number(coordinate[1]))).toBe(true);
+        }
+    });
+
     it("marker + parse end-to-end", async () => {
         const file = new File([Uint8Array.from(readFileSync(FIXTURE))], NAME);
         const vf = { file, relativePath: `video/F/${NAME}` };

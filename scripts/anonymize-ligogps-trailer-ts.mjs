@@ -7,7 +7,7 @@
 // anonymize-ts-generic.mjs), keeping the container that mediabunny and the
 // clamp actually care about. The real trailer is appended verbatim except
 // the coordinate fractions:
-//   - every "N:dd.dddddd" / "E:d.dddddd" (any hemisphere letter, optional
+//   - every "N:dd.dddddd" / "E:d.dddddd" (any hemisphere or no-fix marker, optional
 //     minus) gets its fraction digits zeroed - same byte length, so every
 //     embedded length field stays valid;
 //   - timestamps, speed, course and slot structure are the original camera
@@ -110,13 +110,12 @@ let slots = 0;
 let coordinates = 0;
 let unchangedCoordinates = 0;
 for (let off = SLOTS_OFFSET; off + SLOT_SIZE <= trailer.length; off += SLOT_SIZE) {
-    if (trailer.readUInt32BE(off) === dialect.terminator) break;
     const textStart = off + 4;
-    let textEnd = textStart;
-    while (textEnd < off + SLOT_SIZE && trailer[textEnd] !== 0) textEnd++;
-    if (textEnd === textStart) continue; // blank slot
-    const text = trailer.toString("latin1", textStart, textEnd);
-    const scrubbed = text.replace(/([NSEW]:-?\d+)\.(\d{4,})/g, (_, head, frac) => {
+    const textBytes = trailer.subarray(textStart, off + SLOT_SIZE);
+    if (textBytes.every((byte) => byte === 0)) continue;
+    // The fixture preserves bytes after NUL padding and early terminators too.
+    const text = textBytes.toString("latin1");
+    const scrubbed = text.replace(/([NSEW?]:-?\d+)\.(\d+)/g, (_, head, frac) => {
         coordinates++;
         if (/^0+$/.test(frac)) unchangedCoordinates++;
         return `${head}.${"0".repeat(frac.length)}`;
