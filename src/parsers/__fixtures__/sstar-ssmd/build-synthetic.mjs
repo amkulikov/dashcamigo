@@ -36,6 +36,7 @@ const FLAGS_NO_FIX = 0x047e;
 const SENTINEL = Buffer.from([0x00, 0x00, 0xe0, 0xff, 0xff, 0xff, 0xef, 0x41]);
 const KTRX_FLAGS_FIX = 0x087e;
 const DDMM_FLAGS_FIX = 0x097e;
+const DDMM_FLAGS_NO_FIX = 0x087e;
 const KTRX_FACTORS = [
     15, 25, 36, 63, 82, 13, 12, 15, 21, 31, 21, 57, 16, 29, 47,
     26, 42, 26, 26, 12, 65, 28, 12, 26, 46, 24, 29, 25, 54, 23,
@@ -270,13 +271,13 @@ ddmmEdgeRows[8].writeUInt8(24, 25);
 ddmmEdgeRows[9].writeUInt8(60, 26);
 ddmmEdgeRows[10].writeUInt8(60, 27);
 ddmmEdgeRows[11].writeUInt8(31, 24);
-// Defensive sentinel checks; no distinct no-fix flags word is assumed.
+// A partial coordinate sentinel must not qualify as no-fix.
 SENTINEL.copy(ddmmEdgeRows[12], 0);
 SENTINEL.copy(ddmmEdgeRows[12], 8);
 SENTINEL.copy(ddmmEdgeRows[13], 0);
 SENTINEL.copy(ddmmEdgeRows[14], 0);
 SENTINEL.copy(ddmmEdgeRows[14], 8);
-ddmmEdgeRows[14].writeUInt16LE(KTRX_FLAGS_FIX, 22);
+ddmmEdgeRows[14].writeUInt16LE(DDMM_FLAGS_NO_FIX, 22);
 ddmmEdgeRows[15].writeUInt16LE(0xffff, 20);
 ddmmEdgeRows[15].writeUInt8(0xff, 28);
 const ddmmEdge = buildMp4(ddmmEdgeRows);

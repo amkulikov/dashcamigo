@@ -99,8 +99,9 @@ export const SSTAR_DDMM_SSMD_SAMPLE_SIZE = 32;
 // speed in km/h, flags, UTC day/time and course in 2-degree units. Its first
 // two doubles use degrees*100 + minutes and there is no appended tail.
 // This word occupies Rove's year/month slots, so its date probe rejects it.
-// No no-fix flags word is established for the DDmm dialect.
 export const SSTAR_DDMM_FLAGS_FIX = 0x097e;
+// No-fix rows carry both coordinate sentinels and a camera-local RTC clock.
+export const SSTAR_DDMM_FLAGS_NO_FIX = 0x087e;
 
 /** Flags word at +22: a constant per-camera base plus the 0x0100 fix bit.
  *  Two bases observed across the firmware family: 0x047E (mirror cam) and
@@ -223,7 +224,7 @@ const RX_NEOLINE_SUFFIX = /INF(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-\d+-[F
 
 // Shared by the DDmm and KTRX dialects; local for the same parser-layer
 // decoupling reason as RX_NEOLINE_SUFFIX above.
-const RX_REC_SUFFIX = /REC(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-\d{1,5}\.mp4$/i;
+const RX_REC_SUFFIX = /(?:REC|SOS|PAR)(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-\d{1,5}\.mp4$/i;
 
 // Generic fallback: the first plausible YYYYMMDD run anywhere in the name.
 const RX_GENERIC_DATE_RUN = /(?:^|\D)(20\d{2})(\d{2})(\d{2})(?=\D|$)/;
@@ -448,8 +449,10 @@ export function decodeSstarSsmdRow(dv: DataView): SstarSsmdFix | "nofix" | null 
     if (!isSstarSampleSize(dv.byteLength)) return null;
 
     if (isDdmm) {
-        if (dv.getUint16(OFF_FLAGS, true) !== SSTAR_DDMM_FLAGS_FIX) return null;
+        const flags = dv.getUint16(OFF_FLAGS, true);
+        if (flags !== SSTAR_DDMM_FLAGS_FIX && flags !== SSTAR_DDMM_FLAGS_NO_FIX) return null;
         if (hasSstarNoFixSentinel(dv)) return "nofix";
+        if (flags === SSTAR_DDMM_FLAGS_NO_FIX) return null;
     } else if (isKtrx) {
         if (!hasSstarKtrxTag(dv) || dv.getUint16(OFF_FLAGS, true) !== SSTAR_KTRX_FLAGS_FIX) return null;
         if (hasSstarNoFixSentinel(dv)) return "nofix";

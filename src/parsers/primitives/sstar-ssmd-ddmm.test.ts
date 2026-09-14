@@ -9,6 +9,7 @@ import {
     findSstarSsmdTrack,
     looksLikeSstarSsmdSample,
     SSTAR_DDMM_FLAGS_FIX,
+    SSTAR_DDMM_FLAGS_NO_FIX,
     SSTAR_DDMM_SSMD_SAMPLE_SIZE,
 } from "../internal/sstar-ssmd-extract.js";
 import { WrongFormatError } from "../types.js";
@@ -131,24 +132,40 @@ describe("32-byte SStar DDmm row decoding", () => {
         expect(decodeSstarSsmdRow(dv(bytes))).toBeNull();
     });
 
-    it.each([0, 0x047e, 0x057e, 0x067e, 0x077e, 0x087e, 0x0b7e])("rejects the foreign flags word %i", (flags) => {
-        const bytes = firstRow();
-        bytes.writeUInt16LE(flags, 22);
-        expect(looksLikeSstarSsmdSample(dv(bytes))).toBe(false);
-        expect(decodeSstarSsmdRow(dv(bytes))).toBeNull();
-    });
+    it.each([0, 0x047e, 0x057e, 0x067e, 0x077e, 0x087e, 0x0b7e])(
+        "rejects the unsupported fix flags word %i",
+        (flags) => {
+            const bytes = firstRow();
+            bytes.writeUInt16LE(flags, 22);
+            expect(looksLikeSstarSsmdSample(dv(bytes))).toBe(false);
+            expect(decodeSstarSsmdRow(dv(bytes))).toBeNull();
+        },
+    );
 
-    it("requires both sentinels and the exact known flags word for defensive no-fix handling", () => {
+    it.each([SSTAR_DDMM_FLAGS_FIX, SSTAR_DDMM_FLAGS_NO_FIX])(
+        "recognizes both sentinels under known flags %i",
+        (flags) => {
+            const bytes = firstRow();
+            bytes.writeUInt16LE(flags, 22);
+            bytes.writeDoubleLE(NO_FIX_SENTINEL, 0);
+            expect(looksLikeSstarSsmdSample(dv(bytes))).toBe(false);
+            expect(decodeSstarSsmdRow(dv(bytes))).toBeNull();
+
+            bytes.writeDoubleLE(NO_FIX_SENTINEL, 8);
+            expect(looksLikeSstarSsmdSample(dv(bytes))).toBe(true);
+            expect(decodeSstarSsmdRow(dv(bytes))).toBe("nofix");
+
+            bytes.writeDoubleLE(5030, 0);
+            expect(looksLikeSstarSsmdSample(dv(bytes))).toBe(false);
+            expect(decodeSstarSsmdRow(dv(bytes))).toBeNull();
+        },
+    );
+
+    it("rejects both sentinels under an unknown flags word", () => {
         const bytes = firstRow();
         bytes.writeDoubleLE(NO_FIX_SENTINEL, 0);
-        expect(looksLikeSstarSsmdSample(dv(bytes))).toBe(false);
-        expect(decodeSstarSsmdRow(dv(bytes))).toBeNull();
-
         bytes.writeDoubleLE(NO_FIX_SENTINEL, 8);
-        expect(looksLikeSstarSsmdSample(dv(bytes))).toBe(true);
-        expect(decodeSstarSsmdRow(dv(bytes))).toBe("nofix");
-
-        bytes.writeUInt16LE(0x087e, 22);
+        bytes.writeUInt16LE(0x0b7e, 22);
         expect(looksLikeSstarSsmdSample(dv(bytes))).toBe(false);
         expect(decodeSstarSsmdRow(dv(bytes))).toBeNull();
     });
@@ -180,7 +197,7 @@ describe("sstar-ssmd primitive on 32-byte DDmm fixtures", () => {
         expect(await sstarSsmdPrimitive.marker(vf, index)).toBe(true);
         const result = await sstarSsmdPrimitive.parse(vf, index);
         expect(result.records).toHaveLength(2);
-        expect(result.skipped.map((row) => row.line)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15]);
+        expect(result.skipped.map((row) => row.line)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14]);
         expect(result.skipped.find((row) => row.line === 12)?.reason).toContain("date anchor");
         expect(result.records[1]!.lat).toBeCloseTo(50.5015, 9);
         expect(result.records[1]!.lon).toBeCloseTo(30.2515, 9);
@@ -253,6 +270,41 @@ describe("sstar-ssmd primitive on 32-byte DDmm fixtures", () => {
         expect(result.skipped).toHaveLength(0);
         expect(result.records[0]!.unixSeconds).toBe(START_UTC + 1);
         expect(result.videoStartUtcHint).toBe(START_UTC);
+    });
+
+    it("ignores the local RTC clock during a no-fix interval without dropping surrounding fixes", async () => {
+        const bytes = fixtureBytes();
+        const row = sampleRows(bytes)[2]!;
+        row.writeDoubleLE(NO_FIX_SENTINEL, 0);
+        row.writeDoubleLE(NO_FIX_SENTINEL, 8);
+        row.writeUInt16LE(SSTAR_DDMM_FLAGS_NO_FIX, 22);
+        row.writeUInt8(23, 25);
+        const { vf, index } = await loadBytes(bytes);
+        const result = await sstarSsmdPrimitive.parse(vf, index);
+        expect(result.records.map((record) => record.unixSeconds)).toEqual([
+            START_UTC,
+            START_UTC + 1,
+            START_UTC + 3,
+            START_UTC + 4,
+        ]);
+        expect(result.skipped).toEqual([]);
+        expect(result.videoStartUtcHint).toBe(START_UTC);
+    });
+
+    it("recognizes a no-fix-only track without treating its local RTC as UTC", async () => {
+        const bytes = fixtureBytes();
+        for (const row of sampleRows(bytes)) {
+            row.writeDoubleLE(NO_FIX_SENTINEL, 0);
+            row.writeDoubleLE(NO_FIX_SENTINEL, 8);
+            row.writeUInt16LE(SSTAR_DDMM_FLAGS_NO_FIX, 22);
+            row.writeUInt8(23, 25);
+        }
+        const { vf, index } = await loadBytes(bytes);
+        expect(await sstarSsmdPrimitive.marker(vf, index)).toBe(true);
+        const result = await sstarSsmdPrimitive.parse(vf, index);
+        expect(result.records).toEqual([]);
+        expect(result.skipped).toEqual([]);
+        expect(result.videoStartUtcHint).toBeUndefined();
     });
 
     it("rejects a foreign constant-32 ssmd track", async () => {

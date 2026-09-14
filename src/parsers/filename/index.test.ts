@@ -959,8 +959,7 @@ describe("vueroid techniques", () => {
     });
 });
 
-// SigmaStar REC<date>-<time>-<seq>.mp4 - the CarCam shape minus the mandatory
-// -A..D channel letter. Some two-channel cameras put the channel in A/B dirs.
+// SigmaStar mode-prefix + date - time - sequence; channel lives in the path.
 describe("rec-single techniques", () => {
     it("time/sequence resolve; no channel or mode in the name", () => {
         const name = "REC20260101-120000-228.mp4";
@@ -1006,6 +1005,62 @@ describe("rec-single techniques", () => {
         expect(matchFilenameChannel(cameraB).matchedId).toBeNull();
         expect(cameraFingerprint(cameraA)).not.toBe(cameraFingerprint(cameraB));
     });
+
+    it.each([
+        ["Normal", "F", "REC20260913-125420-1370.mp4", "normal", "front", 1370, "2026-09-13T12:54:20.000Z"],
+        ["Normal", "R", "REC20260913-125420-1334.mp4", "normal", "rear", 1334, "2026-09-13T12:54:20.000Z"],
+        ["Event", "F", "SOS20260913-125521-1371.mp4", "event", "front", 1371, "2026-09-13T12:55:21.000Z"],
+        ["Event", "R", "SOS20260913-125521-1335.mp4", "event", "rear", 1335, "2026-09-13T12:55:21.000Z"],
+        ["Parking", "F", "PAR20260913-120859-0.mp4", "parking", "front", 0, "2026-09-13T12:08:59.000Z"],
+        ["Parking", "R", "PAR20260913-120859-0.mp4", "parking", "rear", 0, "2026-09-13T12:08:59.000Z"],
+    ])("resolves %s/%s/%s with independent channel counters", (folder, letter, name, mode, channel, sequence, time) => {
+        const file = vf(name, `card/${folder}/${letter}/${name}`);
+        expect(matchFilenameTime(file).matchedId).toBe("rec-single-time");
+        expect(matchFilenameTime(file).value?.toISOString()).toBe(time);
+        expect(matchFilenameSequence(file)).toEqual({ value: sequence, matchedId: "rec-single-sequence" });
+        expect(matchFilenameChannel(file)).toEqual({
+            value: { channel, confident: true },
+            matchedId: "rec-single-channel",
+        });
+        expect(matchFilenameMode(file)).toEqual({ value: mode, matchedId: "rec-single-mode" });
+    });
+
+    it.each([
+        ["SOS20260913-125521-1371.mp4", "event", 1371],
+        ["PAR20260913-120859-0.mp4", "parking", 0],
+    ])("retains time, sequence and explicit mode for a flat %s drop", (name, mode, sequence) => {
+        const file = vf(name);
+        expect(matchFilenameTime(file).matchedId).toBe("rec-single-time");
+        expect(matchFilenameSequence(file)).toEqual({ value: sequence, matchedId: "rec-single-sequence" });
+        expect(matchFilenameMode(file)).toEqual({ value: mode, matchedId: "rec-single-mode" });
+        expect(matchFilenameChannel(file)).toEqual({ value: null, matchedId: null });
+    });
+
+    it("recognizes the mode/channel layout case-insensitively", () => {
+        const name = "sos20260913-125521-1335.MP4";
+        const file = vf(name, `card/eVeNt/r/${name}`);
+        expect(matchFilenameChannel(file).value).toEqual({ channel: "rear", confident: true });
+        expect(matchFilenameMode(file)).toEqual({ value: "event", matchedId: "rec-single-mode" });
+    });
+
+    it.each(["F", "R", "Unknown/F", "Normal/F/edited"])(
+        "keeps channel unknown in an unrelated %s directory",
+        (path) => {
+            const name = "REC20260913-125420-1370.mp4";
+            expect(matchFilenameChannel(vf(name, `card/${path}/${name}`))).toEqual({ value: null, matchedId: null });
+        },
+    );
+
+    it.each(["clip.mp4", "SOS20260913-125521-1371-A.mp4", "PAR20260913-120859-123456.mp4"])(
+        "does not claim foreign %s names based on F/R folders",
+        (name) => {
+            const file = vf(name, `card/Event/R/${name}`);
+            expect(matchFilenameChannel(file).matchedId).not.toBe("rec-single-channel");
+            expect(matchFilenameMode(file).matchedId).not.toBe("rec-single-mode");
+            expect(matchFilenameTime(file).matchedId).not.toBe("rec-single-time");
+            expect(matchFilenameSequence(file).matchedId).not.toBe("rec-single-sequence");
+        },
+    );
 
     it("negative: a REC name WITH a channel letter is still carcam, not rec-single", () => {
         expect(RX_REC_SINGLE.test("REC20260101-120000-228-A.mp4")).toBe(false);

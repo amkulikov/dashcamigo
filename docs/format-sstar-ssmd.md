@@ -96,6 +96,13 @@ interprets the flags as a year/month and the speed as knots. Compare
 The size-specific flags gate and shared DDmm conversion live beside
 `SSTAR_DDMM_FLAGS_FIX` and `decodeSstarSsmdRow`.
 
+The dual-camera RoadScan carries camera identity only in its `F`/`R`
+folders. Preserve that hierarchy when importing; a flat file drop cannot
+recover the camera from the name. Counters advance independently per camera,
+so pair by recording time, not basename or counter equality. Event clips
+replace normal loop segments within the same run. Filename/path
+classification lives in `src/parsers/filename/`.
+
 Validation against the real clip's 60 fixes gives a mean speed error of
 0.72 km/h against successive positions; interpreting the speed as knots
 raises it to 33.10 km/h. The doubled course byte agrees with movement
@@ -103,9 +110,10 @@ bearing to about 1.7 degrees on moving pairs. The GPS clock advances once
 per second and agrees with the filename's local clock at UTC+3 within a
 second. The shared REC date anchor therefore applies.
 
-The sample establishes only active fixes in the northern/eastern
-hemispheres. Signed DDmm for southern/western positions and a dual-coordinate
-no-fix sentinel are defensive conventions, without real sample validation;
+The samples establish active fixes in the northern/eastern hemispheres and
+dual-coordinate no-fix sentinels. On loss of fix, the DDmm clock switches to
+the local RTC; omit those rows from the UTC track. Signed DDmm for
+southern/western positions remains defensive, without real sample validation;
 unknown flags remain rejected. The sibling `SS GSNR` track contains integer
 triples, but their units and mounting axes are unverified. Do not decode it
 without a calibration capture.

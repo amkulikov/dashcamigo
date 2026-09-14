@@ -7,6 +7,10 @@ User-facing changes, newest first. Dates are when the change landed on
 [beta](https://beta.dashcamigo.app); production picks it up with the next
 release tag. Localized texts ship inside the app (the "What's new" panel).
 
+## 2026-09-14
+
+- **New camera support:** Front/rear cameras and recording modes are recognized for iBOX RoadScan 2K.
+
 ## 2026-09-13
 
 - **Improved:** Export is faster.

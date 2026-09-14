@@ -47,6 +47,7 @@ import {
     RX_NOVATEK_VIOFO,
     RX_REDTIGER,
     RX_REC_SINGLE,
+    RX_REC_SINGLE_PATH_CHANNEL,
     RX_SSTAR_CHN,
     RX_TESLA_EVENT_FILENAME,
     RX_TESLA_PATH,
@@ -168,6 +169,8 @@ const recSingleChannel: FilenameChannelTechnique = {
     id: "rec-single-channel",
     extract(file: VendorFile): ChannelMatch | null {
         if (!RX_REC_SINGLE.test(file.file.name)) return null;
+        const channelPath = file.relativePath.match(RX_REC_SINGLE_PATH_CHANNEL);
+        if (channelPath) return sure(channelPath[2]!.toUpperCase() === "F" ? "front" : "rear");
         // iZEEKER separates same-named channels into Normal/A and Normal/B.
         // The letters are positional indices, so keep the mount labels
         // unconfirmed while still assigning distinct channel slots.

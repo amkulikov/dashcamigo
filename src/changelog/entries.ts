@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-09-14.1",
+        category: "support",
+        text: {
+            en: "Front/rear cameras and recording modes are recognized for iBOX RoadScan 2K.",
+            ru: "Для iBOX RoadScan 2K определяются передняя и задняя камеры и режим записи.",
+            de: "Front- und Rückkamera sowie Aufnahmemodi der iBOX RoadScan 2K werden erkannt.",
+            es: "Se reconocen las cámaras delantera y trasera y los modos de grabación de iBOX RoadScan 2K.",
+            fr: "Les caméras avant et arrière et les modes d’enregistrement de l’iBOX RoadScan 2K sont reconnus.",
+            pl: "Rozpoznawane są przednia i tylna kamera oraz tryby nagrywania iBOX RoadScan 2K.",
+            pt: "As câmeras dianteira e traseira e os modos de gravação da iBOX RoadScan 2K são reconhecidos.",
+            zh: "可识别 iBOX RoadScan 2K 的前后摄像头和录像模式。",
+            ja: "iBOX RoadScan 2K のフロント・リアカメラと録画モードを認識します。",
+            ko: "iBOX RoadScan 2K의 전방·후방 카메라와 녹화 모드를 인식해요.",
+        },
+    },
+    {
         id: "2026-09-13.2",
         category: "improvement",
         text: {

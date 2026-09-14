@@ -66,6 +66,17 @@ describe("classifyGpsSource", () => {
         expect(classifyGpsSource(vf("NO20260428-200501-000897-20260429120347.mp4"))).toBe("embedded"); // 70mai M500
     });
 
+    it.each(["REC20260913-125420-1370.mp4", "SOS20260913-125521-1371.mp4", "PAR20260913-120859-0.mp4"])(
+        "keeps the embedded probe available for the REC family %s",
+        (name) => {
+            for (const file of [vf(name), vf(name, `card/Normal/F/${name}`)]) {
+                expect(classifyGpsSource(file)).toBe("embedded");
+                expect(shouldTryEmbeddedGps(file, false)).toBe(true);
+                expect(shouldTryEmbeddedGps(file, true)).toBe(false);
+            }
+        },
+    );
+
     it("70mai A510 LA/PA prefixes and the pre-stamp channel letter ride the same embedded hint", () => {
         // The hint gates on the shared RX_70MAI, so the widened regex (LA/PA
         // parking prefixes, channel letter BEFORE the app-export trailing

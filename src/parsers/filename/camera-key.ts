@@ -50,6 +50,7 @@ import {
     RX_NOVATEK_VANTRUE,
     RX_NOVATEK_VIOFO,
     RX_REC_SINGLE,
+    RX_REC_SINGLE_PATH_CHANNEL,
     RX_REDTIGER,
     RX_SSTAR_CHN,
     RX_TESLA_EVENT_FILENAME,
@@ -221,6 +222,17 @@ const recSingleCameraKey: FilenameCameraKeyTechnique = {
     id: "rec-single-camera-key",
     extract(file: VendorFile): string | null {
         if (!RX_REC_SINGLE.test(file.file.name)) return null;
+        if (RX_REC_SINGLE_PATH_CHANNEL.test(file.relativePath)) {
+            // Modes interleave in the same recording loop. Remove exactly the
+            // card's two trailing folders so a camera root named F survives.
+            const dir = file.relativePath
+                .split("/")
+                .filter((segment) => segment.length > 0)
+                .slice(0, -3)
+                .join("/");
+            const masked = maskName(file.file.name.replace(/^(?:REC|SOS|PAR)/i, "REC"));
+            return `rec-single|${dir}|${masked}`;
+        }
         // Some dual-channel SigmaStar cameras use the same REC name in
         // Normal/A and Normal/B folders. Only strip a letter when the channel matcher
         // recognises that full card layout: a user-created bare A/B directory

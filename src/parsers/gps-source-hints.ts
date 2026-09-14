@@ -124,9 +124,9 @@ const GPS_SOURCE_HINTS: readonly GpsSourceHint[] = [
         matches: (f) => RX_CARCAM.test(f.file.name),
         source: "embedded",
     },
-    // SigmaStar REC family: iZEEKER iD300 carries KTRX records in an ssmd
-    // meta track. A known single-channel variant with the same name shape has
-    // no GPS, but probing it is safe and preserves support for embedded variants.
+    // SigmaStar REC/SOS/PAR family: iZEEKER iD300 carries KTRX records in an
+    // ssmd meta track. GPS-less variants share the name shape, but probing
+    // them is safe and preserves support for embedded variants.
     {
         id: "rec-single",
         matches: (f) => RX_REC_SINGLE.test(f.file.name),

@@ -35,6 +35,8 @@ import {
     RX_NOVATEK_PATH_RO,
     RX_NOVATEK_VANTRUE,
     RX_NOVATEK_VIOFO,
+    RX_REC_SINGLE,
+    RX_REC_SINGLE_PATH_CHANNEL,
     RX_REDTIGER,
     RX_REDTIGER_PATH_MODE,
     RX_TESLA_PATH,
@@ -130,6 +132,29 @@ const carcamMode: FilenameModeTechnique = {
         if (RX_CARCAM_PATH_PARKING.test(lower)) return "parking";
         if (RX_CARCAM.test(file.file.name)) return "normal";
         return null;
+    },
+};
+
+const recSingleMode: FilenameModeTechnique = {
+    id: "rec-single-mode",
+    extract(file: VendorFile): RecordingMode | null {
+        if (!RX_REC_SINGLE.test(file.file.name)) return null;
+        const prefix = file.file.name.slice(0, 3).toUpperCase();
+        if (prefix === "SOS") return "event";
+        if (prefix === "PAR") return "parking";
+        // REC is shared by unrelated firmwares; only the card layout provides
+        // a mode when the name has no explicit event or parking prefix.
+        const path = file.relativePath.match(RX_REC_SINGLE_PATH_CHANNEL);
+        switch (path?.[1]?.toLowerCase()) {
+            case "normal":
+                return "normal";
+            case "event":
+                return "event";
+            case "parking":
+                return "parking";
+            default:
+                return null;
+        }
     },
 };
 
@@ -413,6 +438,7 @@ export const FILENAME_MODE: readonly FilenameModeTechnique[] = [
     mai70Mode,
     blackvueMode,
     carcamMode,
+    recSingleMode,
     ddpaiMode,
     eaceMode,
     escortMode,

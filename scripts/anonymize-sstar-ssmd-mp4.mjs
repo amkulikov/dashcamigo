@@ -34,6 +34,7 @@ const SUPPORTED_SAMPLE_SIZES = [32, 40, 56];
 const FLAGS_FIX_BIT = 0x0100;
 const FLAGS_BASES = [0x047e, 0x067e];
 const DDMM_FLAGS_FIX = 0x097e;
+const DDMM_FLAGS_NO_FIX = 0x087e;
 const KTRX_FLAGS_FIX = 0x087e;
 const NO_FIX_COORDINATE = 4294967295;
 const KTRX_FACTORS = [
@@ -262,10 +263,16 @@ const sampleBuffers = sampleAbsOffsets.map((off) => {
     if (sampleSize === 32) {
         const lat = ddmmToDegrees(buf.readDoubleLE(0));
         const lon = ddmmToDegrees(buf.readDoubleLE(8));
-        if (flags !== DDMM_FLAGS_FIX || (!hasNoFixCoordinates(buf) && !hasValidCoordinates(lat, lon))) {
+        const isNoFix = hasNoFixCoordinates(buf);
+        const hasKnownFlags = flags === DDMM_FLAGS_FIX || (flags === DDMM_FLAGS_NO_FIX && isNoFix);
+        if (!hasKnownFlags || (!isNoFix && !hasValidCoordinates(lat, lon))) {
             scrubSample(buf, flags);
             junkCount++;
-        } else if (!hasNoFixCoordinates(buf)) {
+        } else if (isNoFix) {
+            // Keep the local-RTC clock and status without retaining any position.
+            buf.writeDoubleLE(NO_FIX_COORDINATE, 0);
+            buf.writeDoubleLE(NO_FIX_COORDINATE, 8);
+        } else {
             buf.writeDoubleLE(Math.round(lat) * 100, 0);
             buf.writeDoubleLE(Math.round(lon) * 100, 8);
             fixCount++;

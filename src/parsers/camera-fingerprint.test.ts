@@ -85,6 +85,39 @@ describe("cameraFingerprint - cross-channel identity", () => {
         expect(a).toBe(b);
     });
 
+    it("REC family: F/R channels and interleaved modes share a fingerprint", () => {
+        const paths = [
+            "Normal/F/REC20260913-125420-1370.mp4",
+            "Normal/R/REC20260913-125420-1334.mp4",
+            "Event/F/SOS20260913-125521-1371.mp4",
+            "Event/R/SOS20260913-125521-1335.mp4",
+            "Parking/F/PAR20260913-120859-0.mp4",
+            "Parking/R/PAR20260913-120859-0.mp4",
+        ];
+        const fingerprints = paths.map((path) => cameraFingerprint(vf(path.split("/").at(-1)!, `card/${path}`)));
+        expect(new Set(fingerprints)).toEqual(new Set(["rec-single|card|REC#-#-#.mp#"]));
+    });
+
+    it("REC family: removes only the final mode and channel folders", () => {
+        const name = "REC20260913-125420-1370.mp4";
+        const roots = ["", "F", "R", "Normal", "other", "card/F", "card/R"];
+        const fingerprints = roots.map((root) => cameraFingerprint(vf(name, `${root}/Normal/F/${name}`)));
+        expect(new Set(fingerprints).size).toBe(roots.length);
+        expect(fingerprints).toEqual(roots.map((root) => `rec-single|${root}|REC#-#-#.mp#`));
+    });
+
+    it("REC family: leaves arbitrary F/R directories and flat mode prefixes distinct", () => {
+        const normal = "REC20260913-125420-1370.mp4";
+        const event = "SOS20260913-125521-1371.mp4";
+        expect(cameraFingerprint(vf(normal, `card/F/${normal}`))).not.toBe(
+            cameraFingerprint(vf(normal, `card/R/${normal}`)),
+        );
+        expect(cameraFingerprint(vf(normal))).not.toBe(cameraFingerprint(vf(event)));
+        expect(cameraFingerprint(vf("clip.mp4", "card/Normal/F/clip.mp4"))).not.toBe(
+            cameraFingerprint(vf("clip.mp4", "card/Normal/R/clip.mp4")),
+        );
+    });
+
     it("CarCam 4CH: A/B/C/D channels share a fingerprint", () => {
         const a = cameraFingerprint(vf("REC20250607-180617-527-A.mp4", "normal/a/REC20250607-180617-527-A.mp4"));
         const b = cameraFingerprint(vf("REC20250607-180617-527-B.mp4", "normal/b/REC20250607-180617-527-B.mp4"));

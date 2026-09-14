@@ -80,11 +80,12 @@ export function blackvueChannelGroupKey(name: string): string | null {
 
 // CarCam 4CH 360-WiFi: REC + date - time - sequence - A/B/C/D channel.
 export const RX_CARCAM = /^REC(\d{8})-(\d{6})-(\d{1,5})-([ABCD])\.mp4$/i;
-// SigmaStar REC family: REC + date - time - sequence and NOTHING after it.
-// Some cameras are single-channel; iZEEKER puts same-named channels in
-// Normal/A and Normal/B folders. The missing filename channel letter keeps
-// this disjoint from RX_CARCAM (where -A..D is mandatory).
-export const RX_REC_SINGLE = /^REC(\d{8})-(\d{6})-(\d{1,5})\.mp4$/i;
+// SigmaStar REC family: mode prefix + date - time - sequence, no channel suffix.
+// iZEEKER splits channels into Normal/A and Normal/B; iBox RoadScan uses
+// Normal|Event|Parking/F|R with REC|SOS|PAR prefixes. A bare REC name carries
+// no reliable channel or mode. The missing suffix keeps this off RX_CARCAM.
+export const RX_REC_SINGLE = /^(?:REC|SOS|PAR)(\d{8})-(\d{6})-(\d{1,5})\.mp4$/i;
+export const RX_REC_SINGLE_PATH_CHANNEL = /(?:^|\/)(Normal|Event|Parking)\/([FR])\/[^/]+$/i;
 export const RX_CARCAM_PATH_FRONT = /(?:^|\/)normal\/a\//i;
 export const RX_CARCAM_PATH_REAR = /(?:^|\/)normal\/b\//i;
 export const RX_CARCAM_PATH_INTERIOR = /(?:^|\/)normal\/c\//i;

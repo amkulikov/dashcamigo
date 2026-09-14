@@ -215,8 +215,10 @@ describe("localDateAnchorMsFromFilename", () => {
         expect(localDateAnchorMsFromFilename("backup-20250101.mp4")).toBe(Date.UTC(2025, 0, 1));
     });
 
-    it("prefers the strict KTRX REC suffix over a foreign date run", () => {
-        expect(localDateAnchorMsFromFilename("backup-20250101 REC20260902-231922-661.mp4")).toBe(Date.UTC(2026, 8, 2));
+    it.each(["REC", "SOS", "PAR"])("prefers the strict %s suffix over a foreign date run", (prefix) => {
+        expect(localDateAnchorMsFromFilename(`backup-20250101 ${prefix}20260902-231922-661.mp4`)).toBe(
+            Date.UTC(2026, 8, 2),
+        );
     });
 
     it("rejects names without a plausible date run", () => {
@@ -601,14 +603,14 @@ describe("localNaiveSecondsFromNeolineFilename", () => {
 });
 
 describe("localNaiveSecondsFromRecFilename", () => {
-    it("accepts only the strict REC shape and validates calendar fields", () => {
-        expect(localNaiveSecondsFromRecFilename("REC20260902-231922-661.mp4")).toBe(
+    it.each(["REC", "SOS", "PAR"])("accepts the strict %s shape and validates calendar fields", (prefix) => {
+        expect(localNaiveSecondsFromRecFilename(`${prefix}20260902-231922-661.mp4`)).toBe(
             Date.UTC(2026, 8, 2, 23, 19, 22) / 1000,
         );
-        expect(localNaiveSecondsFromRecFilename("backup REC20260902-231922-661.mp4")).toBe(
+        expect(localNaiveSecondsFromRecFilename(`backup ${prefix}20260902-231922-661.mp4`)).toBe(
             Date.UTC(2026, 8, 2, 23, 19, 22) / 1000,
         );
-        expect(localNaiveSecondsFromRecFilename("REC20260902-251922-661.mp4")).toBeNull();
+        expect(localNaiveSecondsFromRecFilename(`${prefix}20260902-251922-661.mp4`)).toBeNull();
         expect(localNaiveSecondsFromRecFilename("clip-20260902-231922.mp4")).toBeNull();
     });
 });
