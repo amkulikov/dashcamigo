@@ -17,14 +17,14 @@
 // Dependencies: ffmpeg in PATH.
 //
 // Usage:
-//   node scripts/anonymize-ligogps-trailer-ts.mjs <input.ts> <output.TS> [duration=3]
+//   node scripts/anonymize-ligogps-trailer-ts.mjs <input.ts> <output.TS> [duration=3] [hevc|h264]
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 
-const [, , inputPath, outputPath, durationArg] = process.argv;
+const [, , inputPath, outputPath, durationArg, codecArg] = process.argv;
 if (!inputPath || !outputPath) {
-    console.error("usage: anonymize-ligogps-trailer-ts.mjs <input.ts> <output.TS> [duration=3]");
+    console.error("usage: anonymize-ligogps-trailer-ts.mjs <input.ts> <output.TS> [duration=3] [hevc|h264]");
     process.exit(1);
 }
 if (!existsSync(inputPath)) {
@@ -32,6 +32,10 @@ if (!existsSync(inputPath)) {
     process.exit(1);
 }
 const durationSec = Number(durationArg ?? 3);
+const codec = codecArg ?? "hevc";
+if (!Number.isFinite(durationSec) || durationSec <= 0 || !["hevc", "h264"].includes(codec)) {
+    throw new Error("invalid duration or codec");
+}
 
 const TS_SIZE = 188;
 const SLOT_SIZE = 132;
@@ -41,7 +45,7 @@ const MAX_TRAILER_BYTES = 16 * 1024 * 1024;
 const MAX_TRAILER_SLOTS = Math.floor((MAX_TRAILER_BYTES - TRAILER_FIXED_SIZE) / SLOT_SIZE);
 
 const TRAILER_DIALECTS = [
-    { magic: "SKIPLCAIGPSINFO", terminator: 0x23232323, header: "length" },
+    { magic: "SKIPLCAIGPSINFO", terminator: 0x23232323, header: "length-or-count" },
     { magic: "SKIPLIGOGPSINFO", terminator: 0x23232323, header: "length" },
     { magic: "SKIPLIGOGPSINFO", terminator: 0x26262626, header: "slot-capacity" },
 ];
@@ -75,17 +79,26 @@ if (trailer.readUInt32BE(0) !== trailerLen) {
     process.exit(1);
 }
 const magic = trailer.toString("latin1", 4, 19);
+const isEmptySkip =
+    trailerLen === TRAILER_FIXED_SIZE &&
+    terminator === 0x23232323 &&
+    trailer.toString("latin1", 4, 8) === "SKIP" &&
+    trailer.subarray(8, 28).every((byte) => byte === 0);
 const dialect = TRAILER_DIALECTS.find((candidate) => candidate.magic === magic && candidate.terminator === terminator);
-if (!dialect) {
+if (!dialect && !isEmptySkip) {
     console.error(`unexpected trailer magic: ${JSON.stringify(magic)}`);
     process.exit(1);
 }
 const slotCount = (trailerLen - TRAILER_FIXED_SIZE) / SLOT_SIZE;
 const headerValue = trailer.readUInt32LE(24);
 const hasValidHeader =
-    dialect.header === "length"
-        ? headerValue === trailerLen
-        : headerValue >= slotCount && headerValue <= MAX_TRAILER_SLOTS;
+    isEmptySkip
+        ? headerValue === 0
+        : dialect.header === "length-or-count"
+          ? headerValue === trailerLen || headerValue === slotCount
+          : dialect.header === "length"
+            ? headerValue === trailerLen
+            : headerValue >= slotCount && headerValue <= MAX_TRAILER_SLOTS;
 if (!hasValidHeader) {
     console.error(`unexpected trailer header value ${headerValue}`);
     process.exit(1);
@@ -115,13 +128,13 @@ for (let off = SLOTS_OFFSET; off + SLOT_SIZE <= trailer.length; off += SLOT_SIZE
     trailer.write(scrubbed, textStart, "latin1");
     slots++;
 }
-if (coordinates === 0 || unchangedCoordinates > 0) {
+if ((!isEmptySkip && coordinates === 0) || unchangedCoordinates > 0) {
     console.error(`cannot prove coordinate scrubbing: fields=${coordinates}, unchanged=${unchangedCoordinates}`);
     process.exit(1);
 }
 console.error(`scrubbed ${coordinates} coordinate fields in ${slots} slots`);
 
-// --- Step 3: generate a from-scratch TS body (HEVC + AAC, tiny).
+// --- Step 3: generate a from-scratch TS body.
 const bodyTmp = `${outputPath}.body.ts`;
 const ffArgs = [
     "-y",
@@ -134,15 +147,13 @@ const ffArgs = [
     "-i",
     `sine=frequency=1000:sample_rate=16000:duration=${durationSec}`,
     "-c:v",
-    "libx265",
+    codec === "h264" ? "libx264" : "libx265",
     "-preset",
     "ultrafast",
-    "-x265-params",
-    "log-level=error:crf=40",
+    ...(codec === "h264" ? ["-crf", "35"] : ["-x265-params", "log-level=error:crf=40"]),
     "-pix_fmt",
     "yuv420p",
-    "-tag:v",
-    "hvc1",
+    ...(codec === "hevc" ? ["-tag:v", "hvc1"] : []),
     "-c:a",
     "aac",
     "-ac",

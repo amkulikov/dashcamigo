@@ -55,6 +55,40 @@ describe("real-anonymized LigoGPS-TS-trailer fixture", () => {
         expect(last.unixSeconds - first.unixSeconds).toBe(59);
     });
 
+    it("parses the slot-count header and positional course", async () => {
+        const name = "20260904_202849F.ts";
+        const file = new File([Uint8Array.from(readFileSync(resolve(HERE, "real-anonymized-count.TS")))], name);
+        const vf = { file, relativePath: `video/F/${name}` };
+        const index = await buildMp4Index(file);
+        expect(await ligoGpsTrailerTsPrimitive.marker(vf, index)).toBe(true);
+        const result = await ligoGpsTrailerTsPrimitive.parse(vf, index);
+        expect(result.skipped).toHaveLength(0);
+        expectPlausibleGpsTrack(result.records, { minCount: 60, monotonicTime: true });
+        expect(result.records).toHaveLength(60);
+        const first = result.records[0]!;
+        expect(first.unixSeconds).toBe(Date.UTC(2026, 8, 4, 20, 29, 0) / 1000);
+        expect(first.speedMs).toBeCloseTo(16 / 3.6);
+        expect(first.bearingDeg).toBeCloseTo(97.85);
+        expect(result.records[59]!.unixSeconds - first.unixSeconds).toBe(59);
+        for (const record of result.records) {
+            expect(record.lat).toBe(53);
+            expect(record.lon).toBe(49);
+            expect(record.active).toBe(true);
+            expect(record.accelXg).toBe(0);
+            expect(record.accelYg).toBe(0);
+            expect(record.accelZg).toBe(0);
+        }
+    });
+
+    it("indexes an empty parking trailer without inventing GPS", async () => {
+        const name = "20260902_174435F_PARK.ts";
+        const file = new File([Uint8Array.from(readFileSync(resolve(HERE, "real-anonymized-empty.TS")))], name);
+        const vf = { file, relativePath: `park/F/${name}` };
+        const index = await buildMp4Index(file);
+        expect(await ligoGpsTrailerTsPrimitive.marker(vf, index)).toBe(true);
+        expect(await ligoGpsTrailerTsPrimitive.parse(vf, index)).toEqual({ records: [], skipped: [] });
+    });
+
     it("parses the classic LIGO magic with an ampersand terminator", async () => {
         const name = "2026081822373512_f.ts";
         const file = new File([Uint8Array.from(readFileSync(AMPERSAND_FIXTURE))], name);

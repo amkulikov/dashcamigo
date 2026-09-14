@@ -41,13 +41,35 @@ describe("findTsGpsTrailer", () => {
 
     it("rejects invalid dialect header values", async () => {
         const lcaiWithSlotCount = Buffer.from(happy);
-        lcaiWithSlotCount.writeUInt32LE(3, HAPPY_CLEAN + 24);
+        lcaiWithSlotCount.writeUInt32LE(2, HAPPY_CLEAN + 24);
         expect(await findTsGpsTrailer(blobOf(lcaiWithSlotCount))).toBeNull();
 
         const ligoWithUndersizedCapacity = Buffer.from(realAmpersand);
         const ligoTrailerLength = ligoWithUndersizedCapacity.readUInt32BE(ligoWithUndersizedCapacity.length - 4);
         ligoWithUndersizedCapacity.writeUInt32LE(59, ligoWithUndersizedCapacity.length - ligoTrailerLength + 24);
         expect(await findTsGpsTrailer(blobOf(ligoWithUndersizedCapacity))).toBeNull();
+    });
+
+    it.each(["count", "empty"])("detects and demuxes the real %s dialect", async (dialect) => {
+        const bytes = readFileSync(resolve(FIXTURES, `real-anonymized-${dialect}.TS`));
+        const file = new File([Uint8Array.from(bytes)], "20260904_202849F.ts");
+        const trailer = await findTsGpsTrailer(file);
+        expect(trailer?.trailerLength).toBe(dialect === "count" ? 7956 : 36);
+        const input = new Input({ source: new BlobSource(await clampTsGpsTrailer(file)), formats: [MPEG_TS] });
+        try {
+            expect(await input.computeDuration()).toBeGreaterThanOrEqual(2);
+        } finally {
+            input.dispose();
+        }
+    });
+
+    it("rejects populated or nonzero SKIP-only headers", async () => {
+        const empty = readFileSync(resolve(FIXTURES, "real-anonymized-empty.TS"));
+        empty[empty.length - 36 + 8] = 1;
+        expect(await findTsGpsTrailer(blobOf(empty))).toBeNull();
+        const populated = Buffer.from(happy);
+        populated.fill(0, HAPPY_CLEAN + 8, HAPPY_CLEAN + 28);
+        expect(await findTsGpsTrailer(blobOf(populated))).toBeNull();
     });
 
     it("rejects a foreign magic even with valid structure", async () => {

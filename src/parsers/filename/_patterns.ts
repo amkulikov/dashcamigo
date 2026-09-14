@@ -203,7 +203,7 @@ export const RX_MAH_SEQUENCE = /^MAH(\d{5})\.mp4$/i;
 export const RX_MAH_VIDEO_PATH = /(?:^|[\\/])MP_ROOT[\\/]\d{3}ANV01[\\/]/i;
 
 // Juscar: 8-digit date _ 6-digit time + F/R + .ts.
-export const RX_JUSCAR = /^(\d{8})_(\d{6})([FR])\.ts$/i;
+export const RX_JUSCAR = /^(\d{8})_(\d{6})([FR])(?:_(SOS|PARK))?\.ts$/i;
 export const RX_JUSCAR_PATH_REAR = /(?:^|\/)rear\/[^/]*$/i;
 export const RX_JUSCAR_PATH_FRONT = /(?:^|\/)front\/[^/]*$/i;
 export const RX_JUSCAR_PATH_EVENT = /(?:^|\/)event\//i;

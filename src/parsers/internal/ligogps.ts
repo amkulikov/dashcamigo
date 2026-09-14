@@ -163,6 +163,7 @@ const REC_RX = /^.{4}(\S+ \S+)\s+([NS?]):(-?)([.\d]+)\s+([EW?]):(-?)([.\d]+)\s+(
  *  in degrees, x/y/z accelerometer components. H: (altitude) has no
  *  GpsRecord field and M: (magnetic variation) no consumer - both dropped. */
 const COURSE_RX = /\bA:(-?[.\d]+)/;
+const TS_POSITIONAL_COURSE_RX = /x:-?[.\d]+\sy:-?[.\d]+\sz:-?[.\d]+\s+(-?[.\d]+)\s+-\s+-\s*$/;
 const ACCEL_RX = /x:(-?[.\d]+)\sy:(-?[.\d]+)\sz:(-?[.\d]+)/;
 
 /**
@@ -172,7 +173,12 @@ const ACCEL_RX = /x:(-?[.\d]+)\sy:(-?[.\d]+)\sz:(-?[.\d]+)/;
  */
 type LigoSpeedUnit = "knots" | "kmh";
 
-function parseLigoGpsRecord(text: string, mp4Filename: string, speedUnit: LigoSpeedUnit = "knots"): GpsRecord | null {
+function parseLigoGpsRecord(
+    text: string,
+    mp4Filename: string,
+    speedUnit: LigoSpeedUnit = "knots",
+    hasPositionalCourse = false,
+): GpsRecord | null {
     const m = text.match(REC_RX);
     if (!m) return null;
 
@@ -184,7 +190,7 @@ function parseLigoGpsRecord(text: string, mp4Filename: string, speedUnit: LigoSp
     const lonNeg = m[6] === "-";
     const lonStr = m[7]!;
     const speedStr = m[8]!;
-    const courseMatch = text.match(COURSE_RX);
+    const courseMatch = text.match(COURSE_RX) ?? (hasPositionalCourse ? text.match(TS_POSITIONAL_COURSE_RX) : null);
     const accelMatch = text.match(ACCEL_RX);
 
     // datetime: "YYYY/MM/DD HH:MM:SS" (UTC).
@@ -558,7 +564,7 @@ export async function parseLigoGpsTsTrailer(file: VendorFile): Promise<ParsedRec
         // Blank (all-zero) slots are a normal firmware gap, not an error.
         if (slot.every((b) => b === 0)) continue;
         const text = bytesToAscii(slot).replace(/\0+$/, "");
-        const record = parseLigoGpsRecord(text, file.file.name, "kmh");
+        const record = parseLigoGpsRecord(text, file.file.name, "kmh", true);
         if (record) {
             records.push(record);
         } else {

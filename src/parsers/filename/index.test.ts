@@ -1467,3 +1467,32 @@ describe("classifyFilenameTimelapse", () => {
         expect(classifyFilenameTimelapse(vf("video.mp4"))).toBe(false);
     });
 });
+
+describe("timestamp-channel TS mode suffixes", () => {
+    it.each([
+        ["", "video", "normal"],
+        ["_SOS", "event", "event"],
+        ["_PARK", "park", "parking"],
+    ])("recognizes both channels with %s suffix", (suffix, folder, mode) => {
+        const front = vf(`20260904_202849F${suffix}.ts`, `card/${folder}/F/20260904_202849F${suffix}.ts`);
+        const rear = vf(`20260904_202849R${suffix}.ts`, `card/${folder}/R/20260904_202849R${suffix}.ts`);
+        expect(matchFilenameTime(front).matchedId).toBe("juscar-time");
+        expect(classifyFilenameTime(front)?.getFullYear()).toBe(2026);
+        expect(classifyFilenameChannel(front)?.channel).toBe("front");
+        expect(classifyFilenameChannel(rear)?.channel).toBe("rear");
+        expect(classifyFilenameMode(front)).toBe(mode);
+        expect(classifyFilenameMode(vf(front.file.name))).toBe(mode);
+        expect(classifyFilenameSequence(front)).toBeNull();
+        expect(cameraFingerprint(front)).toBe(cameraFingerprint(rear));
+        expect(cameraFingerprint(front)).toBe(
+            cameraFingerprint(vf("20260904_202849F.ts", "card/video/F/20260904_202849F.ts")),
+        );
+        expect(cameraFingerprint(front)).not.toBe(
+            cameraFingerprint(vf(rear.file.name, `other/${folder}/R/${rear.file.name}`)),
+        );
+    });
+
+    it("does not claim unknown suffixes", () => {
+        expect(matchFilenameTime(vf("20260904_202849F_OTHER.ts")).matchedId).not.toBe("juscar-time");
+    });
+});

@@ -397,10 +397,9 @@ const juscarCameraKey: FilenameCameraKeyTechnique = {
     extract(file: VendorFile): string | null {
         const m = file.file.name.match(RX_JUSCAR);
         if (!m) return null;
-        // Channel letter F/R at group [3], immediately before `.ts`.
-        const masked = maskNameWithTrailingLetterStripped(file.file.name, m[3]!);
-        // Juscar splits channels by folder too (video/front/, video/rear/).
-        const dir = strippedParentDir(file.relativePath, ["front", "rear"]);
+        // Strip the channel and mode suffix so one camera keeps one key.
+        const masked = maskName(`${m[1]}_${m[2]}.ts`);
+        const dir = strippedParentDir(file.relativePath, ["front", "rear", "f", "r", "video", "event", "park"]);
         return `juscar|${dir}|${masked}`;
     },
 };

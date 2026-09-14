@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-09-14.2",
+        category: "support",
+        text: {
+            en: "Blackview X5S PRO recordings are supported.",
+            ru: "Поддержан Blackview X5S PRO.",
+            de: "Aufnahmen der Blackview X5S PRO werden unterstützt.",
+            es: "Se admiten grabaciones de Blackview X5S PRO.",
+            fr: "Les enregistrements du Blackview X5S PRO sont pris en charge.",
+            pl: "Nagrania z Blackview X5S PRO są obsługiwane.",
+            pt: "Há suporte para gravações do Blackview X5S PRO.",
+            zh: "支持 Blackview X5S PRO 的录像。",
+            ja: "Blackview X5S PRO の録画に対応しました。",
+            ko: "Blackview X5S PRO의 녹화를 지원합니다.",
+        },
+    },
+    {
         id: "2026-09-14.1",
         category: "support",
         text: {

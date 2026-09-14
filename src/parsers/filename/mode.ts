@@ -28,6 +28,7 @@ import {
     RX_IBOX,
     RX_IBOX_PATH_EVENT,
     RX_IBOX_PATH_PARKING,
+    RX_JUSCAR,
     RX_JUSCAR_PATH_EVENT,
     RX_JUSCAR_PATH_VIDEO,
     RX_MIVUE,
@@ -227,11 +228,14 @@ const iboxMode: FilenameModeTechnique = {
 
 const juscarMode: FilenameModeTechnique = {
     id: "juscar-mode",
-    evidence: () => "heuristic",
+    evidence: (file) => (RX_JUSCAR.test(file.file.name) ? "specific" : "heuristic"),
     extract(file: VendorFile): RecordingMode | null {
+        const match = file.file.name.match(RX_JUSCAR);
+        if (match?.[4]?.toUpperCase() === "SOS") return "event";
+        if (match?.[4]?.toUpperCase() === "PARK") return "parking";
         const path = file.relativePath;
         if (RX_JUSCAR_PATH_EVENT.test(path)) return "event";
-        if (RX_JUSCAR_PATH_VIDEO.test(path)) return "normal";
+        if (RX_JUSCAR_PATH_VIDEO.test(path) || match) return "normal";
         return null;
     },
 };

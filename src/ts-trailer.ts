@@ -1,23 +1,8 @@
 // Detection of the LigoGPS-family GPS trailer appended to MPEG-TS files.
 //
-// Some SigmaStar-era firmwares append a plaintext GPS table to the END of a
-// .ts recording, after the last whole 188-byte packet. The length-header
-// dialect ends in `####` and permits the LCAI or classic LIGO magic spelling;
-// the capacity-header dialect pairs classic LIGO with `&&&&`. The trailer is
-// not TS-packetized, so any demuxer that scans to EOF (mediabunny
-// computeDuration, MSE remux, export reads) loses packet sync on it and throws.
-// This module finds the trailer so AV consumers can clamp their readable range
-// to the clean TS prefix, and the ligogps-trailer-ts primitive can parse the
-// table.
-//
-// Trailer layout (verified on real files from two firmware families):
-//   [u32 BE length]["SKIP" + 11-byte magic][5 flag bytes]
-//   [u32 LE length or slot capacity]
-//   [N slots of 132 bytes: u32 slot index + NUL-padded ASCII record]
-//   ["####" or "&&&&" + u32 BE length]
-// The length counts the whole trailer including both length copies and the
-// terminator, so cleanLength = fileSize - length; the firmware always starts
-// the trailer on the 188-byte grid.
+// Firmware appends a plaintext table after the last whole 188-byte packet.
+// AV readers must exclude it to preserve packet sync; GPS parsing reads it
+// separately. Layout and dialect constraints: docs/format-ligogps-trailer-ts.md.
 
 import { isTransportStreamName } from "./video-format-names.js";
 
@@ -37,7 +22,7 @@ const AMPERSAND_BYTE = 0x26;
 const TRAILER_DIALECTS = [
     { magic: "SKIPLIGOGPSINFO", terminatorByte: AMPERSAND_BYTE, header: "slot-capacity" },
     { magic: "SKIPLIGOGPSINFO", terminatorByte: HASH_BYTE, header: "length" },
-    { magic: "SKIPLCAIGPSINFO", terminatorByte: HASH_BYTE, header: "length" },
+    { magic: "SKIPLCAIGPSINFO", terminatorByte: HASH_BYTE, header: "length-or-count" },
 ] as const;
 /** Empty table: u32 len + magic 15 + 5 flags + u32 field + marker + u32 len. */
 const MIN_TRAILER_BYTES = 36;
@@ -100,6 +85,15 @@ export async function findTsGpsTrailer(blob: Blob): Promise<TsGpsTrailer | null>
     if (head.length < TS_TRAILER_SLOTS_OFFSET) return null;
     const headView = new DataView(head.buffer, head.byteOffset, head.byteLength);
     if (headView.getUint32(0) !== trailerLength) return null;
+    // Parking clips carry only SKIP and zero padding, with no GPS magic.
+    if (
+        trailerLength === MIN_TRAILER_BYTES &&
+        terminatorByte === HASH_BYTE &&
+        asciiAt(head, 4, 4) === "SKIP" &&
+        head.subarray(8).every((byte) => byte === 0)
+    ) {
+        return { cleanLength, trailerLength };
+    }
     const magic = asciiAt(head, 4, 15);
     const dialect = TRAILER_DIALECTS.find(
         (candidate) => candidate.magic === magic && candidate.terminatorByte === terminatorByte,
@@ -108,6 +102,9 @@ export async function findTsGpsTrailer(blob: Blob): Promise<TsGpsTrailer | null>
     const slotCount = (trailerLength - MIN_TRAILER_BYTES) / TRAILER_SLOT_BYTES;
     const headerValue = headView.getUint32(24, true);
     if (dialect.header === "length" && headerValue !== trailerLength) return null;
+    if (dialect.header === "length-or-count" && headerValue !== trailerLength && headerValue !== slotCount) {
+        return null;
+    }
     // Partial clips retain their nominal slot capacity, so it may exceed the
     // number of slots that were actually appended.
     if (dialect.header === "slot-capacity" && (headerValue < slotCount || headerValue > MAX_TRAILER_SLOTS)) {
