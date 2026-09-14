@@ -9,6 +9,7 @@ release tag. Localized texts ship inside the app (the "What's new" panel).
 
 ## 2026-09-14
 
+- **Fixed:** Seeking no longer stalls in rare cases.
 - **New camera support:** Blackview X5S PRO recordings are supported.
 - **New camera support:** Front/rear cameras and recording modes are recognized for iBOX RoadScan 2K.
 

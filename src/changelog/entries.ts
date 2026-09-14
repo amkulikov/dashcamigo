@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-09-14.3",
+        category: "fix",
+        text: {
+            en: "Seeking no longer stalls in rare cases.",
+            ru: "Исправлено зависание при перемотке в редких сценариях.",
+            de: "Seltene Hänger beim Spulen sind behoben.",
+            es: "Se corrigieron bloqueos ocasionales al desplazarse por el vídeo.",
+            fr: "La lecture ne se bloque plus dans de rares cas après un saut dans la vidéo.",
+            pl: "Usunięto rzadkie zawieszanie się podczas przewijania.",
+            pt: "Corrigidos travamentos ocasionais ao avançar ou voltar no vídeo.",
+            zh: "修复了少数情况下拖动进度条时卡住的问题。",
+            ja: "再生位置を変更すると、まれに動画が止まる問題を修正しました。",
+            ko: "드물게 재생 위치를 옮길 때 멈추는 문제를 수정했어요.",
+        },
+    },
+    {
         id: "2026-09-14.2",
         category: "support",
         text: {
