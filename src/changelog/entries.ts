@@ -28,6 +28,54 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-09-16.3",
+        category: "fix",
+        text: {
+            en: "Some TS recordings no longer fail to open.",
+            ru: "Некоторые записи TS больше не вызывают ошибку при открытии.",
+            de: "Bestimmte TS-Aufnahmen lassen sich wieder öffnen.",
+            es: "Algunas grabaciones TS ya no fallan al abrirse.",
+            fr: "Certains enregistrements TS ne provoquent plus d’erreur à l’ouverture.",
+            pl: "Niektóre nagrania TS nie powodują już błędu przy otwieraniu.",
+            pt: "Algumas gravações TS não apresentam mais erro ao abrir.",
+            zh: "部分 TS 录像不再出现打开失败的问题。",
+            ja: "一部の TS 録画が開けない問題を修正しました。",
+            ko: "일부 TS 녹화를 열 때 발생하던 오류를 수정했어요.",
+        },
+    },
+    {
+        id: "2026-09-16.2",
+        category: "support",
+        text: {
+            en: "XEGA recordings show both cameras, route, and speed.",
+            ru: "Для записей XEGA доступны обе камеры, маршрут и скорость.",
+            de: "XEGA-Aufnahmen zeigen beide Kameras, die Route und die Geschwindigkeit.",
+            es: "Las grabaciones de XEGA muestran ambas cámaras, la ruta y la velocidad.",
+            fr: "Les enregistrements XEGA affichent les deux caméras, l’itinéraire et la vitesse.",
+            pl: "Nagrania z XEGA pokazują obie kamery, trasę i prędkość.",
+            pt: "As gravações da XEGA mostram as duas câmeras, a rota e a velocidade.",
+            zh: "XEGA 录像可显示两个摄像头的画面、路线和速度。",
+            ja: "XEGA の録画で両方のカメラ、ルート、速度を表示できます。",
+            ko: "XEGA 녹화에서 두 카메라의 영상, 경로, 속도를 볼 수 있어요.",
+        },
+    },
+    {
+        id: "2026-09-16.1",
+        category: "feature",
+        text: {
+            en: "Trips can be filtered by recording mode, notes, or favorites.",
+            ru: "Поездки можно фильтровать по режиму записи, заметкам и избранному.",
+            de: "Fahrten lassen sich nach Aufnahmemodus, Notizen oder Favoriten filtern.",
+            es: "Los trayectos se pueden filtrar por modo de grabación, notas o favoritos.",
+            fr: "Les trajets peuvent être filtrés par mode d’enregistrement, notes ou favoris.",
+            pl: "Przejazdy można filtrować według trybu nagrywania, notatek lub ulubionych.",
+            pt: "As viagens podem ser filtradas por modo de gravação, notas ou favoritos.",
+            zh: "可按录像模式、笔记或收藏筛选行程。",
+            ja: "録画モード、メモ、お気に入りで走行を絞り込めます。",
+            ko: "녹화 모드, 메모, 즐겨찾기로 주행을 필터링할 수 있어요.",
+        },
+    },
+    {
         id: "2026-09-14.3",
         category: "fix",
         text: {

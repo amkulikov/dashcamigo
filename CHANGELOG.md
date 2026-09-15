@@ -7,6 +7,12 @@ User-facing changes, newest first. Dates are when the change landed on
 [beta](https://beta.dashcamigo.app); production picks it up with the next
 release tag. Localized texts ship inside the app (the "What's new" panel).
 
+## 2026-09-16
+
+- **Fixed:** Some TS recordings no longer fail to open.
+- **New camera support:** XEGA recordings show both cameras, route, and speed.
+- **New:** Trips can be filtered by recording mode, notes, or favorites.
+
 ## 2026-09-14
 
 - **Fixed:** Seeking no longer stalls in rare cases.
