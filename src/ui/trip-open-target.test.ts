@@ -49,6 +49,38 @@ describe("trip-open target identity", () => {
         expect(target?.tripKeys).toHaveLength(2);
     });
 
+    it("opens a reused recording at its first playback interval", () => {
+        const long = candidate(new File(["long"], "long.mp4"), "InternalView/long.mp4");
+        const target = captureTripOpenTarget([trip([long])], 0);
+        const regrouped = trip([long, long, long]);
+        expect(resolveTripOpenTarget([regrouped], target!)).toEqual({ tripIdx: 0, frameIdx: 0 });
+    });
+
+    it("opens the newly starting interior file when the exterior continues", () => {
+        const front = candidate(new File(["front"], "front.mp4"), "ExteriorView/front.mp4");
+        const before = candidate(new File(["before"], "before.mp4"), "InternalView/before.mp4");
+        const next = candidate(new File(["next"], "next.mp4"), "InternalView/next.mp4");
+        const recording = trip([]);
+        recording.frames = [
+            {
+                startUtc: 78,
+                durationSec: 14,
+                wallDurationSec: 14,
+                channels: { front, interior: before },
+                mediaOffsetSec: { front: 0, interior: 78 },
+            },
+            {
+                startUtc: 92,
+                durationSec: 12,
+                wallDurationSec: 12,
+                channels: { front, interior: next },
+                mediaOffsetSec: { front: 14, interior: 0 },
+            },
+        ];
+        const target = captureTripOpenTarget([recording], 0, 1);
+        expect(resolveTripOpenTarget([recording], target!)).toEqual({ tripIdx: 0, frameIdx: 1 });
+    });
+
     it("resolves a rebuilt event to the surviving trip nearest its original UTC", () => {
         const first = candidate(new File(["a"], "a.mp4"), "a.mp4");
         const second = candidate(new File(["b"], "b.mp4"), "b.mp4");

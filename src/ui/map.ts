@@ -35,7 +35,7 @@ import {
     prefersReducedMotion,
 } from "./media-queries.js";
 import type { GpsRecord } from "../parser.js";
-import { displayClockDate, wallToContentSec, type Trip, type TripFrame } from "../trips.js";
+import { displayClockDate, frameMediaOffset, wallToContentSec, type Trip, type TripFrame } from "../trips.js";
 import {
     getViewPanels,
     getPreferredMapMode,
@@ -50,7 +50,7 @@ import {
 const log = createLogger("map");
 
 import { isOffline, subscribeConnectivity } from "./connectivity.js";
-import { dom, onActivePlayerEvent } from "./dom.js";
+import { dom, effectiveMasterChannel, onActivePlayerEvent } from "./dom.js";
 import { subscribeExportState } from "./export-state.js";
 import { formatTime } from "./format.js";
 import { activeFrame, activeTrip, state } from "./state.js";
@@ -1676,12 +1676,12 @@ export function buildRecordPopupHtml(rec: GpsRecord, trip: Trip): string {
 
 /**
  * Real UTC for the player's current position. Both native and per-file MSE
- * backends present file-relative currentTime (0..frame.durationSec), so we
- * always add it to frame.startUtc.
+ * backends present file-relative currentTime; an interval may start later
+ * inside that file when the cameras cut at different times.
  */
 function currentRealUtc(frame: TripFrame): number {
     const ct = dom.player.currentTime || 0;
-    return frame.startUtc + ct;
+    return frame.startUtc + ct - frameMediaOffset(frame, effectiveMasterChannel());
 }
 
 /**

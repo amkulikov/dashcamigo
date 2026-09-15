@@ -48,6 +48,8 @@ import {
     RX_REDTIGER,
     RX_REC_SINGLE,
     RX_REC_SINGLE_PATH_CHANNEL,
+    RX_SEI_DOUBLE_GPS,
+    RX_SEI_DOUBLE_GPS_PATH,
     RX_SSTAR_CHN,
     RX_TESLA_EVENT_FILENAME,
     RX_TESLA_PATH,
@@ -178,6 +180,16 @@ const recSingleChannel: FilenameChannelTechnique = {
         if (RX_CARCAM_PATH_FRONT.test(lower)) return guess("front");
         if (RX_CARCAM_PATH_REAR.test(lower)) return guess("rear");
         return null;
+    },
+};
+
+const seiDoubleGpsChannel: FilenameChannelTechnique = {
+    id: "sei-double-gps-channel",
+    extract(file: VendorFile): ChannelMatch | null {
+        if (!RX_SEI_DOUBLE_GPS.test(file.file.name)) return null;
+        const path = file.relativePath.match(RX_SEI_DOUBLE_GPS_PATH);
+        if (!path) return null;
+        return sure(path[1]!.toLowerCase() === "internalview" ? "interior" : "front");
     },
 };
 
@@ -564,6 +576,7 @@ export const FILENAME_CHANNEL: readonly FilenameChannelTechnique[] = [
     beferichChannel,
     blackvueChannel,
     recSingleChannel,
+    seiDoubleGpsChannel,
     carcamChannel,
     sstarChnChannel,
     ddpaiChannel,

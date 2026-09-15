@@ -3,7 +3,7 @@
 // every Trip object while viewer chunks load, so an open action follows the
 // source-qualified recording key rather than either positional index.
 
-import { tripAllCandidates, type Trip } from "../trips.js";
+import { frameChannels, frameMediaOffset, tripAllCandidates, type Trip } from "../trips.js";
 import { vendorFileKey } from "../vendor-file-key.js";
 
 export interface TripOpenTarget {
@@ -40,7 +40,15 @@ export function captureTripOpenTarget(
     const keys =
         frame === null
             ? tripKeys
-            : [...new Set(Object.values(frame.channels).map((candidate) => vendorFileKey(candidate)))];
+            : [
+                  ...new Set(
+                      // A sidebar row can introduce an interior file while the
+                      // front file continues from an earlier playback interval.
+                      frameChannels(frame)
+                          .sort((a, b) => frameMediaOffset(frame, a) - frameMediaOffset(frame, b))
+                          .map((channel) => vendorFileKey(frame.channels[channel]!)),
+                  ),
+              ];
     if (keys.length === 0) return null;
     const eventUtc = eventIndex === undefined ? null : (trip.events[eventIndex]?.unixSeconds ?? null);
     if (eventIndex !== undefined && eventUtc === null) return null;
@@ -100,7 +108,8 @@ function buildRecordingLocationMap(trips: readonly Trip[]): Map<string, { tripId
         const trip = trips[tripIdx]!;
         for (let frameIdx = 0; frameIdx < trip.frames.length; frameIdx++) {
             for (const candidate of Object.values(trip.frames[frameIdx]!.channels)) {
-                locations.set(vendorFileKey(candidate), { tripIdx, frameIdx });
+                const key = vendorFileKey(candidate);
+                if (!locations.has(key)) locations.set(key, { tripIdx, frameIdx });
             }
         }
     }

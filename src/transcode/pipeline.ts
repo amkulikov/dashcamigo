@@ -3,7 +3,7 @@
 // Architecture (flat contract - see src/transcode/types.ts):
 //
 // 1. One main range (TranscodeSource = trip + channel + [startTripSec, endTripSec]).
-//    The range may span multiple MP4 files in the trip - sliceCandidatesForRange
+//    The range may span multiple MP4 files in the trip - sliceTripChannelForRange
 //    splits it at file boundaries; we then iterate over segments[].
 //
 // 2. For each segment:
@@ -43,9 +43,8 @@ import { getInputTimeOrigin } from "../media-time.js";
 import { openAdpcmAudioAuto } from "./adpcm-audio.js";
 import { createVideoSourceResolver } from "./normalize-degenerate-video.js";
 import { probeAudioUniformity } from "../export.js";
-import { rangeSourceFps, sliceCandidatesForRange } from "../export-range.js";
+import { rangeSourceFps, sliceTripChannelForRange } from "../export-range.js";
 import { createLogger } from "../log.js";
-import { tripCandidatesByChannel } from "../trips.js";
 import { VIDEO_INPUT_FORMATS } from "../video-formats.js";
 
 import { createRegionBlurResolver } from "../blur-region-resolver.js";
@@ -114,14 +113,7 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
     if (output.watermarkAnchor) await ensureWatermarkFontReady();
 
     // Main-channel segments covering the full range.
-    const mainCandidates = tripCandidatesByChannel(source.trip, source.channel);
-    // Range is footage-axis (content) seconds; the timeline places files on it.
-    const mainSegments = sliceCandidatesForRange(
-        mainCandidates,
-        source.trip.timeline,
-        source.startTripSec,
-        source.endTripSec,
-    );
+    const mainSegments = sliceTripChannelForRange(source.trip, source.channel, source.startTripSec, source.endTripSec);
     if (mainSegments.length === 0) {
         throw new Error("transcode: empty source range (no main candidates intersect range)");
     }

@@ -6,4 +6,6 @@ The packet starts with a length-prefixed `4e 01` NAL and a small elapsed-second 
 
 The packets contain no satellite UTC timestamp, speed, bearing, or accelerometer values. The extractor gives the trip layer relative offsets for clock anchoring and estimates movement speed and bearing from adjacent positions. The fixture generator copies only this track and `mvhd`, replacing every payload with fictional whole-degree coordinates or a no-fix sentinel; source video, audio, and the `ubia` trailer are omitted.
 
-The tested clips have a true-UTC MP4 creation clock and a filename with only local `HHMMSS`, so the filename cannot supply a date independently. Other suffix letters in the full-card diagnostic are not assigned recording modes without a verified meaning.
+The burned-in overlay can repeat a cached position and zero speed while the vehicle moves and every metadata packet reports no fix. Treat those packets as no GPS; the visible overlay does not establish a valid route.
+
+The tested clips have a true-UTC MP4 creation clock. The `InternalView` and `ExteriorView` folders identify the physical cameras, and their `YYMMDD` child folders supply the calendar date for the local `HHMMSS` filename; a flat filename alone cannot supply the date. See `src/parsers/filename/`. Unequal camera cuts use shared timeline intervals with source-file offsets in `src/trips.ts`. Other suffix letters are not assigned recording modes without a verified meaning.

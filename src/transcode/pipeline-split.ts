@@ -14,13 +14,12 @@ import { createRetryingBlobSource } from "../retrying-blob-source.js";
 import { getInputTimeOrigin } from "../media-time.js";
 
 import { probeAudioUniformity } from "../export.js";
-import { rangeSourceFps, sliceCandidatesForRange, type FileSegment } from "../export-range.js";
+import { rangeSourceFps, sliceTripChannelForRange, type FileSegment } from "../export-range.js";
 import type { BlurRegion } from "../blur-regions.js";
 import { createRegionBlurResolver } from "../blur-region-resolver.js";
 import { openAdpcmAudioAuto } from "./adpcm-audio.js";
 import { createLogger } from "../log.js";
 import type { Channel } from "../parsers/types.js";
-import { tripCandidatesByChannel } from "../trips.js";
 import type { Trip } from "../trips.js";
 import { VIDEO_INPUT_FORMATS } from "../video-formats.js";
 
@@ -153,11 +152,9 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
     if (output.watermarkAnchor) await ensureWatermarkFontReady();
 
     // Build per-slot segment lists for the trip range.
-    const slotSegments: FileSegment[][] = source.slotChannels.map((ch) => {
-        const cands = tripCandidatesByChannel(source.trip, ch);
-        // Range is footage-axis (content) seconds; the timeline places files on it.
-        return sliceCandidatesForRange(cands, source.trip.timeline, source.startTripSec, source.endTripSec);
-    });
+    const slotSegments: FileSegment[][] = source.slotChannels.map((ch) =>
+        sliceTripChannelForRange(source.trip, ch, source.startTripSec, source.endTripSec),
+    );
 
     // Turns a degenerate-packet MKV slot source into a clean stream-copy MP4 for
     // the video decode path (identity for every other container). Audio is read

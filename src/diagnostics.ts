@@ -20,6 +20,7 @@
 // file, so the download is the real review point.
 
 import { getLogBuffer } from "./log.js";
+import { tripAllCandidates } from "./trips.js";
 import { isPipLayout, mainChannel, state } from "./ui/state.js";
 import { APP_VERSION } from "./version.js";
 
@@ -102,22 +103,18 @@ interface DiagPayload {
 export function collectDiagnostics(extras?: { storageQuota?: number; storageUsage?: number }): DiagPayload {
     const navAny = navigator as Navigator & { deviceMemory?: number };
     const trips: DiagTripEntry[] = state.trips.map((trip) => {
-        let filesCount = 0;
+        const candidates = tripAllCandidates(trip);
         const fingerprintSet = new Set<string>();
         const extractorSet = new Set<string>();
-        for (const frame of trip.frames) {
-            for (const c of Object.values(frame.channels)) {
-                if (!c) continue;
-                filesCount++;
-                if (c.fingerprint) fingerprintSet.add(c.fingerprint);
-                for (const eid of c.appliedExtractors) extractorSet.add(eid);
-            }
+        for (const c of candidates) {
+            if (c.fingerprint) fingerprintSet.add(c.fingerprint);
+            for (const eid of c.appliedExtractors) extractorSet.add(eid);
         }
         return {
             startUtcSec: trip.startUtc,
             durationSec: Math.round(trip.durationSec),
             framesCount: trip.frames.length,
-            filesCount,
+            filesCount: candidates.length,
             totalBytes: trip.totalBytes,
             distanceKm: Number(trip.distanceKm.toFixed(2)),
             eventsCount: trip.events.length,

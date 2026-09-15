@@ -68,4 +68,20 @@ describe("regroup remap keys by File identity, not basename", () => {
 
         expect([...state.expandedTrips]).toEqual([0]);
     });
+
+    it("preserves the source-file interval when one camera spans several frames", () => {
+        const file = new File([], "long-camera.mp4");
+        const candidate = cand(file);
+        const frames = [0, 26, 52].map((offset) => ({
+            channels: { front: candidate },
+            durationSec: 26,
+            mediaOffsetSec: { front: offset },
+        }));
+        const split = { frames } as unknown as Trip;
+        state.active = { trip: 0, frame: 1 };
+
+        expect(buildFileLocationMap([split]).get(file)).toEqual({ trip: 0, frame: 0 });
+        remapActiveAndExpanded([split], [split]);
+        expect(state.active).toEqual({ trip: 0, frame: 1 });
+    });
 });

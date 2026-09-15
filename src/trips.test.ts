@@ -17,6 +17,8 @@ import {
     estimatePreciseClockOffsetByFingerprint,
     estimateProvisionalDurationByFingerprint,
     estimateTzByFingerprint,
+    frameMediaOffset,
+    finalizeFrameTiming,
     groupTrips,
     pickFrameChannel,
     reanchorUnsyncedTimes,
@@ -355,14 +357,7 @@ describe("groupTrips: dual-channel pairs", () => {
         expect(Object.keys(trip.frames[1]!.channels).sort()).toEqual(["front", "rear"]);
     });
 
-    // Regression guard for the BlackVue "GPS on the front channel only" bug: a
-    // shared .gps bound to just the front made the front anchor on its (delayed)
-    // GPS fix while the rear anchored on the filename. The gap exceeds the frame
-    // snap's half-window (FRAME_TIMESTAMP_SNAP_SEC/2 = 15 s), so the channels
-    // tear into separate single-channel frames - the trip shows front, then
-    // rear. cloneRecordsAcrossChannels removes the divergence by giving both
-    // channels the same GPS.
-    it("channel startUtc divergence past the snap splits front from rear", () => {
+    it("equal-length channels with conflicting clocks remain unpaired", () => {
         const front = makeCandidate({
             name: "20260718_070333_NF.mp4",
             startUtc: 1020, // anchored on the delayed GPS fix
@@ -377,11 +372,9 @@ describe("groupTrips: dual-channel pairs", () => {
             sequence: 1,
             fingerprint: SAME_CAM,
         });
-        // The symptom: no single frame carries both channels (they tear apart
-        // however the frame/trip split falls out).
-        const frames = groupTrips([front, rear]).flatMap((t) => t.frames);
-        const paired = frames.some((fr) => fr.channels.front && fr.channels.rear);
-        expect(paired).toBe(false);
+        const frames = groupTrips([front, rear]).flatMap((trip) => trip.frames);
+        expect(frames.some((frame) => frame.channels.front && frame.channels.rear)).toBe(false);
+        expect(frames.every((frame) => frame.mediaOffsetSec === undefined)).toBe(true);
     });
 
     it("identical channel startUtc (post-clone) keeps front and rear in one frame", () => {
@@ -623,6 +616,131 @@ describe("groupTrips: fingerprint partition + overlap-split", () => {
         const trips = groupTrips([a, b]);
         expect(trips).toHaveLength(1);
         expect(trips[0]!.frames).toHaveLength(2);
+    });
+});
+
+describe("groupTrips: independent channel cuts", () => {
+    it("aligns independently started channels when unequal file lengths establish different cuts", () => {
+        const front = makeCandidate({ name: "front.mp4", startUtc: 1020, durationSec: 24, channel: "front" });
+        const rear = makeCandidate({ name: "rear.mp4", startUtc: 1000, durationSec: 92, channel: "rear" });
+        const trips = groupTrips([front, rear]);
+        expect(trips).toHaveLength(1);
+        const trip = trips[0]!;
+        expect(trip.frames.map((frame) => [frame.startUtc, frame.durationSec])).toEqual([
+            [1000, 20],
+            [1020, 24],
+            [1044, 48],
+        ]);
+        expect(trip.frames[1]!.channels).toEqual({ front, rear });
+        expect(frameMediaOffset(trip.frames[1]!, "rear")).toBe(20);
+        expect(trip.timeline.contentDurationSec).toBe(92);
+    });
+
+    it("shares one timeline while preserving source positions, files and aggregates", () => {
+        const fronts = [0, 24, 50, 74].map((offset, index) =>
+            makeCandidate({
+                name: `front-${index}.mp4`,
+                startUtc: 1000 + offset,
+                durationSec: index % 2 === 0 ? 24 : 26,
+                channel: "front",
+                bytes: 100,
+            }),
+        );
+        const interior = makeCandidate({
+            name: "interior.mp4",
+            startUtc: 1001,
+            durationSec: 92,
+            channel: "interior",
+            bytes: 300,
+        });
+        const tail = makeCandidate({
+            name: "interior-tail.mp4",
+            startUtc: 1093,
+            durationSec: 7,
+            channel: "interior",
+            bytes: 40,
+        });
+        const candidates = [...fronts, interior, tail];
+        const trips = groupTrips(candidates);
+        expect(trips).toHaveLength(1);
+        const trip = trips[0]!;
+        expect(trip.durationSec).toBe(100);
+        expect(trip.timeline.contentDurationSec).toBe(100);
+        expect(trip.frames.map((frame) => frame.startUtc)).toEqual([1000, 1001, 1024, 1050, 1074, 1093]);
+        expect(tripAllCandidates(trip)).toHaveLength(candidates.length);
+        expect(new Set(tripAllCandidates(trip))).toEqual(new Set(candidates));
+        expect(tripCandidatesByChannel(trip, "interior")).toEqual([interior, tail]);
+        expect(trip.totalBytes).toBe(740);
+        expect(frameMediaOffset(trip.frames[2]!, "interior")).toBe(23);
+        expect(frameMediaOffset(trip.frames[2]!, "front")).toBe(0);
+        expect(frameMediaOffset(trip.frames[5]!, "front")).toBe(19);
+        for (const time of [0, 1, 24, 35, 93, 99.5]) {
+            expect(contentToWallUtc(trip.timeline, time), `wall time at ${time}`).toBe(1000 + time);
+            expect(wallToContentSec(trip.timeline, 1000 + time), `content time at ${time}`).toBe(time);
+        }
+        expect(interior.startUtc).toBe(1001);
+        expect(interior.durationSec).toBe(92);
+        for (const frame of trip.frames) finalizeFrameTiming(frame);
+        expect(trip.frames.map((frame) => frame.startUtc)).toEqual([1000, 1001, 1024, 1050, 1074, 1093]);
+        expect(trip.frames.map((frame) => frame.durationSec)).toEqual([1, 23, 26, 24, 19, 7]);
+        expect(groupTrips(tripAllCandidates(trip))[0]!.frames).toEqual(trip.frames);
+    });
+
+    it("keeps a longer channel's tail after the only short channel file ends", () => {
+        const front = makeCandidate({ name: "front.mp4", startUtc: 1000, durationSec: 24, channel: "front" });
+        const rear = makeCandidate({ name: "rear.mp4", startUtc: 1000, durationSec: 92, channel: "rear" });
+        const trip = groupTrips([front, rear])[0]!;
+        expect(trip.frames.map((frame) => frame.durationSec)).toEqual([24, 68]);
+        expect(trip.frames[1]!.channels).toEqual({ rear });
+        expect(frameMediaOffset(trip.frames[1]!, "rear")).toBe(24);
+        expect(trip.timeline.contentDurationSec).toBe(92);
+    });
+
+    it("detects same-channel collisions across intervening files on another channel", () => {
+        const front = makeCandidate({ name: "front.mp4", startUtc: 1000, durationSec: 120, channel: "front" });
+        const rear = makeCandidate({ name: "rear.mp4", startUtc: 1040, durationSec: 20, channel: "rear" });
+        const collision = makeCandidate({ name: "collision.mp4", startUtc: 1070, durationSec: 60, channel: "front" });
+        const trips = groupTrips([front, rear, collision]);
+        expect(trips).toHaveLength(2);
+        expect(tripAllCandidates(trips[0]!)).toEqual([front, rear]);
+        expect(tripAllCandidates(trips[1]!)).toEqual([collision]);
+    });
+
+    it("retains protected-copy playback instead of clipping its overlap", () => {
+        const normal = makeCandidate({ name: "normal.mp4", startUtc: 1000, durationSec: 120, channel: "front" });
+        const event = makeCandidate({
+            name: "event.mp4",
+            startUtc: 1030,
+            durationSec: 30,
+            channel: "rear",
+            recordingMode: "event",
+        });
+        const trip = groupTrips([normal, event])[0]!;
+        expect(trip.frames).toHaveLength(2);
+        expect(trip.frames.every((frame) => frame.mediaOffsetSec === undefined)).toBe(true);
+        expect(trip.timeline.contentDurationSec).toBe(150);
+    });
+
+    it("keeps time-lapse wall scaling outside realtime interval normalization", () => {
+        const front = makeCandidate({
+            name: "front.mp4",
+            startUtc: 1000,
+            durationSec: 10,
+            wallDurationSec: 120,
+            channel: "front",
+            isTimelapse: true,
+        });
+        const rear = makeCandidate({
+            name: "rear.mp4",
+            startUtc: 1040,
+            durationSec: 5,
+            wallDurationSec: 60,
+            channel: "rear",
+            isTimelapse: true,
+        });
+        const trip = groupTrips([front, rear])[0]!;
+        expect(trip.frames.every((frame) => frame.mediaOffsetSec === undefined)).toBe(true);
+        expect(trip.timeline.contentDurationSec).toBe(15);
     });
 });
 

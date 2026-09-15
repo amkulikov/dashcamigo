@@ -9,7 +9,7 @@
 // internals.
 
 import { getDateLocale, t } from "../i18n/index.js";
-import { contentToFrame, pickFrameChannel } from "../trips.js";
+import { contentToFrame, frameMediaOffset, pickFrameChannel } from "../trips.js";
 import {
     getTimelineView,
     setPlayerCursorRelSec,
@@ -191,9 +191,10 @@ export function initPlayerScrubber(deps: {
         if (!trip) return;
         // Frame containing sec + offset inside it (footage-axis resolver).
         const at = contentToFrame(trip.timeline, sec);
-        const picked = pickFrameChannel(trip.frames[at.index]!, mainChannel());
+        const frame = trip.frames[at.index]!;
+        const picked = pickFrameChannel(frame, mainChannel());
         if (!picked) return;
-        const fileSec = at.offsetInFrame;
+        const fileSec = frameMediaOffset(frame, picked.channel) + at.offsetInFrame;
         try {
             const bitmap = await extractFrameAt(picked.candidate.file, fileSec);
             if (!bitmap || token !== thumbExtractToken) {

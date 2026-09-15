@@ -7,9 +7,8 @@
 
 import type { BlurRegion } from "../blur-regions.js";
 import { applyTrackResult, followSeed } from "../blur-follow.js";
-import { sliceCandidatesForRange } from "../export-range.js";
+import { sliceTripChannelForRange } from "../export-range.js";
 import { createLogger } from "../log.js";
-import { tripCandidatesByChannel } from "../trips.js";
 import type { Trip } from "../trips.js";
 import {
     TRACK_NOTIFY_PROGRESS,
@@ -151,8 +150,7 @@ export async function toggleTrackPass(trip: Trip, region: BlurRegion): Promise<T
     const toSec = region.autoEnd ? contentDur : region.endSec;
     if (toSec - fromSec < 0.05) return "not-started";
 
-    const candidates = tripCandidatesByChannel(trip, region.channel);
-    const segments = sliceCandidatesForRange(candidates, trip.timeline, fromSec, toSec).map((seg) => ({
+    const segments = sliceTripChannelForRange(trip, region.channel, fromSec, toSec).map((seg) => ({
         file: seg.file,
         startInFile: seg.startInFile,
         endInFile: seg.endInFile,

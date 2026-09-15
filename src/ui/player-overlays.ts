@@ -20,11 +20,18 @@ import { drawTelemetryOverlays } from "../transcode/telemetry-overlays.js";
 import { isFinitePosition } from "../transcode/overlay-pipeline-helpers.js";
 import { hasFixAt, interpScalar, resolveFramePos, resolveNoFixFramePos } from "../transcode/frame-pos.js";
 import type { OverlayPipelineArgs, WatermarkAnchor } from "../transcode/types.js";
-import { contentToWallUtc } from "../trips.js";
+import { contentToWallUtc, frameMediaOffset } from "../trips.js";
 import type { Trip } from "../trips.js";
 import { getUnits } from "../units-pref.js";
 
-import { ALL_CHANNELS, channelPlayers, channelTileFor, dom, onActivePlayerEvent } from "./dom.js";
+import {
+    ALL_CHANNELS,
+    channelPlayers,
+    channelTileFor,
+    dom,
+    effectiveMasterChannel,
+    onActivePlayerEvent,
+} from "./dom.js";
 import { createExportMapSnapshotter, type ExportMapSnapshotter } from "./export-map-snapshot.js";
 import {
     exportPanelState,
@@ -336,7 +343,7 @@ function renderTelemetryCanvas(): void {
         return;
     }
     const ct = dom.player.currentTime || 0;
-    const frameUtc = af.frame.startUtc + ct;
+    const frameUtc = af.frame.startUtc + ct - frameMediaOffset(af.frame, effectiveMasterChannel());
     const base = interpolatePosition(af.trip.records, frameUtc);
     if (canvas.width !== w) canvas.width = w;
     if (canvas.height !== h) canvas.height = h;
@@ -395,7 +402,7 @@ function renderPreview(): void {
     if (!af || af.trip.records.length === 0) return;
     if (!exportPanelState.overlayMap.enabled || !dom.playerMapOverlay || dom.playerMapOverlay.hidden) return;
     const ct = dom.player.currentTime || 0;
-    const frameUtc = af.frame.startUtc + ct;
+    const frameUtc = af.frame.startUtc + ct - frameMediaOffset(af.frame, effectiveMasterChannel());
     const pos = interpolatePosition(af.trip.records, frameUtc);
     // Same coverage rule as the burned overlay: no fix -> the CSS badge covers
     // the mini-map (a stale snapshot would lie about the position), and no new

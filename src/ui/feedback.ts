@@ -8,10 +8,10 @@ import { getDateLocale, t } from "../i18n/index.js";
 import { createLogger } from "../log.js";
 import { buildStructureReport } from "../report-structure.js";
 import { captureSentryException } from "../sentry.js";
-import { displayClockDate, wallToContentSec } from "../trips.js";
+import { displayClockDate, frameMediaOffset, tripAllCandidates, wallToContentSec } from "../trips.js";
 import { formatDistanceFromKm } from "../units-pref.js";
 import { APP_VERSION } from "../version.js";
-import { dom } from "./dom.js";
+import { dom, effectiveMasterChannel } from "./dom.js";
 import { formatTime } from "./format.js";
 import { activateModal, deactivateModal, wireBackdropDismiss } from "./modal-helper.js";
 import { notify } from "./notifications.js";
@@ -324,12 +324,7 @@ function currentContextSummary(): string {
     });
     const start = tripFmt.format(displayClockDate(af.trip.startUtc, af.trip.cameraTzSec));
     const end = tripFmt.format(displayClockDate(af.trip.endUtc, af.trip.cameraTzSec));
-    let filesCount = 0;
-    for (const frame of af.trip.frames) {
-        for (const c of Object.values(frame.channels)) {
-            if (c) filesCount++;
-        }
-    }
+    const filesCount = tripAllCandidates(af.trip).length;
     let dist = "—";
     if (af.trip.distanceKm > 0) {
         const d = formatDistanceFromKm(af.trip.distanceKm);
@@ -344,11 +339,12 @@ function currentContextSummary(): string {
         }),
     );
 
-    // Current player position. dom.player.currentTime + frame.startUtc gives trip-time.
-    // Not using functions from player.ts to avoid an import cycle (player -> feedback -> player).
+    // Avoid a player -> feedback -> player import cycle.
     const ct = dom.player?.currentTime || 0;
-    // Footage-axis position: the active frame's content start + in-file offset.
-    const tripPosSec = wallToContentSec(af.trip.timeline, af.frame.startUtc) + ct;
+    const tripPosSec =
+        wallToContentSec(af.trip.timeline, af.frame.startUtc) +
+        ct -
+        frameMediaOffset(af.frame, effectiveMasterChannel());
     lines.push(
         t("feedback.body.context.position", {
             pos: formatTime(tripPosSec),

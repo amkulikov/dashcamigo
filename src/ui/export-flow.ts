@@ -30,7 +30,7 @@ import {
     candidatesInRange,
     rangeSourceBitrateBps,
     rangeSourceFps,
-    sliceCandidatesForRange,
+    sliceTripChannelForRange,
 } from "../export-range.js";
 import { recordsHaveGps } from "../parser.js";
 import { t, getCurrentLang, getDateLocale, type Lang } from "../i18n/index.js";
@@ -152,12 +152,7 @@ function measureRangeSource(trip: Trip): { bitrate: number; fps: number | null }
     let bitrate = 0;
     let fps: number | null = null;
     for (const channel of state.composition.channelOrder) {
-        const segments = sliceCandidatesForRange(
-            tripCandidatesByChannel(trip, channel),
-            trip.timeline,
-            startSec,
-            endSec,
-        );
+        const segments = sliceTripChannelForRange(trip, channel, startSec, endSec);
         bitrate += rangeSourceBitrateBps(segments);
         const channelFps = rangeSourceFps(segments);
         if (channelFps !== null && (fps === null || channelFps > fps)) fps = channelFps;

@@ -7,6 +7,7 @@ import {
     rangeSourceBitrateBps,
     rangeSourceFps,
     sliceCandidatesForRange,
+    sliceTripChannelForRange,
 } from "./export-range.js";
 import type { GpsRecord } from "./parsers/types.js";
 import { buildTripTimeline, groupTrips, type TripFrame, type VideoCandidate } from "./trips.js";
@@ -252,6 +253,53 @@ describe("sliceCandidatesForRange", () => {
         const spanning = candidatesInRange([a, b], timeline, 30, 90);
         expect(spanning.map((e) => e.candidate)).toEqual([a, b]);
         expect(spanning[1]!.fileStart).toBeCloseTo(60, 6);
+    });
+
+    it("exports unequal camera cuts once at their original file positions", () => {
+        const interior = makeCandidate({ name: "interior.mp4", startUtc: 1000, durationSec: 92 });
+        interior.channel = "interior";
+        const exterior = [0, 26, 52, 78].map((offset) => {
+            const candidate = makeCandidate({
+                name: `exterior-${offset}.mp4`,
+                startUtc: 1000 + offset,
+                durationSec: 26,
+            });
+            candidate.channel = "front";
+            return candidate;
+        });
+        const trip = groupTrips([interior, ...exterior])[0]!;
+        expect(trip.timeline.contentDurationSec).toBe(104);
+
+        const inside = sliceTripChannelForRange(trip, "interior", 50, 80);
+        expect(inside).toHaveLength(1);
+        expect(inside[0]).toMatchObject({ file: interior.file, startInFile: 50, endInFile: 80, tripStart: 0 });
+
+        const outside = sliceTripChannelForRange(trip, "front", 50, 80);
+        expect(outside.map(({ startInFile, endInFile }) => [startInFile, endInFile])).toEqual([
+            [24, 26],
+            [0, 26],
+            [0, 2],
+        ]);
+        expect(outside.reduce((total, segment) => total + segment.endInFile - segment.startInFile, 0)).toBe(30);
+    });
+
+    it("exports overlapping files in the same order as interval playback", () => {
+        const front = makeCandidate({ name: "front.mp4", startUtc: 1000, durationSec: 92 });
+        front.channel = "front";
+        const interior = makeCandidate({ name: "interior.mp4", startUtc: 1000, durationSec: 92 });
+        interior.channel = "interior";
+        const overlap = makeCandidate({ name: "short-front.mp4", startUtc: 1026, durationSec: 10 });
+        overlap.channel = "front";
+        const trip = groupTrips([front, interior, overlap])[0]!;
+        expect(trip.frames.some((frame) => frame.mediaOffsetSec)).toBe(true);
+
+        const slices = sliceTripChannelForRange(trip, "front", 20, 40);
+        expect(slices.map(({ file, startInFile, endInFile }) => [file.name, startInFile, endInFile])).toEqual([
+            [front.file.name, 20, 26],
+            [overlap.file.name, 0, 10],
+            [front.file.name, 36, 40],
+        ]);
+        expect(slices.reduce((total, slice) => total + slice.endInFile - slice.startInFile, 0)).toBe(20);
     });
 
     it("the shifted tail file ends exactly where the other channel's tail ends", () => {

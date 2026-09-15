@@ -17,6 +17,8 @@ import type { Trip, VideoCandidate } from "../trips.js";
 import {
     contentToFrame,
     contentToWallUtc,
+    frameChannels,
+    frameMediaOffset,
     needsRecordingMetadata,
     tripAllCandidates,
     wallToContentSec,
@@ -483,31 +485,12 @@ export function markersForTrip(trip: Trip): MarkerAnnotation[] {
 function markerAtAnchoredUtc(marker: MarkerAnnotation, trip: Trip): MarkerAnnotation {
     const anchor = marker.anchor;
     if (!anchor || !trip.timeline?.segments.length) return marker;
-    const frameIndex = markerAnchorFrameIndex(anchor.fileIdentityKey, trip);
-    if (frameIndex === null) return marker;
-    const segment = trip.timeline.segments.find((candidate) => candidate.frameIndex === frameIndex);
-    if (!segment) return marker;
-    const contentSec = Math.max(
-        segment.contentStart,
-        Math.min(segment.contentStart + anchor.offsetSec, segment.contentEnd),
-    );
+    const candidate = markerAnchorCandidate(anchor.fileIdentityKey, trip);
+    if (!candidate) return marker;
+    const contentSec = markerAnchorContentSec(trip, candidate, anchor.offsetSec);
+    if (contentSec === null) return marker;
     const utc = Math.round(contentToWallUtc(trip.timeline, contentSec) * 1000);
     return utc === marker.utc ? marker : { ...marker, utc };
-}
-
-/** Unique frame in this trip that owns an anchor. Exact identity wins; the
- * conservative path-root recovery mirrors uniqueTripForMarkerAnchor. */
-function markerAnchorFrameIndex(fileKey: string, trip: Trip): number | null {
-    const exact = matchingMarkerFrameIndices(trip, (candidate) => candidateIdentityKey(candidate) === fileKey);
-    if (exact.size === 1) return [...exact][0]!;
-    if (exact.size > 1) return null;
-    const stored = parseFileIdentityKey(fileKey);
-    if (!stored) return null;
-    const recovered = matchingMarkerFrameIndices(trip, (candidate) => {
-        if (candidate.file.size !== stored.size) return false;
-        return withoutRoot(normalizedPath(candidate.relativePath)) === withoutRoot(normalizedPath(stored.relativePath));
-    });
-    return recovered.size === 1 ? [...recovered][0]! : null;
 }
 
 function markerAnchorCandidate(fileKey: string, trip: Trip): VideoCandidate | null {
@@ -521,15 +504,24 @@ function markerAnchorCandidate(fileKey: string, trip: Trip): VideoCandidate | nu
     });
 }
 
-function matchingMarkerFrameIndices(trip: Trip, matches: (candidate: VideoCandidate) => boolean): Set<number> {
-    const frameIndices = new Set<number>();
-    for (let frameIndex = 0; frameIndex < trip.frames.length; frameIndex++) {
-        const frame = trip.frames[frameIndex]!;
-        if (Object.values(frame.channels).some((candidate) => candidate != null && matches(candidate))) {
-            frameIndices.add(frameIndex);
+/** A source file can span several timeline intervals when cameras cut separately. */
+function markerAnchorContentSec(trip: Trip, candidate: VideoCandidate, offsetSec: number): number | null {
+    let closest: number | null = null;
+    let distance = Number.POSITIVE_INFINITY;
+    for (const segment of trip.timeline.segments) {
+        const frame = trip.frames[segment.frameIndex]!;
+        for (const channel of frameChannels(frame)) {
+            if (frame.channels[channel] !== candidate) continue;
+            const offset = offsetSec - frameMediaOffset(frame, channel);
+            const clamped = Math.max(0, Math.min(offset, segment.durationSec));
+            const delta = Math.abs(clamped - offset);
+            if (delta < distance) {
+                closest = segment.contentStart + clamped;
+                distance = delta;
+            }
         }
     }
-    return frameIndices;
+    return closest;
 }
 
 function uniqueTripForMarkerAnchor(marker: MarkerAnnotation): Trip | null {
@@ -647,12 +639,13 @@ function captureMarkerAnchor(trip: Trip, record: MarkerAnnotation, utcMs: number
     const segment = trip.timeline.segments.find((candidate) => candidate.frameIndex === frameIndex);
     if (!segment) return;
     const frame = trip.frames[frameIndex];
-    const candidate = frame ? Object.values(frame.channels).find((ch) => ch != null) : undefined;
-    if (!candidate) return;
+    const channel = frame ? frameChannels(frame)[0] : undefined;
+    const candidate = frame && channel ? frame.channels[channel] : undefined;
+    if (!candidate || !frame || !channel) return;
     const anchor = {
         fileIdentityKey: candidateIdentityKey(candidate),
         startUtc: Math.round(candidate.startUtc * 1000),
-        offsetSec: Math.min(offsetInFrame, segment.durationSec),
+        offsetSec: frameMediaOffset(frame, channel) + Math.min(offsetInFrame, segment.durationSec),
     };
     record.anchor = anchor;
     // A trip can span independently opened sources. The notes file must live
@@ -708,9 +701,8 @@ export function restampProvisionalMarkers(opts?: {
             pending.add(markerId);
             continue;
         }
-        const segment = located.trip.timeline.segments.find((seg) => seg.frameIndex === located.frameIndex);
-        if (!segment) continue;
-        const contentSec = Math.min(segment.contentStart + anchor.offsetSec, segment.contentEnd);
+        const contentSec = markerAnchorContentSec(located.trip, located.candidate, anchor.offsetSec);
+        if (contentSec === null) continue;
         const utcMs = Math.round(contentToWallUtc(located.trip.timeline, contentSec) * 1000);
         // Sub-half-second drift is invisible on the timeline - not worth a
         // store write and a notes-file flush.
@@ -756,21 +748,16 @@ export function _resetForTests(): void {
 
 interface LocatedCandidate {
     trip: Trip;
-    frameIndex: number;
     candidate: VideoCandidate;
 }
 
-/** Session candidate key -> the trip and frame currently holding that clip. */
+/** Session candidate key -> the trip currently holding that clip. */
 function indexCandidatesBySessionKey(): Map<string, LocatedCandidate> {
     const out = new Map<string, LocatedCandidate>();
     for (const trip of state.trips) {
-        for (let frameIndex = 0; frameIndex < trip.frames.length; frameIndex++) {
-            const frame = trip.frames[frameIndex]!;
-            for (const candidate of Object.values(frame.channels)) {
-                if (!candidate) continue;
-                const key = vendorFileKey(candidate);
-                if (!out.has(key)) out.set(key, { trip, frameIndex, candidate });
-            }
+        for (const candidate of tripAllCandidates(trip)) {
+            const key = vendorFileKey(candidate);
+            if (!out.has(key)) out.set(key, { trip, candidate });
         }
     }
     return out;

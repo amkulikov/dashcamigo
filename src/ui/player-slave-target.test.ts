@@ -84,6 +84,15 @@ function makeFrames(specs: PairSpec[]): TripFrame[] {
 }
 
 describe("resolveSlaveTarget", () => {
+    it("aligns reused files across interval boundaries with either camera as master", () => {
+        const frames = makeFrames([{ startUtc: 26, frontDur: 26, rearDur: 92 }]);
+        const frame = frames[0]!;
+        frame.channels.rear!.startUtc = 0;
+        frame.mediaOffsetSec = { front: 0, rear: 26 };
+        expect(resolveSlaveTarget(frames, 0, "front", "rear", 7)?.positionSec).toBe(33);
+        expect(resolveSlaveTarget(frames, 0, "rear", "front", 33)?.positionSec).toBe(7);
+    });
+
     it("mirrors the master position exactly when no channel carries a lead", () => {
         const frames = makeFrames([{ startUtc: 0 }, { startUtc: 60 }]);
         const target = resolveSlaveTarget(frames, 1, "front", "rear", 12.34);

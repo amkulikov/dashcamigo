@@ -233,6 +233,9 @@ export function needsRecordingMetadata(candidate: VideoCandidate): boolean {
  *   - 'front' is NOT required. If the front file is lost/corrupt, the frame may
  *     contain only rear and/or interior. Active channel is selected by priority
  *     front -> rear -> interior with fallback to any present channel.
+ *   - Unequal channel cuts use nonoverlapping playback intervals. Their
+ *     mediaOffsetSec maps interval-local time to each original file; candidates
+ *     can belong to several intervals without changing their source timing.
  */
 export interface TripFrame {
     startUtc: number;
@@ -243,6 +246,12 @@ export interface TripFrame {
     // (video) length that the player/scrubber/export live on.
     wallDurationSec: number;
     channels: Partial<Record<Channel, VideoCandidate>>;
+    mediaOffsetSec?: Partial<Record<Channel, number>>;
+}
+
+/** File-local position of a playback interval's first frame. */
+export function frameMediaOffset(frame: TripFrame, channel: Channel): number {
+    return frame.mediaOffsetSec?.[channel] ?? 0;
 }
 
 /**
@@ -431,11 +440,19 @@ export function tripChannels(trip: Trip): Channel[] {
  * (aggregates, codec checks).
  */
 export function tripAllCandidates(trip: Trip): VideoCandidate[] {
+    return uniqueFrameCandidates(trip.frames);
+}
+
+function uniqueFrameCandidates(frames: readonly TripFrame[]): VideoCandidate[] {
+    const seen = new Set<VideoCandidate>();
     const out: VideoCandidate[] = [];
-    for (const frame of trip.frames) {
+    for (const frame of frames) {
         for (const ch of frameChannels(frame)) {
             const c = frame.channels[ch];
-            if (c) out.push(c);
+            if (c && !seen.has(c)) {
+                seen.add(c);
+                out.push(c);
+            }
         }
     }
     return out;
@@ -448,10 +465,14 @@ export function tripAllCandidates(trip: Trip): VideoCandidate[] {
  * skipped - playback and export both omit them.
  */
 export function tripCandidatesByChannel(trip: Trip, channel: Channel): VideoCandidate[] {
+    const seen = new Set<VideoCandidate>();
     const out: VideoCandidate[] = [];
     for (const frame of trip.frames) {
         const c = frame.channels[channel];
-        if (c) out.push(c);
+        if (c && !seen.has(c)) {
+            seen.add(c);
+            out.push(c);
+        }
     }
     return out;
 }
@@ -723,13 +744,14 @@ export function groupTrips(videos: VideoCandidate[], gapSec: number = getTripGap
     const framesByKey = new Map<string, TripFrame>();
     for (const video of sorted) {
         const channel: Channel = video.channel ?? DEFAULT_CHANNEL;
+        const owner = candidateGroupingKey(video);
         // Snap is used ONLY as the grouping key for multi-channel frames:
         // F and B are recorded simultaneously but their startUtc may differ by 0.x sec
         // (different startSource: F used GPS-first, B used mvhd+TZ).
         // Snap to 30s tolerates this. For single-channel, the threshold is inactive:
         // adjacent clips are 60+ sec apart and won't collapse into the same key.
         const snapped = Math.round(video.startUtc / FRAME_TIMESTAMP_SNAP_SEC) * FRAME_TIMESTAMP_SNAP_SEC;
-        let key = `${video.fingerprint}|t${snapped}`;
+        let key = `${owner}|t${snapped}`;
 
         let existing = framesByKey.get(key);
         // Boundary rescue: simultaneous channels whose startUtc straddle the
@@ -743,7 +765,7 @@ export function groupTrips(videos: VideoCandidate[], gapSec: number = getTripGap
         // and adjacent clips are 60+ s apart anyway (> SNAP/2).
         if (!existing) {
             for (const delta of [-FRAME_TIMESTAMP_SNAP_SEC, FRAME_TIMESTAMP_SNAP_SEC]) {
-                const neighborKey = `${video.fingerprint}|t${snapped + delta}`;
+                const neighborKey = `${owner}|t${snapped + delta}`;
                 const neighbor = framesByKey.get(neighborKey);
                 if (
                     neighbor &&
@@ -803,7 +825,8 @@ export function groupTrips(videos: VideoCandidate[], gapSec: number = getTripGap
     for (const frame of framesByKey.values()) {
         // All candidates in a frame share a fingerprint (it is part of the frame
         // key), so any present channel answers for the whole frame.
-        const fingerprint = frameCanonicalCandidate(frame)?.fingerprint ?? "";
+        const canonical = frameCanonicalCandidate(frame);
+        const fingerprint = canonical ? candidateGroupingKey(canonical) : "";
         let group = framesByFingerprint.get(fingerprint);
         if (!group) {
             group = [];
@@ -820,6 +843,8 @@ export function groupTrips(videos: VideoCandidate[], gapSec: number = getTripGap
         // measurement needs the whole per-camera chain. See channel-drift.ts.
         applyChannelDriftLead(group);
         let current: TripFrame[] = [group[0]!];
+        const lastNormalByChannel = new Map<Channel, VideoCandidate>();
+        rememberNormalChannels(group[0]!, lastNormalByChannel);
         // Gap is measured from the furthest end reached by ANY frame in the
         // current trip, not just the last-appended frame. Frames are sorted by
         // startUtc, but a frame that starts later can END earlier: a short
@@ -835,7 +860,6 @@ export function groupTrips(videos: VideoCandidate[], gapSec: number = getTripGap
         // arrives).
         let currentClass = frameTripClass(group[0]!);
         for (let i = 1; i < group.length; i++) {
-            const prev = current[current.length - 1]!;
             const next = group[i]!;
             const gap = next.startUtc - maxEndUtc;
             // Three reasons to start a new trip within one camera:
@@ -853,19 +877,16 @@ export function groupTrips(videos: VideoCandidate[], gapSec: number = getTripGap
             //    != null on both sides): an event fired while parked stays in
             //    the parking session, one fired on the road stays in the drive.
             //
-            // Overlap stays a per-pair test on the ADJACENT (prev, next) frames -
-            // it is a physical-impossibility check between two specific clips, not
-            // a span measurement, so it must NOT use maxEndUtc.
-            const prevOverlap = prev.startUtc + prev.wallDurationSec - next.startUtc;
-            const overlapSplit =
-                prevOverlap > OVERLAP_SPLIT_TOLERANCE_SEC &&
-                isFrameNormalOrUnknown(prev) &&
-                isFrameNormalOrUnknown(next);
+            // Channels may cut files independently. Only two files on the SAME
+            // channel can establish a collision; another channel's long clip
+            // must not split the short clips recorded alongside it.
+            const overlapSplit = hasNormalChannelOverlap(next, lastNormalByChannel);
             const nextClass = frameTripClass(next);
             const classSplit = currentClass !== null && nextClass !== null && nextClass !== currentClass;
             if (gap > gapSec || overlapSplit || classSplit) {
-                trips.push(finalizeTrip(current));
+                trips.push(finalizeTrip(normalizeChannelIntervals(current)));
                 current = [next];
+                lastNormalByChannel.clear();
                 maxEndUtc = next.startUtc + next.wallDurationSec;
                 currentClass = nextClass;
             } else {
@@ -874,8 +895,9 @@ export function groupTrips(videos: VideoCandidate[], gapSec: number = getTripGap
                 if (nextEnd > maxEndUtc) maxEndUtc = nextEnd;
                 if (currentClass === null) currentClass = nextClass;
             }
+            rememberNormalChannels(next, lastNormalByChannel);
         }
-        trips.push(finalizeTrip(current));
+        trips.push(finalizeTrip(normalizeChannelIntervals(current)));
     }
 
     // Per-fingerprint walking emits trips grouped by camera; the sidebar and
@@ -920,15 +942,153 @@ export function frameRecordingMode(frame: TripFrame): RecordingMode | null {
     return frameCanonicalCandidate(frame)?.recordingMode ?? null;
 }
 
-/**
- * Whether a frame's canonical clip is normal driving or has no known mode.
- * Gates the overlap-split in groupTrips: an event/parking/manual clip is often a
- * protected copy that overlaps the normal loop on purpose, so such overlaps must
- * NOT split a trip. An empty frame (no candidate) counts as unknown.
- */
-function isFrameNormalOrUnknown(frame: TripFrame): boolean {
-    const mode = frameRecordingMode(frame);
+/** Protected copies may overlap their source without creating a new session. */
+function isCandidateNormalOrUnknown(candidate: VideoCandidate): boolean {
+    const mode = candidate.recordingMode;
     return mode === null || mode === "normal";
+}
+
+function candidateGroupingKey(candidate: VideoCandidate): string {
+    return JSON.stringify([candidate.sourceKey ?? null, candidate.fingerprint]);
+}
+
+function rememberNormalChannels(frame: TripFrame, latest: Map<Channel, VideoCandidate>): void {
+    for (const channel of frameChannels(frame)) {
+        const candidate = frame.channels[channel]!;
+        if (isCandidateNormalOrUnknown(candidate)) latest.set(channel, candidate);
+    }
+}
+
+function hasNormalChannelOverlap(frame: TripFrame, latest: ReadonlyMap<Channel, VideoCandidate>): boolean {
+    return frameChannels(frame).some((channel) => {
+        const candidate = frame.channels[channel]!;
+        const previous = latest.get(channel);
+        if (!previous || !isCandidateNormalOrUnknown(candidate)) return false;
+        const end = candidate.startUtc + (candidate.wallDurationSec ?? candidate.durationSec);
+        const previousEnd = previous.startUtc + (previous.wallDurationSec ?? previous.durationSec);
+        return (
+            Math.min(end, previousEnd) - Math.max(candidate.startUtc, previous.startUtc) > OVERLAP_SPLIT_TOLERANCE_SEC
+        );
+    });
+}
+
+/** Unequal realtime cuts share one wall-time axis while files retain ownership
+ *  of their bytes, GPS and media clocks. Aligned, drifting, time-lapse and
+ *  protected-copy frames keep their existing playback contract. */
+function normalizeChannelIntervals(frames: TripFrame[]): TripFrame[] {
+    let furthestEnd = Number.NEGATIVE_INFINITY;
+    let hasOverlappingCuts = false;
+    for (const frame of frames) {
+        if (furthestEnd - frame.startUtc > OVERLAP_SPLIT_TOLERANCE_SEC) hasOverlappingCuts = true;
+        furthestEnd = Math.max(furthestEnd, frame.startUtc + frame.wallDurationSec);
+        const ends = Object.values(frame.channels).map((candidate) => candidate.startUtc + candidate.durationSec);
+        if (Math.max(...ends) - Math.min(...ends) > OVERLAP_SPLIT_TOLERANCE_SEC) hasOverlappingCuts = true;
+    }
+    if (!hasOverlappingCuts) return frames;
+    const candidates = uniqueFrameCandidates(frames);
+    if (
+        candidates.some(
+            (candidate) =>
+                !isCandidateNormalOrUnknown(candidate) ||
+                candidate.isTimelapse ||
+                (candidate.driftLeadSec ?? 0) !== 0 ||
+                candidate.metadataReady === false ||
+                !Number.isFinite(candidate.startUtc) ||
+                !Number.isFinite(candidate.durationSec) ||
+                candidate.durationSec <= 0 ||
+                (candidate.wallDurationSec !== null && candidate.wallDurationSec !== candidate.durationSec),
+        )
+    )
+        return frames;
+
+    const durationsByChannel = new Map<Channel, { min: number; max: number }>();
+    for (const candidate of candidates) {
+        const channel = candidate.channel ?? DEFAULT_CHANNEL;
+        const range = durationsByChannel.get(channel);
+        durationsByChannel.set(channel, {
+            min: Math.min(range?.min ?? candidate.durationSec, candidate.durationSec),
+            max: Math.max(range?.max ?? candidate.durationSec, candidate.durationSec),
+        });
+    }
+    const durationRanges = [...durationsByChannel.values()];
+    const hasUnequalCuts = durationRanges.some((range, i) =>
+        durationRanges
+            .slice(i + 1)
+            .some((other) => Math.max(range.max - other.min, other.max - range.min) > OVERLAP_SPLIT_TOLERANCE_SEC),
+    );
+    // Equal-length channels with no aligned pair may have conflicting clocks.
+    // Do not turn that recognition failure into apparently synchronized video.
+    if (!hasUnequalCuts && !frames.some((frame) => frameChannels(frame).length > 1)) return frames;
+
+    interface Boundary {
+        starts: VideoCandidate[];
+        ends: VideoCandidate[];
+    }
+    const boundaries = new Map<number, Boundary>();
+    const channels = new Set<Channel>();
+    for (const candidate of candidates) {
+        channels.add(candidate.channel ?? DEFAULT_CHANNEL);
+        for (const [time, kind] of [
+            [candidate.startUtc, "starts"],
+            [candidate.startUtc + candidate.durationSec, "ends"],
+        ] as const) {
+            let boundary = boundaries.get(time);
+            if (!boundary) {
+                boundary = { starts: [], ends: [] };
+                boundaries.set(time, boundary);
+            }
+            boundary[kind].push(candidate);
+        }
+    }
+    if (channels.size < 2) return frames;
+    const times = [...boundaries.keys()].sort((a, b) => a - b);
+    const active = new Map<Channel, Set<VideoCandidate>>();
+    const used = new Set<VideoCandidate>();
+    const intervals: TripFrame[] = [];
+    for (let i = 0; i < times.length - 1; i++) {
+        const startUtc = times[i]!;
+        const boundary = boundaries.get(startUtc)!;
+        for (const candidate of boundary.ends) active.get(candidate.channel ?? DEFAULT_CHANNEL)?.delete(candidate);
+        for (const candidate of boundary.starts) {
+            const channel = candidate.channel ?? DEFAULT_CHANNEL;
+            let running = active.get(channel);
+            if (!running) {
+                running = new Set();
+                active.set(channel, running);
+            }
+            running.add(candidate);
+        }
+        const durationSec = times[i + 1]! - startUtc;
+        const interval: TripFrame = {
+            startUtc,
+            durationSec,
+            wallDurationSec: durationSec,
+            channels: {},
+            mediaOffsetSec: {},
+        };
+        for (const [channel, running] of active) {
+            // A small same-channel clock overlap uses the newer file until it
+            // ends; keeping the older file active preserves its remaining tail.
+            let candidate: VideoCandidate | undefined;
+            for (const current of running) candidate = current;
+            if (!candidate) continue;
+            used.add(candidate);
+            interval.channels[channel] = candidate;
+            interval.mediaOffsetSec![channel] = startUtc - candidate.startUtc;
+        }
+        if (Object.keys(interval.channels).length === 0) continue;
+        const previous = intervals.at(-1);
+        if (
+            previous &&
+            previous.startUtc + previous.durationSec === startUtc &&
+            [...channels].every((channel) => previous.channels[channel] === interval.channels[channel])
+        ) {
+            previous.durationSec += durationSec;
+            previous.wallDurationSec += durationSec;
+        } else intervals.push(interval);
+    }
+    // A fully hidden duplicate still needs its own playback surface.
+    return used.size === candidates.length ? intervals : frames;
 }
 
 /**
@@ -957,8 +1117,11 @@ function frameTripClass(frame: TripFrame): "driving" | "parking" | null {
  * frame.durationSec = max(channel.startUtc + channel.durationSec) - frame.startUtc.
  * frame.wallDurationSec = same max over the channels' WALL spans
  * (candidate.wallDurationSec ?? durationSec) - differs only on time-lapse frames.
+ * Playback intervals are rebuilt by groupTrips; their bounds must not expand
+ * back to the complete reused files during an incremental metadata refresh.
  */
 export function finalizeFrameTiming(frame: TripFrame): void {
+    if (frame.mediaOffsetSec) return;
     const canonical = frameCanonicalCandidate(frame);
     if (!canonical) return; // empty frame - should not happen, guard
 
@@ -1128,13 +1291,7 @@ function finalizeTrip(frames: TripFrame[]): Trip {
         });
     }
 
-    let totalBytes = 0;
-    for (const frame of frames) {
-        for (const ch of frameChannels(frame)) {
-            const c = frame.channels[ch];
-            if (c) totalBytes += c.file.size;
-        }
-    }
+    const totalBytes = uniqueFrameCandidates(frames).reduce((sum, candidate) => sum + candidate.file.size, 0);
     const distanceKm = totalDistanceKm(records);
 
     const startUtc = first.startUtc;
@@ -1214,25 +1371,21 @@ function collectRawTripRecords(frames: readonly TripFrame[]): { records: GpsReco
     // across regroups. indexByKey holds the survivor's slot in the pre-sort array.
     const indexByKey = new Map<string, number>();
     const merged: GpsRecord[] = [];
-    for (const frame of frames) {
-        for (const ch of frameChannels(frame)) {
-            const c = frame.channels[ch];
-            if (!c) continue;
-            for (const r of c.records) {
-                const key = `${r.unixSeconds}|${r.lat}|${r.lon}`;
-                const existingIdx = indexByKey.get(key);
-                if (existingIdx === undefined) {
-                    indexByKey.set(key, merged.length);
-                    merged.push(r);
-                    continue;
-                }
-                const kept = merged[existingIdx]!;
-                if (
-                    accelMagnitude(r.accelXg, r.accelYg, r.accelZg) >
-                    accelMagnitude(kept.accelXg, kept.accelYg, kept.accelZg)
-                ) {
-                    merged[existingIdx] = { ...kept, accelXg: r.accelXg, accelYg: r.accelYg, accelZg: r.accelZg };
-                }
+    for (const c of uniqueFrameCandidates(frames)) {
+        for (const r of c.records) {
+            const key = `${r.unixSeconds}|${r.lat}|${r.lon}`;
+            const existingIdx = indexByKey.get(key);
+            if (existingIdx === undefined) {
+                indexByKey.set(key, merged.length);
+                merged.push(r);
+                continue;
+            }
+            const kept = merged[existingIdx]!;
+            if (
+                accelMagnitude(r.accelXg, r.accelYg, r.accelZg) >
+                accelMagnitude(kept.accelXg, kept.accelYg, kept.accelZg)
+            ) {
+                merged[existingIdx] = { ...kept, accelXg: r.accelXg, accelYg: r.accelYg, accelZg: r.accelZg };
             }
         }
     }

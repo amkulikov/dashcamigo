@@ -55,7 +55,7 @@ import { createLogger } from "./log.js";
 import { createRetryingBlobSource } from "./retrying-blob-source.js";
 import { getInputTimeOrigin } from "./media-time.js";
 import { isSourceReadError } from "./source-read-error.js";
-import { type AudioTrackFormat, sliceCandidatesForRange } from "./export-range.js";
+import { type AudioTrackFormat, sliceTripChannelForRange } from "./export-range.js";
 import { injectClipGpmf, type CapturedMoov } from "./export/gpmd-inject.js";
 import { closeWritableWithWatchdog } from "./export/writable-finalize.js";
 import { clipBasename, formatBytes, formatTime } from "./ui/format.js";
@@ -63,7 +63,6 @@ import { clipBasename, formatBytes, formatTime } from "./ui/format.js";
 const log = createLogger("export");
 
 import type { Trip } from "./trips.js";
-import { tripCandidatesByChannel } from "./trips.js";
 import type { Channel } from "./parsers/types.js";
 import { t } from "./i18n/index.js";
 
@@ -139,12 +138,7 @@ export async function exportClip({
 
     // startTripSec/endTripSec are footage-axis (content) seconds, the single
     // coordinate system the whole export chain shares.
-    const segments = sliceCandidatesForRange(
-        tripCandidatesByChannel(trip, channel),
-        trip.timeline,
-        startTripSec,
-        endTripSec,
-    );
+    const segments = sliceTripChannelForRange(trip, channel, startTripSec, endTripSec);
     if (segments.length === 0) throw new Error("range covers no files");
 
     // mediabunny StreamTarget expects WritableStream<{type, data, position}>;

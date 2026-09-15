@@ -1,6 +1,6 @@
 import { candidateContentStart } from "../export-range.js";
 import type { Channel } from "../parsers/types.js";
-import { frameChannels, type Trip } from "../trips.js";
+import { tripCandidatesByChannel, tripChannels, type Trip } from "../trips.js";
 
 interface BlurSourceFile {
     file: File;
@@ -20,17 +20,14 @@ export interface BlurTripSource {
 export function captureBlurTripSource(trip: Trip): BlurTripSource {
     return {
         contentDurationSec: trip.timeline.contentDurationSec,
-        files: trip.frames.flatMap((frame) =>
-            frameChannels(frame).map((channel) => {
-                const candidate = frame.channels[channel]!;
-                return {
-                    file: candidate.file,
-                    channel,
-                    contentStart: candidateContentStart(trip.timeline, candidate),
-                    durationSec: candidate.durationSec,
-                    rotation: candidate.rotation,
-                };
-            }),
+        files: tripChannels(trip).flatMap((channel) =>
+            tripCandidatesByChannel(trip, channel).map((candidate) => ({
+                file: candidate.file,
+                channel,
+                contentStart: candidateContentStart(trip.timeline, candidate),
+                durationSec: candidate.durationSec,
+                rotation: candidate.rotation,
+            })),
         ),
     };
 }

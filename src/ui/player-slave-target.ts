@@ -11,7 +11,7 @@
 // tests can reach it.
 
 import type { Channel } from "../parsers/types.js";
-import type { TripFrame, VideoCandidate } from "../trips.js";
+import { frameMediaOffset, type TripFrame, type VideoCandidate } from "../trips.js";
 import { requiresMseBackend } from "./player-video-src.js";
 
 export interface SlaveTarget {
@@ -50,14 +50,20 @@ export function resolveSlaveTarget(
     const cand = frame?.channels[slaveChannel];
     if (!frame || !cand) return null;
     const masterLead = frame.channels[masterChannel]?.driftLeadSec ?? 0;
-    const inFrame = masterPosSec + masterLead - (cand.driftLeadSec ?? 0);
+    const framePosSec = masterPosSec - frameMediaOffset(frame, masterChannel);
+    const inFrame = framePosSec + frameMediaOffset(frame, slaveChannel) + masterLead - (cand.driftLeadSec ?? 0);
 
     if (inFrame < 0) {
         const prevFrame = frames[frameIndex - 1];
         const prevCand = prevFrame?.channels[slaveChannel];
         if (prevFrame && isNativeNeighbour(prevCand)) {
             const spacing = frame.startUtc - prevFrame.startUtc;
-            const positionSec = masterPosSec + spacing + masterLead - (prevCand.driftLeadSec ?? 0);
+            const positionSec =
+                framePosSec +
+                spacing +
+                frameMediaOffset(prevFrame, slaveChannel) +
+                masterLead -
+                (prevCand.driftLeadSec ?? 0);
             if (positionSec >= 0 && positionSec <= prevCand.durationSec) return { cand: prevCand, positionSec };
         }
     } else if (inFrame > cand.durationSec) {
@@ -65,7 +71,12 @@ export function resolveSlaveTarget(
         const nextCand = nextFrame?.channels[slaveChannel];
         if (nextFrame && isNativeNeighbour(nextCand)) {
             const spacing = nextFrame.startUtc - frame.startUtc;
-            const positionSec = masterPosSec - spacing + masterLead - (nextCand.driftLeadSec ?? 0);
+            const positionSec =
+                framePosSec -
+                spacing +
+                frameMediaOffset(nextFrame, slaveChannel) +
+                masterLead -
+                (nextCand.driftLeadSec ?? 0);
             if (positionSec >= 0 && positionSec <= nextCand.durationSec) return { cand: nextCand, positionSec };
         }
     }

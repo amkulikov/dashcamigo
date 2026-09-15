@@ -10,8 +10,8 @@ import { hasTripFilters, matchesTripFilters, tripFilterFacts } from "../trip-fil
 import type { TripFilterFacts } from "../trip-filters.js";
 import { subscribeUnitsChange } from "../units-pref.js";
 import type { Channel } from "../parsers/types.js";
-import type { Trip } from "../trips.js";
-import { needsRecordingMetadata, pickFrameChannel, tripAllCandidates } from "../trips.js";
+import type { Trip, VideoCandidate } from "../trips.js";
+import { frameChannels, needsRecordingMetadata, tripAllCandidates } from "../trips.js";
 
 import { buildEventList } from "./event-list.js";
 import { dom } from "./dom.js";
@@ -408,19 +408,26 @@ function buildTripCard(trip: Trip, tripIdx: number): HTMLLIElement {
         li.appendChild(events);
     }
 
-    // Clip list inside the trip. One <li> = one frame (on multi-channel models this is a synchronized F/B/I pair/triple).
-    // Primary name is the front channel (or fallback via pickFrameChannel); extra channels shown as "+R", "+I" chips.
+    // A camera can keep the same file across several intervals. List it only
+    // when it first appears, preferring a newly started camera for each row.
+    const listedCandidates = new Set<VideoCandidate>();
+    const fileRows = trip.frames.flatMap((frame, frameIdx) => {
+        const channels = frameChannels(frame).filter((channel) => !listedCandidates.has(frame.channels[channel]!));
+        for (const channel of channels) listedCandidates.add(frame.channels[channel]!);
+        const channel = channels[0];
+        return channel ? [{ frame, frameIdx, picked: { channel, candidate: frame.channels[channel]! } }] : [];
+    });
     const filesList = document.createElement("ul");
     filesList.className = "trip-files";
-    trip.frames.forEach((frame, frameIdx) => {
-        const picked = pickFrameChannel(frame, "front");
-        if (!picked) return;
+    fileRows.forEach(({ frame, frameIdx, picked }, rowIndex) => {
         const primary = picked.candidate;
+        const endFrameIdx = (fileRows[rowIndex + 1]?.frameIdx ?? trip.frames.length) - 1;
 
         const fli = document.createElement("li");
         recordingFocusKeys.set(fli, vendorFileKey(primary));
         // data-frame-index is used by updateActiveFrameHighlight to find the <li> without a full re-render.
         fli.dataset.frameIndex = String(frameIdx);
+        fli.dataset.frameEndIndex = String(endFrameIdx);
         const frameCandidates = Object.values(frame.channels);
         const metadataUnresolvedForFrame = frameCandidates.some((candidate) => candidate.metadataReady === false);
         const gpsPendingForFrame = frameCandidates.some((candidate) => {
@@ -430,7 +437,12 @@ function buildTripCard(trip: Trip, tripIdx: number): HTMLLIElement {
         const hasNoRecords =
             !metadataUnresolvedForFrame && !gpsPendingForFrame && frameCandidates.every((c) => c.records.length === 0);
         if (hasNoRecords) fli.classList.add("no-gps");
-        if (state.active && state.active.trip === tripIdx && state.active.frame === frameIdx) {
+        if (
+            state.active &&
+            state.active.trip === tripIdx &&
+            state.active.frame >= frameIdx &&
+            state.active.frame <= endFrameIdx
+        ) {
             fli.classList.add("active");
             fli.setAttribute("aria-current", "true");
         }
@@ -471,9 +483,7 @@ function buildTripCard(trip: Trip, tripIdx: number): HTMLLIElement {
         // them together instead of .file-meta's space-between spreading them apart.
         const fchips: HTMLElement[] = [];
         // Recording-mode chip - "normal" is the default loop recording and gets no
-        // chip, only event/parking/manual clips are called out. primary is the
-        // front-priority candidate (pickFrameChannel above), so on a multi-channel
-        // frame this already prefers that channel's mode over the others.
+        // chip, only event/parking/manual clips are called out.
         if (primary.recordingMode && primary.recordingMode !== "normal") {
             const fmode = document.createElement("span");
             fmode.className = "vendor-chip";
@@ -859,7 +869,9 @@ export function updateActiveFrameHighlight(tripIdx: number, prevFrameIdx: number
     if (!tripLi) return;
     const setActive = (fIdx: number, on: boolean): void => {
         if (fIdx < 0 || fIdx >= trip.frames.length) return;
-        const li = tripLi.querySelector(`li[data-frame-index="${fIdx}"]`);
+        const li = Array.from(tripLi.querySelectorAll<HTMLLIElement>(".trip-files > li")).find(
+            (row) => fIdx >= Number(row.dataset.frameIndex) && fIdx <= Number(row.dataset.frameEndIndex),
+        );
         if (li) {
             li.classList.toggle("active", on);
             if (on) li.setAttribute("aria-current", "true");

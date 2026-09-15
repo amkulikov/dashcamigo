@@ -34,12 +34,14 @@ import { PerFileMseBackend } from "../per-file-mse.js";
 import {
     pickFrameChannel,
     frameChannels,
+    frameMediaOffset,
     tripAllCandidates,
     tripCandidatesByChannel,
     contentToFrame,
 } from "../trips.js";
 import type { TripFrame, VideoCandidate } from "../trips.js";
 import { playbackTimeForContent } from "../video-frame-time.js";
+import { resolveRegroupPlaybackTarget } from "./player-regroup-target.js";
 
 const log = createLogger("player");
 
@@ -143,13 +145,35 @@ export {
  * Reconciles trip-scoped viewer surfaces after groupTrips replaced every Trip
  * object and remapped state.active onto the selected file's new location.
  *
- * The media element keeps playing the same File, so re-running playFrame would
- * needlessly reload it. The surrounding timeline can still have merged, split,
- * or changed duration, though; refresh the consumers that snapshot a Trip on
- * activation and rebuild the preload target against the new frame sequence.
+ * The attached source clock identifies the new interval even when its old
+ * frame was split. Unchanged file ownership keeps the current media source;
+ * changed ownership goes through the usual seek/attach path.
  */
 export function reconcileActiveTripAfterRegroup(): void {
     if (!state.active) return;
+    // Grid roles still describe the previous playback state. The remapped
+    // frame may already choose a different fallback master.
+    const displayedChannel = ALL_CHANNELS.find((channel) => channelTileFor(channel).classList.contains("active"));
+    const previousChannel = displayedChannel ?? effectiveMasterChannel();
+    const previousVideo = channelPlayers[previousChannel];
+    const previousFile = videoAttachedFile.get(previousVideo);
+    const target = previousFile
+        ? resolveRegroupPlaybackTarget(
+              state.trips,
+              previousChannel,
+              previousFile,
+              pendingFileOffset > 0 ? pendingFileOffset : previousVideo.currentTime,
+          )
+        : null;
+    if (target) {
+        const frame = state.trips[target.trip]!.frames[target.frame]!;
+        const hasChangedMedia = ALL_CHANNELS.some(
+            (channel) => videoAttachedFile.get(channelPlayers[channel]) !== frame.channels[channel]?.file,
+        );
+        if (target.trip !== state.active.trip || target.frame !== state.active.frame || hasChangedMedia) {
+            playFrame(target.trip, target.frame, target.offsetInFrame, pendingPlay || !previousVideo.paused);
+        }
+    }
     const trip = state.trips[state.active.trip];
     if (!trip) return;
 
@@ -300,6 +324,10 @@ function schedulePreloadNext(): void {
         return;
     }
     const cand = picked.candidate;
+    if (frameMediaOffset(nextFrame, masterCh) > 0 || videoAttachedFile.get(activePlayer()) === cand.file) {
+        clearPreloadSlot(masterCh);
+        return;
+    }
     if (requiresMseBackend(cand) || !cand.canPlay || runtimePlaybackFailures.has(cand)) {
         clearPreloadSlot(masterCh);
         return;
@@ -328,6 +356,7 @@ function tryPromotePreloadAsActive(nextFrameIdx: number): boolean {
     const picked = pickFrameChannel(nextFrame, mainChannel());
     if (!picked || picked.channel !== masterCh) return false;
     const cand = picked.candidate;
+    if (frameMediaOffset(nextFrame, masterCh) > 0 || videoAttachedFile.get(activePlayer()) === cand.file) return false;
     if (requiresMseBackend(cand) || !cand.canPlay || runtimePlaybackFailures.has(cand)) return false;
 
     const newActive = preloadPlayer(masterCh);
@@ -428,6 +457,7 @@ export function playFrame(
     const picked = pickFrameChannel(frame, mainChannel());
     if (!picked) return;
     const video = picked.candidate;
+    const fileOffsetSec = startOffsetSec + frameMediaOffset(frame, picked.channel);
     // Do NOT update composition.channelOrder[0] to picked.channel. If the current
     // frame lacks the requested channel we play the fallback, but the user's
     // choice is preserved - the next frame that has the channel restores it
@@ -607,7 +637,7 @@ export function playFrame(
         return;
     }
     if (runtimePlaybackFailures.has(video)) {
-        syncFrameToGrid(frame, picked.channel, startOffsetSec);
+        syncFrameToGrid(frame, picked.channel, fileOffsetSec);
         showRuntimePlaybackFailure(video, picked.channel);
         if (tripChanged) resyncMetricsForTrip();
         updatePlayerProgressUi();
@@ -616,22 +646,32 @@ export function playFrame(
     }
     hideCodecUnsupportedOverlay();
 
-    // Re-activating an already loaded native file changes no src, so there will
+    // Re-activating an already buffered file changes no src, so there will
     // be no loadedmetadata event to consume pendingPlay/pendingFileOffset below.
     // Handle that path directly. This is what trip loop and Play-at-EOF hit for
     // a one-frame trip; without the explicit seek the ended element stays parked
     // at duration forever. A source still loading keeps the ordinary pending
     // path so its first loadedmetadata applies the request.
     const master = channelPlayers[picked.channel];
-    const isReusableNativeMaster =
-        !requiresMseBackend(video) &&
+    const masterBackend = state.channelBackends[picked.channel];
+    const canReuseMasterSource =
+        !requiresMseBackend(video) ||
+        (masterBackend?.file === video.file &&
+            !masterBackend.isDone &&
+            !masterBackend.isFailed &&
+            isInVideoBuffer(master, fileOffsetSec));
+    const isReusableMaster =
+        canReuseMasterSource &&
         videoAttachedFile.get(master) === video.file &&
         master.readyState >= master.HAVE_METADATA;
 
+    if (frame.mediaOffsetSec) {
+        setPendingSeek((trip.timeline.segments[frameIdx]?.contentStart ?? 0) + startOffsetSec);
+    }
     pendingPlay = autoPlay;
-    pendingFileOffset = startOffsetSec;
-    syncFrameToGrid(frame, picked.channel, startOffsetSec);
-    if (isReusableNativeMaster) {
+    pendingFileOffset = fileOffsetSec;
+    syncFrameToGrid(frame, picked.channel, fileOffsetSec);
+    if (isReusableMaster) {
         pendingPlay = false;
         pendingFileOffset = 0;
         if (!autoPlay) master.pause();
@@ -639,12 +679,13 @@ export function playFrame(
             const segment = trip.timeline.segments[frameIdx];
             armResumeAfterSeek((segment?.contentStart ?? 0) + startOffsetSec);
         }
-        if (master.currentTime !== startOffsetSec || master.ended) master.currentTime = startOffsetSec;
+        if (master.currentTime !== fileOffsetSec || master.ended) master.currentTime = fileOffsetSec;
         // Setting currentTime on an ended element starts a real media seek.
         // Resume only after it lands; an immediate play() can be interrupted by
         // the decoder's seek under load. A no-op seek has no event, so settle it
         // synchronously through the same latch.
         if (autoPlay && !master.seeking) resumePlaybackIfSeekLanded();
+        if (!master.seeking) clearPendingSeekIfLanded();
         // playFrame invalidated the old preload above. No metadata event will
         // arrive to rebuild it on this same-src path, so warm the next frame now.
         schedulePreloadNext();
@@ -747,7 +788,7 @@ function playbackRetryPosition(v: HTMLVideoElement): PlaybackRetryPosition {
         isMaster && trip && pendingSeekTripSec !== null ? contentToFrame(trip.timeline, pendingSeekTripSec) : null;
     const offsetSec =
         seek && seek.index === state.active?.frame
-            ? seek.offsetInFrame
+            ? seek.offsetInFrame + frameMediaOffset(trip!.frames[seek.index]!, effectiveMasterChannel())
             : isMaster && pendingFileOffset > 0
               ? pendingFileOffset
               : v.currentTime;
@@ -986,6 +1027,7 @@ function attachCandidateToVideo(
                     }
                     // pendingPlay is applied here for the master, because
                     // loadedmetadata will not fire (same MediaSource).
+                    if (isMaster) pendingFileOffset = 0;
                     if (isMaster && pendingPlay) {
                         pendingPlay = false;
                         v.play().catch(() => {});
@@ -1110,8 +1152,9 @@ function reattachBackendsAtOffset(frame: TripFrame, offsetInFrame: number, wasPl
         if (!cand) continue;
         const v = channelPlayers[ch];
         const isMaster = v === master;
+        const fileOffsetSec = offsetInFrame + frameMediaOffset(frame, ch);
         // Target already in this channel's buffer - leave it; native currentTime seek handles it.
-        if (isInVideoBuffer(v, offsetInFrame)) continue;
+        if (isInVideoBuffer(v, fileOffsetSec)) continue;
         log.debug("reattaching backend at offset", {
             channel: ch,
             file: cand.file.name,
@@ -1123,7 +1166,7 @@ function reattachBackendsAtOffset(frame: TripFrame, offsetInFrame: number, wasPl
         // the IIFE right after the SourceBuffer is ready;
         // "full-attach" - dispose+new, pendingFileOffset is picked up in the
         // loadedmetadata handler.
-        const outcome = attachCandidateToVideo(ch, v, cand, isMaster, offsetInFrame, true);
+        const outcome = attachCandidateToVideo(ch, v, cand, isMaster, fileOffsetSec, true);
         if (outcome === "skip") continue;
         reattachedChannels.add(ch);
         if (isMaster) masterOutcome = outcome;
@@ -1131,7 +1174,8 @@ function reattachBackendsAtOffset(frame: TripFrame, offsetInFrame: number, wasPl
     if (reattachedChannels.size > 0) {
         // Only the master's handlers consume these latches. A slave reload
         // must not leave an offset or resume intent for a later master load.
-        pendingFileOffset = masterOutcome === "full-attach" ? offsetInFrame : 0;
+        pendingFileOffset =
+            masterOutcome === "full-attach" ? offsetInFrame + frameMediaOffset(frame, effectiveMasterChannel()) : 0;
         pendingPlay = masterOutcome !== null && wasPlaying;
     }
     return reattachedChannels;
@@ -1253,7 +1297,38 @@ function syncFrameToGrid(frame: TripFrame, activeCh: Channel, masterOffsetSec = 
             // Backend: per-file MSE (mediabunny remux) for needsHevcRemux /
             // MPEG-TS candidates, native <video>.src otherwise. The helper
             // decides whether a re-attach is needed.
-            attachCandidateToVideo(ch, v, attachCand, ch === activeCh);
+            const startSec =
+                ch === activeCh
+                    ? masterOffsetSec
+                    : (activeSlaveTarget(ch, masterOffsetSec)?.positionSec ?? masterOffsetSec);
+            const shouldReseek =
+                !!frame.mediaOffsetSec &&
+                state.channelBackends[ch]?.file === attachCand.file &&
+                videoAttachedFile.get(v) === attachCand.file &&
+                !isInVideoBuffer(v, startSec);
+            const reusedFile = videoAttachedFile.get(v) === attachCand.file;
+            const outcome = attachCandidateToVideo(
+                ch,
+                v,
+                attachCand,
+                ch === activeCh,
+                Math.max(0, startSec),
+                shouldReseek,
+            );
+            // A reused slave emits no metadata event. Position it even when
+            // the new master starts at zero and therefore emits no seeked event.
+            if (
+                frame.mediaOffsetSec &&
+                ch !== activeCh &&
+                reusedFile &&
+                !shouldReseek &&
+                outcome !== "seek-in-place" &&
+                v.readyState >= 1
+            ) {
+                const duration = Number.isFinite(v.duration) ? v.duration : Number.POSITIVE_INFINITY;
+                const positionSec = Math.min(Math.max(startSec, 0), duration);
+                if (Math.abs(v.currentTime - positionSec) > 0.01) v.currentTime = positionSec;
+            }
         } else {
             // Release decoder and backend - canPlay=false or channel absent.
             disposeChannelBackend(ch);
@@ -1763,15 +1838,35 @@ function applySlaveTarget(slaveCh: Channel, s: HTMLVideoElement, target: SlaveTa
     s.currentTime = Math.min(Math.max(target.positionSec, 0), duration);
 }
 
+/** A camera can keep the same file while another camera starts its next clip. */
+function advancePlaybackInterval(): boolean {
+    const af = activeFrame();
+    const master = activePlayer();
+    if (!af?.frame.mediaOffsetSec || !state.active || master.paused || master.seeking || pendingSeekTripSec !== null)
+        return false;
+    if (state.active.frame >= af.trip.frames.length - 1) return false;
+    const offset = master.currentTime - frameMediaOffset(af.frame, effectiveMasterChannel());
+    if (offset < af.frame.durationSec) return false;
+    const range = state.isPreviewZoom ? getSelectedRange() : null;
+    const contentSec = naturalTripCurrentTime();
+    if (range && contentSec >= range.endTripSec - 0.05) return false;
+    const next = contentToFrame(af.trip.timeline, contentSec);
+    if (next.index <= state.active.frame) return false;
+    playFrame(state.active.trip, next.index, next.offsetInFrame, true);
+    return true;
+}
+
 export function driftSyncSlaves(): void {
     const master = activePlayer();
     if (master.paused || master.readyState < 2) return;
+    if (advancePlaybackInterval()) return;
     forEachSlave((s, ch) => {
-        // MSE-fed channels keep the plain mirror: their src/feed is owned by
-        // the backend machinery, not this loop, so no cross-file resolution.
+        // MSE feeds change at interval boundaries; this loop only corrects
+        // their position within the attached file.
         if (state.channelBackends[ch]) {
-            if (s.readyState >= 2 && Math.abs(s.currentTime - master.currentTime) > SLAVE_DRIFT_MAX_SEC) {
-                s.currentTime = master.currentTime;
+            const positionSec = activeSlaveTarget(ch, master.currentTime)?.positionSec ?? master.currentTime;
+            if (s.readyState >= 2 && Math.abs(s.currentTime - positionSec) > SLAVE_DRIFT_MAX_SEC) {
+                s.currentTime = positionSec;
             }
             return;
         }
@@ -1883,7 +1978,7 @@ function naturalTripCurrentTime(): number {
     // removed) plus the in-file playback offset.
     const seg = af.trip.timeline.segments[state.active.frame];
     if (!seg) return 0;
-    return seg.contentStart + (dom.player.currentTime || 0);
+    return seg.contentStart + (dom.player.currentTime || 0) - frameMediaOffset(af.frame, effectiveMasterChannel());
 }
 
 /** Pins the reported trip position to `target` while a slow seek loads. */
@@ -2005,6 +2100,7 @@ export function seekTripTime(targetSec: number): void {
     const at = contentToFrame(trip.timeline, target);
     const { index: frameIdx, offsetInFrame } = at;
     const frame = trip.frames[frameIdx]!;
+    const masterOffsetSec = offsetInFrame + frameMediaOffset(frame, effectiveMasterChannel());
 
     if (state.active.frame !== frameIdx) {
         // Save current play state - if playing, continue after the frame switch.
@@ -2032,18 +2128,18 @@ export function seekTripTime(targetSec: number): void {
             const v = channelPlayers[ch];
             if (!v.getAttribute("src")) continue;
             if (v === activePlayer() || state.channelBackends[ch]) {
-                v.currentTime = offsetInFrame;
+                v.currentTime = offsetInFrame + frameMediaOffset(frame, ch);
                 continue;
             }
             // Slaves land drift-adjusted, possibly in a neighbour file.
-            const slaveTarget = activeSlaveTarget(ch, offsetInFrame);
+            const slaveTarget = activeSlaveTarget(ch, masterOffsetSec);
             if (slaveTarget) applySlaveTarget(ch, v, slaveTarget);
             else v.currentTime = offsetInFrame;
         }
         updatePlayerProgressUi();
         return;
     }
-    dom.player.currentTime = offsetInFrame;
+    dom.player.currentTime = masterOffsetSec;
     updatePlayerProgressUi();
 }
 
@@ -2191,7 +2287,7 @@ export function initPlayer(): void {
         const master = activePlayer();
         forEachSlave((s, ch) => {
             if (state.channelBackends[ch]) {
-                s.currentTime = master.currentTime;
+                s.currentTime = activeSlaveTarget(ch, master.currentTime)?.positionSec ?? master.currentTime;
                 return;
             }
             const target = activeSlaveTarget(ch, master.currentTime);
@@ -2459,6 +2555,7 @@ export function initPlayer(): void {
         } else {
             followPlayheadInZoom(getTripCurrentTime());
         }
+        advancePlaybackInterval();
         refreshMetricsHere();
     });
 

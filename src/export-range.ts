@@ -8,10 +8,17 @@
 
 import type { AudioCodec } from "mediabunny";
 
-import type { GpsRecord } from "./parsers/types.js";
+import type { Channel, GpsRecord } from "./parsers/types.js";
 import { serializeGpx } from "./parsers/sidecars/gpx.js";
 import type { Trip, TripTimeline, VideoCandidate } from "./trips.js";
-import { contentToWallUtc, displayClockDate, wallToContentSec, wallToContentSecIfCovered } from "./trips.js";
+import {
+    contentToWallUtc,
+    displayClockDate,
+    frameMediaOffset,
+    tripCandidatesByChannel,
+    wallToContentSec,
+    wallToContentSecIfCovered,
+} from "./trips.js";
 
 export interface FileSegment {
     file: File;
@@ -72,6 +79,55 @@ export function sliceCandidatesForRange(
         fps: candidate.fps,
         fileDurationSec: candidate.durationSec,
     }));
+}
+
+/** Matches the player's interval ownership when independently cut files overlap. */
+export function sliceTripChannelForRange(
+    trip: Trip,
+    channel: Channel,
+    startContentSec: number,
+    endContentSec: number,
+): FileSegment[] {
+    if (!trip.frames.some((frame) => frame.mediaOffsetSec)) {
+        return sliceCandidatesForRange(
+            tripCandidatesByChannel(trip, channel),
+            trip.timeline,
+            startContentSec,
+            endContentSec,
+        );
+    }
+    const slices: FileSegment[] = [];
+    for (const segment of trip.timeline.segments) {
+        const from = Math.max(startContentSec, segment.contentStart);
+        const to = Math.min(endContentSec, segment.contentEnd);
+        if (from >= to) continue;
+        const frame = trip.frames[segment.frameIndex]!;
+        const candidate = frame.channels[channel];
+        if (!candidate) continue;
+        const fileOffset = frameMediaOffset(frame, channel);
+        const startInFile = fileOffset + from - segment.contentStart;
+        const endInFile = Math.min(candidate.durationSec, fileOffset + to - segment.contentStart);
+        if (startInFile >= endInFile) continue;
+        const tripStart = segment.contentStart - fileOffset;
+        const previous = slices.at(-1);
+        if (
+            previous?.file === candidate.file &&
+            Math.abs(previous.endInFile - startInFile) < 0.000001 &&
+            Math.abs(previous.tripStart - tripStart) < 0.000001
+        ) {
+            previous.endInFile = endInFile;
+        } else {
+            slices.push({
+                file: candidate.file,
+                startInFile,
+                endInFile,
+                tripStart,
+                fps: candidate.fps,
+                fileDurationSec: candidate.durationSec,
+            });
+        }
+    }
+    return slices;
 }
 
 /**

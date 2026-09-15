@@ -54,6 +54,7 @@ import {
     contentToFrame,
     displayClockDate,
     frameRecordingMode,
+    frameMediaOffset,
 } from "../trips.js";
 import type { Trip, TripGap, VideoCandidate } from "../trips.js";
 import type { RecordingMode } from "../parsers/types.js";
@@ -2653,11 +2654,12 @@ function drawTooltipThumb(bitmap: ImageBitmap): void {
  * Linear search over trip.frames is fine - trips typically have 5-50 frames.
  */
 function locateFileAndLocalTime(trip: Trip, relSec: number): { file: File; localTime: number } | null {
-    // relSec is footage-axis; contentToFrame maps it to (frame, in-file offset).
+    // A frame can start inside a longer file from another camera.
     const at = contentToFrame(trip.timeline, relSec);
-    const cand = pickFrameChannel(trip.frames[at.index]!, mainChannel())?.candidate;
-    if (!cand) return null;
-    return { file: cand.file, localTime: at.offsetInFrame };
+    const frame = trip.frames[at.index]!;
+    const picked = pickFrameChannel(frame, mainChannel());
+    if (!picked) return null;
+    return { file: picked.candidate.file, localTime: frameMediaOffset(frame, picked.channel) + at.offsetInFrame };
 }
 
 /**

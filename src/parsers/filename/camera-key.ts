@@ -51,6 +51,8 @@ import {
     RX_NOVATEK_VIOFO,
     RX_REC_SINGLE,
     RX_REC_SINGLE_PATH_CHANNEL,
+    RX_SEI_DOUBLE_GPS,
+    RX_SEI_DOUBLE_GPS_PATH,
     RX_REDTIGER,
     RX_SSTAR_CHN,
     RX_TESLA_EVENT_FILENAME,
@@ -241,6 +243,23 @@ const recSingleCameraKey: FilenameCameraKeyTechnique = {
             RX_CARCAM_PATH_FRONT.test(file.relativePath) || RX_CARCAM_PATH_REAR.test(file.relativePath);
         const dir = strippedParentDir(file.relativePath, hasChannelPath ? ["a", "b"] : []);
         return `rec-single|${dir}|${maskName(file.file.name)}`;
+    },
+};
+
+const seiDoubleGpsCameraKey: FilenameCameraKeyTechnique = {
+    id: "sei-double-gps-camera-key",
+    extract(file: VendorFile): string | null {
+        if (!RX_SEI_DOUBLE_GPS.test(file.file.name) || !RX_SEI_DOUBLE_GPS_PATH.test(file.relativePath)) return null;
+        // The trailing view and date folders belong to one camera. Preserve
+        // its root, including roots whose names happen to look like channels.
+        const dir = file.relativePath
+            .split("/")
+            .filter((segment) => segment.length > 0)
+            .slice(0, -3)
+            .join("/");
+        // The opaque suffix varies between recordings, not physical cameras.
+        const masked = maskName(file.file.name.replace(/_[a-z](\.mp4)$/i, "$1").toLowerCase());
+        return `sei-double-gps|${dir}|${masked}`;
     },
 };
 
@@ -683,6 +702,7 @@ export const FILENAME_CAMERA_KEY: readonly FilenameCameraKeyTechnique[] = [
     carcamCameraKey,
     sstarChnCameraKey,
     recSingleCameraKey,
+    seiDoubleGpsCameraKey,
     ddpaiCameraKey,
     novatekViofoCameraKey,
     novatekVantrueCameraKey,

@@ -7,7 +7,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fileIdentityKey } from "../persist/identity.js";
-import { tripAllCandidates, type Trip, type TripTimeline, type VideoCandidate } from "../trips.js";
+import { buildTripTimeline, tripAllCandidates, type Trip, type TripTimeline, type VideoCandidate } from "../trips.js";
 import { vendorFileKey } from "../vendor-file-key.js";
 
 // annotations.ts reaches folder-sources (-> icons/notifications, which want a
@@ -111,6 +111,18 @@ function buildTwoFrameTrip(firstFile: File, secondFile: File, startUtc: number, 
         durationSec: secondStartOffsetSec + durationSec,
         timeline,
     } as unknown as Trip;
+}
+
+function splitTripFrames(trip: Trip): Trip {
+    const candidate = trip.frames[0]!.channels.front!;
+    const frames = [0, 26, 52].map((offset) => ({
+        startUtc: trip.startUtc + offset,
+        durationSec: Math.min(26, 60 - offset),
+        wallDurationSec: Math.min(26, 60 - offset),
+        channels: { front: candidate },
+        mediaOffsetSec: { front: offset },
+    }));
+    return { ...trip, frames, timeline: buildTripTimeline(frames) };
 }
 
 const PROVISIONAL_START = 1_700_000_000;
@@ -221,6 +233,31 @@ describe("restampProvisionalMarkers", () => {
         expect(markerById(marker.id)?.utc, "stored UTC stays available as a legacy fallback").toBe(
             (PROVISIONAL_START + 30) * 1000,
         );
+    });
+
+    it("keeps a marker's source-file position when camera cuts split its timeline frame", () => {
+        const file = new File(["x"], "long-camera.mp4", { lastModified: 42 });
+        const original = splitTripFrames(buildTrip(file, PROVISIONAL_START, true));
+        state.trips = [original];
+        const marker = addMarker(original, (PROVISIONAL_START + 40) * 1000, "later interval");
+
+        expect(marker.anchor?.offsetSec, "anchor is relative to the file, not its second interval").toBe(40);
+
+        const shifted = splitTripFrames(buildTrip(file, PROVISIONAL_START + CLOCK_REFINEMENT_SHIFT_SEC, true));
+        state.trips = [shifted];
+        expect(markersForTrip(shifted)[0]?.utc).toBe((shifted.startUtc + 40) * 1000);
+    });
+
+    it("restamps provisional markers beyond the first interval of a shared file", () => {
+        const file = new File(["x"], "long-camera.mp4", { lastModified: 42 });
+        const original = buildTrip(file, PROVISIONAL_START, false);
+        state.trips = [original];
+        const marker = addMarker(original, (PROVISIONAL_START + 40) * 1000, "later interval");
+
+        const refined = splitTripFrames(buildTrip(file, PROVISIONAL_START + CLOCK_REFINEMENT_SHIFT_SEC, true));
+        state.trips = [refined];
+        expect(restampProvisionalMarkers()).toBe(1);
+        expect(markerById(marker.id)?.utc).toBe((refined.startUtc + 40) * 1000);
     });
 
     it("anchors an exact clip boundary to the following clip and its folder", () => {

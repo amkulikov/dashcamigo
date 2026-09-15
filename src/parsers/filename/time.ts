@@ -34,6 +34,8 @@ import {
     RX_NOVATEK_VANTRUE,
     RX_NOVATEK_VIOFO,
     RX_REC_SINGLE,
+    RX_SEI_DOUBLE_GPS,
+    RX_SEI_DOUBLE_GPS_PATH,
     RX_TESLA_EVENT_FILENAME,
     RX_TESLA_EVENT_FOLDER,
     RX_TESLA_PATH,
@@ -153,6 +155,16 @@ const recSingleTime: FilenameTimeTechnique = {
         const m = file.file.name.match(RX_REC_SINGLE);
         if (!m) return null;
         return ymdHmsFromSplit(m[1]!, m[2]!);
+    },
+};
+
+const seiDoubleGpsTime: FilenameTimeTechnique = {
+    id: "sei-double-gps-time",
+    extract(file: VendorFile): Date | null {
+        if (!RX_SEI_DOUBLE_GPS.test(file.file.name)) return null;
+        const path = file.relativePath.match(RX_SEI_DOUBLE_GPS_PATH);
+        if (!path) return null;
+        return ymdHmsFromSplit(`20${path[2]}`, file.file.name.slice(0, 6));
     },
 };
 
@@ -382,6 +394,7 @@ export const FILENAME_TIME: readonly FilenameTimeTechnique[] = [
     blackvueTime,
     carcamTime,
     recSingleTime,
+    seiDoubleGpsTime,
     ddpaiTime,
     novatekViofoTime,
     novatekVantrueTime,

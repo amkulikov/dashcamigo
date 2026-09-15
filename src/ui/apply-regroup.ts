@@ -6,7 +6,7 @@
 // state.trips directly.
 
 import { applyStoredGpsSyncToTrips } from "../gps-sync.js";
-import { groupTrips } from "../trips.js";
+import { frameChannels, frameMediaOffset, groupTrips } from "../trips.js";
 import type { Trip, VideoCandidate } from "../trips.js";
 
 import { clearTripEventCycle } from "./sidebar.js";
@@ -47,7 +47,7 @@ export function buildFileLocationMap(trips: Trip[]): Map<File, { trip: number; f
         for (let fi = 0; fi < trip.frames.length; fi++) {
             const frame = trip.frames[fi]!;
             for (const cand of Object.values(frame.channels)) {
-                if (cand) out.set(cand.file, { trip: ti, frame: fi });
+                if (cand && !out.has(cand.file)) out.set(cand.file, { trip: ti, frame: fi });
             }
         }
     }
@@ -62,13 +62,21 @@ export function remapActiveAndExpanded(oldTrips: Trip[], newTrips: Trip[]): void
         const oldFrame = oldTrip?.frames[state.active.frame];
         let remapped: { trip: number; frame: number } | null = null;
         if (oldFrame) {
-            // First candidate that still exists wins. All channels of a frame
-            // belong to the same moment, so any one of them gives the right location.
-            for (const cand of Object.values(oldFrame.channels)) {
+            for (const channel of frameChannels(oldFrame)) {
+                const cand = oldFrame.channels[channel];
                 if (!cand) continue;
                 const loc = fileToLoc.get(cand.file);
                 if (loc) {
-                    remapped = loc;
+                    const frames = newTrips[loc.trip]!.frames;
+                    const offset = frameMediaOffset(oldFrame, channel);
+                    const frameIndex = frames.findIndex((frame) =>
+                        frameChannels(frame).some((ch) => {
+                            if (frame.channels[ch]?.file !== cand.file) return false;
+                            const start = frameMediaOffset(frame, ch);
+                            return offset >= start && offset < start + frame.durationSec;
+                        }),
+                    );
+                    remapped = frameIndex < 0 ? loc : { trip: loc.trip, frame: frameIndex };
                     break;
                 }
             }

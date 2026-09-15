@@ -17,10 +17,10 @@
 // multi-minute passes.
 
 import { cloneBlurRegions, type BlurRegion, type BlurStyle } from "../blur-regions.js";
-import { sliceCandidatesForRange } from "../export-range.js";
+import { sliceTripChannelForRange } from "../export-range.js";
 import { subtractIntervals, type TimeInterval, unionIntervals } from "../tracking/interval-set.js";
 import { createLogger } from "../log.js";
-import { tripAllCandidates, tripCandidatesByChannel } from "../trips.js";
+import { tripAllCandidates } from "../trips.js";
 import type { Trip } from "../trips.js";
 import type { Channel } from "../parsers/types.js";
 import {
@@ -583,12 +583,7 @@ function startRun(trip: Trip, params: PassParams, exportProtected = false): void
     // Ingest can mutate candidates while a prior channel awaits the worker.
     // Freeze every file window against this timeline before yielding control.
     const segmentsByChannel = params.channels.map((channel) =>
-        sliceCandidatesForRange(
-            tripCandidatesByChannel(trip, channel),
-            trip.timeline,
-            params.startSec,
-            params.endSec,
-        ).map((segment) => ({
+        sliceTripChannelForRange(trip, channel, params.startSec, params.endSec).map((segment) => ({
             file: segment.file,
             startInFile: segment.startInFile,
             endInFile: segment.endInFile,
