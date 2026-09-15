@@ -53,6 +53,7 @@ import { findNovatekTsGpsPid } from "./internal/novatek-ts-extract.js";
 import { findTsPesGpsStream } from "./internal/ts-pes-gps.js";
 import { hasNextbaseGdatHead } from "./internal/nextbase-gdat.js";
 import { hasTextGpsLogAtom } from "./internal/text-gpslog-atom.js";
+import { hasSeiDoubleGpsTrackShape } from "./internal/sei-double-gps.js";
 import { LOG_SIDECAR_PRIMITIVES, VIDEO_EMBEDDED_PRIMITIVES } from "./primitives/index.js";
 import { blackvue3gfSidecar } from "./sidecars/blackvue-3gf.js";
 import { escortMapSidecar } from "./sidecars/escort-map.js";
@@ -266,6 +267,9 @@ function hasExclusiveTrackCarrier(index: Mp4Index): boolean {
 }
 
 const EMBEDDED_GPS_LIGHT_SIGNALS: readonly EmbeddedGpsLightSignal[] = [
+    // A 40-byte hvc1/vide track is cheap to identify from moov; the content
+    // probe in the primitive decides whether those NALs actually hold GPS.
+    { exclusive: true, matches: (index) => index.tracks.some((track) => hasSeiDoubleGpsTrackShape(index, track)) },
     { exclusive: true, matches: (index) => index.freeGpsBoxInsideFree !== null },
     // The generic and 70mai freeGPS primitives compete for this table and use
     // probe seeds/signatures, so the atom is light but not probe-exclusive.

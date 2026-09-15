@@ -387,3 +387,7 @@ export const RX_VUEROID = /^(\d{8})_(\d{6})_INF_([FR])_([NEP])\.mp4$/i;
 // Generic-datetime fallback: matches any YYYYMMDDhhmmss embedded in a filename
 // under any separator. Registered last in FILENAME_TIME.
 export const RX_GENERIC_DATETIME = /(\d{4})[-_T]?(\d{2})[-_T]?(\d{2})[-_T ]?(\d{2})[-_:]?(\d{2})[-_:]?(\d{2})/;
+
+// Local HHMMSS + two numeric fields + one opaque letter. The name has no
+// calendar date, so the MP4 metadata supplies the recording start.
+export const RX_SEI_DOUBLE_GPS = /^\d{6}_\d{3}_\d{3}_[A-Z]\.mp4$/i;
