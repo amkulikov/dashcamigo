@@ -4,13 +4,14 @@ import { fileURLToPath } from "node:url";
 import { BlobSource, Input, MPEG_TS } from "mediabunny";
 import { describe, expect, it } from "vitest";
 
-import { clampTsGpsTrailer, findTsGpsTrailer } from "./ts-trailer.js";
+import { clampTsTrailingBytes, findTsGpsTrailer } from "./ts-trailer.js";
 
 const FIXTURES = resolve(dirname(fileURLToPath(import.meta.url)), "parsers/__fixtures__/ligogps-trailer-ts");
 const happy = readFileSync(resolve(FIXTURES, "synthetic-happy.TS"));
 const wrongFormat = readFileSync(resolve(FIXTURES, "synthetic-wrong-format.TS"));
 const realAnonymized = readFileSync(resolve(FIXTURES, "real-anonymized.TS"));
 const realAmpersand = readFileSync(resolve(FIXTURES, "real-anonymized-ampersand.TS"));
+const realEmptyCapacity = readFileSync(resolve(FIXTURES, "real-anonymized-empty-capacity.TS"));
 
 // happy = 2 null TS packets + trailer (see build-synthetic.mjs).
 const HAPPY_CLEAN = 2 * 188;
@@ -55,9 +56,22 @@ describe("findTsGpsTrailer", () => {
         const file = new File([Uint8Array.from(bytes)], "20260904_202849F.ts");
         const trailer = await findTsGpsTrailer(file);
         expect(trailer?.trailerLength).toBe(dialect === "count" ? 7956 : 36);
-        const input = new Input({ source: new BlobSource(await clampTsGpsTrailer(file)), formats: [MPEG_TS] });
+        const input = new Input({ source: new BlobSource(await clampTsTrailingBytes(file)), formats: [MPEG_TS] });
         try {
             expect(await input.computeDuration()).toBeGreaterThanOrEqual(2);
+        } finally {
+            input.dispose();
+        }
+    });
+
+    it("clamps an empty LCAI table with a retained slot capacity", async () => {
+        const file = new File([Uint8Array.from(realEmptyCapacity)], "20260904_205125F.ts");
+        const trailer = await findTsGpsTrailer(file);
+        expect(trailer?.trailerLength).toBe(36);
+        expect((await clampTsTrailingBytes(file)).size).toBe(file.size - 36);
+        const input = new Input({ source: new BlobSource(await clampTsTrailingBytes(file)), formats: [MPEG_TS] });
+        try {
+            expect(await input.computeDuration()).toBeGreaterThan(2);
         } finally {
             input.dispose();
         }
@@ -70,6 +84,17 @@ describe("findTsGpsTrailer", () => {
         const populated = Buffer.from(happy);
         populated.fill(0, HAPPY_CLEAN + 8, HAPPY_CLEAN + 28);
         expect(await findTsGpsTrailer(blobOf(populated))).toBeNull();
+    });
+
+    it("rejects an LCAI capacity when slots are present or it exceeds the sanity bound", async () => {
+        const populated = Buffer.from(happy);
+        populated.writeUInt32LE(35, HAPPY_CLEAN + 24);
+        expect(await findTsGpsTrailer(blobOf(populated))).toBeNull();
+
+        const excessive = Buffer.from(realEmptyCapacity);
+        const trailerStart = excessive.length - 36;
+        excessive.writeUInt32LE(200_000, trailerStart + 24);
+        expect(await findTsGpsTrailer(blobOf(excessive))).toBeNull();
     });
 
     it("rejects a foreign magic even with valid structure", async () => {
@@ -137,26 +162,57 @@ describe("findTsGpsTrailer", () => {
     });
 });
 
-describe("clampTsGpsTrailer", () => {
+describe("clampTsTrailingBytes", () => {
     it("clamps a .ts File to the clean stream", async () => {
         const file = new File([Uint8Array.from(happy)], "20260813211138_0000002F.ts");
-        const clamped = await clampTsGpsTrailer(file);
+        const clamped = await clampTsTrailingBytes(file);
         expect(clamped.size).toBe(HAPPY_CLEAN);
     });
 
     it("passes a trailer-less .ts File through unchanged", async () => {
         const file = new File([Uint8Array.from(happy.subarray(0, HAPPY_CLEAN))], "clean.ts");
-        expect(await clampTsGpsTrailer(file)).toBe(file);
+        expect(await clampTsTrailingBytes(file)).toBe(file);
     });
 
     it("never probes a non-TS name even with trailer bytes present", async () => {
         const file = new File([Uint8Array.from(happy)], "movie.mp4");
-        expect(await clampTsGpsTrailer(file)).toBe(file);
+        expect(await clampTsTrailingBytes(file)).toBe(file);
     });
 
     it("passes a nameless Blob through unchanged", async () => {
         const blob = blobOf(happy);
-        expect(await clampTsGpsTrailer(blob)).toBe(blob);
+        expect(await clampTsTrailingBytes(blob)).toBe(blob);
+    });
+
+    it.each([53, 3 * 188, 100_000])("clips %i unknown trailing bytes after the last TS packet", async (count) => {
+        const clean = realEmptyCapacity.subarray(0, -36);
+        const suffix = Buffer.alloc(count, 0xa5);
+        // A single sync-shaped byte in a suffix is not a packet run.
+        if (count > 188) suffix[0] = 0x47;
+        const file = new File([Uint8Array.from(clean), Uint8Array.from(suffix)], "unknown.ts");
+        expect(await findTsGpsTrailer(file)).toBeNull();
+        const clamped = await clampTsTrailingBytes(file);
+        expect(clamped.size).toBe(clean.length);
+        const input = new Input({ source: new BlobSource(clamped), formats: [MPEG_TS] });
+        try {
+            expect(await input.computeDuration()).toBeGreaterThan(2);
+        } finally {
+            input.dispose();
+        }
+    });
+
+    it("keeps a stream with an internal sync defect and a valid packet tail", async () => {
+        const bytes = Buffer.from(realEmptyCapacity.subarray(0, -36));
+        bytes[bytes.length - 20 * 188] = 0;
+        const file = new File([Uint8Array.from(bytes)], "corrupt.ts");
+        expect(await clampTsTrailingBytes(file)).toBe(file);
+    });
+
+    it("keeps a mislabeled container without a TS packet grid at its head", async () => {
+        const bytes = Buffer.alloc(8 * 188, 0xa5);
+        bytes[bytes.length - 4 * 188] = 0x47;
+        const file = new File([Uint8Array.from(bytes)], "movie.ts");
+        expect(await clampTsTrailingBytes(file)).toBe(file);
     });
 
     it("mediabunny chokes on the raw trailer and computes duration on the clamped stream", async () => {
@@ -170,7 +226,7 @@ describe("clampTsGpsTrailer", () => {
         } finally {
             raw.dispose();
         }
-        const clamped = new Input({ source: new BlobSource(await clampTsGpsTrailer(file)), formats: [MPEG_TS] });
+        const clamped = new Input({ source: new BlobSource(await clampTsTrailingBytes(file)), formats: [MPEG_TS] });
         try {
             expect(await clamped.computeDuration()).toBeGreaterThan(1);
         } finally {

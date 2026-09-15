@@ -55,6 +55,15 @@ describe("indexer: MPEG-TS branch", () => {
         expect(indexed!.durationSec).toBeGreaterThan(0);
         expect(indexed!.codec).toBe("hevc");
     });
+
+    it("indexes an empty LCAI trailer with retained capacity", async () => {
+        const buf = readFileSync(resolve(LIGOGPS_TS_FIXTURES_DIR, "real-anonymized-empty-capacity.TS"));
+        const file = new File([buf], "20260904_205125F.ts");
+        const { indexed } = await indexOneFile(file, false);
+        expect(indexed).not.toBeNull();
+        expect(indexed!.durationSec).toBeGreaterThan(2);
+        expect(indexed!.codec).toBe("avc");
+    });
 });
 
 describe("indexer: Matroska branch", () => {

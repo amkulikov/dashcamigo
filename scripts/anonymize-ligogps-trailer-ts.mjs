@@ -95,7 +95,9 @@ const hasValidHeader =
     isEmptySkip
         ? headerValue === 0
         : dialect.header === "length-or-count"
-          ? headerValue === trailerLen || headerValue === slotCount
+          ? headerValue === trailerLen ||
+            headerValue === slotCount ||
+            (slotCount === 0 && headerValue > 0 && headerValue <= MAX_TRAILER_SLOTS)
           : dialect.header === "length"
             ? headerValue === trailerLen
             : headerValue >= slotCount && headerValue <= MAX_TRAILER_SLOTS;
@@ -127,7 +129,7 @@ for (let off = SLOTS_OFFSET; off + SLOT_SIZE <= trailer.length; off += SLOT_SIZE
     trailer.write(scrubbed, textStart, "latin1");
     slots++;
 }
-if ((!isEmptySkip && coordinates === 0) || unchangedCoordinates > 0) {
+if ((slotCount > 0 && coordinates === 0) || unchangedCoordinates > 0) {
     console.error(`cannot prove coordinate scrubbing: fields=${coordinates}, unchanged=${unchangedCoordinates}`);
     process.exit(1);
 }

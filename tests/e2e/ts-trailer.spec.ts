@@ -13,11 +13,22 @@ test.describe("TS trailer recording ingest", () => {
         ["count", "20260904_202849", ""],
         ["count", "20260904_235813", "_SOS"],
         ["empty", "20260902_174435", "_PARK"],
+        ["empty-capacity", "20260904_205125", ""],
+        ["unknown-suffix", "20260904_205125", ""],
     ]) {
-        test(`indexes and plays both channels with ${suffix || "normal"} filenames`, async ({ page }) => {
-            const buffer = readFileSync(
-                path.join(REPO_ROOT, `src/parsers/__fixtures__/ligogps-trailer-ts/real-anonymized-${dialect}.TS`),
+        test(`indexes and plays both channels with ${dialect} trailing bytes in ${stamp}${suffix}`, async ({
+            page,
+        }) => {
+            const fixture = readFileSync(
+                path.join(
+                    REPO_ROOT,
+                    `src/parsers/__fixtures__/ligogps-trailer-ts/real-anonymized-${dialect === "unknown-suffix" ? "empty-capacity" : dialect}.TS`,
+                ),
             );
+            const buffer =
+                dialect === "unknown-suffix"
+                    ? Buffer.concat([fixture.subarray(0, -36), Buffer.alloc(1000, 0xa5)])
+                    : fixture;
             await page.locator("#file-input").setInputFiles(
                 ["F", "R"].map((channel) => ({
                     name: `${stamp}${channel}${suffix}.ts`,
@@ -46,7 +57,7 @@ test.describe("TS trailer recording ingest", () => {
                         return state.trips[state.active!.trip]!.records.length;
                     }),
                 )
-                .toBe(dialect === "empty" ? 0 : 60);
+                .toBe(dialect === "empty" || dialect === "empty-capacity" || dialect === "unknown-suffix" ? 0 : 60);
             await expect
                 .poll(() =>
                     page

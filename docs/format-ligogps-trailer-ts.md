@@ -2,7 +2,9 @@
 
 The GPS table follows the last complete TS packet. It is not packetized:
 demuxers must stop before it, while telemetry extraction reads the original
-file. Keep detection shared between these consumers in `src/ts-trailer.ts`.
+file. Keep GPS-trailer detection shared between these consumers in
+`src/ts-trailer.ts`. The AV clamp can also cut an unknown suffix when packet
+sync establishes the last complete packet.
 
 The trailer contains a big-endian total length, `SKIP` plus GPS magic,
 five flag bytes, a little-endian header field, indexed NUL-padded ASCII
@@ -16,10 +18,11 @@ with ampersands stores capacity, which can exceed the written count on partial
 clips. Do not infer the field's meaning from the terminator alone.
 The accepted combinations and bounds live in `src/ts-trailer.ts`.
 
-Blackview X5S PRO parking recordings can end in an empty `SKIP` block:
-the GPS magic, flags and count are all zero. Accept that shape only with an
-empty slot region and the hash terminator. It needs the same AV clamp even
-though it supplies no GPS.
+Blackview X5S PRO recordings without GPS can end in an empty table. Parking
+clips use a `SKIP` block with zero magic, flags and count. Time-lapse clips
+retain the LCAI magic and a nominal slot capacity even though no slots were
+written. Accept these shapes only with an empty slot region and the hash
+terminator. They need the same AV clamp even though they supply no GPS.
 
 Plaintext speed is km/h. Timestamps are camera-local; preserve gaps in the
 record cadence. Course can appear as `A:` or, in the LCAI count dialect,

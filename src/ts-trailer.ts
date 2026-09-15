@@ -14,6 +14,10 @@ export interface TsGpsTrailer {
 }
 
 const TS_PACKET = 188;
+const TS_SYNC_BYTE = 0x47;
+const TS_SYNC_RUN = 4;
+const TS_SUFFIX_SCAN_PACKETS = 256;
+const MAX_TS_SUFFIX_BYTES = 16 * 1024 * 1024;
 const TRAILER_SLOT_BYTES = 132;
 const HASH_BYTE = 0x23;
 const AMPERSAND_BYTE = 0x26;
@@ -102,7 +106,14 @@ export async function findTsGpsTrailer(blob: Blob): Promise<TsGpsTrailer | null>
     const slotCount = (trailerLength - MIN_TRAILER_BYTES) / TRAILER_SLOT_BYTES;
     const headerValue = headView.getUint32(24, true);
     if (dialect.header === "length" && headerValue !== trailerLength) return null;
-    if (dialect.header === "length-or-count" && headerValue !== trailerLength && headerValue !== slotCount) {
+    // An empty LCAI table may retain its nominal slot capacity even though
+    // no GPS slots were written. Keep this exception limited to empty tables.
+    if (
+        dialect.header === "length-or-count" &&
+        headerValue !== trailerLength &&
+        headerValue !== slotCount &&
+        !(slotCount === 0 && headerValue > 0 && headerValue <= MAX_TRAILER_SLOTS)
+    ) {
         return null;
     }
     // Partial clips retain their nominal slot capacity, so it may exceed the
@@ -114,16 +125,55 @@ export async function findTsGpsTrailer(blob: Blob): Promise<TsGpsTrailer | null>
     return { cleanLength, trailerLength };
 }
 
+function hasTsSyncRun(bytes: Uint8Array, start: number): boolean {
+    for (let i = 0; i < TS_SYNC_RUN; i++) {
+        const packet = start + i * TS_PACKET;
+        if (bytes[packet] !== TS_SYNC_BYTE) return false;
+        // A stray 0x47 in an opaque suffix is not a packet header.
+        if ((bytes[packet + 1]! & 0x80) !== 0 || (bytes[packet + 3]! & 0x30) === 0) return false;
+    }
+    return true;
+}
+
+/** Finds the last complete packet when a .ts file has an unknown trailing block. */
+async function findTsPacketBoundary(blob: Blob): Promise<number | null> {
+    const alignedEnd = blob.size - (blob.size % TS_PACKET);
+    const runBytes = TS_SYNC_RUN * TS_PACKET;
+    if (alignedEnd < runBytes) return null;
+
+    const tail = new Uint8Array(await blob.slice(alignedEnd - runBytes, alignedEnd).arrayBuffer());
+    if (hasTsSyncRun(tail, 0)) return alignedEnd < blob.size ? alignedEnd : null;
+
+    // Require the packet grid to begin at byte zero. A mislabeled MP4, M2TS,
+    // or a stream with a different packet stride must retain its full bytes.
+    const head = new Uint8Array(await blob.slice(0, runBytes).arrayBuffer());
+    if (!hasTsSyncRun(head, 0)) return null;
+
+    const floor = Math.max(runBytes, alignedEnd - Math.floor(MAX_TS_SUFFIX_BYTES / TS_PACKET) * TS_PACKET);
+    const chunkBytes = TS_SUFFIX_SCAN_PACKETS * TS_PACKET;
+    for (let chunkEnd = alignedEnd; chunkEnd > floor; ) {
+        const chunkStart = Math.max(floor, chunkEnd - chunkBytes);
+        const readStart = chunkStart - runBytes;
+        const bytes = new Uint8Array(await blob.slice(readStart, chunkEnd).arrayBuffer());
+        for (let boundary = chunkEnd; boundary > chunkStart; boundary -= TS_PACKET) {
+            if (hasTsSyncRun(bytes, boundary - readStart - runBytes)) return boundary;
+        }
+        chunkEnd = chunkStart;
+    }
+    return null;
+}
+
 /**
- * Returns a view of `blob` with a detected GPS trailer clipped off, so
- * mediabunny sees only the sync-clean TS stream. Gated on the transport
- * stream filename (a plain Blob without a name passes through untouched) -
- * non-TS containers never pay the probe reads. The returned Blob loses the
- * File name; callers that need the name keep the original reference.
+ * Returns a view of a .ts File ending at its last complete 188-byte packet.
+ * A recognized GPS trailer supplies an exact boundary; an unknown suffix is
+ * clipped only when a four-packet sync run establishes the same packet grid
+ * at the head and near the tail. GPS extraction still requires its own strict
+ * trailer marker. The returned Blob loses the File name.
  */
-export async function clampTsGpsTrailer(blob: Blob): Promise<Blob> {
+export async function clampTsTrailingBytes(blob: Blob): Promise<Blob> {
     const name = blob instanceof File ? blob.name : "";
     if (!isTransportStreamName(name)) return blob;
     const trailer = await findTsGpsTrailer(blob);
-    return trailer ? blob.slice(0, trailer.cleanLength) : blob;
+    const cleanLength = trailer?.cleanLength ?? (await findTsPacketBoundary(blob));
+    return cleanLength === null ? blob : blob.slice(0, cleanLength);
 }

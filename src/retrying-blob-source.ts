@@ -21,7 +21,7 @@ import { createBackgroundReadErrorHandler } from "./blob-source.js";
 import { identifyBrowser } from "./capabilities.js";
 import { createLogger } from "./log.js";
 import { isSourceReadError } from "./source-read-error.js";
-import { clampTsGpsTrailer } from "./ts-trailer.js";
+import { clampTsTrailingBytes } from "./ts-trailer.js";
 
 const log = createLogger("retrying-blob-source");
 
@@ -303,13 +303,13 @@ export function createRetryingBlobSource(blob: Blob, signal?: AbortSignal): Cust
     readSignal.addEventListener("abort", () => pool.disposeAll(), { once: true });
     if (readSignal.aborted) pool.disposeAll();
     const avoidBlobStream = identifyBrowser().engine === "webkit";
-    // A .ts file may end in a LigoGPS trailer that breaks the demuxer's packet
-    // sync (see ts-trailer.ts). getSize is guaranteed to run before read, so
+    // A .ts file may end in bytes past the last packet that break demuxer sync
+    // (see ts-trailer.ts). getSize is guaranteed to run before read, so
     // reporting the clamped size keeps every read inside the clean TS stream -
     // the read path below stays on the original blob untouched.
     let effectiveSize: Promise<number> | null = null;
     return new CustomSource({
-        getSize: () => (effectiveSize ??= clampTsGpsTrailer(blob).then((b) => b.size)),
+        getSize: () => (effectiveSize ??= clampTsTrailingBytes(blob).then((b) => b.size)),
         read: (start, end) =>
             avoidBlobStream
                 ? readRangeWithRetry(blob, start, end, readSignal)
