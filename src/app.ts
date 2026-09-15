@@ -125,6 +125,7 @@ import {
     captureTripOpenTarget,
     closestEventIndex,
     resolveTripOpenTarget,
+    withPreparedRecordingKeys,
     type ResolvedTripOpen,
     type TripOpenTarget,
 } from "./ui/trip-open-target.js";
@@ -606,12 +607,7 @@ async function prepareTripOpen(
             // The read gate may skip a damaged leading clip, replace a repaired File
             // object and finish before viewer initialization. Resolve its stable keys
             // against the latest trip list instead of trusting the original indices.
-            const playableTarget: TripOpenTarget = {
-                ...target,
-                keys: preparation.recordingKeys,
-                exactFrame: true,
-                eventUtc: null,
-            };
+            const playableTarget = withPreparedRecordingKeys(target, preparation.recordingKeys);
             const readyLocation = resolveTripOpenTarget(state.trips, playableTarget);
             if (!readyLocation) {
                 reportTripOpenFailure(openToken, originalTripIdx);

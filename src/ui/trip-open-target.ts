@@ -55,6 +55,18 @@ export function captureTripOpenTarget(
     return { keys, tripKeys, exactFrame: frameIdx !== undefined, eventUtc };
 }
 
+export function withPreparedRecordingKeys(target: TripOpenTarget, recordingKeys: readonly string[]): TripOpenTarget {
+    const prepared = new Set(recordingKeys);
+    return {
+        ...target,
+        // Metadata preparation lists channels in camera order. Keep the clicked
+        // recording first even when another camera spans an earlier interval.
+        keys: [...new Set([...target.keys.filter((key) => prepared.has(key)), ...recordingKeys])],
+        exactFrame: true,
+        eventUtc: null,
+    };
+}
+
 /** Resolves a pre-await click against the latest regrouped trip list. */
 export function resolveTripOpenTarget(trips: readonly Trip[], target: TripOpenTarget): ResolvedTripOpen | null {
     const locations = buildRecordingLocationMap(trips);

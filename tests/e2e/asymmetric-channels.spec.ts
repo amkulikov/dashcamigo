@@ -224,15 +224,33 @@ test("keeps the interior master playing while the exterior changes files", async
 test("opens the interior file from its sidebar row at its own start", async ({ page }) => {
     await page.getByRole("button", { name: "Expand file list" }).click();
     await page.locator(".trip-files > li .file-name").filter({ hasText: "120132_123_011_D.mp4" }).click();
-    await page.waitForFunction(() => {
-        const interior = document.querySelector<HTMLVideoElement>(
-            '.video-tile[data-channel="interior"] > video:not(.preload-slot):not(.tile-blur-bg)',
-        );
-        return interior?.duration === 12 && interior.readyState >= 2 && !interior.seeking;
-    });
+    await page.waitForFunction(
+        () => {
+            const interior = document.querySelector<HTMLVideoElement>(
+                '.video-tile[data-channel="interior"] > video:not(.preload-slot):not(.tile-blur-bg)',
+            );
+            return interior?.duration === 12 && interior.readyState >= 2 && !interior.seeking;
+        },
+        undefined,
+        // A wrong earlier interval must not pass by playing through to this file.
+        { timeout: 5_000 },
+    );
     await pausePlayback(page);
-    await expectPosition(page, 92);
-    expect((await readChannels(page)).every((channel) => channel.paused)).toBe(true);
+    await expect
+        .poll(async () => {
+            const channels = await readChannels(page);
+            const front = channels.find((channel) => channel.channel === "front");
+            const interior = channels.find((channel) => channel.channel === "interior");
+            return {
+                channels,
+                paused: channels.length === 2 && channels.every((channel) => channel.paused && !channel.seeking),
+                // Sidebar activation starts playback before the pause control can run.
+                nearStart: interior !== undefined && interior.time >= 0 && interior.time < 2,
+                synchronized:
+                    front !== undefined && interior !== undefined && Math.abs(front.time - interior.time - 14) < 0.3,
+            };
+        })
+        .toMatchObject({ paused: true, nearStart: true, synchronized: true });
 });
 
 test("exports one continuous interior range across its file boundary", async ({ page }) => {

@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import type { Trip, VideoCandidate } from "../trips.js";
+import { vendorFileKey } from "../vendor-file-key.js";
 
-import { captureTripOpenTarget, closestEventIndex, resolveTripOpenTarget } from "./trip-open-target.js";
+import {
+    captureTripOpenTarget,
+    closestEventIndex,
+    resolveTripOpenTarget,
+    withPreparedRecordingKeys,
+} from "./trip-open-target.js";
 
 function candidate(file: File, relativePath: string, sourceKey = "card-a"): VideoCandidate {
     return { file, relativePath, sourceKey } as VideoCandidate;
@@ -79,6 +85,26 @@ describe("trip-open target identity", () => {
         ];
         const target = captureTripOpenTarget([recording], 0, 1);
         expect(resolveTripOpenTarget([recording], target!)).toEqual({ tripIdx: 0, frameIdx: 1 });
+        const prepared = withPreparedRecordingKeys(target!, [vendorFileKey(front), vendorFileKey(next)]);
+        expect(
+            resolveTripOpenTarget([recording], prepared),
+            "preparation preserves the clicked interior start",
+        ).toEqual({
+            tripIdx: 0,
+            frameIdx: 1,
+        });
+    });
+
+    it("drops unreadable captured recordings after metadata preparation", () => {
+        const unreadable = candidate(new File(["bad"], "bad.mp4"), "bad.mp4");
+        const playable = candidate(new File(["good"], "good.mp4"), "good.mp4");
+        const recording = trip([unreadable, playable]);
+        const target = captureTripOpenTarget([recording], 0)!;
+        const prepared = withPreparedRecordingKeys(target, [vendorFileKey(playable)]);
+
+        expect(prepared.keys).toEqual([vendorFileKey(playable)]);
+        expect(prepared.tripKeys).toEqual(target.tripKeys);
+        expect(resolveTripOpenTarget([recording], prepared)).toEqual({ tripIdx: 0, frameIdx: 1 });
     });
 
     it("resolves a rebuilt event to the surviving trip nearest its original UTC", () => {
