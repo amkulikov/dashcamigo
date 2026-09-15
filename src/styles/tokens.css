@@ -159,6 +159,7 @@
     --fg-mute: var(--dc-ash-5);
     --accent: var(--dc-orange);
     --accent-hot: var(--dc-orange-hot);
+    --accent-contrast: var(--dc-black);
     --accent-dim: var(--dc-orange-dim);
     /* Accent in a TEXT role: same as --accent on dark, darkens on light
        themes for contrast (see --dc-orange-ink). Use for orange words on

@@ -20,6 +20,120 @@
     margin-bottom: var(--dc-space-2);
 }
 
+.trip-filters {
+    margin-bottom: var(--dc-space-2);
+}
+.trip-filter-kinds,
+.trip-filter-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--dc-space-1);
+}
+.trip-filter-kinds {
+    flex-wrap: nowrap;
+    padding: calc(var(--dc-space-1) / 2);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-md);
+    background: var(--bg-elev-2);
+}
+.trip-filter-options {
+    margin-top: var(--dc-space-1);
+}
+.trip-filter {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--dc-space-1);
+    max-width: 100%;
+    min-width: 0;
+    padding: var(--dc-space-1) var(--dc-space-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--dc-radius-pill);
+    background: transparent;
+    color: var(--fg);
+    font: inherit;
+    font-size: var(--dc-text-xs);
+    white-space: nowrap;
+    cursor: pointer;
+}
+.trip-filter-kinds .trip-filter {
+    flex: 1 1 auto;
+    border-color: transparent;
+    border-radius: var(--dc-radius-sm);
+}
+.trip-filter__count {
+    opacity: 0.75;
+    font-variant-numeric: tabular-nums;
+}
+.trip-filter:hover {
+    background: var(--bg-hover);
+}
+.trip-filter[aria-pressed="true"] {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, var(--bg-elev));
+    color: var(--accent-ink);
+}
+.trip-filter-kinds .trip-filter[aria-pressed="true"] {
+    background: var(--accent);
+    color: var(--accent-contrast);
+}
+.trip-filter-summary {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--dc-space-2);
+    margin-top: var(--dc-space-1);
+    color: var(--fg-dim);
+    font-size: var(--dc-text-xs);
+}
+.trip-filter-reset {
+    padding: var(--dc-space-1) 0;
+    border: 0;
+    background: transparent;
+    color: var(--accent-ink);
+    font: inherit;
+    cursor: pointer;
+}
+.trip-filter:focus-visible,
+.trip-filter-reset:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+.trip-filter-empty {
+    padding: var(--dc-space-4) var(--dc-space-2);
+    color: var(--fg-dim);
+    text-align: center;
+    font-size: var(--dc-text-sm);
+}
+.trip-filter-empty p {
+    margin: 0 0 var(--dc-space-2);
+}
+.trip-filters[hidden],
+.trip-filter-options[hidden],
+.trip-filter-summary[hidden],
+.trip-filter[hidden],
+.trip-filter-reset[hidden] {
+    display: none;
+}
+@container sidebar (max-width: 240px) {
+    .trip-filter-kinds {
+        gap: 0;
+    }
+    .trip-filter-kinds .trip-filter {
+        padding-inline: calc(var(--dc-space-1) / 2);
+    }
+    .trip-filter-kinds .trip-filter__count {
+        display: none;
+    }
+}
+@media (pointer: coarse) {
+    .trip-filter,
+    .trip-filter-reset {
+        min-height: 44px;
+    }
+}
+
 .trip-analysis-status {
     margin: 0 0 var(--dc-space-3);
     padding: var(--dc-space-2);
@@ -1008,19 +1122,24 @@
 }
 .trip-events-list {
     border-top: 1px solid var(--border);
-    padding: 4px 10px;
+    padding: var(--dc-space-1) var(--dc-space-2);
 }
 .trip-events-list > summary {
     cursor: pointer;
-    padding-block: 8px;
-    font-size: var(--dc-text-sm);
+    padding: var(--dc-space-1);
+    color: var(--fg-dim);
+    font-size: var(--dc-text-xs);
 }
-.trip-events-list button {
-    display: block;
-    width: 100%;
-    min-height: 44px;
-    text-align: left;
-    margin-block: 4px;
+.trip-events-list > summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    border-radius: var(--dc-radius-sm);
+}
+@media (pointer: coarse) {
+    .trip-events-list > summary {
+        min-height: 44px;
+        line-height: 36px;
+    }
 }
 
 .trip-header {

@@ -168,8 +168,7 @@ test("fullscreen controls remain available while hovered or keyboard focused", a
     await page.locator("#player-fullscreen").click();
     const player = page.locator("#player-wrap");
     await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
-    const speed = await boxOf(page, "#player-speed");
-    await page.mouse.move(speed.x + speed.width / 2, speed.y + speed.height / 2);
+    await page.locator("#player-speed").hover();
     // The idle deadline itself is under test: controls must survive beyond it.
     await page.waitForTimeout(3300);
     await expect(player).toHaveClass(/controls-visible/);

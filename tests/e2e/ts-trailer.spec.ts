@@ -27,6 +27,14 @@ test.describe("TS trailer recording ingest", () => {
             );
             const trips = page.locator("li.trip:not(.unindexed-note)");
             await expect(trips).toHaveCount(1);
+            await expect(page.locator('[data-trip-filter-kind="unknown"]')).toHaveCount(0);
+            if (suffix === "_SOS") {
+                await page.locator('[data-trip-filter-toggle="event"]').click();
+                await expect(trips).toHaveCount(1);
+                await expect(page.locator('[data-trip-filter-kind="normal"]')).toBeHidden();
+                await page.locator("#trip-filter-reset").click();
+                await expect(trips).toHaveCount(1);
+            }
             await trips.first().click();
             for (const channel of ["front", "rear"]) {
                 await expect(page.locator(`#video-grid .video-tile[data-channel="${channel}"]`)).toBeVisible();

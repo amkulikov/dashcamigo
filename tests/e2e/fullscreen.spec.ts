@@ -263,6 +263,7 @@ test.describe("touch fullscreen", () => {
         test(`exit stays fully on screen at ${viewport.width} by ${viewport.height}`, async ({ page }) => {
             await page.setViewportSize(viewport);
             await gotoApp(page, "ru");
+            await page.locator(".lang-banner-dismiss").click();
             await loadTrip(page, SAMPLE_70MAI);
             await pausePlayback(page);
             const entry = page.locator("#player-fullscreen");

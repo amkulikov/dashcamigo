@@ -14,6 +14,7 @@ import type { ClassifiedFile } from "../parsers/registry.js";
 import type { Channel, VendorFile } from "../parsers/types.js";
 import type { PerFileMseBackend } from "../per-file-mse.js";
 import type { RecordingAnalysisProgress } from "../recording-analysis-progress.js";
+import type { TripFilters } from "../trip-filters.js";
 import type { CropRect, SplitLayout } from "../transcode/compose.js";
 import { pickFrameChannel } from "../trips.js";
 import type { Trip, TripFrame, VideoCandidate } from "../trips.js";
@@ -140,6 +141,7 @@ export interface AppState {
     exportModeOpen: boolean;
     tripSortKey: TripSortKey;
     tripSortDir: TripSortDir;
+    tripFilters: TripFilters;
     preferredPlaybackRate: number;
     preferredVolume: number;
     // Mute stored separately from volume: <video>.muted and <video>.volume are
@@ -442,6 +444,7 @@ export const state: AppState = {
     exportModeOpen: false,
     tripSortKey: "date",
     tripSortDir: "desc",
+    tripFilters: { kind: "all", event: false, manual: false, notes: false, favorites: false },
     preferredPlaybackRate: 1,
     preferredVolume: 1,
     preferredMuted: false,

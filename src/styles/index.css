@@ -22,6 +22,7 @@
 @import "./components/overflow.css";
 @import "./components/layout.css";
 @import "./components/sidebar.css";
+@import "./components/event-list.css";
 @import "./components/viewer.css";
 @import "./components/player-composition.css";
 @import "./components/top-panel.css";

@@ -6,6 +6,7 @@
 // Also: a mixed folder (1ch + 2ch files) does not crash and trips stay separate.
 
 import { describe, it, expect } from "vitest";
+import { matchesTripFilters, tripFilterFacts } from "./trip-filters.js";
 import {
     applyTimelapseCadenceWallSpans,
     buildTripTimeline,
@@ -104,6 +105,94 @@ function makeCandidate(opts: {
         localClockOffsetHintSec: null,
     };
 }
+
+describe("trip recording filters", () => {
+    const noAnnotations = { notes: false, favorites: false };
+    it("finds event recordings on another camera without changing the trip kind", () => {
+        const trips = groupTrips([
+            makeCandidate({ name: "front.mp4", startUtc: 1000, channel: "front", recordingMode: "normal" }),
+            makeCandidate({ name: "rear.mp4", startUtc: 1000, channel: "rear", recordingMode: "event" }),
+        ]);
+        expect(trips).toHaveLength(1);
+        expect(tripFilterFacts(trips[0]!)).toEqual({ ...noAnnotations, kind: "normal", event: true, manual: false });
+    });
+
+    it("keeps protected recordings inside a parking trip", () => {
+        const trips = groupTrips([
+            makeCandidate({ name: "parking.mp4", startUtc: 1000, recordingMode: "parking", isTimelapse: true }),
+            makeCandidate({ name: "event.mp4", startUtc: 1060, recordingMode: "event" }),
+            makeCandidate({ name: "manual.mp4", startUtc: 1120, recordingMode: "manual" }),
+        ]);
+        expect(trips).toHaveLength(1);
+        const facts = tripFilterFacts(trips[0]!);
+        expect(facts).toEqual({ ...noAnnotations, kind: "parking", event: true, manual: true });
+        expect(matchesTripFilters(facts, { ...noAnnotations, kind: "parking", event: true, manual: false })).toBe(true);
+        expect(matchesTripFilters(facts, { ...noAnnotations, kind: "normal", event: true, manual: false })).toBe(false);
+    });
+
+    it.each(["event", "manual"] as const)("includes %s-only recordings without inventing a trip type", (mode) => {
+        const trip = groupTrips([makeCandidate({ name: "clip.mp4", startUtc: 1000, recordingMode: mode })])[0]!;
+        const facts = tripFilterFacts(trip);
+        expect(facts.kind).toBeNull();
+        expect(matchesTripFilters(facts, { ...noAnnotations, kind: "normal", event: false, manual: false })).toBe(
+            false,
+        );
+        expect(matchesTripFilters(facts, { ...noAnnotations, kind: "all", event: false, manual: false })).toBe(true);
+        expect(
+            matchesTripFilters(facts, {
+                ...noAnnotations,
+                kind: "all",
+                event: mode === "event",
+                manual: mode === "manual",
+            }),
+        ).toBe(true);
+    });
+
+    it("includes recordings without a recognized mode in all trips", () => {
+        const trip = groupTrips([makeCandidate({ name: "clip.mp4", startUtc: 1000 })])[0]!;
+        const facts = tripFilterFacts(trip);
+        expect(facts.kind).toBeNull();
+        expect(
+            matchesTripFilters(facts, {
+                ...noAnnotations,
+                kind: "all",
+                event: false,
+                manual: false,
+            }),
+        ).toBe(true);
+    });
+
+    it("does not treat a detected brake as an event recording", () => {
+        const trip = groupTrips([makeCandidate({ name: "normal.mp4", startUtc: 1000, recordingMode: "normal" })])[0]!;
+        trip.events = [{ kind: "brake", unixSeconds: 1001, relSec: 1, severity: 1, recordIndex: 0 }];
+        expect(
+            matchesTripFilters(tripFilterFacts(trip), { ...noAnnotations, kind: "all", event: true, manual: false }),
+        ).toBe(false);
+    });
+
+    it("includes either selected recording type and excludes ordinary-only trips", () => {
+        const filters = { ...noAnnotations, kind: "all", event: true, manual: true } as const;
+        expect(matchesTripFilters({ ...noAnnotations, kind: "normal", event: false, manual: true }, filters)).toBe(
+            true,
+        );
+        expect(matchesTripFilters({ ...noAnnotations, kind: "parking", event: true, manual: false }, filters)).toBe(
+            true,
+        );
+        expect(matchesTripFilters({ ...noAnnotations, kind: "normal", event: false, manual: false }, filters)).toBe(
+            false,
+        );
+    });
+
+    it("combines notes and favorites while ignoring blank notes", () => {
+        const trip = groupTrips([makeCandidate({ name: "normal.mp4", startUtc: 1000, recordingMode: "normal" })])[0]!;
+        const filters = { kind: "all", event: false, manual: false, notes: true, favorites: true } as const;
+        expect(matchesTripFilters(tripFilterFacts(trip, { note: "  ", isFavorite: true }), filters)).toBe(false);
+        expect(matchesTripFilters(tripFilterFacts(trip, { note: "Roadworks", isFavorite: false }), filters)).toBe(
+            false,
+        );
+        expect(matchesTripFilters(tripFilterFacts(trip, { note: "Roadworks", isFavorite: true }), filters)).toBe(true);
+    });
+});
 
 describe("groupTrips: single-channel (legacy x800)", () => {
     it("two adjacent files → one trip with two single-channel frames", () => {

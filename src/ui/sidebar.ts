@@ -6,6 +6,8 @@
 import { t } from "../i18n/index.js";
 import { recordsHaveGps } from "../parser.js";
 import { recordingAnalysisPercent } from "../recording-analysis-progress.js";
+import { hasTripFilters, matchesTripFilters, tripFilterFacts } from "../trip-filters.js";
+import type { TripFilterFacts } from "../trip-filters.js";
 import { subscribeUnitsChange } from "../units-pref.js";
 import type { Channel } from "../parsers/types.js";
 import type { Trip } from "../trips.js";
@@ -35,6 +37,7 @@ import type { TripLoadingState } from "./format.js";
 import { setTripMeta, tripMetaFor } from "./annotations.js";
 import { isTripSortKey, state } from "./state.js";
 import { scheduleRecognitionHelp } from "./recognition-help.js";
+import { initSidebarFilters, resetTripFilters, syncSidebarFilters } from "./sidebar-filters.js";
 
 interface SidebarCallbacks {
     /** Opens the first playable frame, tolerating a damaged leading clip. */
@@ -56,6 +59,7 @@ interface SidebarCallbacks {
 /** UX-08: current "next" event index per trip. In-memory, resets on reload. Keyed by tripIdx (not trip object) because groupTrips can recreate the object; the index stays stable within one state.trips snapshot. */
 const tripEventCycleIdx = new Map<number, number>();
 let selectTripEvent: SidebarCallbacks["onPlayTripEvent"];
+const renderedFilterFacts = new Map<number, TripFilterFacts>();
 
 /**
  * Drops the per-trip event-cycle cursor. Called from applyRegroup: the cursor is
@@ -86,14 +90,31 @@ export function renderTrips(): void {
 
     refreshTripAnalysisStatus();
 
-    // Aggregate stats at the top of the list so the user can quickly see what is loaded.
-    if (state.trips.length > 0) {
-        dom.list.appendChild(buildSummaryItem(state.trips));
-    }
-
     // Build the displayed list with original indices and sort by the selected field/direction.
     // The physical order of state.trips is NOT changed - state.active.trip and state.expandedTrips indices depend on it.
-    let displayed = state.trips.map((trip, idx) => ({ trip, idx }));
+    renderedFilterFacts.clear();
+    const entries = state.trips.map((trip, idx) => {
+        const facts = tripFilterFacts(trip, tripMetaFor(trip));
+        renderedFilterFacts.set(idx, facts);
+        return { trip, idx, facts };
+    });
+    syncSidebarFilters(entries.map((entry) => entry.facts));
+    let displayed = entries.filter((entry) => matchesTripFilters(entry.facts, state.tripFilters));
+    if (displayed.length > 0) {
+        dom.list.appendChild(buildSummaryItem(displayed.map((entry) => entry.trip)));
+    } else if (state.trips.length > 0) {
+        const empty = document.createElement("li");
+        empty.className = "trip-filter-empty";
+        const message = document.createElement("p");
+        message.textContent = t("sidebar.filter.empty");
+        const reset = document.createElement("button");
+        reset.type = "button";
+        reset.className = "trip-filter-reset";
+        reset.dataset.action = "reset-trip-filters";
+        reset.textContent = t("sidebar.filter.reset");
+        empty.append(message, reset);
+        dom.list.append(empty);
+    }
     const cmp = comparatorFor(state.tripSortKey);
     // Duration/distance are provisional while metadata is pending (a per-fingerprint
     // estimate / 0 distance), so ranking by them makes cards jump as the
@@ -118,11 +139,7 @@ export function renderTrips(): void {
 
     // Favorited trips float above everything, keeping their relative sorted
     // order. Applied after the sort so the star wins over any sort key.
-    // tripMetaFor walks the trip's candidates - resolve it once per trip,
-    // not once per filter pass (this repaints every 700 ms during ingest).
-    const favoriteByTrip = new Map<Trip, boolean>();
-    for (const entry of displayed) favoriteByTrip.set(entry.trip, tripMetaFor(entry.trip)?.isFavorite === true);
-    const isFavoriteEntry = (entry: { trip: Trip }) => favoriteByTrip.get(entry.trip) === true;
+    const isFavoriteEntry = (entry: { facts: TripFilterFacts }) => entry.facts.favorites;
     const favoriteCount = displayed.filter(isFavoriteEntry).length;
     if (favoriteCount > 0) {
         displayed = [...displayed.filter(isFavoriteEntry), ...displayed.filter((d) => !isFavoriteEntry(d))];
@@ -538,13 +555,28 @@ function buildTripCard(trip: Trip, tripIdx: number): HTMLLIElement {
 export function refreshTripCard(tripIdx: number): void {
     const trip = state.trips[tripIdx];
     if (!trip) return;
+    const before = renderedFilterFacts.get(tripIdx);
+    const after = tripFilterFacts(trip, tripMetaFor(trip));
+    // Metadata can establish a recording mode after the card first appears.
+    // Reconcile even hidden trips so counts and membership stay current.
+    if (
+        !before ||
+        before.kind !== after.kind ||
+        before.event !== after.event ||
+        before.manual !== after.manual ||
+        before.notes !== after.notes ||
+        before.favorites !== after.favorites
+    ) {
+        renderTrips();
+        return;
+    }
+    refreshTripAnalysisStatus();
     const oldLi = dom.list.querySelector<HTMLElement>(`li.trip[data-trip-index="${tripIdx}"]`);
     if (!oldLi) return;
     const focus = captureListFocus(oldLi);
     oldLi.replaceWith(buildTripCard(trip, tripIdx));
     restoreListFocus(focus, dom.list);
     dom.list.setAttribute("aria-busy", state.trips.some(tripHasPending) ? "true" : "false");
-    refreshTripAnalysisStatus();
 }
 
 /** Paints the one shared background-work status above the trip list. */
@@ -672,7 +704,12 @@ function restoreListFocus(focus: ListFocus | null, root: Element): void {
             ? root.querySelectorAll<HTMLElement>(".trip-files > li")
             : root.querySelectorAll<HTMLElement>("li.trip");
     const owner = Array.from(candidates).find((candidate) => recordingFocusKeys.get(candidate) === focus.key);
-    if (!owner) return;
+    if (!owner) {
+        // Removing a note or favorite can remove the focused card from the
+        // filtered list. Keep keyboard navigation at the visible controls.
+        if (hasTripFilters(state.tripFilters)) dom.tripFilterReset.focus({ preventScroll: true });
+        return;
+    }
     if (focus.kind === "title") {
         owner.querySelector<HTMLElement>(".trip-title")?.focus();
         return;
@@ -844,6 +881,7 @@ export function syncSortControls(): void {
 
 export function initSidebar(cb: SidebarCallbacks): void {
     selectTripEvent = cb.onPlayTripEvent;
+    initSidebarFilters(renderTrips);
     dom.sortKey.addEventListener("change", () => {
         // Type guard: value comes from a <select> we control. Unknown values are ignored rather than cast as any.
         const v = dom.sortKey.value;
@@ -870,6 +908,12 @@ export function initSidebar(cb: SidebarCallbacks): void {
         const actionEl = target.closest<HTMLElement>("[data-action]");
         if (!actionEl) return;
         const action = actionEl.dataset.action;
+        if (action === "reset-trip-filters") {
+            resetTripFilters();
+            renderTrips();
+            dom.tripFilterKinds.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
+            return;
+        }
         const tripIdxStr = actionEl.dataset.tripIndex;
         if (!tripIdxStr) return;
         const tripIdx = Number(tripIdxStr);
