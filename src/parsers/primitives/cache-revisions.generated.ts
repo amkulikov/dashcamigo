@@ -33,5 +33,5 @@ export const VIDEO_EMBEDDED_PRIMITIVE_CACHE_REVISIONS = [
     { id: "novatek-ts", revision: "ff7ad30010dc9cf0" },
     { id: "ts-pes-gps", revision: "2d3e8c6877765768" },
     { id: "freegps-70mai", revision: "951e4bcfcf51cbc5" },
-    { id: "freegps", revision: "b324fab0b1e51c8d" },
+    { id: "freegps", revision: "ae058b8adc5d54a8" },
 ] as const;

@@ -39,9 +39,9 @@ export function accelMagnitude(xg: number, yg: number, zg: number): number {
  *
  * On a key collision the first-seen record wins its identity, but the stronger
  * accel triple is transplanted onto it (max-|G| wins). Reason: a parking-mode /
- * cold-start clip keeps identical lat/lon across every row, so all its records
- * share one position key and would collapse to the first - taking the impact
- * spike (which rides a LATER row) with it, and detectEvents would see no brake.
+ * cold-start clip without relative offsets keeps identical lat/lon across every
+ * row, so its records share one position key and collapse to the first. The
+ * impact spike on a later row would be lost, and detectEvents would see no brake.
  * The kept record is cloned rather than mutated: these records are aliased by
  * state.gpsLog buckets and candidate.records, and the raw parser output must
  * stay untouched. Same policy dropTeleportOutliers already applies on drop.
@@ -50,13 +50,14 @@ export function dedupRecords(records: GpsRecord[]): GpsRecord[] {
     const indexByKey = new Map<string, number>();
     const out: GpsRecord[] = [];
     for (const r of records) {
-        // Unsynced (cold-start) records key on position only, not time: their
-        // unixSeconds is a placeholder that the time layer later rewrites to the
-        // video window, so a re-drop of the same log would otherwise compare a
-        // reanchored copy (real time) against a fresh placeholder (~1970) and
-        // fail to dedup. Position + filename identify them uniquely enough.
+        // Relative offsets survive reanchoring and distinguish stationary
+        // fixes. Without one, ignore the rewritten placeholder clock so a
+        // re-drop still deduplicates against the already-reanchored copy.
         const owner = r.videoKey ?? r.mp4Filename;
-        const key = r.timeUnsynced ? `u|${r.lat}|${r.lon}|${owner}` : `${r.unixSeconds}|${r.lat}|${r.lon}|${owner}`;
+        const clock = r.timeUnsynced
+            ? `u|${Number.isFinite(r.relStartSeconds) ? r.relStartSeconds : ""}`
+            : r.unixSeconds;
+        const key = `${clock}|${r.lat}|${r.lon}|${owner}`;
         const existingIdx = indexByKey.get(key);
         if (existingIdx === undefined) {
             indexByKey.set(key, out.length);

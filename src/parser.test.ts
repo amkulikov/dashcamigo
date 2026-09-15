@@ -430,6 +430,16 @@ describe("dedupRecords", () => {
         expect(dedupRecords(records)).toHaveLength(2);
     });
 
+    it("preserves stationary relative offsets while deduplicating reanchored copies", () => {
+        const reanchored = [0, 2, 4].map((relStartSeconds) =>
+            rec(1_780_000_000 + relStartSeconds, 50, 30, { timeUnsynced: true, relStartSeconds }),
+        );
+        const fresh = reanchored.map((record) => ({ ...record, unixSeconds: -1 }));
+        const result = dedupRecords([...reanchored, ...fresh]);
+        expect(result).toEqual(reanchored);
+        expect(result.map((record) => record.relStartSeconds)).toEqual([0, 2, 4]);
+    });
+
     it("preserves order of first occurrence", () => {
         const records = [
             rec(200, 2, 2),
