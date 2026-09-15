@@ -27,6 +27,7 @@ describe("real-anonymized LigoGPS-TS-trailer fixture", () => {
         ["real-anonymized-ampersand.TS", 120],
         ["real-anonymized-count.TS", 120],
         ["real-anonymized-empty.TS", 0],
+        ["real-anonymized-empty-capacity.TS", 0],
     ])("keeps every trailer coordinate in %s at whole degrees", (name, count) => {
         const bytes = readFileSync(resolve(HERE, name));
         const trailerLength = bytes.readUInt32BE(bytes.length - 4);
@@ -100,6 +101,18 @@ describe("real-anonymized LigoGPS-TS-trailer fixture", () => {
         const name = "20260902_174435F_PARK.ts";
         const file = new File([Uint8Array.from(readFileSync(resolve(HERE, "real-anonymized-empty.TS")))], name);
         const vf = { file, relativePath: `park/F/${name}` };
+        const index = await buildMp4Index(file);
+        expect(await ligoGpsTrailerTsPrimitive.marker(vf, index)).toBe(true);
+        expect(await ligoGpsTrailerTsPrimitive.parse(vf, index)).toEqual({ records: [], skipped: [] });
+    });
+
+    it("parses an empty LCAI table with retained capacity without inventing GPS", async () => {
+        const name = "20260904_205125F.ts";
+        const file = new File(
+            [Uint8Array.from(readFileSync(resolve(HERE, "real-anonymized-empty-capacity.TS")))],
+            name,
+        );
+        const vf = { file, relativePath: `video/F/${name}` };
         const index = await buildMp4Index(file);
         expect(await ligoGpsTrailerTsPrimitive.marker(vf, index)).toBe(true);
         expect(await ligoGpsTrailerTsPrimitive.parse(vf, index)).toEqual({ records: [], skipped: [] });

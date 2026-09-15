@@ -1,7 +1,7 @@
 import { BlobSource } from "mediabunny";
 
 import { createLogger } from "./log.js";
-import { clampTsGpsTrailer } from "./ts-trailer.js";
+import { clampTsTrailingBytes } from "./ts-trailer.js";
 
 const log = createLogger("media-source");
 
@@ -21,7 +21,7 @@ export function createBackgroundReadErrorHandler(blob: Blob, signal?: AbortSigna
 
 /** The signal suppresses cancelled-operation diagnostics; the caller still owns Input disposal. */
 export async function createBlobSource(blob: Blob, signal?: AbortSignal): Promise<BlobSource> {
-    return new BlobSource(await clampTsGpsTrailer(blob), {
+    return new BlobSource(await clampTsTrailingBytes(blob), {
         handleUnhandledError: createBackgroundReadErrorHandler(blob, signal),
     });
 }

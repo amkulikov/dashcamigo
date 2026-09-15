@@ -8,7 +8,7 @@ import { rolldown } from "rolldown";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createMseFixture } from "../../tests/helpers/mse-fixtures.js";
 import { findBox, iterBoxes, readHandlerType } from "../parsers/internal/mp4-walker.js";
-import { clampTsGpsTrailer } from "../ts-trailer.js";
+import { clampTsTrailingBytes } from "../ts-trailer.js";
 import { VIDEO_INPUT_FORMATS } from "../video-formats.js";
 import { isWireMessage, type WireMessage, type WireNotification } from "./_protocol/wire.js";
 import type { FeedDoneNotificationData, MediaSegmentNotificationData } from "./per-file-mse-protocol.js";
@@ -276,7 +276,7 @@ describe("per-file MSE worker with real encoded packets", () => {
                       ),
                   );
         const source = new Input({
-            source: new BlobSource(await clampTsGpsTrailer(new File([bytes], "sample.ts"))),
+            source: new BlobSource(await clampTsTrailingBytes(new File([bytes], "sample.ts"))),
             formats: VIDEO_INPUT_FORMATS,
         });
         let audioPayloads: Uint8Array[];
