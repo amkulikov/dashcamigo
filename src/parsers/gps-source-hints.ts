@@ -44,6 +44,7 @@ import {
     RX_NOVATEK_TS,
     RX_REDTIGER,
     RX_REC_SINGLE,
+    RX_SEI_DOUBLE_GPS,
     RX_TESLA_PATH,
     RX_THINKWARE,
     RX_VUEROID,
@@ -86,6 +87,11 @@ interface GpsSourceHint {
 }
 
 const GPS_SOURCE_HINTS: readonly GpsSourceHint[] = [
+    {
+        id: "sei-double-gps",
+        matches: (f) => RX_SEI_DOUBLE_GPS.test(f.file.name),
+        source: "embedded",
+    },
     // 70mai: two storage paths depending on model.
     //  - Older / lower-tier (X800, ...): $V02 CSV log-sidecar (csv-70mai
     //    primitive) - GPSData*.txt next to the MP4, no embedded GPS.

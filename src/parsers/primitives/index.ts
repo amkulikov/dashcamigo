@@ -31,6 +31,7 @@ import { pndmPrimitive } from "./pndm.js";
 import { roveGpmdPrimitive } from "./rove-gpmd.js";
 import { roveSsmdPrimitive } from "./rove-ssmd.js";
 import { rvmiPrimitive } from "./rvmi.js";
+import { seiDoubleGpsPrimitive } from "./sei-double-gps.js";
 import { sstarSsmdPrimitive } from "./sstar-ssmd.js";
 import { tsPesGpsPrimitive } from "./ts-pes-gps.js";
 import { vantrueFmasPrimitive } from "./vantrue-fmas.js";
@@ -127,6 +128,7 @@ import { threeSixtyGpsJsonlPrimitive } from "./360gps-jsonl.js";
 //  10. freegps          - structural is cheap, streaming is the most expensive.
 export const VIDEO_EMBEDDED_PRIMITIVES: readonly Primitive[] = [
     rvmiPrimitive,
+    seiDoubleGpsPrimitive,
     freeGpsBoxPrimitive,
     ligoGpsPrimitive,
     navitelTailPrimitive,
