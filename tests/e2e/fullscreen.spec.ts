@@ -1,10 +1,10 @@
 import type { Page } from "@playwright/test";
+import { fileURLToPath } from "node:url";
 
 import {
     DESKTOP,
     MOBILE_LANDSCAPE,
     SAMPLE_70MAI,
-    SAMPLE_GOPRO,
     boxOf,
     expect,
     gotoApp,
@@ -306,7 +306,18 @@ test.describe("touch fullscreen", () => {
         await page.setViewportSize(MOBILE_LANDSCAPE);
         await gotoApp(page);
         // A single-camera tap normally toggles playback; multichannel taps only route audio.
-        await loadTrip(page, SAMPLE_GOPRO);
+        // Keep clip endings outside the idle-controls interaction under test.
+        await page
+            .locator("#file-input")
+            .setInputFiles(
+                fileURLToPath(
+                    new URL(
+                        "../testdata/asymmetric-channels/ExteriorView/260101/120000_123_025_D.mp4",
+                        import.meta.url,
+                    ),
+                ),
+            );
+        await page.locator("li.trip:not(.unindexed-note)").first().click();
         await startLoopingPlayback(page);
         await activateFullscreenEntry(page, true);
         const player = page.locator("#player-wrap");
