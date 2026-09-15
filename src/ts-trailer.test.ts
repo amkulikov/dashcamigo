@@ -208,10 +208,46 @@ describe("clampTsTrailingBytes", () => {
         expect(await clampTsTrailingBytes(file)).toBe(file);
     });
 
+    it.each([0, 1000])("keeps complete packets with transport errors before %i trailing bytes", async (count) => {
+        const clean = Buffer.from(realEmptyCapacity.subarray(0, -36));
+        clean[clean.length - 3 * 188 + 1]! |= 0x80;
+        const file = new File([Uint8Array.from(clean), new Uint8Array(count).fill(0xa5)], "transport-error.ts");
+        const clamped = await clampTsTrailingBytes(file);
+        expect(clamped.size).toBe(clean.length);
+    });
+
+    it("clips trailing bytes after the minimum complete sync run", async () => {
+        const clean = realEmptyCapacity.subarray(0, 4 * 188);
+        const file = new File([Uint8Array.from(clean), new Uint8Array(1000).fill(0xa5)], "short.ts");
+        expect((await clampTsTrailingBytes(file)).size).toBe(clean.length);
+    });
+
+    it("clips a suffix reaching the scan boundary", async () => {
+        const clean = realEmptyCapacity.subarray(0, -36);
+        const suffixLength = Math.floor((16 * 1024 * 1024) / 188) * 188;
+        const file = new File([Uint8Array.from(clean), new Uint8Array(suffixLength).fill(0xa5)], "long-suffix.ts");
+        expect((await clampTsTrailingBytes(file)).size).toBe(clean.length);
+    });
+
+    it("leaves a suffix beyond the scan bound unchanged", async () => {
+        const clean = realEmptyCapacity.subarray(0, -36);
+        const file = new File([Uint8Array.from(clean), new Uint8Array(17 * 1024 * 1024).fill(0xa5)], "huge-suffix.ts");
+        expect(await clampTsTrailingBytes(file)).toBe(file);
+    });
+
     it("keeps a mislabeled container without a TS packet grid at its head", async () => {
         const bytes = Buffer.alloc(8 * 188, 0xa5);
         bytes[bytes.length - 4 * 188] = 0x47;
         const file = new File([Uint8Array.from(bytes)], "movie.ts");
+        expect(await clampTsTrailingBytes(file)).toBe(file);
+    });
+
+    it("keeps a non-TS file whose tail contains a complete packet run", async () => {
+        const tail = realEmptyCapacity.subarray(-36 - 4 * 188, -36);
+        const file = new File(
+            [new Uint8Array(4 * 188).fill(0xa5), Uint8Array.from(tail), new Uint8Array(53).fill(0xa5)],
+            "movie.ts",
+        );
         expect(await clampTsTrailingBytes(file)).toBe(file);
     });
 

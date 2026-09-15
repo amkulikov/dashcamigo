@@ -129,8 +129,12 @@ function hasTsSyncRun(bytes: Uint8Array, start: number): boolean {
     for (let i = 0; i < TS_SYNC_RUN; i++) {
         const packet = start + i * TS_PACKET;
         if (bytes[packet] !== TS_SYNC_BYTE) return false;
-        // A stray 0x47 in an opaque suffix is not a packet header.
-        if ((bytes[packet + 1]! & 0x80) !== 0 || (bytes[packet + 3]! & 0x30) === 0) return false;
+        // Transport errors do not break packet alignment.
+        const adaptationControl = (bytes[packet + 3]! >> 4) & 3;
+        if (adaptationControl === 0) return false;
+        const adaptationLength = bytes[packet + 4]!;
+        if (adaptationControl === 2 && adaptationLength !== 183) return false;
+        if (adaptationControl === 3 && adaptationLength > 182) return false;
     }
     return true;
 }
@@ -142,12 +146,14 @@ async function findTsPacketBoundary(blob: Blob): Promise<number | null> {
     if (alignedEnd < runBytes) return null;
 
     const tail = new Uint8Array(await blob.slice(alignedEnd - runBytes, alignedEnd).arrayBuffer());
-    if (hasTsSyncRun(tail, 0)) return alignedEnd < blob.size ? alignedEnd : null;
+    const hasCompleteTail = hasTsSyncRun(tail, 0);
+    if (hasCompleteTail && alignedEnd === blob.size) return null;
 
     // Require the packet grid to begin at byte zero. A mislabeled MP4, M2TS,
     // or a stream with a different packet stride must retain its full bytes.
     const head = new Uint8Array(await blob.slice(0, runBytes).arrayBuffer());
     if (!hasTsSyncRun(head, 0)) return null;
+    if (hasCompleteTail) return alignedEnd;
 
     const floor = Math.max(runBytes, alignedEnd - Math.floor(MAX_TS_SUFFIX_BYTES / TS_PACKET) * TS_PACKET);
     const chunkBytes = TS_SUFFIX_SCAN_PACKETS * TS_PACKET;
@@ -155,7 +161,7 @@ async function findTsPacketBoundary(blob: Blob): Promise<number | null> {
         const chunkStart = Math.max(floor, chunkEnd - chunkBytes);
         const readStart = chunkStart - runBytes;
         const bytes = new Uint8Array(await blob.slice(readStart, chunkEnd).arrayBuffer());
-        for (let boundary = chunkEnd; boundary > chunkStart; boundary -= TS_PACKET) {
+        for (let boundary = chunkEnd; boundary >= chunkStart; boundary -= TS_PACKET) {
             if (hasTsSyncRun(bytes, boundary - readStart - runBytes)) return boundary;
         }
         chunkEnd = chunkStart;
