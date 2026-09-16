@@ -206,6 +206,8 @@ export interface ExportMapRenderOptions {
     labelScalePct?: number;
     labelDensity?: StreetLabelDensity;
     markerAppearance?: MapMarkerAppearance;
+    /** The last bitmap became stale after a provider swap or delayed tile load. */
+    onInvalidate?: () => void;
 }
 
 export async function createExportMapSnapshotter(
@@ -219,6 +221,7 @@ export async function createExportMapSnapshotter(
         labelScalePct = 100,
         labelDensity = "standard",
         markerAppearance = DEFAULT_MAP_MARKER_APPEARANCE,
+        onInvalidate,
     } = renderOptions;
     let activeMarkerAppearance = { ...markerAppearance };
     // Resolution policy: derive pixelRatio from the slot the snapshot lands in,
@@ -351,6 +354,13 @@ export async function createExportMapSnapshotter(
     addTrackLayer(map, records);
 
     let isDisposed = false;
+    let shouldRefreshOnIdle = false;
+    const onIdle = (): void => {
+        if (isDisposed || !shouldRefreshOnIdle) return;
+        shouldRefreshOnIdle = false;
+        onInvalidate?.();
+    };
+    if (onInvalidate) map.on("idle", onIdle);
     let providerStyleChange = Promise.resolve();
     const unsubscribeProvider = subscribeMapProvider((provider, previous) => {
         if (provider === activeProvider || isDisposed) return;
@@ -364,7 +374,9 @@ export async function createExportMapSnapshotter(
                     labelDensity,
                 );
                 await waitForStyleLoad(map, styled);
+                if (isDisposed || provider !== activeProvider) return;
                 if (!map.getSource(TRACK_SOURCE_ID)) addTrackLayer(map, records);
+                onInvalidate?.();
             })
             .catch((err: unknown) => {
                 log.warn("provider style switch failed", {
@@ -465,6 +477,7 @@ export async function createExportMapSnapshotter(
         },
         async snapshot(req, opts): Promise<ImageBitmap> {
             await providerStyleChange;
+            shouldRefreshOnIdle = false;
             // Defensive guard: pipeline already filters non-finite positions,
             // but a malformed direct call would otherwise pass NaN into
             // jumpTo and crash maplibre. Throw a typed error so the worker
@@ -542,6 +555,9 @@ export async function createExportMapSnapshotter(
                 cctx.clearRect(0, 0, composite.width, composite.height);
             }
             cctx.drawImage(sourceCanvas, 0, 0);
+            // Only an incomplete capture needs the next idle event. Arming on
+            // every snapshot would loop because jumpTo itself schedules idle.
+            shouldRefreshOnIdle = !!opts?.waitForIdle && !map.loaded();
             // Marker placement. North-up: centered, rotated by heading (the map
             // itself is not rotated). Chase: the map IS rotated to heading-up, so
             // the car points straight up (screen bearing 0) and sits wherever the
@@ -567,6 +583,7 @@ export async function createExportMapSnapshotter(
         },
         dispose(): void {
             isDisposed = true;
+            map.off("idle", onIdle);
             unsubscribeProvider();
             try {
                 map.remove();

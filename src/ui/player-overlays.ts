@@ -826,7 +826,16 @@ async function refreshMapSnapshot(
             "preview",
             theme,
             undefined,
-            { labelScalePct: om.labelScalePct, labelDensity: om.labelDensity, markerAppearance: om.marker },
+            {
+                labelScalePct: om.labelScalePct,
+                labelDensity: om.labelDensity,
+                markerAppearance: om.marker,
+                onInvalidate: () => {
+                    if (myPromise !== mapSnapshotterPromise) return;
+                    mapLastRequestKey = "";
+                    if (state.exportModeOpen && !state.transcodeInProgress) renderPreview();
+                },
+            },
         ).then(
             (s) => {
                 if (myPromise !== mapSnapshotterPromise) {
