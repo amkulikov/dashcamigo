@@ -8,15 +8,16 @@
 import type { EventKind } from "../events.js";
 
 import { state } from "./state.js";
+import { getMapViewPreferences } from "./map-view-pref.js";
 
 export type MapTheme = "light" | "dark";
 
 /**
  * Which base-map style.json to load. Superset of MapTheme: the live app map only
- * ever uses light/dark (tied to the UI theme), but the export "map overlay" lets
+ * ever uses light/dark, but the export "map overlay" lets
  * the user pick "neon" too - a semi-transparent black slot with orange-glowing
  * roads/buildings/cities, independent of the app theme. Kept separate from
- * MapTheme so currentMapTheme()'s contract (it returns the effective UI theme,
+ * MapTheme so currentMapTheme()'s contract (it returns the effective map theme,
  * never "neon") stays honest.
  */
 export type MapStyleId = MapTheme | "neon";
@@ -64,25 +65,31 @@ export function applyTheme(choice: ThemeChoice): void {
     refreshThemeColors();
 }
 
-/** Current user theme choice (auto/light/dark) - not the effective theme. The effective theme is given by currentMapTheme(). */
+/** The interface preference; the map can use its own independent palette. */
 export function getThemeChoice(): ThemeChoice {
     return userThemeChoice;
 }
 
-/**
- * Effective map theme = same signal as the UI theme.
- *  - "light" / "dark" choice: explicit override.
- *  - "auto": follow OS via prefers-color-scheme. matchMedia is the same source
- *    of truth used by the global listener in app.ts and the CSS media queries -
- *    so all three (CSS palette, themeColors() cache, map style) flip together.
- */
+/** The map follows the interface unless its own palette is explicitly chosen. */
 export function currentMapTheme(): MapTheme {
+    const mapTheme = getMapViewPreferences().theme;
+    if (mapTheme !== "auto") return mapTheme;
     if (userThemeChoice === "dark") return "dark";
     if (userThemeChoice === "light") return "light";
     if (typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
         return "dark";
     }
     return "light";
+}
+
+const MAP_COLORS = {
+    light: { background: "#f5f4ef", trackVeil: "rgba(245,244,239,0.45)", markerStroke: "#0e0e0e" },
+    dark: { background: "#14171c", trackVeil: "rgba(20,23,28,0.45)", markerStroke: "#fff" },
+} as const;
+
+/** Map overlays use the basemap palette even when the interface has a different theme. */
+export function mapThemeColors(theme: MapTheme): (typeof MAP_COLORS)[MapTheme] {
+    return MAP_COLORS[theme];
 }
 
 /** Reads a CSS variable value (--fg-dim, --border, etc.) from :root computed style. CSS variable values may include leading spaces. */
@@ -122,10 +129,6 @@ interface ThemeColors {
     markerStart: string; // --dc-green
     markerEnd: string; // --dc-red
     markerStroke: string; // --dc-marker-stroke (#fff on dark / #0E0E0E on light)
-    // Semi-transparent veil drawn over the not-yet-driven portion of the
-    // track ("trail" overlay in map.ts): --bg with alpha, so it dims toward
-    // whichever map background the active theme uses.
-    trackVeil: string;
     // Inferred event strip bars (under the chart). Match canonical signal
     // colors used elsewhere - red for brake, yellow for turn (caution),
     // green for accel (go), dim fg for stop.
@@ -177,12 +180,6 @@ export function themeColors(): ThemeColors {
         markerStart: getCssVar("--dc-green"),
         markerEnd: getCssVar("--dc-red"),
         markerStroke: getCssVar("--dc-marker-stroke"),
-        // Veil = background color at ~45% alpha, one semantic ("blend toward
-        // the map background") for both palettes. Strength is a tradeoff: at
-        // 72% the un-driven track was near-invisible against the base map in
-        // both themes; 45% keeps it clearly readable while the driven part
-        // still pops with the full-strength speed gradient.
-        trackVeil: withAlpha(getCssVar("--bg"), "73"),
         // Read through the semantic --ev-* aliases so the light-theme override
         // (--ev-stop = --dc-stone-3) flows through automatically. Direct
         // physical tokens would freeze the strip on the dark palette.

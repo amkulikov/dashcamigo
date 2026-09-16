@@ -51,6 +51,7 @@ import {
 } from "./map-label-scale.js";
 import { renderMapMarkerControl } from "./map-marker-control.js";
 import { getMapMarkerAppearance, setMapMarkerAppearance } from "./map-marker-pref.js";
+import { initMapViewControls } from "./map-view-controls.js";
 import { activateModal, deactivateModal, wireBackdropDismiss } from "./modal-helper.js";
 import { notify } from "./notifications.js";
 import { resetOnboarding } from "./onboarding.js";
@@ -397,6 +398,9 @@ export function initSettingsModal(): void {
     // Both apply immediately to the live maps (a setStyle re-apply of the
     // cached style with the new prefs). The export overlay map has its own
     // per-export text-size control and is untouched by these preferences.
+
+    const mapViewControl = document.getElementById("settings-map-view-control");
+    if (mapViewControl) initMapViewControls(mapViewControl, "settings-map");
 
     document.getElementById("settings-map-label-scale-select")?.addEventListener("change", (ev) => {
         const sel = ev.target as HTMLSelectElement;

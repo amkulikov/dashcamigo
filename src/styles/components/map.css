@@ -129,8 +129,31 @@
 }
 
 /* Provider credits stay directly visible on the map. */
+.map .maplibregl-control-container {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-end;
+    justify-content: space-between;
+    pointer-events: none;
+}
+/* Bottom controls wrap into separate rows when their combined width exceeds
+   the map pane. Top controls retain MapLibre's absolute positioning. */
+.map .maplibregl-ctrl-bottom-left,
+.map .maplibregl-ctrl-bottom-right {
+    position: static;
+    max-width: 100%;
+}
+.map .maplibregl-ctrl-bottom-right {
+    max-width: calc(100% - 20px);
+    margin: 0 10px 10px auto;
+}
+.map .dc-map-attrib {
+    margin: 0;
+}
 .dc-map-attrib {
-    max-width: min(440px, calc(100vw - 16px));
+    max-width: min(440px, 100%);
     padding: 2px var(--dc-space-1);
     background: var(--bg-elev);
     border: 1px solid var(--border);
@@ -200,6 +223,7 @@
     flex-direction: column;
     gap: var(--dc-space-2);
     width: max-content;
+    max-height: 320px;
     padding: var(--dc-space-2);
     background: var(--bg-elev);
     border: 1px solid var(--border);
@@ -256,6 +280,57 @@
 .map-settings-row-label {
     font-size: var(--dc-text-sm);
     color: var(--fg-dim);
+}
+.map-view-controls {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-2);
+    min-width: 0;
+    font-size: var(--dc-text-sm);
+}
+.map-view-controls__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--dc-space-3);
+    min-width: 0;
+}
+.map-view-controls .map-view-controls__select {
+    width: 200px;
+    min-width: 0;
+    max-width: 100%;
+    flex-shrink: 0;
+}
+.map-view-controls__buildings {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--dc-space-2);
+    cursor: pointer;
+}
+.map-view-controls__buildings input {
+    flex-shrink: 0;
+    margin-top: 3px;
+    accent-color: var(--accent);
+}
+.map-view-controls__hint {
+    display: block;
+    color: var(--fg-mute);
+    font-size: var(--dc-text-xs);
+    line-height: 1.5;
+}
+.map-settings-popover .map-view-controls {
+    padding-bottom: var(--dc-space-2);
+    border-bottom: 1px solid var(--border);
+}
+.map-settings-popover--compact .map-view-controls__row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--dc-space-1);
+}
+.map-settings-popover--compact .map-view-controls__select {
+    width: 100%;
+    max-width: 100%;
 }
 /* Same joined-segment look as .map-follow-segments, but with text pills. */
 .map-settings-segment {

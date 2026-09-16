@@ -56,9 +56,11 @@ import { formatTime } from "./format.js";
 import { activeFrame, activeTrip, state } from "./state.js";
 import type { FollowMode, LngLatTuple, MiniMapData } from "./state.js";
 import { formatSpeedFromMs } from "../units-pref.js";
-import { currentMapTheme, getCssVar, themeColors } from "./theme.js";
+import { currentMapTheme, mapThemeColors, themeColors } from "./theme.js";
 import type { MapStyleId, MapTheme } from "./theme.js";
 import { applyViewerLabelPrefs } from "./map-label-scale.js";
+import { applyMapStylePreset } from "./map-style-preset.js";
+import { getMapViewPreferences, subscribeMapViewPreferences } from "./map-view-pref.js";
 import { getMapMarkerAppearance, MAP_MARKER_SIZE_PX, subscribeMapMarkerAppearance } from "./map-marker-pref.js";
 import { mapMarkerPitchScale, renderMapMarkerIntoCanvas } from "./map-marker-renderer.js";
 import {
@@ -118,20 +120,7 @@ let callbacks: MapCallbacks = {
     onChartLayoutChange: () => {},
 };
 
-/**
- * Map tile styles. Both self-hosted in public/styles/, both keyless.
- *
- * Light: OpenFreeMap Liberty, snapshot copied as-is. Source/sprite/glyphs all
- * point at tiles.openfreemap.org (no API key).
- *
- * Dark: Dark Matter (OpenMapTiles schema, CC0) adapted - source/glyphs URLs
- * rewritten from MapTiler (keyed) to OpenFreeMap, text-font normalized to
- * Noto Sans Regular/Italic (OFM glyph set), sprite copied locally.
- *
- * Both use the same OpenFreeMap planet vector tiles - one shared tile cache.
- * Tied to currentMapTheme(): UI dark -> dark, UI light -> light, UI auto ->
- * matchMedia(prefers-color-scheme).
- */
+// Self-hosted palettes share the canonical layers and OpenFreeMap tile cache.
 const MAP_STYLE_URLS: Record<MapStyleId, string> = {
     light: "/styles/light.json",
     dark: "/styles/dark.json",
@@ -338,14 +327,15 @@ export function loadMapStyle(
     return promise;
 }
 
-/**
- * Applies a loaded style.json to the large map and mini-map (if created). Track
- * redraw after style change happens in the `style.load` handlers in
- * ensureMap/ensureMiniMap, not here - to avoid calling refreshMap twice per event.
- *
- * Theme is checked before applying: the user may have toggled prefers-color-scheme
- * while the style was loading, making this result stale.
- */
+interface RenderedMapTrack {
+    trip: Trip;
+    records: GpsRecord[];
+    recordCount: number;
+}
+let renderedMapTrack: RenderedMapTrack | null = null;
+let preservedStyleTrack: RenderedMapTrack | null = null;
+
+/** Applies only the current theme/provider; style.load restores local overlays. */
 function applyLoadedStyle(
     style: maplibregl.StyleSpecification,
     theme: MapStyleId,
@@ -364,24 +354,12 @@ function applyLoadedStyle(
     // HERE, not in loadMapStyle: the cache must stay pristine because the
     // export snapshotter reads the same cache with its own independent
     // per-export factor.
-    const styled = applyViewerLabelPrefs(style);
+    const styled = applyViewerMapStyle(style);
     if (state.map) {
         const map = state.map;
-        if (shouldPreserveCamera) {
-            const camera = {
-                center: map.getCenter(),
-                zoom: map.getZoom(),
-                bearing: map.getBearing(),
-                pitch: map.getPitch(),
-                padding: map.getPadding(),
-            };
-            // refreshMap fits the track after a style swap. A background retry
-            // must preserve the view the user is inspecting.
-            map.once("style.load", () => {
-                map.jumpTo(camera);
-                ensureChaseEngaged();
-            });
-        }
+        // setStyle retains the camera. A different trip loaded during the swap
+        // must still get its own framing when the style is ready.
+        preservedStyleTrack = shouldPreserveCamera ? renderedMapTrack : null;
         map.setStyle(styled, { diff: false });
     }
     if (state.miniMap) state.miniMap.setStyle(styled, { diff: false });
@@ -399,6 +377,14 @@ export function reapplyMapLabelPrefs(): void {
     const provider = getMapProvider();
     const cached = cachedMapStyles.get(styleCacheKey(provider, theme));
     if (cached) applyLoadedStyle(cached, theme, provider, true);
+}
+
+export function applyViewerMapStyle(style: maplibregl.StyleSpecification): maplibregl.StyleSpecification {
+    return applyViewerLabelPrefs(applyMapStylePreset(style, getMapViewPreferences().style));
+}
+
+function viewerMapColors(): ReturnType<typeof mapThemeColors> {
+    return mapThemeColors(getMapProvider() === "osm-raster" ? "light" : currentMapTheme());
 }
 
 function showMapStyleError(): void {
@@ -548,7 +534,7 @@ function setTrailProgress(progress: number): void {
     cancelTrailingTrailWrite();
     trailLastProgressWritten = progress;
     trailLastWriteAt = now;
-    const dim = themeColors().trackVeil;
+    const dim = viewerMapColors().trackVeil;
     const transparent = "rgba(0,0,0,0)";
     // line-gradient inputs must be STRICTLY ascending. We emit four stops:
     // 0 -> p (transparent), p+eps -> 1 (dim). Clamp p so neither 0==p nor
@@ -896,11 +882,18 @@ export function ensureMap(): maplibregl.Map | null {
         // reaches - and lowering maxZoomLevelsOnScreen below the 9.314 default
         // makes far tiles KEEP more zoom (more tiles, not fewer); the built-in
         // default is already the sane LOD for our pitch range.
-        refreshMap(activeTrip());
+        const trip = activeTrip();
+        const preserveCamera =
+            preservedStyleTrack !== null &&
+            trip === preservedStyleTrack.trip &&
+            trip.records === preservedStyleTrack.records &&
+            trip.records.length === preservedStyleTrack.recordCount;
+        preservedStyleTrack = null;
+        refreshMap(trip, preserveCamera);
         // setStyle (theme swap) wipes every non-style layer, including our 3D
         // building extrusion. Re-add it - with the new theme's wall color - when
         // chase is the active mode.
-        if (state.followMode === "chase") ensure3dBuildings(map);
+        if (state.followMode === "chase" || map.getPitch() > 1) ensure3dBuildings(map);
     });
 
     // Start loading the real style. Promise is cached so a subsequent
@@ -911,15 +904,8 @@ export function ensureMap(): maplibregl.Map | null {
         if (style) applyLoadedStyle(style, theme, provider);
     });
 
-    // Background prefetch the other theme. Two reasons:
-    //   1) Export-overlay snapshotter (src/ui/export-map-snapshot.ts) ALWAYS
-    //      uses light - on a dark user this used to fire a fresh fetch the
-    //      moment the user enabled "Map overlay" in the export modal, with
-    //      its own failure surface. Prewarming makes that path a cache hit.
-    //   2) prefers-color-scheme toggle / theme-switch button no longer waits
-    //      on a fetch on the first switch.
-    // source="prefetch" makes failures silent (no banner) - the user never
-    // explicitly asked for this fetch.
+    // Warm the alternate palette for map settings and export; background
+    // requests must not show a failure banner for an unselected style.
     const otherTheme: MapTheme = theme === "light" ? "dark" : "light";
     loadMapStyle(otherTheme, false, "prefetch", provider);
 
@@ -928,7 +914,7 @@ export function ensureMap(): maplibregl.Map | null {
 
 /**
  * Mini-map in the player corner. Separate MapLibre instance with the same
- * Liberty style, no controls, and interactive:false. Clicking it expands the
+ * viewer style, no controls, and interactive:false. Clicking it expands the
  * large map.
  *
  * The car marker stays centered: camera follows the current position on every
@@ -1038,7 +1024,7 @@ export function ensureMiniMap(): maplibregl.Map | null {
     const provider = getMapProvider();
     const cached = cachedMapStyles.get(styleCacheKey(provider, theme));
     if (cached && state.miniMap) {
-        state.miniMap.setStyle(applyViewerLabelPrefs(cached), { diff: false });
+        state.miniMap.setStyle(applyViewerMapStyle(cached), { diff: false });
     }
 
     return mini;
@@ -1089,12 +1075,13 @@ function buildEndpointMarkerElement(kind: "start" | "end"): HTMLDivElement {
     const tc = themeColors();
     const isStart = kind === "start";
     const fill = isStart ? tc.markerStart : tc.markerEnd;
+    const stroke = viewerMapColors().markerStroke;
     const letter = isStart ? "A" : "B";
     wrap.innerHTML = `
         <svg viewBox="-12 -12 24 24" width="22" height="22">
-            <circle cx="0" cy="0" r="10" fill="${fill}" stroke="${tc.markerStroke}" stroke-width="2"/>
+            <circle cx="0" cy="0" r="10" fill="${fill}" stroke="${stroke}" stroke-width="2"/>
             <text x="0" y="1" text-anchor="middle" dominant-baseline="middle"
-                  font-size="11" font-weight="700" fill="${tc.markerStroke}" font-family="Inter, system-ui, sans-serif">${letter}</text>
+                  font-size="11" font-weight="700" fill="${stroke}" font-family="Inter, system-ui, sans-serif">${letter}</text>
         </svg>
     `;
     return wrap;
@@ -1131,7 +1118,7 @@ function syncMapPanels(trip: Trip | null, recordCount: number): void {
     emitLifecycle("map-tracks-rendered", { recordCount });
 }
 
-export function refreshMap(trip: Trip | null): void {
+export function refreshMap(trip: Trip | null, preserveCamera = false): void {
     const map = ensureMap();
     if (!map) {
         // No WebGL: the map can't render, but the chart + inferred strip depend
@@ -1171,7 +1158,7 @@ export function refreshMap(trip: Trip | null): void {
     // fitBounds below moves the camera (stepping the filter from the old
     // trip's coordinates would yank it back), and a new trip that starts at
     // the previous trip's exact parking spot must not skip its first write.
-    resetFollowCameraFilter();
+    if (!preserveCamera) resetFollowCameraFilter();
     bigMapAppliedLat = Number.NaN;
     bigMapAppliedLon = Number.NaN;
     bigMapAppliedBearing = Number.NaN;
@@ -1225,6 +1212,7 @@ export function refreshMap(trip: Trip | null): void {
         }
     }
     if (dedupedRecs.length === 0) {
+        renderedMapTrack = null;
         // No GPS - clear mini-map too (otherwise the previous trip's track stays).
         // hasTrack=false hides both maps and the icon via applyMapLayout.
         // refreshEventsLayer(null) drops a stale events source/layer carried
@@ -1273,9 +1261,9 @@ export function refreshMap(trip: Trip | null): void {
                 ["linear"],
                 ["line-progress"],
                 0,
-                themeColors().trackVeil,
+                viewerMapColors().trackVeil,
                 1,
-                themeColors().trackVeil,
+                viewerMapColors().trackVeil,
             ] as never,
         },
     });
@@ -1330,7 +1318,7 @@ export function refreshMap(trip: Trip | null): void {
             .setLngLat(coords[coords.length - 1]!)
             .addTo(map);
     }
-    map.fitBounds(bounds, { padding: 40, animate: false });
+    if (!preserveCamera) map.fitBounds(bounds, { padding: 40, animate: false });
 
     // Update mini-map with the already-prepared coords and gradient.
     refreshMiniMap({ coords, gradient });
@@ -1339,7 +1327,8 @@ export function refreshMap(trip: Trip | null): void {
     refreshEventsLayer(map, trip);
 
     syncMapPanels(trip, dedupedRecs.length);
-    ensureChaseEngaged();
+    renderedMapTrack = trip ? { trip, records: trip.records, recordCount: trip.records.length } : null;
+    if (!preserveCamera) ensureChaseEngaged();
 }
 
 // -- Named handlers for delegated map.on(type, layerId) listeners. -----------
@@ -1449,8 +1438,7 @@ function refreshEventsLayer(map: maplibregl.Map, trip: Trip | null): void {
         data: { type: "FeatureCollection", features },
     });
     const tc = themeColors();
-    // 6 px circle with --bg stroke: readable on both light and dark base layers.
-    const bgColor = getCssVar("--bg") || "#000";
+    const bgColor = viewerMapColors().background;
     map.addLayer({
         id: EVENTS_LAYER_ID,
         type: "circle",
@@ -2975,9 +2963,8 @@ function firstSymbolLayerId(map: maplibregl.Map): string | undefined {
  * Adds the 3D building extrusion layer if it is not already present and the map
  * carries an OpenFreeMap or Shortbread vector source. Idempotent. `theme` picks the wall
  * color (the export snapshotter passes its own base-layer theme, independent of
- * the app UI theme). The flat "building" fill in the style has maxzoom 14, so it
- * is already hidden at the z14+ where this extrusion (minzoom 14) renders - no
- * z-fighting, nothing to toggle off.
+ * the app UI theme). Flat footprints remain visible underneath, including while
+ * the extrusion fades in and when the user leaves the tilted view.
  *
  * Exported so the export-overlay snapshotter renders the exact same buildings as
  * the live chase map (one source of truth for the layer definition).
@@ -3001,6 +2988,8 @@ export function addBuildings3dLayer(map: maplibregl.Map, theme: MapStyleId): voi
             source,
             "source-layer": sourceLayer,
             minzoom: 14,
+            // OMT outlines accompany building parts and must not become solid blocks.
+            ...(hasOpenMapTiles ? { filter: ["!=", ["get", "hide_3d"], true] as maplibregl.FilterSpecification } : {}),
             paint: {
                 "fill-extrusion-color": walls,
                 // OpenMapTiles carries render_height/render_min_height; fall back
@@ -3034,7 +3023,8 @@ export function removeBuildings3dLayer(map: maplibregl.Map): void {
 /** Live-map wrapper: buildings track the current app map theme. (Removal needs
  *  no theme, so leaveChaseCamera calls removeBuildings3dLayer directly.) */
 function ensure3dBuildings(map: maplibregl.Map): void {
-    addBuildings3dLayer(map, currentMapTheme());
+    if (getMapViewPreferences().buildings3d) addBuildings3dLayer(map, currentMapTheme());
+    else removeBuildings3dLayer(map);
 }
 
 /**
@@ -3144,6 +3134,15 @@ export function initMap(cb: MapCallbacks): void {
     onActivePlayerEvent("seeked", ensureMarkerLoop);
     state.mapExpanded = getPreferredMapMode() === "large";
     subscribeMapMarkerAppearance(refreshLiveMapMarkerAppearance);
+    let mapPreferences = getMapViewPreferences();
+    subscribeMapViewPreferences((next) => {
+        const needsStyle = next.style !== mapPreferences.style || next.theme !== mapPreferences.theme;
+        mapPreferences = next;
+        if (needsStyle) reloadMapStyleForCurrentTheme();
+        else if (state.map && state.mapReady && (state.followMode === "chase" || state.map.getPitch() > 1))
+            ensure3dBuildings(state.map);
+        else if (state.map && state.mapReady && !next.buildings3d) removeBuildings3dLayer(state.map);
+    });
     let wasOffline = isOffline();
     subscribeConnectivity((offline) => {
         if (offline) scheduleMapRecovery();
@@ -3173,7 +3172,7 @@ export function initMap(cb: MapCallbacks): void {
         if (previous === null && provider === "openfreemap") return;
         const theme = currentMapTheme();
         loadMapStyle(theme, false, "main", provider).then((style) => {
-            if (style) applyLoadedStyle(style, theme, provider);
+            if (style) applyLoadedStyle(style, theme, provider, true);
         });
     });
 
@@ -3404,6 +3403,6 @@ export function reloadMapStyleForCurrentTheme(): void {
     const theme = currentMapTheme();
     const provider = getMapProvider();
     loadMapStyle(theme, false, "main", provider).then((style) => {
-        if (style) applyLoadedStyle(style, theme, provider);
+        if (style) applyLoadedStyle(style, theme, provider, true);
     });
 }

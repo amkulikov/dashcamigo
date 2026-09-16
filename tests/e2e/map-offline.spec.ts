@@ -34,8 +34,15 @@ test("draws the local track while remote map bootstrap remains pending, includin
     await page.locator('.theme-toggle-btn[data-theme="light"]').click();
     await expect(page.locator("html")).toHaveClass(/dc-light/);
     await expect
-        .poll(() => page.evaluate(() => Boolean(window.__dashcamigo.state.map?.getSource("ne2_shaded"))))
-        .toBe(true);
+        .poll(() =>
+            page.evaluate(() => {
+                const layer = window.__dashcamigo.state.map
+                    ?.getStyle()
+                    ?.layers.find((layer) => layer.type === "background");
+                return layer?.paint?.["background-color"];
+            }),
+        )
+        .toBe("#f5f4ef");
     await expectLocalTrack(page, true);
 
     await page.unroute("https://tiles.openfreemap.org/planet");

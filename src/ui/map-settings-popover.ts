@@ -21,6 +21,7 @@ import {
 } from "./map-label-scale.js";
 import { renderMapMarkerControl } from "./map-marker-control.js";
 import { getMapMarkerAppearance, setMapMarkerAppearance } from "./map-marker-pref.js";
+import { initMapViewControls } from "./map-view-controls.js";
 import { reapplyMapLabelPrefs } from "./map.js";
 
 // Segment buttons carry their preset in data-value; a click persists it,
@@ -81,42 +82,50 @@ function renderRows(): void {
 
 const POPOVER_EDGE_MARGIN_PX = 8;
 
-// The pane (.map-wrap) is overflow:hidden, so a popover past its edge is cut,
-// not shown - and the pane can be as narrow as the video/map splitter allows.
-// Measured against the live pane box on every open (media queries cannot see
-// splitter-driven width): default flyout right of the gear, then a panel below
-// it, then the presets stacked vertically; the inline max sizes make long
-// locale labels wrap and, on an absurdly short pane, scroll instead of clip.
+// The splitter can make the clipping pane much narrower than the viewport.
+// Keep the flyout inside that pane and scroll its contents on short screens.
 function fitPopoverToPane(): void {
     const pop = dom.mapSettingsPopover;
+    if (pop.hidden) return;
     pop.classList.remove("map-settings-popover--below", "map-settings-popover--compact");
     pop.style.maxWidth = "";
     pop.style.maxHeight = "";
-    const pane = pop.closest(".map-wrap");
-    if (!(pane instanceof HTMLElement)) return;
-    const paneBox = pane.getBoundingClientRect();
+    pop.style.translate = "0px";
+    const paneBox = dom.mapWrap.getBoundingClientRect();
+    const viewerBox = dom.viewer.getBoundingClientRect();
+    const playerBarBox = dom.playerBar.play.closest(".player-bar")?.getBoundingClientRect();
+    const right = paneBox.right - POPOVER_EDGE_MARGIN_PX;
+    const top = Math.max(0, viewerBox.top, paneBox.top) + POPOVER_EDGE_MARGIN_PX;
+    let bottom = Math.min(window.innerHeight, viewerBox.bottom, paneBox.bottom);
+    // The mobile player bar sticks over the map while the viewer scrolls.
+    if (
+        playerBarBox &&
+        playerBarBox.top > top &&
+        playerBarBox.left < paneBox.right &&
+        playerBarBox.right > paneBox.left
+    ) {
+        bottom = Math.min(bottom, playerBarBox.top);
+    }
+    bottom -= POPOVER_EDGE_MARGIN_PX;
     // +1 slop: scrollWidth/clientWidth round differently at fractional zoom.
-    const fits = (): boolean => {
-        const box = pop.getBoundingClientRect();
-        return (
-            box.right <= paneBox.right - POPOVER_EDGE_MARGIN_PX &&
-            box.bottom <= paneBox.bottom - POPOVER_EDGE_MARGIN_PX &&
-            pop.scrollWidth <= pop.clientWidth + 1 &&
-            pop.scrollHeight <= pop.clientHeight + 1
-        );
-    };
-    if (fits()) return;
-    pop.classList.add("map-settings-popover--below");
-    pop.style.maxWidth = `${Math.floor(paneBox.right - POPOVER_EDGE_MARGIN_PX - pop.getBoundingClientRect().left)}px`;
-    if (fits()) return;
-    pop.classList.add("map-settings-popover--compact");
-    if (fits()) return;
-    pop.style.maxHeight = `${Math.floor(paneBox.bottom - POPOVER_EDGE_MARGIN_PX - pop.getBoundingClientRect().top)}px`;
+    if (pop.getBoundingClientRect().right > right || pop.scrollWidth > pop.clientWidth + 1) {
+        pop.classList.add("map-settings-popover--below");
+    }
+    const availableWidth = Math.max(0, Math.floor(right - pop.getBoundingClientRect().left));
+    pop.style.maxWidth = `${availableWidth}px`;
+    if (availableWidth < 320 || pop.scrollWidth > pop.clientWidth + 1) {
+        pop.classList.add("map-settings-popover--compact");
+    }
+    pop.style.maxHeight = `min(320px, ${Math.max(0, Math.floor(bottom - top))}px)`;
+    const box = pop.getBoundingClientRect();
+    const fittedTop = Math.max(top, Math.min(box.top, bottom - box.height));
+    pop.style.translate = `0px ${fittedTop - box.top}px`;
 }
 
 function openPopover(): void {
     renderRows();
     dom.mapSettingsPopover.hidden = false;
+    dom.mapSettingsPopover.scrollTop = 0;
     dom.mapSettingsToggle.setAttribute("aria-expanded", "true");
     fitPopoverToPane();
 }
@@ -129,6 +138,10 @@ function closePopover(): void {
 /** Wires the gear toggle and the popover's dismiss handlers. Call once at
  *  startup; the popover content itself is (re)rendered on each open. */
 export function initMapSettingsPopover(): void {
+    initMapViewControls(dom.mapViewControl, "map");
+    const resize = new ResizeObserver(fitPopoverToPane);
+    resize.observe(dom.mapWrap);
+    dom.viewer.addEventListener("scroll", fitPopoverToPane, { passive: true });
     dom.mapSettingsToggle.addEventListener("click", (ev) => {
         ev.stopPropagation();
         if (dom.mapSettingsPopover.hidden) openPopover();
@@ -147,6 +160,10 @@ export function initMapSettingsPopover(): void {
         closePopover();
     });
     document.addEventListener("keydown", (ev) => {
-        if (ev.key === "Escape" && !dom.mapSettingsPopover.hidden) closePopover();
+        if (ev.key === "Escape" && !dom.mapSettingsPopover.hidden) {
+            const hasPopoverFocus = dom.mapSettingsPopover.contains(document.activeElement);
+            closePopover();
+            if (hasPopoverFocus) dom.mapSettingsToggle.focus();
+        }
     });
 }

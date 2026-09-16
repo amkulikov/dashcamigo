@@ -1,0 +1,160 @@
+// Geometry and label placement live in light.json. Alternate palettes cannot
+// drop a bridge, road number or building merely because the UI theme changed.
+
+import { roadColorExpression } from "./_map-road-layers.mjs";
+
+export const MAP_SDF_ICONS = ["arrow", "circle_11_black", "airport_11"];
+
+const DARK = {
+    background: "#14171c",
+    water: "#20374a",
+    waterLine: "#36566d",
+    waterLabel: "#87b6d2",
+    park: "#263b2c",
+    parkOutline: "#405d43",
+    forest: "#203629",
+    landuse: "#20242b",
+    building: "#303640",
+    buildingOutline: "#434b57",
+    boundary: "#80708c",
+    roadCasing: "#15181d",
+    bridgeCasing: "#76808b",
+    minor: "#59616b",
+    service: "#505861",
+    secondary: "#9c9874",
+    primary: "#b09a72",
+    motorway: "#bd8890",
+    path: "#938776",
+    transportArea: "#252930",
+    rail: "#868b94",
+    label: "#e4e8ed",
+    labelMinor: "#b4beca",
+    halo: "#14171c",
+    poi: "#aec5db",
+    driverPoi: "#e1c78e",
+};
+
+const NEON = {
+    background: "rgba(0,0,0,0.5)",
+    water: "rgba(10,18,34,0.55)",
+    waterLine: "#445675",
+    waterLabel: "#8dabc6",
+    park: "rgba(30,32,18,0.12)",
+    parkOutline: "#64572f",
+    forest: "rgba(28,31,16,0.12)",
+    landuse: "rgba(30,24,18,0.1)",
+    building: "rgba(255,144,0,0.05)",
+    buildingOutline: "#b76a16",
+    boundary: "#76532e",
+    roadCasing: "#663608",
+    bridgeCasing: "#a86212",
+    minor: "#b35e00",
+    service: "#995309",
+    secondary: "#e89532",
+    primary: "#ffb347",
+    motorway: "#ffd9a0",
+    path: "#936125",
+    transportArea: "rgba(255,144,0,0.06)",
+    rail: "#8a6337",
+    label: "#ffe6c2",
+    labelMinor: "#e5be87",
+    halo: "#271605",
+    poi: "#be9a66",
+    driverPoi: "#ffd9a0",
+};
+
+function lineColor(layer, palette) {
+    const kind = layer.metadata?.["dashcamigo:road-kind"];
+    if (kind) return roadColorExpression(palette, kind);
+    const id = layer.id;
+    if (layer["source-layer"] === "waterway" || id === "road_ferry") return palette.waterLine;
+    if (layer["source-layer"] === "boundary") return palette.boundary;
+    if (layer["source-layer"] === "park") return palette.parkOutline;
+    if (id.includes("rail")) return palette.rail;
+    if (id.includes("casing")) return id.startsWith("bridge_") ? palette.bridgeCasing : palette.roadCasing;
+    if (id.includes("path")) return palette.path;
+    if (id.includes("motorway")) return palette.motorway;
+    if (id.includes("trunk_primary")) return palette.primary;
+    if (id.includes("secondary_tertiary")) return palette.secondary;
+    if (id.includes("service_track")) return palette.service;
+    return palette.minor;
+}
+
+function usesSdfIcon(value) {
+    if (Array.isArray(value)) return value.some(usesSdfIcon);
+    return MAP_SDF_ICONS.includes(value);
+}
+
+export function createMapStyleVariant(light, theme) {
+    const palette = theme === "dark" ? DARK : NEON;
+    const style = structuredClone(light);
+    style.name = theme === "dark" ? "Dashcamigo Classic Dark" : "Dashcamigo Neon";
+    style.sprite = "/styles/sprite/sprite";
+    style.metadata = { ...style.metadata, "dashcamigo:theme": theme };
+    for (const layer of style.layers) {
+        layer.paint ??= {};
+        const p = layer.paint;
+        const role = layer.metadata?.["dashcamigo:role"];
+        if (layer.type === "background") p["background-color"] = palette.background;
+        if (layer.type === "line") {
+            p["line-color"] = lineColor(layer, palette);
+            if (
+                theme === "neon" &&
+                layer.metadata?.["dashcamigo:road-kind"] === "casing" &&
+                layer.metadata?.["dashcamigo:road-level"] === 0 &&
+                layer.metadata?.["dashcamigo:road-crossing"] === "surface"
+            ) {
+                p["line-color"] = "#ff9000";
+                p["line-blur"] = 2;
+                p["line-opacity"] = 0.5;
+            }
+        }
+        if (layer.type === "fill") {
+            const colors = {
+                water: "water",
+                park: "park",
+                landcover: "forest",
+                landuse: "landuse",
+                building: "building",
+                transport: "transportArea",
+            };
+            const color = colors[role];
+            if (!color) throw new Error(`unclassified fill layer: ${layer.id}`);
+            p["fill-color"] = palette[color];
+            if (p["fill-outline-color"] !== undefined) {
+                p["fill-outline-color"] = role === "building" ? palette.buildingOutline : palette.parkOutline;
+            }
+        }
+        if (layer.type === "symbol") {
+            // Shield bitmaps carry light backgrounds in every palette.
+            const hasShield = layer.id.includes("shield");
+            const color =
+                role === "water-label"
+                    ? palette.waterLabel
+                    : role === "poi-driver"
+                      ? palette.driverPoi
+                      : role === "poi"
+                        ? palette.poi
+                        : role === "address" || role === "context-label"
+                          ? palette.labelMinor
+                          : palette.label;
+            if (layer.layout?.["text-field"] !== undefined) {
+                p["text-color"] = hasShield ? "#273443" : color;
+                p["text-halo-color"] = hasShield ? "#ffffff" : palette.halo;
+            }
+            // These atlas entries are SDF; bitmap shields retain their colors.
+            if (usesSdfIcon(layer.layout?.["icon-image"])) {
+                p["icon-color"] = palette.label;
+                p["icon-halo-color"] = palette.halo;
+                p["icon-halo-width"] = 1;
+            }
+        }
+    }
+    if (theme === "neon") {
+        // The export overlay needs transparency and a quiet background; road
+        // geometry, one-way arrows and road/place labels remain shared.
+        const hiddenRoles = new Set(["landuse", "landcover", "park", "boundary", "poi", "address", "context-label"]);
+        style.layers = style.layers.filter((layer) => !hiddenRoles.has(layer.metadata?.["dashcamigo:role"]));
+    }
+    return style;
+}

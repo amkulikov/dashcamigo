@@ -1,0 +1,8 @@
+OpenFreeMap sprite atlas, ofm_f384
+Source: https://tiles.openfreemap.org/sprites/ofm_f384/ofm
+Project: https://github.com/hyperknot/openfreemap-styles
+Licences: LICENSE.txt
+
+Selected monochrome icons are converted to signed distance fields for
+theme colors and contrasting outlines. Other atlas entries are unchanged.
+Regenerate with node scripts/build-map-sprite.mjs.

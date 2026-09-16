@@ -120,6 +120,16 @@ for (const { name, version, dir } of [...packages.values()].sort((a, b) => a.nam
     sections.push(lines.join("\n"));
 }
 
+sections.push(
+    [
+        RULE,
+        "OpenFreeMap map sprite assets",
+        readFileSync(join(ROOT, "public/styles/sprite/NOTICE.txt"), "utf8").trim(),
+        "",
+        readFileSync(join(ROOT, "public/styles/sprite/LICENSE.txt"), "utf8").trim(),
+    ].join("\n"),
+);
+
 if (failures.length > 0) {
     console.error("generate-third-party-notices: FAILED\n" + failures.map((f) => `  - ${f}`).join("\n"));
     process.exit(1);
@@ -130,9 +140,9 @@ const header = [
     "",
     "dashcamigo itself is licensed under AGPL-3.0-only; its source code lives at",
     "the repository linked from the site. This file reproduces the license texts",
-    "of the third-party packages the application is built from, as those licenses",
-    "require. The list is generated from package-lock.json at build time and may",
-    "include packages that the final bundle does not actually contain.",
+    "of third-party packages and assets used by the application. The package list",
+    "is generated from package-lock.json at build time and may include packages",
+    "that the final bundle does not actually contain.",
     "",
 ].join("\n");
 

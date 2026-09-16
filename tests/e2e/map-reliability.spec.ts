@@ -32,6 +32,60 @@ test("starts and responds to theme controls when storage access is denied", asyn
     await expect(page.locator("html")).toHaveClass(/dc-light/);
 });
 
+test("keeps a paused inspection view when map preferences change during chase", async ({ page }) => {
+    await presetLocalStorage(page);
+    await page.setViewportSize(DESKTOP);
+    await gotoApp(page);
+    await loadTrip(page);
+    await page.locator("#mini-map").click();
+    await expect(page.locator("body")).not.toHaveClass(/map-morphing/);
+    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map?.getPitch() ?? 0)).toBeCloseTo(58, 1);
+    await page.evaluate(() => {
+        const { state, dom } = window.__dashcamigo;
+        dom.player.pause();
+        const map = state.map!;
+        map.fire("dragstart", { originalEvent: new MouseEvent("mousedown") });
+        map.jumpTo({ center: [20, 50], zoom: 14.8, bearing: 70, pitch: 30 });
+        map.fire("dragend", { originalEvent: new MouseEvent("mouseup") });
+    });
+    await page.locator("#map-settings-toggle").click();
+    await page.locator("#map-style-select").selectOption("road");
+    await page.locator("#map-theme-select").selectOption("light");
+    await page.locator("#map-style-select").selectOption("minimal");
+    await expect
+        .poll(() =>
+            page.evaluate(() => {
+                const map = window.__dashcamigo.state.map!;
+                return (
+                    Boolean(map.getLayer("trip-line")) &&
+                    map.getPaintProperty("background", "background-color") === "#f5f4ef" &&
+                    !map.getLayer("park")
+                );
+            }),
+        )
+        .toBe(true);
+    const view = await page.evaluate(() => {
+        const { state, dom } = window.__dashcamigo;
+        const map = state.map!;
+        return {
+            lng: map.getCenter().lng,
+            lat: map.getCenter().lat,
+            zoom: map.getZoom(),
+            bearing: map.getBearing(),
+            pitch: map.getPitch(),
+            mode: state.followMode,
+            paused: dom.player.paused,
+        };
+    });
+    expect(view.lng).toBeCloseTo(20);
+    expect(view.lat).toBeCloseTo(50);
+    expect(view.zoom).toBeCloseTo(14.8);
+    expect(view.bearing).toBeCloseTo(70);
+    expect(view.pitch).toBeCloseTo(30);
+    expect(view.mode).toBe("chase");
+    expect(view.paused).toBe(true);
+});
+
 test("keeps a crossing route and follow camera near the antimeridian", async ({ page }) => {
     await presetLocalStorage(page);
     await page.setViewportSize(DESKTOP);

@@ -36,7 +36,7 @@ interface Palette {
 
 const PALETTES: Record<MapStyleId, Palette> = {
     light: {
-        background: "#f5f4f1",
+        background: "#f5f4ef",
         water: "#a8d1e7",
         waterLine: "#7db6d2",
         park: "#dce8cc",
@@ -57,7 +57,7 @@ const PALETTES: Record<MapStyleId, Palette> = {
         waterLabel: "#397e9e",
     },
     dark: {
-        background: "#0a0a0a",
+        background: "#14171c",
         water: "#182438",
         waterLine: "#263b58",
         park: "#15261c",
@@ -158,7 +158,7 @@ function roadCasingWidth(): ExpressionSpecification {
 function shortbreadLayers(theme: MapStyleId): LayerSpecification[] {
     const p = PALETTES[theme];
     const source = OSM_SHORTBREAD_SOURCE_ID;
-    return [
+    const layers: LayerSpecification[] = [
         { id: "osm-bg", type: "background", paint: { "background-color": p.background } },
         { id: "osm-ocean", type: "fill", source, "source-layer": "ocean", paint: { "fill-color": p.water } },
         {
@@ -184,10 +184,11 @@ function shortbreadLayers(theme: MapStyleId): LayerSpecification[] {
             paint: { "fill-color": p.site, "fill-opacity": 0.75 },
         },
         {
-            id: "osm-sites-green",
+            id: "osm-land-park",
             type: "fill",
             source,
-            "source-layer": "sites",
+            "source-layer": "land",
+            metadata: { "dashcamigo:role": "park" },
             filter: [
                 "in",
                 ["get", "kind"],
@@ -332,6 +333,86 @@ function shortbreadLayers(theme: MapStyleId): LayerSpecification[] {
             paint: { "line-color": p.motorway, "line-width": roadLineWidth(0.9, 4.6) },
         },
         {
+            id: "osm-ferries",
+            type: "line",
+            source,
+            "source-layer": "ferries",
+            minzoom: 10,
+            paint: { "line-color": p.waterLine, "line-width": 1.5, "line-dasharray": [3, 2] },
+        },
+        {
+            id: "osm-oneway",
+            type: "symbol",
+            source,
+            "source-layer": "streets",
+            minzoom: 16,
+            filter: ["==", ["get", "oneway"], true],
+            layout: {
+                "symbol-placement": "line",
+                "symbol-spacing": 160,
+                "text-field": ["case", ["==", ["get", "oneway_reverse"], true], "◀", "▶"],
+                "text-font": ["Inter"],
+                "text-size": 10,
+                "text-rotation-alignment": "map",
+                "text-keep-upright": false,
+            },
+            paint: { "text-color": p.labelMinor, "text-halo-color": p.labelHalo, "text-halo-width": 1 },
+        },
+        ...(["addresses", "pois"] as const).map(
+            (sourceLayer): LayerSpecification => ({
+                id: `osm-addresses-${sourceLayer}`,
+                type: "symbol",
+                source,
+                "source-layer": sourceLayer,
+                minzoom: 17,
+                metadata: { "dashcamigo:role": "address" },
+                filter: ["has", "housenumber"],
+                layout: {
+                    "text-field": ["to-string", ["get", "housenumber"]],
+                    "text-font": ["Inter"],
+                    "text-size": 10,
+                    "text-padding": 2,
+                },
+                paint: { "text-color": p.labelMinor, "text-halo-color": p.labelHalo, "text-halo-width": 1 },
+            }),
+        ),
+        {
+            id: "osm-poi-landmark",
+            type: "symbol",
+            source,
+            "source-layer": "pois",
+            minzoom: 14,
+            metadata: { "dashcamigo:role": "poi" },
+            filter: [
+                "all",
+                ["has", "name"],
+                [
+                    "any",
+                    ["in", ["get", "amenity"], ["literal", ["hospital", "school", "college", "library", "townhall"]]],
+                    ["in", ["get", "tourism"], ["literal", ["museum", "attraction"]]],
+                    ["==", ["get", "leisure"], "stadium"],
+                    ["has", "shop"],
+                ],
+            ],
+            layout: { "text-field": nameExpression(), "text-font": ["Inter"], "text-size": 11, "text-padding": 3 },
+            paint: { "text-color": p.labelMinor, "text-halo-color": p.labelHalo, "text-halo-width": 1.2 },
+        },
+        {
+            id: "osm-poi-driver",
+            type: "symbol",
+            source,
+            "source-layer": "pois",
+            minzoom: 14,
+            metadata: { "dashcamigo:role": "poi-driver" },
+            filter: [
+                "all",
+                ["has", "name"],
+                ["in", ["get", "amenity"], ["literal", ["fuel", "parking", "parking_entrance"]]],
+            ],
+            layout: { "text-field": nameExpression(), "text-font": ["Inter"], "text-size": 11, "text-padding": 3 },
+            paint: { "text-color": p.label, "text-halo-color": p.labelHalo, "text-halo-width": 1.2 },
+        },
+        {
             id: "osm-water-labels",
             type: "symbol",
             source,
@@ -372,6 +453,23 @@ function shortbreadLayers(theme: MapStyleId): LayerSpecification[] {
             paint: { "text-color": p.labelMinor, "text-halo-color": p.labelHalo, "text-halo-width": 1.2 },
         },
         {
+            id: "osm-road-refs",
+            type: "symbol",
+            source,
+            "source-layer": "street_labels",
+            minzoom: 10,
+            filter: ["has", "ref"],
+            layout: {
+                "symbol-placement": "line",
+                "symbol-spacing": 350,
+                "text-field": ["get", "ref"],
+                "text-font": ["Inter"],
+                "text-size": 10,
+                "text-rotation-alignment": "viewport",
+            },
+            paint: { "text-color": p.label, "text-halo-color": p.labelHalo, "text-halo-width": 1.5 },
+        },
+        {
             id: "osm-place-labels",
             type: "symbol",
             source,
@@ -410,6 +508,55 @@ function shortbreadLayers(theme: MapStyleId): LayerSpecification[] {
             paint: { "text-color": p.labelMinor, "text-halo-color": p.labelHalo, "text-halo-width": 1 },
         },
     ];
+    // Separate render groups preserve crossings even though road classes are
+    // painted in separate layers. Shortbread 1.0 provides boolean flags.
+    const roads = layers.filter((layer) => layer.type === "line" && layer["source-layer"] === "streets");
+    const firstRoad = layers.findIndex((layer) => layer.id === roads[0]?.id);
+    const roadGroups: LayerSpecification[] = [];
+    for (const crossing of ["tunnel", "surface", "bridge"] as const) {
+        for (const road of roads) {
+            if (road.type !== "line") continue;
+            const filter: ExpressionSpecification =
+                crossing === "tunnel"
+                    ? ["==", ["get", "tunnel"], true]
+                    : crossing === "bridge"
+                      ? ["all", ["==", ["get", "bridge"], true], ["!=", ["get", "tunnel"], true]]
+                      : ["all", ["!=", ["get", "bridge"], true], ["!=", ["get", "tunnel"], true]];
+            roadGroups.push({
+                ...road,
+                id: crossing === "surface" ? road.id : `${road.id}-${crossing}`,
+                // These locally authored filters use expression syntax; the
+                // generic layer type also permits incompatible legacy filters.
+                filter: ["all", (road.filter as ExpressionSpecification | undefined) ?? true, filter],
+                paint: crossing === "tunnel" ? { ...road.paint, "line-opacity": 0.65 } : road.paint,
+            });
+        }
+    }
+    layers.splice(firstRoad, roads.length, ...roadGroups);
+    const roles: Record<string, string> = {
+        ocean: "water",
+        water_polygons: "water",
+        water_lines: "water",
+        land: "landcover",
+        sites: "landuse",
+        buildings: "building",
+        boundaries: "boundary",
+        boundary_labels: "boundary",
+        streets: "transport",
+        street_polygons: "transport",
+        ferries: "transport",
+        water_polygons_labels: "water-label",
+        water_lines_labels: "water-label",
+        street_labels: "transport-label",
+        place_labels: "place-label",
+        public_transport: "poi",
+    };
+    for (const layer of layers) {
+        if (layer.metadata) continue;
+        const role = "source-layer" in layer ? roles[layer["source-layer"] ?? ""] : "background";
+        layer.metadata = { "dashcamigo:role": role };
+    }
+    return layers;
 }
 
 export function createFallbackMapStyle(
