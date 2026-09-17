@@ -4,11 +4,13 @@
 // the naming, this is the single place to update. Per-field technique files
 // (time.ts / channel.ts / mode.ts / sequence.ts) import the constants they
 // need; the regex never gets out of sync across fields.
+// A channel-letter slot accepts any single letter. Map known letters in
+// channel.ts; keep mode, quality, and GPS-carrier discriminator codes specific.
 
 // 70mai: NO (normal) / EV (event) / LA / PA (A510 parking timelapse /
 // parking event) prefix + 8-digit date + - + 6-digit time + optional
 // -counter + optional trailing 14-digit wall-clock timestamp (M500 and app
-// exports) + optional F/B/R/I/C channel letter. The channel letter sits either
+// exports) + optional channel letter (F/B/R/I/C are known). The letter sits either
 // BEFORE the trailing timestamp (app-export shape `...-000195R-<14d>.mp4`,
 // group m[8]) or at the very end (group m[9]); a file carries at most one of
 // the two, so consumers read `m[8] ?? m[9]`. B/R are rear aliases and I/C
@@ -17,7 +19,7 @@
 // for every consumer (time / channel / sequence / camera-key all key off
 // this one regex): m[1..6] datetime, m[7] counter, m[8]/m[9] channel.
 export const RX_70MAI =
-    /^(?:NO|EV|VL|LA|PA)(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(?:-(\d+))?([FBIRC])?(?:-\d{14})?([FBIRC])?\.mp4$/i;
+    /^(?:NO|EV|VL|LA|PA)(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(?:-(\d+))?(?:([A-Z])(?:-\d{14})?|(?:-\d{14})?([A-Z])?)\.mp4$/i;
 export const RX_70MAI_PATH_CHANNEL = /(?:^|\/)(Front|Back|Interior)\//i;
 // Recording-mode folders on a 70mai card. Single source for both the path-mode
 // regex and camera-key's parent-dir strip list - a mode folder added here
@@ -39,7 +41,7 @@ export const RX_70MAI_PREFIX_MODE = /^(NO|EV|VL|LA|PA)/i;
 // ("VL...F.MP4G4"). The core survives both, and it is unique per card
 // (timestamp + sequence + channel), so it is the join key for rebinding log
 // records to loaded videos (rebindOrphanLogRecords in parser.ts).
-const RX_70MAI_NAME_CORE = /^[A-Z]{2}(\d{8}-\d{6}(?:-\d+)?[FBIRC]?)\.MP4/i;
+const RX_70MAI_NAME_CORE = /^[A-Z]{2}(\d{8}-\d{6}(?:-\d+)?[A-Z]?)\.MP4/i;
 
 /** Returns the invariant 70mai name core (uppercased), or null for a name
  *  that does not have the 70mai shape. */
@@ -48,26 +50,26 @@ export function mai70NameCore(name: string): string | null {
     return m ? m[1]!.toUpperCase() : null;
 }
 
-// Channel-letter strip for camera fingerprinting: removes the F/B/I/R/C letter
+// Channel-letter strip for camera fingerprinting: removes the suffix letter
 // from BOTH positions RX_70MAI accepts (terminal, or before the app-export
 // 14-digit stamp). Must stay in lockstep with RX_70MAI's tail grammar - it is
 // self-gating on names RX_70MAI matched (the char in that slot is otherwise a
 // digit), so callers apply it unconditionally after a match.
-export const RX_70MAI_CHANNEL_STRIP = /[FBIRC]((?:-\d{14})?\.mp4)$/i;
+export const RX_70MAI_CHANNEL_STRIP = /[A-Z]((?:-\d{14})?\.mp4)$/i;
 
 // BlackVue DR-series: YYYYMMDD_HHMMSS_<Mode><Channel>.mp4.
-// Mode in N/E/P/M, Channel in F/R/I.
+// Mode in N/E/P/M; F/R/I are known channel letters.
 // Beferich (J18, ...): `2026-08-03_11_34_53_f.mp4`. Same datetime core as
 // RX_FORD but `.mp4` and no FordFootage/ gate - the trailing channel letter
 // keeps the two disjoint via the extension. Front-only corpus: `f` is
 // confirmed, other letters map by mnemonic (see beferich-channel).
 export const RX_BEFERICH = /^(\d{4})-(\d{2})-(\d{2})_(\d{2})_(\d{2})_(\d{2})_([a-z])\.mp4$/i;
 
-export const RX_BLACKVUE = /^(\d{8})_(\d{6})_([NEPM])([FRI])\.mp4$/i;
+export const RX_BLACKVUE = /^(\d{8})_(\d{6})_([NEPM])([A-Z])\.mp4$/i;
 
 /**
  * Channel-independent recording key for a BlackVue clip: `date_time_mode`
- * (lowercased), dropping the F/R/I channel letter. The front, rear and interior
+ * (lowercased), dropping the channel letter. The front, rear and interior
  * clips of one recording share it, so it pairs a shared `_N.gps`/`_N.3gf`
  * sidecar with every channel (matchBlackvueSidecarBasename) and clones that GPS
  * across the channels so they anchor identically (cloneRecordsAcrossChannels).
@@ -78,14 +80,15 @@ export function blackvueChannelGroupKey(name: string): string | null {
     return m ? `${m[1]}_${m[2]}_${m[3]}`.toLowerCase() : null;
 }
 
-// CarCam 4CH 360-WiFi: REC + date - time - sequence - A/B/C/D channel.
-export const RX_CARCAM = /^REC(\d{8})-(\d{6})-(\d{1,5})-([ABCD])\.mp4$/i;
+// CarCam 4CH 360-WiFi: REC + date - time - sequence - channel letter.
+// A/B/C/D are the known port indices; the slot stays open for firmware variants.
+export const RX_CARCAM = /^REC(\d{8})-(\d{6})-(\d{1,5})-([A-Z])\.mp4$/i;
 // SigmaStar REC family: mode prefix + date - time - sequence, no channel suffix.
 // iZEEKER splits channels into Normal/A and Normal/B; iBox RoadScan uses
 // Normal|Event|Parking/F|R with REC|SOS|PAR prefixes. A bare REC name carries
 // no reliable channel or mode. The missing suffix keeps this off RX_CARCAM.
 export const RX_REC_SINGLE = /^(?:REC|SOS|PAR)(\d{8})-(\d{6})-(\d{1,5})\.mp4$/i;
-export const RX_REC_SINGLE_PATH_CHANNEL = /(?:^|\/)(Normal|Event|Parking)\/([FR])\/[^/]+$/i;
+export const RX_REC_SINGLE_PATH_CHANNEL = /(?:^|\/)(Normal|Event|Parking)\/([A-Z])\/[^/]+$/i;
 export const RX_CARCAM_PATH_FRONT = /(?:^|\/)normal\/a\//i;
 export const RX_CARCAM_PATH_REAR = /(?:^|\/)normal\/b\//i;
 export const RX_CARCAM_PATH_INTERIOR = /(?:^|\/)normal\/c\//i;
@@ -110,13 +113,13 @@ export const RX_SSTAR_CHN = /^CH([1-4])-\d{8}-\d{6}\.ts$/i;
 // INSIDE the MP4. The
 // ddpai-normal source hint sets probeIfNoRecords for exactly that reason -
 // widening the counter here must never turn into a hard embedded-probe skip.
-export const RX_DDPAI_NORMAL = /^(\d{14})_(\d{2,7})(?:_([A]))?\.mp4$/i;
+export const RX_DDPAI_NORMAL = /^(\d{14})_(\d{2,7})(?:_([A-Z]))?\.mp4$/i;
 export const RX_DDPAI_TIMELAPSE = /^([SQ])_(\d{14})_(\d{3,5})_(\d{2,4})\.mp4$/i;
 export const RX_DDPAI_EVENT = /^G_(\d{14})_(\d{2,5})_([LX])\.mp4$/i;
 export const RX_DDPAI_TIMESTAMP_TOKEN = /(\d{14})/;
 
-// E-Ace: digits_digits[FR].mp4 (channel suffix optional on single-channel models).
-export const RX_E_ACE = /^(\d{8})_(\d{6})([FR])?\.mp4$/i;
+// E-Ace-shaped clips: digits_digits<channel>.mp4 (suffix optional on single-channel models).
+export const RX_E_ACE = /^(\d{8})_(\d{6})([A-Z])?\.mp4$/i;
 
 // Escort M2: digits_digits_CAM.mp4. Time has no seconds field.
 export const RX_ESCORT = /^(\d{8})_(\d{4})_CAM\.mp4$/i;
@@ -127,9 +130,9 @@ export const RX_ESCORT_PATH_NORMAL = /(?:^|\/)normal\//i;
 // FitCamX: 14-digit timestamp + _ + 6-digit token + letter + .ts.
 // Channel/mode come from parent folder (Movie / Movie_E / EMR / EMR_E).
 export const RX_FITCAMX = /^(\d{14})_(\d{6})([A-Z])\.ts$/i;
-// FitCamX MP4 variant (2-channel HEVC models): same stamp+counter language,
+// FitCamX MP4 variant (2-channel HEVC corpus): same stamp+counter language,
 // but a 3-letter suffix and BOTH channels dropped into one mode folder (EMR/).
-// Decoded from a diagnostic-report corpus: the middle letter A/B is the channel
+// Decoded from a diagnostic-report corpus: the middle letter A/B is the known channel
 // index (a pair shares one to-the-second timestamp and interleaves one shared
 // counter; A runs the higher bitrate of the two), the leading A is constant -
 // kept literal until a sample shows another value. The corpus (EMR-only, all
@@ -139,7 +142,7 @@ export const RX_FITCAMX = /^(\d{14})_(\d{6})([A-Z])\.ts$/i;
 // un-pair them. The FOLDER stays the mode source either way (the letter->mode
 // table is unknown). Filename-only knowledge; embedded GPS unknown, so no
 // source hint.
-export const RX_FITCAMX_MP4 = /^(\d{14})_(\d{6})A([AB])([A-Z])\.mp4$/i;
+export const RX_FITCAMX_MP4 = /^(\d{14})_(\d{6})A([A-Z])([A-Z])\.mp4$/i;
 export const RX_FITCAMX_PATH_REAR = /(?:^|\/)(movie_e|emr_e)\//i;
 export const RX_FITCAMX_PATH_FRONT = /(?:^|\/)(movie|emr)\//i;
 export const RX_FITCAMX_PATH_EVENT = /(?:^|\/)(emr|emr_e)\//i;
@@ -174,13 +177,15 @@ export const RX_FORD_PATH = /(?:^|\/)FordFootage\//i;
 // gps-source hint (rationale at the hint entry).
 export const RX_HPIM = /^HPIM(\d{8})-(\d{6})([A-Z])\.ts$/i;
 
-// FILE + 2-digit-year YY MM DD - HHMMSS + F/R/I channel + extension.
+// FILE + 2-digit-year YY MM DD - HHMMSS + channel letter + extension.
 // Shared by iBox iCON and dual-channel Mio MiVue firmware. The name alone
 // cannot distinguish their GPS carriers; the MiVue 955WD card adds top-level
 // F/ and R/ folders and a same-basename front `.NMEA` sidecar.
-export const RX_IBOX = /^FILE(\d{2})(\d{2})(\d{2})-(\d{6})([FRI])\.(mp4|mov)$/i;
+export const RX_IBOX = /^FILE(\d{2})(\d{2})(\d{2})-(\d{6})([A-Z])\.(mp4|mov)$/i;
 export const RX_IBOX_PATH_EVENT = /(?:^|\/)event\//i;
 export const RX_IBOX_PATH_PARKING = /(?:^|\/)parking\//i;
+// F/R here identifies the observed MiVue sidecar card layout. It is a GPS
+// carrier hint, not the channel parser; other folders retain the embedded probe.
 export const RX_MIVUE_DUAL_PATH = /(?:^|\/)[FR]\//i;
 
 // Mio / Navman MiVue single-channel line (MiVue 150 Safety, ...): FILE +
@@ -202,8 +207,8 @@ export const RX_MIVUE_PATH_MODE = /(?:^|\/)(Normal|Event|Parking)\//i;
 export const RX_MAH_SEQUENCE = /^MAH(\d{5})\.mp4$/i;
 export const RX_MAH_VIDEO_PATH = /(?:^|[\\/])MP_ROOT[\\/]\d{3}ANV01[\\/]/i;
 
-// Juscar: 8-digit date _ 6-digit time + F/R + .ts.
-export const RX_JUSCAR = /^(\d{8})_(\d{6})([FR])(?:_(SOS|PARK))?\.ts$/i;
+// Juscar: 8-digit date _ 6-digit time + channel letter + .ts.
+export const RX_JUSCAR = /^(\d{8})_(\d{6})([A-Z])(?:_(SOS|PARK))?\.ts$/i;
 export const RX_JUSCAR_PATH_REAR = /(?:^|\/)rear\/[^/]*$/i;
 export const RX_JUSCAR_PATH_FRONT = /(?:^|\/)front\/[^/]*$/i;
 export const RX_JUSCAR_PATH_EVENT = /(?:^|\/)event\//i;
@@ -218,7 +223,7 @@ export const RX_JUSCAR_PATH_VIDEO = /(?:^|\/)video\//i;
 export const RX_NAVITEL = /^FILE(\d{2})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-(\d{6})([A-Z])?\.(?:mov|mp4|ts)$/i;
 
 // Unknown-vendor camera family: 14-digit datetime + _ + 7-digit sequence +
-// F/R/I channel letter. Two corpora share the shape: a 3-channel `.mov` trio
+// channel letter. Two corpora share the shape: a 3-channel `.mov` trio
 // (filename-only diagnostic report; F/R/I mnemonics content-unvalidated) and
 // a 2-channel `.ts` card (real files: LigoGPS/LCAI trailer at EOF, channels
 // in single-letter F/ R/ folders, `_ths.jpg` thumbnails). The FitCamX
@@ -228,17 +233,17 @@ export const RX_NAVITEL = /^FILE(\d{2})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-(\d{
 // RX_DDPAI_NORMAL twins. The `.ts` shape carries an "embedded" gps-source
 // hint (trailer); `.mov` stays unhinted on purpose - where its GPS lives is
 // unknown, the default embedded probe stays on.
-export const RX_MOV_SEQ_FRI = /^(\d{14})_(\d{7})([FRI])\.(?:mov|ts)$/i;
+export const RX_MOV_SEQ_FRI = /^(\d{14})_(\d{7})([A-Z])\.(?:mov|ts)$/i;
 
 // LigoGPS-trailer MPEG-TS family: 14-digit local timestamp, an opaque
-// two-digit token, then an underscored F/R/I channel mnemonic. The front
+// two-digit token, then an underscored channel letter. The front
 // spelling and VIDEO_F folder are real-sample validated; R/I keep the
 // standard mnemonic language for sibling firmwares without assigning meaning
 // to the opaque token.
-export const RX_LIGOGPS_TRAILER_TS = /^(\d{14})(\d{2})_([FRI])\.ts$/i;
+export const RX_LIGOGPS_TRAILER_TS = /^(\d{14})(\d{2})_([A-Z])\.ts$/i;
 
 // Nextbase (322GW family): yyMMdd_HHmmss_NNN_<channel><quality>.MP4.
-// Channel B/F/R; quality H/L = parallel high/low-bitrate streams of the same
+// Known channels B/F/R; quality H/L = parallel high/low-bitrate streams of the same
 // lens recorded simultaneously. Upstream accepts the identical language as a
 // 3-group regex ^(\d{6}_\d{6})_(\d{3})_([BFR][HL])\.MP4$ (nb-dashcam-tools
 // src/clipmergewidget.cpp:194-196); ours splits the captures per field.
@@ -247,35 +252,35 @@ export const RX_LIGOGPS_TRAILER_TS = /^(\d{14})(\d{2})_([FRI])\.ts$/i;
 // other channel/quality letters remain foreign-source-only (listed
 // untested-maybe for the 422/522/622GW in nb-dashcam-tools' compat table;
 // unconfirmed for 512GW filenames).
-export const RX_NEXTBASE = /^(\d{6})_(\d{6})_(\d{3})_([BFR])([HL])\.mp4$/i;
+export const RX_NEXTBASE = /^(\d{6})_(\d{6})_(\d{3})_([A-Z])([HL])\.mp4$/i;
 
 // Neoline (Spectrum family, SigmaStar chipset): INF + 8-digit date - 6-digit
-// time - UNPADDED sequence - F/R channel. The corpus is front-only, so
+// time - UNPADDED sequence - channel letter. The corpus is front-only, so
 // R = rear is an assumption from the mnemonic, to be revalidated on the
 // first real rear sample. "INF" is likely the infinity-loop tag (unverified),
 // not a mode marker - the name carries no recording mode. GPS is embedded
 // (SigmaStar ssmd track; extraction is a separate primitive concern).
-export const RX_NEOLINE = /^INF(\d{8})-(\d{6})-(\d+)-([FR])\.mp4$/i;
+export const RX_NEOLINE = /^INF(\d{8})-(\d{6})-(\d+)-([A-Z])\.mp4$/i;
 
-// RedTiger (F7NP-4K, 2-channel): 14-digit datetime + _ + 6-digit card-global
-// counter + F/R mnemonic channel letter + .MP4, card layout
+// RedTiger (F7NP-4K, 2-channel corpus): 14-digit datetime + _ + 6-digit card-global
+// counter + channel letter + .MP4, card layout
 // `CARDV/<Mode>_<channel letter>/` (Movie_F/, Movie_R/, Event_F/, Event_R/
 // corpus-confirmed; Parking_* is the conventional CarDV third). The .mp4
 // extension keeps it off RX_FITCAMX (the same stamp+counter+letter language
 // in .ts), and the mandatory trailing letter keeps it off RX_DDPAI_NORMAL
 // twins. GPS lives in plaintext YOUQINGGPS/freeGPS blocks on the F7NP-4K.
-export const RX_REDTIGER = /^(\d{14})_(\d{6})([FR])\.mp4$/i;
+export const RX_REDTIGER = /^(\d{14})_(\d{6})([A-Z])\.mp4$/i;
 // Recording-mode folder stems on a RedTiger card (the folder name is
 // `<stem>_<channel letter>`). Single source for the path-mode regex and
 // camera-key's parent-dir strip list (the MAI70_MODE_FOLDERS pattern).
 export const REDTIGER_MODE_FOLDERS = ["movie", "event", "parking"] as const;
-export const RX_REDTIGER_PATH_MODE = new RegExp(`(?:^|/)(${REDTIGER_MODE_FOLDERS.join("|")})_[fr]/`, "i");
+export const RX_REDTIGER_PATH_MODE = new RegExp(`(?:^|/)(${REDTIGER_MODE_FOLDERS.join("|")})_[a-z]/`, "i");
 
 // Wolfbox (G900/i07 family, 1-3 channels): YYYY_MM_DD_HHMMSS_EE_C.MP4 where
 // EE is a 2-digit event code (00 = normal, 02 = g-sensor event) and
-// C = F/I/R channel letter. SD layout: <channel>_<mode> folders
+// C is the channel letter (F/I/R known). SD layout: <channel>_<mode> folders
 // (front_norm, front_emer, rear_norm, extra_emer, ...; extra = interior).
-export const RX_WOLFBOX = /^(\d{4})_(\d{2})_(\d{2})_(\d{6})_(\d{2})_([FIR])\.mp4$/i;
+export const RX_WOLFBOX = /^(\d{4})_(\d{2})_(\d{2})_(\d{6})_(\d{2})_([A-Z])\.mp4$/i;
 export const RX_WOLFBOX_PATH_FRONT = /(?:^|\/)front_(?:norm|emer|photo)\//i;
 export const RX_WOLFBOX_PATH_REAR = /(?:^|\/)rear_(?:norm|emer|photo)\//i;
 export const RX_WOLFBOX_PATH_INTERIOR = /(?:^|\/)extra_(?:norm|emer|photo)\//i;
@@ -283,7 +288,7 @@ export const RX_WOLFBOX_PATH_EVENT = /(?:^|\/)(?:front|rear|extra)_emer\//i;
 export const RX_WOLFBOX_PATH_NORMAL = /(?:^|\/)(?:front|rear|extra)_norm\//i;
 
 // Novatek family - three filename variants on the same chipset.
-// VIOFO multi-channel: YYYY_MMDD_HHMMSS[_NNN]<P|E?><F|R|T|I>.mp4. Mode letter:
+// VIOFO multi-channel: YYYY_MMDD_HHMMSS[_NNN]<P|E?><channel>.mp4. Mode letter:
 // P = parking, E = impact event, absent = normal driving. Channel letter:
 // F/R/I = front/rear/interior, T = telephoto (3-channel models pair F+R with
 // either T or I). The sequence counter is OPTIONAL: T130 parking clips and
@@ -292,7 +297,7 @@ export const RX_WOLFBOX_PATH_NORMAL = /(?:^|\/)(?:front|rear|extra)_norm\//i;
 // m[4] as "no sequence" (null), never NaN/0. The E and T letters are
 // implemented from foreign source (viofosync web/services/scanner.py:48-66,
 // web/services/naming.py:99-107), not validated against a real sample.
-export const RX_NOVATEK_VIOFO = /^(\d{4})_(\d{4})_(\d{6})_(\d+)?([PE]?)([FRTI])\.mp4$/i;
+export const RX_NOVATEK_VIOFO = /^(\d{4})_(\d{4})_(\d{6})_(\d+)?([PE]?)([A-Z])\.mp4$/i;
 // Viofo/Novatek locked-clip folder: firmware MOVES g-sensor-locked and
 // manually-locked clips into DCIM/Movie/RO/ with UNCHANGED filenames, so the
 // lock is not inferable from the name (viofosync web/services/scanner.py:57-63;
@@ -323,7 +328,7 @@ export function matchNovatekSingleFilename(name: string): RegExpMatchArray | nul
     return matchNovatekNvtMovFilename(name) ?? name.match(RX_NOVATEK_SINGLE);
 }
 // Vantrue: YYYYMMDD_HHMMSS_NNNN_<N|E|P>_<A|B|C>.mp4.
-export const RX_NOVATEK_VANTRUE = /^(\d{8})_(\d{6})_(\d+)_([NEP])_([ABC])\.mp4$/i;
+export const RX_NOVATEK_VANTRUE = /^(\d{8})_(\d{6})_(\d+)_([NEP])_([A-Z])\.mp4$/i;
 // Novatek MPEG-TS OEMs: 14-digit timestamp _ 6-digit counter + .ts - the
 // RX_DDPAI_NORMAL name scheme in a TS container (GPS rides a private PES
 // stream; extraction is a separate primitive concern). Disjoint from
@@ -373,16 +378,16 @@ export const RX_TESLA_PATH_RECENT = /(?:^|\/)teslacam\/recentclips\//i;
 export const RX_TESLA_PATH_SAVED = /(?:^|\/)teslacam\/savedclips\//i;
 export const RX_TESLA_PATH_SENTRY = /(?:^|\/)teslacam\/sentryclips\//i;
 
-// Thinkware: <REC|EVT|PARK|MAN>_<anything>_<F|R>.mp4. No time in name.
-export const RX_THINKWARE = /^(REC|EVT|PARK|MAN)_.+_([FR])\.mp4$/i;
+// Thinkware: <REC|EVT|PARK|MAN>_<anything>_<channel>.mp4. No time in name.
+export const RX_THINKWARE = /^(REC|EVT|PARK|MAN)_.+_([A-Z])\.mp4$/i;
 
-// Vueroid (S1 4K Infinite): 8-digit date _ 6-digit time _ INF _ F/R channel _
+// Vueroid (S1 4K Infinite): 8-digit date _ 6-digit time _ INF _ channel letter _
 // N/E/P mode. "INF" is the model tag (Infinite), a fixed literal - it is what
 // keeps the shape disjoint from BlackVue/Vantrue/E-Ace underscore names.
 // N = normal is the real-sample-validated shape; E = event and P = parking
 // are assumed from the mnemonic, as is the R rear channel (front-only
 // corpus). No sequence counter in the name.
-export const RX_VUEROID = /^(\d{8})_(\d{6})_INF_([FR])_([NEP])\.mp4$/i;
+export const RX_VUEROID = /^(\d{8})_(\d{6})_INF_([A-Z])_([NEP])\.mp4$/i;
 
 // Generic-datetime fallback: matches any YYYYMMDDhhmmss embedded in a filename
 // under any separator. Registered last in FILENAME_TIME.

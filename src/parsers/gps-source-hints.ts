@@ -161,7 +161,7 @@ const GPS_SOURCE_HINTS: readonly GpsSourceHint[] = [
     // The known local sample is a GPS-less FFmpeg re-encode - it will probe
     // empty, which is the correct degradation.
     //
-    // Only the channel-suffixed form (…F/…R) is claimed: the bare
+    // Only the channel-suffixed form is claimed: the bare
     // `YYYYMMDD_HHMMSS.mp4` shape is one of the most common dashcam naming
     // schemes shared by Novatek clones; suffix-less E-Ace files take the same
     // "unknown" probe path anyway.

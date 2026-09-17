@@ -71,11 +71,31 @@ const sure = (channel: Channel): ChannelMatch => ({ channel, confident: true });
 // but the UI shows a positional "Channel N" label instead of asserting a mount.
 const guess = (channel: Channel): ChannelMatch => ({ channel, confident: false });
 
+// A new suffix still identifies another stream; use the spare slot without
+// claiming its physical mount until a sample establishes the letter's meaning.
+function mnemonicChannel(letter: string): ChannelMatch {
+    switch (letter.toUpperCase()) {
+        case "F":
+            return sure("front");
+        case "R":
+            return sure("rear");
+        case "I":
+            return sure("interior");
+        case "B":
+            return guess("rear");
+        case "C":
+            return guess("interior");
+        default:
+            return guess("side");
+    }
+}
+
 const mai70Channel: FilenameChannelTechnique = {
     id: "70mai-channel",
     evidence: (file) => (RX_70MAI.test(file.file.name) ? "specific" : "heuristic"),
     extract(file: VendorFile): ChannelMatch | null {
         const m = file.file.name.match(RX_70MAI);
+        let unknownSuffix: string | null = null;
         if (m) {
             // The letter sits either before the trailing 14-digit stamp (m[8],
             // app-export shape) or at the very end (m[9]); one file carries at
@@ -86,6 +106,7 @@ const mai70Channel: FilenameChannelTechnique = {
                 if (ch === "F") return sure("front");
                 if (ch === "B" || ch === "R") return sure("rear");
                 if (ch === "I" || ch === "C") return sure("interior");
+                unknownSuffix = ch;
             }
         }
         // Multi-channel S500/A810/T800 use Normal/Front, Normal/Back, Normal/Interior.
@@ -96,7 +117,7 @@ const mai70Channel: FilenameChannelTechnique = {
             if (folder === "back") return sure("rear");
             if (folder === "interior") return sure("interior");
         }
-        return null;
+        return unknownSuffix ? mnemonicChannel(unknownSuffix) : null;
     },
 };
 
@@ -118,6 +139,8 @@ const beferichChannel: FilenameChannelTechnique = {
                 return sure("rear");
             case "i":
                 return sure("interior");
+            case "c":
+                return guess("interior");
             default:
                 return guess("side");
         }
@@ -129,11 +152,7 @@ const blackvueChannel: FilenameChannelTechnique = {
     extract(file: VendorFile): ChannelMatch | null {
         const m = file.file.name.match(RX_BLACKVUE);
         if (!m) return null;
-        const ch = m[4]!.toUpperCase();
-        if (ch === "F") return sure("front");
-        if (ch === "R") return sure("rear");
-        if (ch === "I") return sure("interior");
-        return null;
+        return mnemonicChannel(m[4]!);
     },
 };
 
@@ -163,7 +182,7 @@ const carcamChannel: FilenameChannelTechnique = {
         if (RX_CARCAM_PATH_REAR.test(lower)) return sure("rear");
         if (RX_CARCAM_PATH_INTERIOR.test(lower)) return sure("interior");
         if (RX_CARCAM_PATH_SIDE.test(lower)) return sure("side");
-        return null;
+        return m ? guess("side") : null;
     },
 };
 
@@ -172,7 +191,12 @@ const recSingleChannel: FilenameChannelTechnique = {
     extract(file: VendorFile): ChannelMatch | null {
         if (!RX_REC_SINGLE.test(file.file.name)) return null;
         const channelPath = file.relativePath.match(RX_REC_SINGLE_PATH_CHANNEL);
-        if (channelPath) return sure(channelPath[2]!.toUpperCase() === "F" ? "front" : "rear");
+        if (channelPath) {
+            const letter = channelPath[2]!.toUpperCase();
+            if (letter === "A") return guess("front");
+            if (letter === "B") return guess("rear");
+            return mnemonicChannel(letter);
+        }
         // iZEEKER separates same-named channels into Normal/A and Normal/B.
         // The letters are positional indices, so keep the mount labels
         // unconfirmed while still assigning distinct channel slots.
@@ -230,7 +254,13 @@ const ddpaiChannel: FilenameChannelTechnique = {
         // a generic timestamp pattern, so the mount is a guess. Same for the
         // S/Q timelapse letters and the event default-to-front.
         const normal = file.file.name.match(RX_DDPAI_NORMAL);
-        if (normal) return normal[3] === "A" || normal[3] === "a" ? guess("rear") : guess("front");
+        if (normal) {
+            const suffix = normal[3]?.toUpperCase();
+            if (!suffix) return guess("front");
+            if (suffix === "A") return guess("rear");
+            if (suffix === "F") return guess("front");
+            return mnemonicChannel(suffix);
+        }
         const tl = file.file.name.match(RX_DDPAI_TIMELAPSE);
         if (tl) return tl[1]!.toUpperCase() === "Q" ? guess("rear") : guess("front");
         const ev = file.file.name.match(RX_DDPAI_EVENT);
@@ -249,9 +279,8 @@ const eaceChannel: FilenameChannelTechnique = {
     extract(file: VendorFile): ChannelMatch | null {
         const m = file.file.name.match(RX_E_ACE);
         if (!m) return null;
-        const ch = m[3]?.toUpperCase();
-        if (ch === "F") return sure("front");
-        if (ch === "R") return sure("rear");
+        const ch = m[3];
+        if (ch) return mnemonicChannel(ch);
         // No suffix - single-channel model; grouper assigns default 'front'.
         return null;
     },
@@ -265,7 +294,18 @@ const fitcamxChannel: FilenameChannelTechnique = {
         // -> guess, so the pair still lands in one frame but the UI shows a
         // positional label instead of asserting a mount.
         const mp4 = file.file.name.match(RX_FITCAMX_MP4);
-        if (mp4) return mp4[3]!.toUpperCase() === "A" ? guess("front") : guess("rear");
+        if (mp4) {
+            switch (mp4[3]!.toUpperCase()) {
+                case "A":
+                    return guess("front");
+                case "B":
+                    return guess("rear");
+                case "C":
+                    return guess("interior");
+                default:
+                    return guess("side");
+            }
+        }
         // .ts variant: channel comes from the Movie|EMR vs Movie_E|EMR_E folder
         // pair. The name gate is load-bearing: a bare path claim would mark ANY
         // file inside an EMR/ or Movie/ folder sure("front"), including other
@@ -283,11 +323,7 @@ const ligoGpsTrailerTsChannel: FilenameChannelTechnique = {
     extract(file: VendorFile): ChannelMatch | null {
         const m = file.file.name.match(RX_LIGOGPS_TRAILER_TS);
         if (!m) return null;
-        const ch = m[3]!.toUpperCase();
-        if (ch === "F") return sure("front");
-        if (ch === "R") return sure("rear");
-        if (ch === "I") return sure("interior");
-        return null;
+        return mnemonicChannel(m[3]!);
     },
 };
 
@@ -315,6 +351,8 @@ const fordChannel: FilenameChannelTechnique = {
                 return sure("rear");
             case "i":
                 return sure("interior");
+            case "c":
+                return guess("interior");
             default:
                 return guess("side");
         }
@@ -338,6 +376,8 @@ const hpimChannel: FilenameChannelTechnique = {
                 return sure("rear");
             case "i":
                 return sure("interior");
+            case "c":
+                return guess("interior");
             default:
                 return guess("side");
         }
@@ -349,11 +389,7 @@ const iboxChannel: FilenameChannelTechnique = {
     extract(file: VendorFile): ChannelMatch | null {
         const m = file.file.name.match(RX_IBOX);
         if (!m) return null;
-        const ch = m[5]!.toUpperCase();
-        if (ch === "F") return sure("front");
-        if (ch === "R") return sure("rear");
-        if (ch === "I") return sure("interior");
-        return null;
+        return mnemonicChannel(m[5]!);
     },
 };
 
@@ -362,15 +398,12 @@ const juscarChannel: FilenameChannelTechnique = {
     evidence: (file) => (RX_JUSCAR.test(file.file.name) ? "specific" : "heuristic"),
     extract(file: VendorFile): ChannelMatch | null {
         const m = file.file.name.match(RX_JUSCAR);
-        if (m) {
-            const letter = m[3]!.toUpperCase();
-            if (letter === "F") return sure("front");
-            if (letter === "R") return sure("rear");
-        }
+        const known = m ? mnemonicChannel(m[3]!) : null;
+        if (known?.confident) return known;
         const path = file.relativePath;
         if (RX_JUSCAR_PATH_REAR.test(path)) return sure("rear");
         if (RX_JUSCAR_PATH_FRONT.test(path)) return sure("front");
-        return null;
+        return known;
     },
 };
 
@@ -379,13 +412,7 @@ const neolineChannel: FilenameChannelTechnique = {
     extract(file: VendorFile): ChannelMatch | null {
         const m = file.file.name.match(RX_NEOLINE);
         if (!m) return null;
-        const ch = m[4]!.toUpperCase();
-        if (ch === "F") return sure("front");
-        // R = rear is an assumption (the corpus is front-only), but it is a
-        // standard mnemonic under a vendor-specific pattern - same treatment
-        // as the unconfirmed Ford letters.
-        if (ch === "R") return sure("rear");
-        return null;
+        return mnemonicChannel(m[4]!);
     },
 };
 
@@ -394,12 +421,7 @@ const vueroidChannel: FilenameChannelTechnique = {
     extract(file: VendorFile): ChannelMatch | null {
         const m = file.file.name.match(RX_VUEROID);
         if (!m) return null;
-        const ch = m[3]!.toUpperCase();
-        if (ch === "F") return sure("front");
-        // R = rear is an assumption (front-only corpus), mnemonic-backed -
-        // same treatment as neoline/ford.
-        if (ch === "R") return sure("rear");
-        return null;
+        return mnemonicChannel(m[3]!);
     },
 };
 
@@ -410,10 +432,7 @@ const navitelChannel: FilenameChannelTechnique = {
         if (!m) return null;
         const suffix = m[8];
         if (!suffix) return null;
-        const ch = suffix.toUpperCase();
-        if (ch === "F") return sure("front");
-        if (ch === "R") return sure("rear");
-        return null;
+        return mnemonicChannel(suffix);
     },
 };
 
@@ -422,9 +441,7 @@ const redtigerChannel: FilenameChannelTechnique = {
     extract(file: VendorFile): ChannelMatch | null {
         const m = file.file.name.match(RX_REDTIGER);
         if (!m) return null;
-        // F/R mnemonics, corroborated by the per-channel card folders
-        // (Movie_F/ holds ...F.MP4 files); both letters are corpus-confirmed.
-        return m[3]!.toUpperCase() === "F" ? sure("front") : sure("rear");
+        return mnemonicChannel(m[3]!);
     },
 };
 
@@ -433,18 +450,7 @@ const movSeqFriChannel: FilenameChannelTechnique = {
     extract(file: VendorFile): ChannelMatch | null {
         const m = file.file.name.match(RX_MOV_SEQ_FRI);
         if (!m) return null;
-        // F/R/I are standard mnemonics under a tightly gated shape -> sure()
-        // per the mnemonic rule above, even though the corpus is
-        // filename-only (see RX_MOV_SEQ_FRI).
-        switch (m[3]!.toUpperCase()) {
-            case "F":
-                return sure("front");
-            case "R":
-                return sure("rear");
-            case "I":
-                return sure("interior");
-        }
-        return null;
+        return mnemonicChannel(m[3]!);
     },
 };
 
@@ -454,9 +460,6 @@ const novatekViofoChannel: FilenameChannelTechnique = {
         const m = file.file.name.match(RX_NOVATEK_VIOFO);
         if (!m) return null;
         const ch = m[6]!.toUpperCase();
-        if (ch === "F") return sure("front");
-        if (ch === "R") return sure("rear");
-        if (ch === "I") return sure("interior");
         // T = telephoto, a third front-facing lens (viofosync
         // web/services/naming.py:99-107: "3-channel models pair F+R with
         // either T or I"). Map it to the free "side" slot so it cannot
@@ -464,8 +467,7 @@ const novatekViofoChannel: FilenameChannelTechnique = {
         // (which would spawn |dupN frames); guess() because "side" is a
         // positional compromise, not the actual mount. Implemented from
         // foreign source (viofosync), no real T sample in the corpus.
-        if (ch === "T") return guess("side");
-        return null;
+        return mnemonicChannel(ch);
     },
 };
 
@@ -487,7 +489,7 @@ const novatekVantrueChannel: FilenameChannelTechnique = {
         if (ch === "A") return guess("front");
         if (ch === "B") return guess("interior"); // Vantrue B = cabin
         if (ch === "C") return guess("rear");
-        return null;
+        return guess("side");
     },
 };
 
@@ -505,7 +507,7 @@ const nextbaseChannel: FilenameChannelTechnique = {
         // one channel slot; guess() keeps the UI positional instead of
         // asserting a mount we are only guessing.
         if (ch === "B") return guess("interior");
-        return null;
+        return mnemonicChannel(ch);
     },
 };
 
@@ -541,7 +543,7 @@ const thinkwareChannel: FilenameChannelTechnique = {
     extract(file: VendorFile): ChannelMatch | null {
         const m = file.file.name.match(RX_THINKWARE);
         if (!m) return null;
-        return m[2]!.toUpperCase() === "F" ? sure("front") : sure("rear");
+        return mnemonicChannel(m[2]!);
     },
 };
 
@@ -550,19 +552,15 @@ const wolfboxChannel: FilenameChannelTechnique = {
     evidence: (file) => (RX_WOLFBOX.test(file.file.name) ? "specific" : "heuristic"),
     extract(file: VendorFile): ChannelMatch | null {
         const m = file.file.name.match(RX_WOLFBOX);
-        if (m) {
-            const ch = m[6]!.toUpperCase();
-            if (ch === "F") return sure("front");
-            if (ch === "R") return sure("rear");
-            if (ch === "I") return sure("interior");
-        }
+        const known = m ? mnemonicChannel(m[6]!) : null;
+        if (known?.confident) return known;
         // SD-card folders spell the channel out (front_norm/rear_emer/...);
         // `extra` is the interior camera on the 3-channel models.
         const path = file.relativePath;
         if (RX_WOLFBOX_PATH_FRONT.test(path)) return sure("front");
         if (RX_WOLFBOX_PATH_REAR.test(path)) return sure("rear");
         if (RX_WOLFBOX_PATH_INTERIOR.test(path)) return sure("interior");
-        return null;
+        return known;
     },
 };
 

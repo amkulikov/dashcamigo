@@ -619,7 +619,7 @@ describe("70mai T800 cabin channel", () => {
     });
 
     it("does not claim unrelated C-suffixed files or Cabin folders", () => {
-        for (const name of ["clipC.MP4", "NO20260101-120000-000042X.MP4", "PH20260101-120000-000042C.JPG"]) {
+        for (const name of ["clipC.MP4", "NO20260101-120000-000042XX.MP4", "PH20260101-120000-000042C.JPG"]) {
             expect(matchFilenameChannel(vf(name, `Cabin/${name}`)).matchedId).not.toBe("70mai-channel");
         }
     });
@@ -913,7 +913,7 @@ describe("neoline techniques", () => {
     it("negative: near-miss names are not claimed", () => {
         expect(RX_NEOLINE.test("INFO20260101-120000-14-F.mp4")).toBe(false); // INF is a strict prefix
         expect(RX_NEOLINE.test("INF20260101-120000-14.mp4")).toBe(false); // channel letter mandatory
-        expect(RX_NEOLINE.test("INF20260101-120000-14-A.mp4")).toBe(false); // only F/R
+        expect(RX_NEOLINE.test("INF20260101-120000-14-AA.mp4")).toBe(false); // one channel letter
     });
 });
 
@@ -1222,7 +1222,7 @@ describe("mov-seq-fri techniques", () => {
         expect(RX_MOV_SEQ_FRI.test("20260811083704_0000826F.mp4")).toBe(false); // .mov/.ts only
         expect(RX_MOV_SEQ_FRI.test("20260811083704_000826F.mov")).toBe(false); // 6-digit counter
         expect(RX_MOV_SEQ_FRI.test("20260811083704_0000826.mov")).toBe(false); // letter mandatory
-        expect(RX_MOV_SEQ_FRI.test("20260811083704_0000826A.mov")).toBe(false); // only F/R/I
+        expect(RX_MOV_SEQ_FRI.test("20260811083704_0000826AA.mov")).toBe(false); // one channel letter
         expect(RX_MOV_SEQ_FRI.test("20260813211138_000002F.ts")).toBe(false); // 6-digit counter .ts twin
         // The neighbouring stamp+counter families keep their own techniques.
         expect(matchFilenameTime(vf("20260811083704_082606F.ts")).matchedId).toBe("fitcamx-time");
@@ -1265,6 +1265,73 @@ describe("ligogps-trailer-ts suffix techniques", () => {
         expect(RX_LIGOGPS_TRAILER_TS.test("20260818223735_123456F.ts")).toBe(false);
         expect(RX_LIGOGPS_TRAILER_TS.test("2026081822373512_f.mp4")).toBe(false);
     });
+});
+
+describe("timestamp plus channel-letter MP4 techniques", () => {
+    it("classifies F/R/I siblings with the same time and mode", () => {
+        for (const [suffix, channel] of [
+            ["F", "front"],
+            ["R", "rear"],
+            ["I", "interior"],
+        ] as const) {
+            const file = vf(`20260101_120000${suffix}.MP4`);
+            expect(matchFilenameTime(file).matchedId).toBe("e-ace-time");
+            expect(classifyFilenameTime(file)?.toISOString()).toBe("2026-01-01T12:00:00.000Z");
+            expect(matchFilenameChannel(file)).toEqual({
+                matchedId: "e-ace-channel",
+                value: { channel, confident: true },
+            });
+            expect(matchFilenameMode(file)).toEqual({ matchedId: "e-ace-mode", value: "normal" });
+        }
+    });
+
+    it("keeps an unseen letter in the same camera without claiming its mount", () => {
+        const front = vf("20260101_120000F.MP4", "card/Front/20260101_120000F.MP4");
+        const cabin = vf("20260101_120000C.MP4", "card/C/20260101_120000C.MP4");
+        const other = vf("20260101_120000X.MP4", "card/X/20260101_120000X.MP4");
+        expect(matchFilenameChannel(cabin).value).toEqual({ channel: "interior", confident: false });
+        expect(matchFilenameChannel(other).value).toEqual({ channel: "side", confident: false });
+        expect(cameraFingerprint(cabin)).toBe(cameraFingerprint(front));
+        expect(cameraFingerprint(other)).toBe(cameraFingerprint(front));
+    });
+});
+
+describe("open channel-letter positions", () => {
+    const families = [
+        ["70mai", "NO20260101-120000F.mp4", "card/Normal/Front", "NO20260101-120000X.mp4", "card/Normal/X"],
+        ["blackvue", "20260101_120000_NF.mp4", "card", "20260101_120000_NX.mp4", "card"],
+        ["carcam", "REC20260101-120000-1-A.mp4", "card/normal/a", "REC20260101-120000-1-X.mp4", "card/normal/x"],
+        ["rec-single", "REC20260101-120000-1.mp4", "card/Normal/F", "REC20260101-120000-1.mp4", "card/Normal/X"],
+        ["ddpai", "20260101120000_001_F.mp4", "card", "20260101120000_001_X.mp4", "card"],
+        ["e-ace", "20260101_120000F.mp4", "card", "20260101_120000X.mp4", "card"],
+        ["fitcamx", "20260101120000_000001AAE.mp4", "card/EMR", "20260101120000_000001AXE.mp4", "card/EMR"],
+        ["ibox", "FILE260101-120000F.mp4", "card/F", "FILE260101-120000X.mp4", "card/X"],
+        ["juscar", "20260101_120000F.ts", "card/video/F", "20260101_120000X.ts", "card/video/X"],
+        ["mov-seq-fri", "20260101120000_0000001F.mov", "card", "20260101120000_0000001X.mov", "card"],
+        ["ligogps-trailer-ts", "2026010112000001_F.ts", "card/VIDEO_F", "2026010112000001_X.ts", "card/VIDEO_X"],
+        ["nextbase", "260101_120000_001_FH.mp4", "card", "260101_120000_001_XH.mp4", "card"],
+        ["neoline", "INF20260101-120000-1-F.mp4", "card", "INF20260101-120000-1-X.mp4", "card"],
+        ["redtiger", "20260101120000_000001F.mp4", "card/Movie_F", "20260101120000_000001X.mp4", "card/Movie_X"],
+        ["wolfbox", "2026_01_01_120000_00_F.mp4", "card", "2026_01_01_120000_00_X.mp4", "card"],
+        ["novatek-viofo", "2026_0101_120000_1F.mp4", "card", "2026_0101_120000_1X.mp4", "card"],
+        ["novatek-vantrue", "20260101_120000_1_N_A.mp4", "card", "20260101_120000_1_N_X.mp4", "card"],
+        ["thinkware", "REC_20260101_120000_F.mp4", "card", "REC_20260101_120000_X.mp4", "card"],
+        ["vueroid", "20260101_120000_INF_F_N.mp4", "card", "20260101_120000_INF_X_N.mp4", "card"],
+    ] as const;
+
+    it.each(families)(
+        "%s accepts a new channel letter and keeps one camera key",
+        (id, firstName, firstDir, extraName, extraDir) => {
+            const first = vf(firstName, `${firstDir}/${firstName}`);
+            const extra = vf(extraName, `${extraDir}/${extraName}`);
+            expect(matchFilenameChannel(extra)).toEqual({
+                matchedId: `${id}-channel`,
+                value: { channel: "side", confident: false },
+            });
+            expect(cameraFingerprint(extra)).toBe(cameraFingerprint(first));
+            expect(classifyFilenameTime(extra)).toEqual(classifyFilenameTime(first));
+        },
+    );
 });
 
 // RedTiger F7NP-4K 2-channel: `<14-digit>_<6-digit><F|R>.MP4` under
@@ -1321,7 +1388,7 @@ describe("redtiger techniques", () => {
         expect(RX_REDTIGER.test("20260708073453_000002F.ts")).toBe(false); // .mp4 only - the .ts twin is FitCamX language
         expect(RX_REDTIGER.test("20260708073453_0000002F.MP4")).toBe(false); // 7-digit counter = mov-seq-fri width
         expect(RX_REDTIGER.test("20260708073453_000002.MP4")).toBe(false); // letter mandatory (ddpai-normal territory)
-        expect(RX_REDTIGER.test("20260708073453_000002I.MP4")).toBe(false); // only F/R in the corpus
+        expect(RX_REDTIGER.test("20260708073453_000002II.MP4")).toBe(false); // one channel letter
         // The stamp+counter neighbours keep their own techniques.
         expect(matchFilenameTime(vf("20260708073453_000002F.ts")).matchedId).toBe("fitcamx-time");
         expect(matchFilenameTime(vf("20260708073453_000002.MP4")).matchedId).toBe("ddpai-time");
@@ -1412,7 +1479,7 @@ describe("fitcamx techniques", () => {
 
     it("negative: RX_FITCAMX_MP4 pins the suffix language", () => {
         expect(RX_FITCAMX_MP4.test("20260807191037_000922AAE.ts")).toBe(false); // .mp4 only
-        expect(RX_FITCAMX_MP4.test("20260807191037_000922ACE.MP4")).toBe(false); // channel letter is A|B
+        expect(RX_FITCAMX_MP4.test("20260807191037_000922ACEE.MP4")).toBe(false); // one mode letter
         expect(RX_FITCAMX_MP4.test("20260807191037_000922BAE.MP4")).toBe(false); // leading letter is literal A
         expect(RX_FITCAMX_MP4.test("20260807191037_000922AA1.MP4")).toBe(false); // trailing slot is a letter
         expect(RX_FITCAMX_MP4.test("20260807191037_000922F.MP4")).toBe(false); // single letter = RedTiger

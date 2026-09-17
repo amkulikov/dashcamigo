@@ -320,6 +320,34 @@ describe("groupTrips: dual-channel pairs", () => {
         expect(Object.keys(frame.channels).sort()).toEqual(["front", "interior", "rear"]);
     });
 
+    it("timestamp plus F/R/I MP4 names form one three-channel trip", () => {
+        const candidates = ["120000", "120300", "120600"].flatMap((time, index) =>
+            ["F", "R", "I"].map((suffix) => {
+                const name = `20260101_${time}${suffix}.MP4`;
+                const source = { file: new File([new Uint8Array(0)], name), relativePath: name };
+                const channel = classifyFilenameChannel(source);
+                const start = classifyFilenameTime(source);
+                if (!channel || !start) throw new Error(`unclassified filename: ${name}`);
+                return makeCandidate({
+                    name,
+                    startUtc: start.getTime() / 1000,
+                    durationSec: index === 2 ? 15 : 180,
+                    channel: channel.channel,
+                    channelConfident: channel.confident,
+                    fingerprint: cameraFingerprint(source),
+                    recordingMode: classifyFilenameMode(source),
+                });
+            }),
+        );
+        const trips = groupTrips(candidates);
+        expect(trips).toHaveLength(1);
+        expect(trips[0]!.frames).toHaveLength(3);
+        expect(trips[0]!.durationSec).toBe(375);
+        for (const frame of trips[0]!.frames) {
+            expect(Object.keys(frame.channels).sort()).toEqual(["front", "interior", "rear"]);
+        }
+    });
+
     it("two F/B pairs → one trip with two frames, each with both channels", () => {
         const f1 = makeCandidate({
             name: "f1.mp4",

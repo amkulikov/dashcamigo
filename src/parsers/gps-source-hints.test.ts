@@ -166,6 +166,8 @@ describe("classifyGpsSource", () => {
 
     it("E-Ace flipped to embedded once the freeGPS Type-4 RC4 variant landed", () => {
         expect(classifyGpsSource(vf("20240429_182640F.mp4"))).toBe("embedded");
+        expect(classifyGpsSource(vf("20260101_120000I.mp4"))).toBe("embedded");
+        expect(classifyGpsSource(vf("20260101_120000X.mp4"))).toBe("embedded");
     });
 
     it("Tesla RecentClips - timestamp in the filename", () => {
@@ -233,6 +235,8 @@ describe("shouldTryEmbeddedGps", () => {
         const ddpaiNormal = vf("20190719161640_0060.mp4");
         expect(shouldTryEmbeddedGps(ddpaiNormal, false)).toBe(true);
         expect(shouldTryEmbeddedGps(ddpaiNormal, true)).toBe(false);
+        const ddpaiNewChannel = vf("20190719161640_0060_X.mp4");
+        expect(shouldTryEmbeddedGps(ddpaiNewChannel, false)).toBe(true);
 
         const mivue = vf("FILE260625-144859.MP4");
         expect(shouldTryEmbeddedGps(mivue, false)).toBe(true);

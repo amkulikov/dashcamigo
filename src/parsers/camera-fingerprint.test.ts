@@ -85,6 +85,22 @@ describe("cameraFingerprint - cross-channel identity", () => {
         expect(a).toBe(b);
     });
 
+    it("timestamp plus channel-letter MP4: front, rear and interior share a fingerprint", () => {
+        const front = cameraFingerprint(vf("20260101_120000F.MP4"));
+        expect(front).toBe(cameraFingerprint(vf("20260101_120000R.MP4")));
+        expect(front).toBe(cameraFingerprint(vf("20260101_120000I.MP4")));
+        expect(front).toBe(cameraFingerprint(vf("20260101_120300I.MP4")));
+    });
+
+    it("timestamp plus channel-letter MP4: channel folders share a fingerprint within one card", () => {
+        const front = cameraFingerprint(vf("20260101_120000F.MP4", "card/Front/20260101_120000F.MP4"));
+        const rear = cameraFingerprint(vf("20260101_120000R.MP4", "card/Rear/20260101_120000R.MP4"));
+        const interior = cameraFingerprint(vf("20260101_120000I.MP4", "card/Inside/20260101_120000I.MP4"));
+        expect(front).toBe(rear);
+        expect(front).toBe(interior);
+        expect(front).not.toBe(cameraFingerprint(vf("20260101_120000I.MP4", "other/Inside/20260101_120000I.MP4")));
+    });
+
     it("REC family: F/R channels and interleaved modes share a fingerprint", () => {
         const paths = [
             "Normal/F/REC20260913-125420-1370.mp4",
