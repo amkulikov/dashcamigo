@@ -149,6 +149,72 @@ test.describe("map style failures", () => {
         expect(failureSource).toBe("main");
     });
 
+    for (const replacement of ["provider", "theme"] as const) {
+        test(`ignores a pending style failure after the map ${replacement} changes`, async ({ page }) => {
+            let pendingStyle: Route | undefined;
+            await page.route("**/styles/dark.json", (route) => {
+                pendingStyle = route;
+            });
+            await presetLocalStorage(page);
+            await gotoApp(page);
+            await loadTrip(page);
+            await expect.poll(() => Boolean(pendingStyle)).toBe(true);
+            await page.locator("#settings-btn").click();
+            if (replacement === "provider") {
+                await page.locator("#settings-map-provider-select").selectOption("osm-vector");
+                await expect
+                    .poll(() =>
+                        page.evaluate(() => Boolean(window.__dashcamigo.state.map?.getSource("osm-shortbread"))),
+                    )
+                    .toBe(true);
+            } else {
+                await page.locator("#settings-map-theme-select").selectOption("light");
+                await expectLocalTrack(page);
+            }
+            if (!pendingStyle) throw new Error("style request is missing");
+            await pendingStyle.fulfill({ status: 503 });
+            await expect
+                .poll(() =>
+                    page.evaluate(() =>
+                        window.__dashcamigo.dumpLog().some((entry) => entry.msg === "map style fetch failed"),
+                    ),
+                )
+                .toBe(true);
+            await expect(page.locator("#map-style-error")).toHaveJSProperty("hidden", true);
+            await expect
+                .poll(() => page.evaluate(() => Boolean(window.__dashcamigo.state.map?.getLayer("trip-line"))))
+                .toBe(true);
+        });
+    }
+
+    test("keeps the selected theme failure visible when an old theme finishes loading", async ({ page }) => {
+        let pendingStyle: Route | undefined;
+        await page.route("**/styles/dark.json", (route) => {
+            pendingStyle = route;
+        });
+        await page.route("**/styles/light.json", (route) => route.fulfill({ status: 503 }));
+        await presetLocalStorage(page);
+        await gotoApp(page);
+        await loadTrip(page);
+        await expect.poll(() => Boolean(pendingStyle)).toBe(true);
+        await page.locator("#settings-btn").click();
+        await page.locator("#settings-map-theme-select").selectOption("light");
+        await expect(page.locator("#map-style-error")).toHaveJSProperty("hidden", false);
+
+        if (!pendingStyle) throw new Error("style request is missing");
+        await pendingStyle.fallback();
+        await expect
+            .poll(() =>
+                page.evaluate(() =>
+                    window.__dashcamigo
+                        .dumpLog()
+                        .some((entry) => entry.msg === "map style loaded" && entry.ctx?.theme === "dark"),
+                ),
+            )
+            .toBe(true);
+        await expect(page.locator("#map-style-error")).toHaveJSProperty("hidden", false);
+    });
+
     test("retries the initial style on reconnect before any map tile has been requested", async ({ page, context }) => {
         let canLoadStyle = false;
         let bootstrapRequests = 0;

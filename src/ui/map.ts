@@ -167,12 +167,14 @@ const mapStyleLoadControllers = new Map<MapStyleCacheKey, AbortController>();
 function styleCacheKey(provider: MapProvider, theme: MapStyleId): MapStyleCacheKey {
     return `${provider}:${theme}`;
 }
-// Theme of the most recent failure. Retry uses this instead of
-// currentMapTheme() so the click actually re-fetches what broke. Without it
-// the export-overlay code path (always loads "light") would fail on a dark
-// user, retry would redundantly hit the already-cached "dark" and hide the
-// banner without fixing anything.
-let lastFailedTheme: MapStyleId | null = null;
+interface FailedMapStyle {
+    theme: MapStyleId;
+    provider: MapProvider;
+    source: MapLoadSource;
+}
+// Export can request a different palette from the viewer. Retain its request
+// identity so an unrelated viewer success cannot dismiss or misdirect a retry.
+let lastFailedStyle: FailedMapStyle | null = null;
 
 /**
  * Where a loadMapStyle call originates. Sent to GA4 as `source` on
@@ -188,6 +190,27 @@ export type MapLoadSource = "main" | "export" | "preview" | "prefetch";
 
 function isSilentMapLoadSource(source: MapLoadSource): boolean {
     return source === "prefetch" || source === "preview";
+}
+
+function isRelevantMapLoad(source: MapLoadSource, theme: MapStyleId, provider: MapProvider): boolean {
+    return (
+        !isSilentMapLoadSource(source) &&
+        provider === getMapProvider() &&
+        (source === "export" || theme === currentMapTheme())
+    );
+}
+
+function clearMapStyleFailure(source: MapLoadSource, theme: MapStyleId, provider: MapProvider): void {
+    if (!isRelevantMapLoad(source, theme, provider)) return;
+    const failure = lastFailedStyle;
+    if (
+        failure &&
+        (failure.theme !== theme || failure.provider !== provider) &&
+        isRelevantMapLoad(failure.source, failure.theme, failure.provider)
+    )
+        return;
+    lastFailedStyle = null;
+    hideMapStyleError();
 }
 
 /**
@@ -219,26 +242,20 @@ export function loadMapStyle(
     }
     const cached = cachedMapStyles.get(key);
     if (cached) {
-        if (!isSilentMapLoadSource(source) && lastFailedTheme === theme) {
-            lastFailedTheme = null;
-            hideMapStyleError();
-        }
+        clearMapStyleFailure(source, theme, provider);
         return Promise.resolve(cached);
     }
     const inflight = mapStyleLoadPromises.get(key);
     if (inflight) {
-        // A foreground caller joining a prefetch owns the failure UI too.
-        if (!isSilentMapLoadSource(source)) inflight.source = source;
+        // Export still needs this palette after the viewer chooses another one.
+        if (!isSilentMapLoadSource(source) && inflight.source !== "export") inflight.source = source;
         return inflight.promise;
     }
 
     if (provider !== "openfreemap") {
         const style = createFallbackMapStyle(provider, theme);
         cachedMapStyles.set(key, style);
-        if (!isSilentMapLoadSource(source)) {
-            if (lastFailedTheme === theme) lastFailedTheme = null;
-            hideMapStyleError();
-        }
+        clearMapStyleFailure(source, theme, provider);
         log.info("map style loaded", { theme, provider, durationMs: 0 });
         return Promise.resolve(style);
     }
@@ -269,10 +286,7 @@ export function loadMapStyle(
                 style.glyphs = new URL(style.glyphs, location.origin).href;
             }
             cachedMapStyles.set(key, style);
-            if (!isSilentMapLoadSource(pending.source)) {
-                if (lastFailedTheme === theme) lastFailedTheme = null;
-                hideMapStyleError();
-            }
+            clearMapStyleFailure(pending.source, theme, provider);
             // The tile server is the only external runtime dependency. Style load
             // time is the first proxy for network issues; clearly visible in a
             // "map opens slowly" bug report.
@@ -306,14 +320,10 @@ export function loadMapStyle(
             if (mapStyleLoadControllers.get(key) === ctrl) {
                 mapStyleLoadControllers.delete(key);
             }
-            // Background prefetch and local-fallback preview failures stay
-            // invisible: no banner or lastFailedTheme (retry must not fixate on
-            // a theme the user is not even looking at), and no analytics either.
-            // If the user later requests that theme and it fails again, the user-facing
-            // failure will fire its own map_load_failed; counting the
-            // prefetch attempt too would double-count one real network issue.
-            if (isSilentMapLoadSource(pending.source)) return null;
-            lastFailedTheme = theme;
+            // A late failure from an abandoned viewer theme/provider must not
+            // replace the current error or restart recovery for a working map.
+            if (!isRelevantMapLoad(pending.source, theme, provider)) return null;
+            lastFailedStyle = { theme, provider, source: pending.source };
             showMapStyleError();
             scheduleMapRecovery();
             return null;
@@ -405,18 +415,19 @@ let mapRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
 
 function retryMapResources(): void {
     if ((!state.map && !state.miniMap) || navigator.onLine === false) return;
-    const theme = lastFailedTheme ?? currentMapTheme();
-    const provider = getMapProvider();
-    void loadMapStyle(theme, false, "main", provider).then((style) => {
+    const theme = lastFailedStyle?.theme ?? currentMapTheme();
+    const provider = lastFailedStyle?.provider ?? getMapProvider();
+    const source = lastFailedStyle?.source ?? "main";
+    void loadMapStyle(theme, false, source, provider).then((style) => {
         if (style) applyLoadedStyle(style, theme, provider, true);
     });
 }
 
 function scheduleMapRecovery(): void {
-    if (mapRecoveryTimer !== null || (!isOffline() && lastFailedTheme === null)) return;
+    if (mapRecoveryTimer !== null || (!isOffline() && lastFailedStyle === null)) return;
     mapRecoveryTimer = setTimeout(() => {
         mapRecoveryTimer = null;
-        if (!isOffline() && lastFailedTheme === null) return;
+        if (!isOffline() && lastFailedStyle === null) return;
         retryMapResources();
         scheduleMapRecovery();
     }, MAP_RECOVERY_RETRY_MS);
@@ -3164,7 +3175,7 @@ export function initMap(cb: MapCallbacks): void {
     window.addEventListener("online", () => {
         // The navigator flag may clear while a tile failure still holds the
         // combined offline state, so this cannot rely on a state transition.
-        if (isOffline() || lastFailedTheme !== null) retryMapResources();
+        if (isOffline() || lastFailedStyle !== null) retryMapResources();
     });
 
     subscribeMapProvider((provider, previous) => {
@@ -3268,20 +3279,14 @@ export function initMap(cb: MapCallbacks): void {
     // export-state change; cheap (a few class/hidden toggles + a gated resize).
     subscribeExportState(() => applyMapLayout());
 
-    // Map style error banner. Retry re-fetches style.json; on success applyLoadedStyle
-    // updates both maps. Dismiss/Escape just hide the banner - it reappears on the
-    // next initialization attempt (e.g. after reload).
-    //
-    // Retry the theme that actually failed, not the current UI theme. The export-
-    // overlay code path always fetches "light" regardless of UI theme - if that
-    // failed for a dark user, retrying currentMapTheme() would re-fetch the
-    // already-cached "dark" (instant success), hide the banner, and leave the
-    // real broken fetch unaddressed.
+    // Dismiss/Escape only hide the banner; retry also refreshes the style cache
+    // shared with the export map.
     dom.mapStyleRetry.addEventListener("click", () => {
         dom.mapStyleRetry.disabled = true;
-        const theme = lastFailedTheme ?? currentMapTheme();
-        const provider = getMapProvider();
-        loadMapStyle(theme, true, "main", provider)
+        const theme = lastFailedStyle?.theme ?? currentMapTheme();
+        const provider = lastFailedStyle?.provider ?? getMapProvider();
+        const source = lastFailedStyle?.source ?? "main";
+        loadMapStyle(theme, true, source, provider)
             .then((style) => {
                 if (style) applyLoadedStyle(style, theme, provider);
             })
