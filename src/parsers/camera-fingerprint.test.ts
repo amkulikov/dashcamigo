@@ -101,6 +101,39 @@ describe("cameraFingerprint - cross-channel identity", () => {
         expect(front).not.toBe(cameraFingerprint(vf("20260101_120000I.MP4", "other/Inside/20260101_120000I.MP4")));
     });
 
+    it("timestamp plus channel-letter MP4: preserves a camera root matching one channel letter", () => {
+        const front = "20260101_120000F.MP4";
+        const rear = "20260101_120000R.MP4";
+        const fingerprint = cameraFingerprint(vf(front, `F/Front/${front}`));
+        expect(fingerprint).toBe(cameraFingerprint(vf(rear, `F/Rear/${rear}`)));
+        expect(fingerprint).not.toBe(cameraFingerprint(vf(front, `Front/${front}`)));
+    });
+
+    it("70mai: removes a suffix channel folder without consuming the camera root", () => {
+        const front = "NO20260101-120000F.MP4";
+        const extra = "NO20260101-120000X.MP4";
+        const fingerprint = cameraFingerprint(vf(front, `X/Normal/Front/${front}`));
+        expect(fingerprint).toBe(cameraFingerprint(vf(extra, `X/Normal/X/${extra}`)));
+        expect(fingerprint).not.toBe(cameraFingerprint(vf(extra, `Normal/X/${extra}`)));
+    });
+
+    it.each(["card", "F", "R", "RO"])("VIOFO: locked channel folders retain the %s camera root", (root) => {
+        const front = "2026_0101_120000_001F.MP4";
+        const rear = "2026_0101_120000_001R.MP4";
+        const fingerprint = cameraFingerprint(vf(front, `${root}/F/${front}`));
+        expect(fingerprint).toBe(cameraFingerprint(vf(front, `${root}/F/RO/${front}`)));
+        expect(fingerprint).toBe(cameraFingerprint(vf(rear, `${root}/R/RO/${rear}`)));
+        expect(fingerprint).not.toBe(cameraFingerprint(vf(front, `F/RO/${front}`)));
+    });
+
+    it("REC family: every channel folder shares the same card and mode key", () => {
+        const name = "REC20260101-120000-228.mp4";
+        const fingerprints = ["A", "B", "C", "D", "F", "R", "X"].map((letter) =>
+            cameraFingerprint(vf(name, `card/Normal/${letter}/${name}`)),
+        );
+        expect(new Set(fingerprints).size).toBe(1);
+    });
+
     it("REC family: F/R channels and interleaved modes share a fingerprint", () => {
         const paths = [
             "Normal/F/REC20260913-125420-1370.mp4",

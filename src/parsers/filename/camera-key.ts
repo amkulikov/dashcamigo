@@ -28,8 +28,6 @@ import {
     RX_BEFERICH,
     RX_BLACKVUE,
     RX_CARCAM,
-    RX_CARCAM_PATH_FRONT,
-    RX_CARCAM_PATH_REAR,
     RX_DDPAI_EVENT,
     RX_DDPAI_NORMAL,
     RX_DDPAI_TIMELAPSE,
@@ -67,20 +65,23 @@ import {
 import type { FilenameCameraKeyTechnique } from "./types.js";
 
 /**
- * Returns the parent-directory string with channel-folder segments stripped.
- *
- * Walks the path bottom-up from the file's parent, dropping consecutive
- * segments that match any of `channelFolders` (case-insensitive). Returns
- * the remaining join. Empty path or flat-drop -> "".
- *
- * Stripping is iterative so layouts like `normal/a/` (CarCam: parent folder
- * is `a`, grandparent is `normal`) collapse to `` rather than just to `normal`
- * - the whole channel sub-tree is one logical "channel marker".
+ * Removes channel and mode folders while retaining the enclosing camera path.
+ * Letter-based channel folders apply only at the leaf; spelled-out folders
+ * can nest, as in Normal/Front.
  */
-function strippedParentDir(relativePath: string, channelFolders: readonly string[]): string {
+function strippedParentDir(
+    relativePath: string,
+    channelFolders: readonly string[],
+    leafChannelFolders: readonly string[] = [],
+): string {
     const segs = relativePath.split("/").filter((s) => s.length > 0);
     if (segs.length < 2) return ""; // flat drop, no parent
     const dirSegs = segs.slice(0, -1); // drop the filename itself
+    // A suffix-derived folder is only a channel at the leaf. The same letter
+    // higher in the path can identify the card rather than one of its streams.
+    if (leafChannelFolders.some((folder) => folder.toLowerCase() === dirSegs.at(-1)?.toLowerCase())) {
+        dirSegs.pop();
+    }
     const lower = channelFolders.map((s) => s.toLowerCase());
     while (dirSegs.length > 0) {
         const last = dirSegs[dirSegs.length - 1]!.toLowerCase();
@@ -157,7 +158,7 @@ const mai70CameraKey: FilenameCameraKeyTechnique = {
         // A810 lite in Rear/) plus the recording-mode folder above the channel
         // one, so Normal/Front, Normal/Rear, Event/Front, Event/Rear all yield
         // the same dir component.
-        const dir = strippedParentDir(file.relativePath, [...MAI70_STRIP_FOLDERS, m[8] ?? m[9] ?? ""]);
+        const dir = strippedParentDir(file.relativePath, MAI70_STRIP_FOLDERS, [m[8] ?? m[9] ?? ""]);
         return `70mai|${dir}|${masked}`;
     },
 };
@@ -171,7 +172,7 @@ const beferichCameraKey: FilenameCameraKeyTechnique = {
         // front + rear converge to one fingerprint and pair into one frame.
         const masked = maskNameWithTrailingLetterStripped(file.file.name, m[7]!);
         // Single-folder corpus; defensive strip for hand-split channels.
-        const dir = strippedParentDir(file.relativePath, ["front", "rear", "interior", m[7]!]);
+        const dir = strippedParentDir(file.relativePath, ["front", "rear", "interior"], [m[7]!]);
         return `beferich|${dir}|${masked}`;
     },
 };
@@ -186,7 +187,7 @@ const blackvueCameraKey: FilenameCameraKeyTechnique = {
         const masked = maskNameWithTrailingLetterStripped(file.file.name, m[4]!);
         // BlackVue typically writes everything to one folder, but defensive strip
         // for users who manually split channels into subfolders.
-        const dir = strippedParentDir(file.relativePath, ["front", "rear", "interior", m[4]!]);
+        const dir = strippedParentDir(file.relativePath, ["front", "rear", "interior"], [m[4]!]);
         return `blackvue|${dir}|${masked}`;
     },
 };
@@ -200,7 +201,7 @@ const carcamCameraKey: FilenameCameraKeyTechnique = {
         const masked = maskNameWithTrailingLetterStripped(file.file.name, m[4]!);
         // CarCam path layout: `normal/a|b|c|d/...`. The channel folder name is
         // a single letter; strip it (and the `normal` parent stays as-is).
-        const dir = strippedParentDir(file.relativePath, ["a", "b", "c", "d", m[4]!]);
+        const dir = strippedParentDir(file.relativePath, [], ["a", "b", "c", "d", m[4]!]);
         return `carcam|${dir}|${masked}`;
     },
 };
@@ -225,11 +226,7 @@ const recSingleCameraKey: FilenameCameraKeyTechnique = {
     id: "rec-single-camera-key",
     extract(file: VendorFile): string | null {
         if (!RX_REC_SINGLE.test(file.file.name)) return null;
-        if (
-            RX_REC_SINGLE_PATH_CHANNEL.test(file.relativePath) &&
-            !RX_CARCAM_PATH_FRONT.test(file.relativePath) &&
-            !RX_CARCAM_PATH_REAR.test(file.relativePath)
-        ) {
+        if (RX_REC_SINGLE_PATH_CHANNEL.test(file.relativePath)) {
             // Modes interleave in the same recording loop. Remove exactly the
             // card's two trailing folders so a camera root named F survives.
             const dir = file.relativePath
@@ -240,13 +237,8 @@ const recSingleCameraKey: FilenameCameraKeyTechnique = {
             const masked = maskName(file.file.name.replace(/^(?:REC|SOS|PAR)/i, "REC"));
             return `rec-single|${dir}|${masked}`;
         }
-        // Some dual-channel SigmaStar cameras use the same REC name in
-        // Normal/A and Normal/B folders. Only strip a letter when the channel matcher
-        // recognises that full card layout: a user-created bare A/B directory
-        // may hold a separate physical camera and must remain part of its key.
-        const hasChannelPath =
-            RX_CARCAM_PATH_FRONT.test(file.relativePath) || RX_CARCAM_PATH_REAR.test(file.relativePath);
-        const dir = strippedParentDir(file.relativePath, hasChannelPath ? ["a", "b"] : []);
+        // Bare letter directories can identify separate physical cameras.
+        const dir = strippedParentDir(file.relativePath, []);
         return `rec-single|${dir}|${maskName(file.file.name)}`;
     },
 };
@@ -279,7 +271,7 @@ const ddpaiCameraKey: FilenameCameraKeyTechnique = {
             if (normal[3]) {
                 stripped = stripped.replace(/_[A-Z](\.mp4)$/i, "$1");
             }
-            const dir = strippedParentDir(file.relativePath, ["front", "rear", "inside", normal[3] ?? ""]);
+            const dir = strippedParentDir(file.relativePath, ["front", "rear", "inside"], [normal[3] ?? ""]);
             return `ddpai|${dir}|${maskName(stripped)}`;
         }
         // Timelapse: S_ (front) / Q_ (rear) prefix at group [1].
@@ -313,7 +305,7 @@ const eaceCameraKey: FilenameCameraKeyTechnique = {
         } else {
             masked = maskName(file.file.name);
         }
-        const dir = strippedParentDir(file.relativePath, ["front", "rear", "inside", "interior", ch ?? ""]);
+        const dir = strippedParentDir(file.relativePath, ["front", "rear", "inside", "interior"], [ch ?? ""]);
         return `e-ace|${dir}|${masked}`;
     },
 };
@@ -411,7 +403,7 @@ const iboxCameraKey: FilenameCameraKeyTechnique = {
         // SD layout puts the pair in sibling F/ and R/ folders, so strip both
         // the single-letter and spelled-out folder dialects.
         const masked = maskNameWithTrailingLetterStripped(file.file.name, m[5]!);
-        const dir = strippedParentDir(file.relativePath, ["f", "r", "i", "front", "rear", "interior", m[5]!]);
+        const dir = strippedParentDir(file.relativePath, ["front", "rear", "interior"], ["f", "r", "i", m[5]!]);
         return `ibox|${dir}|${masked}`;
     },
 };
@@ -453,7 +445,7 @@ const movSeqFriCameraKey: FilenameCameraKeyTechnique = {
         // The .ts card splits channels into single-letter F/ R/ folders - a
         // per-clip attribute, not camera identity; long names cover
         // hand-split channels.
-        const dir = strippedParentDir(file.relativePath, ["front", "rear", "interior", "f", "r", "i", m[3]!]);
+        const dir = strippedParentDir(file.relativePath, ["front", "rear", "interior"], ["f", "r", "i", m[3]!]);
         return `mov-seq-fri|${dir}|${masked}`;
     },
 };
@@ -464,19 +456,11 @@ const ligoGpsTrailerTsCameraKey: FilenameCameraKeyTechnique = {
         const m = file.file.name.match(RX_LIGOGPS_TRAILER_TS);
         if (!m) return null;
         const masked = maskNameWithTrailingLetterStripped(file.file.name, m[3]!);
-        const dir = strippedParentDir(file.relativePath, [
-            "video_f",
-            "video_r",
-            "video_i",
-            `video_${m[3]}`,
-            "front",
-            "rear",
-            "interior",
-            "f",
-            "r",
-            "i",
-            m[3]!,
-        ]);
+        const dir = strippedParentDir(
+            file.relativePath,
+            ["front", "rear", "interior"],
+            ["video_f", "video_r", "video_i", `video_${m[3]}`, "f", "r", "i", m[3]!],
+        );
         return `ligogps-trailer-ts|${dir}|${masked}`;
     },
 };
@@ -515,11 +499,10 @@ const novatekViofoCameraKey: FilenameCameraKeyTechnique = {
         // mode letter [5] (P = parking, E = impact event) stays in the mask
         // (cameraKey is not mode-aware - mode handling lives separately).
         const masked = maskNameWithTrailingLetterStripped(file.file.name, m[6]!);
-        // "ro" is the locked-clip folder (firmware moves locked clips into
-        // Movie/RO/ with unchanged names) - strip it so a locked clip keeps
-        // the fingerprint of its Movie/ siblings; otherwise per-fingerprint
-        // TZ buckets split and the locked frame renders as a second "camera".
-        const dir = strippedParentDir(file.relativePath, ["front", "rear", "interior", "ro", m[6]!]);
+        // Locked clips move into RO with unchanged names. Remove that leaf
+        // first so a letter channel folder above it still matches normally.
+        const channelPath = file.relativePath.replace(/(^|\/)ro\/(?=[^/]+$)/i, "$1");
+        const dir = strippedParentDir(channelPath, ["front", "rear", "interior"], [m[6]!]);
         return `novatek-viofo|${dir}|${masked}`;
     },
 };
@@ -531,7 +514,7 @@ const novatekVantrueCameraKey: FilenameCameraKeyTechnique = {
         if (!m) return null;
         // Channel letter at group [5], one char before `.mp4`.
         const masked = maskNameWithTrailingLetterStripped(file.file.name, m[5]!);
-        const dir = strippedParentDir(file.relativePath, ["front", "rear", "interior", m[5]!]);
+        const dir = strippedParentDir(file.relativePath, ["front", "rear", "interior"], [m[5]!]);
         return `novatek-vantrue|${dir}|${masked}`;
     },
 };
@@ -569,7 +552,7 @@ const neolineCameraKey: FilenameCameraKeyTechnique = {
         if (!m) return null;
         // Channel letter at group [4], immediately before `.mp4`.
         const masked = maskNameWithTrailingLetterStripped(file.file.name, m[4]!);
-        const dir = strippedParentDir(file.relativePath, ["front", "rear", "interior", m[4]!]);
+        const dir = strippedParentDir(file.relativePath, ["front", "rear", "interior"], [m[4]!]);
         return `neoline|${dir}|${masked}`;
     },
 };
@@ -589,7 +572,7 @@ const vueroidCameraKey: FilenameCameraKeyTechnique = {
         // rationale; E/P shapes are corpus-unvalidated, folding is the safe
         // direction either way).
         const stripped = file.file.name.replace(/_[A-Z]_[NEP](\.mp4)$/i, "_N$1");
-        const dir = strippedParentDir(file.relativePath, ["front", "rear", "interior", m[3]!]);
+        const dir = strippedParentDir(file.relativePath, ["front", "rear", "interior"], [m[3]!]);
         return `vueroid|${dir}|${maskName(stripped)}`;
     },
 };
@@ -631,6 +614,7 @@ const redtigerCameraKey: FilenameCameraKeyTechnique = {
         const masked = maskNameWithTrailingLetterStripped(file.file.name, m[3]!);
         const dir = strippedParentDir(
             file.relativePath,
+            [],
             REDTIGER_MODE_FOLDERS.flatMap((mode) => ["f", "r", m[3]!].map((letter) => `${mode}_${letter}`)),
         );
         return `redtiger|${dir}|${masked}`;
@@ -673,7 +657,7 @@ const thinkwareCameraKey: FilenameCameraKeyTechnique = {
         if (!m) return null;
         // Channel letter at group [2], one char before `.mp4`.
         const masked = maskNameWithTrailingLetterStripped(file.file.name, m[2]!);
-        const dir = strippedParentDir(file.relativePath, ["front", "rear", "interior", m[2]!]);
+        const dir = strippedParentDir(file.relativePath, ["front", "rear", "interior"], [m[2]!]);
         return `thinkware|${dir}|${masked}`;
     },
 };
