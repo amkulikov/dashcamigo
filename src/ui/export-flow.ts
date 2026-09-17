@@ -26,6 +26,7 @@ import { showSaveFilePicker } from "native-file-system-adapter";
 import type { VideoCodec } from "mediabunny";
 
 import type { ExportClipResult } from "../export.js";
+import { resolveOutputFps } from "../transcode/frame-rate.js";
 import { reencodeBitrateForQuality } from "../export-bitrate.js";
 import {
     buildClipGpx,
@@ -392,7 +393,7 @@ export function buildOverlayPipelineArgs(trip: Trip): OverlayPipelineArgs | null
 // mediabunny memoizes), so a stale/pending cache never produces a wrong file.
 
 interface EncodeCeiling {
-    /** Config key this entry reflects (dims + desired bitrate). */
+    /** Config key this entry reflects (dimensions, FPS and desired bitrate). */
     key: string;
     /** Desired (requested) bitrate before any device-fit reduction. */
     desiredBitrate: number;
@@ -418,8 +419,8 @@ export function subscribeEncodeCeiling(listener: () => void): () => void {
     return () => encodeCeilingListeners.delete(listener);
 }
 
-function ceilingKey(dims: OutputDims, desiredBitrate: number): string {
-    return `${dims.width}x${dims.height}@${desiredBitrate}`;
+function ceilingKey(dims: OutputDims, desiredBitrate: number, frameRate: number): string {
+    return `${dims.width}x${dims.height}@${frameRate}:${desiredBitrate}`;
 }
 
 /**
@@ -442,11 +443,12 @@ export function refreshEncodeCeiling(): void {
     }
     const dims = resolveOutputDims();
     const desiredBitrate = resolveReencodeBitrate(trip, dims);
-    const key = ceilingKey(dims, desiredBitrate);
+    const frameRate = resolveOutputFps(measureRangeSource(trip).fps);
+    const key = ceilingKey(dims, desiredBitrate, frameRate);
     if (key === encodeCeilingInFlightKey) return; // already probed / probing
     encodeCeilingInFlightKey = key;
     void import("../transcode/capabilities.js")
-        .then(({ resolveEncodableH264 }) => resolveEncodableH264(dims.width, dims.height, desiredBitrate))
+        .then(({ resolveEncodableH264 }) => resolveEncodableH264(dims.width, dims.height, desiredBitrate, frameRate))
         .then((res) => {
             // Drop a result whose config was superseded while the probe ran.
             if (key !== encodeCeilingInFlightKey) return;
@@ -460,9 +462,9 @@ export function refreshEncodeCeiling(): void {
 /** The cached ceiling for the given config, or null if it does not match (stale
  *  / pending / cleared). Used by estimateExport to fold the device cap into the
  *  shown size without itself awaiting. */
-function ceilingFor(dims: OutputDims, desiredBitrate: number): EncodeCeiling | null {
+function ceilingFor(dims: OutputDims, desiredBitrate: number, frameRate: number): EncodeCeiling | null {
     const current = encodeCeiling;
-    if (current && current.key === ceilingKey(dims, desiredBitrate)) return current;
+    if (current && current.key === ceilingKey(dims, desiredBitrate, frameRate)) return current;
     return null;
 }
 
@@ -557,7 +559,7 @@ export function estimateExport(): ExportEstimate | null {
     // can only encode below the requested bitrate, the shown size must reflect
     // the bitrate that will ACTUALLY be used, not the optimistic request. Null
     // ceiling (stream-copy / probe pending) keeps the optimistic desired value.
-    const ceiling = stream ? null : ceilingFor(dims, desiredReencodeBitrate);
+    const ceiling = stream ? null : ceilingFor(dims, desiredReencodeBitrate, resolveOutputFps(source.fps));
     const deviceCapped = !!ceiling && ceiling.degraded;
     const blocked = !!ceiling && ceiling.blocked;
     const sourceUndecodable = stream ? null : undecodableSource(trip);
@@ -861,6 +863,7 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
         : null;
     const dims = resolveOutputDims();
     const desiredBitrate = resolveReencodeBitrate(trip, dims);
+    const frameRate = resolveOutputFps(measureRangeSource(trip).fps);
     const sourceUndecodable = undecodableSource(trip);
     const expectedBytes = estimateExport()?.bytes ?? 0;
     const manualBlurRegions = cloneBlurRegions(activeBlurRegions());
@@ -962,7 +965,7 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
             return;
         }
         const { resolveEncodableH264 } = await import("../transcode/capabilities.js");
-        const encodable = await resolveEncodableH264(dims.width, dims.height, desiredBitrate);
+        const encodable = await resolveEncodableH264(dims.width, dims.height, desiredBitrate, frameRate);
         if (!encodable) {
             log.warn("re-encode export blocked: device cannot encode at this resolution", {
                 width: dims.width,

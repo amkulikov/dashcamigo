@@ -25,7 +25,7 @@ import {
     type EncodedPacket,
     type InputAudioTrack,
     type InputVideoTrack,
-    type Rotation,
+    type TransformationMatrix,
     type VideoCodec,
 } from "mediabunny";
 import { createLogger } from "../log.js";
@@ -120,7 +120,7 @@ let audioCodec: AudioCodec | null = null;
 let videoDecoderConfig: VideoDecoderConfig | null = null;
 let audioDecoderConfig: AudioDecoderConfig | null = null;
 let audioConfigPrimingPacket: EncodedPacket | undefined;
-let videoRotation: Rotation = 0;
+let videoTransformationMatrix: TransformationMatrix | undefined;
 let startSec = 0;
 let sourceTimeOrigin = 0;
 // IMA-ADPCM transcode mode (Mio/Navman): mediabunny cannot read the audio, so
@@ -351,7 +351,7 @@ async function onInit(
         if (!vt) throw new Error("no-video-track");
         videoTrack = vt;
         videoCodec = (await vt.getCodec()) as VideoCodec;
-        videoRotation = await vt.getRotation();
+        videoTransformationMatrix = await vt.getTransformationMatrix();
         const videoCodecParamRaw = await vt.getCodecParameterString();
         if (!videoCodecParamRaw) throw new Error("no-video-codec-param");
 
@@ -642,7 +642,7 @@ async function startNewFeedCycle(cycleId: number, armSeekDone: boolean): Promise
         }),
         target: new StreamTarget(noopWritable),
     });
-    cycle.output.addVideoTrack(cycle.videoSource, { rotation: videoRotation });
+    cycle.output.addVideoTrack(cycle.videoSource, { transformationMatrix: videoTransformationMatrix });
     if (cycle.audioSource) {
         // Keep the track set stable even when a seek has no remaining audio packets.
         cycle.output.addAudioTrack(

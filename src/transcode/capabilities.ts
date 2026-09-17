@@ -3,7 +3,7 @@
 // The split / crop / overlay / speed-up export decodes, composites, and
 // RE-ENCODES via WebCodecs. mediabunny configures a VideoEncoder for codec "avc"
 // as High profile (its buildVideoCodecString hardcodes profile 0x64; only the
-// LEVEL is derived, from resolution + bitrate) and gates on a single
+// LEVEL is derived, from resolution, bitrate and frame rate) and gates on a single
 // VideoEncoder.isConfigSupported with the hardwareAcceleration we pass. On a
 // machine with no hardware H.264 encoder and only a Constrained-Baseline software
 // one (e.g. Chrome's bundled OpenH264 on a GPU-less Linux box), that High-profile
@@ -88,9 +88,9 @@ export function createEncodeAudioSource(codec: "aac" | "opus"): AudioSampleSourc
 
 /**
  * Whether the browser can encode the H.264 stream the re-encode export emits at
- * the given output size and bitrate. Mirrors the pipeline's encoder config:
+ * the given output size, bitrate and frame rate. Mirrors the pipeline's encoder config:
  * codec "avc" (mediabunny hardcodes High profile 0x64 and derives only the H.264
- * level from resolution + bitrate) + hardwareAcceleration "no-preference".
+ * level from resolution, bitrate and frame rate) + hardwareAcceleration "no-preference".
  *
  * We ask mediabunny's own canEncodeVideo rather than a bare isConfigSupported:
  * it builds the same encoder config the pipeline uses AND, on Firefox (where
@@ -106,11 +106,17 @@ export function createEncodeAudioSource(codec: "aac" | "opus"): AudioSampleSourc
  * to even via ensureEven). bitrate is in bits per second. Never throws -
  * returns false when no usable encoder exists.
  */
-export async function canReencodeH264(width: number, height: number, bitrate: number): Promise<boolean> {
+export async function canReencodeH264(
+    width: number,
+    height: number,
+    bitrate: number,
+    frameRate?: number,
+): Promise<boolean> {
     try {
         return await canEncodeVideo("avc", {
             width,
             height,
+            frameRate,
             // Explicit bitrate only - never a quantizer or a subjective level, so
             // the probe resolves to the exact bitrate-driven isConfigSupported
             // check the binary search in resolveEncodableH264 depends on.
@@ -176,12 +182,13 @@ export async function resolveEncodableH264(
     width: number,
     height: number,
     desiredBitrate: number,
+    frameRate?: number,
 ): Promise<EncodableH264 | null> {
-    if (await canReencodeH264(width, height, desiredBitrate)) {
+    if (await canReencodeH264(width, height, desiredBitrate, frameRate)) {
         return { bitrate: desiredBitrate, degraded: false };
     }
     const floor = Math.round(width * height * 4 * FLOOR_FRACTION);
-    if (floor >= desiredBitrate || !(await canReencodeH264(width, height, floor))) {
+    if (floor >= desiredBitrate || !(await canReencodeH264(width, height, floor, frameRate))) {
         return null;
     }
 
@@ -189,7 +196,7 @@ export async function resolveEncodableH264(
     let bad = desiredBitrate;
     for (let probes = 0; bad - good > SEARCH_STOP_BPS && probes < MAX_SEARCH_PROBES; probes++) {
         const mid = Math.round((good + bad) / 2);
-        if (await canReencodeH264(width, height, mid)) {
+        if (await canReencodeH264(width, height, mid, frameRate)) {
             good = mid;
         } else {
             bad = mid;

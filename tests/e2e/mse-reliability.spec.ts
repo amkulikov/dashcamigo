@@ -3,7 +3,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { createMseFixture } from "../helpers/mse-fixtures.js";
-import { expect, gotoApp, loadTrip, presetLocalStorage, test } from "./_fixtures.js";
+import {
+    expect,
+    gotoApp,
+    installExportCapture,
+    loadTrip,
+    openExport,
+    pausePlayback,
+    presetLocalStorage,
+    readTranscodeDoneFields,
+    test,
+} from "./_fixtures.js";
 
 let fixtureDirectory: string;
 
@@ -51,6 +61,8 @@ test.beforeAll(async () => {
         ["seek-zero", { gopCount: 120, preserveFrameTiming: true }],
         ["audio-leading", { gopDurationSec: 10, gopCount: 3, audioDurationSec: 30, audioLeadSec: 1024 / 48000 }],
         ["matched-audio", { gopCount: 2, audioDurationSec: 2 }],
+        ["plain", { gopCount: 2 }],
+        ["mirrored", { gopCount: 2, videoMetadata: { flip: true } }],
     ] as const) {
         const directory = join(fixtureDirectory, name);
         await mkdir(directory);
@@ -127,6 +139,79 @@ test.afterEach(async ({ page }, testInfo) => {
     const path = testInfo.outputPath("mse-diagnosis.json");
     await writeFile(path, JSON.stringify(diagnosis, null, 2));
     await testInfo.attach("mse-diagnosis", { path, contentType: "application/json" });
+});
+
+test("preserves source reflection in MSE playback and re-encoded export", async ({ page }) => {
+    test.setTimeout(120_000);
+    await installExportCapture(page);
+    const capture = (mirrored: boolean) =>
+        page.locator("#player").evaluate(async (video: HTMLVideoElement, mirrored) => {
+            video.pause();
+            if (video.currentTime !== 0.2 || video.seeking) {
+                await new Promise<void>((resolve) => {
+                    video.addEventListener("seeked", () => resolve(), { once: true });
+                    video.currentTime = 0.2;
+                });
+            }
+            const canvas = document.createElement("canvas");
+            canvas.width = 80;
+            canvas.height = 45;
+            const ctx = canvas.getContext("2d")!;
+            if (mirrored) {
+                ctx.translate(80, 0);
+                ctx.scale(-1, 1);
+            }
+            ctx.drawImage(video, 0, 0, 80, 45);
+            return [...ctx.getImageData(0, 0, 80, 45).data];
+        }, mirrored);
+    await loadTrip(page, join(fixtureDirectory, "plain"));
+    await pausePlayback(page);
+    const expected = await capture(true);
+    const unflipped = await capture(false);
+    const difference = (a: number[], b: number[]) =>
+        a.reduce((sum, value, i) => sum + Math.abs(value - b[i]!), 0) / a.length;
+    expect(difference(expected, unflipped), "the fixture distinguishes a reflection").toBeGreaterThan(5);
+
+    await gotoApp(page, "en");
+    await loadTrip(page, join(fixtureDirectory, "mirrored"));
+    await pausePlayback(page);
+    expect(difference(expected, await capture(false)), "MSE preserves container reflection").toBeLessThan(3);
+    await openExport(page);
+    await page.locator('input[name="export-panel-quality"][value="medium"]').check();
+    await page.locator("#export-panel-watermark").uncheck();
+    await page.locator("#export-panel-save-btn").click();
+    await expect(page.locator("#export-panel-done-summary")).toBeVisible({ timeout: 60_000 });
+    const done = await readTranscodeDoneFields(page);
+    expect(done!.framesEncoded).toBeGreaterThan(0);
+    expect(done!.framesDirect).toBe(0);
+    const exported = await page.evaluate(async () => {
+        const handle = (window as unknown as { __lastExportHandle: { _buf: Uint8Array } }).__lastExportHandle;
+        const url = URL.createObjectURL(new Blob([handle._buf.slice()], { type: "video/mp4" }));
+        const video = document.createElement("video");
+        video.muted = true;
+        try {
+            await new Promise<void>((resolve, reject) => {
+                video.onloadeddata = () => resolve();
+                video.onerror = () => reject(new Error("exported video cannot play"));
+                video.src = url;
+            });
+            await new Promise<void>((resolve) => {
+                video.onseeked = () => resolve();
+                video.currentTime = 0.2;
+            });
+            const canvas = document.createElement("canvas");
+            canvas.width = 80;
+            canvas.height = 45;
+            const ctx = canvas.getContext("2d")!;
+            ctx.drawImage(video, 0, 0, 80, 45);
+            return [...ctx.getImageData(0, 0, 80, 45).data];
+        } finally {
+            video.removeAttribute("src");
+            video.load();
+            URL.revokeObjectURL(url);
+        }
+    });
+    expect(difference(expected, exported), "export bakes in the source reflection").toBeLessThan(8);
 });
 
 test("starts MSE playback when one GOP exceeds the ahead window", async ({ page }) => {

@@ -34,10 +34,6 @@ import type { OverlayMapPipelineOpts, TranscodeProgress, TranscodeResult } from 
 
 const log = createLogger("transcode:finalize");
 
-/** Output frame rate used when the source's own rate is unknown. 30 is what most
- *  dashcams record at, so it is the least-wrong guess. */
-export const FALLBACK_OUTPUT_FPS = 30;
-
 /**
  * Bitrate (kbit/s) an output actually came out at, for the done-line next to the
  * requested figure. Includes the audio track and container overhead, so it reads
@@ -48,28 +44,6 @@ export const FALLBACK_OUTPUT_FPS = 30;
 export function achievedKbps(sizeBytes: number, durationSec: number): number {
     if (!(durationSec > 0.001)) return 0;
     return Math.round((sizeBytes * 8) / durationSec / 1000);
-}
-
-// Bounds on the frame rate an export will run at. The low end keeps a bad
-// indexer estimate from producing a one-frame clip; the high end keeps it from
-// asking the encoder for a rate no dashcam records at (and, via the budget, for
-// an absurd bitrate).
-const MIN_OUTPUT_FPS = 5;
-const MAX_OUTPUT_FPS = 120;
-
-/**
- * Frame rate the export runs at, from the source rate measured over the range
- * (rangeSourceFps). Clamped to a plausible band; null (nothing measurable)
- * falls back to FALLBACK_OUTPUT_FPS.
- *
- * This is load-bearing in three places, and it used to be pinned at 30 in all
- * three: the encode budget is per second, so a 60 fps source needs twice the
- * bits; the expected frame count drives the progress bar and its ETA; and the
- * value is written into the output track's metadata.
- */
-export function resolveOutputFps(sourceFps: number | null): number {
-    if (sourceFps === null || !Number.isFinite(sourceFps) || sourceFps <= 0) return FALLBACK_OUTPUT_FPS;
-    return Math.min(MAX_OUTPUT_FPS, Math.max(MIN_OUTPUT_FPS, sourceFps));
 }
 
 // Source codecs we stream-copy straight into the output MP4 (no encoder, no
@@ -836,7 +810,7 @@ export async function joinAllOrThrowFirst<T>(tasks: ReadonlyArray<Promise<T>>): 
  * the encoder untouched instead of through the composition canvas.
  *
  * All four dimensions are compared, not just the display pair: a non-square
- * pixel aspect (coded != display) or a rotation flag is applied by
+ * pixel aspect (coded != display), rotation or reflection is applied by
  * VideoSample.draw, and an encoder fed the raw frame would silently drop it -
  * the export would come out squashed or sideways. Callers must separately
  * establish that nothing is painted on top (overlays, watermark, blur, crop).
@@ -844,6 +818,7 @@ export async function joinAllOrThrowFirst<T>(tasks: ReadonlyArray<Promise<T>>): 
 export function frameNeedsNoComposite(
     frame: {
         rotation: number;
+        flip: boolean;
         codedWidth: number;
         codedHeight: number;
         displayWidth: number;
@@ -854,6 +829,7 @@ export function frameNeedsNoComposite(
 ): boolean {
     return (
         frame.rotation === 0 &&
+        !frame.flip &&
         frame.codedWidth === outputW &&
         frame.codedHeight === outputH &&
         frame.displayWidth === outputW &&

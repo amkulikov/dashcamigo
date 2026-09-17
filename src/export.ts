@@ -291,11 +291,8 @@ export async function exportClip({
         if (!firstVideoDecoderConfig) {
             throw new Error(`unable to read video decoder config in file ${segments[0]!.file.name}`);
         }
-        // Pass the display-matrix rotation to the output, otherwise clips from
-        // cameras that write rotated MP4s open sideways in OS players. mediabunny
-        // writes it into the tkhd-matrix of the output container. Taken from the
-        // first segment - rotation is consistent across all files of one camera.
-        const videoRotation = await firstVideoTrack.getRotation();
+        // Packet copies retain the source presentation, including reflection and translation.
+        const transformationMatrix = await firstVideoTrack.getTransformationMatrix();
         await assertVideoCompatibility(
             segments.slice(1).map((seg) => seg.file),
             firstVideoTrack,
@@ -303,7 +300,7 @@ export async function exportClip({
             signal,
         );
         const videoSource = new EncodedVideoPacketSource(videoCodec);
-        output.addVideoTrack(videoSource, { rotation: videoRotation });
+        output.addVideoTrack(videoSource, { transformationMatrix });
 
         let audioSource: EncodedAudioPacketSource | null = null;
         let audioCodec: AudioCodec | null = null;
@@ -409,7 +406,8 @@ export async function exportClip({
             audioCodec,
             adpcm: adpcmSource !== null,
             withAudio,
-            rotation: videoRotation,
+            rotation: await firstVideoTrack.getRotation(),
+            flip: await firstVideoTrack.getFlip(),
             segmentsCount: segments.length,
             startTripSec: Math.round(startTripSec * 100) / 100,
             endTripSec: Math.round(endTripSec * 100) / 100,
@@ -761,7 +759,7 @@ async function assertVideoCompatibility(
     signal: AbortSignal | undefined,
 ): Promise<void> {
     if (files.length === 0) return;
-    const rotation = await firstTrack.getRotation();
+    const transformationMatrix = await firstTrack.getTransformationMatrix();
     const firstDescription = await comparableVideoDescription(firstTrack, first);
     for (const file of files) {
         signal?.throwIfAborted();
@@ -781,7 +779,7 @@ async function assertVideoCompatibility(
                 config.colorSpace?.matrix !== first.colorSpace?.matrix ||
                 config.colorSpace?.fullRange !== first.colorSpace?.fullRange ||
                 Boolean(config.description) !== Boolean(first.description) ||
-                (await track.getRotation()) !== rotation ||
+                !(await track.getTransformationMatrix()).every((value, i) => value === transformationMatrix[i]) ||
                 !sameDecoderDescription(await comparableVideoDescription(track, config), firstDescription)
             ) {
                 const err = new Error("video formats differ across files; choose medium or low export quality");

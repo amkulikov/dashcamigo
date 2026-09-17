@@ -10,6 +10,7 @@ import {
     MovOutputFormat,
     Output,
     type InputTrack,
+    type VideoTrackMetadata,
 } from "mediabunny";
 import { describe, expect, it, vi } from "vitest";
 import { exportClip, probeAudioUniformity } from "./export.js";
@@ -114,7 +115,7 @@ async function save(files: File[], options: { start?: number; end?: number; with
     return { result, file: await handle.getFile() };
 }
 
-async function remuxFixture(file: File, withPcm8Audio = false): Promise<File> {
+async function remuxFixture(file: File, withPcm8Audio = false, metadata?: VideoTrackMetadata): Promise<File> {
     const input = open(file);
     const target = new BufferTarget();
     const output = new Output({ target, format: withPcm8Audio ? new MovOutputFormat() : new Mp4OutputFormat() });
@@ -125,7 +126,7 @@ async function remuxFixture(file: File, withPcm8Audio = false): Promise<File> {
         const config = await track.getDecoderConfig();
         if (!codec || !config) throw new Error("fixture has no video config");
         const source = new EncodedVideoPacketSource(codec);
-        output.addVideoTrack(source);
+        output.addVideoTrack(source, metadata);
         const audioSource = withPcm8Audio ? new EncodedAudioPacketSource("pcm-u8") : null;
         if (audioSource) output.addAudioTrack(audioSource);
         await output.start();
@@ -147,6 +148,28 @@ async function remuxFixture(file: File, withPcm8Audio = false): Promise<File> {
 }
 
 describe("stream-copy export", () => {
+    it("preserves rotation and reflection when copying a video track", async () => {
+        const file = await remuxFixture(fixture(H264_FIXTURE), false, { rotation: 90, flip: true });
+        const input = open(file);
+        const output = open((await save([file, file])).file);
+        try {
+            const source = (await input.getPrimaryVideoTrack())!;
+            const video = (await output.getPrimaryVideoTrack())!;
+            expect(await source.getFlip()).toBe(true);
+            expect(await video.getTransformationMatrix()).toEqual(await source.getTransformationMatrix());
+            expect((await packets(video)).length).toBe((await packets(source)).length * 2);
+        } finally {
+            input.dispose();
+            output.dispose();
+        }
+    });
+
+    it("rejects joining files with different reflection metadata", async () => {
+        const source = fixture(H264_FIXTURE);
+        const flipped = await remuxFixture(source, false, { flip: true });
+        await expect(save([source, flipped])).rejects.toMatchObject({ name: "IncompatibleVideoConfigError" });
+    });
+
     it.each([
         "./parsers/__fixtures__/juscar/real-anonymized.TS",
         "./parsers/__fixtures__/novatek-ts/real-anonymized.TS",

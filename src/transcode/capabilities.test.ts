@@ -36,6 +36,19 @@ describe("canReencodeH264", () => {
         });
         await expect(canReencodeH264(1920, 1080, 8_000_000)).resolves.toBe(true);
     });
+    it("distinguishes supported and unsupported frame rates at the same size and bitrate", async () => {
+        const checked: number[] = [];
+        vi.stubGlobal("VideoEncoder", {
+            isConfigSupported: async (config: VideoEncoderConfig) => {
+                checked.push(config.framerate!);
+                return { supported: config.framerate === 30 };
+            },
+        });
+        await expect(canReencodeH264(1536, 864, 5_000_000, 30)).resolves.toBe(true);
+        await expect(canReencodeH264(1536, 864, 5_000_000, 60)).resolves.toBe(false);
+        expect(checked).toContain(30);
+        expect(checked).toContain(60);
+    });
 });
 
 // resolveEncodeAudioCodec probes a FIXED config (AUDIO_TARGET_* from types.ts)
@@ -101,5 +114,19 @@ describe("resolveEncodableH264", () => {
             }),
         });
         await expect(resolveEncodableH264(960, 720, 8_000_000)).resolves.toBeNull();
+    });
+    it("keeps the output frame rate throughout bitrate fallback", async () => {
+        const checked: number[] = [];
+        vi.stubGlobal("VideoEncoder", {
+            isConfigSupported: async (config: VideoEncoderConfig) => {
+                checked.push(config.framerate!);
+                return { supported: config.framerate === 60 && config.bitrate! <= 3_000_000 };
+            },
+        });
+        const result = await resolveEncodableH264(1152, 648, 8_000_000, 60);
+        expect(result?.degraded).toBe(true);
+        expect(result?.bitrate).toBeLessThanOrEqual(3_000_000);
+        expect(checked.length).toBeGreaterThan(2);
+        expect(checked.every((fps) => fps === 60)).toBe(true);
     });
 });

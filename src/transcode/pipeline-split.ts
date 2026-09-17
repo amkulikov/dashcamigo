@@ -9,6 +9,7 @@
 //  - if decoder is not open or is past the active segment: swap;
 //  - getSample(localTime) for that tripTime, one composition via drawSplitScreen.
 
+import { resolveOutputFps } from "./frame-rate.js";
 import type { CameraFlip } from "../camera-flip.js";
 import { Input, type VideoSample, VideoSampleSink } from "mediabunny";
 import { createRetryingBlobSource } from "../retrying-blob-source.js";
@@ -50,7 +51,6 @@ import { ensureOverlayFontsReady } from "./overlay-styles.js";
 import { recordsHaveAccel } from "./frame-pos.js";
 import {
     achievedKbps,
-    resolveOutputFps,
     type ActiveAudioPlan,
     applyAudioPlan,
     discardOutputQuietly,

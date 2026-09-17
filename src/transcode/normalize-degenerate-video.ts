@@ -88,9 +88,7 @@ async function normalizeToCleanMp4(file: File, signal?: AbortSignal): Promise<Fi
         // stream-copyable - fall back rather than fail the export.
         const decoderConfig = await track.getDecoderConfig();
         if (!codec || !decoderConfig) return file;
-        // Carry the display-matrix rotation so a rotated source does not open
-        // sideways after the round-trip (mirrors export.ts).
-        const rotation = await track.getRotation();
+        const transformationMatrix = await track.getTransformationMatrix();
 
         const sink = new EncodedPacketSink(track);
         if (!isMatroskaName(file.name)) {
@@ -113,7 +111,7 @@ async function normalizeToCleanMp4(file: File, signal?: AbortSignal): Promise<Fi
         );
         output = new Output({ format: new Mp4OutputFormat({ fastStart: "fragmented" }), target });
         const videoSource = new EncodedVideoPacketSource(codec);
-        output.addVideoTrack(videoSource, { rotation });
+        output.addVideoTrack(videoSource, { transformationMatrix });
         await output.start();
 
         // verifyKeyPackets bitstream-checks the key/delta flag we copy verbatim

@@ -38,10 +38,7 @@ export interface IndexedMp4 {
      * too-high-level streams the browser cannot decode.
      */
     videoCodecString: string | null;
-    /**
-     * MP4 display-matrix rotation. Passed to mediabunny addVideoTrack({rotation})
-     * in export.ts so the trimmed clip opens in the correct orientation.
-     */
+    /** Quarter-turn component of the MP4 display matrix. */
     rotation: Mp4Rotation;
     /**
      * Frame size of the primary video track, in pixels. null when there is no

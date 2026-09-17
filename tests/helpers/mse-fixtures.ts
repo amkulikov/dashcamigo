@@ -12,9 +12,11 @@ import {
     MpegTsOutputFormat,
     Output,
     type EncodedPacket,
+    type VideoTrackMetadata,
 } from "mediabunny";
 
 interface MseFixtureOptions {
+    videoMetadata?: VideoTrackMetadata;
     format?: "mp4" | "matroska" | "mpegts";
     gopDurationSec?: number;
     gopCount?: number;
@@ -54,7 +56,7 @@ export async function createMseFixture(options: MseFixtureOptions = {}): Promise
         }
         if (originalGopDuration <= 0) throw new Error("fixture has no complete gop");
         const videoSource = new EncodedVideoPacketSource(codec);
-        output.addVideoTrack(videoSource);
+        output.addVideoTrack(videoSource, options.videoMetadata);
         const audio = options.audioDurationSec ? await input.getPrimaryAudioTrack() : null;
         const audioCodec = await audio?.getCodec();
         const audioConfig = await audio?.getDecoderConfig();

@@ -36,6 +36,7 @@
 //    (limit ~60 in the decoder queue); forgetting close stalls the decoder.
 //  - canvas - one OffscreenCanvas for the entire exec, reused.
 
+import { resolveOutputFps } from "./frame-rate.js";
 import { hasCameraFlip } from "../camera-flip.js";
 import { Input, VideoSample, VideoSampleSink } from "mediabunny";
 import { createRetryingBlobSource } from "../retrying-blob-source.js";
@@ -66,7 +67,6 @@ import { ensureOverlayFontsReady } from "./overlay-styles.js";
 import { type FramePos, recordsHaveAccel } from "./frame-pos.js";
 import {
     achievedKbps,
-    resolveOutputFps,
     type ActiveAudioPlan,
     consumeMapSnapshot,
     createH264SampleSource,

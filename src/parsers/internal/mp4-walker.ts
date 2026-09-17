@@ -289,9 +289,8 @@ export function fourCCToVideoCodec(fourcc: string): VideoCodec | null {
  *   180°: a=-1 b= 0 c= 0 d=-1
  *   270°: a= 0 b=-1 c=+1 d= 0
  *
- * For non-standard matrices (rare on dashcams; would be a custom rotation or
- * a mirror flip) returns 0 - native <video> renders correctly anyway, and
- * export.ts addVideoTrack({rotation}) only takes 0/90/180/270.
+ * Other transforms return 0 here. Native playback and stream-copy export
+ * preserve the full matrix independently.
  */
 export type Mp4Rotation = 0 | 90 | 180 | 270;
 

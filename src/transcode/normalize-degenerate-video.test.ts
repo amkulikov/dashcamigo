@@ -11,6 +11,8 @@ import {
     type PacketType,
     type Rotation,
     type VideoCodec,
+    type VideoTrackMetadata,
+    type TransformationMatrix,
 } from "mediabunny";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -34,6 +36,7 @@ interface VideoStream {
     // type); no need to import it, it is a global.
     decoderConfig: VideoDecoderConfig;
     rotation: Rotation;
+    transformationMatrix: TransformationMatrix;
     packets: PacketRecord[];
 }
 
@@ -60,18 +63,23 @@ async function readVideoStream(file: File): Promise<VideoStream> {
             });
             packet = await sink.getNextPacket(packet);
         }
-        return { codec, decoderConfig, rotation, packets };
+        return { codec, decoderConfig, rotation, transformationMatrix: await track.getTransformationMatrix(), packets };
     } finally {
         input.dispose();
     }
 }
 
-async function buildVideo(stream: VideoStream, packets: PacketRecord[], name: string): Promise<File> {
+async function buildVideo(
+    stream: VideoStream,
+    packets: PacketRecord[],
+    name: string,
+    metadata?: VideoTrackMetadata,
+): Promise<File> {
     const target = new BufferTarget();
     const isMkv = name.endsWith(".mkv");
     const output = new Output({ format: isMkv ? new MkvOutputFormat() : new Mp4OutputFormat(), target });
     const source = new EncodedVideoPacketSource(stream.codec);
-    output.addVideoTrack(source, { rotation: stream.rotation });
+    output.addVideoTrack(source, { rotation: stream.rotation, ...metadata });
     await output.start();
     let first = true;
     for (const rec of packets) {
@@ -153,7 +161,10 @@ describe("createVideoSourceResolver", () => {
                 degenerate,
                 ...source.packets.slice(insertAt),
             ];
-            const dirtyFile = await buildVideo(source, withDegenerate, `dirty.${extension}`);
+            const dirtyFile = await buildVideo(source, withDegenerate, `dirty.${extension}`, {
+                rotation: 90,
+                flip: true,
+            });
 
             const dirty = await readVideoStream(dirtyFile);
             expect(dirty.packets.some((p) => p.data.byteLength <= DEGENERATE_VIDEO_PACKET_MAX_BYTES)).toBe(true);
@@ -165,6 +176,7 @@ describe("createVideoSourceResolver", () => {
             await expectValidMp4(clean);
 
             const out = await readVideoStream(clean);
+            expect(out.transformationMatrix).toEqual(dirty.transformationMatrix);
             // The degenerate packet is gone; every real frame survives.
             expect(out.packets.length).toBe(source.packets.length);
             expect(out.packets.every((p) => p.data.byteLength > DEGENERATE_VIDEO_PACKET_MAX_BYTES)).toBe(true);

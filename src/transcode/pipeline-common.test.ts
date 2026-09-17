@@ -328,8 +328,9 @@ describe("joinAllOrThrowFirst", () => {
 });
 
 describe("frameNeedsNoComposite", () => {
-    const frame = (over: Partial<Record<string, number>> = {}) => ({
+    const frame = (over: Partial<Parameters<typeof frameNeedsNoComposite>[0]> = {}) => ({
         rotation: 0,
+        flip: false,
         codedWidth: 1920,
         codedHeight: 1080,
         displayWidth: 1920,
@@ -349,6 +350,10 @@ describe("frameNeedsNoComposite", () => {
     it("rejects a rotated source", () => {
         expect(frameNeedsNoComposite(frame({ rotation: 90 }), 1920, 1080)).toBe(false);
         expect(frameNeedsNoComposite(frame({ rotation: 180 }), 1920, 1080)).toBe(false);
+    });
+
+    it("rejects reflection stored in the source metadata", () => {
+        expect(frameNeedsNoComposite(frame({ flip: true }), 1920, 1080)).toBe(false);
     });
 
     it("rejects a non-square pixel aspect", () => {
