@@ -61411,15 +61411,32 @@
       ],
       "layout": {
         "icon-image": [
-          "concat",
+          "coalesce",
           [
-            "get",
-            "network"
+            "image",
+            [
+              "concat",
+              [
+                "get",
+                "network"
+              ],
+              "_",
+              [
+                "get",
+                "ref_length"
+              ]
+            ]
           ],
-          "_",
           [
-            "get",
-            "ref_length"
+            "image",
+            [
+              "concat",
+              "road_",
+              [
+                "get",
+                "ref_length"
+              ]
+            ]
           ]
         ],
         "icon-rotation-alignment": "viewport",
@@ -61521,15 +61538,32 @@
       ],
       "layout": {
         "icon-image": [
-          "concat",
+          "coalesce",
           [
-            "get",
-            "network"
+            "image",
+            [
+              "concat",
+              [
+                "get",
+                "network"
+              ],
+              "_",
+              [
+                "get",
+                "ref_length"
+              ]
+            ]
           ],
-          "_",
           [
-            "get",
-            "ref_length"
+            "image",
+            [
+              "concat",
+              "road_",
+              [
+                "get",
+                "ref_length"
+              ]
+            ]
           ]
         ],
         "icon-rotation-alignment": "viewport",

@@ -125,6 +125,41 @@ describe("shared OpenMapTiles cartography", () => {
         }
     });
 
+    it.each(["light", "dark", "neon"])(
+        "resolves every supported road shield against the sprite atlas in %s",
+        (theme) => {
+            const style = loadStyle(theme);
+            for (const scale of ["", "@2x"]) {
+                const atlas: unknown = JSON.parse(
+                    readFileSync(join(__dirname, `../../public/styles/sprite/sprite${scale}.json`), "utf8"),
+                );
+                if (!atlas || typeof atlas !== "object") throw new Error("sprite atlas is invalid");
+                const images = Object.keys(atlas);
+                for (const [id, network] of [
+                    ["highway-shield-non-us", "de:national"],
+                    ["highway-shield-us-interstate", "us-interstate"],
+                    ["road_shield_us", "us-highway"],
+                    ["road_shield_us", "us-state"],
+                ] as const) {
+                    const layer = style.layers.find((candidate) => candidate.id === id);
+                    if (layer?.type !== "symbol") throw new Error("road shield missing");
+                    const expression = createExpression(layer.layout?.["icon-image"], "road shield");
+                    if (expression.result !== "success") throw new Error("road shield expression is invalid");
+                    for (let length = 1; length <= 6; length++) {
+                        const feature = {
+                            type: 2 as const,
+                            properties: { network, ref: "1".repeat(length), ref_length: length },
+                        };
+                        expect(featureFilter(layer.filter, layer.id).filter({ zoom: 16 }, feature)).toBe(true);
+                        const image = String(expression.value.evaluate({ zoom: 16 }, feature, {}, undefined, images));
+                        expect(images, `${scale} ${network} reference length ${length}: ${image}`).toContain(image);
+                        if (length <= 3 && network !== "de:national") expect(image).toBe(`${network}_${length}`);
+                    }
+                }
+            }
+        },
+    );
+
     it.each(["light", "dark", "neon"])("renders bridges above surface roads and tunnels in %s", (theme) => {
         const style = loadStyle(theme);
         const tunnel = matchingRoads(style, { class: "motorway", brunnel: "tunnel", layer: -1, ramp: 0 });
