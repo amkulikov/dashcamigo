@@ -36,6 +36,7 @@
 //    (limit ~60 in the decoder queue); forgetting close stalls the decoder.
 //  - canvas - one OffscreenCanvas for the entire exec, reused.
 
+import { hasCameraFlip } from "../camera-flip.js";
 import { Input, VideoSample, VideoSampleSink } from "mediabunny";
 import { createRetryingBlobSource } from "../retrying-blob-source.js";
 import { getInputTimeOrigin } from "../media-time.js";
@@ -179,7 +180,12 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
     // half of the gate is here; frameNeedsNoComposite checks each frame itself,
     // so a resize, a rotated source or a non-square pixel aspect still routes
     // through the canvas.
-    const noOverlayLayer = !output.crop && !output.watermarkAnchor && !anyOverlay && !output.blurRegions?.length;
+    const noOverlayLayer =
+        !hasCameraFlip(output.flip) &&
+        !output.crop &&
+        !output.watermarkAnchor &&
+        !anyOverlay &&
+        !output.blurRegions?.length;
     // Encoder config shared with pipeline-split (one place for the load-bearing
     // hardwareAcceleration rationale). The sample flavour is a superset of the
     // canvas one: composited frames are wrapped in a VideoSample here, which is
@@ -227,10 +233,6 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
         formats: VIDEO_INPUT_FORMATS,
     });
     try {
-        // Turns a degenerate-packet MKV into a clean stream-copy MP4 for the video
-        // decode path (identity for every other container). One instance per export;
-        // memoizes per File so a multi-segment range remuxes once. Video only - audio
-        // keeps reading the original file below.
         const videoResolver = createVideoSourceResolver(signal);
         if (output.withAudio) {
             // Probe all segments: heterogeneous audio (e.g. an original clip spliced
@@ -372,7 +374,7 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
                 const regionBlurs = output.blurRegions?.length ? resolveRegionBlurs(p.contentSec) : null;
                 // Composition. drawMain does keep-aspect-fit internally: output.crop=null
                 // fits the whole frame; a crop rect fits that region.
-                drawMain(ctx, p.sample, output.crop, widthPx, heightPx, renderOpts, regionBlurs);
+                drawMain(ctx, p.sample, output.crop, widthPx, heightPx, renderOpts, regionBlurs, output.flip);
                 if (p.framePos && overlays) {
                     drawTelemetryOverlays(ctx, widthPx, heightPx, overlays, p.framePos);
                     // No fix -> no snapshot was issued; hold the slot with the
@@ -437,10 +439,7 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
                 // assigned only from inside one stays narrowed to null for the finally.
                 const decodeAhead: { frame: PendingFrame | null } = { frame: null };
 
-                // Video source: a clean stream-copy MP4 for a degenerate-packet MKV,
-                // else seg.file unchanged. Audio always reads the ORIGINAL seg.file -
-                // the normalized copy is video-only, and the audio probe/plan above
-                // was taken from the original.
+                // Normalized copies contain video only; audio keeps the original file.
                 const videoFile = await videoResolver.resolve(seg.file);
                 const videoRedirected = videoFile !== seg.file;
                 // segIdx 0 reuses firstInput for video only when NOT redirected

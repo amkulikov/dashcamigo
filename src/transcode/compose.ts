@@ -4,10 +4,11 @@
 // and reusable (the Simple Modal crop/split preview calls the same drawMain/
 // drawSplitScreen on a live canvas).
 //
-// Coordinate system: everything in output pixels (outputW × outputH). Crop
-// rect is in normalized source coordinates [0..1]; PiP rect and split-layout
-// slots are in normalized output coordinates [0..1].
+// Crops use normalized visible-image coordinates (after camera reflection).
+// Privacy masks use normalized source coordinates; layout slots use normalized
+// output coordinates. Drawing uses output pixels (outputW × outputH).
 
+import { type CameraFlip, applyCanvasFlip, flipCropRect, flipPixelRect } from "../camera-flip.js";
 import type { VideoSample } from "mediabunny";
 
 import type { ResolvedRegionBlur } from "../blur-regions.js";
@@ -136,7 +137,7 @@ export function fillBlurredCover(
     destCtx.restore();
 }
 
-/** Rectangle in normalized source coordinates (0..1). */
+/** Rectangle in normalized image coordinates (0..1). */
 export interface CropRect {
     xPct: number;
     yPct: number;
@@ -503,6 +504,7 @@ export function paintRegionBlursForView(
     dw: number,
     dh: number,
     helper: RegionBlurHelper | null,
+    flip?: Readonly<CameraFlip>,
 ): void {
     for (const rb of regionBlurs) {
         if (rb.style !== "fill") {
@@ -511,16 +513,18 @@ export function paintRegionBlursForView(
                     ? snapRegionToMosaicGrid(rb.rect, sourceW, sourceH, sx, sy, sw, sh)
                     : softBlurRegionGrid(rb.rect, sourceW, sourceH, sx, sy, sw, sh);
             if (!snapped) continue;
-            const patch = mapRegionRectToDest(snapped.rect, sourceW, sourceH, sx, sy, sw, sh, dx, dy, dw, dh);
+            let patch = mapRegionRectToDest(snapped.rect, sourceW, sourceH, sx, sy, sw, sh, dx, dy, dw, dh);
             if (!patch) continue;
+            patch = flipPixelRect(patch, { x: dx, y: dy, w: dw, h: dh }, flip);
             paintRegionBlur(ctx, ctx.canvas, patch, patch, rb.style, helper, {
                 cols: snapped.cols,
                 rows: snapped.rows,
             });
             continue;
         }
-        const patch = mapRegionRectToDest(rb.rect, sourceW, sourceH, sx, sy, sw, sh, dx, dy, dw, dh);
+        let patch = mapRegionRectToDest(rb.rect, sourceW, sourceH, sx, sy, sw, sh, dx, dy, dw, dh);
         if (!patch) continue;
+        patch = flipPixelRect(patch, { x: dx, y: dy, w: dw, h: dh }, flip);
         paintRegionBlur(ctx, ctx.canvas, patch, patch, rb.style, helper);
     }
 }
@@ -588,7 +592,9 @@ export function drawMain(
     outputH: number,
     opts?: RenderFillOpts,
     regionBlurs?: readonly ResolvedRegionBlur[] | null,
+    flip?: Readonly<CameraFlip>,
 ): void {
+    if (crop) crop = flipCropRect(crop, flip);
     const sourceW = sample.displayWidth;
     const sourceH = sample.displayHeight;
     let sx: number;
@@ -611,11 +617,19 @@ export function drawMain(
     // (the common 16:9 source -> 16:9 output) the fit covers the frame, so both
     // the full-canvas black fill and the far pricier blurred cover would be
     // overpainted whole - on every frame of the run.
+    ctx.save();
+    applyCanvasFlip(ctx, { x: 0, y: 0, w: outputW, h: outputH }, flip);
     if (!fitHidesBackdrop(fit, outputW, outputH, sample.format)) {
         fillBackdrop(ctx, sample, sourceW, sourceH, 0, 0, outputW, outputH, opts, regionBlurs);
     }
     sample.draw(ctx, sx, sy, sw, sh, fit.dx, fit.dy, fit.dw, fit.dh);
+    ctx.restore();
     if (regionBlurs?.length) {
+        const dest = flipPixelRect(
+            { x: fit.dx, y: fit.dy, w: fit.dw, h: fit.dh },
+            { x: 0, y: 0, w: outputW, h: outputH },
+            flip,
+        );
         paintRegionBlursForView(
             ctx,
             regionBlurs,
@@ -625,11 +639,12 @@ export function drawMain(
             sy,
             sw,
             sh,
-            fit.dx,
-            fit.dy,
+            dest.x,
+            dest.y,
             fit.dw,
             fit.dh,
             opts?.regionBlurHelper ?? null,
+            flip,
         );
     }
 }
@@ -855,6 +870,7 @@ export function drawSplitScreen(
     slotCrops?: ReadonlyArray<CropRect | null>,
     opts?: RenderFillOpts,
     slotRegionBlurs?: ReadonlyArray<readonly ResolvedRegionBlur[] | null>,
+    slotFlips?: ReadonlyArray<Readonly<CameraFlip>>,
 ): void {
     if (samples.length !== slots.length) {
         throw new Error(`split-screen: expected ${slots.length} samples, got ${samples.length}`);
@@ -874,7 +890,9 @@ export function drawSplitScreen(
         if (!sample) continue;
         const sourceW = sample.displayWidth;
         const sourceH = sample.displayHeight;
-        const customCrop = slotCrops?.[i] ?? null;
+        const flip = slotFlips?.[i];
+        const crop = slotCrops?.[i];
+        const customCrop = crop ? flipCropRect(crop, flip) : null;
         let sx: number;
         let sy: number;
         let sw: number;
@@ -900,6 +918,11 @@ export function drawSplitScreen(
         const regionBlurs = slotRegionBlurs?.[i];
         const paintSlotRegionBlurs = (): void => {
             if (!regionBlurs?.length) return;
+            const dest = flipPixelRect(
+                { x: drawX, y: drawY, w: fit.dw, h: fit.dh },
+                { x: dx, y: dy, w: dw, h: dh },
+                flip,
+            );
             paintRegionBlursForView(
                 ctx,
                 regionBlurs,
@@ -909,11 +932,12 @@ export function drawSplitScreen(
                 sy,
                 sw,
                 sh,
-                drawX,
-                drawY,
+                dest.x,
+                dest.y,
                 fit.dw,
                 fit.dh,
                 opts?.regionBlurHelper ?? null,
+                flip,
             );
         };
         if (slot.rounded) {
@@ -926,16 +950,22 @@ export function drawSplitScreen(
             // (WebCodecs encode = Chromium 94). roundRectPath calls beginPath.
             roundRectPath(ctx, dx, dy, dw, dh, radius);
             ctx.clip();
+            ctx.save();
+            applyCanvasFlip(ctx, { x: dx, y: dy, w: dw, h: dh }, flip);
             fillBackdrop(ctx, sample, sourceW, sourceH, dx, dy, dw, dh, opts, regionBlurs);
             sample.draw(ctx, sx, sy, sw, sh, drawX, drawY, fit.dw, fit.dh);
+            ctx.restore();
             // Inside the clip: a patch on a rounded corner keeps the corner.
             paintSlotRegionBlurs();
             ctx.restore();
         } else {
+            ctx.save();
+            applyCanvasFlip(ctx, { x: dx, y: dy, w: dw, h: dh }, flip);
             if (!fitHidesBackdrop(fit, dw, dh, sample.format)) {
                 fillBackdrop(ctx, sample, sourceW, sourceH, dx, dy, dw, dh, opts, regionBlurs);
             }
             sample.draw(ctx, sx, sy, sw, sh, drawX, drawY, fit.dw, fit.dh);
+            ctx.restore();
             paintSlotRegionBlurs();
         }
     }

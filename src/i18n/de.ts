@@ -14,6 +14,11 @@ export const deDict = {
     "topbar.langMenu.title": "Sprache",
     "topbar.more": "Mehr",
     "topbar.more.title": "Weitere Aktionen",
+    "player.camera.settings": "Einstellungen: {camera}",
+    "player.camera.flip.horizontal": "Horizontal spiegeln",
+    "player.camera.flip.vertical": "Vertikal spiegeln",
+    "player.camera.flip.hint": "Gilt für Wiedergabe und Export. Wird für diese Kamera in diesem Browser gespeichert.",
+
     "player.more": "Weitere Steuerungen",
 
     "sidebar.cta.label": "Ordner hinzufügen",

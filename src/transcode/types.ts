@@ -3,6 +3,7 @@
 // - this is a viewer, not an editor. Extend only if multi-segment splicing
 // from a single trip is ever needed.
 
+import type { CameraFlip } from "../camera-flip.js";
 import type { BlurRegion } from "../blur-regions.js";
 import type { Channel, GpsRecord } from "../parsers/types.js";
 import type { Trip } from "../trips.js";
@@ -49,8 +50,9 @@ interface TranscodeOutput {
     aspect: AspectId;
     /** Bitrate in bps. null = use default from pixel-area formula (resolveBitrate). */
     bitrate: number | null;
-    /** Crop in normalized source coordinates (0..1). null = full frame (no crop). */
+    /** Crop in normalized reflected-image coordinates (0..1). null = full frame. */
     crop: CropRect | null;
+    flip?: CameraFlip;
     /** Watermark corner. null = do not apply. */
     watermarkAnchor: WatermarkAnchor | null;
     /** Whether to include an audio track. */

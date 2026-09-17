@@ -121,6 +121,7 @@ describe("captureCurrentFrame privacy blur", () => {
             100,
             60,
             expect.anything(),
+            { horizontal: false, vertical: false },
         );
         expect(mocks.downloadBlob).toHaveBeenCalledOnce();
     });

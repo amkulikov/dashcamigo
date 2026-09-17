@@ -14,6 +14,8 @@
 // exportPanelState. All UI inputs persist in exportPanelState; this module
 // only reads.
 
+import { hasCameraFlip } from "../camera-flip.js";
+import { cameraFlipForChannel } from "./camera-flip-pref.js";
 import { showSaveFilePicker } from "native-file-system-adapter";
 
 // export.js / gpmd-inject.js / transcode-capabilities carry value imports of
@@ -194,6 +196,7 @@ function streamCopyEligibleConfig(): boolean {
         exportPanelState.outputPresetId === "source" &&
         state.composition.channelOrder.length <= 1 &&
         !state.composition.perSlotCrops[0] &&
+        !state.composition.channelOrder.some((ch) => hasCameraFlip(cameraFlipForChannel(ch))) &&
         exportPanelState.letterboxFill === "black" &&
         exportPanelState.speedFactor === 1 &&
         !anyOverlayEnabled() &&
@@ -840,6 +843,7 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
     // layout or blur edit from the future leak into this already-started run
     // (in the worst case re-enabling stream-copy and shipping raw frames).
     const channelOrder = [...state.composition.channelOrder];
+    const slotFlips = channelOrder.map((ch) => ({ ...cameraFlipForChannel(ch, trip) }));
     const channel = channelOrder[0] ?? mainChannel();
     const layout = state.composition.layout;
     const slotCrops = state.composition.perSlotCrops.map((crop) => (crop ? { ...crop } : null));
@@ -867,6 +871,7 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
         outputPresetId === "source" &&
         channelOrder.length <= 1 &&
         !slotCrops[0] &&
+        !slotFlips.some(hasCameraFlip) &&
         letterboxFill === "black" &&
         speedFactor === 1 &&
         overlays === null &&
@@ -1224,6 +1229,7 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
                             withAudio: reencodeAudio,
                             speedFactor,
                             slotCrops,
+                            slotFlips,
                             overlayPositions: slotPipPositions,
                             slotPipScales,
                             letterboxFill,
@@ -1252,6 +1258,7 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
                             aspect: dims.aspect,
                             bitrate,
                             crop: slotCrops[0] ?? null,
+                            flip: slotFlips[0],
                             watermarkAnchor,
                             withAudio: reencodeAudio,
                             speedFactor,

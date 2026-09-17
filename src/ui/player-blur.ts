@@ -12,7 +12,7 @@
 //
 // Geometry: regions store rects in normalized source coords. In export-mode a
 // tile shows either the full source frame (contain-fit) or, with a crop set,
-// the crop result (player-crop owns video.style.transform/clip-path) - both
+// the crop result (player-crop owns the view transform and clip-path) - both
 // reduce to "source view rect fitted into a dest rect", which is exactly the
 // mapping mapRegionRectToDest implements. While a tile is in crop-editing the
 // blur UI on it is hidden (the crop editor's drag view breaks the mapping and
@@ -22,6 +22,8 @@
 // a paused preview. Listeners cover both preload slots so promotion preserves
 // redraws. No logging here - hot path.
 
+import { type CameraFlip, applyCanvasFlip, flipCropRect, flipPixelRect } from "../camera-flip.js";
+import { cameraFlipForChannel } from "./camera-flip-pref.js";
 import { t } from "../i18n/index.js";
 import type { Channel } from "../parsers/types.js";
 import {
@@ -280,6 +282,7 @@ function destroyTileUi(ui: TileUi): void {
  *  the view in the tile (see player-crop's resultContentRect). Null when the
  *  video has no dimensions yet. */
 interface TileMapping {
+    flip: Readonly<CameraFlip>;
     vw: number;
     vh: number;
     view: CropRect;
@@ -301,12 +304,13 @@ function tileMapping(ch: Channel, width?: number, height?: number): TileMapping 
     };
     const viewAspect = (v.videoWidth / v.videoHeight) * (crop.wPct / Math.max(1e-6, crop.hPct));
     const dest = containRect(viewAspect, tileWidth, tileHeight);
-    return { vw: v.videoWidth, vh: v.videoHeight, view: crop, dest };
+    const flip = cameraFlipForChannel(ch);
+    return { vw: v.videoWidth, vh: v.videoHeight, view: flipCropRect(crop, flip), dest, flip };
 }
 
 /** Region rect (normalized source) -> tile px, honoring the crop view. */
 function regionRectToTile(m: TileMapping, rect: CropRect): { x: number; y: number; w: number; h: number } | null {
-    return mapRegionRectToDest(
+    const patch = mapRegionRectToDest(
         rect,
         m.vw,
         m.vh,
@@ -319,6 +323,7 @@ function regionRectToTile(m: TileMapping, rect: CropRect): { x: number; y: numbe
         m.dest.w,
         m.dest.h,
     );
+    return patch ? flipPixelRect(patch, m.dest, m.flip) : null;
 }
 
 /** Tile px point -> normalized source coords (clamped to the visible view). */
@@ -327,7 +332,10 @@ function tilePointToSource(ch: Channel, px: number, py: number): { x: number; y:
     if (!m) return null;
     const fx = Math.max(0, Math.min(1, (px - m.dest.x) / m.dest.w));
     const fy = Math.max(0, Math.min(1, (py - m.dest.y) / m.dest.h));
-    return { x: m.view.xPct + fx * m.view.wPct, y: m.view.yPct + fy * m.view.hPct };
+    return {
+        x: m.view.xPct + (m.flip.horizontal ? 1 - fx : fx) * m.view.wPct,
+        y: m.view.yPct + (m.flip.vertical ? 1 - fy : fy) * m.view.hPct,
+    };
 }
 
 // --- preview loop ------------------------------------------------------------
@@ -404,6 +412,7 @@ function paintTile(ch: Channel, ui: TileUi, regions: readonly BlurRegion[]): voi
         ctx.rect(0, 0, tileWidth, tileHeight);
         ctx.rect(mapping.dest.x, mapping.dest.y, mapping.dest.w, mapping.dest.h);
         ctx.clip("evenodd");
+        applyCanvasFlip(ctx, { x: 0, y: 0, w: tileWidth, h: tileHeight }, mapping.flip);
         fillBlurredCover(
             ctx,
             v,
@@ -460,6 +469,8 @@ function paintTile(ch: Channel, ui: TileUi, regions: readonly BlurRegion[]): voi
         }
         const patchTileRect = patchRect === rect ? tileRect : mapping && regionRectToTile(mapping, patchRect);
         if (patchTileRect) {
+            ctx.save();
+            applyCanvasFlip(ctx, patchTileRect, cameraFlipForChannel(ch));
             paintRegionBlur(
                 ctx,
                 v,
@@ -474,6 +485,7 @@ function paintTile(ch: Channel, ui: TileUi, regions: readonly BlurRegion[]): voi
                 previewHelper,
                 grid,
             );
+            ctx.restore();
         }
         if (box) {
             box.hidden = false;
@@ -561,7 +573,8 @@ function editBoxWithKeyboard(region: BlurRegion, event: KeyboardEvent): void {
     const current = regionRectAt(region, frame.contentSec);
     if (!current) return;
     const step = 0.005;
-    const next = { ...current };
+    const flip = cameraFlipForChannel(region.channel);
+    const next = flipCropRect(current, flip);
     if (event.shiftKey) {
         if (event.key === "ArrowLeft") next.wPct = Math.max(MIN_REGION, next.wPct - step);
         if (event.key === "ArrowRight") next.wPct = Math.min(1 - next.xPct, next.wPct + step);
@@ -573,7 +586,7 @@ function editBoxWithKeyboard(region: BlurRegion, event: KeyboardEvent): void {
         if (event.key === "ArrowUp") next.yPct = Math.max(0, next.yPct - step);
         if (event.key === "ArrowDown") next.yPct = Math.min(1 - next.hPct, next.yPct + step);
     }
-    commitRect(region, next, frame);
+    commitRect(region, flipCropRect(next, flip), frame);
 }
 
 function pauseBlurVideos(): void {
@@ -613,6 +626,7 @@ function attachBoxMoveDrag(region: BlurRegion, el: HTMLDivElement): void {
             if (!frame) return false;
             base = regionRectAt(region, frame.contentSec);
             if (!base) return false;
+            base = flipCropRect(base, cameraFlipForChannel(region.channel));
             startX = e.clientX;
             startY = e.clientY;
             e.preventDefault();
@@ -631,7 +645,7 @@ function attachBoxMoveDrag(region: BlurRegion, el: HTMLDivElement): void {
             const dy = ((e.clientY - startY) / m.dest.h) * m.view.hPct;
             const xPct = Math.max(0, Math.min(1 - base.wPct, base.xPct + dx));
             const yPct = Math.max(0, Math.min(1 - base.hPct, base.yPct + dy));
-            commitRect(region, { ...base, xPct, yPct }, frame);
+            commitRect(region, flipCropRect({ ...base, xPct, yPct }, m.flip), frame);
         },
     });
 }
@@ -649,6 +663,7 @@ function attachBoxHandleDrag(region: BlurRegion, handle: HTMLElement, corner: "t
             if (!frame) return false;
             base = regionRectAt(region, frame.contentSec);
             if (!base) return false;
+            base = flipCropRect(base, cameraFlipForChannel(region.channel));
             startX = e.clientX;
             startY = e.clientY;
             e.preventDefault();
@@ -679,7 +694,7 @@ function attachBoxHandleDrag(region: BlurRegion, handle: HTMLElement, corner: "t
             } else {
                 hPct = Math.min(1 - yPct, Math.max(MIN_REGION, hPct + dy));
             }
-            commitRect(region, { xPct, yPct, wPct, hPct }, frame);
+            commitRect(region, flipCropRect({ xPct, yPct, wPct, hPct }, m.flip), frame);
         },
     });
 }
@@ -848,10 +863,10 @@ function finishDraw(
         };
     } else {
         rect = {
-            xPct: a.x,
-            yPct: a.y,
-            wPct: Math.max(MIN_REGION, b.x - a.x),
-            hPct: Math.max(MIN_REGION, b.y - a.y),
+            xPct: Math.min(a.x, b.x),
+            yPct: Math.min(a.y, b.y),
+            wPct: Math.max(MIN_REGION, Math.abs(b.x - a.x)),
+            hPct: Math.max(MIN_REGION, Math.abs(b.y - a.y)),
         };
     }
     const now = frame.contentSec;

@@ -3,6 +3,8 @@
 // Filename: dashcamigo_YYYYMMDD_HHMMSS_frame.jpg on the display clock (camera
 // clock when known - matches the trip headers in the sidebar).
 
+import { applyCanvasFlip, hasCameraFlip } from "../camera-flip.js";
+import { cameraFlipForChannel } from "./camera-flip-pref.js";
 import { resolveRegionBlursAt } from "../blur-regions.js";
 import { downloadBlob } from "../download.js";
 import { t } from "../i18n/index.js";
@@ -180,8 +182,14 @@ export async function captureCurrentFrame(
         log.warn("capture skipped: 2d context unavailable", ctxLog);
         return;
     }
+    const flip = cameraFlipForChannel(ch, sourceTrip);
     try {
+        if (hasCameraFlip(flip)) {
+            ctx.save();
+            applyCanvasFlip(ctx, { x: 0, y: 0, w: canvas.width, h: canvas.height }, flip);
+        }
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        if (hasCameraFlip(flip)) ctx.restore();
     } catch (e) {
         // SecurityError if video is tainted (cross-origin without CORS) - our
         // blob: src should never trigger this, but log defensively.
@@ -209,6 +217,7 @@ export async function captureCurrentFrame(
                 canvas.width,
                 canvas.height,
                 createRegionBlurHelper(),
+                flip,
             );
         }
     }

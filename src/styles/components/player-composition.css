@@ -20,6 +20,96 @@
 
 /* === Output letterbox === */
 
+.video-tile > video:not(.tile-blur-bg) {
+    transform-origin: 0 0;
+    transform: var(--video-view-transform, translate(0)) var(--camera-flip, translate(0));
+}
+
+/* The tile only exposes a small overflow affordance; its popover is a pair
+   of axis buttons, so camera setup never competes with playback controls. */
+.camera-settings-button {
+    position: absolute;
+    top: var(--dc-space-1);
+    right: 34px;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--dc-radius-sm);
+    background: var(--bg-elev);
+    color: var(--fg-dim);
+    cursor: pointer;
+    opacity: 0;
+}
+
+.video-tile:hover .camera-settings-button,
+.video-tile:focus-within .camera-settings-button,
+.camera-flipped .camera-settings-button {
+    opacity: 0.85;
+}
+
+.camera-flipped .camera-settings-button {
+    color: var(--accent);
+}
+
+.video-grid[data-channel-count="1"] .camera-settings-button,
+body.export-mode .camera-settings-button {
+    right: var(--dc-space-1);
+}
+
+@media (hover: none) {
+    .camera-settings-button {
+        opacity: 0.85;
+        width: 28px;
+        height: 28px;
+    }
+}
+
+.camera-settings-menu {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-md);
+    background: var(--bg-elev);
+    color: var(--fg-dim);
+    box-shadow: var(--dc-shadow-popup);
+}
+
+.camera-settings-menu:popover-open {
+    display: flex;
+    gap: 2px;
+}
+
+.camera-settings-menu button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 30px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--dc-radius-sm);
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+
+.camera-settings-menu button[aria-checked="true"] {
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    color: var(--accent);
+}
+
+.camera-settings-menu button:hover,
+.camera-settings-menu button:focus-visible {
+    background: var(--bg-hover);
+}
+
 body.export-mode .video-frame {
     display: flex;
     align-items: center;
@@ -82,7 +172,7 @@ body.export-mode .video-grid::after {
     /* scale over-fills to hide the transparent edge bleed CSS blur leaves at
        the element borders. */
     filter: blur(16px);
-    transform: scale(1.08);
+    transform: scale(1.08) scale(var(--camera-flip-x, 1), var(--camera-flip-y, 1));
     z-index: -1;
     pointer-events: none;
     display: none;

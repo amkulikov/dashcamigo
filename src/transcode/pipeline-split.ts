@@ -9,6 +9,7 @@
 //  - if decoder is not open or is past the active segment: swap;
 //  - getSample(localTime) for that tripTime, one composition via drawSplitScreen.
 
+import type { CameraFlip } from "../camera-flip.js";
 import { Input, type VideoSample, VideoSampleSink } from "mediabunny";
 import { createRetryingBlobSource } from "../retrying-blob-source.js";
 import { getInputTimeOrigin } from "../media-time.js";
@@ -92,12 +93,13 @@ interface TranscodeSplitOutput {
     /** Audio from slot 0 (master). */
     withAudio: boolean;
     /**
-     * Custom crop per slot. length must match the layout's slot count.
+     * Crop in normalized reflected-image coordinates per slot; length matches the slot count.
      * null in slotCrops[i] means "use the full frame" - drawSplitScreen fits
      * it into the slot with keep-aspect-fit (letterbox/pillarbox when slot and
      * source have different aspect ratios).
      */
     slotCrops?: (CropRect | null)[];
+    slotFlips?: CameraFlip[];
     /**
      * Custom PiP overlay positions in output coords (0..1, top-left corner).
      * Applied only in pip-layouts (pip2/pip3/pip4) and only for overlay slots
@@ -156,10 +158,6 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
         sliceTripChannelForRange(source.trip, ch, source.startTripSec, source.endTripSec),
     );
 
-    // Turns a degenerate-packet MKV slot source into a clean stream-copy MP4 for
-    // the video decode path (identity for every other container). Audio is read
-    // from the original file separately below, so only the slot VIDEO input is
-    // redirected. Shared across slots; memoizes per File.
     const videoResolver = createVideoSourceResolver(signal);
 
     // Master segments for audio and timing - slot 0 (user-selected primary).
@@ -475,9 +473,7 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
             // Swap segment.
             await disposeSlot(rt);
             const seg = segs[activeIdx]!;
-            // Video source: a clean stream-copy MP4 for a degenerate-packet MKV, else
-            // seg.file unchanged. This slot input feeds only the video decode; the
-            // audio loop below reads the original seg.file through its own Input.
+            // Normalized copies contain video only; audio keeps the original file.
             const videoFile = await videoResolver.resolve(seg.file);
             const input = new Input({
                 source: createRetryingBlobSource(videoFile, signal),
@@ -685,6 +681,7 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
                         output.slotCrops,
                         renderOpts,
                         slotRegionBlurs,
+                        output.slotFlips,
                     );
                     if (framePos && overlays) {
                         drawTelemetryOverlays(ctx, widthPx, heightPx, overlays, framePos);

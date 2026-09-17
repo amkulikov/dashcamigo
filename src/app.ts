@@ -1,3 +1,4 @@
+import { initPlayerCameraFlip } from "./ui/player-camera-flip.js";
 import { initMobileViewNav } from "./ui/mobile-view-nav.js";
 // Frontend entry point. Vanilla DOM, no framework.
 //
@@ -495,6 +496,7 @@ initExportTrimBar({ getTripCurrentTime, seekThenPlay });
 initTimelineRange();
 initPlayerOverlays();
 initPlayerCrop();
+initPlayerCameraFlip();
 initPlayerBlur();
 // A regroup that drops a blur zone (merge/split changed its file set) must also
 // abort that zone's in-flight Follow pass, or the orphaned pass keeps holding

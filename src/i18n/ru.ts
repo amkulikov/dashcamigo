@@ -21,6 +21,11 @@ export const ruDict = {
     "topbar.langMenu.title": "Язык интерфейса",
     "topbar.more": "Ещё",
     "topbar.more.title": "Дополнительные действия",
+    "player.camera.settings": "Настройки: {camera}",
+    "player.camera.flip.horizontal": "Отразить по горизонтали",
+    "player.camera.flip.vertical": "Отразить по вертикали",
+    "player.camera.flip.hint": "Для просмотра и экспорта. Сохраняется для этой камеры в этом браузере.",
+
     "player.more": "Другие действия",
 
     "sidebar.cta.label": "Добавить папку",

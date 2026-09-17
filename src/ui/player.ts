@@ -1,3 +1,4 @@
+import { syncCameraFlips } from "./player-camera-flip.js";
 // Player core: playback pipeline + multichannel grid + initPlayer composition
 // over the player-* subsystem modules. The subsystems (volume, speed, loop,
 // fullscreen, capture, metrics, zoom, scrubber, hotkeys, tile-input,
@@ -1201,6 +1202,7 @@ function reattachBackendsAtOffset(frame: TripFrame, offsetInFrame: number, wasPl
  * <video>.src / backends - only syncFrameToGrid attaches/disposes media.
  */
 function applyTileLayoutRoles(frame: TripFrame, activeCh: Channel, masterOffsetSec = activePlayer().currentTime): void {
+    syncCameraFlips();
     const isFocus = isFocusLayout(state.composition.layout);
     const channelOrder = state.composition.channelOrder;
     // Grid sizing follows the COMPOSITION (visible slots), not the frame's raw

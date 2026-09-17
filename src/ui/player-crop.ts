@@ -27,9 +27,11 @@
 // on <video> (spec/impl target <img>; Chromium leaves the video uncropped), so
 // it set the property but never rendered the crop. transform + clip-path work
 // on video (same mechanism as the digital-zoom feature). Because both write
-// video.style.transform, digital zoom is suspended in export mode (player-zoom
+// --video-view-transform, digital zoom is suspended in export mode (player-zoom
 // bails on state.exportModeOpen) - the crop preview owns the transform here.
 
+import { flipCropRect } from "../camera-flip.js";
+import { cameraFlipForChannel } from "./camera-flip-pref.js";
 import { t } from "../i18n/index.js";
 import type { Channel } from "../parsers/types.js";
 import { computeAutoCrop, type CropRect } from "../transcode/compose.js";
@@ -166,7 +168,7 @@ function applyCropPreviewToChannel(ch: Channel, crop: CropRect | null): void {
     const v = channelPlayers[ch];
     if (!v) return;
     if (!crop) {
-        v.style.removeProperty("transform");
+        v.style.removeProperty("--video-view-transform");
         v.style.removeProperty("transform-origin");
         v.style.removeProperty("clip-path");
         return;
@@ -182,7 +184,7 @@ function applyCropPreviewToChannel(ch: Channel, crop: CropRect | null): void {
     const subW = crop.wPct * disp.w;
     const subH = crop.hPct * disp.h;
     if (tileW <= 0 || tileH <= 0 || subW <= 0 || subH <= 0) {
-        v.style.removeProperty("transform");
+        v.style.removeProperty("--video-view-transform");
         v.style.removeProperty("clip-path");
         return;
     }
@@ -196,12 +198,16 @@ function applyCropPreviewToChannel(ch: Channel, crop: CropRect | null): void {
     // Clip the video to the crop sub-rect (local, pre-transform coords) so the
     // excluded source does not bleed into the bars; the bars then show the
     // grid's black background - matching the export's black letterbox.
-    const top = subY;
-    const right = tileW - subX - subW;
-    const bottom = tileH - subY - subH;
-    const left = subX;
+    const sourceCrop = flipCropRect(crop, cameraFlipForChannel(ch));
+    const top = disp.y + sourceCrop.yPct * disp.h;
+    const left = disp.x + sourceCrop.xPct * disp.w;
+    const right = tileW - left - subW;
+    const bottom = tileH - top - subH;
     v.style.transformOrigin = "0 0";
-    v.style.transform = `translate(${tx.toFixed(2)}px, ${ty.toFixed(2)}px) scale(${scale.toFixed(4)})`;
+    v.style.setProperty(
+        "--video-view-transform",
+        `translate(${tx.toFixed(2)}px, ${ty.toFixed(2)}px) scale(${scale.toFixed(4)})`,
+    );
     v.style.clipPath = `inset(${top.toFixed(2)}px ${right.toFixed(2)}px ${bottom.toFixed(2)}px ${left.toFixed(2)}px)`;
 }
 

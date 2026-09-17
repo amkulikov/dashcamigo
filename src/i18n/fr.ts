@@ -16,6 +16,11 @@ export const frDict = {
     "topbar.langMenu.title": "Langue de l'interface",
     "topbar.more": "Plus",
     "topbar.more.title": "Plus d'actions",
+    "player.camera.settings": "Réglages : {camera}",
+    "player.camera.flip.horizontal": "Retourner horizontalement",
+    "player.camera.flip.vertical": "Retourner verticalement",
+    "player.camera.flip.hint": "Pour la lecture et l’export. Mémorisé pour cette caméra dans ce navigateur.",
+
     "player.more": "Plus de commandes",
 
     "sidebar.cta.label": "Ajouter un dossier",

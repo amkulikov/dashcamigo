@@ -15,6 +15,11 @@ export const zhDict = {
     "topbar.langMenu.title": "界面语言",
     "topbar.more": "更多",
     "topbar.more.title": "更多操作",
+    "player.camera.settings": "{camera}设置",
+    "player.camera.flip.horizontal": "水平翻转",
+    "player.camera.flip.vertical": "垂直翻转",
+    "player.camera.flip.hint": "应用于播放和导出。此浏览器会记住这台摄像头的设置。",
+
     "player.more": "更多控件",
 
     "sidebar.cta.label": "添加文件夹",

@@ -24,6 +24,10 @@ export type I18nKey =
     | "topbar.langMenu.title"
     | "topbar.more"
     | "topbar.more.title"
+    | "player.camera.settings"
+    | "player.camera.flip.horizontal"
+    | "player.camera.flip.vertical"
+    | "player.camera.flip.hint"
     | "player.more"
 
     // Sidebar CTA ("add files" button in the sidebar header, shown after

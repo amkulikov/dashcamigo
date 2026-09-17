@@ -14,10 +14,12 @@
 // HEVC remux / MPEG-TS files have no native-decodable blob URL, so the
 // duplicate <video> cannot play them - we hide the mini-preview instead.
 
+import { cameraFlipForChannel } from "./camera-flip-pref.js";
 import { containRect } from "./video-geometry.js";
 import {
     ALL_CHANNELS,
     activePlayer,
+    effectiveMasterChannel,
     channelTileFor,
     dom,
     forEachVideoSlot,
@@ -159,7 +161,7 @@ export function applyVideoZoom(): void {
     // below would otherwise leave a stale badge on screen).
     syncZoomBadge();
     // In export mode the crop preview owns the main-video transform (player-crop
-    // writes the same video.style.transform). Bail so this never resets/overwrites
+    // writes the same --video-view-transform). Bail so this never resets/overwrites
     // it - including from the ResizeObserver below. Digital zoom is a casual
     // viewing aid; export mode is for configuring the output.
     if (state.exportModeOpen) return;
@@ -168,7 +170,7 @@ export function applyVideoZoom(): void {
     // active master <video> and its tile. Two-pass is simpler than computing
     // "keep or reset" in one pass.
     forEachVideoSlot((v) => {
-        v.style.transform = "";
+        v.style.removeProperty("--video-view-transform");
     });
     for (const ch of ALL_CHANNELS) {
         channelTileFor(ch).classList.remove("zoomed");
@@ -176,7 +178,10 @@ export function applyVideoZoom(): void {
     if (z.scale > 1) {
         const master = activePlayer();
         master.style.transformOrigin = "0 0";
-        master.style.transform = `translate(${z.offsetX}px, ${z.offsetY}px) scale(${z.scale})`;
+        master.style.setProperty(
+            "--video-view-transform",
+            `translate(${z.offsetX}px, ${z.offsetY}px) scale(${z.scale})`,
+        );
         master.parentElement?.classList.add("zoomed");
     }
     syncMinimap();
@@ -330,6 +335,8 @@ function syncMinimap(): void {
         return;
     }
     minimap.hidden = false;
+    const flip = cameraFlipForChannel(effectiveMasterChannel());
+    mv.style.transform = `scale(${flip.horizontal ? -1 : 1}, ${flip.vertical ? -1 : 1})`;
     minimap.style.aspectRatio = `${geom.vW} / ${geom.vH}`;
 
     // Mini-map plays the same file as master with its own blob URL + decoder.

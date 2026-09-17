@@ -11,6 +11,7 @@ import {
     openExport,
     presetLocalStorage,
     readExportResult,
+    readTranscodeDoneFields,
     test,
 } from "./_fixtures.js";
 
@@ -65,7 +66,12 @@ test("Save keeps an adopted detection pass when playback switches trips", async 
     const trips = page.locator("li.trip:not(.unindexed-note)");
     await expect(trips).toHaveCount(2);
     await trips.first().locator(".trip-header").click();
+    await page.locator(".video-tile:not([hidden]) .camera-settings-button").click();
+    await page.getByRole("menuitemcheckbox", { name: "Flip horizontally" }).click();
+    await page.keyboard.press("Escape");
     await openExport(page);
+    await page.locator('input[name="export-panel-quality"][value="original"]').check();
+    await page.locator("#export-panel-watermark").uncheck();
     await page.locator("#export-panel-blur-plates").check();
     await page.locator(".export-panel__blur-detect-strip").getByRole("button", { name: "Download & scan" }).click();
     await expect
@@ -90,4 +96,8 @@ test("Save keeps an adopted detection pass when playback switches trips", async 
     expect(result?.ftyp).toBe(true);
     expect(result?.moov).toBe(true);
     expect(result?.mdat).toBe(true);
+    const done = await readTranscodeDoneFields(page);
+    expect(done, "an empty detection result cannot bypass camera reflection").not.toBeNull();
+    expect(done!.framesEncoded).toBeGreaterThan(0);
+    expect(done!.framesDirect).toBe(0);
 });
