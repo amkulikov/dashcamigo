@@ -494,9 +494,10 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
                                 if (pull.done) {
                                     if (pull.truncated) {
                                         decodeTruncated = true;
-                                        log.warn("decode stopped early on damaged source", {
+                                        log.warn("decode stopped early", {
                                             file: seg.file.name,
                                             framesDone,
+                                            err: pull.error,
                                         });
                                     }
                                     break;

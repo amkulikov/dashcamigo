@@ -528,7 +528,17 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
                 if (pull.truncated) {
                     rt.decodeFailed = true;
                     decodeTruncated = true;
-                    log.warn("split slot decode stopped early on damaged source", { slot: slotIdx, framesDone });
+                    const fileName = slotSegments[slotIdx]?.[rt.currentSegmentIdx]?.file.name;
+                    log.warn("split slot decode stopped early", {
+                        slot: slotIdx,
+                        channel: source.slotChannels[slotIdx],
+                        file: fileName,
+                        framesDone,
+                        err: pull.error,
+                    });
+                    if (framesDone === 0) {
+                        throw new Error(`cannot decode video ${fileName ?? ""}: ${pull.error}`);
+                    }
                 }
                 return;
             }

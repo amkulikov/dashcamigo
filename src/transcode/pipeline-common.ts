@@ -305,7 +305,7 @@ export async function feedSegmentAudio(opts: {
             if (pull.done) {
                 if (pull.truncated) {
                     onTruncated();
-                    log.warn("audio decode stopped early on damaged source", { file: fileName });
+                    log.warn("audio decode stopped early", { file: fileName, err: pull.error });
                 }
                 break;
             }
@@ -557,7 +557,10 @@ export function round2(n: number): number {
 
 /** Result of nextTolerant: a value, or a graceful end that may be a decode
  *  truncation (truncated=true) rather than a clean end-of-stream. */
-export type TolerantNext<T> = { done: false; value: T } | { done: true; truncated: boolean };
+export type TolerantNext<T> =
+    | { done: false; value: T }
+    | { done: true; truncated: false }
+    | { done: true; truncated: true; error: string };
 
 /**
  * Pulls the next sample from a mediabunny VideoSampleSink / AudioSampleSink
@@ -585,7 +588,7 @@ export async function nextTolerant<T>(iterator: AsyncIterator<T>): Promise<Toler
     } catch (err) {
         if (err instanceof Error && err.name === "AbortError") throw err;
         if (isSourceReadError(err)) throw err;
-        return { done: true, truncated: true };
+        return { done: true, truncated: true, error: err instanceof Error ? err.message : String(err) };
     }
 }
 
@@ -717,6 +720,11 @@ export async function finalizeTranscodeOutput(opts: {
     if (signal.aborted) {
         await discardOutputQuietly(out, writable);
         throw new DOMException("aborted", "AbortError");
+    }
+
+    if (framesDone === 0) {
+        await discardOutputQuietly(out, writable);
+        throw new Error("no video frames could be exported");
     }
 
     onProgress({

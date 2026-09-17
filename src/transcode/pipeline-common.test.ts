@@ -7,6 +7,7 @@ import {
     discardOutputQuietly,
     emitSilence,
     frameNeedsNoComposite,
+    finalizeTranscodeOutput,
     joinAllOrThrowFirst,
     nextTolerant,
     resolveAudioPlan,
@@ -84,12 +85,12 @@ describe("nextTolerant", () => {
         const decodeErr = new DOMException("Decoding error", "EncodingError");
         const it = fakeIterator([1], decodeErr);
         await expect(nextTolerant(it)).resolves.toEqual({ done: false, value: 1 });
-        await expect(nextTolerant(it)).resolves.toEqual({ done: true, truncated: true });
+        await expect(nextTolerant(it)).resolves.toEqual({ done: true, truncated: true, error: "Decoding error" });
     });
 
     it("tolerates a non-DOMException decode error too", async () => {
         const it = fakeIterator<number>([], new Error("decoder closed"));
-        await expect(nextTolerant(it)).resolves.toEqual({ done: true, truncated: true });
+        await expect(nextTolerant(it)).resolves.toEqual({ done: true, truncated: true, error: "decoder closed" });
     });
 
     it("rethrows AbortError - cancellation is the caller's, not a source defect", async () => {
@@ -159,6 +160,27 @@ function recordingWritable() {
 }
 
 describe("discardOutputQuietly", () => {
+    it("discards an export with no video frames instead of committing an unusable file", async () => {
+        const { writable, calls, isCommitted } = recordingWritable();
+        const signal = new AbortController().signal;
+        const out = createMp4StreamOutput(writable, signal, () => {});
+        await expect(
+            finalizeTranscodeOutput({
+                out,
+                writable,
+                signal,
+                onProgress: () => {},
+                framesDone: 0,
+                framesTotal: 30,
+                getBytesWritten: () => 0,
+                durationSec: 0,
+            }),
+        ).rejects.toThrow("no video frames could be exported");
+        expect(calls[0]).toBe("abort");
+        expect(isCommitted()).toBe(false);
+        expect(out.state).toBe("canceled");
+    });
+
     it("aborts the writable first, then cancels the muxer, and never commits", async () => {
         const { writable, calls, isCommitted } = recordingWritable();
         const out = createMp4StreamOutput(writable, new AbortController().signal, () => {});

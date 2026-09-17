@@ -34,7 +34,7 @@ test.beforeEach(async ({ page }) => {
     await page.goto("/transcode-harness.html");
 });
 
-for (const kind of ["split", "single-ts", "split-ts", "split-large", "cancel"] as const) {
+for (const kind of ["split", "single-ts", "split-ts", "split-large", "split-empty-mp4", "cancel"] as const) {
     test(`transcode ${kind} releases decoders and preserves the media timeline`, async ({ page }) => {
         test.setTimeout(120_000);
         const fixture = kind.endsWith("-ts") ? "juscar/real-anonymized.TS" : "generic/clip-h264.mkv";

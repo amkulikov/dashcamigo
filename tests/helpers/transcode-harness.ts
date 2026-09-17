@@ -1,4 +1,15 @@
-import { BlobSource, Input, VideoSampleSink, type VideoSample } from "mediabunny";
+import {
+    BlobSource,
+    BufferTarget,
+    EncodedPacket,
+    EncodedPacketSink,
+    EncodedVideoPacketSource,
+    Input,
+    Mp4OutputFormat,
+    Output,
+    VideoSampleSink,
+    type VideoSample,
+} from "mediabunny";
 import { getInputTimeOrigin } from "../../src/media-time.js";
 import { createVideoSourceResolver } from "../../src/transcode/normalize-degenerate-video.js";
 import { canReencodeH264 } from "../../src/transcode/capabilities.js";
@@ -79,14 +90,46 @@ async function fileTiming(file: File) {
     }
 }
 
+async function withEmptyVideoPacket(file: File): Promise<File> {
+    const input = new Input({ source: new BlobSource(file), formats: VIDEO_INPUT_FORMATS });
+    try {
+        const track = (await input.getPrimaryVideoTrack())!;
+        const decoderConfig = (await track.getDecoderConfig())!;
+        const sink = new EncodedPacketSink(track);
+        const target = new BufferTarget();
+        const output = new Output({ format: new Mp4OutputFormat(), target });
+        const source = new EncodedVideoPacketSource((await track.getCodec())!);
+        output.addVideoTrack(source);
+        await output.start();
+        let index = 0;
+        for await (const packet of sink.packets()) {
+            await source.add(packet, index === 0 ? { decoderConfig } : undefined);
+            if (index === 2) {
+                await source.add(
+                    new EncodedPacket(new Uint8Array(0), "delta", packet.timestamp + packet.duration / 2, 0),
+                );
+            }
+            index++;
+        }
+        await output.finalize();
+        return new File([target.buffer!], "empty-packet.mp4", { type: "video/mp4" });
+    } finally {
+        input.dispose();
+    }
+}
+
 export async function runTranscodeRegression(
     bytes: number[],
-    kind: "split" | "single-ts" | "split-ts" | "split-large" | "cancel",
+    kind: "split" | "single-ts" | "split-ts" | "split-large" | "split-empty-mp4" | "cancel",
 ) {
     if (!(await canReencodeH264(640, 360, 1_000_000))) return { supported: false as const };
     const isTs = kind.endsWith("-ts");
     const original = new File([new Uint8Array(bytes)], isTs ? "source.TS" : "source.mkv");
-    const file = await createVideoSourceResolver().resolve(original);
+    // The dirty MP4 reaches the pipeline unchanged so its own resolver is exercised.
+    const file =
+        kind === "split-empty-mp4"
+            ? await withEmptyVideoPacket(original)
+            : await createVideoSourceResolver().resolve(original);
     const timing = await fileTiming(file);
     const count = isTs ? 1 : kind === "split-large" ? 24 : 8;
     const frames: TripFrame[] = Array.from({ length: count }, (_, index) => {

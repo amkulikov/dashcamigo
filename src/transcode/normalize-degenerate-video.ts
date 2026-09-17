@@ -1,34 +1,15 @@
-// Normalize a container whose encoded video stream carries degenerate/empty
-// packets into a clean MP4 that mediabunny's strict WebCodecs decode path can
-// consume.
-//
-// WHY this exists: some viewers re-export dashcam clips as Matroska with an empty
-// ~4-byte access unit (a bare length-prefix / zero-length NAL, no coded picture)
-// about once a second. Playback survives (MSE decoders skip them) and stream-copy
-// export survives (export.ts drops them in its copy loop), but the RE-ENCODE
-// pipelines decode through mediabunny's VideoSampleSink, which feeds every packet
-// straight to a WebCodecs VideoDecoder - and a strict decoder throws EncodingError
-// on the empty packet, aborting the whole segment (a mid-stream bad packet kills
-// the single decoder the sink wraps; it cannot resume). mediabunny exposes no
-// packet-filter / decode-tolerance hook (verified against its current docs and
-// type surface), so the clean fix is to normalize the source ONCE up front: a
-// pure stream-copy remux (NO re-encode) that drops the degenerate packets, then
-// feed the resulting clean MP4 to the UNCHANGED decode path - which keeps all of
-// mediabunny's per-packet Chromium/Safari/HEVC decoder workarounds intact.
-//
-// This is the same machinery - and the same drop threshold - as export.ts's
-// stream-copy loop, just targeting an in-memory BufferTarget instead of the disk
-// writable. Scope is MKV only: healthy MP4/TS never carry these packets, so they
-// pass through untouched (identity resolve), preserving the mature export path
-// byte-for-byte.
-//
-// RAM: the clean copy is buffered whole in memory (no OPFS in this project, and a
-// stream target cannot be re-opened as an Input). MKV inputs here are viewer
-// re-exports of single clips (tens of seconds), so the copy is small; a
-// pathological multi-minute MKV would double its video RAM for the export. The
-// remux is per unique File and cached, so a multi-segment range remuxes once.
+// Native playback tolerates empty access units that WebCodecs rejects. Remux
+// affected sources without those packets before decoding, preserving timestamps.
+// Healthy MP4s only need a metadata scan; Matroska also benefits from normalization.
 
-import { BufferTarget, EncodedPacketSink, EncodedVideoPacketSource, Input, Mp4OutputFormat, Output } from "mediabunny";
+import {
+    AppendOnlyStreamTarget,
+    EncodedPacketSink,
+    EncodedVideoPacketSource,
+    Input,
+    Mp4OutputFormat,
+    Output,
+} from "mediabunny";
 import { createLogger } from "../log.js";
 import { createRetryingBlobSource } from "../retrying-blob-source.js";
 import { isSourceReadError } from "../source-read-error.js";
@@ -36,6 +17,7 @@ import { isMatroskaName } from "../video-format-names.js";
 import { VIDEO_INPUT_FORMATS } from "../video-formats.js";
 
 const log = createLogger("normalize-video");
+const MAX_CACHED_SOURCES = 4;
 
 // Max byte length of a video packet treated as an empty/phantom access unit and
 // dropped. A real coded H.264/HEVC picture - even a tiny P-frame - is well above
@@ -45,10 +27,8 @@ export const DEGENERATE_VIDEO_PACKET_MAX_BYTES = 4;
 
 export interface VideoSourceResolver {
     /**
-     * Returns a strictly-decodable video File for `file`. For MKV this is a
-     * stream-copy MP4 with degenerate packets dropped (cached per File, so a
-     * multi-segment range of one file remuxes once). For any other container -
-     * or when the remux is not possible - returns `file` unchanged.
+     * Returns a stream-copy MP4 with empty packets dropped when necessary.
+     * Healthy MP4s and unsupported containers retain their original File identity.
      *
      * A malformed stream falls back to the original. Cancellation and source
      * read failures propagate so they cannot be mistaken for a damaged stream.
@@ -57,9 +37,8 @@ export interface VideoSourceResolver {
 }
 
 /**
- * Creates a per-export resolver that turns degenerate-packet MKV sources into
- * clean MP4s on demand, memoizing by File identity. One instance per pipeline
- * run; drop the reference when the export ends to release the cached buffers.
+ * Memoizes the most recent sources per export so repeated timeline intervals
+ * reuse a normalized file without retaining every clip of a long trip.
  */
 export function createVideoSourceResolver(signal?: AbortSignal): VideoSourceResolver {
     // Cache the PROMISE (not the File) so concurrent slots/segments asking for the
@@ -68,7 +47,7 @@ export function createVideoSourceResolver(signal?: AbortSignal): VideoSourceReso
     return {
         resolve(file: File): Promise<File> {
             if (signal?.aborted) return Promise.reject(new DOMException("aborted", "AbortError"));
-            if (!isMatroskaName(file.name)) return Promise.resolve(file);
+            if (!isMatroskaName(file.name) && !/\.(mp4|mov|m4v)$/i.test(file.name)) return Promise.resolve(file);
             let pending = cache.get(file);
             if (!pending) {
                 pending = normalizeToCleanMp4(file, signal).catch((err) => {
@@ -76,12 +55,15 @@ export function createVideoSourceResolver(signal?: AbortSignal): VideoSourceReso
                     if (isSourceReadError(err)) throw err;
                     log.warn("degenerate-video normalize failed, using original source", {
                         file: file.name,
-                        err: String(err),
+                        err: err instanceof Error ? err.message : String(err),
                     });
                     return file;
                 });
                 cache.set(file, pending);
+                while (cache.size > MAX_CACHED_SOURCES) cache.delete(cache.keys().next().value!);
             }
+            cache.delete(file);
+            cache.set(file, pending);
             return pending;
         },
     };
@@ -110,13 +92,30 @@ async function normalizeToCleanMp4(file: File, signal?: AbortSignal): Promise<Fi
         // sideways after the round-trip (mirrors export.ts).
         const rotation = await track.getRotation();
 
-        const target = new BufferTarget();
-        output = new Output({ format: new Mp4OutputFormat({ fastStart: false }), target });
+        const sink = new EncodedPacketSink(track);
+        if (!isMatroskaName(file.name)) {
+            let packet = await sink.getFirstPacket({ metadataOnly: true });
+            while (packet && packet.byteLength > DEGENERATE_VIDEO_PACKET_MAX_BYTES) {
+                if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+                packet = await sink.getNextPacket(packet, { metadataOnly: true });
+            }
+            if (!packet) return file;
+        }
+
+        // Blob chunks avoid a contiguous full-file allocation for large camera clips.
+        const chunks: Blob[] = [];
+        const target = new AppendOnlyStreamTarget(
+            new WritableStream<Uint8Array>({
+                write(data) {
+                    chunks.push(new Blob([new Uint8Array(data)]));
+                },
+            }),
+        );
+        output = new Output({ format: new Mp4OutputFormat({ fastStart: "fragmented" }), target });
         const videoSource = new EncodedVideoPacketSource(codec);
         output.addVideoTrack(videoSource, { rotation });
         await output.start();
 
-        const sink = new EncodedPacketSink(track);
         // verifyKeyPackets bitstream-checks the key/delta flag we copy verbatim
         // into the output sync-sample table - a mislabeled source flag would
         // otherwise corrupt seeking on the clean copy (same rationale as export.ts).
@@ -139,16 +138,14 @@ async function normalizeToCleanMp4(file: File, signal?: AbortSignal): Promise<Fi
         }
         await output.finalize();
 
-        const buffer = target.buffer;
-        // A track that was all-degenerate (pushedAny false) or a muxer that yielded
-        // no bytes leaves nothing usable - keep the original.
-        if (!buffer || !pushedAny) return file;
+        if (!pushedAny || chunks.length === 0) return file;
+        const cleaned = new File(chunks, `${file.name}.clean.mp4`, { type: "video/mp4" });
         log.info("normalized degenerate video to clean mp4", {
             file: file.name,
             droppedPackets: dropped,
-            bytes: buffer.byteLength,
+            bytes: cleaned.size,
         });
-        return new File([buffer], `${file.name}.clean.mp4`, { type: "video/mp4" });
+        return cleaned;
     } finally {
         input.dispose();
         if (output && output.state !== "finalized") await output.cancel();

@@ -1,11 +1,3 @@
-// Tests the degenerate-packet video normalizer: the fix that lets the re-encode
-// export path decode an MKV whose stream carries empty ~4-byte access units. The
-// bug (a strict WebCodecs decoder throws on the empty packet) can only be
-// reproduced with a real decoder, which node has not; but the FIX is a pure
-// stream-copy remux (no decode), so its core - drop the degenerate packets,
-// preserve the real ones and their timestamps, emit a valid MP4 - is fully
-// exercisable in node against a synthetic MKV built via mediabunny.
-
 import {
     BlobSource,
     BufferTarget,
@@ -14,6 +6,7 @@ import {
     EncodedVideoPacketSource,
     Input,
     MkvOutputFormat,
+    Mp4OutputFormat,
     Output,
     type PacketType,
     type Rotation,
@@ -73,11 +66,10 @@ async function readVideoStream(file: File): Promise<VideoStream> {
     }
 }
 
-// Muxes packet records into an in-memory MKV named `name` (so the resolver's
-// isMatroska filename gate fires).
-async function buildMkv(stream: VideoStream, packets: PacketRecord[], name: string): Promise<File> {
+async function buildVideo(stream: VideoStream, packets: PacketRecord[], name: string): Promise<File> {
     const target = new BufferTarget();
-    const output = new Output({ format: new MkvOutputFormat(), target });
+    const isMkv = name.endsWith(".mkv");
+    const output = new Output({ format: isMkv ? new MkvOutputFormat() : new Mp4OutputFormat(), target });
     const source = new EncodedVideoPacketSource(stream.codec);
     output.addVideoTrack(source, { rotation: stream.rotation });
     await output.start();
@@ -89,19 +81,24 @@ async function buildMkv(stream: VideoStream, packets: PacketRecord[], name: stri
     }
     await output.finalize();
     const buffer = target.buffer;
-    if (!buffer) throw new Error("mkv mux produced no buffer");
-    return new File([buffer], name, { type: "video/x-matroska" });
+    if (!buffer) throw new Error("mux produced no buffer");
+    return new File([buffer], name, { type: isMkv ? "video/x-matroska" : "video/mp4" });
 }
 
 describe("createVideoSourceResolver", () => {
-    // Non-MKV must be returned verbatim (same object): the mature MP4/TS export
-    // path must not pay a remux or change behavior at all.
-    it("returns non-Matroska files unchanged (identity)", async () => {
+    it("returns healthy MP4 and MOV files unchanged", async () => {
+        const mkv = new File([readFileSync(resolve(FIXTURES_DIR, "clip-h264.mkv"))], "clip.mkv");
+        const stream = await readVideoStream(mkv);
         const resolver = createVideoSourceResolver();
-        const mp4 = new File([new Uint8Array([0, 0, 0, 0])], "clip.mp4", { type: "video/mp4" });
-        const ts = new File([new Uint8Array([0, 0, 0, 0])], "clip.ts", { type: "video/mp2t" });
-        await expect(resolver.resolve(mp4)).resolves.toBe(mp4);
-        await expect(resolver.resolve(ts)).resolves.toBe(ts);
+        for (const name of ["clip.mp4", "clip.mov"]) {
+            const file = await buildVideo(stream, stream.packets, name);
+            await expect(resolver.resolve(file)).resolves.toBe(file);
+        }
+    });
+
+    it("leaves unsupported containers unchanged", async () => {
+        const file = new File([readFileSync(resolve(FIXTURES_DIR, "../juscar/real-anonymized.TS"))], "clip.ts");
+        await expect(createVideoSourceResolver().resolve(file)).resolves.toBe(file);
     });
 
     it("memoizes per file: two resolves of the same MKV yield the same result object", async () => {
@@ -130,46 +127,55 @@ describe("createVideoSourceResolver", () => {
         expect(out.packets.length).toBe(source.packets.length);
     });
 
-    it("drops degenerate packets from an MKV and keeps the real frames + timestamps", async () => {
-        const buf = readFileSync(resolve(FIXTURES_DIR, "clip-h264.mkv"));
-        const mkv = new File([buf], "clip-h264.mkv", { type: "video/x-matroska" });
-        const source = await readVideoStream(mkv);
-        expect(source.packets.length).toBeGreaterThan(4);
+    it.each([
+        ["mkv", 4],
+        ["mp4", 0],
+        ["mp4", 4],
+    ] as const)(
+        "drops %s packets of %i bytes and preserves real frames and timestamps",
+        async (extension, emptySize) => {
+            const buf = readFileSync(resolve(FIXTURES_DIR, "clip-h264.mkv"));
+            const mkv = new File([buf], "clip-h264.mkv", { type: "video/x-matroska" });
+            const source = await readVideoStream(mkv);
+            expect(source.packets.length).toBeGreaterThan(4);
 
-        // Interleave one empty 4-byte access unit mid-stream, with a timestamp
-        // between two real frames so the MKV muxer stays monotonic. This is the
-        // exact shape seen on viewer-re-exported dashcam MKVs (~1 empty AU/sec).
-        const insertAt = 3;
-        const between = (source.packets[insertAt - 1]!.timestamp + source.packets[insertAt]!.timestamp) / 2;
-        const degenerate: PacketRecord = {
-            data: new Uint8Array(DEGENERATE_VIDEO_PACKET_MAX_BYTES),
-            type: "delta",
-            timestamp: between,
-            duration: 0,
-        };
-        const withDegenerate = [...source.packets.slice(0, insertAt), degenerate, ...source.packets.slice(insertAt)];
-        const dirtyMkv = await buildMkv(source, withDegenerate, "dirty.mkv");
+            // Keep the empty packet between real frames, with its own presentation time.
+            const insertAt = 3;
+            const between = (source.packets[insertAt - 1]!.timestamp + source.packets[insertAt]!.timestamp) / 2;
+            const degenerate: PacketRecord = {
+                data: new Uint8Array(emptySize),
+                type: "delta",
+                timestamp: between,
+                duration: 0,
+            };
+            const withDegenerate = [
+                ...source.packets.slice(0, insertAt),
+                degenerate,
+                ...source.packets.slice(insertAt),
+            ];
+            const dirtyFile = await buildVideo(source, withDegenerate, `dirty.${extension}`);
 
-        // Sanity: the dirty MKV really carries the degenerate packet.
-        const dirty = await readVideoStream(dirtyMkv);
-        expect(dirty.packets.some((p) => p.data.byteLength <= DEGENERATE_VIDEO_PACKET_MAX_BYTES)).toBe(true);
-        expect(dirty.packets.length).toBe(source.packets.length + 1);
+            const dirty = await readVideoStream(dirtyFile);
+            expect(dirty.packets.some((p) => p.data.byteLength <= DEGENERATE_VIDEO_PACKET_MAX_BYTES)).toBe(true);
+            expect(dirty.packets.length).toBe(source.packets.length + 1);
 
-        const resolver = createVideoSourceResolver();
-        const clean = await resolver.resolve(dirtyMkv);
-        expect(clean).not.toBe(dirtyMkv);
-        await expectValidMp4(clean);
+            const resolver = createVideoSourceResolver();
+            const clean = await resolver.resolve(dirtyFile);
+            expect(clean).not.toBe(dirtyFile);
+            await expectValidMp4(clean);
 
-        const out = await readVideoStream(clean);
-        // The degenerate packet is gone; every real frame survives.
-        expect(out.packets.length).toBe(source.packets.length);
-        expect(out.packets.every((p) => p.data.byteLength > DEGENERATE_VIDEO_PACKET_MAX_BYTES)).toBe(true);
-        // Timestamps of the surviving frames are preserved (remux carries pts
-        // verbatim; allow a sub-millisecond tolerance for MP4 timescale rounding).
-        for (let i = 0; i < source.packets.length; i++) {
-            expect(out.packets[i]!.timestamp).toBeCloseTo(source.packets[i]!.timestamp, 3);
-        }
-    });
+            const out = await readVideoStream(clean);
+            // The degenerate packet is gone; every real frame survives.
+            expect(out.packets.length).toBe(source.packets.length);
+            expect(out.packets.every((p) => p.data.byteLength > DEGENERATE_VIDEO_PACKET_MAX_BYTES)).toBe(true);
+            // Timestamps of the surviving frames are preserved (remux carries pts
+            // verbatim; allow a sub-millisecond tolerance for MP4 timescale rounding).
+            for (let i = 0; i < source.packets.length; i++) {
+                expect(out.packets[i]!.data).toEqual(source.packets[i]!.data);
+                expect(out.packets[i]!.timestamp).toBeCloseTo(source.packets[i]!.timestamp, 3);
+            }
+        },
+    );
 });
 
 // Asserts the File is a structurally valid MP4: an `ftyp` box at the head plus
