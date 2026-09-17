@@ -3169,7 +3169,7 @@ export function initMap(cb: MapCallbacks): void {
 
     subscribeMapProvider((provider, previous) => {
         mapAttributionControl.setProvider(provider);
-        if (previous === null && provider === "openfreemap") return;
+        if (previous === null) return;
         const theme = currentMapTheme();
         loadMapStyle(theme, false, "main", provider).then((style) => {
             if (style) applyLoadedStyle(style, theme, provider, true);

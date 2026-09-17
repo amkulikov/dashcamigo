@@ -1,12 +1,14 @@
-// Page-scoped base-map provider fallback. The state deliberately lives only in
-// this module: a reload starts from OpenFreeMap again, while every MapLibre
-// instance created by the current page observes the same one-way downgrade.
+// The preferred base-map source survives reloads. Every MapLibre instance on
+// the page shares the active provider and its session-scoped fallback chain.
 
 import { createLogger } from "../log.js";
 
 const log = createLogger("map-provider");
 
 export type MapProvider = "openfreemap" | "osm-vector" | "osm-raster";
+export type MapProviderPreference = "openfreemap" | "osm-vector";
+
+const STORAGE_KEY = "dashcamigo:mapProvider";
 
 const FAILURE_WINDOW_MS = 5_000;
 const FAILURE_THRESHOLD = 2;
@@ -15,21 +17,38 @@ const FAILURE_THRESHOLD = 2;
 // cheaper than leaving the map blank behind the browser's network timeout.
 export const MAP_PROVIDER_REQUEST_TIMEOUT_MS = 3_000;
 
-const PROBE_URLS: Record<Exclude<MapProvider, "openfreemap">, string> = {
+const PROBE_URLS: Record<MapProvider, string> = {
+    openfreemap: "https://tiles.openfreemap.org/planet",
     "osm-vector": "https://vector.openstreetmap.org/shortbread_v1/0/0/0.mvt",
     "osm-raster": "https://tile.openstreetmap.org/0/0/0.png",
 };
 
 type ProviderListener = (provider: MapProvider, previous: MapProvider | null) => void;
-type ProviderProbe = (provider: Exclude<MapProvider, "openfreemap">) => Promise<boolean>;
+type ProviderProbe = (provider: MapProvider) => Promise<boolean>;
 
 const listeners = new Set<ProviderListener>();
 let activeProvider: MapProvider = "openfreemap";
+let preferredProvider: MapProviderPreference | null = null;
 let failedTiles = new Map<string, number>();
 let transitionPromise: Promise<void> | null = null;
 let providerRevision = 0;
 
-async function fetchProbe(provider: Exclude<MapProvider, "openfreemap">): Promise<boolean> {
+function getPreferredMapProvider(): MapProviderPreference {
+    if (preferredProvider !== null) return preferredProvider;
+    try {
+        preferredProvider = localStorage.getItem(STORAGE_KEY) === "osm-vector" ? "osm-vector" : "openfreemap";
+    } catch {
+        preferredProvider = "openfreemap";
+    }
+    activeProvider = preferredProvider;
+    return preferredProvider;
+}
+
+export function getMapProviderPreference(): MapProviderPreference {
+    return getPreferredMapProvider();
+}
+
+async function fetchProbe(provider: MapProvider): Promise<boolean> {
     const ctrl = new AbortController();
     const timeoutId = setTimeout(() => ctrl.abort("timeout"), MAP_PROVIDER_REQUEST_TIMEOUT_MS);
     try {
@@ -45,12 +64,13 @@ async function fetchProbe(provider: Exclude<MapProvider, "openfreemap">): Promis
 let probeProvider: ProviderProbe = fetchProbe;
 
 export function getMapProvider(): MapProvider {
+    getPreferredMapProvider();
     return activeProvider;
 }
 
 export function subscribeMapProvider(listener: ProviderListener): () => void {
     listeners.add(listener);
-    listener(activeProvider, null);
+    listener(getMapProvider(), null);
     return () => listeners.delete(listener);
 }
 
@@ -109,7 +129,7 @@ function isProviderBootstrapRequest(provider: MapProvider, rawUrl: string): bool
 }
 
 async function probeAndSwitch(
-    provider: Exclude<MapProvider, "openfreemap">,
+    provider: MapProvider,
     failedProvider: MapProvider,
     expectedRevision: number,
 ): Promise<boolean> {
@@ -124,14 +144,13 @@ async function probeAndSwitch(
 }
 
 async function downgradeProvider(failedProvider: MapProvider, expectedRevision: number): Promise<void> {
-    if (failedProvider === "openfreemap") {
-        if (await probeAndSwitch("osm-vector", failedProvider, expectedRevision)) return;
+    const order: MapProvider[] =
+        getPreferredMapProvider() === "openfreemap"
+            ? ["openfreemap", "osm-vector", "osm-raster"]
+            : ["osm-vector", "openfreemap", "osm-raster"];
+    for (const provider of order.slice(order.indexOf(failedProvider) + 1)) {
+        if (await probeAndSwitch(provider, failedProvider, expectedRevision)) return;
         if (providerRevision !== expectedRevision || activeProvider !== failedProvider) return;
-        await probeAndSwitch("osm-raster", failedProvider, expectedRevision);
-        return;
-    }
-    if (failedProvider === "osm-vector") {
-        await probeAndSwitch("osm-raster", failedProvider, expectedRevision);
     }
 }
 
@@ -141,6 +160,7 @@ async function downgradeProvider(failedProvider: MapProvider, expectedRevision: 
  * not count twice. Errors from a provider already left behind are ignored.
  */
 export function reportMapProviderTileError(error: unknown, now = Date.now()): Promise<void> | null {
+    getPreferredMapProvider();
     const url = errorUrl(error);
     const failedProvider = url ? mapProviderForTileUrl(url) : null;
     if (!url || failedProvider !== activeProvider || activeProvider === "osm-raster") return null;
@@ -162,20 +182,39 @@ export function reportMapProviderTileError(error: unknown, now = Date.now()): Pr
         threshold,
         windowMs: FAILURE_WINDOW_MS,
     });
-    transitionPromise = downgradeProvider(failedProvider, providerRevision).finally(() => {
-        transitionPromise = null;
+    const transition = downgradeProvider(failedProvider, providerRevision).finally(() => {
+        if (transitionPromise === transition) transitionPromise = null;
     });
+    transitionPromise = transition;
     return transitionPromise;
 }
 
-/** Page-scoped DevTools override. A reload always restores OpenFreeMap. */
+/** Store the user's first choice and immediately retry it on the current page. */
+export function setMapProviderPreference(provider: MapProviderPreference): void {
+    if (provider !== "openfreemap" && provider !== "osm-vector") throw new Error("unknown map provider");
+    getPreferredMapProvider();
+    preferredProvider = provider;
+    try {
+        localStorage.setItem(STORAGE_KEY, provider);
+    } catch {
+        // Storage may be blocked; the choice still works for this page.
+    }
+    // Cancel a pending probe even if the chosen provider is already active.
+    providerRevision++;
+    transitionPromise = null;
+    switchProvider(provider);
+}
+
+/** Page-scoped DevTools override. A reload restores the saved preference. */
 export function forceMapProvider(provider: MapProvider): MapProvider {
     if (provider !== "openfreemap" && provider !== "osm-vector" && provider !== "osm-raster") {
         throw new Error("unknown map provider");
     }
+    getPreferredMapProvider();
     // Invalidate an in-flight automatic probe even when forcing the provider
     // already active; its late result must not undo an explicit debug choice.
     providerRevision++;
+    transitionPromise = null;
     const previous = activeProvider;
     activeProvider = provider;
     failedTiles = new Map();
@@ -187,6 +226,7 @@ export function forceMapProvider(provider: MapProvider): MapProvider {
 /** Test-only reset for the module-level page session. */
 export function _resetForTests(probe: ProviderProbe = fetchProbe): void {
     activeProvider = "openfreemap";
+    preferredProvider = null;
     failedTiles = new Map();
     transitionPromise = null;
     providerRevision = 0;

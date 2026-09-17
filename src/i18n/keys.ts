@@ -1130,6 +1130,10 @@ export type I18nKey =
     // localStorage["dashcamigo:mapLabelScale"]); the export overlay map has its
     // own per-export control (export.overlays.mapLabelSize).
     | "settings.map.section"
+    | "settings.map.provider.label"
+    | "settings.map.provider.openfreemap"
+    | "settings.map.provider.openstreetmap"
+    | "settings.map.provider.description"
     | "settings.map.style.label"
     | "settings.map.style.classic"
     | "settings.map.style.road"

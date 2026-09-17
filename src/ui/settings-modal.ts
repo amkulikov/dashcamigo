@@ -51,6 +51,7 @@ import {
 } from "./map-label-scale.js";
 import { renderMapMarkerControl } from "./map-marker-control.js";
 import { getMapMarkerAppearance, setMapMarkerAppearance } from "./map-marker-pref.js";
+import { getMapProviderPreference, setMapProviderPreference } from "./map-provider.js";
 import { initMapViewControls } from "./map-view-controls.js";
 import { activateModal, deactivateModal, wireBackdropDismiss } from "./modal-helper.js";
 import { notify } from "./notifications.js";
@@ -105,6 +106,7 @@ function openSettings(): void {
     if (!m) return;
     syncCrashToggleFromState();
     syncUnitsSelect();
+    syncMapProviderSelect();
     syncMapLabelScaleSelect();
     syncMapMarkerControl();
     syncSeekStepInputs();
@@ -155,6 +157,11 @@ function syncEventsThresholdInputs(): void {
 function syncUnitsSelect(): void {
     const sel = document.getElementById("settings-units-select") as HTMLSelectElement | null;
     if (sel) sel.value = getUnits();
+}
+
+function syncMapProviderSelect(): void {
+    const sel = document.getElementById("settings-map-provider-select") as HTMLSelectElement | null;
+    if (sel) sel.value = getMapProviderPreference();
 }
 
 function syncMapLabelScaleSelect(): void {
@@ -393,14 +400,19 @@ export function initSettingsModal(): void {
         }
     });
 
-    // --- Map: label size + street-name density ---
-    //
-    // Both apply immediately to the live maps (a setStyle re-apply of the
-    // cached style with the new prefs). The export overlay map has its own
-    // per-export text-size control and is untouched by these preferences.
+    // --- Map provider ---
 
     const mapViewControl = document.getElementById("settings-map-view-control");
     if (mapViewControl) initMapViewControls(mapViewControl, "settings-map");
+
+    document.getElementById("settings-map-provider-select")?.addEventListener("change", (ev) => {
+        const provider = (ev.target as HTMLSelectElement).value;
+        if (provider === "openfreemap" || provider === "osm-vector") setMapProviderPreference(provider);
+    });
+
+    // --- Map labels ---
+    // Both apply immediately to the live maps. The export overlay map has
+    // its own per-export text-size control.
 
     document.getElementById("settings-map-label-scale-select")?.addEventListener("change", (ev) => {
         const sel = ev.target as HTMLSelectElement;

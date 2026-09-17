@@ -2600,6 +2600,16 @@
             <!-- Viewer map preferences; export overlays have separate controls. -->
             <div class="export-modal-section">
                 <h3 class="settings-section-title" data-i18n="settings.map.section">Map</h3>
+                <div class="settings-row">
+                    <label class="settings-select-row">
+                        <span class="settings-select-label" data-i18n="settings.map.provider.label">Map provider</span>
+                        <select id="settings-map-provider-select" class="settings-select">
+                            <option value="openfreemap" data-i18n="settings.map.provider.openfreemap">OpenFreeMap (recommended)</option>
+                            <option value="osm-vector" data-i18n="settings.map.provider.openstreetmap">OpenStreetMap</option>
+                        </select>
+                    </label>
+                    <p class="settings-toggle-desc" data-i18n="settings.map.provider.description">If this provider is unavailable, the map switches automatically.</p>
+                </div>
                 <div id="settings-map-view-control" class="settings-row"></div>
                 <div class="settings-row">
                     <span class="settings-select-label" data-i18n="settings.map.marker.label">Map marker</span>

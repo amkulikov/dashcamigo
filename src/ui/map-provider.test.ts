@@ -1,12 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
     _resetForTests,
     forceMapProvider,
     getMapProvider,
+    getMapProviderPreference,
     mapProviderForTileUrl,
     mapProviderErrorKey,
     reportMapProviderTileError,
+    setMapProviderPreference,
     subscribeMapProvider,
     type MapProvider,
 } from "./map-provider.js";
@@ -20,6 +22,51 @@ const OSM_VECTOR_TILE_B = { url: "https://vector.openstreetmap.org/shortbread_v1
 describe("map provider fallback", () => {
     beforeEach(() => {
         _resetForTests();
+    });
+
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    it("saves the preferred provider and restores it on a new page session", () => {
+        const values = new Map<string, string>();
+        vi.stubGlobal("localStorage", {
+            getItem: (key: string) => values.get(key) ?? null,
+            setItem: (key: string, value: string) => values.set(key, value),
+        });
+
+        setMapProviderPreference("osm-vector");
+        expect(getMapProvider()).toBe("osm-vector");
+        expect(values.get("dashcamigo:mapProvider")).toBe("osm-vector");
+
+        _resetForTests();
+        expect(getMapProviderPreference()).toBe("osm-vector");
+        expect(getMapProvider()).toBe("osm-vector");
+    });
+
+    it("falls back to OpenFreeMap when the selected OpenStreetMap vector tiles fail", async () => {
+        const probe = vi.fn(async (_provider: MapProvider) => true);
+        _resetForTests(probe);
+        setMapProviderPreference("osm-vector");
+
+        reportMapProviderTileError(OSM_VECTOR_TILE_A, 1_000);
+        await reportMapProviderTileError(OSM_VECTOR_TILE_B, 1_001);
+
+        expect(probe.mock.calls.map(([provider]) => provider)).toEqual(["openfreemap"]);
+        expect(getMapProvider()).toBe("openfreemap");
+        expect(getMapProviderPreference()).toBe("osm-vector");
+    });
+
+    it("uses raster after both vector providers fail under the OpenStreetMap preference", async () => {
+        const probe = vi.fn(async (provider: MapProvider) => provider === "osm-raster");
+        _resetForTests(probe);
+        setMapProviderPreference("osm-vector");
+
+        reportMapProviderTileError(OSM_VECTOR_TILE_A, 1_000);
+        await reportMapProviderTileError(OSM_VECTOR_TILE_B, 1_001);
+
+        expect(probe.mock.calls.map(([provider]) => provider)).toEqual(["openfreemap", "osm-raster"]);
+        expect(getMapProvider()).toBe("osm-raster");
     });
 
     it("requires two different failed tiles inside five seconds", async () => {
@@ -112,5 +159,23 @@ describe("map provider fallback", () => {
         await transition;
 
         expect(getMapProvider()).toBe("osm-raster");
+    });
+
+    it("does not let a late automatic probe undo a new preference", async () => {
+        let finishProbe: ((available: boolean) => void) | undefined;
+        _resetForTests(
+            () =>
+                new Promise<boolean>((resolve) => {
+                    finishProbe = resolve;
+                }),
+        );
+        reportMapProviderTileError(OFM_TILE_A, 1_000);
+        const transition = reportMapProviderTileError(OFM_TILE_B, 1_001);
+        setMapProviderPreference("osm-vector");
+        finishProbe?.(true);
+        await transition;
+
+        expect(getMapProvider()).toBe("osm-vector");
+        expect(getMapProviderPreference()).toBe("osm-vector");
     });
 });

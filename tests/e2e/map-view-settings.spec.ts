@@ -25,6 +25,26 @@ test.beforeEach(async ({ page }) => {
     await gotoApp(page, "en");
 });
 
+test("map provider choice applies immediately and survives a reload", async ({ page }) => {
+    await loadTrip(page);
+    await page.locator("#settings-btn").click();
+    const provider = page.getByRole("combobox", { name: "Map provider" });
+    await expect(provider).toHaveValue("openfreemap");
+    await expect(provider.locator('option[value="openfreemap"]')).toHaveText("OpenFreeMap (recommended)");
+    await provider.selectOption("osm-vector");
+    await expect
+        .poll(() => page.evaluate(() => Boolean(window.__dashcamigo.state.map?.getSource("osm-shortbread"))))
+        .toBe(true);
+
+    await gotoApp(page, "ru");
+    await page.locator("#settings-btn").click();
+    const russianProvider = page.getByRole("combobox", { name: "Источник карты" });
+    await expect(russianProvider).toHaveValue("osm-vector");
+    await expect(russianProvider.locator('option[value="openfreemap"]')).toHaveText("OpenFreeMap (рекомендуется)");
+    await russianProvider.selectOption("openfreemap");
+    await expect(russianProvider).toHaveValue("openfreemap");
+});
+
 test("map preferences persist and use the page language", async ({ page }) => {
     await page.locator("#settings-btn").click();
     const modal = page.locator("#settings-modal");
