@@ -187,7 +187,7 @@ async function ingestFilesInternal(
     // accumulated.
     state.lastIngestFiles = [...vfiles];
 
-    // Drop hidden/junk-dir files (70mai .s_* proxies, macOS/Windows system dirs)
+    // Drop hidden/junk files and known preview recordings
     // before anything touches them. Single chokepoint for both the picker and DnD
     // paths, so junk never costs an SD seek and never collides on basename with a
     // real recording. One summary log so a "my files did not load" report can be
@@ -195,21 +195,16 @@ async function ingestFilesInternal(
     const totalDropped = vfiles.length;
     const kept = vfiles.filter((vf) => !isIgnoredPath(vf.relativePath));
     if (kept.length < totalDropped) {
-        log.debug("ignored hidden/system paths", { ignored: totalDropped - kept.length, total: totalDropped });
+        log.debug("ignored non-recording paths", { ignored: totalDropped - kept.length, total: totalDropped });
     }
     if (kept.length === 0) {
-        // The filter emptied a non-empty selection: every file sat in a hidden
-        // or system folder. This is NOT the empty-drop case (that returns in the
-        // ingestFiles wrapper) - the user picked real files, they just all live
-        // under a folder we skip. Give a dedicated hint ("pick the folder with
-        // your recordings") instead of the generic filesNotSelected toast, and
-        // log the distinct junk roots (the folder the user chose) so a "my files
-        // did not load" report can be traced to the exact name we rejected.
-        log.info("selection was entirely hidden/system files", {
+        // The filter emptied a non-empty selection. Give a dedicated hint
+        // instead of claiming no files were selected.
+        log.info("selection contained no primary recordings", {
             total: totalDropped,
             junkRoots: ignoredRootSegments(vfiles.map((vf) => vf.relativePath)),
         });
-        notify({ severity: "warn", messageKey: "status.onlyHiddenFiles" });
+        notify({ severity: "warn", messageKey: "status.noRecordingsFound" });
         // This early return still has to resume any carried pending recordings.
         resumeProgressiveIngest();
         return;

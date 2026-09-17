@@ -232,7 +232,7 @@ export const ptDict = {
     "gpxAssign.timeUncertain": "horário incerto",
     "gpxAssign.skip": "Ignorar todos",
     "gpxAssign.apply": "Adicionar trajetos",
-    "status.onlyHiddenFiles": "Ali só tinha arquivos ocultos ou de sistema — escolha a pasta com suas gravações.",
+    "status.noRecordingsFound": "Não há gravações aqui — escolha a pasta com suas gravações.",
     "status.offline.label": "Offline",
     "status.offline.info": "O que isto significa",
     "status.offline.detail": "O fundo do mapa não carrega offline. O vídeo, o gráfico de velocidade e a exportação continuam funcionando — e o app se atualiza quando você volta a ter conexão.",

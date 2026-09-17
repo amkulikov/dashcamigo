@@ -232,7 +232,7 @@ export const esDict = {
     "gpxAssign.timeUncertain": "hora incierta",
     "gpxAssign.skip": "Omitir todos",
     "gpxAssign.apply": "Añadir tracks",
-    "status.onlyHiddenFiles": "Ahí solo había archivos ocultos o del sistema — elige la carpeta con tus grabaciones.",
+    "status.noRecordingsFound": "No hay grabaciones ahí — elige la carpeta con tus grabaciones.",
     "status.offline.label": "Sin conexión",
     "status.offline.info": "Qué significa esto",
     "status.offline.detail": "El fondo del mapa no se carga sin conexión. El vídeo, el gráfico de velocidad y la exportación siguen funcionando, y la app se actualiza sola cuando vuelvas a tener conexión.",

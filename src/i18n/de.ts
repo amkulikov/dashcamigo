@@ -231,7 +231,7 @@ export const deDict = {
     "gpxAssign.timeUncertain": "Zeit unsicher",
     "gpxAssign.skip": "Alle überspringen",
     "gpxAssign.apply": "Tracks hinzufügen",
-    "status.onlyHiddenFiles": "Das waren nur versteckte oder Systemdateien — wähl den Ordner mit deinen Aufnahmen.",
+    "status.noRecordingsFound": "Hier sind keine Aufnahmen — wähl den Ordner mit deinen Aufnahmen.",
     "status.offline.label": "Offline",
     "status.offline.info": "Was das bedeutet",
     "status.offline.detail": "Der Kartenhintergrund lädt offline nicht. Video, Geschwindigkeitsdiagramm und Export funktionieren weiter — und die App aktualisiert sich, sobald du wieder online bist.",

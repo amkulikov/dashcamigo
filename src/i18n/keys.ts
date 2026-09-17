@@ -272,12 +272,9 @@ export type I18nKey =
     | "gpxAssign.timeUncertain"
     | "gpxAssign.skip"
     | "gpxAssign.apply"
-    // Shown when the whole picked/dropped selection was hidden or system files
-    // (a card copied into a ".backup"/".stversions" folder, a chkdsk FOUND.000
-    // recovery folder) - so the junk filter emptied it. Distinct from
-    // filesNotSelected: the user did pick files, they just all sat in a folder
-    // we skip, and the fix is to pick the folder with the recordings instead.
-    | "status.onlyHiddenFiles"
+    // Shown when the path filter removes every selected file (system files or
+    // preview videos). The user selected files, but no primary recording remains.
+    | "status.noRecordingsFound"
 
     // Offline banner (src/ui/offline-banner.ts): compact label + the info
     // button's accessible name + the detail popover copy.

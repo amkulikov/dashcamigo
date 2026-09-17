@@ -231,7 +231,7 @@ export const enDict = {
     "gpxAssign.timeUncertain": "time uncertain",
     "gpxAssign.skip": "Skip all",
     "gpxAssign.apply": "Add tracks",
-    "status.onlyHiddenFiles": "That was all hidden or system files — pick the folder with your recordings.",
+    "status.noRecordingsFound": "No recordings found there — pick the folder with your recordings.",
     "status.offline.label": "Offline",
     "status.offline.info": "What this means",
     "status.offline.detail": "The map background won't load while you're offline. Video, the speed chart and export still work — and the app updates itself the next time you're online.",

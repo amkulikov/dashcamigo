@@ -10,6 +10,9 @@ describe("isIgnoredPath", () => {
             "DCIM/Movie/FILE0001.MP4",
             "TeslaCam/SentryClips/2024-01-01_12-00-00-front.mp4",
             "clip.mp4", // bare filename, no path
+            "DCIM/200video/front/20260817190140_0060.mp4",
+            "DCIM/200video/front/20260817190140_0060_S.mp4", // suffix alone is not a preview
+            "DCIM/200video/front/small/other.mp4", // path alone is not enough
         ];
         for (const path of keep) {
             expect(isIgnoredPath(path), path).toBe(false);
@@ -21,6 +24,13 @@ describe("isIgnoredPath", () => {
         // the full-res clip in Normal/Front, collides on basename in ingest.
         expect(isIgnoredPath(".s_Front/NO20260101-120000-000001F.MP4")).toBe(true);
         expect(isIgnoredPath(".s_Back/NO20260101-120000-000001R.MP4")).toBe(true);
+    });
+
+    it("drops Z60 small previews even without their full-size files", () => {
+        const preview = "disk/DCIM/200video/front/small/20260817190140_0060_S.mp4";
+        expect(isIgnoredPath(preview)).toBe(true);
+        expect(isIgnoredPath("small/20260817200209_0060_S.MP4")).toBe(true);
+        expect(isIgnoredPath(preview.replaceAll("/", "\\"))).toBe(true);
     });
 
     it("drops any hidden segment, anywhere in the path", () => {

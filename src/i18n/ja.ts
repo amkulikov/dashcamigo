@@ -240,7 +240,7 @@ export const jaDict = {
     "gpxAssign.timeUncertain": "時刻が不確か",
     "gpxAssign.skip": "すべてスキップ",
     "gpxAssign.apply": "トラックを追加",
-    "status.onlyHiddenFiles": "隠しファイルやシステムファイルばかりでした — 録画が入っているフォルダーを選んでください。",
+    "status.noRecordingsFound": "ここに録画はありません。録画が入っているフォルダーを選んでください。",
     "status.offline.label": "オフライン",
     "status.offline.info": "これはどういうこと？",
     "status.offline.detail": "オフラインのあいだは地図の背景が表示されません。動画・速度グラフ・書き出しはそのまま使えます。ネットにつながると自動で最新版に更新されます。",

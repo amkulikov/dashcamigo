@@ -230,7 +230,7 @@ export const plDict = {
     "gpxAssign.timeUncertain": "czas niepewny",
     "gpxAssign.skip": "Pomiń wszystkie",
     "gpxAssign.apply": "Dodaj ślady",
-    "status.onlyHiddenFiles": "To były same pliki ukryte lub systemowe — wybierz folder z nagraniami.",
+    "status.noRecordingsFound": "Nie ma tu nagrań — wybierz folder z nagraniami.",
     "status.offline.label": "Offline",
     "status.offline.info": "Co to znaczy",
     "status.offline.detail": "Tło mapy nie załaduje się bez internetu. Wideo, wykres prędkości i eksport nadal działają, a aplikacja sama się zaktualizuje, gdy znów będziesz online.",

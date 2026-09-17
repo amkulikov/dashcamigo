@@ -1,16 +1,15 @@
-// Pre-ingest path filter: drops files that live in hidden or OS/filesystem
-// junk directories before they reach classify/index/dedup. Runs at the single
+// Pre-ingest path filter: drops hidden/system files and known low-resolution
+// previews before they reach classify/index/dedup. Runs at the single
 // ingest chokepoint (ui/ingest.ts), so junk never costs an SD seek. The FSA
 // and drag-and-drop walkers additionally prune the same names during
 // enumeration (via isIgnoredSegment) - OS metadata directories like
 // .Spotlight-V100 are unreadable and would otherwise surface as read-error
 // warnings for a perfectly healthy card.
 //
-// Vendor-neutral by design - there is no per-camera branch here. The two rules
-// below cover every known case we have seen, including 70mai `.s_Front` /
-// `.s_Back` (low-res display/app-search proxies that share a basename with the
-// full-res clip in `Normal/Front` - ingesting both collides on basename and
-// pollutes the trip list with duplicate low-quality channels).
+// Hidden directories cover 70mai `.s_Front` / `.s_Back` previews. DDPai Z60
+// writes its low-resolution previews to a visible `small/` directory instead.
+
+const RX_SMALL_PREVIEW_PATH = /(?:^|\/)small\/\d{14}_\d{2,7}_S\.mp4$/i;
 
 // Exact-match (case-insensitive) directory names that are OS/filesystem junk
 // but not dot-prefixed, so the hidden-segment rule below would miss them.
@@ -38,16 +37,17 @@ export function isIgnoredSegment(segment: string): boolean {
 }
 
 /**
- * Whether a file at `relativePath` should be skipped at ingest. True if ANY
- * path segment is hidden or junk - a file nested under `.s_Front/clip.mp4` or
- * `System Volume Information/...` is dropped regardless of the leaf name.
+ * Whether a file at `relativePath` should be skipped at ingest. Hidden/junk
+ * segments and known preview paths are ignored.
  *
  * Accepts both "/" (DnD fullPath) and "\\" (some Windows webkitRelativePath)
  * separators. An empty path is never ignored (treated as a bare filename).
  */
 export function isIgnoredPath(relativePath: string): boolean {
     if (!relativePath) return false;
-    const segments = relativePath.split(/[/\\]/);
+    const normalizedPath = relativePath.replaceAll("\\", "/");
+    if (RX_SMALL_PREVIEW_PATH.test(normalizedPath)) return true;
+    const segments = normalizedPath.split("/");
     for (const segment of segments) {
         if (segment.length === 0) continue; // leading slash, double slash
         if (isIgnoredSegment(segment)) return true;

@@ -234,7 +234,7 @@ export const frDict = {
     "gpxAssign.timeUncertain": "heure incertaine",
     "gpxAssign.skip": "Tout ignorer",
     "gpxAssign.apply": "Ajouter les traces",
-    "status.onlyHiddenFiles": "Il n'y avait que des fichiers cachés ou système — choisis le dossier avec tes enregistrements.",
+    "status.noRecordingsFound": "Aucun enregistrement ici — choisis le dossier qui contient tes enregistrements.",
     "status.offline.label": "Hors ligne",
     "status.offline.info": "Ce que ça veut dire",
     "status.offline.detail": "Le fond de carte ne se charge pas hors ligne. La vidéo, le graphique de vitesse et l'export fonctionnent toujours — et l'appli se met à jour toute seule dès que tu es de nouveau en ligne.",

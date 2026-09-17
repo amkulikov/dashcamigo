@@ -235,7 +235,7 @@ export const ruDict = {
     "gpxAssign.timeUncertain": "точность времени неизвестна",
     "gpxAssign.skip": "Пропустить все",
     "gpxAssign.apply": "Добавить треки",
-    "status.onlyHiddenFiles": "Тут одни скрытые и системные файлы — выбери папку, где лежат записи.",
+    "status.noRecordingsFound": "Здесь нет записей — выбери папку, где они лежат.",
     "status.offline.label": "Офлайн",
     "status.offline.info": "Что это значит",
     "status.offline.detail": "Фоновая карта не загрузится, пока нет интернета. Видео, график скорости и экспорт работают, а приложение обновится само, когда снова появится сеть.",

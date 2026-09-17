@@ -138,9 +138,9 @@ const GPS_SOURCE_HINTS: readonly GpsSourceHint[] = [
         matches: (f) => RX_REC_SINGLE.test(f.file.name),
         source: "embedded",
     },
-    // DDPai: NMEA-in-.gpx sidecar with same basename (nmea-sidecar handler).
-    // The MP4 has no embedded GPS. Timelapse (S_/Q_ prefix) and event (G_ prefix
-    // + _L/_X suffix) shapes are distinctive enough to hard-skip the probe.
+    // DDPai timelapse (S_/Q_ prefix) and event (G_ prefix + _L/_X suffix)
+    // recordings use basename-matched NMEA-in-.gpx sidecars. These distinctive
+    // shapes can skip the embedded probe; normal clips cannot make that claim.
     {
         id: "ddpai",
         matches: (f) => RX_DDPAI_TIMELAPSE.test(f.file.name) || RX_DDPAI_EVENT.test(f.file.name),

@@ -239,7 +239,7 @@ export const koDict = {
     "gpxAssign.timeUncertain": "시간 불확실",
     "gpxAssign.skip": "모두 건너뛰기",
     "gpxAssign.apply": "트랙 추가",
-    "status.onlyHiddenFiles": "숨김 파일이나 시스템 파일뿐이었어요 — 녹화가 들어 있는 폴더를 선택해요.",
+    "status.noRecordingsFound": "여기에 녹화 영상이 없어요. 녹화 영상이 있는 폴더를 선택해요.",
     "status.offline.label": "오프라인",
     "status.offline.info": "무슨 뜻인가요",
     "status.offline.detail": "오프라인일 때는 지도 배경이 표시되지 않아요. 영상, 속도 그래프, 내보내기는 그대로 작동하고, 인터넷에 다시 연결되면 앱이 자동으로 업데이트돼요.",

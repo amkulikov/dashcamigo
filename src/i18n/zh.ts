@@ -229,7 +229,7 @@ export const zhDict = {
     "gpxAssign.timeUncertain": "时间不确定",
     "gpxAssign.skip": "全部跳过",
     "gpxAssign.apply": "添加轨迹",
-    "status.onlyHiddenFiles": "这里全是隐藏文件或系统文件。请选择存放录像的文件夹。",
+    "status.noRecordingsFound": "这里没有录像。请选择存放录像的文件夹。",
     "status.offline.label": "离线",
     "status.offline.info": "这是什么意思",
     "status.offline.detail": "离线时地图底图无法加载。视频、速度图表和导出仍可正常使用，重新联网后应用会自动更新到最新版本。",
