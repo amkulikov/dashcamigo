@@ -16,7 +16,7 @@ import type { Trip } from "../trips.js";
 
 import type { StreetLabelDensity } from "./map-label-scale.js";
 import { getMapMarkerAppearance, type MapMarkerAppearance } from "./map-marker-pref.js";
-import type { OverlayMapProviderPreference } from "./map-provider.js";
+import type { OverlayMapProvider, OverlayMapProviderPreference } from "./map-provider.js";
 import { activeTrip, state } from "./state.js";
 import type { MapStyleId } from "./theme.js";
 import {
@@ -299,6 +299,23 @@ function freshExportPanelState(): ExportPanelState {
  */
 export const exportPanelState: ExportPanelState = freshExportPanelState();
 
+let mapPreviewProvider: { preference: OverlayMapProviderPreference; active: OverlayMapProvider } | null = null;
+
+/** A preview fallback affects available controls, but never overwrites saved choices. */
+export function getExportMapPreviewProvider(): OverlayMapProvider {
+    const preference = exportPanelState.overlayMap.provider;
+    return mapPreviewProvider?.preference === preference ? mapPreviewProvider.active : preference;
+}
+
+export function setExportMapPreviewProvider(
+    preference: OverlayMapProviderPreference,
+    active: OverlayMapProvider,
+): void {
+    if (mapPreviewProvider?.preference === preference && mapPreviewProvider.active === active) return;
+    mapPreviewProvider = { preference, active };
+    notifyExportStateChanged();
+}
+
 function currentOverlayPreferences(): OverlayPreferences {
     return cloneOverlayPreferences(exportPanelState);
 }
@@ -578,6 +595,7 @@ export function toggleExportMode(): void {
 }
 
 export function _resetForTests(): void {
+    mapPreviewProvider = null;
     pendingOpen = null;
     prepareExportMode = null;
     listeners.clear();

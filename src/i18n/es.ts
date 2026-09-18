@@ -906,7 +906,7 @@ export const esDict = {
     "settings.map.provider.yandex": "Yandex Maps",
     "settings.map.provider.unavailable": "Yandex Maps no está disponible aquí.",
     "settings.map.provider.description": "Si este proveedor no está disponible, el mapa cambia automáticamente.",
-    "settings.map.styleUnavailable": "No se puede cambiar el aspecto de Yandex Maps.",
+    "settings.map.styleUnavailable": "Los ajustes de apariencia no están disponibles para mapas ráster.",
     "settings.map.style.label": "Estilo del mapa",
     "settings.map.style.classic": "Clásico",
     "settings.map.style.road": "Carreteras",

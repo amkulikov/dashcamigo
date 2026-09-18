@@ -909,7 +909,7 @@ export const ruDict = {
     "settings.map.provider.yandex": "Яндекс Карты",
     "settings.map.provider.unavailable": "Яндекс Карты здесь недоступны.",
     "settings.map.provider.description": "Если выбранный источник недоступен, карта переключится автоматически.",
-    "settings.map.styleUnavailable": "Оформление Яндекс Карт изменить нельзя.",
+    "settings.map.styleUnavailable": "Настройки оформления недоступны для растровых карт.",
     "settings.map.style.label": "Стиль карты",
     "settings.map.style.classic": "Классическая",
     "settings.map.style.road": "Дорожная",

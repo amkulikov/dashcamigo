@@ -903,7 +903,7 @@ export const zhDict = {
     "settings.map.provider.yandex": "Yandex 地图",
     "settings.map.provider.unavailable": "此处未提供 Yandex 地图。",
     "settings.map.provider.description": "如果所选提供方不可用，地图会自动切换。",
-    "settings.map.styleUnavailable": "无法更改 Yandex 地图的外观。",
+    "settings.map.styleUnavailable": "栅格地图不支持外观设置。",
     "settings.map.style.label": "地图样式",
     "settings.map.style.classic": "经典",
     "settings.map.style.road": "道路",

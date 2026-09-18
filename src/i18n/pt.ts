@@ -906,7 +906,7 @@ export const ptDict = {
     "settings.map.provider.yandex": "Yandex Maps",
     "settings.map.provider.unavailable": "O Yandex Maps não está disponível aqui.",
     "settings.map.provider.description": "Se este provedor estiver indisponível, o mapa muda automaticamente.",
-    "settings.map.styleUnavailable": "Não é possível alterar a aparência do Yandex Maps.",
+    "settings.map.styleUnavailable": "As definições de aparência não estão disponíveis para mapas raster.",
     "settings.map.style.label": "Estilo do mapa",
     "settings.map.style.classic": "Clássico",
     "settings.map.style.road": "Rodoviário",

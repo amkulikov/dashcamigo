@@ -91,6 +91,23 @@ test("repaints a paused map preview after its provider fails without rebuilding 
     await expect(page.locator("#player")).toHaveJSProperty("paused", true);
     await expect(page.locator("#player")).toHaveJSProperty("currentTime", playhead);
     await expectPreviewSettles(page);
+    await expect(page.locator('button[data-mapmode="north"]')).toHaveClass(/is-active/);
+    await expect(page.locator('button[data-mapmode="chase"]')).toBeDisabled();
+    await expect(page.locator("#export-map-chase-controls")).toBeHidden();
+    await expect(page.locator('button[data-maptheme="dark"]')).toBeDisabled();
+    await expect(page.locator("#export-map-appearance-unavailable")).toBeVisible();
+    const savedMode = await page.evaluate(() => {
+        const prefs = JSON.parse(localStorage.getItem("dashcamigo:export:overlays") ?? "null");
+        return prefs?.overlayMap?.mode;
+    });
+    expect(savedMode, "a fallback does not replace the preferred camera mode").toBe("chase");
+    await page.locator("#export-map-provider-select").selectOption("openfreemap");
+    shouldFailTiles = false;
+    await page.locator("#export-map-provider-select").selectOption("osm-vector");
+    await expect(page.locator('button[data-mapmode="chase"]')).toBeEnabled();
+    await expect(page.locator('button[data-mapmode="chase"]')).toHaveClass(/is-active/);
+    await expect(page.locator("#export-map-chase-controls")).toBeVisible();
+    await expect(page.locator('button[data-maptheme="dark"]')).toBeEnabled();
     await page.locator("#export-panel-close").click();
     await expect(page.locator("#export-map-snapshot-host")).toHaveCount(0);
 });

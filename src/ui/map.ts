@@ -75,6 +75,7 @@ import {
     subscribeMapProvider,
     type MapProvider,
 } from "./map-provider.js";
+import { MAP_PROVIDER_REGISTRY, MAX_MAP_PITCH_DEG } from "./map-provider-registry.js";
 import { MapAttributionControl } from "./map-attribution-control.js";
 import { createYandexMapStyle } from "./yandex-map.js";
 import { registerSharedMapTileCache, transformMapTileRequest } from "./map-tile-cache.js";
@@ -408,7 +409,7 @@ export function applyViewerMapStyle(style: maplibregl.StyleSpecification): mapli
 
 function viewerMapColors(): ReturnType<typeof mapThemeColors> {
     const provider = getMapProvider();
-    return mapThemeColors(provider === "osm-raster" || provider === "yandex" ? "light" : currentMapTheme());
+    return mapThemeColors(MAP_PROVIDER_REGISTRY[provider].usesSelectedTheme ? currentMapTheme() : "light");
 }
 
 function showMapStyleError(): void {
@@ -744,6 +745,7 @@ export function ensureMap(): maplibregl.Map | null {
         return null;
     }
     state.map = map;
+    syncProviderCamera();
 
     // Markers stay viewport-aligned for legibility, then receive a deliberately
     // milder manual foreshortening than MapLibre's full map-plane projection.
@@ -1688,6 +1690,7 @@ export function syncMapFollowButton(): void {
     for (const btn of buttons) {
         const mode = btn.dataset.followMode as FollowMode | undefined;
         if (!mode) continue;
+        btn.disabled = !MAP_PROVIDER_REGISTRY[getMapProvider()].camera.supportsHeadingUp && isHeadingUpMode(mode);
         btn.setAttribute("aria-pressed", mode === state.followMode ? "true" : "false");
     }
     syncChaseControls();
@@ -1717,6 +1720,7 @@ export function smoothCameraToCurrentPosition(): void {
  *  state, syncs the control + the resolution cap, then runs the one-off ease /
  *  chase entry toward the current car. */
 function applyFollowMode(mode: FollowMode): void {
+    if (!MAP_PROVIDER_REGISTRY[getMapProvider()].camera.supportsHeadingUp && isHeadingUpMode(mode)) return;
     const fromMode = state.followMode;
     if (fromMode === mode) return;
     state.followMode = mode;
@@ -2855,7 +2859,7 @@ const MINI_MAP_REPAINT_THRESHOLD_PX = 3;
 //    fetches.
 
 // Slider ceiling. See the maxPitch comment in ensureMap for why 70, not 85.
-const CHASE_MAX_PITCH_DEG = 70;
+const CHASE_MAX_PITCH_DEG = MAX_MAP_PITCH_DEG;
 const CHASE_DEFAULT_PITCH_DEG = 58;
 // Street-level zoom chase eases to on entry when the user was zoomed out on the
 // trip overview. Buildings live at z14+, so a tilted overview would show none.
@@ -2901,6 +2905,33 @@ function clampPitch(deg: number): number {
  *  the per-frame bearing write and recenter bearing. */
 function isHeadingUpMode(mode: FollowMode): boolean {
     return mode === "rotate" || mode === "chase";
+}
+
+function syncProviderCamera(): void {
+    const camera = MAP_PROVIDER_REGISTRY[getMapProvider()].camera;
+    const map = state.map;
+    if (map) {
+        // Also constrain an animation or compass drag already active at fallback.
+        map.setTransformCameraUpdate(
+            camera.supportsHeadingUp ? null : (next) => camera.orient(next.bearing, next.pitch),
+        );
+        if (!camera.supportsHeadingUp) {
+            map.stop();
+            map.setMaxPitch(camera.maxPitch);
+            map.dragRotate.disable();
+            map.touchZoomRotate.disableRotation();
+            map.keyboard.disableRotation();
+            map.jumpTo(camera.orient(map.getBearing(), map.getPitch()));
+            removeBuildings3dLayer(map);
+        } else {
+            map.setMaxPitch(camera.maxPitch);
+            map.dragRotate.enable();
+            map.touchZoomRotate.enableRotation();
+            map.keyboard.enableRotation();
+        }
+    }
+    if (!camera.supportsHeadingUp && isHeadingUpMode(state.followMode)) applyFollowMode("follow");
+    else syncMapFollowButton();
 }
 
 /** Maps speed to a chase zoom: rest -> zoomed in, fast -> zoomed out. Monotonic,
@@ -3165,6 +3196,7 @@ export function initMap(cb: MapCallbacks): void {
 
     subscribeMapProvider((provider, previous) => {
         if (previous === null) return;
+        syncProviderCamera();
         const theme = currentMapTheme();
         loadMapStyle(theme, false, "main", provider).then((style) => {
             if (style) applyLoadedStyle(style, theme, provider, true);
@@ -3306,14 +3338,15 @@ function canResetMapBearing(map: maplibregl.Map): boolean {
 function guardMapCompass(map: maplibregl.Map): void {
     const compass = map.getContainer().querySelector<HTMLButtonElement>(".maplibregl-ctrl-compass");
     if (!compass) return;
-    const preventTiltedReset = (event: Event): void => {
-        if (canResetMapBearing(map)) return;
+    const preventUnavailableInteraction = (event: Event): void => {
+        const canRotate = MAP_PROVIDER_REGISTRY[getMapProvider()].camera.supportsHeadingUp;
+        if (canResetMapBearing(map) && (event.type === "click" || canRotate)) return;
         event.preventDefault();
         event.stopImmediatePropagation();
     };
-    // MapLibre's compass drag listeners also receive touches on disabled buttons.
+    // The compass rotates independently of dragRotate, even on disabled buttons.
     for (const event of ["click", "mousedown", "touchstart"]) {
-        compass.addEventListener(event, preventTiltedReset, { capture: true, passive: false });
+        compass.addEventListener(event, preventUnavailableInteraction, { capture: true, passive: false });
     }
 }
 

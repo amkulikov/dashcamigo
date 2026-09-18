@@ -19,6 +19,7 @@ import {
     closeExportMode,
     type ExportOutputKind,
     exportPanelState,
+    getExportMapPreviewProvider,
     hasCustomOverlayPreferences,
     MAP_LABEL_SIZE_PCT_VALUES,
     type MapViewMode,
@@ -109,6 +110,7 @@ import { isMapAvailable } from "./map.js";
 import { STREET_LABEL_DENSITY_LABEL_KEYS, STREET_LABEL_DENSITY_VALUES } from "./map-label-scale.js";
 import { renderMapMarkerControl } from "./map-marker-control.js";
 import { createMapProviderSelect } from "./map-provider-control.js";
+import { MAP_PROVIDER_REGISTRY, MAX_MAP_PITCH_DEG } from "./map-provider-registry.js";
 import { buildLucideIcon } from "./icons.js";
 import { isMobileLayout } from "./media-queries.js";
 
@@ -231,6 +233,7 @@ function syncExportPanel(): void {
     // Cheap and idempotent; keeps the panel honest after any external state change.
     syncOutputKindUi();
     syncOverlayReset();
+    syncExportMapControls();
     const videoMode = exportPanelState.outputKind === "video";
     // Everything below configures the video pipeline - skip it entirely in
     // gpx-only mode (the controls are hidden and there is no encode to size). In
@@ -2349,6 +2352,7 @@ function renderOverlaySegment<Value extends string | number>(options: OverlaySeg
         btn.dataset[options.dataKey] = String(value);
         setToggleSelected(btn, options.current === value);
         btn.addEventListener("click", () => {
+            if (btn.disabled) return;
             options.onChange(value);
             for (const button of buttons) setToggleSelected(button, button === btn);
             notifyExportStateChanged();
@@ -2564,6 +2568,12 @@ function refreshOverlayInspector(): void {
             ),
         );
         root.appendChild(renderMapModeControls());
+        const appearanceHint = document.createElement("p");
+        appearanceHint.id = "export-map-appearance-unavailable";
+        appearanceHint.className = "export-panel__note";
+        appearanceHint.textContent = t("settings.map.styleUnavailable");
+        root.appendChild(appearanceHint);
+        syncExportMapControls();
     }
 
     // Positioning is drag-on-the-frame; the X/Y sliders + align grid are gone.
@@ -2689,6 +2699,7 @@ function renderMapModeControls(): HTMLElement {
     const om = exportPanelState.overlayMap;
 
     const extras = document.createElement("div");
+    extras.id = "export-map-chase-controls";
     extras.hidden = om.mode !== "chase";
     wrap.appendChild(
         renderOverlaySegmentField<MapViewMode>({
@@ -2711,7 +2722,7 @@ function renderMapModeControls(): HTMLElement {
         renderOverlaySlider(
             t("export.overlays.mapTilt"),
             0,
-            70,
+            MAX_MAP_PITCH_DEG,
             om.pitchDeg,
             (v) => `${v}°`,
             (v) => {
@@ -2729,6 +2740,27 @@ function renderMapModeControls(): HTMLElement {
     );
     wrap.appendChild(extras);
     return wrap;
+}
+
+function syncExportMapControls(): void {
+    if (selectedOverlayKey !== "map" || !overlayInspectorEl) return;
+    const { camera, supportsAppearanceSettings } = MAP_PROVIDER_REGISTRY[getExportMapPreviewProvider()];
+    const mode = camera.supportsHeadingUp ? exportPanelState.overlayMap.mode : "north";
+    for (const button of overlayInspectorEl.querySelectorAll<HTMLButtonElement>("button[data-mapmode]")) {
+        button.disabled = button.dataset.mapmode === "chase" && !camera.supportsHeadingUp;
+        setToggleSelected(button, button.dataset.mapmode === mode);
+    }
+    const extras = overlayInspectorEl.querySelector<HTMLElement>("#export-map-chase-controls");
+    if (extras) extras.hidden = mode !== "chase";
+    const hint = overlayInspectorEl.querySelector<HTMLElement>("#export-map-appearance-unavailable");
+    if (hint) hint.hidden = supportsAppearanceSettings;
+    for (const button of overlayInspectorEl.querySelectorAll<HTMLButtonElement>(
+        "button[data-maptheme], button[data-maplabelsize], button[data-mapstreetnames]",
+    )) {
+        button.disabled = !supportsAppearanceSettings;
+        if (button.disabled) button.setAttribute("aria-describedby", "export-map-appearance-unavailable");
+        else button.removeAttribute("aria-describedby");
+    }
 }
 
 /** A labelled range slider with a live value readout. Values snap to the step

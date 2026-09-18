@@ -1,6 +1,12 @@
 import { t, type I18nKey } from "../i18n/index.js";
 import { createMapProviderSelect } from "./map-provider-control.js";
-import { getMapProviderPreference, setMapProviderPreference, subscribeMapProviderPreference } from "./map-provider.js";
+import {
+    getMapProviderPreference,
+    setMapProviderPreference,
+    subscribeMapProvider,
+    subscribeMapProviderPreference,
+} from "./map-provider.js";
+import { MAP_PROVIDER_REGISTRY } from "./map-provider-registry.js";
 import { isYandexMapAvailable } from "./yandex-map.js";
 import {
     getMapViewPreferences,
@@ -139,14 +145,16 @@ export function initMapViewControls(host: HTMLElement, idPrefix: string): void {
     subscribeMapViewPreferences(sync);
     subscribeMapProviderPreference((preference) => {
         provider.value = preference;
-        const isYandex = preference === "yandex";
+    });
+    subscribeMapProvider((activeProvider) => {
+        const unavailable = !MAP_PROVIDER_REGISTRY[activeProvider].supportsAppearanceSettings;
         for (const control of [style, theme]) {
-            control.disabled = isYandex;
-            if (isYandex) control.setAttribute("aria-describedby", styleHint.id);
+            control.disabled = unavailable;
+            if (unavailable) control.setAttribute("aria-describedby", styleHint.id);
             else control.removeAttribute("aria-describedby");
         }
-        buildings.disabled = isYandex;
-        buildings.setAttribute("aria-describedby", isYandex ? `${description.id} ${styleHint.id}` : description.id);
-        styleHint.hidden = !isYandex;
+        buildings.disabled = unavailable;
+        buildings.setAttribute("aria-describedby", unavailable ? `${description.id} ${styleHint.id}` : description.id);
+        styleHint.hidden = !unavailable;
     });
 }

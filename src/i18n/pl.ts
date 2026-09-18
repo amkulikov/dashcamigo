@@ -904,7 +904,7 @@ export const plDict = {
     "settings.map.provider.yandex": "Yandex Maps",
     "settings.map.provider.unavailable": "Yandex Maps nie jest tutaj dostępny.",
     "settings.map.provider.description": "Jeśli ten dostawca jest niedostępny, mapa przełączy się automatycznie.",
-    "settings.map.styleUnavailable": "Wyglądu Yandex Maps nie można zmienić.",
+    "settings.map.styleUnavailable": "Ustawienia wyglądu są niedostępne dla map rastrowych.",
     "settings.map.style.label": "Styl mapy",
     "settings.map.style.classic": "Klasyczny",
     "settings.map.style.road": "Drogowy",

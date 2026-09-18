@@ -51,7 +51,8 @@ import {
 } from "./map-label-scale.js";
 import { renderMapMarkerControl } from "./map-marker-control.js";
 import { getMapMarkerAppearance, setMapMarkerAppearance } from "./map-marker-pref.js";
-import { getMapProviderPreference, subscribeMapProviderPreference } from "./map-provider.js";
+import { getMapProvider, subscribeMapProvider } from "./map-provider.js";
+import { MAP_PROVIDER_REGISTRY } from "./map-provider-registry.js";
 import { initMapViewControls } from "./map-view-controls.js";
 import { activateModal, deactivateModal, wireBackdropDismiss } from "./modal-helper.js";
 import { notify } from "./notifications.js";
@@ -399,11 +400,11 @@ export function initSettingsModal(): void {
     const mapViewControl = document.getElementById("settings-map-view-control");
     if (mapViewControl) initMapViewControls(mapViewControl, "settings-map");
 
-    subscribeMapProviderPreference((provider) => {
+    subscribeMapProvider((provider) => {
         for (const id of ["settings-map-label-scale-select", "settings-map-street-names-select"]) {
             const select = document.getElementById(id) as HTMLSelectElement | null;
             if (!select) continue;
-            select.disabled = provider === "yandex";
+            select.disabled = !MAP_PROVIDER_REGISTRY[provider].supportsAppearanceSettings;
             if (select.disabled) select.setAttribute("aria-describedby", "settings-map-style-unavailable");
             else select.removeAttribute("aria-describedby");
         }
@@ -414,7 +415,7 @@ export function initSettingsModal(): void {
     // its own per-export text-size control.
 
     document.getElementById("settings-map-label-scale-select")?.addEventListener("change", (ev) => {
-        if (getMapProviderPreference() === "yandex") return;
+        if (!MAP_PROVIDER_REGISTRY[getMapProvider()].supportsAppearanceSettings) return;
         const sel = ev.target as HTMLSelectElement;
         const parsed = Number(sel.value);
         const match = MAP_LABEL_SCALE_VALUES.find((v) => v === parsed);
@@ -424,7 +425,7 @@ export function initSettingsModal(): void {
     });
 
     document.getElementById("settings-map-street-names-select")?.addEventListener("change", (ev) => {
-        if (getMapProviderPreference() === "yandex") return;
+        if (!MAP_PROVIDER_REGISTRY[getMapProvider()].supportsAppearanceSettings) return;
         const sel = ev.target as HTMLSelectElement;
         const match = STREET_LABEL_DENSITY_VALUES.find((v) => v === sel.value);
         if (match === undefined) return;

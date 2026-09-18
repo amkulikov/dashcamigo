@@ -905,7 +905,7 @@ export const deDict = {
     "settings.map.provider.yandex": "Yandex Maps",
     "settings.map.provider.unavailable": "Yandex Maps ist hier nicht verfügbar.",
     "settings.map.provider.description": "Wenn dieser Anbieter nicht erreichbar ist, wechselt die Karte automatisch.",
-    "settings.map.styleUnavailable": "Das Aussehen von Yandex Maps lässt sich nicht ändern.",
+    "settings.map.styleUnavailable": "Darstellungseinstellungen sind für Rasterkarten nicht verfügbar.",
     "settings.map.style.label": "Kartenstil",
     "settings.map.style.classic": "Klassisch",
     "settings.map.style.road": "Straßen",

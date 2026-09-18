@@ -205,6 +205,14 @@
     background: var(--accent-hot);
     color: var(--dc-black);
 }
+.map-follow-segments .map-follow-seg:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+}
+.map-follow-segments .map-follow-seg:disabled:hover {
+    background: var(--bg-elev);
+    color: var(--fg);
+}
 
 /* Gear popover: map view preferences anchored to the gear button in the
    controls column (position:relative wrapper so the flyout tracks the gear's

@@ -47,8 +47,10 @@ import { drawMapMarker } from "./map-marker-renderer.js";
 import {
     createOverlayMapProviderSession,
     mapProviderErrorKey,
+    type OverlayMapProvider,
     type OverlayMapProviderPreference,
 } from "./map-provider.js";
+import { MAP_PROVIDER_REGISTRY, MAX_MAP_PITCH_DEG } from "./map-provider-registry.js";
 import { transformMapTileRequest } from "./map-tile-cache.js";
 import { waitForMapEvent } from "./map-events.js";
 import { addSpeedTrack } from "./map-track.js";
@@ -79,7 +81,7 @@ const EARTH_R = 6378137;
 // --- Chase camera (export map overlay) ---
 // Tilt ceiling - mirrors the live map's CHASE_MAX_PITCH_DEG. Past ~70 the
 // renderer pulls in far too many tiles near the horizon for little gain.
-const EXPORT_CHASE_MAX_PITCH = 70;
+const EXPORT_CHASE_MAX_PITCH = MAX_MAP_PITCH_DEG;
 // Speed-adaptive zoom: zoom out by up to this many levels as speed rises so the
 // road ahead stays in view. Unlike the live chase (fixed 16.8..15.4, always
 // above maxzoom), the export base zoom comes from the user's km-scale slider, so
@@ -207,6 +209,8 @@ export interface ExportMapRenderOptions {
     markerAppearance?: MapMarkerAppearance;
     /** The last bitmap became stale after a provider swap or delayed tile load. */
     onInvalidate?: () => void;
+    /** Reports the actual source so preview controls follow fallback capabilities. */
+    onProviderChange?: (provider: OverlayMapProvider) => void;
 }
 
 export async function createExportMapSnapshotter(
@@ -222,6 +226,7 @@ export async function createExportMapSnapshotter(
         markerAppearance = DEFAULT_MAP_MARKER_APPEARANCE,
         provider,
         onInvalidate,
+        onProviderChange,
     } = renderOptions;
     let activeMarkerAppearance = { ...markerAppearance };
     // Resolution policy: derive pixelRatio from the slot the snapshot lands in,
@@ -366,6 +371,7 @@ export async function createExportMapSnapshotter(
     if (onInvalidate) map.on("idle", onIdle);
     let providerStyleChange = Promise.resolve();
     const unsubscribeProvider = providerSession.subscribe((provider, previous) => {
+        if (!isDisposed) onProviderChange?.(provider);
         if (provider === activeProvider || isDisposed) return;
         activeProvider = provider;
         providerStyleChange = providerStyleChange
@@ -409,7 +415,7 @@ export async function createExportMapSnapshotter(
         throw new Error("canvas 2d ctx unavailable");
     }
 
-    return {
+    const snapshotter: ExportMapSnapshotter = {
         async prewarm(recs, zoomKm, signal, chase): Promise<void> {
             await providerStyleChange;
             // Filter first: an inactive/NaN seed or waypoint would make
@@ -417,11 +423,6 @@ export async function createExportMapSnapshotter(
             // jumpTo a NaN center, which destabilizes the MapLibre instance.
             const usable = finiteActiveRecords(recs);
             if (usable.length === 0) return;
-            const headingUp = chase?.headingUp === true;
-            const pitch = headingUp ? clampExportPitch(chase?.pitchDeg) : 0;
-            // Add buildings before walking so each idle wait also caches their
-            // tessellation - the per-frame hot loop then has them ready.
-            if (headingUp) addBuildings3dLayer(map, theme);
             const baseZoom = zoomForDiameterKm(usable[0]!.lat, zoomKm, SNAPSHOT_WIDTH);
             // Walk at the WIDEST zoom the run can reach (base + the full adaptive
             // zoom-out) so the cached corridor spans every frame's footprint. NB:
@@ -430,10 +431,6 @@ export async function createExportMapSnapshotter(
             // zoomed-in frames can request a finer tile level this walk did not
             // fetch; that is a bounded, tolerated gray-fill (maxTileCacheSize
             // accumulates them as the run proceeds).
-            const targetZoom =
-                headingUp && chase?.adaptiveZoom
-                    ? baseZoom + exportAdaptiveZoomDelta(EXPORT_ADAPTIVE_FULL_SPEED_MS)
-                    : baseZoom;
             // Step size = half the visible viewport in meters. After jumping by
             // half a viewport every neighboring snapshot reuses tiles loaded
             // by the previous waypoint.
@@ -445,17 +442,29 @@ export async function createExportMapSnapshotter(
             // Per-waypoint bearing (only in chase) so the tilted frustum we cache
             // points the same way the per-frame snapshot will; pitch extends it
             // forward to the horizon, which is the tiles a top-down walk misses.
-            const visit = (record: GpsRecord, timeoutMs: number): Promise<void> =>
-                waitForMapEvent(map, "idle", timeoutMs, {
+            const visit = async (record: GpsRecord, timeoutMs: number): Promise<void> => {
+                await providerStyleChange;
+                const camera = MAP_PROVIDER_REGISTRY[activeProvider].camera;
+                const headingUp = camera.supportsHeadingUp && chase?.headingUp === true;
+                if (headingUp) addBuildings3dLayer(map, theme);
+                else removeBuildings3dLayer(map);
+                const targetZoom =
+                    headingUp && chase?.adaptiveZoom
+                        ? baseZoom + exportAdaptiveZoomDelta(EXPORT_ADAPTIVE_FULL_SPEED_MS)
+                        : baseZoom;
+                await waitForMapEvent(map, "idle", timeoutMs, {
                     signal,
                     start: () =>
                         map.jumpTo({
                             center: [record.lon, record.lat],
                             zoom: targetZoom,
-                            bearing: headingUp ? record.bearingDeg : 0,
-                            pitch,
+                            ...camera.orient(
+                                headingUp ? record.bearingDeg : 0,
+                                headingUp ? clampExportPitch(chase?.pitchDeg) : 0,
+                            ),
                         }),
                 });
+            };
             await visit(usable[0]!, 4000);
             for (const r of usable) {
                 if (signal.aborted) throw new DOMException("aborted", "AbortError");
@@ -474,13 +483,14 @@ export async function createExportMapSnapshotter(
             }
             log.info("map snapshot prewarm done", {
                 points: usable.length,
-                chase: headingUp,
+                chase: MAP_PROVIDER_REGISTRY[activeProvider].camera.supportsHeadingUp && chase?.headingUp === true,
                 elapsedMs: Date.now() - startedAtMs,
                 budgetExhausted,
             });
         },
         async snapshot(req, opts): Promise<ImageBitmap> {
             await providerStyleChange;
+            const snapshotProvider = activeProvider;
             shouldRefreshOnIdle = false;
             // Defensive guard: pipeline already filters non-finite positions,
             // but a malformed direct call would otherwise pass NaN into
@@ -489,7 +499,8 @@ export async function createExportMapSnapshotter(
             if (!Number.isFinite(req.lat) || !Number.isFinite(req.lon) || !Number.isFinite(req.zoomKm)) {
                 throw new Error("snapshot request has non-finite lat/lon/zoom");
             }
-            const headingUp = req.headingUp === true;
+            const camera = MAP_PROVIDER_REGISTRY[activeProvider].camera;
+            const headingUp = camera.supportsHeadingUp && req.headingUp === true;
             // 3D buildings ride along with chase (heading-up + tilt), matching
             // the live chase map. Drop them on a north-up frame so a top-down
             // preview after a chase preview does not keep the flat footprints.
@@ -504,8 +515,10 @@ export async function createExportMapSnapshotter(
             // extrusion fades out on fast/wide shots. Intentional - the wider
             // frame keeps more road ahead in view, which matters more at speed.
             if (headingUp && req.adaptiveZoom) zoom += exportAdaptiveZoomDelta(req.speedMs);
-            const bearing = headingUp ? req.bearingDeg : 0;
-            const pitch = headingUp ? clampExportPitch(req.pitchDeg) : 0;
+            const { bearing, pitch } = camera.orient(
+                headingUp ? req.bearingDeg : 0,
+                headingUp ? clampExportPitch(req.pitchDeg) : 0,
+            );
             // Chase pushes the car into the lower third (road ahead in view) via
             // top camera padding; north-up keeps it centered.
             const padTop = headingUp ? Math.round(SNAPSHOT_HEIGHT * CHASE_TOP_PADDING_FRAC) : 0;
@@ -546,6 +559,8 @@ export async function createExportMapSnapshotter(
                 }
             }
 
+            // A fallback during the tile wait changes both style and camera policy.
+            if (snapshotProvider !== activeProvider) return snapshotter.snapshot(req, opts);
             const sourceCanvas = map.getCanvas();
             // Render the car marker on top - direct on a compositor canvas so
             // we hand back a fully self-contained ImageBitmap. Doing the marker
@@ -598,6 +613,7 @@ export async function createExportMapSnapshotter(
             host.remove();
         },
     };
+    return snapshotter;
 }
 
 function waitForStyleLoad(map: maplibregl.Map, style?: maplibregl.StyleSpecification): Promise<void> {

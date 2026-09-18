@@ -913,7 +913,7 @@ export const koDict = {
     "settings.map.provider.yandex": "Yandex Maps",
     "settings.map.provider.unavailable": "여기서는 Yandex Maps를 사용할 수 없어요.",
     "settings.map.provider.description": "선택한 제공업체를 사용할 수 없으면 지도가 자동으로 전환됩니다.",
-    "settings.map.styleUnavailable": "Yandex Maps의 지도 스타일은 변경할 수 없어요.",
+    "settings.map.styleUnavailable": "래스터 지도에서는 화면 설정을 사용할 수 없어요.",
     "settings.map.style.label": "지도 스타일",
     "settings.map.style.classic": "기본",
     "settings.map.style.road": "도로 중심",

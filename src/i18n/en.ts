@@ -904,7 +904,7 @@ export const enDict = {
     "settings.map.provider.yandex": "Yandex Maps",
     "settings.map.provider.unavailable": "Yandex Maps isn’t available here.",
     "settings.map.provider.description": "If this provider is unavailable, the map switches automatically.",
-    "settings.map.styleUnavailable": "Map appearance can’t be changed with Yandex Maps.",
+    "settings.map.styleUnavailable": "Map appearance settings are unavailable for raster maps.",
     "settings.map.style.label": "Map style",
     "settings.map.style.classic": "Classic",
     "settings.map.style.road": "Road",

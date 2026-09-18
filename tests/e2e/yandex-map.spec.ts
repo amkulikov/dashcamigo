@@ -120,7 +120,7 @@ async function expectMainCreditsAbovePlayerBar(page: Page, tooltip: string): Pro
     await expectCreditsClickable(main);
 }
 
-test("Yandex selection syncs both settings and disables only map appearance controls", async ({ page }) => {
+test("Yandex selection syncs map settings and limits the camera to north-up", async ({ page }) => {
     await loadTrip(page);
     await pausePlayback(page);
     await page.locator(".mini-map").click();
@@ -131,12 +131,16 @@ test("Yandex selection syncs both settings and disables only map appearance cont
     await page.locator("#map-theme-select").selectOption("light");
     await quickProvider.selectOption("yandex");
     await expectViewerSource(page, "yandex");
+    await expect(page.locator('.map-follow-seg[data-follow-mode="chase"]')).toBeDisabled();
+    await expect(page.locator('.map-follow-seg[data-follow-mode="rotate"]')).toBeDisabled();
+    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map!.getBearing())).toBe(0);
+    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map!.getPitch())).toBe(0);
     const quickAppearance = page.locator(
         "#map-style-select, #map-theme-select, #map-buildings3d-toggle, #map-label-scale-segment button, #map-street-names-segment button",
     );
     await expectControlsDisabled(quickAppearance, true);
     await expect(page.locator("#map-style-unavailable")).toHaveText(
-        "Map appearance can’t be changed with Yandex Maps.",
+        "Map appearance settings are unavailable for raster maps.",
     );
     await expect(page.locator("#map-style-unavailable")).toBeVisible();
     await expectControlsDisabled(page.locator("#map-marker-control button, #map-marker-control input"), false);
@@ -166,7 +170,9 @@ test("Yandex selection syncs both settings and disables only map appearance cont
     await page.locator("#settings-btn").click();
     await expect(page.locator("#settings-map-provider-select")).toHaveValue("yandex");
     await expect(page.locator('#settings-map-provider-select option[value="yandex"]')).toHaveText("Яндекс Карты");
-    await expect(page.locator("#settings-map-style-unavailable")).toHaveText("Оформление Яндекс Карт изменить нельзя.");
+    await expect(page.locator("#settings-map-style-unavailable")).toHaveText(
+        "Настройки оформления недоступны для растровых карт.",
+    );
     await expectControlsDisabled(modalAppearance, true);
 });
 

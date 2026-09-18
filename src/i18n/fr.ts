@@ -908,7 +908,7 @@ export const frDict = {
     "settings.map.provider.yandex": "Yandex Maps",
     "settings.map.provider.unavailable": "Yandex Maps n’est pas disponible ici.",
     "settings.map.provider.description": "Si ce fournisseur est indisponible, la carte change automatiquement.",
-    "settings.map.styleUnavailable": "L’apparence de Yandex Maps ne peut pas être modifiée.",
+    "settings.map.styleUnavailable": "Les réglages d’apparence ne sont pas disponibles pour les cartes matricielles.",
     "settings.map.style.label": "Style de carte",
     "settings.map.style.classic": "Classique",
     "settings.map.style.road": "Routier",

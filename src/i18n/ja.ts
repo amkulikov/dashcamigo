@@ -916,7 +916,7 @@ export const jaDict = {
     "settings.map.provider.yandex": "Yandex Maps",
     "settings.map.provider.unavailable": "ここでは Yandex Maps を利用できません。",
     "settings.map.provider.description": "選んだ提供元が利用できない場合、地図は自動で切り替わります。",
-    "settings.map.styleUnavailable": "Yandex Maps の表示スタイルは変更できません。",
+    "settings.map.styleUnavailable": "ラスター地図では外観設定を変更できません。",
     "settings.map.style.label": "地図のスタイル",
     "settings.map.style.classic": "クラシック",
     "settings.map.style.road": "道路重視",

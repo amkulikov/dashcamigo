@@ -86,6 +86,62 @@ test("keeps a paused inspection view when map preferences change during chase", 
     expect(view.paused).toBe(true);
 });
 
+test("raster providers keep the viewer flat and north-up", async ({ page }) => {
+    await presetLocalStorage(page);
+    await page.setViewportSize(DESKTOP);
+    await gotoApp(page);
+    await loadTrip(page);
+    await page.locator("#mini-map").click();
+    await expect(page.locator("body")).not.toHaveClass(/map-morphing/);
+    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map?.getPitch() ?? 0)).toBeGreaterThan(20);
+
+    await page.evaluate(() => window.__dashcamigo.setMapProvider("osm-raster"));
+    const rotate = page.locator('.map-follow-seg[data-follow-mode="rotate"]');
+    const chase = page.locator('.map-follow-seg[data-follow-mode="chase"]');
+    await expect(rotate).toBeDisabled();
+    await expect(chase).toBeDisabled();
+    await expect(page.locator("#map-chase-controls")).toBeHidden();
+    await expect
+        .poll(() =>
+            page.evaluate(() => {
+                const { state } = window.__dashcamigo;
+                return {
+                    mode: state.followMode,
+                    bearing: state.map?.getBearing(),
+                    pitch: state.map?.getPitch(),
+                    maxPitch: state.map?.getMaxPitch(),
+                    canDragRotate: state.map?.dragRotate.isEnabled(),
+                };
+            }),
+        )
+        .toEqual({ mode: "follow", bearing: 0, pitch: 0, maxPitch: 0, canDragRotate: false });
+
+    await page.locator('.map-follow-seg[data-follow-mode="off"]').click();
+    const compass = await page.locator("#map .maplibregl-ctrl-compass").boundingBox();
+    if (!compass) throw new Error("map compass is missing");
+    await page.mouse.move(compass.x + compass.width / 2, compass.y + 4);
+    await page.mouse.down();
+    await page.mouse.move(compass.x + 70, compass.y + compass.height / 2, { steps: 5 });
+    await page.mouse.up();
+    await page.locator("#map .maplibregl-canvas").focus();
+    await page.keyboard.press("Shift+ArrowRight");
+    await page.keyboard.press("Shift+ArrowUp");
+    expect(await page.evaluate(() => window.__dashcamigo.state.map!.getBearing())).toBe(0);
+    expect(await page.evaluate(() => window.__dashcamigo.state.map!.getPitch())).toBe(0);
+    await page.evaluate(() => window.__dashcamigo.state.map!.jumpTo({ bearing: 90, pitch: 40 }));
+    expect(await page.evaluate(() => window.__dashcamigo.state.map!.getBearing())).toBe(0);
+    expect(await page.evaluate(() => window.__dashcamigo.state.map!.getPitch())).toBe(0);
+    await expect(page.locator("#settings-map-label-scale-select")).toBeDisabled();
+    await expect(page.locator("#map-buildings3d-toggle")).toBeDisabled();
+
+    await page.evaluate(() => window.__dashcamigo.setMapProvider("osm-vector"));
+    await expect(rotate).toBeEnabled();
+    await expect(chase).toBeEnabled();
+    await expect(page.locator("#settings-map-label-scale-select")).toBeEnabled();
+    await chase.click();
+    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map?.getPitch() ?? 0)).toBeGreaterThan(20);
+});
+
 test("keeps a crossing route and follow camera near the antimeridian", async ({ page }) => {
     await presetLocalStorage(page);
     await page.setViewportSize(DESKTOP);

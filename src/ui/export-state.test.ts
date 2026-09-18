@@ -5,9 +5,11 @@ import {
     _resetForTests,
     closeExportMode,
     exportPanelState,
+    getExportMapPreviewProvider,
     openExportMode,
     resetExportRangeForTrip,
     setExportModePreparation,
+    setExportMapPreviewProvider,
     setRange,
     subscribeExportState,
 } from "./export-state.js";
@@ -56,6 +58,27 @@ afterEach(() => {
     state.active = null;
     state.exportModeOpen = false;
     exportPanelState.range = null;
+});
+
+describe("export map preview provider", () => {
+    it("reports fallback capabilities without replacing the selected provider or camera", () => {
+        exportPanelState.overlayMap.provider = "openfreemap";
+        exportPanelState.overlayMap.mode = "chase";
+        let notifications = 0;
+        subscribeExportState(() => notifications++);
+
+        setExportMapPreviewProvider("openfreemap", "osm-raster");
+        setExportMapPreviewProvider("openfreemap", "osm-raster");
+
+        expect(getExportMapPreviewProvider()).toBe("osm-raster");
+        expect(exportPanelState.overlayMap.provider).toBe("openfreemap");
+        expect(exportPanelState.overlayMap.mode).toBe("chase");
+        expect(notifications).toBe(1);
+
+        exportPanelState.overlayMap.provider = "osm-vector";
+        expect(getExportMapPreviewProvider()).toBe("osm-vector");
+        exportPanelState.overlayMap.provider = "openfreemap";
+    });
 });
 
 describe("export mode preparation", () => {

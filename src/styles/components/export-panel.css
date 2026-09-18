@@ -869,8 +869,12 @@ fieldset.export-panel__group {
     cursor: pointer;
 }
 
-.export-panel__segment button:hover {
+.export-panel__segment button:hover:not(:disabled) {
     background: var(--bg-hover);
+}
+.export-panel__segment button:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
 }
 
 .export-panel__segment button.is-active {

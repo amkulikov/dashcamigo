@@ -36,6 +36,7 @@ import { createExportMapSnapshotter, type ExportMapSnapshotter } from "./export-
 import {
     exportPanelState,
     notifyExportStateChanged,
+    setExportMapPreviewProvider,
     subscribeExportState,
     type OverlayTextState,
 } from "./export-state.js";
@@ -824,16 +825,21 @@ async function refreshMapSnapshot(
         mapSnapshotterProvider = om.provider;
         mapSnapshotterLabelScalePct = om.labelScalePct;
         mapSnapshotterLabelDensity = om.labelDensity;
+        const providerPreference = om.provider;
         const myPromise: Promise<ExportMapSnapshotter | null> = createExportMapSnapshotter(
             records,
             "preview",
             theme,
             undefined,
             {
-                provider: om.provider,
+                provider: providerPreference,
                 labelScalePct: om.labelScalePct,
                 labelDensity: om.labelDensity,
                 markerAppearance: om.marker,
+                onProviderChange: (provider) => {
+                    if (myPromise !== mapSnapshotterPromise) return;
+                    setExportMapPreviewProvider(providerPreference, provider);
+                },
                 onInvalidate: () => {
                     if (myPromise !== mapSnapshotterPromise) return;
                     mapLastRequestKey = "";

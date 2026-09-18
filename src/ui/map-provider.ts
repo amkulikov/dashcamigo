@@ -9,7 +9,7 @@ const log = createLogger("map-provider");
 export type MapProvider = "openfreemap" | "osm-vector" | "osm-raster" | "yandex";
 export type MapProviderPreference = Exclude<MapProvider, "osm-raster">;
 export type OverlayMapProviderPreference = Exclude<MapProviderPreference, "yandex">;
-type OverlayMapProvider = Exclude<MapProvider, "yandex">;
+export type OverlayMapProvider = Exclude<MapProvider, "yandex">;
 
 const STORAGE_KEY = "dashcamigo:mapProvider";
 const FAILURE_WINDOW_MS = 5_000;
