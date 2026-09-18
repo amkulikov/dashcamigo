@@ -85,7 +85,7 @@ import {
     OSM_SHORTBREAD_SOURCE_ID,
 } from "./osm-fallback-style.js";
 import { buildMercatorCumulativeDistances, buildSpeedGradient } from "./speed-gradient.js";
-import { addSpeedTrack } from "./map-track.js";
+import { addSpeedTrack, removeSpeedTrack, speedTrackOuterWidth } from "./map-track.js";
 
 // --- lazy maplibre-gl loading (T9) ---
 //
@@ -1155,8 +1155,7 @@ export function refreshMap(trip: Trip | null, preserveCamera = false): void {
 
     const trailLayerId = `${TRIP_SOURCE_ID}${TRAIL_LAYER_SUFFIX}`;
     if (map.getLayer(trailLayerId)) map.removeLayer(trailLayerId);
-    if (map.getLayer(TRIP_SOURCE_ID)) map.removeLayer(TRIP_SOURCE_ID);
-    if (map.getSource(TRIP_SOURCE_ID)) map.removeSource(TRIP_SOURCE_ID);
+    removeSpeedTrack(map, TRIP_SOURCE_ID);
     if (state.marker) {
         state.marker.remove();
         state.marker = null;
@@ -1230,7 +1229,8 @@ export function refreshMap(trip: Trip | null, preserveCamera = false): void {
     trackCumDist = trailProgress.cumDist;
     trackTotalDist = trailProgress.total;
 
-    addSpeedTrack(map, { coords, gradient }, { sourceId: TRIP_SOURCE_ID, width: 4, opacity: 0.9 });
+    const trackWidth = 4;
+    addSpeedTrack(map, { coords, gradient }, { sourceId: TRIP_SOURCE_ID, width: trackWidth, opacity: 0.9 });
     // Trail overlay: same geometry, line-gradient is a 4-stop transparent ->
     // dim mask. setTrailProgress() rewrites it on every rAF tick so the un-
     // driven part of the track fades toward the map background. The driven
@@ -1241,7 +1241,7 @@ export function refreshMap(trip: Trip | null, preserveCamera = false): void {
         source: TRIP_SOURCE_ID,
         layout: { "line-join": "round", "line-cap": "round" },
         paint: {
-            "line-width": 5,
+            "line-width": speedTrackOuterWidth(trackWidth) + 1,
             "line-gradient": [
                 "interpolate",
                 ["linear"],
@@ -1466,8 +1466,7 @@ function refreshMiniMap(data: MiniMapData | null): void {
     if (!state.miniMapReady) return;
 
     // Clear previous track.
-    if (mini.getLayer(TRIP_SOURCE_ID)) mini.removeLayer(TRIP_SOURCE_ID);
-    if (mini.getSource(TRIP_SOURCE_ID)) mini.removeSource(TRIP_SOURCE_ID);
+    removeSpeedTrack(mini, TRIP_SOURCE_ID);
     if (state.miniMapMarker) {
         state.miniMapMarker.remove();
         state.miniMapMarker = null;

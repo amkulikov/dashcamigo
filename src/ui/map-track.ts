@@ -1,6 +1,14 @@
 import type { ExpressionSpecification, Map as MapLibreMap } from "maplibre-gl";
 import type { MiniMapData } from "./state.js";
 import { unwrapTrackCoordinates } from "../coordinates.js";
+import { themeColors } from "./theme.js";
+
+const OUTLINE_WIDTH = 1;
+const HALO_WIDTH = 0.75;
+
+export function speedTrackOuterWidth(width: number): number {
+    return width + 2 * (OUTLINE_WIDTH + HALO_WIDTH);
+}
 
 /** Geometry and gradient must describe the same ordered vertices. */
 export function addSpeedTrack(
@@ -19,6 +27,24 @@ export function addSpeedTrack(
             geometry: { type: "LineString", coordinates: unwrapTrackCoordinates(data.coords) },
         },
     });
+    // Both edges stay distinct on light roads, dark basemaps and raster imagery.
+    const colors = themeColors();
+    for (const casing of [
+        { id: `${layerId}-halo`, width: speedTrackOuterWidth(width), color: colors.trackHalo },
+        { id: `${layerId}-outline`, width: width + 2 * OUTLINE_WIDTH, color: colors.trackOutline },
+    ]) {
+        map.addLayer({
+            id: casing.id,
+            type: "line",
+            source: sourceId,
+            layout: { "line-join": "round", "line-cap": "round" },
+            paint: {
+                "line-width": casing.width,
+                "line-color": casing.color,
+                "line-opacity": opacity,
+            },
+        });
+    }
     map.addLayer({
         id: layerId,
         type: "line",
@@ -30,4 +56,11 @@ export function addSpeedTrack(
             "line-gradient": data.gradient as ExpressionSpecification,
         },
     });
+}
+
+export function removeSpeedTrack(map: MapLibreMap, sourceId: string, layerId = sourceId): void {
+    for (const id of [layerId, `${layerId}-outline`, `${layerId}-halo`]) {
+        if (map.getLayer(id)) map.removeLayer(id);
+    }
+    if (map.getSource(sourceId)) map.removeSource(sourceId);
 }

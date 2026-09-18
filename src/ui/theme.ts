@@ -120,6 +120,8 @@ export function withAlpha(color: string, alphaHex: string): string {
  */
 interface ThemeColors {
     track: [string, string, string, string, string]; // --dc-track-1..5 (slow → fast gradient)
+    trackOutline: string;
+    trackHalo: string;
     chartSpeed: string; // --dc-blue
     chartAccel: string; // --dc-orange
     chartCursor: string; // --dc-red
@@ -171,6 +173,8 @@ export function themeColors(): ThemeColors {
             getCssVar("--dc-track-4"),
             getCssVar("--dc-track-5"),
         ],
+        trackOutline: getCssVar("--dc-track-outline"),
+        trackHalo: getCssVar("--dc-track-halo"),
         chartSpeed: getCssVar("--dc-blue"),
         chartAccel: getCssVar("--dc-orange"),
         chartCursor: getCssVar("--dc-red"),

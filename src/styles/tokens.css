@@ -61,6 +61,8 @@
     --dc-track-3: #f5c518;
     --dc-track-4: #ff9000;
     --dc-track-5: #e5102b; /* fast */
+    --dc-track-outline: var(--dc-ink);
+    --dc-track-halo: var(--dc-white);
 
     /* ----- TYPE ----- */
     /* BrandMark "dashcamigo" - Space Grotesk, a tight grotesque derived from
