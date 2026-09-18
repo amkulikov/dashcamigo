@@ -430,6 +430,7 @@ export const frDict = {
     "map.ctrl.zoomIn": "Zoom avant",
     "map.ctrl.zoomOut": "Zoom arrière",
     "map.ctrl.resetBearing": "Réinitialiser l'orientation vers le nord",
+    "map.ctrl.resetBearingFlatOnly": "Le nord en haut est disponible uniquement en vue à plat",
     "map.ctrl.attribution": "Attribution de la carte",
     "map.yandex.open": "Ouvrir dans Maps",
     "map.coop.twoFingers": "Déplace la carte avec deux doigts",

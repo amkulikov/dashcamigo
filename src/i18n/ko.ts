@@ -435,6 +435,7 @@ export const koDict = {
     "map.ctrl.zoomIn": "확대",
     "map.ctrl.zoomOut": "축소",
     "map.ctrl.resetBearing": "방위를 북쪽으로 초기화",
+    "map.ctrl.resetBearingFlatOnly": "북쪽 위 고정은 평면 보기에서만 사용할 수 있어요",
     "map.ctrl.attribution": "지도 출처",
     "map.yandex.open": "지도에서 열기",
     "map.coop.twoFingers": "두 손가락으로 지도를 움직이세요",

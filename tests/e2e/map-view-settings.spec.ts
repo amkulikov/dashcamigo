@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 import {
     DESKTOP,
@@ -19,10 +19,199 @@ function mapBackground(page: Page): Promise<string | undefined> {
     });
 }
 
+function markerPixels(canvas: Locator): Promise<string | null> {
+    return canvas.evaluate((element: HTMLCanvasElement) => {
+        const pixels = element.getContext("2d")!.getImageData(0, 0, element.width, element.height).data;
+        const hasPaint = pixels.some((value, index) => index % 4 === 3 && value > 0);
+        return hasPaint ? element.toDataURL() : null;
+    });
+}
+
 test.beforeEach(async ({ page }) => {
     await presetLocalStorage(page);
     await page.setViewportSize(DESKTOP);
     await gotoApp(page, "en");
+});
+
+test("vehicle markers use overhead art on flat maps and preserve the chase perspective", async ({ page }) => {
+    await loadTrip(page);
+    await pausePlayback(page);
+    const miniMarker = page.locator("#mini-map .car-marker__canvas");
+    const mainMarker = page.locator(".map-wrap .car-marker__canvas");
+    await expect(miniMarker).toHaveAttribute("data-marker-render-key", "arrow:#ff9000");
+    await expect.poll(() => markerPixels(miniMarker)).toBeTruthy();
+    const arrowPixels = await markerPixels(miniMarker);
+
+    await page.locator("#settings-btn").click();
+    const settings = page.locator('[data-marker-control="settings"]');
+    await settings.locator('button[data-marker-shape="sedan"]').click();
+    const preview = settings.locator('button[data-marker-shape="sedan"] canvas');
+    await expect.poll(() => markerPixels(preview)).toBeTruthy();
+    const perspectivePixels = await markerPixels(preview);
+    await page.locator("#settings-modal-header-close").click();
+    await expect(miniMarker).toHaveAttribute("data-marker-render-key", "sedan:#ff9000:overhead");
+    await expect.poll(() => markerPixels(miniMarker)).not.toBe(arrowPixels);
+    const overheadPixels = await markerPixels(miniMarker);
+    expect(overheadPixels, "the overhead vehicle is visibly painted").toBeTruthy();
+    expect(overheadPixels, "flat maps use different vehicle artwork from the chase preview").not.toBe(
+        perspectivePixels,
+    );
+
+    await page.locator("#mini-map").click();
+    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map!.getPitch())).toBeGreaterThan(20);
+    await expect(mainMarker).toHaveAttribute("data-marker-render-key", "sedan:#ff9000");
+    await expect.poll(() => markerPixels(mainMarker)).toBe(perspectivePixels);
+
+    await page.locator('.map-follow-seg[data-follow-mode="follow"]').click();
+    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map!.getPitch())).toBeLessThan(1);
+    await expect.poll(() => page.evaluate(() => Math.abs(window.__dashcamigo.state.map!.getBearing()))).toBeLessThan(1);
+    await expect(mainMarker).toHaveAttribute("data-marker-render-key", "sedan:#ff9000:overhead");
+    await expect.poll(() => markerPixels(mainMarker)).toBe(overheadPixels);
+    await page.locator('.map-follow-seg[data-follow-mode="rotate"]').click();
+    await expect(mainMarker).toHaveAttribute("data-marker-render-key", "sedan:#ff9000:overhead");
+    await expect.poll(() => markerPixels(mainMarker)).toBe(overheadPixels);
+
+    await page.locator('.map-follow-seg[data-follow-mode="chase"]').click();
+    await expect(mainMarker).toHaveAttribute("data-marker-render-key", "sedan:#ff9000");
+    await expect.poll(() => markerPixels(mainMarker)).toBe(perspectivePixels);
+    await page.locator('.map-follow-seg[data-follow-mode="follow"]').click();
+    await expect(mainMarker).toHaveAttribute("data-marker-render-key", "sedan:#ff9000:overhead");
+    await expect.poll(() => markerPixels(mainMarker)).toBe(overheadPixels);
+    await page.locator("#map-settings-toggle").click();
+    const popover = page.locator('[data-marker-control="map-popover"]');
+    await popover.locator('button[data-marker-color="#e5484d"]').click();
+    await popover.locator('button[data-marker-size="large"]').click();
+    await expect(mainMarker).toHaveAttribute("data-marker-render-key", "sedan:#e5484d:overhead");
+    await expect(miniMarker).toHaveAttribute("data-marker-render-key", "sedan:#e5484d:overhead");
+    await expect.poll(() => markerPixels(mainMarker)).not.toBe(overheadPixels);
+    const redOverheadPixels = await markerPixels(mainMarker);
+    expect(redOverheadPixels).toBeTruthy();
+    await expect.poll(() => markerPixels(miniMarker)).toBe(redOverheadPixels);
+    await expect(mainMarker).toHaveCSS("width", "52px");
+    const redPreview = popover.locator('button[data-marker-shape="sedan"] canvas');
+    await expect(redPreview).toHaveAttribute("data-marker-render-key", "sedan:#e5484d");
+    await expect.poll(() => markerPixels(redPreview)).not.toBe(perspectivePixels);
+    const redPerspectivePixels = await markerPixels(redPreview);
+    await page.keyboard.press("Escape");
+    await page.locator('.map-follow-seg[data-follow-mode="chase"]').click();
+    await expect.poll(() => markerPixels(mainMarker)).toBe(redPerspectivePixels);
+    expect(redPerspectivePixels).not.toBe(redOverheadPixels);
+    await page.locator("#map-collapse").click();
+    await expect(miniMarker).toBeVisible();
+    await expect.poll(() => markerPixels(miniMarker)).toBe(redOverheadPixels);
+});
+
+for (const locale of ["en", "ru"] as const) {
+    test(`the north compass only resets bearing on a flat map (${locale})`, async ({ page }) => {
+        if (locale !== "en") await gotoApp(page, locale);
+        await loadTrip(page);
+        await pausePlayback(page);
+        await page.locator("#mini-map").click();
+        await page.locator("#map-settings-toggle").click();
+        await page.locator('[data-marker-control="map-popover"] button[data-marker-shape="sedan"]').click();
+        const preview = page.locator('[data-marker-control="map-popover"] button[data-marker-shape="sedan"] canvas');
+        await expect.poll(() => markerPixels(preview)).toBeTruthy();
+        const chasePixels = await markerPixels(preview);
+        await page.keyboard.press("Escape");
+        const compass = page.locator(".map-wrap .maplibregl-ctrl-compass");
+        const marker = page.locator(".map-wrap .car-marker__canvas");
+        await expect(marker).toHaveAttribute("data-marker-render-key", "sedan:#ff9000");
+        await expect.poll(() => markerPixels(marker)).toBe(chasePixels);
+        await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map!.isMoving())).toBe(false);
+
+        const disabledCompassKeepsCamera = async (): Promise<void> => {
+            await expect(compass).toBeDisabled();
+            await expect(compass).toHaveAccessibleName(
+                locale === "en" ? "North up is available in flat view" : "Север сверху доступен в плоском режиме",
+            );
+            const before = await page.evaluate(() => {
+                const map = window.__dashcamigo.state.map!;
+                return { bearing: map.getBearing(), pitch: map.getPitch() };
+            });
+            await compass.dispatchEvent("click");
+            const after = await page.evaluate(() => {
+                const map = window.__dashcamigo.state.map!;
+                return { bearing: map.getBearing(), pitch: map.getPitch(), moving: map.isMoving() };
+            });
+            expect(after.bearing, "a disabled compass preserves the camera bearing").toBeCloseTo(before.bearing);
+            expect(after.pitch, "a disabled compass preserves the camera tilt").toBeCloseTo(before.pitch);
+            expect(after.moving, "a disabled compass does not start a camera animation").toBe(false);
+        };
+
+        await page.evaluate(() => window.__dashcamigo.state.map!.jumpTo({ bearing: 45 }));
+        await disabledCompassKeepsCamera();
+        await page.locator('.map-follow-seg[data-follow-mode="follow"]').click();
+        await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map!.getPitch())).toBeLessThan(1);
+        await expect(compass).toBeEnabled();
+        await page.locator('.map-follow-seg[data-follow-mode="off"]').click();
+        await page.evaluate(() => window.__dashcamigo.state.map!.jumpTo({ bearing: 45, pitch: 0 }));
+        await compass.click();
+        await expect
+            .poll(() => page.evaluate(() => Math.abs(window.__dashcamigo.state.map!.getBearing())))
+            .toBeLessThan(0.1);
+        await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map!.isMoving())).toBe(false);
+
+        await page.evaluate(() => window.__dashcamigo.state.map!.jumpTo({ bearing: 60, pitch: 50 }));
+        await disabledCompassKeepsCamera();
+        await page.locator('.map-follow-seg[data-follow-mode="chase"]').click();
+        await expect(compass).toBeDisabled();
+        await expect(marker).toHaveAttribute("data-marker-render-key", "sedan:#ff9000");
+        await expect.poll(() => markerPixels(marker)).toBe(chasePixels);
+    });
+}
+
+test.describe("delayed marker assets", () => {
+    // Service-worker precaching would bypass the response gate in page.route.
+    test.use({ serviceWorkers: "block" });
+
+    test("a late overhead sprite cannot overwrite a marker after returning to chase", async ({ page }) => {
+        await loadTrip(page);
+        await pausePlayback(page);
+        const mainMarker = page.locator(".map-wrap .car-marker__canvas");
+        const miniMarker = page.locator("#mini-map .car-marker__canvas");
+        await expect.poll(() => markerPixels(miniMarker)).toBeTruthy();
+        const arrowPixels = await markerPixels(miniMarker);
+        let releaseSprite = (): void => {};
+        const spriteGate = new Promise<void>((resolve) => {
+            releaseSprite = resolve;
+        });
+        let spriteRequested = false;
+        await page.route(/\/suv-overhead[^/]*\.webp(?:\?.*)?$/, async (route) => {
+            spriteRequested = true;
+            await spriteGate;
+            await route.continue();
+        });
+
+        try {
+            await page.locator("#mini-map").click();
+            await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map!.getPitch())).toBeGreaterThan(20);
+            await page.locator("#map-settings-toggle").click();
+            const popover = page.locator('[data-marker-control="map-popover"]');
+            await popover.locator('button[data-marker-shape="suv"]').click();
+            await expect.poll(() => spriteRequested).toBe(true);
+            const preview = popover.locator('button[data-marker-shape="suv"] canvas');
+            await expect.poll(() => markerPixels(preview)).toBeTruthy();
+            const perspectivePixels = await markerPixels(preview);
+            await expect.poll(() => markerPixels(mainMarker)).toBe(perspectivePixels);
+            await page.keyboard.press("Escape");
+            await page.locator('.map-follow-seg[data-follow-mode="follow"]').click();
+            await expect(mainMarker).toHaveAttribute("data-marker-render-key", "suv:#ff9000:overhead");
+            await page.locator('.map-follow-seg[data-follow-mode="chase"]').click();
+            await expect(mainMarker).toHaveAttribute("data-marker-render-key", "suv:#ff9000");
+            await expect.poll(() => markerPixels(mainMarker)).toBe(perspectivePixels);
+
+            releaseSprite();
+            await expect.poll(() => markerPixels(miniMarker)).not.toBe(arrowPixels);
+            expect(await markerPixels(miniMarker), "the delayed overhead art finishes painting").toBeTruthy();
+            expect(await markerPixels(miniMarker)).not.toBe(perspectivePixels);
+            await expect(mainMarker).toHaveAttribute("data-marker-render-key", "suv:#ff9000");
+            expect(await markerPixels(mainMarker), "the latest camera view survives the late image load").toBe(
+                perspectivePixels,
+            );
+        } finally {
+            releaseSprite();
+        }
+    });
 });
 
 test("map provider choice applies immediately and survives a reload", async ({ page }) => {

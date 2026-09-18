@@ -710,7 +710,7 @@ body.map-unavailable #player-map {
     background: transparent;
     border-color: var(--border);
 }
-.maplibregl-ctrl-group button:hover {
+.maplibregl-ctrl-group button:not(:disabled):hover {
     background: var(--bg-hover);
 }
 .maplibregl-ctrl-group button .maplibregl-ctrl-icon {

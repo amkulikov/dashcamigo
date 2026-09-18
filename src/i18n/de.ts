@@ -427,6 +427,7 @@ export const deDict = {
     "map.ctrl.zoomIn": "Vergrößern",
     "map.ctrl.zoomOut": "Verkleinern",
     "map.ctrl.resetBearing": "Ausrichtung auf Norden zurücksetzen",
+    "map.ctrl.resetBearingFlatOnly": "Norden oben ist nur in der flachen Ansicht verfügbar",
     "map.ctrl.attribution": "Karten-Quellenangabe",
     "map.yandex.open": "In Maps öffnen",
     "map.coop.twoFingers": "Bewege die Karte mit zwei Fingern",

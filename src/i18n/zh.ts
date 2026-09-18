@@ -425,6 +425,7 @@ export const zhDict = {
     "map.ctrl.zoomIn": "放大",
     "map.ctrl.zoomOut": "缩小",
     "map.ctrl.resetBearing": "重置方向为正北",
+    "map.ctrl.resetBearingFlatOnly": "仅在平面视图中可将正北朝上",
     "map.ctrl.attribution": "地图来源信息",
     "map.yandex.open": "在地图中打开",
     "map.coop.twoFingers": "用两根手指移动地图",

@@ -578,6 +578,7 @@ export type I18nKey =
     | "map.ctrl.zoomIn"
     | "map.ctrl.zoomOut"
     | "map.ctrl.resetBearing"
+    | "map.ctrl.resetBearingFlatOnly"
     | "map.ctrl.attribution"
     | "map.yandex.open"
     // Cooperative-gestures overlay, on wherever the page can scroll past the map

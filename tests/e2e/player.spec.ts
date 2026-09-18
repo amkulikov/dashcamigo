@@ -503,14 +503,17 @@ test.describe("player", () => {
             streetNames: "more",
             marker: { shape: "suv", color: "#2f7ee6", size: "large" },
         });
-        await expect(page.locator(".car-marker__canvas").first()).toHaveAttribute(
+        await expect(page.locator("#mini-map .car-marker__canvas")).toHaveAttribute(
+            "data-marker-render-key",
+            "suv:#2f7ee6:overhead",
+        );
+        await expect(page.locator(".map-wrap .car-marker__canvas")).toHaveAttribute(
             "data-marker-render-key",
             "suv:#2f7ee6",
         );
         expect(
             await page
-                .locator(".car-marker")
-                .first()
+                .locator("#mini-map .car-marker")
                 .evaluate((element) => element.style.getPropertyValue("--map-marker-size")),
         ).toBe("52px");
 
@@ -1542,9 +1545,9 @@ test.describe("player", () => {
         await shot(page, "player-11-map-marker-settings");
         await page.locator("#settings-modal-close").click();
 
-        await expect(page.locator(".car-marker__canvas").first()).toHaveAttribute(
+        await expect(page.locator("#mini-map .car-marker__canvas")).toHaveAttribute(
             "data-marker-render-key",
-            "van:#e5484d",
+            "van:#e5484d:overhead",
         );
         const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("dashcamigo:mapMarker") ?? "null"));
         expect(stored).toEqual({ shape: "van", color: "#e5484d", size: "small" });

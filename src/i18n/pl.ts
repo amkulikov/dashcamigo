@@ -426,6 +426,7 @@ export const plDict = {
     "map.ctrl.zoomIn": "Przybliż",
     "map.ctrl.zoomOut": "Oddal",
     "map.ctrl.resetBearing": "Wyrównaj na północ",
+    "map.ctrl.resetBearingFlatOnly": "Północ u góry jest dostępna tylko w widoku płaskim",
     "map.ctrl.attribution": "Źródła mapy",
     "map.yandex.open": "Otwórz w Maps",
     "map.coop.twoFingers": "Przesuwaj mapę dwoma palcami",

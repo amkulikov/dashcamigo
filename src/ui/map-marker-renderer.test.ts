@@ -1,6 +1,43 @@
 import { describe, expect, it } from "vitest";
 
-import { isMapMarkerBodyPixel, mapMarkerPitchScale, recolorMapMarkerBodyPixel } from "./map-marker-renderer.js";
+import { DEFAULT_MAP_MARKER_APPEARANCE, MAP_MARKER_SHAPES } from "./map-marker-pref.js";
+import {
+    isMapMarkerBodyPixel,
+    mapMarkerPitchScale,
+    mapMarkerRenderKey,
+    mapMarkerViewForPitch,
+    recolorMapMarkerBodyPixel,
+} from "./map-marker-renderer.js";
+
+describe("map marker view", () => {
+    it("uses overhead art on flat maps and perspective art on tilted maps", () => {
+        expect(mapMarkerViewForPitch(0)).toBe("overhead");
+        expect(mapMarkerViewForPitch(19.9)).toBe("overhead");
+        expect(mapMarkerViewForPitch(20)).toBe("perspective");
+        expect(mapMarkerViewForPitch(58)).toBe("perspective");
+        expect(mapMarkerViewForPitch(70)).toBe("perspective");
+    });
+
+    it("handles out-of-range and invalid pitch without losing the flat-map fallback", () => {
+        expect(mapMarkerViewForPitch(-20)).toBe("overhead");
+        expect(mapMarkerViewForPitch(100)).toBe("perspective");
+        for (const pitch of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+            expect(mapMarkerViewForPitch(pitch)).toBe("overhead");
+        }
+    });
+
+    it("separates vehicle views in render caches while sharing the arrow", () => {
+        for (const shape of MAP_MARKER_SHAPES) {
+            const appearance = { ...DEFAULT_MAP_MARKER_APPEARANCE, shape };
+            const perspectiveKey = `${shape}:${appearance.color}`;
+            expect(mapMarkerRenderKey(appearance)).toBe(perspectiveKey);
+            expect(mapMarkerRenderKey(appearance, "perspective")).toBe(perspectiveKey);
+            expect(mapMarkerRenderKey(appearance, "overhead")).toBe(
+                shape === "arrow" ? perspectiveKey : `${perspectiveKey}:overhead`,
+            );
+        }
+    });
+});
 
 describe("map marker recoloring", () => {
     it("selects blue paint but leaves glass, lights and tires alone", () => {

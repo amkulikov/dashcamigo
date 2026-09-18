@@ -62,7 +62,12 @@ import { applyViewerLabelPrefs } from "./map-label-scale.js";
 import { applyMapStylePreset } from "./map-style-preset.js";
 import { getMapViewPreferences, subscribeMapViewPreferences } from "./map-view-pref.js";
 import { getMapMarkerAppearance, MAP_MARKER_SIZE_PX, subscribeMapMarkerAppearance } from "./map-marker-pref.js";
-import { mapMarkerPitchScale, renderMapMarkerIntoCanvas } from "./map-marker-renderer.js";
+import {
+    mapMarkerPitchScale,
+    mapMarkerRenderKey,
+    mapMarkerViewForPitch,
+    renderMapMarkerIntoCanvas,
+} from "./map-marker-renderer.js";
 import {
     getMapProvider,
     mapProviderErrorKey,
@@ -742,7 +747,10 @@ export function ensureMap(): maplibregl.Map | null {
 
     // Markers stay viewport-aligned for legibility, then receive a deliberately
     // milder manual foreshortening than MapLibre's full map-plane projection.
-    map.on("pitch", () => setMarkerPitch(state.marker, map.getPitch()));
+    map.on("pitch", () => {
+        setMarkerPitch(state.marker, map.getPitch());
+        syncMapCompassAvailability();
+    });
 
     map.on("styledataloading", () => {
         state.mapReady = false;
@@ -767,6 +775,7 @@ export function ensureMap(): maplibregl.Map | null {
         new mlg!.NavigationControl({ showCompass: true, showZoom: true, visualizePitch: false }),
         "top-right",
     );
+    guardMapCompass(map);
 
     // Scale bar. ScaleControl.setUnit switches the unit SYSTEM
     // (metric/imperial/nautical) but not the label language - the "m"/"km" text
@@ -778,9 +787,7 @@ export function ensureMap(): maplibregl.Map | null {
     // default AttributionControl (see attributionControl:false above).
     map.addControl(mapAttributionControl, "bottom-right");
 
-    // NavigationControl buttons ship with English title/aria-label from
-    // MapLibre's defaultLocale. Overwrite them via DOM queries now and on every
-    // langchange (see subscription at the end of initMap).
+    // NavigationControl labels use MapLibre's locale instead of the page's.
     localizeMapNavControls();
 
     // Track user map gestures so the rAF loop does not fight them. A live
@@ -1009,12 +1016,13 @@ export function ensureMiniMap(): maplibregl.Map | null {
  * The canvas is filled asynchronously for vehicle assets; the element can be
  * handed to MapLibre immediately and paints in place when its asset is ready.
  */
-function buildCarMarkerElement(): HTMLDivElement {
+function buildCarMarkerElement(pitchDeg = 0): HTMLDivElement {
     const wrap = document.createElement("div");
     wrap.className = "car-marker-wrap";
     const marker = document.createElement("div");
     marker.className = "car-marker";
     marker.style.setProperty("--bearing", "0deg");
+    marker.style.setProperty("--marker-pitch-scale", mapMarkerPitchScale(pitchDeg).toFixed(3));
     const appearance = getMapMarkerAppearance();
     marker.style.setProperty("--map-marker-size", `${MAP_MARKER_SIZE_PX[appearance.size]}px`);
     const canvas = document.createElement("canvas");
@@ -1023,18 +1031,21 @@ function buildCarMarkerElement(): HTMLDivElement {
     canvas.height = 192;
     marker.appendChild(canvas);
     wrap.appendChild(marker);
-    void renderMapMarkerIntoCanvas(canvas, appearance);
+    void renderMapMarkerIntoCanvas(canvas, appearance, mapMarkerViewForPitch(pitchDeg));
     return wrap;
 }
 
 function refreshLiveMapMarkerAppearance(): void {
     const appearance = getMapMarkerAppearance();
-    for (const marker of [state.marker, state.miniMapMarker]) {
+    for (const [marker, map] of [
+        [state.marker, state.map],
+        [state.miniMapMarker, state.miniMap],
+    ] as const) {
         const inner = marker?.getElement()?.querySelector<HTMLElement>(".car-marker");
         const canvas = inner?.querySelector<HTMLCanvasElement>(".car-marker__canvas");
         if (!inner || !canvas) continue;
         inner.style.setProperty("--map-marker-size", `${MAP_MARKER_SIZE_PX[appearance.size]}px`);
-        void renderMapMarkerIntoCanvas(canvas, appearance);
+        void renderMapMarkerIntoCanvas(canvas, appearance, mapMarkerViewForPitch(map?.getPitch() ?? 0));
     }
 }
 
@@ -1244,7 +1255,7 @@ export function refreshMap(trip: Trip | null, preserveCamera = false): void {
     addTrackListeners(map);
 
     state.marker = new mlg!.Marker({
-        element: buildCarMarkerElement(),
+        element: buildCarMarkerElement(map.getPitch()),
         // "map" alignment: CSS bearing is in map coordinates (from true north).
         // MapLibre auto-counter-rotates the marker when the map rotates, so the
         // arrow always points the correct geographic direction. With "viewport"
@@ -1500,6 +1511,14 @@ function setMarkerPitch(marker: maplibregl.Marker | null, pitchDeg: number): voi
     const inner = marker.getElement()?.querySelector<HTMLElement>(".car-marker");
     if (!inner) return;
     inner.style.setProperty("--marker-pitch-scale", mapMarkerPitchScale(pitchDeg).toFixed(3));
+    const canvas = inner.querySelector<HTMLCanvasElement>(".car-marker__canvas");
+    if (!canvas) return;
+    const appearance = getMapMarkerAppearance();
+    const view = mapMarkerViewForPitch(pitchDeg);
+    // Pitch animates every frame; repaint only when the artwork view changes.
+    if (canvas.dataset.markerRenderKey !== mapMarkerRenderKey(appearance, view)) {
+        void renderMapMarkerIntoCanvas(canvas, appearance, view);
+    }
 }
 
 /**
@@ -1661,6 +1680,7 @@ function currentInterpolatedPosition(): {
 }
 
 export function syncMapFollowButton(): void {
+    syncMapCompassAvailability();
     // UX-18: 3-button segmented control; active mode highlighted via
     // [aria-pressed="true"] (see CSS .map-follow-seg[aria-pressed="true"]).
     if (!dom.mapFollowSegments) return;
@@ -3279,18 +3299,52 @@ export function initMap(cb: MapCallbacks): void {
     window.matchMedia?.(MOBILE_LAYOUT_QUERY).addEventListener("change", syncCooperativeGestures);
 }
 
+function canResetMapBearing(map: maplibregl.Map): boolean {
+    return state.followMode !== "chase" && map.getPitch() <= 1;
+}
+
+function guardMapCompass(map: maplibregl.Map): void {
+    const compass = map.getContainer().querySelector<HTMLButtonElement>(".maplibregl-ctrl-compass");
+    if (!compass) return;
+    const preventTiltedReset = (event: Event): void => {
+        if (canResetMapBearing(map)) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+    };
+    // MapLibre's compass drag listeners also receive touches on disabled buttons.
+    for (const event of ["click", "mousedown", "touchstart"]) {
+        compass.addEventListener(event, preventTiltedReset, { capture: true, passive: false });
+    }
+}
+
+function syncMapCompassAvailability(shouldRefreshLabel = false): void {
+    const map = state.map;
+    if (!map) return;
+    const compass = map.getContainer().querySelector<HTMLButtonElement>(".maplibregl-ctrl-compass");
+    if (!compass) return;
+    const isDisabled = !canResetMapBearing(map);
+    const ariaDisabled = String(isDisabled);
+    if (
+        !shouldRefreshLabel &&
+        compass.disabled === isDisabled &&
+        compass.getAttribute("aria-disabled") === ariaDisabled
+    )
+        return;
+    compass.disabled = isDisabled;
+    compass.setAttribute("aria-disabled", ariaDisabled);
+    const label = t(isDisabled ? "map.ctrl.resetBearingFlatOnly" : "map.ctrl.resetBearing");
+    compass.setAttribute("title", label);
+    compass.setAttribute("aria-label", label);
+}
+
 /**
- * Overwrites title and aria-label on MapLibre NavigationControl buttons.
- * MapLibre renders buttons with classes .maplibregl-ctrl-zoom-in /
- * .maplibregl-ctrl-zoom-out / .maplibregl-ctrl-compass; their labels come from
- * map._locale (private) at addControl time. There is no public setLocale API,
- * so we patch attributes directly via querySelector - stable and private-field
- * independent. Idempotent: no-op if buttons are absent.
+ * MapLibre has no public setLocale API, so navigation labels are patched on
+ * their public control elements without accessing the private locale state.
  */
 function localizeMapNavControls(): void {
     if (!state.map) return;
     const container = state.map.getContainer();
-    const setBtn = (selector: string, key: "map.ctrl.zoomIn" | "map.ctrl.zoomOut" | "map.ctrl.resetBearing") => {
+    const setBtn = (selector: string, key: "map.ctrl.zoomIn" | "map.ctrl.zoomOut") => {
         const btn = container.querySelector<HTMLElement>(selector);
         if (!btn) return;
         const label = t(key);
@@ -3299,7 +3353,7 @@ function localizeMapNavControls(): void {
     };
     setBtn(".maplibregl-ctrl-zoom-in", "map.ctrl.zoomIn");
     setBtn(".maplibregl-ctrl-zoom-out", "map.ctrl.zoomOut");
-    setBtn(".maplibregl-ctrl-compass", "map.ctrl.resetBearing");
+    syncMapCompassAvailability(true);
 }
 
 /**

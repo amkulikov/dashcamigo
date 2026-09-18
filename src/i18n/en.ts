@@ -427,6 +427,7 @@ export const enDict = {
     "map.ctrl.zoomIn": "Zoom in",
     "map.ctrl.zoomOut": "Zoom out",
     "map.ctrl.resetBearing": "Reset bearing to north",
+    "map.ctrl.resetBearingFlatOnly": "North up is available in flat view",
     "map.ctrl.attribution": "Map attribution",
     "map.yandex.open": "Open in Maps",
     "map.coop.twoFingers": "Use two fingers to move the map",

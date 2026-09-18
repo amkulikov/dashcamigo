@@ -436,6 +436,7 @@ export const jaDict = {
     "map.ctrl.zoomIn": "拡大",
     "map.ctrl.zoomOut": "縮小",
     "map.ctrl.resetBearing": "方角を北にリセット",
+    "map.ctrl.resetBearingFlatOnly": "北を上に固定できるのは平面表示のみです",
     "map.ctrl.attribution": "地図の出典",
     "map.yandex.open": "マップで開く",
     "map.coop.twoFingers": "2本指で地図を動かせます",

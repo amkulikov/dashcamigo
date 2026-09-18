@@ -428,6 +428,7 @@ export const esDict = {
     "map.ctrl.zoomIn": "Acercar",
     "map.ctrl.zoomOut": "Alejar",
     "map.ctrl.resetBearing": "Restablecer orientación al norte",
+    "map.ctrl.resetBearingFlatOnly": "El norte arriba solo está disponible en la vista plana",
     "map.ctrl.attribution": "Atribución del mapa",
     "map.yandex.open": "Abrir en Maps",
     "map.coop.twoFingers": "Mueve el mapa con dos dedos",

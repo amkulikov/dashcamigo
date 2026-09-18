@@ -1,40 +1,66 @@
 import { mapMarkerAppearanceKey, type MapMarkerAppearance, type MapMarkerShape } from "./map-marker-pref.js";
+import motorcycleOverheadSpriteUrl from "../assets/map-markers/motorcycle-overhead.webp?no-inline";
 import motorcycleSpriteUrl from "../assets/map-markers/motorcycle.webp?no-inline";
+import sedanOverheadSpriteUrl from "../assets/map-markers/sedan-overhead.webp?no-inline";
 import sedanSpriteUrl from "../assets/map-markers/sedan.webp?no-inline";
+import suvOverheadSpriteUrl from "../assets/map-markers/suv-overhead.webp?no-inline";
 import suvSpriteUrl from "../assets/map-markers/suv.webp?no-inline";
+import truckOverheadSpriteUrl from "../assets/map-markers/truck-overhead.webp?no-inline";
 import truckSpriteUrl from "../assets/map-markers/truck.webp?no-inline";
+import vanOverheadSpriteUrl from "../assets/map-markers/van-overhead.webp?no-inline";
 import vanSpriteUrl from "../assets/map-markers/van.webp?no-inline";
 
 const RENDER_SIZE = 192;
 const VEHICLE_PADDING = 8;
 
 type VehicleShape = Exclude<MapMarkerShape, "arrow">;
+export type MapMarkerView = "overhead" | "perspective";
 
 const VEHICLE_SPRITE_URLS = {
-    sedan: sedanSpriteUrl,
-    suv: suvSpriteUrl,
-    motorcycle: motorcycleSpriteUrl,
-    van: vanSpriteUrl,
-    truck: truckSpriteUrl,
-} as const satisfies Record<VehicleShape, string>;
+    perspective: {
+        sedan: sedanSpriteUrl,
+        suv: suvSpriteUrl,
+        motorcycle: motorcycleSpriteUrl,
+        van: vanSpriteUrl,
+        truck: truckSpriteUrl,
+    },
+    overhead: {
+        sedan: sedanOverheadSpriteUrl,
+        suv: suvOverheadSpriteUrl,
+        motorcycle: motorcycleOverheadSpriteUrl,
+        van: vanOverheadSpriteUrl,
+        truck: truckOverheadSpriteUrl,
+    },
+} as const satisfies Record<MapMarkerView, Record<VehicleShape, string>>;
 
-const sourcePromises = new Map<VehicleShape, Promise<HTMLImageElement>>();
+const sourcePromises = new Map<string, Promise<HTMLImageElement>>();
 const renderCache = new Map<string, Promise<HTMLCanvasElement>>();
 const MAX_RENDER_CACHE_ENTRIES = 48;
 const PITCH_FORESHORTENING_STRENGTH = 0.14;
+const PERSPECTIVE_MIN_PITCH_DEG = 20;
 
-function loadVehicleSource(shape: VehicleShape): Promise<HTMLImageElement> {
-    const cached = sourcePromises.get(shape);
+export function mapMarkerViewForPitch(pitchDeg: number): MapMarkerView {
+    return Number.isFinite(pitchDeg) && pitchDeg >= PERSPECTIVE_MIN_PITCH_DEG ? "perspective" : "overhead";
+}
+
+export function mapMarkerRenderKey(appearance: MapMarkerAppearance, view: MapMarkerView = "perspective"): string {
+    const key = mapMarkerAppearanceKey(appearance);
+    return appearance.shape !== "arrow" && view === "overhead" ? `${key}:overhead` : key;
+}
+
+function loadVehicleSource(shape: VehicleShape, view: MapMarkerView): Promise<HTMLImageElement> {
+    const key = `${shape}:${view}`;
+    const cached = sourcePromises.get(key);
     if (cached) return cached;
     const promise = new Promise<HTMLImageElement>((resolve, reject) => {
         const image = new Image();
         image.addEventListener("load", () => resolve(image), { once: true });
-        image.addEventListener("error", () => reject(new Error(`map marker asset failed to load: ${shape}`)), {
+        image.addEventListener("error", () => reject(new Error(`map marker asset failed to load: ${key}`)), {
             once: true,
         });
-        image.src = VEHICLE_SPRITE_URLS[shape];
+        image.src = VEHICLE_SPRITE_URLS[view][shape];
     });
-    sourcePromises.set(shape, promise);
+    sourcePromises.set(key, promise);
     return promise;
 }
 
@@ -211,7 +237,7 @@ function drawArrow(context: CanvasRenderingContext2D, color: string): void {
     context.stroke();
 }
 
-async function buildRenderedMarker(appearance: MapMarkerAppearance): Promise<HTMLCanvasElement> {
+async function buildRenderedMarker(appearance: MapMarkerAppearance, view: MapMarkerView): Promise<HTMLCanvasElement> {
     const canvas = document.createElement("canvas");
     canvas.width = RENDER_SIZE;
     canvas.height = RENDER_SIZE;
@@ -223,7 +249,7 @@ async function buildRenderedMarker(appearance: MapMarkerAppearance): Promise<HTM
     }
     let image: HTMLImageElement;
     try {
-        image = await loadVehicleSource(appearance.shape);
+        image = await loadVehicleSource(appearance.shape, view);
     } catch {
         drawArrow(context, appearance.color);
         return canvas;
@@ -241,11 +267,14 @@ async function buildRenderedMarker(appearance: MapMarkerAppearance): Promise<HTM
     return canvas;
 }
 
-export function renderMapMarkerImage(appearance: MapMarkerAppearance): Promise<HTMLCanvasElement> {
-    const key = mapMarkerAppearanceKey(appearance);
+export function renderMapMarkerImage(
+    appearance: MapMarkerAppearance,
+    view: MapMarkerView = "perspective",
+): Promise<HTMLCanvasElement> {
+    const key = mapMarkerRenderKey(appearance, view);
     const cached = renderCache.get(key);
     if (cached) return cached;
-    const rendered = buildRenderedMarker(appearance);
+    const rendered = buildRenderedMarker(appearance, view);
     if (renderCache.size >= MAX_RENDER_CACHE_ENTRIES) {
         const oldestKey = renderCache.keys().next().value;
         if (typeof oldestKey === "string") renderCache.delete(oldestKey);
@@ -257,10 +286,11 @@ export function renderMapMarkerImage(appearance: MapMarkerAppearance): Promise<H
 export async function renderMapMarkerIntoCanvas(
     canvas: HTMLCanvasElement,
     appearance: MapMarkerAppearance,
+    view: MapMarkerView = "perspective",
 ): Promise<void> {
-    const key = mapMarkerAppearanceKey(appearance);
+    const key = mapMarkerRenderKey(appearance, view);
     canvas.dataset.markerRenderKey = key;
-    const image = await renderMapMarkerImage(appearance);
+    const image = await renderMapMarkerImage(appearance, view);
     if (canvas.dataset.markerRenderKey !== key) return;
     canvas.width = RENDER_SIZE;
     canvas.height = RENDER_SIZE;
@@ -279,7 +309,7 @@ export async function drawMapMarker(
     sizePx: number,
     pitchDeg = 0,
 ): Promise<void> {
-    const image = await renderMapMarkerImage(appearance);
+    const image = await renderMapMarkerImage(appearance, mapMarkerViewForPitch(pitchDeg));
     context.save();
     context.translate(cx, cy);
     // Screen-space Y compression happens after local rotation, matching the

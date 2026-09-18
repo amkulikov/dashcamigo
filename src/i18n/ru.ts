@@ -431,6 +431,7 @@ export const ruDict = {
     "map.ctrl.zoomIn": "Приблизить",
     "map.ctrl.zoomOut": "Отдалить",
     "map.ctrl.resetBearing": "Повернуть карту севером вверх",
+    "map.ctrl.resetBearingFlatOnly": "Север сверху доступен в плоском режиме",
     "map.ctrl.attribution": "Источники данных карты",
     "map.yandex.open": "Открыть в Картах",
     "map.coop.twoFingers": "Двигай карту двумя пальцами",
