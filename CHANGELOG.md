@@ -7,6 +7,17 @@ User-facing changes, newest first. Dates are when the change landed on
 [beta](https://beta.dashcamigo.app); production picks it up with the next
 release tag. Localized texts ship inside the app (the "What's new" panel).
 
+## 2026-09-18
+
+- **New:** Choose the map's appearance and provider, including Yandex where available.
+- **New:** Reflect each camera horizontally or vertically during playback and export.
+- **Fixed:** DDPAI Z60 Pro previews no longer appear as duplicate recordings.
+- **Fixed:** Some MP4 recordings that failed to export can be saved.
+
+## 2026-09-17
+
+- **Fixed:** Recordings from some multi-camera devices no longer split into separate trips.
+
 ## 2026-09-16
 
 - **Fixed:** Some TS recordings no longer fail to open.
