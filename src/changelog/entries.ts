@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-09-18.5",
+        category: "improvement",
+        text: {
+            en: "Raster maps remain north-up and flat, including in exports.",
+            ru: "Растровые карты остаются плоскими, с севером сверху, в том числе при экспорте.",
+            de: "Rasterkarten bleiben auch beim Export flach und nach Norden ausgerichtet.",
+            es: "Los mapas ráster permanecen planos y orientados al norte, también al exportar.",
+            fr: "Les cartes matricielles restent à plat et orientées vers le nord, y compris à l’export.",
+            pl: "Mapy rastrowe pozostają płaskie i skierowane na północ, również przy eksporcie.",
+            pt: "Os mapas raster permanecem planos e orientados para o norte, inclusive na exportação.",
+            zh: "栅格地图始终朝北且保持平面视图，导出时也是如此。",
+            ja: "ラスター地図は書き出し時も北を上にした平面表示になります。",
+            ko: "래스터 지도는 내보내기에서도 북쪽이 위로 향하는 평면 보기로 표시돼요.",
+        },
+    },
+    {
         id: "2026-09-18.4",
         category: "feature",
         text: {

@@ -9,6 +9,7 @@ release tag. Localized texts ship inside the app (the "What's new" panel).
 
 ## 2026-09-18
 
+- **Improved:** Raster maps remain north-up and flat, including in exports.
 - **New:** Choose the map's appearance and provider, including Yandex where available.
 - **New:** Reflect each camera horizontally or vertically during playback and export.
 - **Fixed:** DDPAI Z60 Pro previews no longer appear as duplicate recordings.
