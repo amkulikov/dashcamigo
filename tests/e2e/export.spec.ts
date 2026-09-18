@@ -1389,6 +1389,14 @@ test.describe("export range lock", () => {
         }
         expect(await readAnnouncedRange()).toEqual(rangeBefore);
 
+        const cameraTile = page.locator('.video-tile[data-channel="front"]');
+        const cameraSettings = cameraTile.locator(".camera-settings-button");
+        await expect(cameraSettings).toBeDisabled();
+        await cameraSettings.dispatchEvent("click");
+        await expect(cameraTile.getByRole("menu")).toBeHidden();
+        await cameraTile.locator('[data-flip="horizontal"]').dispatchEvent("click");
+        await expect(cameraTile).not.toHaveClass(/camera-flipped/);
+
         const setStart = page.locator('.export-trim-bar__set[data-set-edge="start"]');
         const setEnd = page.locator('.export-trim-bar__set[data-set-edge="end"]');
         const reset = page.locator("#export-trim-reset");

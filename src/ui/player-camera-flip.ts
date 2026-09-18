@@ -2,14 +2,19 @@ import { flipCropRect, hasCameraFlip } from "../camera-flip.js";
 import { t } from "../i18n/index.js";
 import { ALL_CHANNELS, channelTileFor } from "./dom.js";
 import { cameraFlipForChannel, saveCameraFlip } from "./camera-flip-pref.js";
-import { notifyExportStateChanged, subscribeExportState } from "./export-state.js";
+import { exportPanelState, notifyExportStateChanged, subscribeExportState } from "./export-state.js";
 import { channelDisplayLabel } from "./format.js";
 import { initMenuKeyboard } from "./menu-keyboard.js";
 import { exitCropEditIfOpen } from "./player-crop.js";
 import { activeTrip, state } from "./state.js";
 
+function isCameraFlipLocked(): boolean {
+    return exportPanelState.configurationLocked || state.transcodeInProgress;
+}
+
 export function syncCameraFlips(): void {
     const trip = activeTrip();
+    const isLocked = isCameraFlipLocked();
     for (const ch of ALL_CHANNELS) {
         const tile = channelTileFor(ch);
         const flip = cameraFlipForChannel(ch);
@@ -22,17 +27,14 @@ export function syncCameraFlips(): void {
         tile.classList.toggle("camera-flipped", hasCameraFlip(flip));
         const button = tile.querySelector<HTMLButtonElement>(".camera-settings-button");
         if (button) {
-            button.disabled = state.transcodeInProgress;
+            button.disabled = isLocked;
             button.title = t("player.camera.settings", {
                 camera: trip ? channelDisplayLabel(ch, trip) : "",
             });
             button.setAttribute("aria-label", button.title);
         }
         const menu = tile.querySelector<HTMLElement>(".camera-settings-menu");
-        if (
-            menu?.matches(":popover-open") &&
-            (state.transcodeInProgress || menu.getAttribute("aria-label") !== button?.title)
-        ) {
+        if (menu?.matches(":popover-open") && (isLocked || menu.getAttribute("aria-label") !== button?.title)) {
             menu.hidePopover();
         }
         for (const axis of ["horizontal", "vertical"] as const) {
@@ -67,7 +69,7 @@ export function initPlayerCameraFlip(): void {
             item.setAttribute("aria-label", item.title);
             item.innerHTML = `<svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><g${axis === "vertical" ? ' transform="rotate(90 10 10)"' : ""}><path d="M10 2v16" stroke-dasharray="2 2"/><path d="M3 5v10l4-2V7z"/><path d="M17 5v10l-4-2V7z" fill="currentColor" fill-opacity=".25"/></g></svg>`;
             item.addEventListener("click", () => {
-                if (state.transcodeInProgress) return;
+                if (isCameraFlipLocked()) return;
                 exitCropEditIfOpen();
                 const flip = cameraFlipForChannel(ch);
                 const slot = state.composition.channelOrder.indexOf(ch);
@@ -88,7 +90,7 @@ export function initPlayerCameraFlip(): void {
         const close = (): void => menu.hidePopover();
         const open = (): void => {
             const trip = activeTrip();
-            if (!trip || state.transcodeInProgress) return;
+            if (!trip || isCameraFlipLocked()) return;
             syncCameraFlips();
             menu.setAttribute("aria-label", button.title);
             menu.showPopover();
@@ -112,7 +114,7 @@ export function initPlayerCameraFlip(): void {
         }
         initMenuKeyboard({ button, menu, itemSelector: "button", onOpen: open, onClose: close });
         const observer = new MutationObserver(() => {
-            if (tile.hidden || state.transcodeInProgress) close();
+            if (tile.hidden || isCameraFlipLocked()) close();
         });
         observer.observe(tile, { attributes: true, attributeFilter: ["hidden"] });
     }
