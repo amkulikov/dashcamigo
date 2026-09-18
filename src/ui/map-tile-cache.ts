@@ -16,12 +16,71 @@ const TILE_PROTOCOL_PREFIX = `${TILE_PROTOCOL}://`;
 // so keep this bounded for video-heavy mobile sessions. This is large enough to
 // retain a useful route corridor without adding another unbounded memory owner.
 const SHARED_TILE_CACHE_MAX_BYTES = 64 * 1024 * 1024;
+const SHARED_TILE_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+// This pace applies to one page; other visitors share the API key's allowance.
+const YANDEX_REQUEST_INTERVAL_MS = 40;
+
+interface QueuedYandexRequest {
+    signal: AbortSignal;
+    resolve(): void;
+    reject(error: DOMException): void;
+    onAbort(): void;
+}
+
+const yandexQueue: QueuedYandexRequest[] = [];
+let yandexQueueTimer: ReturnType<typeof setTimeout> | null = null;
+let nextYandexRequestAt = 0;
+
+function pumpYandexQueue(): void {
+    if (yandexQueueTimer !== null) {
+        clearTimeout(yandexQueueTimer);
+        yandexQueueTimer = null;
+    }
+    if (yandexQueue.length === 0) return;
+    const delay = nextYandexRequestAt - performance.now();
+    if (delay > 0) {
+        yandexQueueTimer = setTimeout(pumpYandexQueue, delay);
+        return;
+    }
+    const request = yandexQueue.shift()!;
+    request.signal.removeEventListener("abort", request.onAbort);
+    nextYandexRequestAt = performance.now() + YANDEX_REQUEST_INTERVAL_MS;
+    request.resolve();
+    if (yandexQueue.length > 0) yandexQueueTimer = setTimeout(pumpYandexQueue, YANDEX_REQUEST_INTERVAL_MS);
+}
+
+function waitForYandexRequest(signal: AbortSignal): Promise<void> {
+    if (signal.aborted) return Promise.reject(abortError(signal.reason));
+    return new Promise<void>((resolve, reject) => {
+        const request: QueuedYandexRequest = {
+            signal,
+            resolve,
+            reject,
+            onAbort(): void {
+                const index = yandexQueue.indexOf(request);
+                if (index >= 0) yandexQueue.splice(index, 1);
+                signal.removeEventListener("abort", request.onAbort);
+                reject(abortError(signal.reason));
+                pumpYandexQueue();
+            },
+        };
+        yandexQueue.push(request);
+        signal.addEventListener("abort", request.onAbort, { once: true });
+        pumpYandexQueue();
+    });
+}
 
 interface TilePayload {
     data: ArrayBuffer;
     cacheControl?: string | null;
     expires?: string | null;
+    age?: string | null;
     etag?: string;
+}
+
+interface CachedTile {
+    payload: TilePayload;
+    expiresAt: number;
 }
 
 interface PendingTile {
@@ -58,11 +117,21 @@ function tileRequestError(url: string, status: number, statusText: string, cause
             : statusText
               ? `map request failed (${statusText})`
               : "failed to fetch map resource";
-    const error = new Error(`${prefix}: ${url}`, cause === undefined ? undefined : { cause });
-    return Object.assign(error, { status, statusText, url });
+    const isYandex = mapProviderForTileUrl(url) === "yandex";
+    const diagnosticUrl = isYandex ? "https://tiles.api-maps.yandex.ru/v1/tiles/" : url;
+    // Fetch errors can repeat the full URL in their cause. Keep API keys and
+    // tile coordinates out of the logger, including nested Error serialization.
+    const error = new Error(`${prefix}: ${diagnosticUrl}`, isYandex || cause === undefined ? undefined : { cause });
+    Object.assign(error, { status, statusText });
+    // Fallback still needs distinct tile URLs; ordinary object serialization does not.
+    Object.defineProperty(error, "url", { value: url, enumerable: !isYandex });
+    return error;
 }
 
 async function fetchTile(url: string, signal: AbortSignal, type?: RequestParameters["type"]): Promise<TilePayload> {
+    if (mapProviderForTileUrl(url) === "yandex") await waitForYandexRequest(signal);
+    if (signal.aborted) throw abortError(signal.reason);
+    // Queueing is not a network failure: start the deadline only after admission.
     const requestController = new AbortController();
     const forwardAbort = () => requestController.abort(signal.reason);
     signal.addEventListener("abort", forwardAbort, { once: true });
@@ -74,6 +143,7 @@ async function fetchTile(url: string, signal: AbortSignal, type?: RequestParamet
             data: await response.arrayBuffer(),
             cacheControl: response.headers.get("cache-control"),
             expires: response.headers.get("expires"),
+            age: response.headers.get("age"),
             etag: response.headers.get("etag") ?? undefined,
         };
         // A successful HTTP response can still contain an upstream error page.
@@ -104,38 +174,81 @@ function clonePayload(payload: TilePayload): TilePayload {
     return { ...payload, data: payload.data.slice(0) };
 }
 
+function cacheExpiresAt(payload: TilePayload, now: number): number {
+    const directives = (payload.cacheControl ?? "").split(",").map((part) => part.trim());
+    if (directives.some((part) => /^(?:no-store|no-cache)(?:=|$)/i.test(part))) return now;
+    const maxAge = directives.map((part) => part.match(/^max-age\s*=\s*"?(\d+)"?$/i)).find((match) => match !== null);
+    const responseAge = Math.max(0, Number(payload.age) || 0);
+    const declaredExpiry = maxAge ? now + (Number(maxAge[1]) - responseAge) * 1000 : Date.parse(payload.expires ?? "");
+    const ceiling = now + SHARED_TILE_CACHE_MAX_AGE_MS;
+    return Number.isFinite(declaredExpiry) ? Math.min(ceiling, declaredExpiry) : ceiling;
+}
+
 export function createSharedTileCache(maxBytes: number, fetcher: TileFetcher = fetchTile): SharedTileCache {
-    const cached = new Map<string, TilePayload>();
+    const cached = new Map<string, CachedTile>();
     const pending = new Map<string, PendingTile>();
     let cachedBytes = 0;
 
-    const touch = (url: string, payload: TilePayload): void => {
+    let expiryTimer: ReturnType<typeof setTimeout> | null = null;
+    let scheduledExpiryAt = Number.POSITIVE_INFINITY;
+
+    const remove = (url: string, entry: CachedTile): void => {
         cached.delete(url);
-        cached.set(url, payload);
+        cachedBytes -= entry.payload.data.byteLength;
     };
 
-    const store = (url: string, payload: TilePayload): void => {
+    const pruneExpired = (): void => {
+        const now = Date.now();
+        for (const [url, entry] of cached) {
+            if (entry.expiresAt <= now) remove(url, entry);
+        }
+    };
+
+    const scheduleExpiry = (expiresAt: number): void => {
+        if (expiresAt >= scheduledExpiryAt) return;
+        if (expiryTimer !== null) clearTimeout(expiryTimer);
+        // Browser timers overflow above a signed 32-bit delay, before 30 days.
+        const delay = Math.min(2_147_483_647, Math.max(0, expiresAt - Date.now()));
+        scheduledExpiryAt = Date.now() + delay;
+        expiryTimer = setTimeout(() => {
+            expiryTimer = null;
+            scheduledExpiryAt = Number.POSITIVE_INFINITY;
+            pruneExpired();
+            for (const entry of cached.values()) scheduleExpiry(entry.expiresAt);
+        }, delay);
+    };
+
+    const touch = (url: string, entry: CachedTile): void => {
+        cached.delete(url);
+        cached.set(url, entry);
+    };
+
+    const store = (url: string, payload: TilePayload, expiresAt: number): void => {
         const size = payload.data.byteLength;
-        if (size > maxBytes || maxBytes <= 0) return;
+        if (size > maxBytes || maxBytes <= 0 || expiresAt <= Date.now()) return;
 
         const previous = cached.get(url);
-        if (previous) cachedBytes -= previous.data.byteLength;
-        touch(url, payload);
+        if (previous) remove(url, previous);
+        touch(url, { payload, expiresAt });
         cachedBytes += size;
 
         while (cachedBytes > maxBytes) {
             const oldest = cached.entries().next().value;
             if (!oldest) break;
-            cached.delete(oldest[0]);
-            cachedBytes -= oldest[1].data.byteLength;
+            remove(oldest[0], oldest[1]);
         }
+        scheduleExpiry(expiresAt);
     };
 
     const start = (url: string, type?: RequestParameters["type"]): PendingTile => {
         const controller = new AbortController();
         const promise = fetcher(url, controller.signal, type).then((payload) => {
-            if (!controller.signal.aborted) store(url, payload);
-            return payload;
+            const expiresAt = cacheExpiresAt(payload, Date.now());
+            // MapLibre must keep the original deadline on a shared cache hit.
+            // Its max-age clock restarts on every response and overrides Expires.
+            const boundedPayload = { ...payload, cacheControl: null, expires: new Date(expiresAt).toUTCString() };
+            if (!controller.signal.aborted) store(url, boundedPayload, expiresAt);
+            return boundedPayload;
         });
         const entry: PendingTile = { controller, promise, consumers: 0, isSettled: false };
         pending.set(url, entry);
@@ -157,10 +270,11 @@ export function createSharedTileCache(maxBytes: number, fetcher: TileFetcher = f
             if (signal.aborted) throw abortError(signal.reason);
 
             const hit = cached.get(url);
-            if (hit) {
+            if (hit && hit.expiresAt > Date.now()) {
                 touch(url, hit);
-                return clonePayload(hit);
+                return clonePayload(hit.payload);
             }
+            if (hit) remove(url, hit);
 
             const existing = pending.get(url);
             const entry = existing && !existing.controller.signal.aborted ? existing : start(url, type);
@@ -189,12 +303,16 @@ export function createSharedTileCache(maxBytes: number, fetcher: TileFetcher = f
             }
         },
         clear(): void {
+            if (expiryTimer !== null) clearTimeout(expiryTimer);
+            expiryTimer = null;
+            scheduledExpiryAt = Number.POSITIVE_INFINITY;
             for (const entry of pending.values()) entry.controller.abort("cache cleared");
             pending.clear();
             cached.clear();
             cachedBytes = 0;
         },
         stats(): SharedTileCacheStats {
+            pruneExpired();
             return {
                 entries: cached.size,
                 bytes: cachedBytes,
@@ -240,4 +358,11 @@ export function getSharedMapTileCacheStats(): SharedTileCacheStats {
 /** Test-only reset for the module-level page-session cache. */
 export function _resetForTests(): void {
     sharedTileCache.clear();
+    if (yandexQueueTimer !== null) clearTimeout(yandexQueueTimer);
+    yandexQueueTimer = null;
+    nextYandexRequestAt = 0;
+    for (const request of yandexQueue.splice(0)) {
+        request.signal.removeEventListener("abort", request.onAbort);
+        request.reject(abortError("cache reset"));
+    }
 }

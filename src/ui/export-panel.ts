@@ -108,6 +108,7 @@ import {
 import { isMapAvailable } from "./map.js";
 import { STREET_LABEL_DENSITY_LABEL_KEYS, STREET_LABEL_DENSITY_VALUES } from "./map-label-scale.js";
 import { renderMapMarkerControl } from "./map-marker-control.js";
+import { createMapProviderSelect } from "./map-provider-control.js";
 import { buildLucideIcon } from "./icons.js";
 import { isMobileLayout } from "./media-queries.js";
 
@@ -2538,6 +2539,7 @@ function refreshOverlayInspector(): void {
     );
 
     if (def.isMap) {
+        root.appendChild(renderMapProviderField());
         root.appendChild(renderMapMarkerField());
         root.appendChild(renderMapShapeSegment());
         root.appendChild(renderMapThemeSegment());
@@ -2569,6 +2571,33 @@ function refreshOverlayInspector(): void {
     hint.className = "export-panel__note export-panel__ov-hint";
     hint.textContent = t("export.overlays.dragHint");
     root.appendChild(hint);
+}
+
+function renderMapProviderField(): HTMLElement {
+    const wrap = document.createElement("div");
+    wrap.className = "export-panel__ov-field";
+    const label = document.createElement("label");
+    label.className = "export-panel__ov-field-label";
+    label.textContent = t("export.overlays.mapProvider");
+    const select = createMapProviderSelect({
+        id: "export-map-provider-select",
+        value: exportPanelState.overlayMap.provider,
+        isYandexDisabled: true,
+        onChange: (provider) => {
+            if (provider === "yandex" || exportPanelState.configurationLocked) return;
+            exportPanelState.overlayMap.provider = provider;
+            notifyExportStateChanged();
+        },
+    });
+    label.htmlFor = select.id;
+    select.className = "export-panel__output-select";
+    const note = document.createElement("p");
+    note.id = "export-map-provider-description";
+    note.className = "export-panel__note";
+    note.textContent = t("export.overlays.mapProvider.yandexUnavailable");
+    select.setAttribute("aria-describedby", note.id);
+    wrap.append(label, select, note);
+    return wrap;
 }
 
 function renderMapMarkerField(): HTMLElement {

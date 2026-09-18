@@ -30,6 +30,7 @@ describe("CSP policy", () => {
                 "https://*.openfreemap.org",
                 "https://vector.openstreetmap.org",
                 "https://tile.openstreetmap.org",
+                "https://tiles.api-maps.yandex.ru",
                 "https://cloudflareinsights.com",
                 "https://o4511528520843264.ingest.de.sentry.io",
             ]),

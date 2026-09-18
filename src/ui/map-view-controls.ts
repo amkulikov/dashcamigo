@@ -1,4 +1,7 @@
 import { t, type I18nKey } from "../i18n/index.js";
+import { createMapProviderSelect } from "./map-provider-control.js";
+import { getMapProviderPreference, setMapProviderPreference, subscribeMapProviderPreference } from "./map-provider.js";
+import { isYandexMapAvailable } from "./yandex-map.js";
 import {
     getMapViewPreferences,
     MAP_STYLE_PRESETS,
@@ -44,6 +47,7 @@ function createSelect<Value extends string>(
         select.append(option);
     }
     select.addEventListener("change", () => {
+        if (select.disabled) return;
         const value = values.find((value) => value === select.value);
         if (value !== undefined) onChange(value);
     });
@@ -55,6 +59,38 @@ function createSelect<Value extends string>(
 /** Both hosts live for the page lifetime; syncing values preserves keyboard focus. */
 export function initMapViewControls(host: HTMLElement, idPrefix: string): void {
     host.classList.add("map-view-controls");
+    const providerRow = document.createElement("label");
+    providerRow.className = "map-view-controls__row";
+    const providerLabel = document.createElement("span");
+    providerLabel.textContent = t("settings.map.provider.label");
+    const provider = createMapProviderSelect({
+        id: `${idPrefix}-provider-select`,
+        value: getMapProviderPreference(),
+        isYandexDisabled: !isYandexMapAvailable(),
+        onChange: setMapProviderPreference,
+    });
+    provider.classList.add("map-view-controls__select");
+    providerRow.append(providerLabel, provider);
+    const providerHint = document.createElement("span");
+    providerHint.id = `${idPrefix}-provider-description`;
+    providerHint.className = "map-view-controls__hint";
+    providerHint.textContent = t("settings.map.provider.description");
+    provider.setAttribute("aria-describedby", providerHint.id);
+    host.append(providerRow, providerHint);
+    if (!isYandexMapAvailable()) {
+        const unavailableHint = document.createElement("span");
+        unavailableHint.id = `${idPrefix}-provider-unavailable`;
+        unavailableHint.className = "map-view-controls__hint";
+        unavailableHint.textContent = t("settings.map.provider.unavailable");
+        provider.setAttribute("aria-describedby", `${providerHint.id} ${unavailableHint.id}`);
+        host.append(unavailableHint);
+    }
+    const styleHint = document.createElement("span");
+    styleHint.id = `${idPrefix}-style-unavailable`;
+    styleHint.className = "map-view-controls__hint";
+    styleHint.textContent = t("settings.map.styleUnavailable");
+    styleHint.hidden = true;
+    host.append(styleHint);
     const style = createSelect(
         host,
         `${idPrefix}-style-select`,
@@ -87,6 +123,7 @@ export function initMapViewControls(host: HTMLElement, idPrefix: string): void {
     buildings.setAttribute("aria-describedby", description.id);
     buildings.setAttribute("aria-labelledby", title.id);
     buildings.addEventListener("change", () => {
+        if (buildings.disabled) return;
         setMapViewPreferences({ ...getMapViewPreferences(), buildings3d: buildings.checked });
     });
     copy.append(title, description);
@@ -100,4 +137,16 @@ export function initMapViewControls(host: HTMLElement, idPrefix: string): void {
     };
     sync(getMapViewPreferences());
     subscribeMapViewPreferences(sync);
+    subscribeMapProviderPreference((preference) => {
+        provider.value = preference;
+        const isYandex = preference === "yandex";
+        for (const control of [style, theme]) {
+            control.disabled = isYandex;
+            if (isYandex) control.setAttribute("aria-describedby", styleHint.id);
+            else control.removeAttribute("aria-describedby");
+        }
+        buildings.disabled = isYandex;
+        buildings.setAttribute("aria-describedby", isYandex ? `${description.id} ${styleHint.id}` : description.id);
+        styleHint.hidden = !isYandex;
+    });
 }

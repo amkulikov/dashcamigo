@@ -17,6 +17,10 @@ import {
 } from "./map-provider.js";
 import { isOffline, reportMapTileNetworkError, reportMapTilesOk } from "./connectivity.js";
 
+function yandexTile(x: number): string {
+    return `https://tiles.api-maps.yandex.ru/v1/tiles/?x=${x}&y=204&z=10&apikey=local-debug-key`;
+}
+
 function bytes(...values: number[]): ArrayBuffer {
     return new Uint8Array(values).buffer;
 }
@@ -333,5 +337,222 @@ describe("shared map tile cache", () => {
         await vi.advanceTimersByTimeAsync(MAP_PROVIDER_REQUEST_TIMEOUT_MS);
 
         await rejection;
+    });
+
+    it("paces Yandex starts across independent map caches below thirty requests per second", async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(0);
+        const startedAt: number[] = [];
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async () => {
+                startedAt.push(Date.now());
+                return new Response(bytes(1));
+            }),
+        );
+        const firstCache = createSharedTileCache(0);
+        const secondCache = createSharedTileCache(0);
+        const requests = Array.from({ length: 60 }, (_, index) =>
+            (index % 2 ? firstCache : secondCache).load(yandexTile(index), new AbortController().signal),
+        );
+        await vi.advanceTimersByTimeAsync(999);
+        expect(startedAt.length).toBeGreaterThan(0);
+        expect(startedAt.length).toBeLessThan(30);
+        await vi.advanceTimersByTimeAsync(4_000);
+        await Promise.all(requests);
+        expect(startedAt).toHaveLength(60);
+        for (const start of startedAt) {
+            expect(startedAt.filter((time) => time >= start && time < start + 1000).length).toBeLessThan(30);
+        }
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("keeps Yandex admission moving when the system clock moves backward", async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(0);
+        const fetcher = vi.fn(async () => new Response(bytes(1)));
+        vi.stubGlobal("fetch", fetcher);
+        const cache = createSharedTileCache(0);
+        await cache.load(yandexTile(1), new AbortController().signal);
+        vi.setSystemTime(-60_000);
+        const next = cache.load(yandexTile(2), new AbortController().signal);
+        await vi.advanceTimersByTimeAsync(40);
+        await next;
+        expect(fetcher).toHaveBeenCalledTimes(2);
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("removes abandoned queued Yandex requests without reserving their slots", async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(0);
+        const started: { url: string; time: number }[] = [];
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async (url: string) => {
+                started.push({ url, time: Date.now() });
+                return new Response(bytes(1));
+            }),
+        );
+        const cache = createSharedTileCache(0);
+        await cache.load(yandexTile(1), new AbortController().signal);
+        const canceledController = new AbortController();
+        const canceled = cache.load(yandexTile(2), canceledController.signal);
+        const cancellation = expect(canceled).rejects.toMatchObject({ name: "AbortError" });
+        const next = cache.load(yandexTile(3), new AbortController().signal);
+        canceledController.abort("map moved");
+        await cancellation;
+        await vi.advanceTimersByTimeAsync(40);
+        await next;
+        expect(started).toEqual([
+            { url: yandexTile(1), time: 0 },
+            { url: yandexTile(3), time: 40 },
+        ]);
+        expect(vi.getTimerCount()).toBe(0);
+
+        const finalController = new AbortController();
+        const final = cache.load(yandexTile(4), finalController.signal);
+        const finalCancellation = expect(final).rejects.toMatchObject({ name: "AbortError" });
+        finalController.abort("map moved");
+        await finalCancellation;
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("starts the Yandex network deadline after a long queue wait", async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(0);
+        let lastSignal: AbortSignal | null | undefined;
+        const fetcher = vi.fn((url: string, init?: RequestInit) => {
+            if (url !== yandexTile(99)) return Promise.resolve(new Response(bytes(1)));
+            lastSignal = init?.signal;
+            return new Promise<Response>((_resolve, reject) => {
+                init?.signal?.addEventListener("abort", () => reject(new DOMException("timeout", "AbortError")), {
+                    once: true,
+                });
+            });
+        });
+        vi.stubGlobal("fetch", fetcher);
+        const cache = createSharedTileCache(0);
+        const requests = Array.from({ length: 99 }, (_, index) =>
+            cache.load(yandexTile(index), new AbortController().signal),
+        );
+        const last = cache.load(yandexTile(99), new AbortController().signal);
+        const failure = expect(last).rejects.toMatchObject({ statusText: "timeout" });
+        await vi.advanceTimersByTimeAsync(3_960);
+        await Promise.all(requests);
+        expect(fetcher).toHaveBeenCalledTimes(100);
+        expect(lastSignal?.aborted).toBe(false);
+        await vi.advanceTimersByTimeAsync(MAP_PROVIDER_REQUEST_TIMEOUT_MS - 1);
+        expect(lastSignal?.aborted).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        await failure;
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("deduplicates Yandex requests before taking a queue slot", async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(0);
+        const fetcher = vi.fn(async () => new Response(bytes(1)));
+        vi.stubGlobal("fetch", fetcher);
+        const cache = createSharedTileCache(0);
+        const first = cache.load(yandexTile(1), new AbortController().signal);
+        const second = cache.load(yandexTile(1), new AbortController().signal);
+        await Promise.all([first, second]);
+        expect(fetcher).toHaveBeenCalledOnce();
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it.each(["no-store", "no-cache", "max-age=0"])("does not retain a %s response", async (cacheControl) => {
+        const fetcher = vi.fn(async () => ({ data: bytes(1), cacheControl }));
+        const cache = createSharedTileCache(1024, fetcher);
+        await cache.load("tile-a", new AbortController().signal);
+        await cache.load("tile-a", new AbortController().signal);
+        expect(fetcher).toHaveBeenCalledTimes(2);
+        expect(cache.stats()).toMatchObject({ entries: 0, bytes: 0 });
+    });
+
+    it("expires cached bytes at their response freshness deadline", async () => {
+        vi.useFakeTimers();
+        const fetcher = vi.fn(async () => ({ data: bytes(1), cacheControl: "public, max-age=2" }));
+        const cache = createSharedTileCache(1024, fetcher);
+        await cache.load("tile-a", new AbortController().signal);
+        await vi.advanceTimersByTimeAsync(1_999);
+        await cache.load("tile-a", new AbortController().signal);
+        expect(fetcher).toHaveBeenCalledOnce();
+        await vi.advanceTimersByTimeAsync(1);
+        expect(cache.stats()).toMatchObject({ entries: 0, bytes: 0 });
+        await cache.load("tile-a", new AbortController().signal);
+        expect(fetcher).toHaveBeenCalledTimes(2);
+        cache.clear();
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("uses Expires when a response has no max-age", async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(0);
+        const fetcher = vi.fn(async () => ({ data: bytes(1), expires: new Date(2000).toUTCString() }));
+        const cache = createSharedTileCache(1024, fetcher);
+        await cache.load("tile-a", new AbortController().signal);
+        await vi.advanceTimersByTimeAsync(2000);
+        expect(cache.stats()).toMatchObject({ entries: 0, bytes: 0 });
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("keeps MapLibre's expiry fixed when cached tiles are reused by another map", async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(0);
+        const fetcher = vi.fn(async () => ({ data: bytes(1), cacheControl: "max-age=999999999" }));
+        const cache = createSharedTileCache(1024, fetcher);
+        const first = await cache.load("tile-a", new AbortController().signal);
+        await vi.advanceTimersByTimeAsync(20 * 24 * 60 * 60 * 1000);
+        const reused = await cache.load("tile-a", new AbortController().signal);
+        expect(fetcher).toHaveBeenCalledOnce();
+        expect(first.cacheControl).toBeNull();
+        expect(reused.cacheControl).toBeNull();
+        expect(Date.parse(first.expires!)).toBe(30 * 24 * 60 * 60 * 1000);
+        expect(reused.expires).toBe(first.expires);
+        cache.clear();
+    });
+
+    it("accounts for the upstream response age before caching it", async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(0);
+        const fetcher = vi.fn(async () => ({ data: bytes(1), cacheControl: "max-age=30", age: "29" }));
+        const cache = createSharedTileCache(1024, fetcher);
+        const response = await cache.load("tile-a", new AbortController().signal);
+        expect(Date.parse(response.expires!)).toBe(1000);
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(cache.stats()).toMatchObject({ entries: 0, bytes: 0 });
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("removes cached bytes after thirty days on a long-lived page", async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(0);
+        const fetcher = vi.fn(async () => ({ data: bytes(1), cacheControl: "max-age=999999999" }));
+        const cache = createSharedTileCache(1024, fetcher);
+        await cache.load("tile-a", new AbortController().signal);
+        await vi.advanceTimersByTimeAsync(30 * 24 * 60 * 60 * 1000);
+        expect(cache.stats()).toMatchObject({ entries: 0, bytes: 0 });
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("keeps Yandex credentials and tile coordinates out of error diagnostics", async () => {
+        const url = yandexTile(12345);
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async () => {
+                throw new TypeError(`fetch failed: ${url}`);
+            }),
+        );
+        const cache = createSharedTileCache(0);
+        const error = await cache.load(url, new AbortController().signal).catch((cause: unknown) => cause);
+        if (!(error instanceof Error)) throw new Error("missing fetch error");
+        expect(error.message).toContain("https://tiles.api-maps.yandex.ru/v1/tiles/");
+        expect(error.message).not.toContain("apikey");
+        expect(error.message).not.toContain("12345");
+        expect(error.cause).toBeUndefined();
+        expect(error.stack).not.toContain("local-debug-key");
+        expect(JSON.stringify(error)).not.toContain("local-debug-key");
+        expect(error).toMatchObject({ url, status: 0 });
     });
 });

@@ -77,14 +77,14 @@ function isBenignConsole(text: string, url: string): boolean {
     // Browser resource-load failure for an aborted tile-server request
     // ("Failed to load resource: net::ERR_FAILED"): msg.location().url is the
     // openfreemap request URL itself.
-    if (/openfreemap\.org|(?:tile|vector)\.openstreetmap\.org/i.test(url)) return true;
+    if (/openfreemap\.org|(?:tile|vector)\.openstreetmap\.org|tiles\.api-maps\.yandex\.ru/i.test(url)) return true;
     // Firefox raw browser CORS console error for an aborted tile request
     // ("Cross-Origin Request Blocked: ... https://tiles.openfreemap.org/...")
     // carries the domain in the TEXT, not in the console message's url field, so
     // the url check above misses it. The openfreemap.org domain only ever appears
     // because WE abort every request to it, so trusting it in text is as safe as
     // trusting it in the url - a tile server being unreachable IS the invariant.
-    if (/openfreemap\.org|(?:tile|vector)\.openstreetmap\.org/i.test(text)) return true;
+    if (/openfreemap\.org|(?:tile|vector)\.openstreetmap\.org|tiles\.api-maps\.yandex\.ru/i.test(text)) return true;
     // src/ui/map.ts mirrors map.on("error") / mini.on("error") through the app
     // logger as "[map] maplibre [mini ]error <cause>". Tolerate ONLY the causes
     // the aborted tile server actually produces (verified by capturing every
@@ -99,7 +99,11 @@ function isBenignConsole(text: string, url: string): boolean {
     // mentions "tile" or "AbortError" outside this exact logger line (e.g. a
     // video-tile feature, an export/ingest cancel) - is NOT masked.
     const isMaplibreLogLine = /^\[map\] maplibre (mini )?error /.test(text);
-    if (isMaplibreLogLine && /openfreemap\.org|(?:tile|vector)\.openstreetmap\.org/i.test(text)) return true;
+    if (
+        isMaplibreLogLine &&
+        /openfreemap\.org|(?:tile|vector)\.openstreetmap\.org|tiles\.api-maps\.yandex\.ru/i.test(text)
+    )
+        return true;
     if (isMaplibreLogLine && /\bAbortError\b/.test(text)) return true;
     // MapLibre "Style is not done loading" race on style swap - phrasing is
     // maplibre-specific, safe to match anywhere.
@@ -147,7 +151,8 @@ function isEgressAllowed(reqUrl: string, baseHost: string): boolean {
     return (
         /(^|\.)openfreemap\.org$/i.test(u.hostname) ||
         u.hostname === "vector.openstreetmap.org" ||
-        u.hostname === "tile.openstreetmap.org"
+        u.hostname === "tile.openstreetmap.org" ||
+        u.hostname === "tiles.api-maps.yandex.ru"
     );
 }
 
@@ -188,7 +193,9 @@ export const test = base.extend<{ tolerateConsole: RegExp[] }>({
         });
 
         // Hermetic + degradation guard: block the tile server.
-        await page.route(/openfreemap\.org|(?:tile|vector)\.openstreetmap\.org/i, (route) => route.abort());
+        await page.route(/openfreemap\.org|(?:tile|vector)\.openstreetmap\.org|tiles\.api-maps\.yandex\.ru/i, (route) =>
+            route.abort(),
+        );
 
         await use(page);
 

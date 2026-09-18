@@ -21,6 +21,7 @@ import {
 } from "./map-label-scale.js";
 import { renderMapMarkerControl } from "./map-marker-control.js";
 import { getMapMarkerAppearance, setMapMarkerAppearance } from "./map-marker-pref.js";
+import { getMapProviderPreference, subscribeMapProviderPreference } from "./map-provider.js";
 import { initMapViewControls } from "./map-view-controls.js";
 import { reapplyMapLabelPrefs } from "./map.js";
 
@@ -43,7 +44,10 @@ function renderSegment<Value extends string | number>(
         btn.dataset.value = String(value);
         btn.textContent = labelOf(value);
         btn.setAttribute("aria-pressed", String(value === current));
+        btn.disabled = getMapProviderPreference() === "yandex";
+        if (btn.disabled) btn.setAttribute("aria-describedby", "map-style-unavailable");
         btn.addEventListener("click", () => {
+            if (getMapProviderPreference() === "yandex") return;
             apply(value);
             reapplyMapLabelPrefs();
             for (const child of host.children) {
@@ -139,6 +143,16 @@ function closePopover(): void {
  *  startup; the popover content itself is (re)rendered on each open. */
 export function initMapSettingsPopover(): void {
     initMapViewControls(dom.mapViewControl, "map");
+    subscribeMapProviderPreference((provider) => {
+        for (const segment of [dom.mapLabelScaleSegment, dom.mapStreetNamesSegment]) {
+            for (const button of segment.querySelectorAll("button")) {
+                button.disabled = provider === "yandex";
+                if (button.disabled) button.setAttribute("aria-describedby", "map-style-unavailable");
+                else button.removeAttribute("aria-describedby");
+            }
+        }
+        fitPopoverToPane();
+    });
     const resize = new ResizeObserver(fitPopoverToPane);
     resize.observe(dom.mapWrap);
     dom.viewer.addEventListener("scroll", fitPopoverToPane, { passive: true });

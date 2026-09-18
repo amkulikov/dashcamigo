@@ -51,7 +51,7 @@ import {
 } from "./map-label-scale.js";
 import { renderMapMarkerControl } from "./map-marker-control.js";
 import { getMapMarkerAppearance, setMapMarkerAppearance } from "./map-marker-pref.js";
-import { getMapProviderPreference, setMapProviderPreference } from "./map-provider.js";
+import { getMapProviderPreference, subscribeMapProviderPreference } from "./map-provider.js";
 import { initMapViewControls } from "./map-view-controls.js";
 import { activateModal, deactivateModal, wireBackdropDismiss } from "./modal-helper.js";
 import { notify } from "./notifications.js";
@@ -106,7 +106,6 @@ function openSettings(): void {
     if (!m) return;
     syncCrashToggleFromState();
     syncUnitsSelect();
-    syncMapProviderSelect();
     syncMapLabelScaleSelect();
     syncMapMarkerControl();
     syncSeekStepInputs();
@@ -157,11 +156,6 @@ function syncEventsThresholdInputs(): void {
 function syncUnitsSelect(): void {
     const sel = document.getElementById("settings-units-select") as HTMLSelectElement | null;
     if (sel) sel.value = getUnits();
-}
-
-function syncMapProviderSelect(): void {
-    const sel = document.getElementById("settings-map-provider-select") as HTMLSelectElement | null;
-    if (sel) sel.value = getMapProviderPreference();
 }
 
 function syncMapLabelScaleSelect(): void {
@@ -405,9 +399,14 @@ export function initSettingsModal(): void {
     const mapViewControl = document.getElementById("settings-map-view-control");
     if (mapViewControl) initMapViewControls(mapViewControl, "settings-map");
 
-    document.getElementById("settings-map-provider-select")?.addEventListener("change", (ev) => {
-        const provider = (ev.target as HTMLSelectElement).value;
-        if (provider === "openfreemap" || provider === "osm-vector") setMapProviderPreference(provider);
+    subscribeMapProviderPreference((provider) => {
+        for (const id of ["settings-map-label-scale-select", "settings-map-street-names-select"]) {
+            const select = document.getElementById(id) as HTMLSelectElement | null;
+            if (!select) continue;
+            select.disabled = provider === "yandex";
+            if (select.disabled) select.setAttribute("aria-describedby", "settings-map-style-unavailable");
+            else select.removeAttribute("aria-describedby");
+        }
     });
 
     // --- Map labels ---
@@ -415,6 +414,7 @@ export function initSettingsModal(): void {
     // its own per-export text-size control.
 
     document.getElementById("settings-map-label-scale-select")?.addEventListener("change", (ev) => {
+        if (getMapProviderPreference() === "yandex") return;
         const sel = ev.target as HTMLSelectElement;
         const parsed = Number(sel.value);
         const match = MAP_LABEL_SCALE_VALUES.find((v) => v === parsed);
@@ -424,6 +424,7 @@ export function initSettingsModal(): void {
     });
 
     document.getElementById("settings-map-street-names-select")?.addEventListener("change", (ev) => {
+        if (getMapProviderPreference() === "yandex") return;
         const sel = ev.target as HTMLSelectElement;
         const match = STREET_LABEL_DENSITY_VALUES.find((v) => v === sel.value);
         if (match === undefined) return;

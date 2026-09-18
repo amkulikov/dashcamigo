@@ -150,6 +150,7 @@ jobs:
           SEO_MIRROR_CONFIG: ${{ secrets.SEO_MIRROR_CONFIG }}
           SEO_CUTOVER: ${{ vars.SEO_CUTOVER }}
           VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          VITE_YANDEX_TILES_API_KEY: ${{ secrets.VITE_YANDEX_TILES_API_KEY }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}

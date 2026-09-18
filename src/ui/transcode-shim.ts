@@ -140,6 +140,7 @@ function runInWorker(
         const outputWidthPx = computeOutputSize(transferArgs.output.height, transferArgs.output.aspect).width;
         const targetSlotWidthPx = outputWidthPx * MAP_BASE_WIDTH_PCT * (overlayMap.scalePct / 100);
         return createExportMapSnapshotter(records, "export", mapTheme, targetSlotWidthPx, {
+            provider: overlayMap.provider,
             labelScalePct: overlayMap.labelScalePct,
             labelDensity: overlayMap.labelDensity,
             markerAppearance: overlayMap.marker,

@@ -41,7 +41,7 @@
     "test:watch": "TZ=UTC vitest",
     "test:coverage": "TZ=UTC vitest run --coverage",
     "test:perf": "playwright test --config=tests/playwright.perf.config.ts",
-    "test:e2e": "npm run build && playwright test --config=tests/playwright.e2e.config.ts",
+    "test:e2e": "VITE_YANDEX_TILES_API_KEY=e2e-yandex-key npm run build && playwright test --config=tests/playwright.e2e.config.ts",
     "test:vrt": "npm run build && playwright test --config=tests/playwright.vrt.config.ts",
     "test:vrt:update": "npm run build && playwright test --config=tests/playwright.vrt.config.ts --update-snapshots",
     "test:bench": "vitest bench --run --config tests/vitest.bench.config.ts",

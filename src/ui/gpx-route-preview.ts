@@ -10,6 +10,7 @@ import { createLogger } from "../log.js";
 import { isValidGpsFix } from "../parser.js";
 import type { GpsRecord } from "../parsers/types.js";
 import { applyViewerMapStyle, loadMaplibre, loadMapStyle } from "./map.js";
+import { MapAttributionControl } from "./map-attribution-control.js";
 import { getMapProvider, mapProviderErrorKey } from "./map-provider.js";
 import { transformMapTileRequest } from "./map-tile-cache.js";
 import { currentMapTheme, getCssVar } from "./theme.js";
@@ -159,7 +160,6 @@ export class GpxRoutePreview {
 
             const mapHost = document.createElement("div");
             mapHost.className = "gpx-assignment-maplibre";
-            mapHost.setAttribute("aria-hidden", "true");
             this.host.appendChild(mapHost);
             const map = new maplibre.Map({
                 container: mapHost,
@@ -167,14 +167,15 @@ export class GpxRoutePreview {
                 center: this.coords[0] ?? [0, 0],
                 zoom: 12,
                 interactive: false,
-                attributionControl: { compact: true },
+                attributionControl: false,
                 fadeDuration: 0,
-                refreshExpiredTiles: false,
+                refreshExpiredTiles: true,
                 crossSourceCollisions: false,
                 validateStyle: false,
                 transformRequest: transformMapTileRequest,
             });
             this.map = map;
+            map.addControl(new MapAttributionControl(provider), "bottom-right");
             map.on("error", (event) => {
                 const cause = (event as { error?: unknown }).error;
                 const message = cause instanceof Error ? cause.message : String(cause);

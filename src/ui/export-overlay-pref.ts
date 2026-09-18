@@ -3,6 +3,7 @@
 // cameras and blur zones keep their existing per-trip/session lifecycles.
 
 import { MAP_MARKER_SHAPES, MAP_MARKER_SIZES, type MapMarkerAppearance } from "./map-marker-pref.js";
+import type { OverlayMapProviderPreference } from "./map-provider.js";
 import type { OverlayMapState, OverlayPreferences, OverlayTextState } from "./export-state.js";
 
 export const OVERLAY_PREFERENCES_STORAGE_KEY = "dashcamigo:export:overlays";
@@ -10,6 +11,7 @@ export const OVERLAY_PREFERENCES_STORAGE_KEY = "dashcamigo:export:overlays";
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 const OVERLAY_STYLES = ["min", "card", "bold"] as const;
 const MAP_SHAPES = ["rect", "circle"] as const;
+const MAP_PROVIDERS = ["openfreemap", "osm-vector"] as const satisfies readonly OverlayMapProviderPreference[];
 const MAP_THEMES = ["light", "dark", "neon"] as const;
 const MAP_LABEL_SIZES = [100, 125, 150, 200] as const;
 const MAP_LABEL_DENSITIES = ["standard", "more", "max"] as const;
@@ -61,6 +63,7 @@ function normalizeMap(value: unknown, fallback: OverlayMapState): OverlayMapStat
     if (!candidate) return { ...fallback, marker: { ...fallback.marker } };
     return {
         enabled: bool(candidate.enabled, fallback.enabled),
+        provider: oneOf(candidate.provider, MAP_PROVIDERS, fallback.provider),
         xPct: finiteInRange(candidate.xPct, fallback.xPct, 0, 1),
         yPct: finiteInRange(candidate.yPct, fallback.yPct, 0, 1),
         scalePct: finiteInRange(candidate.scalePct, fallback.scalePct, 50, 200),

@@ -1459,7 +1459,7 @@
                     <!-- Mini-map is positioned absolute relative to .video-frame, so it
                          doesn't overlap the chart strip when the grid resizes. Drag in JS
                          moves it within video-frame via transform translate. -->
-                    <div id="mini-map" class="mini-map" role="button" tabindex="0"
+                    <div id="mini-map" class="mini-map" role="group" tabindex="0"
                          data-i18n-attr="aria-label:miniMap.expandAria,title:miniMap.expandAria"
                          aria-label="Expand map · drag to move" title="Expand map · drag to move"></div>
                     <button id="mini-map-close" class="mini-map-close" type="button"
@@ -2600,16 +2600,6 @@
             <!-- Viewer map preferences; export overlays have separate controls. -->
             <div class="export-modal-section">
                 <h3 class="settings-section-title" data-i18n="settings.map.section">Map</h3>
-                <div class="settings-row">
-                    <label class="settings-select-row">
-                        <span class="settings-select-label" data-i18n="settings.map.provider.label">Map provider</span>
-                        <select id="settings-map-provider-select" class="settings-select">
-                            <option value="openfreemap" data-i18n="settings.map.provider.openfreemap">OpenFreeMap (recommended)</option>
-                            <option value="osm-vector" data-i18n="settings.map.provider.openstreetmap">OpenStreetMap</option>
-                        </select>
-                    </label>
-                    <p class="settings-toggle-desc" data-i18n="settings.map.provider.description">If this provider is unavailable, the map switches automatically.</p>
-                </div>
                 <div id="settings-map-view-control" class="settings-row"></div>
                 <div class="settings-row">
                     <span class="settings-select-label" data-i18n="settings.map.marker.label">Map marker</span>

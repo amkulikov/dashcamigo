@@ -560,7 +560,7 @@ function shortbreadLayers(theme: MapStyleId): LayerSpecification[] {
 }
 
 export function createFallbackMapStyle(
-    provider: Exclude<MapProvider, "openfreemap">,
+    provider: Extract<MapProvider, "osm-vector" | "osm-raster">,
     theme: MapStyleId,
 ): StyleSpecification {
     if (provider === "osm-raster") {

@@ -154,14 +154,12 @@
 }
 .dc-map-attrib {
     max-width: min(440px, 100%);
-    padding: 2px var(--dc-space-1);
-    background: var(--bg-elev);
-    border: 1px solid var(--border);
-    border-radius: var(--dc-radius-sm);
-    box-shadow: var(--dc-shadow-card);
+    padding: 1px 3px;
+    background: color-mix(in srgb, var(--bg-elev) 80%, transparent);
+    border-radius: 2px;
 }
 .dc-map-attrib-text {
-    font-size: var(--dc-text-xs);
+    font-size: var(--dc-text-2xs);
     color: var(--fg-dim);
     line-height: 1.25;
     pointer-events: auto;
@@ -313,11 +311,19 @@
     margin-top: 3px;
     accent-color: var(--accent);
 }
+.map-view-controls__row:has(select:disabled),
+.map-view-controls__buildings:has(input:disabled) {
+    color: var(--fg-mute);
+    cursor: default;
+}
 .map-view-controls__hint {
     display: block;
     color: var(--fg-mute);
     font-size: var(--dc-text-xs);
     line-height: 1.5;
+}
+.map-view-controls__hint[hidden] {
+    display: none;
 }
 .map-settings-popover .map-view-controls {
     padding-bottom: var(--dc-space-2);
@@ -358,11 +364,11 @@
 .map-settings-seg-btn + .map-settings-seg-btn {
     border-left: 0;
 }
-.map-settings-seg-btn:hover {
+.map-settings-seg-btn:hover:not(:disabled) {
     background: var(--bg-hover);
     color: var(--accent);
 }
-.map-settings-seg-btn:active {
+.map-settings-seg-btn:active:not(:disabled) {
     background: var(--bg-active);
 }
 .map-settings-seg-btn[aria-pressed="true"] {
@@ -370,9 +376,13 @@
     color: var(--dc-black);
     border-color: var(--accent);
 }
-.map-settings-seg-btn[aria-pressed="true"]:hover {
+.map-settings-seg-btn[aria-pressed="true"]:hover:not(:disabled) {
     background: var(--accent-hot);
     color: var(--dc-black);
+}
+.map-settings-seg-btn:disabled {
+    cursor: default;
+    opacity: 0.5;
 }
 
 /* Chase-mode sub-controls: tilt slider + speed-adaptive-zoom toggle. Stack
@@ -489,7 +499,7 @@
 /* Map unavailable (no WebGL context at all). Permanent centered notice over the
    blank/absent map canvas - distinct from the dismissible top toast for tile
    failures. The big map only ever shows when expanded, so the notice is centered
-   in that area; the mini-map circle is hidden entirely (an empty ring is worse
+   in that area; the mini-map is hidden entirely (an empty ring is worse
    than nothing) via the body class below.
 
    These notice rules are scoped to the #map-unavailable id ON PURPOSE, not to a
@@ -541,7 +551,7 @@
     align-items: flex-start;
     gap: var(--dc-space-2);
 }
-/* No WebGL: hide the mini-map circle, its close-X and the mobile map toggle -
+/* No WebGL: hide the mini-map, its close-X and the mobile map toggle -
    none of them can render a map. The big-map notice above carries the message. */
 body.map-unavailable .mini-map,
 body.map-unavailable .mini-map-close,
@@ -550,10 +560,14 @@ body.map-unavailable #player-map {
 }
 
 /* =========================================================================
-   11. MINI-MAP - the round GPS map, default in the TOP-LEFT corner of the
+   11. MINI-MAP - the GPS map, default in the TOP-LEFT corner of the
    video frame (the zoom birds-eye preview .video-minimap takes top-right -
    see viewer.css). The user can drag it anywhere; see the anchor note below.
    ========================================================================= */
+.video-frame {
+    --mini-map-width: 220px;
+}
+
 .mini-map,
 /* The duplicated .mini-map.maplibregl-map selector is needed because of CSS
    order in prod: maplibre-gl.css is imported in app.ts FIRST, but Vite in
@@ -568,21 +582,14 @@ body.map-unavailable #player-map {
    double selector doubles specificity (0,0,2,0) and reliably beats
    .maplibregl-map (0,0,1,0) regardless of bundle order. */
 .mini-map.maplibregl-map {
-    /* Positioned inside .video-frame (the parent is also relative).
-       Default position is the frame's top-left corner. Drag via JS changes
-       --mini-map-offset-x/y, applied as a translate. We deliberately do NOT
-       do a CSS hover-scale - it would conflict with the drag-translate.
-       Do NOT move this top:16/left:16 default in CSS alone: the drag
-       clamping and the persisted {xPct,yPct} position in ui/map.ts
-       (applyOffset/dragRangeForFrame) measure offsets FROM this anchor,
-       and .mini-map-close below derives its left:134 from it. */
+    /* The close control shares this anchor and drag offset. */
     position: absolute;
     top: 16px;
     left: 16px;
     z-index: 5;
-    width: 140px;
-    height: 140px;
-    border-radius: 50%;
+    width: var(--mini-map-width);
+    height: 150px;
+    border-radius: var(--dc-radius-sm);
     background: var(--bg-elev);
     border: 2px solid var(--accent);
     cursor: grab;
@@ -608,16 +615,9 @@ body.map-unavailable #player-map {
 }
 
 .mini-map-close {
-    /* Mini-map is a 140x140 circle in the video-frame's top-left corner
-       (top:16, left:16). We place the 22x22 close button in the top-right
-       corner of the circle's bbox - the circle itself doesn't cover the
-       bbox corners, so the button fits there without overlapping the mini-
-       map itself. Coordinates: top matches the mini-map (16), left = 16
-       + 140 (mini-map width) - 22 (close width) = 134. It moves together
-       with the mini-map via the same transform var. */
     position: absolute;
     top: 16px;
-    left: 134px;
+    left: calc(16px + var(--mini-map-width) - var(--dc-iconbtn-mini));
     z-index: 6;
     width: var(--dc-iconbtn-mini);
     height: var(--dc-iconbtn-mini);
@@ -666,8 +666,8 @@ body.map-unavailable #player-map {
     flex: 0 0 auto;
 }
 
-/* Mobile (any orientation): drop the mini-map circle entirely. On phone
-   the full map is one tap away via the bar button - the corner circle
+/* Mobile (any orientation): drop the mini-map entirely. On phone
+   the full map is one tap away via the bar button - the corner thumbnail
    covers the front camera and is a bad touch target on top of that.
    max-height + landscape catches landscape phones (width >767, height
    <500), which the plain max-width: 767 rule used to miss. This block sits
@@ -941,4 +941,30 @@ body.map-unavailable #player-map {
 .mini-map .car-marker__canvas {
     width: calc(var(--map-marker-size, 44px) * 0.6);
     height: calc(var(--map-marker-size, 44px) * 0.6);
+}
+
+.dc-map-attrib--yandex {
+    display: flex;
+    align-items: center;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+}
+.dc-map-logo {
+    display: block;
+    flex-shrink: 0;
+    line-height: 0;
+    pointer-events: auto;
+}
+.dc-map-logo img {
+    display: block;
+    max-width: none;
+}
+.mini-map .maplibregl-ctrl-bottom-right {
+    max-width: 100%;
+}
+.mini-map .dc-map-attrib {
+    margin: 0;
+    border-radius: 0;
 }

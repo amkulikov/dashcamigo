@@ -579,6 +579,7 @@ export type I18nKey =
     | "map.ctrl.zoomOut"
     | "map.ctrl.resetBearing"
     | "map.ctrl.attribution"
+    | "map.yandex.open"
     // Cooperative-gestures overlay, on wherever the page can scroll past the map
     // (touch, and the stacked layout on any pointer): one finger scrolls the
     // page, two fingers move the map; with a mouse there, plain wheel scrolls
@@ -930,6 +931,8 @@ export type I18nKey =
     | "export.overlays.speed"
     | "export.overlays.coords"
     | "export.overlays.map"
+    | "export.overlays.mapProvider"
+    | "export.overlays.mapProvider.yandexUnavailable"
     | "export.overlays.mapScale"
     | "export.overlays.style"
     | "export.overlays.style.min"
@@ -1134,7 +1137,10 @@ export type I18nKey =
     | "settings.map.provider.label"
     | "settings.map.provider.openfreemap"
     | "settings.map.provider.openstreetmap"
+    | "settings.map.provider.yandex"
+    | "settings.map.provider.unavailable"
     | "settings.map.provider.description"
+    | "settings.map.styleUnavailable"
     | "settings.map.style.label"
     | "settings.map.style.classic"
     | "settings.map.style.road"

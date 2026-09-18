@@ -17,6 +17,7 @@ function defaults(): OverlayPreferences {
         overlayCoords: { enabled: false, xPct: 0.035, yPct: 0.9, scalePct: 100 },
         overlayMap: {
             enabled: false,
+            provider: "openfreemap",
             xPct: 0.045,
             yPct: 0.05,
             scalePct: 100,
@@ -61,6 +62,7 @@ describe("export overlay preferences", () => {
                 overlaySpeed: { enabled: true, xPct: 0.4, yPct: -1, scalePct: 140 },
                 overlayMap: {
                     enabled: true,
+                    provider: "osm-vector",
                     xPct: 0.2,
                     yPct: 0.3,
                     scalePct: 175,
@@ -85,6 +87,7 @@ describe("export overlay preferences", () => {
         expect(restored.overlayCoords).toEqual(fallback.overlayCoords);
         expect(restored.overlayMap).toEqual({
             enabled: true,
+            provider: "osm-vector",
             xPct: 0.2,
             yPct: 0.3,
             scalePct: 175,
@@ -107,6 +110,7 @@ describe("export overlay preferences", () => {
         customized.overlaySpeed.enabled = true;
         customized.overlaySpeed.xPct = 0.42;
         customized.overlayMap.theme = "dark";
+        customized.overlayMap.provider = "osm-vector";
 
         persistOverlayPreferences(customized, fallback);
         expect(values.has(OVERLAY_PREFERENCES_STORAGE_KEY)).toBe(true);
@@ -114,6 +118,19 @@ describe("export overlay preferences", () => {
 
         persistOverlayPreferences(fallback, fallback);
         expect(values.has(OVERLAY_PREFERENCES_STORAGE_KEY)).toBe(false);
+    });
+
+    it("rejects Yandex and unknown overlay providers without discarding the layout", () => {
+        for (const provider of ["yandex", "osm-raster", "unknown", undefined]) {
+            const restored = normalizeOverlayPreferences(
+                { overlayMap: { provider, enabled: true, theme: "dark", zoomKm: 2 } },
+                defaults(),
+            );
+            expect(restored.overlayMap.provider).toBe("openfreemap");
+            expect(restored.overlayMap.enabled).toBe(true);
+            expect(restored.overlayMap.theme).toBe("dark");
+            expect(restored.overlayMap.zoomKm).toBe(2);
+        }
     });
 
     it("returns an independent default layout when storage is unavailable", () => {

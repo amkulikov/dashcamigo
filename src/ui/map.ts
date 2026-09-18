@@ -22,7 +22,7 @@ import { probeWebGL } from "../capabilities.js";
 import { mercatorY, unwrapLongitude, unwrapTrackCoordinates, wrapDegrees } from "../coordinates.js";
 import { gMagnitude, hasAccelData } from "../events.js";
 import { escapeHtml } from "../escape.js";
-import { getDateLocale, t } from "../i18n/index.js";
+import { getCurrentLang, getDateLocale, t } from "../i18n/index.js";
 import { createLogger } from "../log.js";
 import { emitLifecycle } from "../perf.js";
 import { interpolatePosition, isValidGpsFix } from "../parser.js";
@@ -70,6 +70,8 @@ import {
     subscribeMapProvider,
     type MapProvider,
 } from "./map-provider.js";
+import { MapAttributionControl } from "./map-attribution-control.js";
+import { createYandexMapStyle } from "./yandex-map.js";
 import { registerSharedMapTileCache, transformMapTileRequest } from "./map-tile-cache.js";
 import {
     createFallbackMapStyle,
@@ -253,7 +255,9 @@ export function loadMapStyle(
     }
 
     if (provider !== "openfreemap") {
-        const style = createFallbackMapStyle(provider, theme);
+        const style =
+            provider === "yandex" ? createYandexMapStyle(getCurrentLang()) : createFallbackMapStyle(provider, theme);
+        if (!style) return Promise.resolve(null);
         cachedMapStyles.set(key, style);
         clearMapStyleFailure(source, theme, provider);
         log.info("map style loaded", { theme, provider, durationMs: 0 });
@@ -371,8 +375,12 @@ function applyLoadedStyle(
         // must still get its own framing when the style is ready.
         preservedStyleTrack = shouldPreserveCamera ? renderedMapTrack : null;
         map.setStyle(styled, { diff: false });
+        mapAttributionControl.setProvider(provider);
     }
-    if (state.miniMap) state.miniMap.setStyle(styled, { diff: false });
+    if (state.miniMap) {
+        state.miniMap.setStyle(styled, { diff: false });
+        miniMapAttributionControl.setProvider(provider);
+    }
 }
 
 /**
@@ -394,7 +402,8 @@ export function applyViewerMapStyle(style: maplibregl.StyleSpecification): mapli
 }
 
 function viewerMapColors(): ReturnType<typeof mapThemeColors> {
-    return mapThemeColors(getMapProvider() === "osm-raster" ? "light" : currentMapTheme());
+    const provider = getMapProvider();
+    return mapThemeColors(provider === "osm-raster" || provider === "yandex" ? "light" : currentMapTheme());
 }
 
 function showMapStyleError(): void {
@@ -569,53 +578,8 @@ function setTrailProgress(progress: number): void {
     state.map.setPaintProperty(layerId, "line-gradient", gradient as never);
 }
 
-/**
- * Minimal always-visible attribution control. Credits deliberately have no
- * compact or collapsed state.
- */
-class MapAttributionControl implements maplibregl.IControl {
-    private root: HTMLDivElement | null = null;
-    private text: HTMLDivElement | null = null;
-
-    onAdd(_map: maplibregl.Map): HTMLElement {
-        const root = document.createElement("div");
-        // Inherit maplibre ctrl spacing so it sits flush with NavigationControl
-        // / ScaleControl - same outer margin, our CSS adds the visual style.
-        root.className = "maplibregl-ctrl dc-map-attrib";
-        const text = document.createElement("div");
-        text.className = "dc-map-attrib-text";
-        root.appendChild(text);
-        this.root = root;
-        this.text = text;
-        this.setProvider(getMapProvider());
-        this.applyLabels();
-        return root;
-    }
-
-    onRemove(): void {
-        this.root?.remove();
-        this.root = null;
-        this.text = null;
-    }
-
-    /** Re-applies i18n labels. Called on language change. */
-    applyLabels(): void {
-        if (this.root) this.root.setAttribute("aria-label", t("map.ctrl.attribution"));
-    }
-
-    setProvider(provider: MapProvider): void {
-        if (!this.text) return;
-        const osm =
-            '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors';
-        this.text.innerHTML =
-            provider === "openfreemap"
-                ? `${osm} · © <a href="https://openmaptiles.org/" target="_blank" rel="noopener noreferrer">OpenMapTiles</a>` +
-                  ' · © <a href="https://openfreemap.org/" target="_blank" rel="noopener noreferrer">OpenFreeMap</a>'
-                : osm;
-    }
-}
-
-const mapAttributionControl = new MapAttributionControl();
+const mapAttributionControl = new MapAttributionControl(getMapProvider(), { avoidPlayerControls: true });
+const miniMapAttributionControl = new MapAttributionControl(getMapProvider(), { reserveBottomSpace: true });
 
 /**
  * Installs a transparent 1x1 stub for every icon the style asks for but the
@@ -688,7 +652,7 @@ function handleMapInitFailure(err?: unknown): void {
     mapInitFailed = true;
     log.error("map unavailable: no WebGL context", err instanceof Error ? err : { err: String(err) });
     if (typeof document !== "undefined") {
-        // Body class hides the mini-map circle (an empty 140px ring would be
+        // Body class hides the mini-map (an empty panel would be
         // worse than nothing) and the map toggle; CSS in components/map.css.
         document.body.classList.add("map-unavailable");
         const notice = document.getElementById("map-unavailable");
@@ -732,7 +696,7 @@ export function ensureMap(): maplibregl.Map | null {
             // every rendered frame, a continuous main-thread cost while the
             // follow camera keeps the map moving. At 300 ms placement runs at
             // most ~3x/s and labels cross-fade instead of popping.
-            refreshExpiredTiles: false,
+            refreshExpiredTiles: true,
             crossSourceCollisions: false,
             // Pitch (tilt) is driven ONLY programmatically, by followMode
             // "chase" (and its tilt slider). We keep the direct gesture pitch
@@ -925,11 +889,11 @@ export function ensureMap(): maplibregl.Map | null {
 
 /**
  * Mini-map in the player corner. Separate MapLibre instance with the same
- * viewer style, no controls, and interactive:false. Clicking it expands the
+ * viewer style, visible credits, and interactive:false. Clicking it expands the
  * large map.
  *
  * The car marker stays centered: camera follows the current position on every
- * rAF tick (see startMarkerLoop). Zoom keeps MINI_MAP_TARGET_DIAMETER_KM around
+ * rAF tick (see startMarkerLoop). Zoom keeps MINI_MAP_TARGET_WIDTH_KM around
  * the car. Bearing is always 0 (north-up).
  *
  * Web Mercator on MapLibre's 512 px tiles: meters_per_pixel =
@@ -938,14 +902,11 @@ export function ensureMap(): maplibregl.Map | null {
  * significant (~1.5 zoom levels from equator to 70°N), so zoom is recomputed
  * dynamically on each jumpTo.
  */
-const MINI_MAP_DIAMETER_PX = 140; // Must match .mini-map width/height in styles/components/map.css.
-// ~5 km across the circle. Was nominally 10 with the 256-tile constant that
-// doubled the zoom, so it actually rendered ~5 km; this keeps that exact framing
-// now that the constant is fixed. Raise it for more surrounding context.
-const MINI_MAP_TARGET_DIAMETER_KM = 5;
+const MINI_MAP_TARGET_WIDTH_KM = 5;
 
 function miniMapZoomForLat(lat: number): number {
-    const targetMetersPerPx = (MINI_MAP_TARGET_DIAMETER_KM * 1000) / MINI_MAP_DIAMETER_PX;
+    const width = Number.parseFloat(getComputedStyle(dom.miniMap).width);
+    const targetMetersPerPx = (MINI_MAP_TARGET_WIDTH_KM * 1000) / Math.max(1, width);
     const cosLat = Math.cos((lat * Math.PI) / 180);
     // Near poles cos → 0; guard against -Infinity and absurdly large zoom.
     const safeCos = Math.max(cosLat, 0.01);
@@ -974,7 +935,6 @@ export function ensureMiniMap(): maplibregl.Map | null {
             // Fully non-interactive - user should not accidentally pan/rotate it;
             // click is handled by a separate DOM listener that expands the large map.
             interactive: false,
-            // Attribution only on the large map; it would just clutter a 150 px circle.
             attributionControl: false,
             // Performance tuning for "car-camera follow" use case:
             //  - fadeDuration:0 - zeroes the 300 ms label-collision fade (per the
@@ -982,18 +942,18 @@ export function ensureMiniMap(): maplibregl.Map | null {
             //    raster tile cross-fade). The mini-map camera moves in sparse
             //    px-gated jumps; a nonzero fade would keep it rendering for
             //    300 ms after every jump - nearly continuous rendering for a
-            //    140 px thumbnail. The big map makes the opposite call (see
+            //    small thumbnail. The big map makes the opposite call (see
             //    ensureMap): there the camera moves continuously anyway and
             //    fadeDuration doubles as the symbol-placement throttle.
-            //  - refreshExpiredTiles:false - skip tile TTL revalidation; sessions are
-            //    read-only playback, tiles don't meaningfully "expire".
+            //  - refreshExpiredTiles:true - respect provider cache lifetimes
+            //    even when an installed app stays open for a long time.
             //  - crossSourceCollisions:false - disables label-collision detection across
             //    sources (one tile source + our line source). One of the most expensive
             //    algorithms in the render loop.
             fadeDuration: 0,
-            refreshExpiredTiles: false,
+            refreshExpiredTiles: true,
             crossSourceCollisions: false,
-            // Small tile cache is fine: ~140 px viewport fits 4-9 tiles at typical zoom.
+            // The thumbnail only needs a few visible tiles at typical zoom.
             // 32 gives headroom for speed changes and zoom shifts on long trips.
             maxTileCacheSize: 32,
             // Skip runtime style validation (static self-hosted styles, gated at
@@ -1007,6 +967,7 @@ export function ensureMiniMap(): maplibregl.Map | null {
         return null;
     }
     state.miniMap = mini;
+    mini.addControl(miniMapAttributionControl, "bottom-right");
 
     mini.on("styledataloading", () => {
         state.miniMapReady = false;
@@ -1036,6 +997,7 @@ export function ensureMiniMap(): maplibregl.Map | null {
     const cached = cachedMapStyles.get(styleCacheKey(provider, theme));
     if (cached && state.miniMap) {
         state.miniMap.setStyle(applyViewerMapStyle(cached), { diff: false });
+        miniMapAttributionControl.setProvider(provider);
     }
 
     return mini;
@@ -1834,7 +1796,7 @@ export function applyMapLayout(): void {
     syncMobileViewNav();
     // No WebGL: there is no map to lay out. Use the big-map slot to host the
     // permanent "map unavailable" notice (it has no canvas) whenever GPS exists
-    // and the user wants a map; the mini-map circle and the toggles are hidden
+    // and the user wants a map; the mini-map and the toggles are hidden
     // via body.map-unavailable in CSS. The chart keeps its own layout.
     if (!isMapAvailable()) {
         // Export mode suppresses the notice pane exactly like it suppresses the
@@ -1877,7 +1839,7 @@ export function applyMapLayout(): void {
     dom.mapCollapseBtn.hidden = !showBigMap;
 
     // Player-bar map toggle: mobile-only entry to expand/collapse the map
-    // (mini-map circle is hidden on mobile - see map.css). Disabled only when
+    // (mini-map is hidden on mobile - see map.css). Disabled only when
     // there is no GPS - userWantsMap is intentionally not a disable condition
     // because the View menu sits inside the overflow kebab on mobile and is a
     // discoverability dead-end; the click handler force-enables map visibility
@@ -2163,7 +2125,6 @@ function closeMiniMapToViewMenu(): void {
 // 2*padding) so the relative position survives viewport size changes between
 // sessions. Single JSON key for atomic read/write.
 const MINIMAP_POS_STORAGE_KEY = "dashcamigo:minimap-pos";
-const MINIMAP_SIZE_PX = 140;
 const MINIMAP_PADDING_PX = 16;
 
 interface MiniMapStoredPos {
@@ -2206,14 +2167,14 @@ function persistMiniMapPos(pos: MiniMapStoredPos): void {
  */
 function dragRangeForFrame(frame: HTMLElement): { rangeX: number; rangeY: number } {
     const fr = frame.getBoundingClientRect();
-    const rangeX = Math.max(0, fr.width - MINIMAP_SIZE_PX - MINIMAP_PADDING_PX * 2);
-    const rangeY = Math.max(0, fr.height - MINIMAP_SIZE_PX - MINIMAP_PADDING_PX * 2);
+    const rangeX = Math.max(0, fr.width - dom.miniMap.offsetWidth - MINIMAP_PADDING_PX * 2);
+    const rangeY = Math.max(0, fr.height - dom.miniMap.offsetHeight - MINIMAP_PADDING_PX * 2);
     return { rangeX, rangeY };
 }
 
 function initMiniMapDrag(): void {
     // Click expands the large map; Enter/Space for keyboard accessibility
-    // (mini-map has role="button" tabindex=0). The close button is a sibling,
+    // (the mini-map group is focusable). The close button is a sibling,
     // not a child, so its click does not bubble through the mini-map.
     //
     // Drag: pointer events on the element. Movement above threshold suppresses
@@ -2289,6 +2250,7 @@ function initMiniMapDrag(): void {
     }
 
     dom.miniMap.addEventListener("pointerdown", (e) => {
+        if (e.target instanceof Element && e.target.closest("a")) return;
         // Primary mouse button or first touch only.
         if (e.button !== 0 && e.pointerType === "mouse") return;
         dragging = true;
@@ -2304,6 +2266,7 @@ function initMiniMapDrag(): void {
     });
 
     dom.miniMap.addEventListener("pointermove", (e) => {
+        if (e.target instanceof Element && e.target.closest("a")) return;
         if (!dragging) return;
         const dx = e.clientX - startClientX;
         const dy = e.clientY - startClientY;
@@ -2330,6 +2293,7 @@ function initMiniMapDrag(): void {
     dom.miniMap.addEventListener("pointercancel", endDrag);
 
     dom.miniMap.addEventListener("click", (e) => {
+        if (e.target instanceof Element && e.target.closest("a")) return;
         if (suppressNextClick) {
             // This was a drag, not a click - suppress map expand.
             suppressNextClick = false;
@@ -2340,6 +2304,7 @@ function initMiniMapDrag(): void {
     });
 
     dom.miniMap.addEventListener("keydown", (e) => {
+        if (e.target !== dom.miniMap) return;
         if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             expandMap();
@@ -2351,7 +2316,7 @@ function initMiniMapDrag(): void {
  * Mini-map hover sync: while the cursor is over the mini-map, project the
  * pixel coord to LngLat, snap to the nearest GPS record, and drive the chart
  * cursor. Mirrors what onTrackHover does on the main map but without a popup
- * (140 px viewport is too small to read one). interactive:false on the
+ * (the thumbnail is too small to read one). interactive:false on the
  * mini-map blocks MapLibre's own listeners; we attach to the DOM container
  * directly and use mini.unproject() for coordinate conversion.
  */
@@ -2845,8 +2810,8 @@ export function startMarkerLoop(opts: { onAfterTick?: () => void } = {}): void {
 }
 
 // Minimum pixel shift before a mini-map repaint. At zoom ~15, 1 px = ~10 m, so
-// the camera re-centers every ~3 px of car travel - a 3 px jump in a 140 px
-// circle is imperceptible as jitter, and the marker slides smoothly on top.
+// the camera re-centers every ~3 px of car travel - a 3 px jump in a small
+// thumbnail is imperceptible as jitter, and the marker slides smoothly on top.
 const MINI_MAP_REPAINT_THRESHOLD_PX = 3;
 
 // =====================================================================
@@ -3179,7 +3144,6 @@ export function initMap(cb: MapCallbacks): void {
     });
 
     subscribeMapProvider((provider, previous) => {
-        mapAttributionControl.setProvider(provider);
         if (previous === null) return;
         const theme = currentMapTheme();
         loadMapStyle(theme, false, "main", provider).then((style) => {
@@ -3252,12 +3216,12 @@ export function initMap(cb: MapCallbacks): void {
 
     dom.mapCollapseBtn.addEventListener("click", () => collapseMap(dom.viewMenuButton));
     // Player-bar map toggle: single entry point for mobile users to expand or
-    // collapse the map (mini-map circle is hidden via CSS on mobile). Force
+    // collapse the map (mini-map is hidden via CSS on mobile). Force
     // userWantsMap=true on expand so the click works regardless of the View
     // menu state - on mobile that menu is buried inside the overflow kebab
     // and users would otherwise hit a no-op button on the first tap. Collapse
     // does NOT flip userWantsMap off: a user who explicitly enabled the map
-    // panel may want it shown as the mini-map circle on desktop later.
+    // panel may want it shown as the mini-map on desktop later.
     dom.playerMapBtn.addEventListener("click", () => {
         if (state.mapExpanded) {
             collapseMap(dom.playerMapBtn);

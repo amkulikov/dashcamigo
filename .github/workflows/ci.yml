@@ -49,6 +49,9 @@ jobs:
       # (it would otherwise silently self-skip and never gate anything).
       - name: Build
         run: npm run build
+        env:
+          # Browser tests intercept every map request; no real API key enters CI.
+          VITE_YANDEX_TILES_API_KEY: e2e-yandex-key
 
       - name: Unit tests (vitest)
         run: npm test

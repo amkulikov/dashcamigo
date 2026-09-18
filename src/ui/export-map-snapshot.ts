@@ -20,9 +20,8 @@
 //    marker, so the result "looks like the player mini-map" without the
 //    consumer (pipeline) needing a separate compositor pass for the marker.
 //
-// We deliberately do not write the LICENSE/attribution text on the snapshot -
-// the export modal already shows a watermark + the user owns the source video.
-// The OpenFreeMap attribution lives on the main map.
+// Only providers allowed by the overlay controls enter this renderer. Its
+// provider session is isolated from the interactive viewer and its fallbacks.
 
 // Type-only: the runtime namespace is loaded lazily via loadMaplibre (shared
 // with the viewer map module), so maplibre-gl stays out of the eager graph.
@@ -46,10 +45,9 @@ import { applyStreetLabelDensity, scaleStyleTextSizes, type StreetLabelDensity }
 import { DEFAULT_MAP_MARKER_APPEARANCE, type MapMarkerAppearance, mapMarkerSizeScale } from "./map-marker-pref.js";
 import { drawMapMarker } from "./map-marker-renderer.js";
 import {
-    getMapProvider,
+    createOverlayMapProviderSession,
     mapProviderErrorKey,
-    reportMapProviderTileError,
-    subscribeMapProvider,
+    type OverlayMapProviderPreference,
 } from "./map-provider.js";
 import { transformMapTileRequest } from "./map-tile-cache.js";
 import { waitForMapEvent } from "./map-events.js";
@@ -203,6 +201,7 @@ export interface ExportMapSnapshotter {
  * needs a rebuild, same as `theme`.
  */
 export interface ExportMapRenderOptions {
+    provider?: OverlayMapProviderPreference;
     labelScalePct?: number;
     labelDensity?: StreetLabelDensity;
     markerAppearance?: MapMarkerAppearance;
@@ -221,6 +220,7 @@ export async function createExportMapSnapshotter(
         labelScalePct = 100,
         labelDensity = "standard",
         markerAppearance = DEFAULT_MAP_MARKER_APPEARANCE,
+        provider,
         onInvalidate,
     } = renderOptions;
     let activeMarkerAppearance = { ...markerAppearance };
@@ -259,7 +259,8 @@ export async function createExportMapSnapshotter(
     // User-selected base layer (default "light" - higher contrast against the
     // orange car marker and the typical daytime recording). ensureMap prefetches
     // both themes at startup, so either is usually a cache hit.
-    let activeProvider = getMapProvider();
+    const providerSession = createOverlayMapProviderSession(provider);
+    let activeProvider = providerSession.getProvider();
     const styleFromCache = await loadMapStyle(theme, false, source, activeProvider);
     const style = applyStreetLabelDensity(
         scaleStyleTextSizes(styleFromCache ?? EMPTY_MAP_STYLE, labelScalePct / 100),
@@ -317,6 +318,7 @@ export async function createExportMapSnapshotter(
             transformRequest: transformMapTileRequest,
         });
     } catch (err) {
+        providerSession.dispose();
         host.remove();
         throw err;
     }
@@ -330,7 +332,7 @@ export async function createExportMapSnapshotter(
     const seenErrors = new Set<string>();
     map.on("error", (ev) => {
         const cause = (ev as { error?: unknown }).error;
-        reportMapProviderTileError(cause);
+        providerSession.reportTileError(cause);
         const errorKey = mapProviderErrorKey(cause);
         if (seenErrors.has(errorKey)) return;
         seenErrors.add(errorKey);
@@ -340,6 +342,7 @@ export async function createExportMapSnapshotter(
     try {
         await waitForStyleLoad(map);
     } catch (err) {
+        providerSession.dispose();
         try {
             map.remove();
         } catch (cleanupErr) {
@@ -362,7 +365,7 @@ export async function createExportMapSnapshotter(
     };
     if (onInvalidate) map.on("idle", onIdle);
     let providerStyleChange = Promise.resolve();
-    const unsubscribeProvider = subscribeMapProvider((provider, previous) => {
+    const unsubscribeProvider = providerSession.subscribe((provider, previous) => {
         if (provider === activeProvider || isDisposed) return;
         activeProvider = provider;
         providerStyleChange = providerStyleChange
@@ -396,6 +399,7 @@ export async function createExportMapSnapshotter(
     if (!cctx) {
         isDisposed = true;
         unsubscribeProvider();
+        providerSession.dispose();
         try {
             map.remove();
         } catch {
@@ -585,6 +589,7 @@ export async function createExportMapSnapshotter(
             isDisposed = true;
             map.off("idle", onIdle);
             unsubscribeProvider();
+            providerSession.dispose();
             try {
                 map.remove();
             } catch (err) {

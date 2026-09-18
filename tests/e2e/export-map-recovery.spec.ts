@@ -54,23 +54,40 @@ async function expectPreviewSettles(page: Page): Promise<void> {
     expect(writes, "an idle map must not keep resnapshotting the paused preview").toBe(0);
 }
 
-test("repaints a paused map preview after its provider changes without rebuilding the map", async ({ page }) => {
+test("repaints a paused map preview after its provider fails without rebuilding the map", async ({ page }) => {
     const tile = await solidTile(page);
+    let vectorTileRequests = 0;
+    let shouldFailTiles = false;
+    await page.route("https://vector.openstreetmap.org/**", (route) => {
+        if (!new URL(route.request().url()).pathname.endsWith("/0/0/0.mvt")) vectorTileRequests++;
+        if (shouldFailTiles) return route.abort();
+        return route.fulfill({ body: Buffer.alloc(0), headers: { "access-control-allow-origin": "*" } });
+    });
     await page.locator("#export-panel-ov-map").check();
+    await page.locator("#export-map-provider-select").selectOption("osm-vector");
+    await expect.poll(() => vectorTileRequests).toBeGreaterThanOrEqual(2);
+    await expect(page.locator("#export-map-snapshot-host")).toHaveCount(1);
     await expect.poll(() => previewPixel(page)).toEqual([0, 0, 0, 128]);
     const playhead = await page.locator("#player").evaluate((el) => (el as HTMLVideoElement).currentTime);
     await page.locator("#export-map-snapshot-host").evaluate((el) => {
         (el as HTMLElement).dataset.providerTest = "true";
     });
 
-    // Keep fallback probes unavailable until the initial provider has painted.
+    // Changing scale requests uncached tiles while preserving the snapshot map.
     await page.route("https://tile.openstreetmap.org/**", (route) =>
         route.fulfill({ body: tile, contentType: "image/png", headers: { "access-control-allow-origin": "*" } }),
     );
-    await page.evaluate(() => window.__dashcamigo.setMapProvider("osm-raster"));
+    shouldFailTiles = true;
+    await page.getByRole("slider", { name: "Map scale", exact: true }).evaluate((element) => {
+        const slider = element as HTMLInputElement;
+        slider.value = slider.max;
+        slider.dispatchEvent(new Event("input", { bubbles: true }));
+    });
 
     await expect.poll(() => previewPixel(page)).toEqual([32, 160, 64, 255]);
     await expect(page.locator('[data-provider-test="true"]')).toHaveCount(1);
+    await expect(page.locator("#export-map-provider-select")).toHaveValue("osm-vector");
+    await expect(page.locator("#settings-map-provider-select")).toHaveValue("openfreemap");
     await expect(page.locator("#player")).toHaveJSProperty("paused", true);
     await expect(page.locator("#player")).toHaveJSProperty("currentTime", playhead);
     await expectPreviewSettles(page);

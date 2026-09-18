@@ -770,6 +770,7 @@ let mapSnapshotterRecordCount = 0;
 // rebuild the hidden MapLibre instance (the style is fixed at construction), so
 // it invalidates the cache the same way a trip change does.
 let mapSnapshotterTheme: MapStyleId | null = null;
+let mapSnapshotterProvider: typeof exportPanelState.overlayMap.provider | null = null;
 // Label scale / street-name density the cached snapshotter was built for -
 // fixed at construction like the theme, so a change invalidates the same way.
 let mapSnapshotterLabelScalePct: number | null = null;
@@ -799,13 +800,14 @@ async function refreshMapSnapshot(
     // same playhead position) is not skipped by the early-return below. Speed is
     // included only when adaptive zoom is on (it changes the zoom then).
     const speedBucket = headingUp && om.adaptiveZoom ? Math.round(pos.speedMs) : 0;
-    const key = `${pos.lat.toFixed(4)}|${pos.lon.toFixed(4)}|${zoomKm}|${Math.round(pos.bearingDeg)}|${theme}|${om.labelScalePct}|${om.labelDensity}|${om.mode}|${om.pitchDeg}|${om.adaptiveZoom ? 1 : 0}|${speedBucket}|${mapMarkerAppearanceKey(om.marker)}|${om.marker.size}`;
+    const key = `${pos.lat.toFixed(4)}|${pos.lon.toFixed(4)}|${zoomKm}|${Math.round(pos.bearingDeg)}|${om.provider}|${theme}|${om.labelScalePct}|${om.labelDensity}|${om.mode}|${om.pitchDeg}|${om.adaptiveZoom ? 1 : 0}|${speedBucket}|${mapMarkerAppearanceKey(om.marker)}|${om.marker.size}`;
     const shouldRebuild =
         !mapSnapshotterPromise ||
         mapSnapshotterTripUtc !== tripStartUtc ||
         mapSnapshotterRecords !== records ||
         mapSnapshotterRecordCount !== records.length ||
         mapSnapshotterTheme !== theme ||
+        mapSnapshotterProvider !== om.provider ||
         mapSnapshotterLabelScalePct !== om.labelScalePct ||
         mapSnapshotterLabelDensity !== om.labelDensity;
     if (!shouldRebuild && key === mapLastRequestKey) return;
@@ -819,6 +821,7 @@ async function refreshMapSnapshot(
         mapSnapshotterRecords = records;
         mapSnapshotterRecordCount = records.length;
         mapSnapshotterTheme = theme;
+        mapSnapshotterProvider = om.provider;
         mapSnapshotterLabelScalePct = om.labelScalePct;
         mapSnapshotterLabelDensity = om.labelDensity;
         const myPromise: Promise<ExportMapSnapshotter | null> = createExportMapSnapshotter(
@@ -827,6 +830,7 @@ async function refreshMapSnapshot(
             theme,
             undefined,
             {
+                provider: om.provider,
                 labelScalePct: om.labelScalePct,
                 labelDensity: om.labelDensity,
                 markerAppearance: om.marker,
@@ -927,6 +931,7 @@ function disposeMapSnapshotter(): void {
     mapSnapshotterRecords = null;
     mapSnapshotterRecordCount = 0;
     mapSnapshotterTheme = null;
+    mapSnapshotterProvider = null;
     mapSnapshotterLabelScalePct = null;
     mapSnapshotterLabelDensity = null;
     mapLastRequestKey = "";

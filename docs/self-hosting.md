@@ -23,6 +23,7 @@ you need a private installation you control.
 - **You already have nginx, Caddy, a NAS or an internal web server:** download a
   release and follow the [server requirements](#serve-it-on-an-internal-web-server).
 - **You want to change the code:** [build from source](#build-from-source).
+- **You want Yandex Maps:** [set up your own API key](#enable-yandex-maps).
 
 ## Run a release with Node.js
 
@@ -133,6 +134,43 @@ omits version and page-modification metadata.
 `npm run preview` and `python3 -m http.server -d dist` can serve the app itself,
 but links such as `/privacy` return 404 without an additional rewrite rule.
 
+## Enable Yandex Maps
+
+Build your own copy to enable Yandex Maps. The published release archives and
+Docker image contain no Yandex key, and adding a key to a running server or
+container cannot change their browser assets.
+
+1. Follow the [Yandex Tiles API quickstart](https://yandex.ru/maps-api/docs/tiles-api/quickstart.html)
+   to obtain a key for the **Tiles API** package. Wait for the key to activate.
+2. Configure [domain restrictions](https://yandex.ru/maps-api/docs/tiles-api/limit.html)
+   for the addresses people will use to open your installation. The key is
+   public in the browser; these restrictions do not make it a secret. Requests
+   come from each visitor's device, so the hosting server's IP is not the right
+   restriction for this app.
+3. Insert the key using one of the build methods below, then select **Yandex
+   Maps** in the app's map settings.
+
+For an npm build, create `.env.local` next to `package.json` and replace the
+placeholder with your key:
+
+```dotenv
+VITE_YANDEX_TILES_API_KEY=YOUR_TILES_API_KEY
+```
+
+Run `npm run build` and serve the resulting `dist/` as described above.
+`.env.local` is ignored by Git; other optional settings are documented in
+[`.env.example`](../.env.example).
+
+For a Docker build from your checkout, pass the key as a build argument:
+
+```sh
+docker build --build-arg VITE_YANDEX_TILES_API_KEY=YOUR_TILES_API_KEY -t dashcamigo .
+```
+
+Run this image using the [Docker instructions](#run-with-docker). Docker builds
+exclude local `.env` files, and `docker run -e` cannot supply this build setting.
+Rebuild and replace the served files or image whenever you change the key.
+
 ## Serve it on an internal web server
 
 Copy the contents of the release folder or `dist/` to the root of the site.
@@ -169,8 +207,7 @@ detects an insecure address.
 
 ## Network access at runtime
 
-In a default self-hosted build, the only external requests are for OpenFreeMap
-tiles, sprites and map text. Their URLs live in `public/styles/*.json`.
+See the [privacy policy](https://dashcamigo.app/privacy) for map-service requests.
 
 Without an internet connection, the basemap is blank, but the route, markers,
 chart and video continue to work. Nothing else is contacted unless you enable

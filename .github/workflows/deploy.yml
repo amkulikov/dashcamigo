@@ -73,6 +73,7 @@ jobs:
           # issues. No INDEXNOW_KEY: the key file is a production concern.
           VITE_NO_INDEX: "1"
           VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN_STAGING }}
+          VITE_YANDEX_TILES_API_KEY: ${{ secrets.VITE_YANDEX_TILES_API_KEY_STAGING }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT_STAGING }}

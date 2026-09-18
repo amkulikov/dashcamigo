@@ -14,6 +14,7 @@ COPY . .
 # nginx.conf sends no CSP header, so deliver the CSP as a <meta> tag
 # (vite-plugins/csp-hash.ts) - same flavor the release artifact ships.
 ENV META_CSP=1
+ARG VITE_YANDEX_TILES_API_KEY
 RUN npm run build
 
 FROM nginx:alpine

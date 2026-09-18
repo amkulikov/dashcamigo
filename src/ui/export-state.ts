@@ -16,6 +16,7 @@ import type { Trip } from "../trips.js";
 
 import type { StreetLabelDensity } from "./map-label-scale.js";
 import { getMapMarkerAppearance, type MapMarkerAppearance } from "./map-marker-pref.js";
+import type { OverlayMapProviderPreference } from "./map-provider.js";
 import { activeTrip, state } from "./state.js";
 import type { MapStyleId } from "./theme.js";
 import {
@@ -89,6 +90,8 @@ export type MapViewMode = "north" | "chase";
 
 export interface OverlayMapState {
     enabled: boolean;
+    /** Export maps keep a provider that permits overlays, independent of the viewer. */
+    provider: OverlayMapProviderPreference;
     xPct: number;
     yPct: number;
     scalePct: number;
@@ -236,6 +239,7 @@ function freshOverlayPreferences(): OverlayPreferences {
         overlayCoords: { enabled: false, xPct: 0.035, yPct: 0.9, scalePct: 100 },
         overlayMap: {
             enabled: false,
+            provider: "openfreemap",
             xPct: 0.045,
             yPct: 0.05,
             scalePct: 100,

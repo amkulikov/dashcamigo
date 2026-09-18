@@ -245,6 +245,7 @@ test("map credits and scale remain separate and accessible in a narrow pane", as
     if ((await page.locator(".sidebar").getAttribute("data-drawer-open")) === "true") {
         await page.locator("#topbar-burger").click();
     }
+    await expect.poll(controlsFit).toBe(true);
     await page.locator(".viewer").evaluate((el) => {
         el.scrollTop = el.scrollHeight;
     });
