@@ -19,6 +19,19 @@ import {
     test,
 } from "./_fixtures.js";
 
+const COLOR_ERROR_LIMIT = 20;
+
+function meanRgb(pixels: number[]): number[] {
+    return [0, 1, 2].map(
+        (channel) =>
+            pixels.reduce((sum, value, index) => sum + (index % 4 === channel ? value : 0), 0) / (pixels.length / 4),
+    );
+}
+
+function colorError(expected: number[], actual: number[]): number {
+    return expected.reduce((sum, value, index) => sum + Math.abs(value - actual[index]!), 0) / 3;
+}
+
 test.describe("camera reflection", () => {
     test("composition reflects each video before overlays, crops and privacy masks", async ({ page }) => {
         const bundle = await rolldown({
@@ -122,9 +135,33 @@ test.describe("camera reflection", () => {
         await page.locator("#player-mini-progress").focus();
         await page.keyboard.press("Home");
         const flips = [
-            { channel: "front", horizontal: true, vertical: false },
-            { channel: "rear", horizontal: false, vertical: true },
-            { channel: "interior", horizontal: true, vertical: true },
+            {
+                channel: "front",
+                horizontal: true,
+                vertical: false,
+                points: [
+                    { x: 0.1, y: 0.2 },
+                    { x: 0.55, y: 0.75 },
+                ],
+            },
+            {
+                channel: "rear",
+                horizontal: false,
+                vertical: true,
+                points: [
+                    { x: 0.45, y: 0.25 },
+                    { x: 0.9, y: 0.45 },
+                ],
+            },
+            {
+                channel: "interior",
+                horizontal: true,
+                vertical: true,
+                points: [
+                    { x: 0.55, y: 0.25 },
+                    { x: 0.1, y: 0.45 },
+                ],
+            },
         ];
         for (const flip of flips) {
             await page.locator(`.video-tile[data-channel="${flip.channel}"] .camera-settings-button`).click();
@@ -160,24 +197,47 @@ test.describe("camera reflection", () => {
                 const scale = Math.min(rect.width / video.videoWidth, rect.height / video.videoHeight);
                 const w = video.videoWidth * scale,
                     h = video.videoHeight * scale;
-                return [0.2, 0.35].flatMap((x) =>
-                    [0.2, 0.4].map((y) => ({
-                        x: (rect.left - grid.left + (rect.width - w) / 2 + x * w) / grid.width,
-                        y: (rect.top - grid.top + (rect.height - h) / 2 + y * h) / grid.height,
-                        rgb: [
-                            ...ctx.getImageData(
-                                Math.floor((flip.horizontal ? 1 - x : x) * canvas.width),
-                                Math.floor((flip.vertical ? 1 - y : y) * canvas.height),
-                                1,
-                                1,
-                            ).data,
-                        ].slice(0, 3),
-                    })),
-                );
+                // Use flat patches beside the fixture's diagonal stripe. Single source pixels
+                // on its edges do not survive PiP resampling and software H.264 encoding.
+                const size = 0.03;
+                return flip.points.map(({ x, y }) => {
+                    const left = x - size / 2,
+                        top = y - size / 2;
+                    const pixels = (horizontal: boolean, vertical: boolean) => [
+                        ...ctx.getImageData(
+                            Math.floor((horizontal ? 1 - left - size : left) * canvas.width),
+                            Math.floor((vertical ? 1 - top - size : top) * canvas.height),
+                            Math.ceil(size * canvas.width),
+                            Math.ceil(size * canvas.height),
+                        ).data,
+                    ];
+                    return {
+                        channel: flip.channel,
+                        x: (rect.left - grid.left + (rect.width - w) / 2 + left * w) / grid.width,
+                        y: (rect.top - grid.top + (rect.height - h) / 2 + top * h) / grid.height,
+                        width: (size * w) / grid.width,
+                        height: (size * h) / grid.height,
+                        pixels: pixels(flip.horizontal, flip.vertical),
+                        withoutHorizontal: flip.horizontal ? pixels(false, flip.vertical) : null,
+                        withoutVertical: flip.vertical ? pixels(flip.horizontal, false) : null,
+                    };
+                });
             });
         }, flips);
+        for (const point of expected) {
+            const rgb = meanRgb(point.pixels);
+            for (const axis of ["withoutHorizontal", "withoutVertical"] as const) {
+                const pixels = point[axis];
+                if (pixels) {
+                    expect(colorError(rgb, meanRgb(pixels)), `${point.channel}: ${axis}`).toBeGreaterThan(
+                        2 * COLOR_ERROR_LIMIT,
+                    );
+                }
+            }
+        }
         await page.locator("#export-panel-save-btn").click();
         await expect(page.locator("#export-panel-done-summary")).toBeVisible({ timeout: 100_000 });
+        const regions = expected.map(({ x, y, width, height }) => ({ x, y, width, height }));
         const result = await page.evaluate(async (expected) => {
             const handle = (window as unknown as { __lastExportHandle: { _buf: Uint8Array } }).__lastExportHandle;
             const url = URL.createObjectURL(new Blob([handle._buf.slice()], { type: "video/mp4" }));
@@ -201,24 +261,31 @@ test.describe("camera reflection", () => {
                 ctx.drawImage(video, 0, 0);
                 return {
                     duration: video.duration,
-                    errors: expected.map((point) => {
-                        const actual = ctx.getImageData(
+                    samples: expected.map((point) => [
+                        ...ctx.getImageData(
                             Math.floor(point.x * canvas.width),
                             Math.floor(point.y * canvas.height),
-                            1,
-                            1,
-                        ).data;
-                        return point.rgb.reduce((sum, value, i) => sum + Math.abs(value - actual[i]!), 0) / 3;
-                    }),
+                            Math.ceil(point.width * canvas.width),
+                            Math.ceil(point.height * canvas.height),
+                        ).data,
+                    ]),
                 };
             } finally {
                 video.removeAttribute("src");
                 video.load();
                 URL.revokeObjectURL(url);
             }
-        }, expected);
+        }, regions);
         expect(result.duration).toBeCloseTo(4, 1);
-        expect(Math.max(...result.errors), JSON.stringify(result)).toBeLessThan(20);
+        const colors = expected.map((point, index) => ({
+            channel: point.channel,
+            expected: meanRgb(point.pixels),
+            actual: meanRgb(result.samples[index]!),
+        }));
+        expect(
+            Math.max(...colors.map((point) => colorError(point.expected, point.actual))),
+            JSON.stringify(colors),
+        ).toBeLessThan(COLOR_ERROR_LIMIT);
     });
 
     test("a reflected single-camera export cannot bypass composition", async ({ page }) => {
