@@ -142,11 +142,14 @@ container cannot change their browser assets.
 
 1. Follow the [Yandex Tiles API quickstart](https://yandex.ru/maps-api/docs/tiles-api/quickstart.html)
    to obtain a key for the **Tiles API** package. Wait for the key to activate.
-2. Configure [domain restrictions](https://yandex.ru/maps-api/docs/tiles-api/limit.html)
-   for the addresses people will use to open your installation. The key is
-   public in the browser; these restrictions do not make it a secret. Requests
-   come from each visitor's device, so the hosting server's IP is not the right
-   restriction for this app.
+2. If the key's settings offer
+   [domain restrictions](https://yandex.ru/maps-api/docs/tiles-api/limit.html),
+   configure them for the addresses people will use to open your installation.
+   If the field is absent, continue without it. The key is public in the browser;
+   restrictions do not make it private or guarantee protection against reuse.
+   Yandex documents these restrictions as applying only to billable requests.
+   Requests come from each visitor's device, so do not restrict the key to the
+   hosting server's IP.
 3. Insert the key using one of the build methods below, then select **Yandex
    Maps** in the app's map settings.
 
