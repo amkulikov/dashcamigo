@@ -26,12 +26,64 @@ const OSM_VECTOR_TILE_B = { url: "https://vector.openstreetmap.org/shortbread_v1
 describe("map provider fallback", () => {
     beforeEach(() => {
         vi.stubEnv("VITE_YANDEX_TILES_API_KEY", "");
+        vi.stubEnv("VITE_DEFAULT_MAP_PROVIDER", "");
         _resetForTests();
     });
 
     afterEach(() => {
         vi.unstubAllGlobals();
         vi.unstubAllEnvs();
+    });
+
+    it.each([
+        ["", "", "openfreemap"],
+        ["invalid", "test-key", "openfreemap"],
+        ["openfreemap", "test-key", "openfreemap"],
+        ["osm-vector", "", "osm-vector"],
+        ["yandex", "", "openfreemap"],
+        ["yandex", "test-key", "yandex"],
+    ])("uses available deployment default %j with key %j as %s", (configured, key, expected) => {
+        vi.stubEnv("VITE_DEFAULT_MAP_PROVIDER", configured);
+        vi.stubEnv("VITE_YANDEX_TILES_API_KEY", key);
+        const setItem = vi.fn();
+        vi.stubGlobal("localStorage", { getItem: () => null, setItem });
+
+        expect(getMapProviderPreference()).toBe(expected);
+        expect(getMapProvider()).toBe(expected);
+        expect(setItem, "a deployment default is not a saved user choice").not.toHaveBeenCalled();
+        const overlay = createOverlayMapProviderSession();
+        expect(overlay.getProvider()).toBe("openfreemap");
+        overlay.dispose();
+    });
+
+    it.each(["openfreemap", "osm-vector", "yandex"])("keeps saved %s above the deployment default", (stored) => {
+        vi.stubEnv("VITE_DEFAULT_MAP_PROVIDER", "yandex");
+        vi.stubEnv("VITE_YANDEX_TILES_API_KEY", "test-key");
+        vi.stubGlobal("localStorage", { getItem: () => stored });
+
+        expect(getMapProviderPreference()).toBe(stored);
+        expect(getMapProvider()).toBe(stored);
+    });
+
+    it("uses the deployment default when the saved preference is invalid", () => {
+        vi.stubEnv("VITE_DEFAULT_MAP_PROVIDER", "yandex");
+        vi.stubEnv("VITE_YANDEX_TILES_API_KEY", "test-key");
+        vi.stubGlobal("localStorage", { getItem: () => "invalid" });
+
+        expect(getMapProviderPreference()).toBe("yandex");
+    });
+
+    it("uses the deployment default when browser storage is blocked", () => {
+        vi.stubEnv("VITE_DEFAULT_MAP_PROVIDER", "yandex");
+        vi.stubEnv("VITE_YANDEX_TILES_API_KEY", "test-key");
+        vi.stubGlobal("localStorage", {
+            getItem: () => {
+                throw new Error("storage is blocked");
+            },
+        });
+
+        expect(getMapProviderPreference()).toBe("yandex");
+        expect(getMapProvider()).toBe("yandex");
     });
 
     it("saves the preferred provider and restores it on a new page session", () => {

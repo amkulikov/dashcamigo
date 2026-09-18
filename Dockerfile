@@ -15,6 +15,7 @@ COPY . .
 # (vite-plugins/csp-hash.ts) - same flavor the release artifact ships.
 ENV META_CSP=1
 ARG VITE_YANDEX_TILES_API_KEY
+ARG VITE_DEFAULT_MAP_PROVIDER
 RUN npm run build
 
 FROM nginx:alpine

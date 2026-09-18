@@ -59,20 +59,24 @@ function viewerProviderOrder(preference: MapProviderPreference): MapProvider[] {
         : overlayProviderOrder(preference);
 }
 
+function availablePreference(value: string | null | undefined): MapProviderPreference | null {
+    if (value === "openfreemap" || value === "osm-vector") return value;
+    return value === "yandex" && isYandexMapAvailable() ? value : null;
+}
+
 export function getMapProviderPreference(): MapProviderPreference {
     if (preferredProvider !== null) return preferredProvider;
+    const defaultProvider = availablePreference(import.meta.env.VITE_DEFAULT_MAP_PROVIDER) ?? "openfreemap";
     try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        preferredProvider =
-            stored === "osm-vector" || (stored === "yandex" && isYandexMapAvailable()) ? stored : "openfreemap";
+        preferredProvider = availablePreference(localStorage.getItem(STORAGE_KEY)) ?? defaultProvider;
     } catch {
-        preferredProvider = "openfreemap";
+        preferredProvider = defaultProvider;
     }
     return preferredProvider;
 }
 
 async function fetchProbe(provider: MapProvider): Promise<boolean> {
-    // Yandex is an explicit choice, never a fallback target or background probe.
+    // Yandex is never a fallback target or background probe.
     if (provider === "yandex") return false;
     const ctrl = new AbortController();
     const timeoutId = setTimeout(() => ctrl.abort("timeout"), MAP_PROVIDER_REQUEST_TIMEOUT_MS);
