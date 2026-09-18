@@ -146,6 +146,7 @@ export async function exportClip({
     // .write({type, position, data}). Wrap it 1-to-1, also tracking total
     // bytes written for the "saving to disk" progress stage.
     let totalBytesWritten = 0;
+    let isDiscardingOutput = false;
     const targetWritable = new WritableStream<{ type: "write"; position: number; data: Uint8Array }>({
         async write(chunk) {
             if (signal?.aborted) throw new DOMException("aborted", "AbortError");
@@ -160,6 +161,8 @@ export async function exportClip({
             totalBytesWritten += chunk.data.byteLength;
         },
         async close() {
+            // Output.cancel() closes its target even after the file was aborted.
+            if (isDiscardingOutput) return;
             // Watchdog + breadcrumb around the actual disk/stream commit - the
             // step that historically hung at "Finalizing" with no error. Pass the
             // total bytes so the watchdog deadline scales with output size (a
@@ -437,6 +440,8 @@ export async function exportClip({
                 segIdx === 0
                     ? firstInput
                     : new Input({ source: createRetryingBlobSource(seg.file, signal), formats: VIDEO_INPUT_FORMATS });
+            let videoCount = 0;
+            let audioCount = 0;
 
             try {
                 const v = segIdx === 0 ? firstVideoTrack : await input.getPrimaryVideoTrack();
@@ -480,7 +485,6 @@ export async function exportClip({
                 // relative to the source clock so audio and GPS stay aligned.
                 const videoStartShift = segIdx === 0 ? sourceStart : Math.min(sourceStart, videoStartPacket.timestamp);
                 let videoLastEndSec = videoStartShift;
-                let videoCount = 0;
 
                 let pkt: EncodedPacket | null = videoStartPacket;
                 while (pkt) {
@@ -519,7 +523,6 @@ export async function exportClip({
 
                 // Both tracks share the same shift. Keep the first audio packet
                 // crossing zero: the edit list hides its negative portion.
-                let audioCount = 0;
                 // A following file starts on the recording clock, including any
                 // audio-only tail. B-frame references can still extend that span.
                 const segmentEnd =
@@ -572,6 +575,21 @@ export async function exportClip({
                     videoPackets: videoCount,
                     audioPackets: audioCount,
                 });
+            } catch (err) {
+                if (!(err instanceof Error && err.name === "AbortError")) {
+                    log.warn("segment copy failed", {
+                        segmentNumber: segIdx + 1,
+                        segmentsCount: segments.length,
+                        file: seg.file.name,
+                        fileSizeBytes: seg.file.size,
+                        startInFile: Number(seg.startInFile.toFixed(2)),
+                        endInFile: Number(seg.endInFile.toFixed(2)),
+                        videoPackets: videoCount,
+                        audioPackets: audioCount,
+                        err: err instanceof Error ? err.message : String(err),
+                    });
+                }
+                throw err;
             } finally {
                 if (segIdx > 0) input.dispose();
             }
@@ -642,6 +660,7 @@ export async function exportClip({
     } catch (err) {
         // Output.cancel closes StreamTarget, which would commit an unfinished
         // file. Discard the writable before allowing the muxer to close it.
+        isDiscardingOutput = true;
         try {
             await mp4Writable.abort(err);
         } catch {

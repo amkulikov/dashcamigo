@@ -12,8 +12,9 @@ import {
     type InputTrack,
     type VideoTrackMetadata,
 } from "mediabunny";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { exportClip, probeAudioUniformity } from "./export.js";
+import { _resetForTests as resetLog, getLogBuffer } from "./log.js";
 import { getInputTimeOrigin } from "./media-time.js";
 import { createRetryingBlobSource } from "./retrying-blob-source.js";
 import { groupTrips, type VideoCandidate } from "./trips.js";
@@ -148,6 +149,8 @@ async function remuxFixture(file: File, withPcm8Audio = false, metadata?: VideoT
 }
 
 describe("stream-copy export", () => {
+    beforeEach(resetLog);
+
     it("preserves rotation and reflection when copying a video track", async () => {
         const file = await remuxFixture(fixture(H264_FIXTURE), false, { rotation: 90, flip: true });
         const input = open(file);
@@ -424,9 +427,52 @@ describe("stream-copy export", () => {
                 }),
             ).rejects.toMatchObject({ name: "AbortError" });
             expect(await (await handle.getFile()).arrayBuffer()).toEqual(await file.arrayBuffer());
+            expect(getLogBuffer().filter((entry) => entry.msg.startsWith("writable close"))).toHaveLength(0);
+            expect(getLogBuffer().filter((entry) => entry.msg === "segment copy failed")).toHaveLength(0);
         } finally {
             vi.useRealTimers();
         }
+    });
+
+    it("identifies a damaged TS segment and discards its output without closing the aborted file", async () => {
+        const original = fixture("./parsers/__fixtures__/juscar/real-anonymized.TS");
+        const bytes = new Uint8Array(await original.arrayBuffer());
+        bytes[Math.floor(bytes.length / 188 / 2) * 188] = 0;
+        const damaged = new File([bytes], "damaged.ts");
+        // Index the intact recording; corruption is encountered during the packet walk.
+        const trip = await tripOf([original, original]);
+        trip.frames[1]!.channels.front!.file = damaged;
+        const handle = createInMemoryFileHandle("existing.mp4");
+        const existing = await handle.createWritable();
+        const previousBytes = new Uint8Array([1, 2, 3]);
+        await existing.write(previousBytes);
+        await existing.close();
+
+        await expect(
+            exportClip({
+                trip,
+                channel: "front",
+                startTripSec: 0,
+                endTripSec: trip.timeline.contentDurationSec,
+                withAudio: true,
+                withGpmf: false,
+                mp4Writable: await handle.createWritable(),
+                onProgress() {},
+            }),
+        ).rejects.toThrow("Invalid TS packet sync byte");
+
+        expect(new Uint8Array(await (await handle.getFile()).arrayBuffer())).toEqual(previousBytes);
+        const failure = getLogBuffer().find((entry) => entry.msg === "segment copy failed");
+        expect(failure?.ctx).toMatchObject({
+            segmentNumber: 2,
+            segmentsCount: 2,
+            file: damaged.name,
+            fileSizeBytes: damaged.size,
+            videoPackets: 0,
+            audioPackets: 0,
+        });
+        expect(getLogBuffer().filter((entry) => entry.msg === "segment copied")).toHaveLength(1);
+        expect(getLogBuffer().filter((entry) => entry.msg.startsWith("writable close"))).toHaveLength(0);
     });
 
     it("propagates an exhausted source-read failure during audio preflight", async () => {
