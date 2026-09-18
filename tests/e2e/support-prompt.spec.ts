@@ -222,6 +222,8 @@ test.describe("project support prompt", () => {
         await expect(page.locator("#support-banner-copy")).toHaveText("Скопировать ссылку");
         await expect(page.locator("#support-banner-later")).toHaveText("В другой раз");
 
+        // The entrance translation can temporarily put the banner below the viewport.
+        await expect(banner).toHaveCSS("transform", "none");
         const layout = await banner.evaluate((element) => {
             const rect = element.getBoundingClientRect();
             const actions = Array.from(element.querySelectorAll<HTMLElement>(".support-banner-actions .dc-btn")).map(
