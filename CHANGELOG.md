@@ -9,6 +9,8 @@ release tag. Localized texts ship inside the app (the "What's new" panel).
 
 ## 2026-09-19
 
+- **New:** Backward and forward seek buttons repeat while held.
+- **New:** Maps mark trip endpoints and indicate missing GPS positions.
 - **New camera support:** Avylet A1 recordings with GPS show routes and speed.
 - **Fixed:** Raster maps no longer appear blurry on high-resolution screens.
 - **Fixed:** Speed-colored routes no longer blend into roads.

@@ -28,6 +28,38 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-09-19.5",
+        category: "feature",
+        text: {
+            en: "Backward and forward seek buttons repeat while held.",
+            ru: "Кнопки перемотки назад и вперёд срабатывают повторно при удержании.",
+            de: "Die Tasten zum Vor- und Zurückspringen wiederholen den Sprung beim Gedrückthalten.",
+            es: "Los botones para avanzar y retroceder repiten los saltos al mantenerlos pulsados.",
+            fr: "Les boutons pour avancer et reculer répètent les sauts quand tu les maintiens enfoncés.",
+            pl: "Przyciski przewijania do tyłu i do przodu powtarzają skoki po przytrzymaniu.",
+            pt: "Os botões de avanço e retrocesso repetem os saltos enquanto são mantidos pressionados.",
+            zh: "长按后退或前进按钮可重复跳转。",
+            ja: "戻る・進むボタンを長押しすると、繰り返し移動できます。",
+            ko: "뒤로·앞으로 이동 버튼을 길게 누르면 이동이 반복돼요.",
+        },
+    },
+    {
+        id: "2026-09-19.4",
+        category: "feature",
+        text: {
+            en: "Maps mark trip endpoints and indicate missing GPS positions.",
+            ru: "Карты отмечают начало и конец поездки и показывают отсутствие GPS-координат.",
+            de: "Karten markieren Fahrtbeginn und Fahrtende und zeigen fehlende GPS-Positionen an.",
+            es: "Los mapas marcan el inicio y el final del viaje e indican cuándo faltan posiciones GPS.",
+            fr: "Les cartes marquent le début et la fin du trajet et signalent les positions GPS manquantes.",
+            pl: "Mapy oznaczają początek i koniec podróży oraz wskazują brak pozycji GPS.",
+            pt: "Os mapas marcam o início e o fim da viagem e indicam a ausência de posições GPS.",
+            zh: "地图标出行程起点和终点，并提示缺少 GPS 位置。",
+            ja: "地図に走行の開始・終了地点と、GPS 位置がないことを表示します。",
+            ko: "지도에 주행 시작·종료 지점을 표시하고 GPS 위치가 없으면 알려줘요.",
+        },
+    },
+    {
         id: "2026-09-19.3",
         category: "support",
         text: {
