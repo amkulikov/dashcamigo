@@ -1,4 +1,15 @@
-import { DESKTOP, MOBILE, boxOf, expect, gotoApp, loadTrip, presetLocalStorage, shot, test } from "./_fixtures.js";
+import {
+    DESKTOP,
+    MOBILE,
+    boxOf,
+    expect,
+    gotoApp,
+    loadTrip,
+    pausePlayback,
+    presetLocalStorage,
+    shot,
+    test,
+} from "./_fixtures.js";
 
 test.use({ serviceWorkers: "block" });
 
@@ -7,10 +18,10 @@ test("shows GPS dropouts and trip flags on both maps through seeking and style c
     await page.setViewportSize(DESKTOP);
     await gotoApp(page);
     await loadTrip(page);
+    await pausePlayback(page);
     await expect(page.locator("#mini-map .endpoint-marker-wrap")).toHaveCount(2);
     await page.evaluate(() => {
         const { state, dom, setMapProvider } = window.__dashcamigo;
-        dom.player.pause();
         dom.player.currentTime = 0.25;
         const trip = state.trips[state.active!.trip]!;
         const startUtc = trip.frames[state.active!.frame]!.startUtc;
@@ -114,10 +125,10 @@ test.describe("touch map status", () => {
         await presetLocalStorage(page);
         await gotoApp(page);
         await loadTrip(page);
+        await pausePlayback(page);
         await page.locator("#mobile-view-map").click();
         await page.evaluate(() => {
-            const { state, dom, setMapProvider } = window.__dashcamigo;
-            dom.player.pause();
+            const { state, setMapProvider } = window.__dashcamigo;
             const trip = state.trips[state.active!.trip]!;
             trip.records = trip.records.map((record) => ({ ...record, unixSeconds: record.unixSeconds + 3600 }));
             setMapProvider("osm-raster");
@@ -137,9 +148,9 @@ test("keeps coincident trip flags distinct and labels them in Russian", async ({
     await page.setViewportSize(DESKTOP);
     await gotoApp(page, "ru");
     await loadTrip(page);
+    await pausePlayback(page);
     await page.evaluate(() => {
-        const { state, dom, setMapProvider } = window.__dashcamigo;
-        dom.player.pause();
+        const { state, setMapProvider } = window.__dashcamigo;
         const trip = state.trips[state.active!.trip]!;
         const source = trip.records.find((record) => record.active)!;
         trip.records = [{ ...source, unixSeconds: trip.frames[state.active!.frame]!.startUtc, lat: 50, lon: 20 }];
