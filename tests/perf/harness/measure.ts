@@ -30,6 +30,7 @@ export interface LogEntrySnippet {
 }
 
 export interface CdpProcessSnapshot {
+    id: number;
     /** type === "renderer" or "gpu" or "browser" */
     type: string;
     cpuTimeSec: number;
@@ -209,13 +210,13 @@ export async function readCdpProcesses(page: Page): Promise<CdpProcessSnapshot[]
         type ProcInfo = { type: string; id: number; cpuTime: number; rss?: number };
         const result = (await sess.send("SystemInfo.getProcessInfo")) as { processInfo: ProcInfo[] };
         return (result.processInfo ?? []).map((p) => ({
+            id: p.id,
             type: p.type,
             cpuTimeSec: p.cpuTime ?? 0,
             rssBytes: typeof p.rss === "number" ? p.rss : null,
         }));
     } catch {
-        // Some Chromium builds don't expose rss/cpuTime - return [] rather
-        // than failing the scenario; aggregate sums will be zero deltas.
+        // An empty snapshot means process metrics are unavailable.
         return [];
     }
 }

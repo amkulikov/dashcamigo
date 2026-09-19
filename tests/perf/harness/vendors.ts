@@ -6,7 +6,7 @@
 // uses test.skip() per case).
 
 import { existsSync, readdirSync, type Stats, statSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // Repository root: this file is tests/perf/harness/vendors.ts, so three
@@ -19,7 +19,7 @@ const VIDEO_EXTS = new Set([".mp4", ".mov", ".ts", ".m2ts"]);
 const SIDECAR_EXTS = new Set([".gpx", ".gps", ".map", ".nmea", ".csv", ".log", ".3gf", ".txt"]);
 
 export interface VendorSample {
-    /** Human-readable folder name as in private/samples/. */
+    /** Human-readable sample folder name. */
     name: string;
     /** Absolute path to the vendor folder. */
     absPath: string;
@@ -63,13 +63,51 @@ function collectFiles(root: string, extSet: Set<string>, out: string[]): void {
     }
 }
 
+function readVendorSample(folderPath: string, extensions: Set<string>): VendorSample | null {
+    const filePaths: string[] = [];
+    collectFiles(folderPath, extensions, filePaths);
+    if (filePaths.length === 0) return null;
+    let totalBytes = 0;
+    let videoCount = 0;
+    for (const path of filePaths) {
+        try {
+            totalBytes += statSync(path).size;
+        } catch {
+            // Race with deletion - skip
+        }
+        const dot = path.lastIndexOf(".");
+        if (dot >= 0 && VIDEO_EXTS.has(path.slice(dot).toLowerCase())) videoCount++;
+    }
+    if (videoCount === 0) return null;
+    return { name: basename(folderPath), absPath: folderPath, filePaths, totalBytes, videoCount };
+}
+
 /**
  * Discovers vendor folders. Returns an empty array if SAMPLES_ROOT does not
  * exist (typical for CI without a sample mirror). Each returned vendor has
  * at least one video file; vendors without videos are skipped (a perf test
  * with no video cannot exercise the ingest pipeline meaningfully).
+ * PERF_SAMPLE_DIR selects one required folder, relative to the repository
+ * root or absolute; an invalid selection fails instead of skipping the run.
  */
 export function discoverVendors(): VendorSample[] {
+    const allExts = new Set([...VIDEO_EXTS, ...SIDECAR_EXTS]);
+    const requestedDir = process.env.PERF_SAMPLE_DIR;
+    if (requestedDir !== undefined) {
+        if (requestedDir.trim() === "") throw new Error("perf sample directory must not be empty");
+        const folderPath = resolve(REPO_ROOT, requestedDir);
+        let stats: Stats;
+        try {
+            stats = statSync(folderPath);
+        } catch {
+            throw new Error("perf sample directory is unavailable");
+        }
+        if (!stats.isDirectory()) throw new Error("perf sample directory must be a folder");
+        const sample = readVendorSample(folderPath, allExts);
+        if (!sample) throw new Error("perf sample directory contains no readable non-empty videos");
+        return [sample];
+    }
+
     if (!existsSync(SAMPLES_ROOT)) return [];
     const vendors: VendorSample[] = [];
     let topLevel: string[];
@@ -78,7 +116,6 @@ export function discoverVendors(): VendorSample[] {
     } catch {
         return [];
     }
-    const allExts = new Set([...VIDEO_EXTS, ...SIDECAR_EXTS]);
     for (const folderName of topLevel) {
         if (folderName.startsWith(".")) continue;
         const folderPath = join(SAMPLES_ROOT, folderName);
@@ -89,22 +126,8 @@ export function discoverVendors(): VendorSample[] {
             continue;
         }
         if (!st.isDirectory()) continue;
-        const filePaths: string[] = [];
-        collectFiles(folderPath, allExts, filePaths);
-        if (filePaths.length === 0) continue;
-        let totalBytes = 0;
-        let videoCount = 0;
-        for (const p of filePaths) {
-            try {
-                totalBytes += statSync(p).size;
-            } catch {
-                // Race with deletion - skip
-            }
-            const dot = p.lastIndexOf(".");
-            if (dot >= 0 && VIDEO_EXTS.has(p.slice(dot).toLowerCase())) videoCount++;
-        }
-        if (videoCount === 0) continue;
-        vendors.push({ name: folderName, absPath: folderPath, filePaths, totalBytes, videoCount });
+        const sample = readVendorSample(folderPath, allExts);
+        if (sample) vendors.push(sample);
     }
     // Stable sort by name so test order is deterministic between runs.
     vendors.sort((a, b) => a.name.localeCompare(b.name));
