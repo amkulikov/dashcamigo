@@ -159,3 +159,134 @@ test("paused map checks the playhead at idle cadence", async ({ page }, testInfo
     expect(currentTimeReads, "a paused mini-map does not poll at display refresh rate").toBeLessThanOrEqual(20);
     await testInfo.attach("idle-work", { body: JSON.stringify({ currentTimeReads }), contentType: "application/json" });
 });
+
+test("mini-map playback reuses its width and refreshes zoom after a paused resize", async ({ page }) => {
+    await page.waitForFunction(() => window.__dashcamigo.state.miniMapReady);
+    const result = await page.evaluate(async () => {
+        const { state, dom } = window.__dashcamigo;
+        const mini = state.miniMap;
+        if (!mini || !state.miniMapMarker) throw new Error("mini-map unavailable");
+        const player = dom.player;
+        player.currentTime = 0;
+        player.muted = true;
+        await player.play();
+        // Let the initial layout and map resize settle before counting reads.
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        const original = window.getComputedStyle;
+        let widthReads = 0;
+        window.getComputedStyle = (element, pseudo) => {
+            if (element === dom.miniMap) widthReads++;
+            return original.call(window, element, pseudo);
+        };
+        const start = player.currentTime;
+        try {
+            await new Promise((resolve) => setTimeout(resolve, 700));
+        } finally {
+            window.getComputedStyle = original;
+            player.pause();
+        }
+        const advanced = player.currentTime - start;
+        const beforeWidth = Number.parseFloat(getComputedStyle(dom.miniMap).width);
+        const beforeZoom = mini.getZoom();
+        dom.miniMap.style.width = `${beforeWidth * 1.5}px`;
+        mini.resize();
+        return { widthReads, advanced, beforeWidth, beforeZoom };
+    });
+    expect(result.advanced, "the width read budget covers moving playback").toBeGreaterThan(0.4);
+    expect(result.widthReads, "moving the marker does not re-read the thumbnail's computed style").toBe(0);
+    await expect
+        .poll(() =>
+            page.evaluate(() => {
+                const mini = window.__dashcamigo.state.miniMap;
+                if (!mini) throw new Error("mini-map unavailable");
+                return mini.getZoom();
+            }),
+        )
+        .toBeCloseTo(result.beforeZoom + Math.log2(1.5), 2);
+});
+
+test("Chase settles adaptive zoom while the camera keeps following playback", async ({ page }, testInfo) => {
+    await page.locator("#mini-map").click();
+    await expect(page.locator("body")).not.toHaveClass(/map-morphing/);
+    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map?.getPitch() ?? 0)).toBeCloseTo(58, 1);
+    await expect(page.locator("#map-chase-adaptive")).toHaveAttribute("aria-pressed", "true");
+
+    const result = await page.evaluate(async () => {
+        const { state, dom } = window.__dashcamigo;
+        const map = state.map;
+        const trip = state.active && state.trips[state.active.trip];
+        if (!map || !trip) throw new Error("Chase playback unavailable");
+        const player = dom.player;
+        const speeds = trip.records.map((record) => record.speedMs);
+        const originalRate = player.playbackRate;
+        const beforeZoom = map.getZoom();
+        let zoomChanges = 0;
+        let cameraMoves = 0;
+        const transitionZooms: number[] = [];
+        const onZoom = (): void => {
+            zoomChanges++;
+            transitionZooms.push(map.getZoom());
+        };
+        const onMove = (): void => {
+            cameraMoves++;
+        };
+        map.on("zoom", onZoom);
+        map.on("move", onMove);
+        try {
+            if (player.currentTime !== 0) {
+                const seeked = new Promise<void>((resolve) =>
+                    player.addEventListener("seeked", () => resolve(), { once: true }),
+                );
+                player.currentTime = 0;
+                await seeked;
+            }
+            for (const record of trip.records) record.speedMs = 33;
+            // Re-enable adaptive zoom to seed its speed filter at a steady cruise.
+            dom.mapChaseAdaptive.click();
+            dom.mapChaseAdaptive.click();
+            // The short real fixture keeps moving throughout zoom convergence.
+            player.playbackRate = 0.25;
+            player.muted = true;
+            await player.play();
+            const deadline = performance.now() + 5000;
+            while (Math.abs(map.getZoom() - 15.4) >= 0.0005) {
+                if (performance.now() > deadline) throw new Error("adaptive zoom did not approach cruise framing");
+                await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+            }
+            const zoomWhileChanging = [...transitionZooms];
+            zoomChanges = 0;
+            cameraMoves = 0;
+            const startTime = player.currentTime;
+            const startCenter = map.getCenter();
+            await new Promise((resolve) => setTimeout(resolve, 750));
+            const endCenter = map.getCenter();
+            return {
+                beforeZoom,
+                zoomWhileChanging,
+                zoomChanges,
+                cameraMoves,
+                advanced: player.currentTime - startTime,
+                centerShift: Math.hypot(endCenter.lat - startCenter.lat, endCenter.lng - startCenter.lng),
+                finalZoom: map.getZoom(),
+            };
+        } finally {
+            map.off("zoom", onZoom);
+            map.off("move", onMove);
+            player.pause();
+            player.playbackRate = originalRate;
+            trip.records.forEach((record, i) => {
+                record.speedMs = speeds[i]!;
+            });
+        }
+    });
+    expect(result.beforeZoom - result.finalZoom, "cruising still widens the map view").toBeGreaterThan(0.5);
+    expect(new Set(result.zoomWhileChanging).size, "adaptive zoom preserves its smooth transition").toBeGreaterThan(2);
+    expect(result.advanced, "the player continues through the measurement").toBeGreaterThan(0.1);
+    expect(result.cameraMoves, "following continues after zoom settles at quarter-speed video cadence").toBeGreaterThan(
+        2,
+    );
+    expect(result.centerShift).toBeGreaterThan(0.000001);
+    expect(result.finalZoom).toBeCloseTo(15.4, 10);
+    expect(result.zoomChanges, "moving the camera does not restart settled zoom work").toBe(0);
+    await testInfo.attach("chase-zoom-work", { body: JSON.stringify(result), contentType: "application/json" });
+});

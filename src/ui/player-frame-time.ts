@@ -10,10 +10,14 @@ import { channelPlayers, forEachVideoSlot } from "./dom.js";
 import { videoAttachedFile } from "./player-video-src.js";
 import { activeTrip } from "./state.js";
 
-let frames = new WeakMap<HTMLVideoElement, PresentedFrame>();
+let frames = new WeakMap<HTMLVideoElement, PlayerFrameObservation>();
 let pendingFrames = new WeakSet<HTMLVideoElement>();
 let candidates = new WeakMap<Trip, Map<Channel, Map<File, VideoCandidate>>>();
 const listeners = new Set<() => void>();
+
+export interface PlayerFrameObservation extends Readonly<PresentedFrame> {
+    readonly observedAtMs: number;
+}
 
 export interface ChannelPresentedFrame {
     trip: Trip;
@@ -25,6 +29,23 @@ export interface ChannelPresentedFrame {
 export function subscribePlayerFrames(listener: () => void): () => void {
     listeners.add(listener);
     return () => listeners.delete(listener);
+}
+
+/** Returns the cached physical-slot observation, unchanged until another
+ *  compositor callback. observedAtMs uses the performance.now() clock. A seek
+ *  can retain the previous observation; this does not imply editing is ready. */
+export function videoPresentedFrame(video: HTMLVideoElement): PlayerFrameObservation | null {
+    const frame = frames.get(video);
+    if (
+        !frame ||
+        video.readyState < 2 ||
+        frame.file !== videoAttachedFile.get(video) ||
+        frame.src !== video.src ||
+        !Number.isFinite(frame.mediaTime) ||
+        !Number.isFinite(frame.observedAtMs)
+    )
+        return null;
+    return frame;
 }
 
 /** Resolves a supplied capture PTS, or the latest compositor PTS for preview. */
@@ -99,7 +120,7 @@ export function initPlayerFrameTimes(): void {
             const file = videoAttachedFile.get(video);
             const src = video.src;
             if (!file || !src) return;
-            callbackId = video.requestVideoFrameCallback((_, metadata) => {
+            callbackId = video.requestVideoFrameCallback((now, metadata) => {
                 callbackId = null;
                 // An MSE attachment can claim the element before disposal of
                 // the old source finishes. Never label its final frame anew.
@@ -107,7 +128,7 @@ export function initPlayerFrameTimes(): void {
                 // Presentation can precede the readyState update. Preserve its
                 // PTS now; readers still require decoded pixels before use.
                 const previous = frames.get(video);
-                frames.set(video, { file, src, mediaTime: metadata.mediaTime });
+                frames.set(video, { file, src, mediaTime: metadata.mediaTime, observedAtMs: now });
                 // A seek's frame can arrive before seeked, with its PTS before
                 // the requested media time. Acknowledge it now; the seeking
                 // guard still blocks edits until the media element settles.

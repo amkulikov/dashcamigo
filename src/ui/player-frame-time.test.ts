@@ -12,7 +12,12 @@ vi.mock("./dom.js", () => ({
 }));
 vi.mock("./state.js", () => ({ activeTrip: () => ui.trip }));
 
-import { _resetForTests, channelPresentedFrame, initPlayerFrameTimes } from "./player-frame-time.js";
+import {
+    _resetForTests,
+    channelPresentedFrame,
+    initPlayerFrameTimes,
+    videoPresentedFrame,
+} from "./player-frame-time.js";
 import { videoAttachedFile } from "./player-video-src.js";
 
 function makeTrip(file: File): Trip {
@@ -94,11 +99,11 @@ function makeVideo() {
     return {
         target,
         video,
-        present(mediaTime: number): void {
+        present(mediaTime: number, now = 0): void {
             const pending = [...callbacks.values()];
             callbacks.clear();
             for (const callback of pending)
-                callback(0, {
+                callback(now, {
                     mediaTime,
                     expectedDisplayTime: 0,
                     presentationTime: 0,
@@ -173,6 +178,109 @@ describe("player frame observations", () => {
         source.target.dispatchEvent(new Event("seeked"));
 
         expect(channelPresentedFrame("front", true)?.contentSec).toBe(0);
+    });
+});
+
+describe("physical video presentation tokens", () => {
+    beforeEach(() => _resetForTests());
+
+    function observeVideo(file = new File(["video"], "generic.mp4")) {
+        const source = makeVideo();
+        ui.video = source.video;
+        ui.trip = makeTrip(file);
+        videoAttachedFile.set(source.video, file);
+        source.target.src = "blob:generic";
+        source.target.readyState = 2;
+        initPlayerFrameTimes();
+        return { ...source, file };
+    }
+
+    it("retains callback time and stable identity without treating media clock movement as presentation", () => {
+        const source = observeVideo();
+        expect(videoPresentedFrame(source.video)).toBeNull();
+        source.target.readyState = 1;
+        source.present(0.5, 120);
+        expect(videoPresentedFrame(source.video)).toBeNull();
+        source.target.readyState = 2;
+        const first = videoPresentedFrame(source.video);
+        expect(first).toEqual({ file: source.file, src: "blob:generic", mediaTime: 0.5, observedAtMs: 120 });
+
+        source.target.currentTime = 0.54;
+        expect(videoPresentedFrame(source.video)).toBe(first);
+        source.present(0.5, 160);
+        const repeatedPts = videoPresentedFrame(source.video);
+        expect(repeatedPts).not.toBe(first);
+        expect(repeatedPts?.observedAtMs).toBe(160);
+        expect(repeatedPts?.mediaTime).toBe(0.5);
+    });
+
+    it.each(["file", "src"] as const)("rejects a replaced %s and its stale callback", (changed) => {
+        const source = observeVideo();
+        source.present(0.5, 120);
+        const first = videoPresentedFrame(source.video);
+        if (changed === "file") videoAttachedFile.set(source.video, new File(["replacement"], "next.mp4"));
+        else source.target.src = "blob:replacement";
+        expect(videoPresentedFrame(source.video)).toBeNull();
+        source.present(0.75, 150);
+        expect(videoPresentedFrame(source.video)).toBeNull();
+
+        source.target.dispatchEvent(new Event("loadstart"));
+        source.present(0, 180);
+        const replacement = videoPresentedFrame(source.video);
+        expect(replacement).not.toBe(first);
+        expect(replacement?.file).toBe(videoAttachedFile.get(source.video));
+        expect(replacement?.src).toBe(source.target.src);
+        expect(replacement?.observedAtMs).toBe(180);
+        source.target.dispatchEvent(new Event("emptied"));
+        expect(videoPresentedFrame(source.video)).toBeNull();
+    });
+
+    it("keeps identical file and PTS observations separate across physical slots", () => {
+        const first = observeVideo();
+        first.present(0, 120);
+        const token = videoPresentedFrame(first.video);
+        const next = observeVideo(first.file);
+        next.present(0, 130);
+
+        expect(videoPresentedFrame(first.video)).toBe(token);
+        expect(videoPresentedFrame(next.video)).not.toBe(token);
+        expect(videoPresentedFrame(next.video)?.observedAtMs).toBe(130);
+        expect(channelPresentedFrame("front")?.video).toBe(next.video);
+    });
+
+    it("preserves a displayed token during a pending seek without unlocking privacy edits", () => {
+        const source = observeVideo();
+        source.present(0, 100);
+        const first = videoPresentedFrame(source.video);
+        source.target.currentTime = 1.25;
+        source.target.seeking = true;
+        source.target.dispatchEvent(new Event("seeking"));
+        expect(videoPresentedFrame(source.video)).toBe(first);
+        expect(channelPresentedFrame("front", true)).toBeNull();
+
+        source.present(1.233333, 150);
+        expect(videoPresentedFrame(source.video)).not.toBe(first);
+        expect(videoPresentedFrame(source.video)?.mediaTime).toBeCloseTo(1.233333);
+        expect(channelPresentedFrame("front", true)).toBeNull();
+        source.target.seeking = false;
+        source.target.dispatchEvent(new Event("seeked"));
+        expect(channelPresentedFrame("front", true)?.contentSec).toBeCloseTo(1.233333);
+    });
+
+    it("leaves unsupported frame callbacks observable as unavailable without changing the privacy clock fallback", () => {
+        const source = makeVideo();
+        Object.defineProperty(source.target, "requestVideoFrameCallback", { value: undefined });
+        const file = new File(["video"], "generic.mp4");
+        ui.video = source.video;
+        ui.trip = makeTrip(file);
+        videoAttachedFile.set(source.video, file);
+        source.target.src = "blob:generic";
+        source.target.readyState = 2;
+        source.target.currentTime = 1;
+        initPlayerFrameTimes();
+
+        expect(videoPresentedFrame(source.video)).toBeNull();
+        expect(channelPresentedFrame("front", true)?.contentSec).toBe(1);
     });
 });
 

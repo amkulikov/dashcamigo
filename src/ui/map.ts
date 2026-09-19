@@ -54,6 +54,8 @@ import { dom, effectiveMasterChannel, onActivePlayerEvent } from "./dom.js";
 import { subscribeExportState } from "./export-state.js";
 import { formatTime } from "./format.js";
 import { activeFrame, activeTrip, state } from "./state.js";
+import { videoPresentedFrame, type PlayerFrameObservation } from "./player-frame-time.js";
+import { installMapRenderCadence, type MapRenderCadence } from "./map-render-cadence.js";
 import type { FollowMode, LngLatTuple, MiniMapData } from "./state.js";
 import { formatSpeedFromMs } from "../units-pref.js";
 import { currentMapTheme, mapThemeColors, themeColors } from "./theme.js";
@@ -745,6 +747,17 @@ export function ensureMap(): maplibregl.Map | null {
         return null;
     }
     state.map = map;
+    chaseRenderCadence = installMapRenderCadence(map, () => {
+        const frame = chaseVideoFrame(performance.now());
+        if (
+            !frame ||
+            chaseAppliedVideo !== dom.player ||
+            chaseAppliedFrame?.file !== frame.file ||
+            chaseAppliedFrame.src !== frame.src
+        )
+            return null;
+        return chaseAppliedFrame;
+    });
     syncProviderCamera();
 
     // Markers stay viewport-aligned for legibility, then receive a deliberately
@@ -912,10 +925,18 @@ export function ensureMap(): maplibregl.Map | null {
  * dynamically on each jumpTo.
  */
 const MINI_MAP_TARGET_WIDTH_KM = 5;
+let miniMapWidthPx = 1;
+
+function refreshMiniMapWidth(): void {
+    const width = Number.parseFloat(getComputedStyle(dom.miniMap).width);
+    if (!Number.isFinite(width) || width <= 0 || width === miniMapWidthPx) return;
+    miniMapWidthPx = width;
+    // A resized thumbnail needs a new zoom even when the playhead is paused.
+    miniAppliedLat = Number.NaN;
+}
 
 function miniMapZoomForLat(lat: number): number {
-    const width = Number.parseFloat(getComputedStyle(dom.miniMap).width);
-    const targetMetersPerPx = (MINI_MAP_TARGET_WIDTH_KM * 1000) / Math.max(1, width);
+    const targetMetersPerPx = (MINI_MAP_TARGET_WIDTH_KM * 1000) / Math.max(1, miniMapWidthPx);
     const cosLat = Math.cos((lat * Math.PI) / 180);
     // Near poles cos → 0; guard against -Infinity and absurdly large zoom.
     const safeCos = Math.max(cosLat, 0.01);
@@ -933,6 +954,7 @@ export function ensureMiniMap(): maplibregl.Map | null {
 
     let mini: maplibregl.Map;
     try {
+        refreshMiniMapWidth();
         mini = new mlg!.Map({
             container: "mini-map",
             // Start with empty style; real style is applied via applyLoadedStyle
@@ -976,6 +998,9 @@ export function ensureMiniMap(): maplibregl.Map | null {
         return null;
     }
     state.miniMap = mini;
+    // Reading computed width after marker writes forces style work on every
+    // playback frame. Map resizes keep the cached width current off that path.
+    mini.on("resize", refreshMiniMapWidth);
     mini.addControl(miniMapAttributionControl, "bottom-right");
 
     mini.on("styledataloading", () => {
@@ -1792,16 +1817,9 @@ const BIG_MAP_FOLLOW_PIXEL_RATIO_CAP = 1.5;
 let bigMapPixelRatioApplied = Number.NaN;
 
 /**
- * Caps the big map's pixel ratio while it is actively following, to cut
- * fragment-shading cost on high-DPI screens. Smoothness is untouched - the map
- * still renders at 60 fps via the chained follow ease; we only rasterize fewer
- * pixels per frame. Restored to full devicePixelRatio when follow is "off" (the
- * user is inspecting the map by hand) or the big map is hidden, so any frame the
- * user lingers on / screenshots is crisp. min() makes it a no-op on non-Retina
- * (dpr <= cap). setPixelRatio resizes the GL backing store, so we only call it
- * when the target actually changes - avoids a redundant resize on every layout
- * recompute. The mini-map is a separate instance and is left at full res (it is
- * small and cheap). Idempotent; safe to call from any layout/mode-change site.
+ * Reduces fragment-shading cost while a follow mode is selected, including
+ * paused playback. The mini-map stays at full resolution. Only change the
+ * target when needed because setPixelRatio resizes the GL backing store.
  */
 function syncBigMapPixelRatio(): void {
     const map = state.map;
@@ -2377,7 +2395,8 @@ function initMiniMapHover(): void {
 // tabs (CPU savings). Text metrics are updated via timeupdate instead - no point
 // writing to the DOM at 60 Hz.
 //
-// Visible motion uses rAF; idle/hidden maps only need the drift-sync cadence.
+// Chase samples presented video frames; other visible motion uses rAF.
+// Idle/hidden maps only need the drift-sync cadence.
 // Media events wake a sleeping loop immediately for playback and paused seeks.
 let markerRafHandle: number | null = null;
 let markerTimerHandle: ReturnType<typeof setTimeout> | null = null;
@@ -2387,10 +2406,42 @@ let slowLaneLastMs = 0;
 // Previous fast-lane timestamp, for the filter's frame dt.
 let lastFrameMs = 0;
 
-// Camera drive: direct per-frame jumpTo, NOT chained easeTo. Both repaint every
-// frame while the camera moves (each easeTo schedules its own per-frame render
-// callback for its whole duration), so per-frame jumpTo costs the same GPU-side
-// - but easeTo fully restarts its tween on every call (easeId only suppresses
+let chaseRenderCadence: MapRenderCadence | null = null;
+let chaseAppliedFrame: PlayerFrameObservation | null = null;
+let chaseAppliedVideo: HTMLVideoElement | null = null;
+
+function chaseVideoFrame(now: number): PlayerFrameObservation | null {
+    const map = state.map;
+    const video = dom.player;
+    if (
+        !chaseRenderCadence?.enabled ||
+        !map ||
+        !state.mapReady ||
+        !state.hasTrack ||
+        !state.mapExpanded ||
+        !getViewPanels().map ||
+        state.followMode !== "chase" ||
+        state.exportModeOpen ||
+        state.transcodeInProgress ||
+        document.hidden ||
+        video.paused ||
+        video.ended ||
+        video.seeking ||
+        video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA ||
+        map.isMoving() ||
+        activeMapGestures.size > 0 ||
+        followResumeRemainingMs > 0 ||
+        now < followEaseSuspendedUntilMs
+    )
+        return null;
+    const frame = videoPresentedFrame(video);
+    // Release deferred paints when frame callbacks stop, including a stalled
+    // decoder. The scheduler keeps checking while a paint is pending.
+    return frame && now - frame.observedAtMs < 250 ? frame : null;
+}
+
+// Camera drive: direct jumpTo with an exponential follow filter. Chaining
+// easeTo fully restarts its tween on every call (easeId only suppresses
 // the event churn, it does not blend animations): camera velocity stepped at
 // every tick seam, the camera trailed the marker by one tick interval, and a
 // late rAF tick let the ease finish early - a visible micro-freeze. Driving the
@@ -2538,11 +2589,12 @@ function stepFollowCamera(
     const bearingDone =
         !headingUp || Math.abs(wrapDegrees(pos.bearingDeg - followCamBearing)) < FOLLOW_SNAP_BEARING_DEG;
     const zoomDone = zoomTarget === undefined || Math.abs(zoomTarget - followCamZoom) < FOLLOW_SNAP_ZOOM;
+    // A moving center must not keep a settled zoom invalidating the map style.
+    if (zoomDone && zoomTarget !== undefined) followCamZoom = zoomTarget;
     if (centerDone && bearingDone && zoomDone) {
         followCamLat = pos.lat;
         followCamLon = targetLon;
         followCamBearing += wrapDegrees(pos.bearingDeg - followCamBearing);
-        if (zoomTarget !== undefined) followCamZoom = zoomTarget;
         followFilterConverged = true;
     }
 
@@ -2604,6 +2656,8 @@ export function ensureMarkerLoop(): void {
 export function startMarkerLoop(opts: { onAfterTick?: () => void } = {}): void {
     if (opts.onAfterTick) markerLoopOnAfterTick = opts.onAfterTick;
     if (markerRafHandle !== null || markerTimerHandle !== null) return;
+    let markerFrame: PlayerFrameObservation | null = null;
+    let pendingFrameDtMs = 0;
 
     // Marker/camera work for one frame. Separate from the rAF tick so its
     // early-returns (no trip / no frame / GPS window ended) skip ONLY the map
@@ -2800,6 +2854,9 @@ export function startMarkerLoop(opts: { onAfterTick?: () => void } = {}): void {
         // proxy sink (see writable-bridge.ts). Any rAF work here steals main-
         // thread time from those acks, stalling the worker in await.
         if (state.transcodeInProgress || document.hidden) {
+            markerFrame = null;
+            pendingFrameDtMs = 0;
+            lastFrameMs = performance.now();
             scheduleTick(false);
             return;
         }
@@ -2809,6 +2866,7 @@ export function startMarkerLoop(opts: { onAfterTick?: () => void } = {}): void {
         // snap). 100 ms keeps the glide graceful across dropped frames.
         const frameDtMs = Math.min(100, Math.max(1, now - lastFrameMs));
         lastFrameMs = now;
+        pendingFrameDtMs += frameDtMs;
         // Slow lane: drift sync + grace-window countdown at a fixed cadence.
         if (now - slowLaneLastMs >= DRIFT_SYNC_INTERVAL_MS) {
             slowLaneLastMs = now;
@@ -2826,7 +2884,20 @@ export function startMarkerLoop(opts: { onAfterTick?: () => void } = {}): void {
             // work (no GPS / GPS window ended) - drift sync needs no marker.
             markerLoopOnAfterTick?.();
         }
-        scheduleTick(markerTick(now, frameDtMs));
+        const frame = chaseVideoFrame(now);
+        if (frame && frame === markerFrame) {
+            scheduleTick(true);
+            return;
+        }
+        markerFrame = frame;
+        const isAnimating = markerTick(now, pendingFrameDtMs);
+        pendingFrameDtMs = 0;
+        // Publish only after camera and marker writes, so a native render that
+        // precedes this tick cannot consume a not-yet-applied video frame.
+        chaseAppliedFrame = frame;
+        chaseAppliedVideo = dom.player;
+        chaseRenderCadence?.refresh();
+        scheduleTick(isAnimating);
     };
     lastFrameMs = performance.now();
     markerRafHandle = requestAnimationFrame(tick);
