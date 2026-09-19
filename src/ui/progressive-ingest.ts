@@ -533,6 +533,7 @@ function abortRecordingSessions(): void {
  */
 export function cancelProgressiveIngest(): void {
     fillGeneration++;
+    cancelBackgroundPreviews();
     abortRecordingSessions();
     activeRun?.controller.abort();
     // Release per-run references; the generation bump neutralizes scheduled work.
@@ -550,6 +551,7 @@ export function cancelProgressiveIngest(): void {
 export function pauseProgressiveIngestForRegroup(): boolean {
     if (!hasActiveProgressiveIngest()) return false;
     fillGeneration++;
+    cancelBackgroundPreviews();
     abortRecordingSessions();
     candidatePool = null;
     candidateAssociation = null;
@@ -566,6 +568,7 @@ export function resumeProgressiveIngest(): void {
     if (!pool.some(needsRecordingMetadata) && !activeRun) {
         candidatePool = null;
         candidateAssociation = null;
+        void schedulePopulateTripPreviews(state.trips, updateTripPreview, backgroundPreviewController.signal);
         return;
     }
     candidatePool = pool;
@@ -818,7 +821,7 @@ async function readRecordingData(
                 refreshTripCard(tripIdx);
                 const trip = state.trips[tripIdx];
                 if (trip && schedulingPolicy.cadence === "immediate") {
-                    void ensureTripPreview(trip, updateTripPreview);
+                    void ensureTripPreview(trip, updateTripPreview, backgroundPreviewController.signal);
                 }
             });
         metadataChecks.push(check);
@@ -1118,6 +1121,12 @@ function bindReadyRecordingLogs(candidates: readonly VideoCandidate[]): void {
 
 // Bumped on each ingest / cancel; a pump from an older generation stops.
 let fillGeneration = 0;
+let backgroundPreviewController = new AbortController();
+
+function cancelBackgroundPreviews(): void {
+    backgroundPreviewController.abort();
+    backgroundPreviewController = new AbortController();
+}
 
 function scheduleBackground(fn: () => void): void {
     if (schedulingPolicy.cadence === "immediate") {
@@ -1206,7 +1215,7 @@ function startBackgroundFill(): void {
         } else {
             candidatePool = null;
             candidateAssociation = null;
-            void schedulePopulateTripPreviews(state.trips, updateTripPreview);
+            void schedulePopulateTripPreviews(state.trips, updateTripPreview, backgroundPreviewController.signal);
         }
     };
 
@@ -1242,7 +1251,7 @@ function startBackgroundFill(): void {
                 if (generation !== fillGeneration) return;
                 for (const tripIdx of indices) {
                     const trip = state.trips[tripIdx];
-                    if (trip) void ensureTripPreview(trip, updateTripPreview);
+                    if (trip) void ensureTripPreview(trip, updateTripPreview, backgroundPreviewController.signal);
                 }
             })
             .catch((err) => {
@@ -1277,7 +1286,7 @@ function announceListReady(run: ProgressiveIngestRun): void {
 }
 
 async function completeProgressiveRun(run: ProgressiveIngestRun, generation: number): Promise<void> {
-    await schedulePopulateTripPreviews(state.trips, updateTripPreview);
+    await schedulePopulateTripPreviews(state.trips, updateTripPreview, backgroundPreviewController.signal);
     if (generation !== fillGeneration || activeRun !== run) return;
 
     if (run.metadataFailed > 0) {

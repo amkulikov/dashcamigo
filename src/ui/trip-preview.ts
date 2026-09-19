@@ -28,50 +28,17 @@ import {
 import { createWorkerClient } from "../workers/_protocol/worker-client.js";
 import { createWorkerPool } from "../workers/_protocol/worker-pool.js";
 import { requiresMseBackend } from "./player-video-src.js";
+import { createPreviewQueue } from "./trip-preview-queue.js";
 
 const log = createLogger("preview");
 
 /** Pool size. 2 is a compromise: more causes contention on the HEVC hardware decoder (M-chips have 3-4 VT slots, Intel iGPU 1-2); fewer wastes wall-clock. On typical 10-50 trip lists a 2× speedup over sequential is measurable. */
 const POOL_SIZE = 2;
-
-// Playback throttle. While a trip is actively playing, background preview
-// decoding contends with the player for the same hardware decoder pool - the
-// suspected trigger of runtime decode failures under heavy concurrent decode. So
-// the extra pool worker(s) park during playback and only worker 0 keeps going:
-// previews still fill (slower), the player keeps decoder headroom. Not a hard
-// pause - a deprioritization.
-let previewPlaybackActive = false;
-// resolve callbacks of workers parked on the throttle gate; released together
-// when playback stops (or per-worker when its run aborts).
-const throttleWaiters = new Set<() => void>();
-
-/** Wakes every parked worker (playback stopped, or the queue drained). */
-function releaseThrottleWaiters(): void {
-    const waiters = [...throttleWaiters];
-    throttleWaiters.clear();
-    for (const release of waiters) release();
-}
+const previewQueue = createPreviewQueue(POOL_SIZE);
 
 /** Player play/pause bridge: true while a trip actively plays. Idempotent. */
 export function setPreviewPlaybackActive(active: boolean): void {
-    if (active === previewPlaybackActive) return;
-    previewPlaybackActive = active;
-    if (!active) releaseThrottleWaiters();
-}
-
-/** Parks a throttled worker until playback stops, the queue drains, or its run
- *  aborts. Resolves immediately when not throttling. Worker 0 never calls this. */
-function awaitThrottleRelease(signal: AbortSignal): Promise<void> {
-    if (!previewPlaybackActive || signal.aborted) return Promise.resolve();
-    return new Promise<void>((resolve) => {
-        const release = (): void => {
-            signal.removeEventListener("abort", release);
-            throttleWaiters.delete(release);
-            resolve();
-        };
-        throttleWaiters.add(release);
-        signal.addEventListener("abort", release, { once: true });
-    });
+    previewQueue.setPlaybackActive(active);
 }
 
 const pool = createWorkerPool({
@@ -217,22 +184,8 @@ let activeRun: AbortController | null = null;
 // an internal scheduling detail.
 const previewFailedFiles = new WeakSet<File>();
 
-// In-flight first-frame extractions keyed by File, so the opened-trip path
-// (ensureTripPreview) and the authoritative background pass (populateTrip-
-// PreviewsImpl) never decode the SAME first frame twice when they target one
-// trip concurrently - they share the one decode instead. Entry is removed when
-// it settles.
-const inflightExtractions = new Map<File, Promise<string | null>>();
-
-/** Single-flight wrapper over extractFirstFrameDataUrl, deduped by File. */
-function extractFirstFrameShared(candidate: VideoCandidate): Promise<string | null> {
-    const existing = inflightExtractions.get(candidate.file);
-    if (existing) return existing;
-    const pending = extractFirstFrameDataUrl(candidate).finally(() => {
-        if (inflightExtractions.get(candidate.file) === pending) inflightExtractions.delete(candidate.file);
-    });
-    inflightExtractions.set(candidate.file, pending);
-    return pending;
+function extractFirstFrameShared(candidate: VideoCandidate, signal?: AbortSignal): Promise<string | null> {
+    return previewQueue.run(candidate.file, () => extractFirstFrameDataUrl(candidate), signal);
 }
 
 /**
@@ -244,12 +197,17 @@ function extractFirstFrameShared(candidate: VideoCandidate): Promise<string | nu
  * trip was opened early. No-op if the trip already has a preview or already
  * failed. onUpdate fires with (trip, dataUrl) on success.
  */
-export async function ensureTripPreview(trip: Trip, onUpdate: (trip: Trip, dataUrl: string) => void): Promise<void> {
+export async function ensureTripPreview(
+    trip: Trip,
+    onUpdate: (trip: Trip, dataUrl: string) => void,
+    signal?: AbortSignal,
+): Promise<void> {
     if (trip.previewDataUrl) return;
     const first = tripAllCandidates(trip)[0];
     if (!first || previewFailedFiles.has(first.file)) return;
     try {
-        const url = await extractFirstFrameShared(first);
+        const url = await extractFirstFrameShared(first, signal);
+        if (signal?.aborted) return;
         if (url) {
             trip.previewDataUrl = url;
             onUpdate(trip, url);
@@ -257,6 +215,7 @@ export async function ensureTripPreview(trip: Trip, onUpdate: (trip: Trip, dataU
             previewFailedFiles.add(first.file);
         }
     } catch (err) {
+        if (signal?.aborted) return;
         previewFailedFiles.add(first.file);
         log.debug("preview extract failed", {
             file: first.file.name,
@@ -270,26 +229,12 @@ async function populateTripPreviewsImpl(
     onUpdate: (trip: Trip, dataUrl: string) => void,
     signal: AbortSignal,
 ): Promise<void> {
-    // Parallel queue: POOL_SIZE files in flight at once. cursor is the next trip index to take.
+    // Keep a small pending window; the shared queue owns decoder admission.
     let cursor = 0;
-    const runOne = async (workerIndex: number): Promise<void> => {
+    const runOne = async (): Promise<void> => {
         while (!signal.aborted) {
-            // Throttle: the extra worker(s) park while a trip actively plays so
-            // preview decoding yields the hardware decoder to the player. Worker 0
-            // keeps going, so previews never fully stall. Only park while work
-            // remains - otherwise a parked worker would hold up Promise.all after
-            // worker 0 drained the queue (playback may never stop on its own).
-            if (workerIndex > 0 && previewPlaybackActive && cursor < trips.length) {
-                await awaitThrottleRelease(signal);
-                if (signal.aborted) return;
-            }
             const tripIdx = cursor++;
-            if (tripIdx >= trips.length) {
-                // Queue drained: wake any parked peer so it exits too (its park
-                // guard now sees cursor >= length and it returns).
-                releaseThrottleWaiters();
-                return;
-            }
+            if (tripIdx >= trips.length) return;
             const trip = trips[tripIdx];
             if (!trip || trip.previewDataUrl) continue;
             const candidates = tripAllCandidates(trip);
@@ -300,7 +245,7 @@ async function populateTripPreviewsImpl(
             // wastes a worker slot for a result we already know.
             if (!first || previewFailedFiles.has(first.file)) continue;
             try {
-                const url = await extractFirstFrameShared(first);
+                const url = await extractFirstFrameShared(first, signal);
                 if (signal.aborted) return;
                 if (url) {
                     trip.previewDataUrl = url;
@@ -316,6 +261,7 @@ async function populateTripPreviewsImpl(
                     previewFailedFiles.add(first.file);
                 }
             } catch (err) {
+                if (signal.aborted) return;
                 // Worker-level error for this file - continue to the next trip; the card stays as a placeholder.
                 previewFailedFiles.add(first.file);
                 log.debug("preview extract failed", {
@@ -326,7 +272,7 @@ async function populateTripPreviewsImpl(
             }
         }
     };
-    const tasks = Array.from({ length: POOL_SIZE }, (_unused, i) => runOne(i));
+    const tasks = Array.from({ length: POOL_SIZE }, () => runOne());
     await Promise.all(tasks);
 }
 
@@ -346,13 +292,18 @@ async function populateTripPreviewsImpl(
 export function schedulePopulateTripPreviews(
     trips: Trip[],
     onUpdate: (trip: Trip, dataUrl: string) => void,
+    signal?: AbortSignal,
 ): Promise<void> {
     if (activeRun) {
         activeRun.abort();
     }
     const ctrl = new AbortController();
     activeRun = ctrl;
+    const onAbort = (): void => ctrl.abort();
+    if (signal?.aborted) ctrl.abort();
+    else signal?.addEventListener("abort", onAbort, { once: true });
     return populateTripPreviewsImpl(trips, onUpdate, ctrl.signal).finally(() => {
+        signal?.removeEventListener("abort", onAbort);
         if (activeRun === ctrl) activeRun = null;
     });
 }

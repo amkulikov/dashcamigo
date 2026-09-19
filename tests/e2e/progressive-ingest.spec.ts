@@ -769,6 +769,71 @@ test.describe("progressive ingest", () => {
         ).toBeGreaterThanOrEqual(1);
     });
 
+    test("an ignored-only drop resumes previews after recording metadata is ready", async ({ page }) => {
+        const directory = makeTemporaryDirectory("dashcamigo-preview-resume-");
+        const source = path.join(SAMPLE_NOGPS, "clip-no-gps.mp4");
+        for (let i = 0; i < 4; i++) {
+            writeFileSync(
+                path.join(directory, `clip-${i}.mp4`),
+                withMvhdCreationTime(source, `2026-01-15T${String(i + 10).padStart(2, "0")}:00:00Z`),
+            );
+        }
+        const ignoredDirectory = makeTemporaryDirectory("dashcamigo-preview-ignored-");
+        writeFileSync(path.join(ignoredDirectory, ".DS_Store"), "ignored");
+
+        await page.evaluate(() => {
+            const send = Worker.prototype.postMessage;
+            const pending: Array<() => void> = [];
+            let isHeld = true;
+            Worker.prototype.postMessage = function (
+                message: unknown,
+                transferOrOptions: Transferable[] | StructuredSerializeOptions = [],
+            ): void {
+                const deliver = (): void => {
+                    send.call(
+                        this,
+                        message,
+                        Array.isArray(transferOrOptions) ? { transfer: transferOrOptions } : transferOrOptions,
+                    );
+                };
+                if (
+                    isHeld &&
+                    typeof message === "object" &&
+                    message !== null &&
+                    "type" in message &&
+                    message.type === "extract-preview"
+                ) {
+                    pending.push(deliver);
+                    return;
+                }
+                deliver();
+            };
+            (window as typeof window & { __releasePreviews?: () => void }).__releasePreviews = () => {
+                isHeld = false;
+                for (const deliver of pending.splice(0)) deliver();
+            };
+        });
+
+        await page.locator("#folder-input").setInputFiles(directory);
+        await expect(page.locator("li.trip:not(.unindexed-note)")).toHaveCount(4);
+        await expect(page.locator("#trip-list")).toHaveAttribute("aria-busy", "false", { timeout: 20_000 });
+        await expect(page.locator("#trip-analysis-status")).toBeHidden();
+        expect(
+            await page.evaluate(() => window.__dashcamigo.state.trips.filter((trip) => trip.previewDataUrl).length),
+        ).toBe(0);
+
+        await page.locator("#folder-input").setInputFiles(ignoredDirectory);
+        await expect(page.locator("#ingest-overlay")).toBeHidden();
+        await page.evaluate(() => {
+            (window as typeof window & { __releasePreviews?: () => void }).__releasePreviews?.();
+        });
+        await expect
+            .poll(() =>
+                page.evaluate(() => window.__dashcamigo.state.trips.filter((trip) => trip.previewDataUrl).length),
+            )
+            .toBe(4);
+    });
+
     test("regrouping from settings preserves the active ingest lifecycle", async ({ page }) => {
         const dir = makeTemporaryDirectory("dashcamigo-regroup-");
         const source = path.join(SAMPLE_70MAI, "Normal/Front/NO20260101-120000-000001F.MP4");
