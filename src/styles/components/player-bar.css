@@ -2,34 +2,47 @@
    7. PLAYER BAR (custom toolbar)
    ========================================================================= */
 .player-bar {
-    /* Container query scope for all internal responsive rules.
-       The player-bar reacts to its own width (= the viewer's width, which
-       depends on the sidebar/map-pane), not the window width: a user with
-       an open map gets a narrow bar even on a 1440px desktop.
-       container-type: inline-size - @container queries measure width only,
-       height is free (the bar does not grow taller). */
+    /* Respond to available player width, including sidebar and export drawers. */
     container-type: inline-size;
     container-name: pbar;
 
-    display: flex;
-    align-items: center;
-    gap: var(--dc-space-2);
     padding: var(--dc-space-1) var(--dc-space-2);
     background: var(--bg-elev);
     border-top: var(--player-bar-border) solid var(--border);
     color: var(--fg);
-    /* flex-wrap: nowrap - on a narrow bar, progressive hide via @container
-       (see below) + overflow-bar.ts remove low-priority elements.
-       Wrap would create a second row of controls, breaking the bar's fixed
-       height and the player-wrap grid-template-rows (row "bar" = auto).
-       We do NOT set overflow: hidden - that would clip child popovers
-       (.player-speed-menu goes up, so does .player-volume-popover, and
-       overflow-menu too). Guarding against visual overflow on an extremely
-       narrow bar is overflow-bar's job; once all of its items are already
-       hidden, the remaining buttons physically just barely fit and are
-       fully visible. */
-    flex-wrap: nowrap;
     font-family: var(--dc-font-body);
+}
+
+.player-bar-layout {
+    display: grid;
+    grid-template-columns: minmax(0, var(--transport-left-space, 1fr)) max-content minmax(0, 1fr);
+    align-items: center;
+    gap: var(--dc-space-2);
+}
+.player-info,
+.player-transport,
+.player-bar-secondary {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    min-width: 0;
+}
+.player-info {
+    gap: var(--dc-space-2);
+    white-space: nowrap;
+}
+#player-bar .player-info[data-compact-time="true"] .player-time-sep,
+#player-bar .player-info[data-compact-time="true"] #player-total {
+    display: none;
+}
+.player-transport {
+    justify-content: center;
+    justify-self: start;
+    width: max-content;
+    gap: 2px;
+}
+.player-bar-secondary {
+    gap: var(--dc-space-2);
 }
 
 /* Toolbar buttons. Square, square-radius. The main Play button is orange. */
@@ -74,7 +87,7 @@
     outline: 2px solid var(--accent);
     outline-offset: 1px;
 }
-/* Height the desktop bar occupies: its tallest control (the transport pair
+/* Height the desktop bar occupies: its tallest control (the transport group
    below) plus the vertical padding and the top border. Every term is the token
    the bar itself lays out with, so growing a control moves this with it - the
    fullscreen chart overlay is absolutely positioned and has to clear the bar
@@ -87,7 +100,7 @@
     --player-bar-h: calc(var(--player-transport-size) + 2 * var(--dc-space-1) + var(--player-bar-border));
 }
 
-/* Desktop sizing: transport (play + frame-step) is noticeably larger - the
+/* Desktop sizing: transport controls are noticeably larger - the
    most-aimed-at targets now that the bar sits right above the timeline; the
    rest of the bar grows slightly over the --dc-iconbtn base. The mobile block
    below overrides all of this with touch sizes (44/40) and wins by cascade
@@ -114,22 +127,49 @@
     height: 20px;
 }
 
-/* Frame-step pair (player-frame-step.ts). touch-action: none - a touch hold
-   drives auto-repeat, so the browser must not steal the gesture for scrolling
-   (pointercancel would kill the repeat mid-hold). */
+/* Hold gestures stay with the button instead of scrolling the viewer. */
 .player-step {
     touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
     flex-shrink: 0;
 }
-/* Narrow bar: the step pair leaves entirely. It is deliberately NOT in the
-   overflow priority list (player-bar-overflow.ts) - a hold-to-repeat control
-   inside the kebab menu degenerates into open-menu-tap-once - and on a
-   portrait-phone-width bar the mandatory controls already just fit. Landscape
-   phones and desktop keep it. */
-@container pbar (max-width: 640px) {
-    .player-step {
-        display: none;
-    }
+.player-bar .player-btn.player-seek {
+    width: auto;
+    min-width: var(--player-transport-size);
+    padding: 0 6px;
+    gap: 3px;
+}
+.player-bar .player-seek svg {
+    width: 16px;
+    height: 16px;
+}
+.player-seek-amount {
+    font-family: var(--dc-font-mono);
+    font-size: var(--dc-text-sm);
+    font-weight: 600;
+    pointer-events: none;
+}
+/* The video can occupy only the left pane while this bar spans video + map. */
+.player-bar-layout[data-transport-stacked="true"] {
+    grid-template-columns: auto minmax(0, 1fr);
+}
+.player-bar-layout[data-transport-stacked="true"] .player-transport {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    margin-left: var(--transport-left, 0px);
+}
+.player-bar-layout[data-transport-stacked="true"] .player-info {
+    grid-column: 1;
+    grid-row: 2;
+}
+.player-bar-layout[data-transport-stacked="true"] .player-bar-secondary {
+    grid-column: 2;
+    grid-row: 2;
+}
+#gps-sync-pill-mobile {
+    display: none;
 }
 /* #player-map: mobile-only entry to expand/collapse the map. On desktop the
    mini-map circle is the click target (and the dedicated button would be
@@ -169,6 +209,9 @@
 }
 #player-play[data-paused="true"]:hover {
     background: var(--accent-hot);
+}
+#player-play[data-paused="false"] {
+    box-shadow: inset 0 0 0 2px var(--accent);
 }
 
 .player-btn[aria-pressed="true"] {
@@ -255,10 +298,12 @@
     display: block;
     flex-shrink: 0;
 }
-/* Very narrow bar: hide the label, only the icon remains. Container query,
-   not media: the size depends on the player-bar, not the window. */
-@container pbar (max-width: 420px) {
-    .player-export-btn__label {
+/* Compact actions keep desktop transport on one row when the viewer narrows. */
+@container pbar (max-width: 900px) {
+    .player-export-btn__label,
+    .view-menu-button__label,
+    .view-menu-button__chevron,
+    .player-bar-divider {
         display: none;
     }
     .player-export-btn {
@@ -665,8 +710,12 @@
         height: 18px;
     }
     /* Other buttons 40x40 - touch-target floor. */
-    .player-bar .player-btn:not(#player-play) {
+    .player-bar .player-btn:not(#player-play, .player-seek) {
         width: var(--dc-iconbtn-touch);
+        height: var(--dc-iconbtn-touch);
+    }
+    .player-bar .player-seek {
+        min-width: var(--dc-iconbtn-touch);
         height: var(--dc-iconbtn-touch);
     }
     .player-bar .player-btn:not(#player-play) svg {
@@ -693,6 +742,9 @@
        and this is the only way to expand the map. Same 40px touch target
        as the other player-btn entries below. */
     #player-map:not([data-overflow-hidden="true"]) {
+        display: inline-flex;
+    }
+    #gps-sync-pill-mobile:not([hidden]):not([data-overflow-hidden="true"]) {
         display: inline-flex;
     }
     /* Speed pill, view-menu, view-mode button etc. stay in the bar on
@@ -807,7 +859,9 @@
    <=420px so wide landscape phones keep the roomier 8px spacing. Touch targets
    stay 40px, so 4px between them is still comfortably tappable. */
 @media (max-width: 420px) {
-    .player-bar {
+    .player-bar-layout,
+    .player-info,
+    .player-bar-secondary {
         gap: var(--dc-space-1);
     }
 }

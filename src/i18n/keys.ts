@@ -596,6 +596,10 @@ export type I18nKey =
     // Player bar
     | "player.play"
     | "player.pause"
+    | "player.playTooltip"
+    | "player.pauseTooltip"
+    | "player.seekBack"
+    | "player.seekFwd"
     | "player.stepBack"
     | "player.stepFwd"
     | "player.mute"

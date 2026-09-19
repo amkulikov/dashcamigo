@@ -6,6 +6,7 @@
 import { activeCandidate, state } from "./state.js";
 import { dom } from "./dom.js";
 import { FRAME_STEP_HOLD_DELAY_MS, FRAME_STEP_REPEAT_MS, heldFrameStepCount } from "./frame-step-repeat.js";
+import { initButtonRepeat } from "./player-button-repeat.js";
 
 interface FrameStepDeps {
     getTripCurrentTime: () => number;
@@ -40,62 +41,28 @@ export function stepFrame(direction: 1 | -1): void {
 }
 
 function wireStepButton(btn: HTMLButtonElement, direction: 1 | -1): void {
-    let delayTimer: number | null = null;
-    let repeatTimer: number | null = null;
-    let hold: { startedAt: number; baseTime: number; stepSeconds: number; appliedSteps: number } | null = null;
-
-    const clearTimers = (): void => {
-        if (delayTimer !== null) clearTimeout(delayTimer);
-        if (repeatTimer !== null) clearInterval(repeatTimer);
-        delayTimer = repeatTimer = null;
-    };
-
-    const applyHeldProgress = (): void => {
-        if (!hold || !deps || !state.active) return;
-        const requestedSteps = heldFrameStepCount(performance.now() - hold.startedAt);
-        if (requestedSteps <= hold.appliedSteps) return;
-        if (!dom.player.paused) dom.player.pause();
-        deps.seekTripTime(hold.baseTime + direction * requestedSteps * hold.stepSeconds);
-        hold.appliedSteps = requestedSteps;
-    };
-
-    const stopRepeat = (): void => {
-        // Derive the final target from total hold duration. Even if a busy main
-        // thread coalesced interval callbacks/seeks, pointerup lands on the same
-        // frame count instead of degrading to one or two steps.
-        applyHeldProgress();
-        clearTimers();
-        hold = null;
-    };
-
-    // Pointer path: first step on pointerdown, auto-repeat while held. No
-    // pointer capture on purpose - dragging off the button stops the repeat,
-    // which is the expected escape hatch for a stuck-feeling hold.
-    btn.addEventListener("pointerdown", (event) => {
-        if (event.button !== 0) return;
-        clearTimers();
-        hold = null;
-        if (!deps || !state.active) return;
-        if (!dom.player.paused) dom.player.pause();
-        const baseTime = deps.getTripCurrentTime();
-        const stepSeconds = frameStepSeconds(activeCandidate()?.fps ?? null);
-        hold = { startedAt: performance.now(), baseTime, stepSeconds, appliedSteps: 1 };
-        deps.seekTripTime(baseTime + direction * stepSeconds);
-        delayTimer = window.setTimeout(() => {
-            repeatTimer = window.setInterval(applyHeldProgress, FRAME_STEP_REPEAT_MS);
-        }, FRAME_STEP_HOLD_DELAY_MS);
+    initButtonRepeat(btn, {
+        delayMs: FRAME_STEP_HOLD_DELAY_MS + FRAME_STEP_REPEAT_MS,
+        repeatMs: FRAME_STEP_REPEAT_MS,
+        activate: () => stepFrame(direction),
+        start: () => {
+            if (!deps || !state.active) return null;
+            const trip = state.trips[state.active.trip];
+            if (!dom.player.paused) dom.player.pause();
+            const baseTime = deps.getTripCurrentTime();
+            const stepSeconds = frameStepSeconds(activeCandidate()?.fps ?? null);
+            let appliedSteps = 1;
+            deps.seekTripTime(baseTime + direction * stepSeconds);
+            return (elapsedMs) => {
+                if (!deps || !state.active || state.trips[state.active.trip] !== trip) return false;
+                const requestedSteps = heldFrameStepCount(elapsedMs);
+                if (requestedSteps <= appliedSteps) return;
+                if (!dom.player.paused) dom.player.pause();
+                deps.seekTripTime(baseTime + direction * requestedSteps * stepSeconds);
+                appliedSteps = requestedSteps;
+            };
+        },
     });
-    for (const eventName of ["pointerup", "pointercancel", "pointerleave"] as const) {
-        btn.addEventListener(eventName, stopRepeat);
-    }
-    // Keyboard activation (Enter/Space on the focused button) arrives as a
-    // click with detail 0 and no pointerdown; pointer clicks already stepped
-    // on pointerdown and must not double-step here.
-    btn.addEventListener("click", (event) => {
-        if (event.detail === 0) stepFrame(direction);
-    });
-    // A touch long-press must keep stepping, not summon the context menu.
-    btn.addEventListener("contextmenu", (event) => event.preventDefault());
 }
 
 /** Wires the player-bar step buttons and arms stepFrame for the hotkeys.

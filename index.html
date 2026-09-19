@@ -1817,247 +1817,255 @@
                     </div>
                 </div>
                 <div class="player-bar" id="player-bar">
-                    <!-- Play / Pause toggle: both SVGs are in the DOM, the sync function flips [hidden].
-                         data-paused also controls the background (orange when paused).
-                         aria-label is set dynamically in syncPlayButton. -->
-                    <button id="player-play" class="player-btn" type="button" aria-label="Play" aria-keyshortcuts="Space K" data-paused="true">
-                        <svg class="i-play" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"/></svg>
-                        <svg class="i-pause" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></svg>
-                    </button>
-                    <!-- Frame-step pair: creep up on the exact frame (plates) after a
-                         rough pause. Works while playing too (pauses first); hold =
-                         auto-repeat (player-frame-step.ts). Hidden on narrow bars via
-                         @container - a hold-to-repeat control is useless as a kebab
-                         menu row, so unlike the other secondary buttons it leaves
-                         entirely instead of overflowing. -->
-                    <button id="player-step-back" class="player-btn player-step" type="button" aria-keyshortcuts=","
-                            data-i18n-attr="aria-label:player.stepBack,title:player.stepBack" aria-label="Previous frame">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/></svg>
-                    </button>
-                    <button id="player-step-fwd" class="player-btn player-step" type="button" aria-keyshortcuts="."
-                            data-i18n-attr="aria-label:player.stepFwd,title:player.stepFwd" aria-label="Next frame">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
-                    </button>
-                    <!-- Drop a timeline marker at the playhead (annotation,
-                         persists for remembered folders). Opens the text
-                         editor right away. -->
-                    <button id="player-add-marker" class="player-btn" type="button"
-                            data-i18n-attr="aria-label:player.addMarker,title:player.addMarker" aria-label="Add marker">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v6"/><path d="M9 10h6"/><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
-                    </button>
-                    <!-- All markers of the trip: jump, rename, delete. Shown
-                         only once the trip has one (src/ui/marker-list-modal.ts). -->
-                    <button id="player-marker-list" class="player-btn" type="button" hidden
-                            data-i18n-attr="aria-label:markerList.title,title:markerList.title" aria-label="Trip markers">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
-                    </button>
-                    <span class="player-time mono" id="player-current">0:00</span>
-                    <span class="player-time-sep">/</span>
-                    <span class="player-time mono" id="player-total">0:00</span>
-                    <!-- Speed-only readout for the mobile bar. The full readout
-                         row (#player-readout) is absent on phones, where vertical
-                         space is scarcer than horizontal; speed is the one metric
-                         that stays relevant while driving the timeline with a
-                         thumb. Hidden on desktop - the row owns it there. Both
-                         copies are written by player-metrics.ts. -->
-                    <div class="player-metrics" id="player-metrics">
-                        <button type="button" class="pm-item pm-speed pm-speed-toggle" id="pm-bar-speed-toggle"
-                                data-i18n-attr="aria-label:units.toggle.aria,title:units.toggle.title"
-                                aria-label="Toggle speed units" title="Click to switch km/h ↔ mph">
-                            <span class="pm-value mono" id="pm-bar-speed">-</span>
-                            <span class="pm-unit" id="pm-bar-unit">km/h</span>
-                        </button>
-                        <button type="button" class="gps-sync-pill gps-sync-pill--mobile" id="gps-sync-pill-mobile" hidden
-                                data-i18n-attr="aria-label:gpsSync.open,title:gpsSync.open"
-                                aria-label="Sync GPS" title="Sync GPS">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v4"/><path d="M18 12h4"/><path d="M12 18v4"/><path d="M2 12h4"/><circle cx="12" cy="12" r="3"/></svg>
-                            <span id="gps-sync-pill-mobile-label"></span>
-                        </button>
-                    </div>
-                    <span class="player-spacer"></span>
-                    <div class="player-speed-wrap">
-                        <button id="player-speed" class="player-btn player-btn-text" type="button" aria-haspopup="true" aria-expanded="false"
-                                data-i18n-attr="aria-label:player.speed.label"
-                                aria-label="Playback speed">1x</button>
-                        <ul id="player-speed-menu" class="player-speed-menu" role="menu" hidden>
-                            <li role="menuitem" data-rate="0.25">0.25x</li>
-                            <li role="menuitem" data-rate="0.5">0.5x</li>
-                            <li role="menuitem" data-rate="0.75">0.75x</li>
-                            <li role="menuitem" data-rate="1">1x</li>
-                            <li role="menuitem" data-rate="1.25">1.25x</li>
-                            <li role="menuitem" data-rate="1.5">1.5x</li>
-                            <li role="menuitem" data-rate="2">2x</li>
-                            <li role="menuitem" data-rate="4">4x</li>
-                            <li role="menuitem" data-rate="8">8x</li>
-                        </ul>
-                    </div>
-                    <div class="player-mute-wrap">
-                        <!-- Volume on/off toggle: the sync function flips [hidden].
-                             aria-label is set dynamically in syncMuteButton. -->
-                        <button id="player-mute" class="player-btn" type="button" aria-label="Mute" aria-keyshortcuts="U">
-                            <svg class="i-vol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/></svg>
-                            <svg class="i-vol-x" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><line x1="22" x2="16" y1="9" y2="15"/><line x1="16" x2="22" y1="9" y2="15"/></svg>
-                        </button>
-                        <div id="player-volume-popover" class="player-volume-popover" hidden>
-                            <input id="player-volume" type="range" min="0" max="1" step="0.05" value="1"
-                                   data-i18n-attr="aria-label:player.volume"
-                                   aria-label="Volume">
-                        </div>
-                    </div>
-                    <button id="player-capture" class="player-btn" type="button" aria-keyshortcuts="S"
-                            data-i18n-attr="aria-label:player.capture,title:player.capture"
-                            aria-label="Save still image (S)" title="Save still image (S)">
-                        <!-- camera (lucide) -->
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
-                    </button>
-                    <!-- Trip-end behavior cycles stop -> loop -> advance (like a media
-                         player's repeat-off/all/one). Two icons: repeat for stop/loop,
-                         skip-forward for advance; syncLoopButton flips [hidden] + the
-                         label/aria-pressed. -->
-                    <button id="player-loop" class="player-btn" type="button" aria-label="Loop trip" title="Loop trip" aria-keyshortcuts="R" aria-pressed="false">
-                        <!-- repeat (stop / loop) -->
-                        <svg class="i-loop-repeat" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>
-                        <!-- skip-forward (advance to next trip) -->
-                        <svg class="i-loop-advance" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" x2="19" y1="5" y2="19"/></svg>
-                    </button>
-                    <!-- Multichannel view-mode toggle: focus (active large + PIP)
-                         vs split (equal grid). On single-channel trips the button
-                         is hidden - no choice to make, one tile either way. -->
-                    <button id="player-view-mode" class="player-btn" type="button"
-                            data-mode="focus"
-                            data-i18n-attr="aria-label:player.view.toggle,title:player.view.toggle"
-                            aria-label="Camera layout"
-                            title="Camera layout" hidden>
-                        <!-- picture-in-picture-2 (focus mode) -->
-                        <svg class="i-vm i-vm-focus" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 9V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h7"/><rect width="10" height="7" x="12" y="13" rx="2"/></svg>
-                        <!-- grid-2x2 (split mode) -->
-                        <svg class="i-vm i-vm-split" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 12h18"/><path d="M12 3v18"/></svg>
-                    </button>
-                    <!-- Map expand/collapse toggle. On desktop the mini-map circle
-                         doubles as a click target to expand; on mobile the circle
-                         is hidden (covers the camera + bad touch target), so this
-                         button is the only way in. CSS shows it on mobile only.
-                         aria-label/title flip in applyMapLayout based on state. -->
-                    <button id="player-map" class="player-btn" type="button"
-                            data-i18n-attr="aria-label:miniMap.expandAria,title:miniMap.expandAria"
-                            aria-label="Expand map">
-                        <!-- lucide: map -->
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/></svg>
-                    </button>
-                    <!-- "View" dropdown: chart / events / readouts are visibility
-                         toggles; map is a three-state off / mini / large control.
-                         Hotkeys C / T / M / G. See src/ui/view-menu.ts. -->
-                    <div class="view-menu-wrap">
-                        <button id="player-view-menu" class="player-btn player-btn-text view-menu-button" type="button"
-                                aria-haspopup="true" aria-expanded="false"
-                                data-i18n-attr="aria-label:viewMenu.title,title:viewMenu.title"
-                                aria-label="View" title="View">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                <rect x="3" y="3" width="7" height="7"/>
-                                <rect x="14" y="3" width="7" height="7"/>
-                                <rect x="3" y="14" width="7" height="7"/>
-                                <rect x="14" y="14" width="7" height="7"/>
-                            </svg>
-                            <span class="view-menu-button__label" data-i18n="viewMenu.label">View</span>
-                            <span class="view-menu-button__chevron" aria-hidden="true">▾</span>
-                        </button>
-                        <div id="player-view-menu-popover" class="view-menu-popover" hidden role="menu">
-                            <div class="view-menu-popover__header" data-i18n="viewMenu.section.display">Display</div>
-                            <button type="button" class="view-menu-row" role="menuitemcheckbox" data-panel="chart"
-                                    aria-checked="true">
-                                <span class="view-menu-row__check" aria-hidden="true">
-                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                         stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                                </span>
-                                <span class="view-menu-row__label" data-i18n="viewMenu.chart">Speed + |G| chart</span>
-                                <span class="view-menu-row__hint mono">C</span>
-                            </button>
-                            <button type="button" class="view-menu-row" role="menuitemcheckbox" data-panel="strip"
-                                    aria-checked="true">
-                                <span class="view-menu-row__check" aria-hidden="true">
-                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                         stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                                </span>
-                                <span class="view-menu-row__label" data-i18n="viewMenu.strip">Events strip</span>
-                                <span class="view-menu-row__hint mono">T</span>
-                            </button>
-                            <div class="view-menu-map" data-panel="map">
-                                <div class="view-menu-map__header">
-                                    <span class="view-menu-row__label" data-i18n="viewMenu.map">Map</span>
-                                    <span class="view-menu-row__hint mono">M</span>
-                                </div>
-                                <div class="view-menu-map__modes" role="group"
-                                     data-i18n-attr="aria-label:viewMenu.map" aria-label="Map">
-                                    <button type="button" role="menuitemradio" data-map-mode="off"
-                                            aria-checked="false" data-i18n="viewMenu.map.off">Off</button>
-                                    <button type="button" role="menuitemradio" data-map-mode="mini"
-                                            aria-checked="true" data-i18n="viewMenu.map.mini">Mini</button>
-                                    <button type="button" role="menuitemradio" data-map-mode="large"
-                                            aria-checked="false" data-i18n="viewMenu.map.large">Large</button>
+                    <div class="player-bar-layout">
+                        <div class="player-info">
+                            <div class="player-mute-wrap">
+                                <!-- Volume on/off toggle: the sync function flips [hidden].
+                                     aria-label is set dynamically in syncMuteButton. -->
+                                <button id="player-mute" class="player-btn" type="button" aria-label="Mute" aria-keyshortcuts="U">
+                                    <svg class="i-vol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/></svg>
+                                    <svg class="i-vol-x" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><line x1="22" x2="16" y1="9" y2="15"/><line x1="16" x2="22" y1="9" y2="15"/></svg>
+                                </button>
+                                <div id="player-volume-popover" class="player-volume-popover" hidden>
+                                    <input id="player-volume" type="range" min="0" max="1" step="0.05" value="1"
+                                           data-i18n-attr="aria-label:player.volume"
+                                           aria-label="Volume">
                                 </div>
                             </div>
-                            <button type="button" class="view-menu-row" role="menuitemcheckbox" data-panel="readout"
-                                    aria-checked="true">
-                                <span class="view-menu-row__check" aria-hidden="true">
-                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                         stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                                </span>
-                                <span class="view-menu-row__label" data-i18n="viewMenu.readout">GPS readouts</span>
-                                <span class="view-menu-row__hint mono">G</span>
+                            <span class="player-time mono" id="player-current">0:00</span>
+                            <span class="player-time-sep">/</span>
+                            <span class="player-time mono" id="player-total">0:00</span>
+                            <!-- Speed-only readout for the mobile bar. The full readout
+                                 row (#player-readout) is absent on phones, where vertical
+                                 space is scarcer than horizontal; speed is the one metric
+                                 that stays relevant while driving the timeline with a
+                                 thumb. Hidden on desktop - the row owns it there. Both
+                                 copies are written by player-metrics.ts. -->
+                            <div class="player-metrics" id="player-metrics">
+                                <button type="button" class="pm-item pm-speed pm-speed-toggle" id="pm-bar-speed-toggle"
+                                        data-i18n-attr="aria-label:units.toggle.aria,title:units.toggle.title"
+                                        aria-label="Toggle speed units" title="Click to switch km/h ↔ mph">
+                                    <span class="pm-value mono" id="pm-bar-speed">-</span>
+                                    <span class="pm-unit" id="pm-bar-unit">km/h</span>
+                                </button>
+                            </div>
+                            <div class="player-speed-wrap">
+                                <button id="player-speed" class="player-btn player-btn-text" type="button" aria-haspopup="true" aria-expanded="false"
+                                        data-i18n-attr="aria-label:player.speed.label"
+                                        aria-label="Playback speed">1x</button>
+                                <ul id="player-speed-menu" class="player-speed-menu" role="menu" hidden>
+                                    <li role="menuitem" data-rate="0.25">0.25x</li>
+                                    <li role="menuitem" data-rate="0.5">0.5x</li>
+                                    <li role="menuitem" data-rate="0.75">0.75x</li>
+                                    <li role="menuitem" data-rate="1">1x</li>
+                                    <li role="menuitem" data-rate="1.25">1.25x</li>
+                                    <li role="menuitem" data-rate="1.5">1.5x</li>
+                                    <li role="menuitem" data-rate="2">2x</li>
+                                    <li role="menuitem" data-rate="4">4x</li>
+                                    <li role="menuitem" data-rate="8">8x</li>
+                                </ul>
+                            </div>
+                            <!-- Trip-end behavior cycles stop -> loop -> advance (like a media
+                                 player's repeat-off/all/one). Two icons: repeat for stop/loop,
+                                 skip-forward for advance; syncLoopButton flips [hidden] + the
+                                 label/aria-pressed. -->
+                            <button id="player-loop" class="player-btn" type="button" aria-label="Loop trip" title="Loop trip" aria-keyshortcuts="R" aria-pressed="false">
+                                <!-- repeat (stop / loop) -->
+                                <svg class="i-loop-repeat" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>
+                                <!-- skip-forward (advance to next trip) -->
+                                <svg class="i-loop-advance" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" x2="19" y1="5" y2="19"/></svg>
                             </button>
-                            <button type="button" class="view-menu-row feedback-link" role="menuitem"
-                                    data-feedback-preset="cameras" data-i18n="recognition.cameras.help">Missing a camera?</button>
-                            <button id="recognition-gps-menu" type="button" class="view-menu-row feedback-link" role="menuitem" hidden
-                                    data-feedback-preset="gps" data-i18n="recognition.gps.help">Expected GPS in these recordings? Tell us</button>
+                        </div>
+                        <div class="player-transport">
+                            <button id="player-seek-back" class="player-btn player-step player-seek" type="button" aria-keyshortcuts="ArrowLeft">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m11 5-7 7 7 7m9-14-7 7 7 7"/></svg>
+                                <span class="player-seek-amount" aria-hidden="true">5</span>
+                            </button>
+                            <button id="player-step-back" class="player-btn player-step" type="button" aria-keyshortcuts=","
+                                    data-i18n-attr="aria-label:player.stepBack,title:player.stepBack" aria-label="Previous frame">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/></svg>
+                            </button>
+                            <button id="player-play" class="player-btn" type="button" aria-label="Play" aria-keyshortcuts="Space K" data-paused="true">
+                                <svg class="i-play" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+                                <svg class="i-pause" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></svg>
+                            </button>
+                            <button id="player-step-fwd" class="player-btn player-step" type="button" aria-keyshortcuts="."
+                                    data-i18n-attr="aria-label:player.stepFwd,title:player.stepFwd" aria-label="Next frame">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+                            </button>
+                            <button id="player-seek-fwd" class="player-btn player-step player-seek" type="button" aria-keyshortcuts="ArrowRight">
+                                <span class="player-seek-amount" aria-hidden="true">5</span>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 5 7 7-7 7m9-14 7 7-7 7"/></svg>
+                            </button>
+                        </div>
+                        <div class="player-bar-secondary" id="player-bar-secondary">
+                            <span class="player-spacer"></span>
+                            <!-- Drop a timeline marker at the playhead (annotation,
+                                 persists for remembered folders). Opens the text
+                                 editor right away. -->
+                            <button id="player-add-marker" class="player-btn" type="button"
+                                    data-i18n-attr="aria-label:player.addMarker,title:player.addMarker" aria-label="Add marker">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v6"/><path d="M9 10h6"/><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
+                            </button>
+                            <!-- All markers of the trip: jump, rename, delete. Shown
+                                 only once the trip has one (src/ui/marker-list-modal.ts). -->
+                            <button id="player-marker-list" class="player-btn" type="button" hidden
+                                    data-i18n-attr="aria-label:markerList.title,title:markerList.title" aria-label="Trip markers">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
+                            </button>
+                            <button type="button" class="gps-sync-pill gps-sync-pill--mobile" id="gps-sync-pill-mobile" hidden
+                                    data-i18n-attr="aria-label:gpsSync.open,title:gpsSync.open"
+                                    aria-label="Sync GPS" title="Sync GPS">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v4"/><path d="M18 12h4"/><path d="M12 18v4"/><path d="M2 12h4"/><circle cx="12" cy="12" r="3"/></svg>
+                                <span id="gps-sync-pill-mobile-label"></span>
+                            </button>
+
+                            <button id="player-capture" class="player-btn" type="button" aria-keyshortcuts="S"
+                                    data-i18n-attr="aria-label:player.capture,title:player.capture"
+                                    aria-label="Save still image (S)" title="Save still image (S)">
+                                <!-- camera (lucide) -->
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+                            </button>
+                            <!-- Multichannel view-mode toggle: focus (active large + PIP)
+                                 vs split (equal grid). On single-channel trips the button
+                                 is hidden - no choice to make, one tile either way. -->
+                            <button id="player-view-mode" class="player-btn" type="button"
+                                    data-mode="focus"
+                                    data-i18n-attr="aria-label:player.view.toggle,title:player.view.toggle"
+                                    aria-label="Camera layout"
+                                    title="Camera layout" hidden>
+                                <!-- picture-in-picture-2 (focus mode) -->
+                                <svg class="i-vm i-vm-focus" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 9V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h7"/><rect width="10" height="7" x="12" y="13" rx="2"/></svg>
+                                <!-- grid-2x2 (split mode) -->
+                                <svg class="i-vm i-vm-split" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 12h18"/><path d="M12 3v18"/></svg>
+                            </button>
+                            <!-- Map expand/collapse toggle. On desktop the mini-map circle
+                                 doubles as a click target to expand; on mobile the circle
+                                 is hidden (covers the camera + bad touch target), so this
+                                 button is the only way in. CSS shows it on mobile only.
+                                 aria-label/title flip in applyMapLayout based on state. -->
+                            <button id="player-map" class="player-btn" type="button"
+                                    data-i18n-attr="aria-label:miniMap.expandAria,title:miniMap.expandAria"
+                                    aria-label="Expand map">
+                                <!-- lucide: map -->
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/></svg>
+                            </button>
+                            <!-- "View" dropdown: chart / events / readouts are visibility
+                                 toggles; map is a three-state off / mini / large control.
+                                 Hotkeys C / T / M / G. See src/ui/view-menu.ts. -->
+                            <div class="view-menu-wrap">
+                                <button id="player-view-menu" class="player-btn player-btn-text view-menu-button" type="button"
+                                        aria-haspopup="true" aria-expanded="false"
+                                        data-i18n-attr="aria-label:viewMenu.title,title:viewMenu.title"
+                                        aria-label="View" title="View">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <rect x="3" y="3" width="7" height="7"/>
+                                        <rect x="14" y="3" width="7" height="7"/>
+                                        <rect x="3" y="14" width="7" height="7"/>
+                                        <rect x="14" y="14" width="7" height="7"/>
+                                    </svg>
+                                    <span class="view-menu-button__label" data-i18n="viewMenu.label">View</span>
+                                    <span class="view-menu-button__chevron" aria-hidden="true">▾</span>
+                                </button>
+                                <div id="player-view-menu-popover" class="view-menu-popover" hidden role="menu">
+                                    <div class="view-menu-popover__header" data-i18n="viewMenu.section.display">Display</div>
+                                    <button type="button" class="view-menu-row" role="menuitemcheckbox" data-panel="chart"
+                                            aria-checked="true">
+                                        <span class="view-menu-row__check" aria-hidden="true">
+                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                                 stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                        </span>
+                                        <span class="view-menu-row__label" data-i18n="viewMenu.chart">Speed + |G| chart</span>
+                                        <span class="view-menu-row__hint mono">C</span>
+                                    </button>
+                                    <button type="button" class="view-menu-row" role="menuitemcheckbox" data-panel="strip"
+                                            aria-checked="true">
+                                        <span class="view-menu-row__check" aria-hidden="true">
+                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                                 stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                        </span>
+                                        <span class="view-menu-row__label" data-i18n="viewMenu.strip">Events strip</span>
+                                        <span class="view-menu-row__hint mono">T</span>
+                                    </button>
+                                    <div class="view-menu-map" data-panel="map">
+                                        <div class="view-menu-map__header">
+                                            <span class="view-menu-row__label" data-i18n="viewMenu.map">Map</span>
+                                            <span class="view-menu-row__hint mono">M</span>
+                                        </div>
+                                        <div class="view-menu-map__modes" role="group"
+                                             data-i18n-attr="aria-label:viewMenu.map" aria-label="Map">
+                                            <button type="button" role="menuitemradio" data-map-mode="off"
+                                                    aria-checked="false" data-i18n="viewMenu.map.off">Off</button>
+                                            <button type="button" role="menuitemradio" data-map-mode="mini"
+                                                    aria-checked="true" data-i18n="viewMenu.map.mini">Mini</button>
+                                            <button type="button" role="menuitemradio" data-map-mode="large"
+                                                    aria-checked="false" data-i18n="viewMenu.map.large">Large</button>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="view-menu-row" role="menuitemcheckbox" data-panel="readout"
+                                            aria-checked="true">
+                                        <span class="view-menu-row__check" aria-hidden="true">
+                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                                 stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                        </span>
+                                        <span class="view-menu-row__label" data-i18n="viewMenu.readout">GPS readouts</span>
+                                        <span class="view-menu-row__hint mono">G</span>
+                                    </button>
+                                    <button type="button" class="view-menu-row feedback-link" role="menuitem"
+                                            data-feedback-preset="cameras" data-i18n="recognition.cameras.help">Missing a camera?</button>
+                                    <button id="recognition-gps-menu" type="button" class="view-menu-row feedback-link" role="menuitem" hidden
+                                            data-feedback-preset="gps" data-i18n="recognition.gps.help">Expected GPS in these recordings? Tell us</button>
+                                </div>
+                            </div>
+                            <button id="player-fullscreen" class="player-btn" type="button"
+                                    data-i18n-attr="aria-label:player.fullscreen.enter,title:player.fullscreen.enter" aria-keyshortcuts="F">
+                                <svg class="fullscreen-enter-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H3v5"/><path d="M21 8V3h-5"/><path d="M3 16v5h5"/><path d="M16 21h5v-5"/></svg>
+                            </button>
+                            <!-- UX-10: ? button - opens a modal with the hotkey list. -->
+                            <button id="player-help" class="player-btn" type="button"
+                                    data-i18n-attr="aria-label:player.help.title,title:player.help.title"
+                                    aria-label="Keyboard shortcuts (?)" title="Keyboard shortcuts (?)">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                                    <path d="M12 17h.01"/>
+                                </svg>
+                            </button>
+                            <!-- Overflow kebab for player-bar. When the bar shrinks
+                                 (narrow sidebar+map or a mobile screen), the
+                                 capture/loop/view-mode/help buttons move into the popup.
+                                 Hidden on a wide desktop. -->
+                            <div class="overflow-wrap">
+                                <button id="player-overflow" class="player-btn overflow-toggle" type="button"
+                                        hidden aria-haspopup="true" aria-expanded="false"
+                                        data-i18n-attr="aria-label:player.more,title:player.more"
+                                        aria-label="More controls" title="More controls">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <circle cx="12" cy="5" r="1.6"/>
+                                        <circle cx="12" cy="12" r="1.6"/>
+                                        <circle cx="12" cy="19" r="1.6"/>
+                                    </svg>
+                                </button>
+                                <ul id="player-overflow-menu" class="overflow-menu overflow-menu--up" role="menu" hidden></ul>
+                            </div>
+                            <!-- Divider before "Save clip" - visually separates player
+                                 settings from the "hand the finished clip over" action. -->
+                            <span class="player-bar-divider" aria-hidden="true"></span>
+                            <!-- The "Export" button - always present, enabled once a
+                                 trip is loaded. Hotkey E. Opens the modal with a range of
+                                 "whole trip" by default; if a chart-zoom selection
+                                 exists, that selection is substituted automatically. -->
+                            <button id="player-export" class="player-export-btn" type="button" disabled aria-keyshortcuts="E"
+                                    data-i18n-attr="title:player.export.tooltip,aria-label:player.export.tooltip"
+                                    title="Save clip · E" aria-label="Save clip · E">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                                <span class="player-export-btn__label" data-i18n="player.export.label">Save clip</span>
+                            </button>
                         </div>
                     </div>
-                    <button id="player-fullscreen" class="player-btn" type="button"
-                            data-i18n-attr="aria-label:player.fullscreen.enter,title:player.fullscreen.enter" aria-keyshortcuts="F">
-                        <svg class="fullscreen-enter-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H3v5"/><path d="M21 8V3h-5"/><path d="M3 16v5h5"/><path d="M16 21h5v-5"/></svg>
-                    </button>
-                    <!-- UX-10: ? button - opens a modal with the hotkey list. -->
-                    <button id="player-help" class="player-btn" type="button"
-                            data-i18n-attr="aria-label:player.help.title,title:player.help.title"
-                            aria-label="Keyboard shortcuts (?)" title="Keyboard shortcuts (?)">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <circle cx="12" cy="12" r="10"/>
-                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-                            <path d="M12 17h.01"/>
-                        </svg>
-                    </button>
-                    <!-- Overflow kebab for player-bar. When the bar shrinks
-                         (narrow sidebar+map or a mobile screen), the
-                         capture/loop/view-mode/help buttons move into the popup.
-                         Hidden on a wide desktop. -->
-                    <div class="overflow-wrap">
-                        <button id="player-overflow" class="player-btn overflow-toggle" type="button"
-                                hidden aria-haspopup="true" aria-expanded="false"
-                                data-i18n-attr="aria-label:player.more,title:player.more"
-                                aria-label="More controls" title="More controls">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                <circle cx="12" cy="5" r="1.6"/>
-                                <circle cx="12" cy="12" r="1.6"/>
-                                <circle cx="12" cy="19" r="1.6"/>
-                            </svg>
-                        </button>
-                        <ul id="player-overflow-menu" class="overflow-menu overflow-menu--up" role="menu" hidden></ul>
-                    </div>
-                    <!-- Divider before "Save clip" - visually separates player
-                         settings from the "hand the finished clip over" action. -->
-                    <span class="player-bar-divider" aria-hidden="true"></span>
-                    <!-- The "Export" button - always present, enabled once a
-                         trip is loaded. Hotkey E. Opens the modal with a range of
-                         "whole trip" by default; if a chart-zoom selection
-                         exists, that selection is substituted automatically. -->
-                    <button id="player-export" class="player-export-btn" type="button" disabled aria-keyshortcuts="E"
-                            data-i18n-attr="title:player.export.tooltip,aria-label:player.export.tooltip"
-                            title="Save clip · E" aria-label="Save clip · E">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-                        <span class="player-export-btn__label" data-i18n="player.export.label">Save clip</span>
-                    </button>
                 </div>
             </div>
             <!-- Export panel: a side drawer on desktop, an in-flow section on phones

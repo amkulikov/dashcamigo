@@ -51,11 +51,7 @@ function isEditableTarget(target: HTMLElement | null): boolean {
     return false;
 }
 
-/** True if Space/Enter would natively activate the focused element (button,
- *  link, summary, or an ARIA control). Used to bail out of the global Space
- *  handler so a focused toolbar button is not toggled twice (native click +
- *  play/pause). Letter hotkeys are NOT gated by this - they keep working with
- *  a button focused. */
+/** Controls outside the player toolbar keep their own Space/Enter activation. */
 function isNativeActivationTarget(target: EventTarget | null): boolean {
     if (!(target instanceof HTMLElement)) return false;
     const tag = target.tagName;
@@ -63,6 +59,13 @@ function isNativeActivationTarget(target: EventTarget | null): boolean {
     if (tag === "A" && target.hasAttribute("href")) return true;
     const role = target.getAttribute("role");
     return role === "button" || role === "menuitem" || role === "tab" || role === "link";
+}
+
+function isPlayerToolbarButton(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLButtonElement) || !target.matches("#player-bar button")) return false;
+    if (target.closest('[role="menu"]')) return false;
+    const popup = target.getAttribute("aria-haspopup");
+    return popup === null || popup === "false";
 }
 
 export function initPlayerHotkeys(deps: HotkeyDeps): void {
@@ -85,6 +88,8 @@ export function initPlayerHotkeys(deps: HotkeyDeps): void {
     });
 
     document.addEventListener("keydown", (e) => {
+        if (e.defaultPrevented) return;
+
         // Escape closes the speed menu ALWAYS, before any other filter - even
         // if focus moved into a speed-menu li, Escape must close it.
         if (e.key === "Escape" && deps.isSpeedMenuOpen()) {
@@ -103,10 +108,13 @@ export function initPlayerHotkeys(deps: HotkeyDeps): void {
         // Skip when focus is in an editable control.
         if (e.target instanceof HTMLElement && isEditableTarget(e.target)) return;
 
-        // Space/Enter on a focused button/link natively activate it. Bail so we
-        // don't double-fire (native click + the global play/pause below). Only
-        // Space/Enter are gated; letter hotkeys still work with a button focused.
-        if ((e.code === "Space" || e.key === "Enter") && isNativeActivationTarget(e.target)) return;
+        // Space stays a playback shortcut after clicking a toolbar action.
+        // Enter still activates that focused action; menus keep both keys.
+        if (
+            isNativeActivationTarget(e.target) &&
+            (e.key === "Enter" || (e.code === "Space" && !isPlayerToolbarButton(e.target)))
+        )
+            return;
 
         // Skip system/browser combos - Cmd+R, Ctrl+T, etc. Allow Shift through.
         if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -126,6 +134,7 @@ export function initPlayerHotkeys(deps: HotkeyDeps): void {
         if (code === "Space" || code === "KeyK") {
             if (!hasActive) return;
             e.preventDefault();
+            if (e.repeat) return;
             if (dom.player.paused) {
                 // Same restart-at-trip-end branch as the play button above -
                 // without it Space at trip end replays only the LAST file

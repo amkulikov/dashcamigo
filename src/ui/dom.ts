@@ -316,6 +316,8 @@ export const dom = {
     playerWrap: $id<HTMLElement>("player-wrap"),
     playerBar: {
         play: $id<HTMLButtonElement>("player-play"),
+        seekBack: $id<HTMLButtonElement>("player-seek-back"),
+        seekFwd: $id<HTMLButtonElement>("player-seek-fwd"),
         stepBack: $id<HTMLButtonElement>("player-step-back"),
         stepFwd: $id<HTMLButtonElement>("player-step-fwd"),
         mute: $id<HTMLButtonElement>("player-mute"),

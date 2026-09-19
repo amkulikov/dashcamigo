@@ -977,7 +977,7 @@ body.has-expanded-player .viewer {
 .player-wrap.player-expanded {
     --fullscreen-inset: var(--dc-space-4);
     --fullscreen-bottom: max(var(--fullscreen-inset), env(safe-area-inset-bottom, 0px));
-    --fullscreen-bar-h: calc(var(--player-transport-size) + 12px + 2px);
+    --fullscreen-bar-h: var(--player-controls-measured-h, calc(var(--player-transport-size) + 12px + 2px));
     --fullscreen-side: max(var(--fullscreen-inset), calc((100% - 1120px) / 2));
     position: fixed;
     inset: 0;
@@ -1048,7 +1048,7 @@ body.has-expanded-player .viewer {
 }
 .player-wrap.player-expanded .player-bar {
     bottom: var(--fullscreen-bottom);
-    min-height: var(--fullscreen-bar-h);
+    min-height: calc(var(--player-transport-size) + 12px + 2px);
     padding: 6px var(--dc-space-3);
     border: 1px solid var(--border);
     border-radius: 0 0 var(--dc-radius-lg) var(--dc-radius-lg);
@@ -1177,7 +1177,7 @@ body.has-expanded-player .viewer {
         flex: 0 0 auto;
         min-height: 100%;
         --chart-height: 166px;
-        --mobile-bar-h: calc(60px + env(safe-area-inset-bottom, 0px));
+        --mobile-bar-h: var(--player-controls-measured-h, calc(60px + env(safe-area-inset-bottom, 0px)));
     }
     /* Video-frame on mobile: 16:9, ALWAYS fully visible in the first viewport
        screen. Two caps via aspect-ratio:
@@ -1315,7 +1315,7 @@ body.has-expanded-player .viewer {
     }
     .player-wrap.player-expanded {
         --fullscreen-inset: var(--dc-space-2);
-        --fullscreen-bar-h: 60px;
+        --fullscreen-bar-h: var(--player-controls-measured-h, 60px);
         --fullscreen-side: var(--fullscreen-inset);
     }
     .player-wrap {

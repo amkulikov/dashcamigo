@@ -78,6 +78,7 @@ import { setDrawerOpen } from "./mobile-drawer.js";
 import { captureCurrentFrame, syncCaptureButton } from "./player-capture.js";
 import { hideLoadingOverlay, showLoadingOverlay } from "./player-loading-overlay.js";
 import { initFrameStep } from "./player-frame-step.js";
+import { initSeekButtons } from "./player-seek-buttons.js";
 import { channelPresentedFrame, initPlayerFrameTimes } from "./player-frame-time.js";
 import { initPlayerHotkeys } from "./player-hotkeys.js";
 import { initPlayerScrubber, updatePlayerProgressUi } from "./player-scrubber.js";
@@ -2182,7 +2183,7 @@ export function syncPlayButton(): void {
     dom.playerBar.play.dataset.paused = paused ? "true" : "false";
     const label = paused ? t("player.play") : t("player.pause");
     dom.playerBar.play.setAttribute("aria-label", label);
-    dom.playerBar.play.title = label;
+    dom.playerBar.play.title = paused ? t("player.playTooltip") : t("player.pauseTooltip");
 }
 
 /**
@@ -2494,6 +2495,7 @@ export function initPlayer(): void {
     // Before initPlayerHotkeys: the , / . hotkeys call stepFrame, which is a
     // no-op until initFrameStep arms it with these deps.
     initFrameStep({ getTripCurrentTime, seekTripTime });
+    initSeekButtons({ getTripCurrentTime, seekTripTime });
 
     initPlayerHotkeys({
         getTripCurrentTime,

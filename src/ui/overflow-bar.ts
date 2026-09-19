@@ -48,6 +48,9 @@ export interface OverflowBarOptions {
     /** Container with flex layout, flex-wrap: nowrap. */
     container: HTMLElement;
 
+    /** Other flex groups that share this container's overflow button and menu. */
+    additionalContainers?: HTMLElement[];
+
     /** Kebab button (always last in the DOM after items). Hides itself if all
      *  items fit. */
     overflowButton: HTMLButtonElement;
@@ -77,6 +80,7 @@ export interface OverflowBarHandle {
  *  the ResizeObserver recomputes on container width changes by itself. */
 export function initOverflowBar(opts: OverflowBarOptions): OverflowBarHandle {
     const { container, overflowButton, overflowMenu, items } = opts;
+    const containers = [...new Set([container, ...(opts.additionalContainers ?? [])])];
 
     // Sort once: the priority list is fixed. Hide by descending priority
     // (higher priority → less important → hidden first).
@@ -219,9 +223,9 @@ export function initOverflowBar(opts: OverflowBarOptions): OverflowBarHandle {
      *  position:absolute. Rect-based works under any overflow and is more
      *  precise: we look at where the last visible child physically ends and
      *  compare it with the right edge of the parent's content area. */
-    function isOverflowing(): boolean {
-        const containerRect = container.getBoundingClientRect();
-        const cs = getComputedStyle(container);
+    function isOverflowing(group: HTMLElement): boolean {
+        const containerRect = group.getBoundingClientRect();
+        const cs = getComputedStyle(group);
         const padR = Number.parseFloat(cs.paddingRight) || 0;
         // Anchor the right edge to the VISUAL VIEWPORT, not the container's own
         // rect. On mobile a flex container with nowrap + flex-shrink:0 children
@@ -240,7 +244,7 @@ export function initOverflowBar(opts: OverflowBarOptions): OverflowBarHandle {
         const limit = Math.min(containerRect.right, viewportRight) - padR;
 
         let maxRight = Number.NEGATIVE_INFINITY;
-        for (const child of container.children) {
+        for (const child of group.children) {
             const ce = child as HTMLElement;
             if (ce.hidden) continue;
             if (ce.dataset.overflowHidden === "true") continue;
@@ -264,7 +268,7 @@ export function initOverflowBar(opts: OverflowBarOptions): OverflowBarHandle {
         try {
             measureInner(opts?.forceRender ?? false);
         } finally {
-            mo.observe(container, MO_OPTS);
+            for (const group of containers) mo.observe(group, MO_OPTS);
         }
         // Measuring temporarily hides the trigger, which clears browser focus.
         if (wasOverflowFocused && !overflowButton.hidden) overflowButton.focus({ preventScroll: true });
@@ -279,29 +283,13 @@ export function initOverflowBar(opts: OverflowBarOptions): OverflowBarHandle {
         // calc - we'll show it again below only if anything was hidden.
         overflowButton.hidden = true;
 
-        // Hide by priority until the content fits. After each hide we
-        // recompute geometry - flex distribution changes, and the children's
-        // right edges become different.
-        for (const it of dropOrder) {
-            if (!isOverflowing()) break;
-            const avail = it.isAvailable?.() ?? !it.el.hidden;
-            if (!avail) continue;
-            it.el.dataset.overflowHidden = "true";
-        }
+        collapseOverflow();
 
         const hidden = getHiddenItems();
         overflowButton.hidden = hidden.length === 0;
         // Final check: after showing the kebab the bar can become overflowing
         // too. If so - hide more items until it fits together with the kebab.
-        if (!overflowButton.hidden) {
-            for (const it of dropOrder) {
-                if (!isOverflowing()) break;
-                if (it.el.dataset.overflowHidden === "true") continue;
-                const avail = it.isAvailable?.() ?? !it.el.hidden;
-                if (!avail) continue;
-                it.el.dataset.overflowHidden = "true";
-            }
-        }
+        if (!overflowButton.hidden) collapseOverflow();
 
         // Recompute the hidden set AFTER the final-check loop: that loop can
         // drop more items than the `hidden` snapshot above captured (e.g. the
@@ -310,13 +298,10 @@ export function initOverflowBar(opts: OverflowBarOptions): OverflowBarHandle {
         // such an item hidden in the bar yet absent from the menu - unreachable.
         const menuItems = getHiddenItems();
 
-        // Re-render the menu when it is open (so live changes are visible)
-        // or when the hidden-set signature changed (so the next open shows
-        // current content). forceRender=true is used by the kebab click
-        // path to always refresh, even on a stable signature (mute/active
-        // toggles can be invisible to the signature but matter inside).
+        // Preserve focused menu controls through resize measurements. Opening
+        // refreshes labels and state even when the hidden set has not changed.
         const sig = hiddenSignature();
-        if (forceRender || menuOpen || sig !== lastHiddenSig) {
+        if (forceRender || sig !== lastHiddenSig) {
             renderMenu(menuItems);
             lastHiddenSig = sig;
         }
@@ -328,12 +313,29 @@ export function initOverflowBar(opts: OverflowBarOptions): OverflowBarHandle {
         }
     }
 
+    function collapseOverflow(): void {
+        while (true) {
+            const overflowing = containers.filter(isOverflowing);
+            if (overflowing.length === 0) return;
+            // Hiding a control in another group cannot resolve this collision.
+            // Items can move between groups at layout breakpoints.
+            const next = dropOrder.find(
+                (item) =>
+                    item.el.dataset.overflowHidden !== "true" &&
+                    (item.isAvailable?.() ?? !item.el.hidden) &&
+                    overflowing.some((group) => group.contains(item.el)),
+            );
+            if (!next) return;
+            next.el.dataset.overflowHidden = "true";
+        }
+    }
+
     const ro = new ResizeObserver(() => {
         // requestAnimationFrame - smooth out the resize spam on sidebar
         // drag-resize: measure once per frame, not per pixel.
         requestAnimationFrame(() => measure());
     });
-    ro.observe(container);
+    for (const group of containers) ro.observe(group);
 
     // Mutation observer on children - detects external visibility changes
     // (hidden/disabled attribute) after initial measure. E.g. player-view-mode
@@ -358,7 +360,7 @@ export function initOverflowBar(opts: OverflowBarOptions): OverflowBarHandle {
         // reflow (~60/sec), which a single attribute mutation does not produce.
         measure();
     });
-    mo.observe(container, MO_OPTS);
+    for (const group of containers) mo.observe(group, MO_OPTS);
 
     overflowButton.addEventListener("click", (e) => {
         e.stopPropagation();

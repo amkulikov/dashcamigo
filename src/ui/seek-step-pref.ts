@@ -2,8 +2,7 @@
 //
 // Two values: plain Arrow (default 5s) and Shift+Arrow (default 30s).
 // Read by src/ui/player-hotkeys.ts on every keydown, written by the settings
-// modal. No subscribers - hotkeys read fresh each time, change applies on
-// the next keypress without any wiring.
+// modal. Toolbar labels subscribe to updates; hotkeys read on every keypress.
 
 const STORAGE_KEY_ARROW = "dashcamigo:hotkeys:seekStepSec";
 const STORAGE_KEY_SHIFT_ARROW = "dashcamigo:hotkeys:seekStepShiftSec";
@@ -50,6 +49,7 @@ export function getSeekStepShiftSec(): number {
 
 export function setSeekStepSec(sec: number): void {
     writePositive(STORAGE_KEY_ARROW, sec);
+    document.dispatchEvent(new Event("seekstepchange"));
 }
 
 export function setSeekStepShiftSec(sec: number): void {

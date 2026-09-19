@@ -1,34 +1,63 @@
-// Overflow-bar for the player-bar. On a wide desktop the kebab is hidden - all
-// controls fit in one row. On a narrow one (mobile or an open map) the secondary
-// controls move into the kebab so play, the current time/speed readout and the
-// Export button stay visible.
-//
-// Mobile contract (see player-bar.css MOBILE PLAYER BAR comment): play +
-// current-time + speed metric + playback-speed + view-menu + Export + kebab stay
-// inline; help/capture/loop/view-mode/mute/map collapse into the kebab
-// highest-priority-first. Export is priority 1 (last to leave), and the narrow-bar
-// gap shrink in player-bar.css keeps the mandatory floor under the viewport, so
-// Export is never the control forced out - the bug where it disappeared into the
-// kebab on narrow portrait. Map is a simple one-shot click, so the
-// default kebab row (el.click()) drives them - no popover-anchored control is
-// collapsed, so none needs a custom inline renderer.
-//
-// Item visibility in the bar already depends on state (view-mode hidden if only
-// 1 channel; map shown only on mobile via CSS). overflow-bar respects this via
-// isAvailable - an unavailable item enters neither overflow nor the kebab menu.
+// Secondary player controls share one overflow row. The transport group stays
+// visible and gets its own row when the player is narrow.
 
 import { t } from "../i18n/index.js";
 import { dom } from "./dom.js";
-import { isMobileLayout } from "./media-queries.js";
+import { isMobileLayout, MOBILE_LAYOUT_QUERY } from "./media-queries.js";
 import { type OverflowableItem, initOverflowBar } from "./overflow-bar.js";
 import { state } from "./state.js";
 import { applyVolumeLevel } from "./player-volume.js";
+import { initPlayerPopoverPosition } from "./player-popover.js";
 
 export function initPlayerBarOverflow() {
-    const bar = document.getElementById("player-bar");
+    const bar = document.getElementById("player-bar-secondary");
+    const playerBar = document.getElementById("player-bar");
     const button = document.getElementById("player-overflow") as HTMLButtonElement | null;
     const menu = document.getElementById("player-overflow-menu") as HTMLUListElement | null;
-    if (!bar || !button || !menu) return;
+    if (!bar || !playerBar || !button || !menu) return;
+
+    const layout = playerBar.querySelector<HTMLElement>(".player-bar-layout");
+    const transport = playerBar.querySelector<HTMLElement>(".player-transport");
+    const info = playerBar.querySelector<HTMLElement>(".player-info");
+    const video = dom.playerWrap.querySelector<HTMLElement>(".video-frame");
+    const syncLayout = (): void => {
+        dom.playerWrap.style.setProperty("--player-controls-measured-h", `${playerBar.offsetHeight}px`);
+        if (!layout || !transport || !info || !video) return;
+        const bounds = layout.getBoundingClientRect();
+        if (!bounds.width) return;
+        const videoBounds = video.getBoundingClientRect();
+        const center = videoBounds.width > 0 ? videoBounds.x + videoBounds.width / 2 : bounds.x + bounds.width / 2;
+        const desiredLeft = Math.max(0, center - bounds.x - transport.offsetWidth / 2);
+        const gap = Number.parseFloat(getComputedStyle(layout).columnGap) || 0;
+        const requiredInfoSpace = (): number => {
+            // Mute and loop can overflow; they must not move the center when
+            // an overflow pass temporarily restores every button.
+            const fixedItems = Array.from(info.children).filter(
+                (child) => child !== muteWrap && child !== loop && (child as HTMLElement).offsetWidth > 0,
+            );
+            return (
+                fixedItems.reduce((total, child) => total + (child as HTMLElement).offsetWidth, 0) +
+                gap * fixedItems.length
+            );
+        };
+        const isStacked = isMobileLayout();
+        info.dataset.compactTime = "false";
+        info.dataset.compactTime = String(!isStacked && desiredLeft < requiredInfoSpace());
+        const left = isStacked ? desiredLeft : Math.max(desiredLeft, requiredInfoSpace());
+        layout.style.setProperty("--transport-left", `${left}px`);
+        layout.style.setProperty("--transport-left-space", `${Math.max(0, left - gap)}px`);
+        layout.dataset.transportStacked = String(isStacked);
+    };
+    const sizeObserver = new ResizeObserver(syncLayout);
+    sizeObserver.observe(playerBar);
+    if (video) sizeObserver.observe(video);
+    if (transport) sizeObserver.observe(transport);
+    if (info) {
+        sizeObserver.observe(info);
+        // Intrinsic labels can grow inside a fixed-width grid column.
+        for (const child of info.children) sizeObserver.observe(child);
+    }
+    document.addEventListener("playerexpansionchange", syncLayout);
 
     const muteWrap = document.querySelector<HTMLElement>(".player-mute-wrap");
     const mute = document.getElementById("player-mute") as HTMLButtonElement | null;
@@ -41,6 +70,29 @@ export function initPlayerBarOverflow() {
     const map = document.getElementById("player-map") as HTMLButtonElement | null;
     const gpsSync = document.getElementById("gps-sync-pill-mobile") as HTMLButtonElement | null;
     const exportBtn = document.getElementById("player-export") as HTMLButtonElement | null;
+    const mobileLayout = window.matchMedia(MOBILE_LAYOUT_QUERY);
+    const syncControlGroups = (): void => {
+        if (!info || !muteWrap || !loop) return;
+        const parent = mobileLayout.matches ? bar : info;
+        if (muteWrap.parentElement === parent && loop.parentElement === parent) return;
+        muteWrap.dataset.overflowHidden = "false";
+        loop.dataset.overflowHidden = "false";
+        if (mobileLayout.matches) {
+            bar.querySelector(".player-spacer")?.after(muteWrap, loop);
+        } else {
+            info.prepend(muteWrap);
+            info.append(loop);
+        }
+    };
+    syncControlGroups();
+    if (muteWrap) {
+        const muteVisibility = new MutationObserver(() => {
+            if (muteWrap.dataset.overflowHidden === "true" && !dom.playerBar.volumePopover.hidden) {
+                dom.playerBar.volumePopover.hidden = true;
+            }
+        });
+        muteVisibility.observe(muteWrap, { attributes: true, attributeFilter: ["data-overflow-hidden"] });
+    }
     const items: OverflowableItem[] = [];
 
     // Priorities: HIGH priority = drop FIRST (see overflow-bar.ts header). The
@@ -158,11 +210,18 @@ export function initPlayerBarOverflow() {
         });
     }
 
+    initPlayerPopoverPosition(playerBar, menu);
     const handle = initOverflowBar({
         container: bar,
+        additionalContainers: info ? [info] : [],
         overflowButton: button,
         overflowMenu: menu,
         items,
+    });
+    mobileLayout.addEventListener("change", () => {
+        syncControlGroups();
+        syncLayout();
+        handle.remeasure({ immediate: true });
     });
     // Restore toolbar visibility before fullscreen returns keyboard focus.
     document.addEventListener("playerexpansionchange", () => handle.remeasure({ immediate: true }));

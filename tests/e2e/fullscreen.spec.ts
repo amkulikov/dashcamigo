@@ -63,7 +63,18 @@ async function activateFullscreenEntry(page: Page, touch = false): Promise<void>
 
 async function moveAwayFromControls(page: Page): Promise<void> {
     const frame = await boxOf(page, ".video-frame");
-    await page.mouse.move(frame.x + frame.width / 2, frame.y + frame.height / 2);
+    const timeline = await boxOf(page, "#player-chart");
+    // In landscape, stacked controls can cover the middle of the video.
+    const exposedBottom = Math.min(frame.y + frame.height, timeline.y);
+    expect(exposedBottom).toBeGreaterThan(frame.y);
+    const x = frame.x + frame.width / 2;
+    const y = (frame.y + exposedBottom) / 2;
+    await page.mouse.move(x, y);
+    await expect
+        .poll(() =>
+            page.evaluate(({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest(".video-frame")), { x, y }),
+        )
+        .toBe(true);
 }
 
 test.beforeEach(async ({ page }) => {

@@ -210,12 +210,14 @@
    targets and bottom-anchored sheet read better than a popover.
    ========================================================================== */
 @media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {
+    .player-bar .overflow-wrap {
+        position: static;
+    }
     #player-overflow-menu.overflow-menu {
-        /* Anchored to the bottom of the window, full width. position:fixed
-           pulls the sheet out from under player-bar absolute-positioned
-           contexts. */
-        position: fixed;
-        bottom: 0;
+        /* The sheet sits above the whole toolbar, leaving transport and the
+           toggle reachable while it is open. */
+        position: absolute;
+        bottom: calc(100% + 6px);
         left: 0;
         right: 0;
         top: auto;
@@ -223,7 +225,7 @@
         /* left:0 + right:0 already span the viewport; width:100vw was redundant
            (and ignores the side insets below). */
         min-width: 0;
-        max-height: 70vh;
+        max-height: calc(100dvh - var(--mobile-bar-h, 60px) - var(--dc-topbar-h-mobile) - 12px);
         overflow-y: auto;
         /* Keep a flick that reaches the sheet's scroll end from chaining to the
            player/page behind it. */
@@ -262,7 +264,7 @@
 }
 @keyframes mobile-sheet-up {
     from {
-        transform: translateY(100%);
+        transform: translateY(8px);
         opacity: 0;
     }
     to {
