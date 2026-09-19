@@ -25,7 +25,7 @@ import { escapeHtml } from "../escape.js";
 import { getCurrentLang, getDateLocale, t } from "../i18n/index.js";
 import { createLogger } from "../log.js";
 import { emitLifecycle } from "../perf.js";
-import { interpolatePosition, isValidGpsFix } from "../parser.js";
+import { isValidGpsFix } from "../parser.js";
 import { captureSentryMessage } from "../sentry.js";
 import {
     COARSE_POINTER_QUERY,
@@ -88,6 +88,43 @@ import {
 } from "./osm-fallback-style.js";
 import { buildMercatorCumulativeDistances, buildSpeedGradient } from "./speed-gradient.js";
 import { addSpeedTrack, removeSpeedTrack, speedTrackOuterWidth } from "./map-track.js";
+import { buildLucideIcon } from "./icons.js";
+import { mapPositionAt } from "./map-position.js";
+
+let mapGpsStatus: HTMLDivElement | null = null;
+let miniMapGpsStatus: HTMLDivElement | null = null;
+let miniStartMarker: maplibregl.Marker | null = null;
+let miniEndMarker: maplibregl.Marker | null = null;
+
+function buildGpsStatusBadge(container: HTMLElement): HTMLDivElement {
+    const badge = document.createElement("div");
+    badge.className = "map-no-gps";
+    badge.hidden = true;
+    badge.title = t("map.noGps");
+    badge.setAttribute("role", "img");
+    badge.setAttribute("aria-label", badge.title);
+    const icon = buildLucideIcon(
+        [
+            "M12 21c-4-4.5-6-7.7-6-10.5a6 6 0 1 1 12 0C18 13.3 16 16.5 12 21z",
+            "M12 8.5a2 2 0 1 0 0 4a2 2 0 1 0 0-4",
+            "M4 4l16 16",
+            "M4 4l16 16",
+        ],
+        22,
+    );
+    icon.setAttribute("aria-hidden", "true");
+    badge.appendChild(icon);
+    container.appendChild(badge);
+    return badge;
+}
+
+function syncGpsStatus(hasPosition: boolean): void {
+    for (const badge of [mapGpsStatus, miniMapGpsStatus]) {
+        if (badge && badge.hidden !== hasPosition) badge.hidden = hasPosition;
+    }
+    if (state.marker) setMarkerHidden(state.marker, !hasPosition);
+    if (state.miniMapMarker) setMarkerHidden(state.miniMapMarker, !hasPosition);
+}
 
 // --- lazy maplibre-gl loading (T9) ---
 //
@@ -747,6 +784,7 @@ export function ensureMap(): maplibregl.Map | null {
         return null;
     }
     state.map = map;
+    mapGpsStatus = buildGpsStatusBadge(dom.mapWrap);
     chaseRenderCadence = installMapRenderCadence(map, () => {
         const frame = chaseVideoFrame(performance.now());
         if (
@@ -999,6 +1037,7 @@ export function ensureMiniMap(): maplibregl.Map | null {
         return null;
     }
     state.miniMap = mini;
+    miniMapGpsStatus = buildGpsStatusBadge(dom.miniMap);
     // Reading computed width after marker writes forces style work on every
     // playback frame. Map resizes keep the cached width current off that path.
     mini.on("resize", refreshMiniMapWidth);
@@ -1077,45 +1116,45 @@ function refreshLiveMapMarkerAppearance(): void {
     }
 }
 
-/**
- * SVG circle with a letter - start ('A', green) or end ('B', red) marker.
- * Makes direction of travel obvious on loop routes.
- */
 function buildEndpointMarkerElement(kind: "start" | "end"): HTMLDivElement {
     const wrap = document.createElement("div");
     wrap.className = "endpoint-marker-wrap";
+    wrap.dataset.endpoint = kind;
+    wrap.title = t(kind === "start" ? "map.tripStart" : "map.tripEnd");
+    wrap.setAttribute("role", "img");
+    wrap.setAttribute("aria-label", wrap.title);
     const tc = themeColors();
     const isStart = kind === "start";
     const fill = isStart ? tc.markerStart : tc.markerEnd;
     const stroke = viewerMapColors().markerStroke;
-    const letter = isStart ? "A" : "B";
+    const poleX = isStart ? 27 : 1;
+    const flag = isStart
+        ? `<path d="M27 3H3L8 11L3 19H27Z" fill="${fill}" stroke="${stroke}"/>`
+        : `<path d="M1 3H25V19H1Z" fill="${stroke}"/>
+           <path d="M1 3h6v4H1zM13 3h6v4h-6zM7 7h6v4H7zM19 7h6v4h-6zM1 11h6v4H1zM13 11h6v4h-6zM7 15h6v4H7zM19 15h6v4h-6z" fill="${fill}"/>
+           <path d="M1 3H25V19H1Z" fill="none" stroke="${stroke}"/>`;
     wrap.innerHTML = `
-        <svg viewBox="-12 -12 24 24" width="22" height="22">
-            <circle cx="0" cy="0" r="10" fill="${fill}" stroke="${stroke}" stroke-width="2"/>
-            <text x="0" y="1" text-anchor="middle" dominant-baseline="middle"
-                  font-size="11" font-weight="700" fill="${stroke}" font-family="Inter, system-ui, sans-serif">${letter}</text>
+        <svg viewBox="0 0 28 32" width="28" height="32" aria-hidden="true" stroke-linejoin="round">
+            <path d="M${poleX} 2V31" stroke="${stroke}" stroke-width="3" stroke-linecap="round"/>
+            ${flag}
         </svg>
     `;
     return wrap;
 }
 
-/**
- * "Loop" heuristic: start and end are within 30% of the bounding-box diagonal.
- * On a straight trip A/B markers add no information (direction is unambiguous
- * from the speed gradient and the car marker); on a loop they pin down which
- * corner is the start. Threshold chosen empirically - generous enough to catch
- * city laps that return near the start, tight enough to skip near-straight
- * commutes that just happen to share a parking lot at both ends.
- */
-function isLoopRoute(start: LngLatTuple, end: LngLatTuple, bounds: maplibregl.LngLatBounds): boolean {
-    const dLon = start[0] - end[0];
-    const dLat = start[1] - end[1];
-    const startEndDist = Math.sqrt(dLon * dLon + dLat * dLat);
-    const ne = bounds.getNorthEast();
-    const sw = bounds.getSouthWest();
-    const diag = Math.sqrt((ne.lng - sw.lng) ** 2 + (ne.lat - sw.lat) ** 2);
-    if (diag === 0) return false;
-    return startEndDist / diag < 0.3;
+function addEndpointMarker(map: maplibregl.Map, kind: "start" | "end", coords: LngLatTuple): maplibregl.Marker {
+    // Opposite flag directions keep both endpoints legible when the trip returns to its start.
+    const isStart = kind === "start";
+    return new mlg!.Marker({
+        element: buildEndpointMarkerElement(kind),
+        anchor: isStart ? "bottom-right" : "bottom-left",
+        offset: [isStart ? 1 : -1, 1],
+        rotationAlignment: "viewport",
+        pitchAlignment: "viewport",
+        subpixelPositioning: true,
+    })
+        .setLngLat(coords)
+        .addTo(map);
 }
 
 /** GPS and accelerometer panels stay usable even when WebGL is unavailable. */
@@ -1223,6 +1262,7 @@ export function refreshMap(trip: Trip | null, preserveCamera = false): void {
         }
     }
     if (dedupedRecs.length === 0) {
+        syncGpsStatus(true);
         renderedMapTrack = null;
         // No GPS - clear mini-map too (otherwise the previous trip's track stays).
         // hasTrack=false hides both maps and the icon via applyMapLayout.
@@ -1305,35 +1345,13 @@ export function refreshMap(trip: Trip | null, preserveCamera = false): void {
     // Fit camera to track bounding box.
     const bounds = coords.reduce((acc, c) => acc.extend(c), new mlg!.LngLatBounds(coords[0]!, coords[0]!));
 
-    // Start ('A') and end ('B') anchors only make sense on loop routes - when
-    // start sits near end, the user can otherwise mistake direction-of-travel.
-    // On a straight A-to-B trip the start marker is always at the bbox corner
-    // and the end at the opposite, no ambiguity - so we drop both and let the
-    // car marker + speed-gradient + trail veil tell the story.
-    if (isLoopRoute(coords[0]!, coords[coords.length - 1]!, bounds)) {
-        // subpixelPositioning: without it Marker._update rounds the position on
-        // every moveend, and the per-frame follow jumpTo fires moveend per frame
-        // - the pins would jitter by up to 1 px against the gliding basemap.
-        state.startMarker = new mlg!.Marker({
-            element: buildEndpointMarkerElement("start"),
-            anchor: "center",
-            subpixelPositioning: true,
-        })
-            .setLngLat(coords[0]!)
-            .addTo(map);
-
-        state.endMarker = new mlg!.Marker({
-            element: buildEndpointMarkerElement("end"),
-            anchor: "center",
-            subpixelPositioning: true,
-        })
-            .setLngLat(coords[coords.length - 1]!)
-            .addTo(map);
-    }
+    state.startMarker = addEndpointMarker(map, "start", coords[0]!);
+    state.endMarker = addEndpointMarker(map, "end", coords[coords.length - 1]!);
     if (!preserveCamera) map.fitBounds(bounds, { padding: 40, animate: false });
 
     // Update mini-map with the already-prepared coords and gradient.
     refreshMiniMap({ coords, gradient });
+    syncGpsStatus(currentInterpolatedPosition() !== null);
 
     // UX-19: event dots on the large map only - mini-map is too small to read them.
     refreshEventsLayer(map, trip);
@@ -1489,14 +1507,18 @@ function refreshMiniMap(data: MiniMapData | null): void {
     // No WebGL: no mini-map instance. Nothing to draw - the big-map slot already
     // shows the "map unavailable" notice (see applyMapLayout).
     if (!mini) return;
-    if (!state.miniMapReady) return;
-
-    // Clear previous track.
-    removeSpeedTrack(mini, TRIP_SOURCE_ID);
+    // DOM markers survive style changes, including a switch to a trip without GPS.
     if (state.miniMapMarker) {
         state.miniMapMarker.remove();
         state.miniMapMarker = null;
     }
+    miniStartMarker?.remove();
+    miniEndMarker?.remove();
+    miniStartMarker = null;
+    miniEndMarker = null;
+    if (!state.miniMapReady) return;
+
+    removeSpeedTrack(mini, TRIP_SOURCE_ID);
 
     if (!data || data.coords.length === 0) return;
     const { coords } = data;
@@ -1511,6 +1533,9 @@ function refreshMiniMap(data: MiniMapData | null): void {
     })
         .setLngLat(coords[0]!)
         .addTo(mini);
+    miniStartMarker = addEndpointMarker(mini, "start", coords[0]!);
+    miniEndMarker = addEndpointMarker(mini, "end", coords[coords.length - 1]!);
+    syncGpsStatus(currentInterpolatedPosition() !== null);
 
     // Initial view at the first point; rAF loop will center on current position
     // at the first tick. Invalidate the mini lane's applied-target cache: this
@@ -1555,7 +1580,8 @@ function setMarkerPitch(marker: maplibregl.Marker | null, pitchDeg: number): voi
 function setMarkerHidden(m: maplibregl.Marker, hidden: boolean): void {
     const el = m.getElement();
     if (!el) return;
-    el.style.visibility = hidden ? "hidden" : "";
+    const visibility = hidden ? "hidden" : "";
+    if (el.style.visibility !== visibility) el.style.visibility = visibility;
 }
 
 /**
@@ -1703,7 +1729,7 @@ function currentInterpolatedPosition(): {
 } | null {
     const af = activeFrame();
     if (!af || af.trip.records.length === 0) return null;
-    return interpolatePosition(af.trip.records, currentRealUtc(af.frame));
+    return mapPositionAt(af.trip.records, currentRealUtc(af.frame));
 }
 
 export function syncMapFollowButton(): void {
@@ -2675,18 +2701,15 @@ export function startMarkerLoop(opts: { onAfterTick?: () => void } = {}): void {
         const frame = trip.frames[state.active.frame];
         if (!frame) return false;
         const targetUnix = currentRealUtc(frame);
-        const pos = interpolatePosition(trip.records, targetUnix);
+        const pos = mapPositionAt(trip.records, targetUnix);
+        syncGpsStatus(pos !== null);
         if (!pos) {
             // GPS window ended before video (Vantrue drops GPS on long stops;
             // GoPro cuts the gpmd track in the last second). Hide both markers
             // so they don't freeze at the last known point. Player metrics are
             // hidden in sync via the timeupdate handler.
-            setMarkerHidden(state.marker, true);
-            if (state.miniMapMarker) setMarkerHidden(state.miniMapMarker, true);
             return false;
         }
-        setMarkerHidden(state.marker, false);
-        if (state.miniMapMarker) setMarkerHidden(state.miniMapMarker, false);
 
         let cameraSettling = false;
 

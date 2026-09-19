@@ -538,6 +538,9 @@ export type I18nKey =
     // Chase-mode sub-controls: camera tilt slider + speed-adaptive-zoom toggle.
     | "map.chase.tilt"
     | "map.chase.adaptiveZoom"
+    | "map.noGps"
+    | "map.tripStart"
+    | "map.tripEnd"
     | "map.recenter"
     | "map.collapse"
     // Gear button on the big map opening the map-preferences popover; the

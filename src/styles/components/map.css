@@ -22,6 +22,36 @@
     height: 100%;
 }
 
+.map-no-gps {
+    position: absolute;
+    top: 8px;
+    right: calc(var(--dc-iconbtn) + 16px);
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--dc-iconbtn);
+    height: var(--dc-iconbtn);
+    border: 1px solid var(--border);
+    border-radius: var(--dc-radius-sm);
+    background: var(--bg-elev);
+    color: var(--fg-dim);
+    box-shadow: var(--dc-shadow-card);
+    cursor: help;
+}
+.map-no-gps[hidden] {
+    display: none;
+}
+.map-no-gps path:nth-last-child(2) {
+    stroke: var(--bg-elev);
+    stroke-width: 4;
+}
+.mini-map .map-no-gps {
+    top: 6px;
+    left: 6px;
+    right: auto;
+}
+
 /* Cooperative-gestures hint overlay ("move the map with two fingers"). MapLibre
    renders it in its default Helvetica; align the font with the rest of the UI.
    Touch-only here, so it never appears on desktop. The dark scrim + white text
@@ -764,6 +794,9 @@ body.map-unavailable #player-map {
    floor, and re-derive the native group's top offset from the larger collapse
    button (40 + 8 inset + 8 gap). The chase-tilt thumb grows for an easier grab. */
 @media (pointer: coarse) {
+    .map-wrap > .map-no-gps {
+        right: calc(var(--dc-iconbtn-touch) + 16px);
+    }
     .map-control-btn,
     .map-collapse-btn,
     /* The tile-error close (×) - Retry only needs a taller min-height (below). */
@@ -927,10 +960,18 @@ body.map-unavailable #player-map {
     color: var(--dc-white);
 }
 
-.car-marker-wrap,
-.endpoint-marker-wrap {
+.car-marker-wrap {
     cursor: pointer;
     will-change: transform;
+}
+.endpoint-marker-wrap {
+    cursor: help;
+    will-change: transform;
+}
+.endpoint-marker-wrap svg {
+    display: block;
+    overflow: visible;
+    filter: drop-shadow(0 1px 2px var(--bg));
 }
 
 .car-marker {

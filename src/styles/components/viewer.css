@@ -1096,7 +1096,8 @@ body.has-expanded-player .viewer {
         --fullscreen-map-top: calc(var(--fullscreen-inset) + var(--fullscreen-action-size) + var(--dc-space-2));
     }
     .player-expanded .map-controls,
-    .player-expanded .map-collapse-btn {
+    .player-expanded .map-collapse-btn,
+    .player-expanded .map-wrap > .map-no-gps {
         top: calc(var(--fullscreen-map-top) + 8px);
     }
     .player-expanded .maplibregl-ctrl-top-right {
