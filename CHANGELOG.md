@@ -7,8 +7,15 @@ User-facing changes, newest first. Dates are when the change landed on
 [beta](https://beta.dashcamigo.app); production picks it up with the next
 release tag. Localized texts ship inside the app (the "What's new" panel).
 
+## 2026-09-19
+
+- **New camera support:** Avylet A1 recordings with GPS show routes and speed.
+- **Fixed:** Raster maps no longer appear blurry on high-resolution screens.
+- **Fixed:** Speed-colored routes no longer blend into roads.
+
 ## 2026-09-18
 
+- **Fixed:** Canceling an export no longer reports a save error.
 - **Improved:** Raster maps remain north-up and flat, including in exports.
 - **New:** Choose the map's appearance and provider, including Yandex where available.
 - **New:** Reflect each camera horizontally or vertically during playback and export.
