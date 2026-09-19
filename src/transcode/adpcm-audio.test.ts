@@ -160,18 +160,6 @@ function concat(samples: { data: Int16Array }[]): Int16Array {
     return out;
 }
 
-// AudioSample round-trips s16 through its internal float representation, so a
-// full-scale ±32767/-32768 reads back off by one. The DECODE is bit-exact
-// (ima-adpcm.test.ts); here we only need to prove the reader emits the RIGHT
-// region in the RIGHT order, so a tolerance of 1 LSB is the correct check (a
-// clip/offset bug would diverge by far more than 1).
-function expectClose(got: Int16Array, want: Int16Array): void {
-    expect(got.length).toBe(want.length);
-    let maxDiff = 0;
-    for (let i = 0; i < got.length; i++) maxDiff = Math.max(maxDiff, Math.abs(got[i]! - want[i]!));
-    expect(maxDiff).toBeLessThanOrEqual(1);
-}
-
 const CHANNELS = 2;
 const SR = 1000; // tiny so 5000 frames = 5 s, exercising multi-batch emit
 const BLOCK_LEN = 32; // 8-byte header (2ch) + 3 word-pairs -> 25 frames/block
@@ -206,7 +194,7 @@ describe("openAdpcmAudio", () => {
         expect(firstEmits).toBe(1); // onFirstEmit fires exactly once
         const got = concat(samples);
         const want = decodeImaAdpcmBlocks(blocks, CHANNELS);
-        expectClose(got, want);
+        expect(got).toEqual(want);
         // First sample anchored at 0; timestamps monotonic at cumulative frame / SR.
         expect(samples[0]!.ts).toBe(0);
         let frameCum = 0;
@@ -229,7 +217,7 @@ describe("openAdpcmAudio", () => {
         // First emitted frame is `startFrame`; its ts = startFrame/SR + offset.
         expect(samples[0]!.ts).toBeCloseTo(startFrame / SR + offset, 9);
         const want = decodeImaAdpcmBlocks(blocks, CHANNELS).subarray(startFrame * CHANNELS);
-        expectClose(concat(samples), want);
+        expect(concat(samples)).toEqual(want);
     });
 
     it("feedRange clips to [start,end) and anchors the first frame at outStartSec", async () => {
@@ -243,7 +231,7 @@ describe("openAdpcmAudio", () => {
         expect(dur).toBeCloseTo((endFrame - startFrame) / SR, 9);
         expect(samples[0]!.ts).toBe(100);
         const want = decodeImaAdpcmBlocks(blocks, CHANNELS).subarray(startFrame * CHANNELS, endFrame * CHANNELS);
-        expectClose(concat(samples), want);
+        expect(concat(samples)).toEqual(want);
         let total = 0;
         for (const s of samples) total += s.frames;
         expect(total).toBe(endFrame - startFrame);
@@ -263,7 +251,7 @@ describe("openAdpcmAudio", () => {
         expect(dur).toBeCloseTo((endFrame - startFrame) / SR, 9);
         expect(samples[0]!.ts).toBe(50);
         const want = decodeImaAdpcmBlocks(blocks, CHANNELS).subarray(startFrame * CHANNELS, endFrame * CHANNELS);
-        expectClose(concat(samples), want);
+        expect(concat(samples)).toEqual(want);
         let total = 0;
         for (const s of samples) total += s.frames;
         expect(total).toBe(endFrame - startFrame);
