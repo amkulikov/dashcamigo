@@ -13,6 +13,7 @@ import {
     gotoApp,
     loadTrip,
     masterVideoTime,
+    openExport,
     pausePlayback,
     presetLocalStorage,
     shot,
@@ -61,6 +62,11 @@ async function seekToTripStart(page: Page): Promise<void> {
         .toBe(true);
 }
 
+async function wheelVideoZoom(page: Page, deltaY: number): Promise<void> {
+    await page.locator(".video-tile.active video:not(.preload-slot):not(.tile-blur-bg)").hover();
+    await page.mouse.wheel(0, deltaY);
+}
+
 test.describe("player", () => {
     test.beforeEach(async ({ page }) => {
         await presetLocalStorage(page);
@@ -84,6 +90,77 @@ test.describe("player", () => {
         await play.click();
         await expect(play).toHaveAttribute("data-paused", "true");
         await shot(page, "player-01-playpause");
+    });
+
+    test("wheel zoom-out releases the duplicate video and zoom-in restores playback", async ({ page }) => {
+        await pausePlayback(page);
+        await seekToTripStart(page);
+        const master = page.locator(".video-tile.active video:not(.preload-slot):not(.tile-blur-bg)");
+        const preview = page.locator("#video-minimap-video");
+        // Keep the short fixture away from a file boundary during UI assertions.
+        await master.evaluate(async (video: HTMLVideoElement) => {
+            video.playbackRate = 0.25;
+            video.muted = true;
+            await video.play();
+        });
+        await wheelVideoZoom(page, -120);
+        await expect(page.locator("#video-minimap")).toBeVisible();
+        await expect
+            .poll(() => preview.evaluate((video: HTMLVideoElement) => video.readyState >= 2 && !video.paused))
+            .toBe(true);
+
+        await wheelVideoZoom(page, 120);
+        await expect(page.locator("#video-minimap")).toBeHidden();
+        await expect
+            .poll(() =>
+                preview.evaluate(
+                    (video: HTMLVideoElement) => video.paused && !video.hasAttribute("src") && video.readyState === 0,
+                ),
+            )
+            .toBe(true);
+        expect(
+            await master.evaluate((video: HTMLVideoElement) => video.paused),
+            "zoom-out keeps the main video playing",
+        ).toBe(false);
+
+        await wheelVideoZoom(page, -120);
+        await expect(page.locator("#video-minimap")).toBeVisible();
+        await expect
+            .poll(() => preview.evaluate((video: HTMLVideoElement) => video.readyState >= 2 && !video.paused))
+            .toBe(true);
+        await master.evaluate((video: HTMLVideoElement) => video.pause());
+        await expect.poll(() => preview.evaluate((video: HTMLVideoElement) => video.paused)).toBe(true);
+    });
+
+    test("export releases the zoom preview and permits zooming again on close", async ({ page }) => {
+        await pausePlayback(page);
+        await seekToTripStart(page);
+        const preview = page.locator("#video-minimap-video");
+        await wheelVideoZoom(page, -120);
+        await expect(page.locator("#video-minimap")).toBeVisible();
+        await expect
+            .poll(() => preview.evaluate((video: HTMLVideoElement) => video.readyState >= 2 && video.paused))
+            .toBe(true);
+
+        await openExport(page, false);
+        await expect(page.locator("#video-minimap")).toBeHidden();
+        await expect
+            .poll(() =>
+                preview.evaluate(
+                    (video: HTMLVideoElement) => video.paused && !video.hasAttribute("src") && video.readyState === 0,
+                ),
+            )
+            .toBe(true);
+
+        await page.locator("#export-panel-close").click();
+        await expect(page.locator("#video-minimap")).toBeHidden();
+        expect(await page.evaluate(() => window.__dashcamigo.state.videoZoom.scale)).toBe(1);
+        await wheelVideoZoom(page, -120);
+        await expect(page.locator("#video-minimap")).toBeVisible();
+        await expect
+            .poll(() => preview.evaluate((video: HTMLVideoElement) => video.readyState >= 2 && video.paused))
+            .toBe(true);
+        expect(await page.evaluate(() => window.__dashcamigo.dom.player.paused)).toBe(true);
     });
 
     test("frame-step buttons step the paused player frame by frame, both ways", async ({ page }) => {

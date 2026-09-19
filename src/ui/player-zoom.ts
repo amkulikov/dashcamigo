@@ -164,7 +164,10 @@ export function applyVideoZoom(): void {
     // writes the same --video-view-transform). Bail so this never resets/overwrites
     // it - including from the ResizeObserver below. Digital zoom is a casual
     // viewing aid; export mode is for configuring the output.
-    if (state.exportModeOpen) return;
+    if (state.exportModeOpen) {
+        hideMinimap();
+        return;
+    }
     const z = state.videoZoom;
     // Reset all slots + tiles (8 videos, 4 tiles). Apply zoom only to the
     // active master <video> and its tile. Two-pass is simpler than computing
@@ -224,10 +227,6 @@ export function resetVideoZoom(): void {
     }
     wasDragging = false;
     applyVideoZoom();
-    // Release the minimap's decoder and blob URL - shouldn't burn resources
-    // while zoom is inactive. On the next zoom-in, src will be re-applied via
-    // setVideoSrcFromFile.
-    if (dom.videoMinimapVideo.src) clearVideoSrc(dom.videoMinimapVideo);
 }
 
 // Zoom-level badge + reset control on the active tile (top-left, away from the
@@ -298,31 +297,36 @@ export function consumeDragClickSuppress(): boolean {
     return true;
 }
 
-/**
- * Syncs the mini-preview: visibility, src, aspect-ratio, viewport frame.
- * Called from applyVideoZoom (any zoom change) and from play/pause/seeked/
- * loadedmetadata listeners on the active <video>.
- */
+function hideMinimap(): void {
+    dom.videoMinimap.hidden = true;
+    const video = dom.videoMinimapVideo;
+    // Hidden native videos can keep decoding the full-resolution source.
+    if (!video.paused) video.pause();
+    if (videoAttachedFile.has(video) || video.hasAttribute("src")) clearVideoSrc(video);
+    if (video.srcObject) video.srcObject = null;
+}
+
+/** Syncs the mini-preview source, playback and geometry with the zoomed view. */
 function syncMinimap(): void {
     const z = state.videoZoom;
     const minimap = dom.videoMinimap;
     const mv = dom.videoMinimapVideo;
     const frame = dom.videoMinimapFrame;
 
-    if (z.scale <= 1 || !isFocusLayout(state.composition.layout) || !state.active) {
-        minimap.hidden = true;
+    if (state.exportModeOpen || z.scale <= 1 || !isFocusLayout(state.composition.layout) || !state.active) {
+        hideMinimap();
         return;
     }
     const geom = computeZoomGeometry();
     if (!geom) {
-        minimap.hidden = true;
+        hideMinimap();
         return;
     }
     const master = activePlayer();
     const masterFile = videoAttachedFile.get(master);
     if (!masterFile) {
         // Codec overlay is active or no file is attached - nothing to show.
-        minimap.hidden = true;
+        hideMinimap();
         return;
     }
     // Master via MSE (hev1 remux or MPEG-TS): master blob URL is from
@@ -331,7 +335,7 @@ function syncMinimap(): void {
     // -> not supported). Hide mini-map.
     const cand = activeCandidate();
     if (cand && requiresMseBackend(cand)) {
-        minimap.hidden = true;
+        hideMinimap();
         return;
     }
     minimap.hidden = false;
@@ -707,6 +711,7 @@ export function initPlayerZoom(): void {
         }
     });
     dom.videoMinimapVideo.addEventListener("loadedmetadata", () => {
+        if (dom.videoMinimap.hidden || state.exportModeOpen) return;
         const master = activePlayer();
         dom.videoMinimapVideo.currentTime = master.currentTime;
         dom.videoMinimapVideo.playbackRate = master.playbackRate;
