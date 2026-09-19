@@ -226,30 +226,34 @@ test("a paused seek updates the Chase camera and returns to idle without new vid
         )
         .toBeLessThan(0.0000002);
     await waitForMapIdle(page);
-    const result = await page.evaluate(async () => {
-        const { state, dom } = window.__dashcamigo;
-        const map = state.map!;
-        let renders = 0;
-        const onRender = (): void => {
-            renders++;
-        };
-        map.on("render", onRender);
-        try {
-            await new Promise((resolve) => setTimeout(resolve, 350));
-            return {
-                renders,
-                center: map.getCenter().toArray(),
-                paused: dom.player.paused,
-                time: dom.player.currentTime,
+    // Native idle can fire between application-driven camera steps. Require a
+    // quiet window after the follow filter converges, within a bounded deadline.
+    await expect(async () => {
+        const result = await page.evaluate(async () => {
+            const { state, dom } = window.__dashcamigo;
+            const map = state.map!;
+            let renders = 0;
+            const onRender = (): void => {
+                renders++;
             };
-        } finally {
-            map.off("render", onRender);
-        }
-    });
-    expect(result.paused).toBe(true);
-    expect(result.time).toBeCloseTo(1.4, 2);
-    expect(Math.hypot(result.center[0] - before[0], result.center[1] - before[1])).toBeGreaterThan(0.000001);
-    expect(result.renders, "settled paused Chase does not keep repainting").toBeLessThanOrEqual(1);
+            map.on("render", onRender);
+            try {
+                await new Promise((resolve) => setTimeout(resolve, 350));
+                return {
+                    renders,
+                    center: map.getCenter().toArray(),
+                    paused: dom.player.paused,
+                    time: dom.player.currentTime,
+                };
+            } finally {
+                map.off("render", onRender);
+            }
+        });
+        expect(result.paused).toBe(true);
+        expect(result.time).toBeCloseTo(1.4, 2);
+        expect(Math.hypot(result.center[0] - before[0], result.center[1] - before[1])).toBeGreaterThan(0.000001);
+        expect(result.renders, "settled paused Chase does not keep repainting").toBeLessThanOrEqual(1);
+    }).toPass({ timeout: 5000 });
 });
 
 test("zoom, drag and recenter remain responsive during frame-paced Chase", async ({ page }) => {
