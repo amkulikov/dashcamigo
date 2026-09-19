@@ -12,6 +12,9 @@ Thumbs.db
 /.vscode/
 /.run/
 
+# Codex: local workspace settings.
+/.codex/
+
 # Claude Code: personal developer settings - not committed. Files inside
 # /.claude/ (settings.json, skills/) ARE committed, so everyone who clones
 # the repo gets the shared project-level config.
