@@ -28,6 +28,7 @@ describe("Yandex map configuration", () => {
         expect(url.searchParams.get("projection")).toBe("web_mercator");
         expect(url.searchParams.get("apikey")).toBe(key);
         expect(url.searchParams.get("lang")).toBe(expectedLang);
+        expect(url.searchParams.get("scale")).toBe("2");
         expect(url.searchParams.get("x")).toBe("{x}");
         expect(url.searchParams.get("y")).toBe("{y}");
         expect(url.searchParams.get("z")).toBe("{z}");

@@ -783,6 +783,7 @@ export function ensureMap(): maplibregl.Map | null {
     };
     updateFollowViewportSize();
     map.on("resize", updateFollowViewportSize);
+    map.on("resize", syncBigMapPixelRatio);
 
     // Standard NavigationControl: +/- zoom, compass. Pitch not shown - 3D tilt
     // without real elevation data looks cheap.
@@ -1753,8 +1754,6 @@ function applyFollowMode(mode: FollowMode): void {
     // - and the follow loop does not fire a spurious re-aim on top of this switch.
     resetFollowInteractionPause();
     syncMapFollowButton();
-    // off<->following transitions flip the resolution cap (off = full res for
-    // hand inspection; follow/rotate/chase = capped while the map drives).
     syncBigMapPixelRatio();
     const map = state.map;
     if (!map) return;
@@ -1809,25 +1808,27 @@ export function resetFollowInteractionPause(): void {
 // Every entry point below commits through setMapViewMode so controls, layout and
 // shared-element animations stay in sync.
 
-// Cap on the big map's render resolution while it is actively following. 1.5 is
-// still high-DPI (well above a non-Retina 1.0), so the softening is barely
-// perceptible, yet on a devicePixelRatio=2 screen it renders (1.5/2)^2 = ~56% of
-// the fragments - a ~44% cut on the fill-heavy tilted 3D chase view.
+// Vector follow views trade some pixel density for playback GPU headroom.
 const BIG_MAP_FOLLOW_PIXEL_RATIO_CAP = 1.5;
 let bigMapPixelRatioApplied = Number.NaN;
 
 /**
- * Reduces fragment-shading cost while a follow mode is selected, including
- * paused playback. The mini-map stays at full resolution. Only change the
- * target when needed because setPixelRatio resizes the GL backing store.
+ * Raster labels are already baked into tiles, so another downsample softens
+ * them. Keep raster maps and paused inspection at full resolution; cap only
+ * vector playback. Avoid redundant GL backing-store resizes.
  */
 function syncBigMapPixelRatio(): void {
     const map = state.map;
     if (!map) return;
     const dpr = window.devicePixelRatio || 1;
     const bigMapShown = state.hasTrack && state.mapExpanded && getViewPanels().map && !state.exportModeOpen;
-    const following = bigMapShown && state.followMode !== "off";
-    const target = following ? Math.min(dpr, BIG_MAP_FOLLOW_PIXEL_RATIO_CAP) : dpr;
+    const shouldCap =
+        bigMapShown &&
+        state.followMode !== "off" &&
+        MAP_PROVIDER_REGISTRY[getMapProvider()].tileType === "vector" &&
+        !dom.player.paused &&
+        !dom.player.ended;
+    const target = shouldCap ? Math.min(dpr, BIG_MAP_FOLLOW_PIXEL_RATIO_CAP) : dpr;
     if (target === bigMapPixelRatioApplied) return;
     bigMapPixelRatioApplied = target;
     map.setPixelRatio(target);
@@ -1892,9 +1893,7 @@ export function applyMapLayout(): void {
     dom.playerMapBtn.setAttribute("aria-pressed", showBigMap ? "true" : "false");
     syncMapModeControl(currentMapViewMode());
 
-    // Apply / clear the follow-resolution cap for the new layout (expand shows the
-    // big map -> cap; collapse hides it -> restore). Before the resize() below so
-    // setPixelRatio's own resize and the container resize settle in one frame.
+    // Apply the resolution policy before resizing so both changes settle together.
     syncBigMapPixelRatio();
 
     // MapLibre does not observe CSS container size changes. resize() is required
@@ -3002,6 +3001,7 @@ function syncProviderCamera(): void {
     }
     if (!camera.supportsHeadingUp && isHeadingUpMode(state.followMode)) applyFollowMode("follow");
     else syncMapFollowButton();
+    syncBigMapPixelRatio();
 }
 
 /** Maps speed to a chase zoom: rest -> zoomed in, fast -> zoomed out. Monotonic,
@@ -3226,7 +3226,13 @@ function syncChaseControls(): void {
  */
 export function initMap(cb: MapCallbacks): void {
     callbacks = cb;
-    onActivePlayerEvent("play", ensureMarkerLoop);
+    onActivePlayerEvent("play", () => {
+        syncBigMapPixelRatio();
+        ensureMarkerLoop();
+    });
+    onActivePlayerEvent("pause", syncBigMapPixelRatio);
+    onActivePlayerEvent("ended", syncBigMapPixelRatio);
+    onActivePlayerEvent("emptied", syncBigMapPixelRatio);
     onActivePlayerEvent("seeking", ensureMarkerLoop);
     onActivePlayerEvent("seeked", ensureMarkerLoop);
     state.mapExpanded = getPreferredMapMode() === "large";

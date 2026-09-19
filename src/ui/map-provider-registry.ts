@@ -7,6 +7,7 @@ interface MapCameraPolicy {
 }
 
 interface MapProviderDefinition {
+    readonly tileType: "vector" | "raster";
     readonly camera: MapCameraPolicy;
     readonly supportsAppearanceSettings: boolean;
     readonly usesSelectedTheme: boolean;
@@ -27,8 +28,23 @@ const RASTER_CAMERA: MapCameraPolicy = {
 };
 
 export const MAP_PROVIDER_REGISTRY = {
-    openfreemap: { camera: VECTOR_CAMERA, supportsAppearanceSettings: true, usesSelectedTheme: true },
-    "osm-vector": { camera: VECTOR_CAMERA, supportsAppearanceSettings: true, usesSelectedTheme: true },
-    "osm-raster": { camera: RASTER_CAMERA, supportsAppearanceSettings: false, usesSelectedTheme: false },
-    yandex: { camera: RASTER_CAMERA, supportsAppearanceSettings: false, usesSelectedTheme: false },
+    openfreemap: {
+        tileType: "vector",
+        camera: VECTOR_CAMERA,
+        supportsAppearanceSettings: true,
+        usesSelectedTheme: true,
+    },
+    "osm-vector": {
+        tileType: "vector",
+        camera: VECTOR_CAMERA,
+        supportsAppearanceSettings: true,
+        usesSelectedTheme: true,
+    },
+    "osm-raster": {
+        tileType: "raster",
+        camera: RASTER_CAMERA,
+        supportsAppearanceSettings: false,
+        usesSelectedTheme: false,
+    },
+    yandex: { tileType: "raster", camera: RASTER_CAMERA, supportsAppearanceSettings: false, usesSelectedTheme: false },
 } satisfies Record<MapProvider, MapProviderDefinition>;

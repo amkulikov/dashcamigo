@@ -213,6 +213,7 @@ test("every mini-map is rectangular and Yandex credits stay visible on both maps
     await expect.poll(() => requests.length).toBeGreaterThan(0);
     for (const url of requests) {
         expect(url.searchParams.get("projection")).toBe("web_mercator");
+        expect(url.searchParams.get("scale")).toBe("2");
         expect(url.searchParams.get("lang")).toBe("en_US");
         expect(Boolean(url.searchParams.get("apikey"))).toBe(true);
     }
@@ -221,6 +222,130 @@ test("every mini-map is rectangular and Yandex credits stay visible on both maps
     const main = page.locator("#map");
     await expectCreditsInside(main);
     await expectYandexLogo(main, "Open in Maps");
+});
+
+test.describe("Retina maps", () => {
+    test.use({ deviceScaleFactor: 2 });
+
+    async function expectCanvasPixelRatios(page: Page, mainRatio: number): Promise<void> {
+        await expect
+            .poll(() =>
+                page.evaluate((mainRatio) => {
+                    const { map, miniMap } = window.__dashcamigo.state;
+                    return [map, miniMap].map((map, index) => {
+                        if (!map) return false;
+                        const canvas = map.getCanvas();
+                        const width = parseFloat(canvas.style.width);
+                        const height = parseFloat(canvas.style.height);
+                        const ratio = index === 0 ? mainRatio : window.devicePixelRatio;
+                        return (
+                            width > 0 &&
+                            height > 0 &&
+                            Math.abs(canvas.width - width * ratio) <= 1 &&
+                            Math.abs(canvas.height - height * ratio) <= 1
+                        );
+                    });
+                }, mainRatio),
+            )
+            .toEqual([true, true]);
+    }
+
+    async function playSlowly(page: Page): Promise<void> {
+        await page.evaluate(async () => {
+            const { player } = window.__dashcamigo.dom;
+            player.playbackRate = 0.25;
+            player.muted = true;
+            await player.play();
+        });
+        await expect(page.locator("#player")).toHaveJSProperty("paused", false);
+    }
+
+    test("Yandex requests dense tiles on the same grid and renders both canvases at full resolution", async ({
+        page,
+    }) => {
+        const requests: URL[] = [];
+        page.on("request", (request) => {
+            const url = new URL(request.url());
+            if (url.hostname === "tiles.api-maps.yandex.ru") requests.push(url);
+        });
+        await loadTrip(page);
+        await pausePlayback(page);
+        await chooseViewerProvider(page, "yandex");
+        await expectViewerSource(page, "yandex");
+        expect(await page.evaluate(() => window.devicePixelRatio)).toBe(2);
+        await expect.poll(() => requests.length).toBeGreaterThan(0);
+        for (const url of requests) expect(url.searchParams.get("scale")).toBe("2");
+        const sources = await page.evaluate(() => {
+            const { map, miniMap } = window.__dashcamigo.state;
+            return [map, miniMap].map((map) => {
+                const source = map!.getStyle().sources.yandex!;
+                if (source.type !== "raster") throw new Error("yandex source is not raster");
+                return { tileSize: source.tileSize, minzoom: source.minzoom ?? 0, maxzoom: source.maxzoom };
+            });
+        });
+        expect(sources).toEqual([
+            { tileSize: 256, minzoom: 0, maxzoom: 20 },
+            { tileSize: 256, minzoom: 0, maxzoom: 20 },
+        ]);
+        await expectCanvasPixelRatios(page, 2);
+        await page.locator("#mini-map").click({ position: { x: 30, y: 30 } });
+        await expect(page.locator("#map")).toBeVisible();
+        await page.locator('.map-follow-seg[data-follow-mode="follow"]').click();
+        await expectCanvasPixelRatios(page, 2);
+        await playSlowly(page);
+        await expectCanvasPixelRatios(page, 2);
+        await pausePlayback(page);
+        await expectCanvasPixelRatios(page, 2);
+    });
+
+    test("vector follow caps resolution only during playback and refreshes it when providers change", async ({
+        page,
+    }) => {
+        await page.route("https://vector.openstreetmap.org/**", (route) =>
+            route.fulfill({ body: Buffer.alloc(0), headers: { "access-control-allow-origin": "*" } }),
+        );
+        await loadTrip(page);
+        await pausePlayback(page);
+        await chooseViewerProvider(page, "osm-vector");
+        await expectViewerSource(page, "osm-shortbread");
+        await page.locator("#mini-map").click({ position: { x: 30, y: 30 } });
+        await page.locator('.map-follow-seg[data-follow-mode="follow"]').click();
+        await expectCanvasPixelRatios(page, 2);
+        await playSlowly(page);
+        await expectCanvasPixelRatios(page, 1.5);
+        await pausePlayback(page);
+        await expectCanvasPixelRatios(page, 2);
+        await playSlowly(page);
+        await expectCanvasPixelRatios(page, 1.5);
+
+        await chooseViewerProvider(page, "yandex");
+        await expectViewerSource(page, "yandex");
+        await expect(page.locator("#player")).toHaveJSProperty("paused", false);
+        await expectCanvasPixelRatios(page, 2);
+        await chooseViewerProvider(page, "osm-vector");
+        await expectViewerSource(page, "osm-shortbread");
+        await expectCanvasPixelRatios(page, 1.5);
+        await pausePlayback(page);
+        await expectCanvasPixelRatios(page, 2);
+    });
+
+    test("OpenStreetMap raster fallback keeps full resolution during playback", async ({ page }) => {
+        await page.route("https://tile.openstreetmap.org/**", (route) =>
+            route.fulfill({
+                path: path.join(REPO_ROOT, "public/favicon-192.png"),
+                contentType: "image/png",
+                headers: { "access-control-allow-origin": "*" },
+            }),
+        );
+        await loadTrip(page);
+        await pausePlayback(page);
+        await expectViewerSource(page, "osm-raster");
+        await page.locator("#mini-map").click({ position: { x: 30, y: 30 } });
+        await page.locator('.map-follow-seg[data-follow-mode="follow"]').click();
+        await expectCanvasPixelRatios(page, 2);
+        await playSlowly(page);
+        await expectCanvasPixelRatios(page, 2);
+    });
 });
 
 test("overlay uses its own provider while Yandex remains selected in the viewer", async ({ page }) => {
