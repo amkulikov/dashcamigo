@@ -26,6 +26,10 @@ Parser: `src/parsers/primitives/novatek-ts.ts` +
   stuffing.
 - Cadence: exactly one PES per second, one record per PES (180 PES on each
   180 s sample; one 2 s gap in one sample - a skipped second, not a reorder).
+- Before the optional receiver gets its first fix, some firmware writes
+  `V00\0`, zero coordinates/speed/course, and an unset or invalid clock. These
+  rows still lock the GPS PID and preserve the delay before the first fixed
+  point; they do not emit positions.
 - Bytes `[44..1008)` of the PES body are zero padding (verified all-zero on
   all 360 real PES). The whole record fits in the PUSI packet on this dialect.
 
@@ -65,7 +69,7 @@ record geometry (`src/parsers/internal/freegps.ts`) rebased to 0:
 | 0 | u32 | hour | camera-LOCAL clock, see below |
 | 4 | u32 | minute | |
 | 8 | u32 | second | |
-| 12 | u32 | year | 2-digit (21 = 2021), expands as 2000+yy |
+| 12 | u32 | year | 2-digit (21 = 2021) or full year (2026) |
 | 16 | u32 | month | 1..12 |
 | 20 | u32 | day | 1..31 |
 | 24 | char | fix | `'A'` valid / `'V'` void (skipped) |
@@ -85,16 +89,14 @@ so calendar gates and unit conversions cannot drift from the MP4 freeGPS path.
 
 ## Clock is camera-local, not UTC
 
-On both samples the struct time equals the filename's local time while the
-coordinates resolve to a UTC+1 region (real UTC is one hour earlier). The
-struct clock is therefore the camera's local wall clock. The extractor flags
-every record `timeUnsynced` and supplies `relStartSeconds` (offset from the
-first record), mirroring the Kenwood local-clock quarantine in `freegps.ts`:
-the time layer re-anchors the records onto the video window instead of
-poisoning per-fingerprint TZ estimation with local-as-UTC stamps. Because
-private_stream_2 has no PTS, the offset baseline is the first record, not
-frame 0 - the ~1 s GPS warm-up before the first PES is not recoverable and is
-far below GPS-lock ambiguity.
+The struct time equals the filename's local time rather than the satellite
+clock. The extractor flags every record `timeUnsynced`, mirroring the Kenwood
+local-clock quarantine in `freegps.ts`: the time layer re-anchors the records
+onto the video window instead of poisoning per-fingerprint TZ estimation with
+local-as-UTC stamps. Leading no-fix rows preserve the receiver warm-up delay at
+the format's one-record-per-second cadence, while clock deltas preserve later
+gaps. Private_stream_2 has no PTS, so a delay before the first PES is not
+recoverable.
 
 ## Marker
 
@@ -119,10 +121,12 @@ HEVC sticks). Negative tests pin both directions.
   `build-synthetic.mjs` in the same folder (packet-level TS writer mirroring
   the real 6-packet PES split; PMT deliberately omits the GPS PID, like the
   real camera).
-- `real-anonymized.TS` - `scripts/anonymize-novatek-ts.mjs` over a real
-  sample: GPS PES packet groups kept byte-exact (PES header, continuation
-  split and AF stuffing are the container quirks the fixture exists to
-  preserve) with coordinates patched to a moving sentinel, interleaved into a
-  freshly generated HEVC+AAC base. Record count, sentinel coordinates and the
-  base-clip recipe are the script's own parameters. Timestamps and
-  speed/course are original; no original video/audio bytes reach the fixture.
+- `real-anonymized.TS` and `real-no-fix-anonymized.TS` are produced by
+  `scripts/anonymize-novatek-ts.mjs` over real samples. GPS PES packet groups
+  stay byte-exact (PES header, continuation split and AF stuffing are the
+  container quirks the fixtures preserve) with fixed coordinates patched to a
+  moving sentinel, interleaved into a freshly generated HEVC+AAC base. The
+  second fixture keeps the transition from no-fix rows to fixed rows. Record
+  count, sentinel coordinates and the base-clip recipe are the script's own
+  parameters. Timestamps and speed/course are original; no original video/audio
+  bytes reach either fixture.

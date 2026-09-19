@@ -34,6 +34,7 @@ import {
     RX_MIVUE,
     RX_MIVUE_PATH_MODE,
     RX_NOVATEK_PATH_RO,
+    RX_NOVATEK_TS,
     RX_NOVATEK_VANTRUE,
     RX_NOVATEK_VIOFO,
     RX_REC_SINGLE,
@@ -314,6 +315,9 @@ const novatekMode: FilenameModeTechnique = {
             }
         }
         if (matchNovatekSingleFilename(file.file.name)) {
+            return RX_NOVATEK_PATH_RO.test(file.relativePath) ? "event" : "normal";
+        }
+        if (RX_NOVATEK_TS.test(file.file.name)) {
             return RX_NOVATEK_PATH_RO.test(file.relativePath) ? "event" : "normal";
         }
         const vantrue = file.file.name.match(RX_NOVATEK_VANTRUE);

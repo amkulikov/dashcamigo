@@ -27,7 +27,7 @@
 // Record struct (all little-endian) - byte-identical to the post-magic
 // record geometry of a Novatek freeGPS block (internal/freegps.ts
 // FieldLayout, rebased to 0):
-//   [0..24)   6 x u32: hour, minute, second, year (2-digit), month, day
+//   [0..24)   6 x u32: hour, minute, second, year (2- or 4-digit), month, day
 //   [24]      'A' fix valid / 'V' void (no fix - record skipped)
 //   [25]      'N'/'S'    [26] 'E'/'W'    [27] 0x00
 //   [28..32)  f32 latitude,  DDmm.mmmm
@@ -36,20 +36,18 @@
 //             on both real samples ~= KNOTS_TO_MS; km/h would be 0.28)
 //   [40..44)  f32 course, degrees
 //
-// The 2-digit year expands as 2000+yy via the shared utcSecondsFromYmdhms
-// (Y2100 is a non-concern: no dashcam SD card survives 75 years, and the
-// shared helper already range-gates 2000..2099).
+// The shared utcSecondsFromYmdhms accepts either year spelling and range-gates
+// both to 2000..2099.
 //
-// Clock: the struct time is the camera's LOCAL wall clock, not UTC - on the
-// real samples it equals the filename's local time while the coordinates
-// resolve to a UTC+1 zone (UTC would be one hour earlier). Records are
+// Clock: the struct time is the camera's LOCAL wall clock, not UTC - it equals
+// the filename's local time rather than the satellite clock. Records are
 // flagged timeUnsynced with a per-record relStartSeconds offset, mirroring
 // the Kenwood local-clock quarantine in freegps.ts: the time layer then
 // re-anchors them onto the video window instead of poisoning the
-// per-fingerprint TZ estimate with local-as-UTC stamps. relStartSeconds is
-// relative to the FIRST record, not to frame 0 - private_stream_2 has no
-// PTS, so the (~1 s) GPS warm-up gap before the first record is not
-// recoverable; the error is far below the GPS-lock ambiguity.
+// per-fingerprint TZ estimate with local-as-UTC stamps. Leading no-fix rows
+// preserve the receiver warm-up delay; once fixes begin, their clock deltas
+// preserve later gaps. private_stream_2 has no PTS, so a delay before the
+// first PES remains unrecoverable.
 
 import type { GpsRecord, ParsedRecords, SkippedLine, VendorFile } from "../types.js";
 import { KNOTS_TO_MS, WrongFormatError } from "../types.js";
@@ -115,18 +113,26 @@ export function findNovatekTsGpsPid(bytes: Uint8Array): number | null {
 }
 
 /**
- * Signature check for a record at `off`: status triple 'A'/'V' + N/S + E/W +
- * zero pad, and all six datetime u32 fields in calendar range. The datetime
- * gate is what makes this safe to run on arbitrary PES bodies (video bytes
- * that happen to spell "ANE\0" would still need six in-range u32s before it).
+ * Signature check for a record at `off`. Fixed records carry A/V + N/S + E/W,
+ * zero pad, and six in-range datetime fields. The year accepts both the
+ * original two-digit spelling and the four-digit spelling used by newer
+ * firmware. Receivers without a fix may emit
+ * `V00\0` with a zero coordinate tail and an unset clock; that exact shape is
+ * strong enough to lock the private-data PID before the first fixed record.
  */
 function isNovatekTsRecordAt(bytes: Uint8Array, off: number, end: number): boolean {
     if (off + RECORD_SIZE > end || off + RECORD_SIZE > bytes.length) return false;
     const fix = bytes[off + 24];
     if (fix !== 0x41 && fix !== 0x56) return false; // 'A' / 'V'
     const ns = bytes[off + 25];
-    if (ns !== 0x4e && ns !== 0x53) return false;
     const ew = bytes[off + 26];
+    if (fix === 0x56 && ns === 0x30 && ew === 0x30 && bytes[off + 27] === 0) {
+        for (let i = off + 28; i < off + RECORD_SIZE; i++) {
+            if (bytes[i] !== 0) return false;
+        }
+        return true;
+    }
+    if (ns !== 0x4e && ns !== 0x53) return false;
     if (ew !== 0x45 && ew !== 0x57) return false;
     if (bytes[off + 27] !== 0) return false;
     const h = u32le(bytes, off);
@@ -136,7 +142,7 @@ function isNovatekTsRecordAt(bytes: Uint8Array, off: number, end: number): boole
     const mo = u32le(bytes, off + 16);
     const d = u32le(bytes, off + 20);
     if (h > 23 || mi > 59 || s > 59) return false;
-    if (y > 99 || mo < 1 || mo > 12 || d < 1 || d > 31) return false;
+    if (!((y <= 99 || (y >= 2000 && y <= 2099)) && mo >= 1 && mo <= 12 && d >= 1 && d <= 31)) return false;
     return true;
 }
 
@@ -262,6 +268,7 @@ export async function extractNovatekTsGps(
     const records: GpsRecord[] = [];
     const skipped: SkippedLine[] = [];
     let recordIdx = 0;
+    let leadingNoFixSeconds = 0;
 
     const fileSize = file.file.size;
     let chunkStart = 0;
@@ -357,6 +364,7 @@ export async function extractNovatekTsGps(
             recordIdx++;
             const outcome = decodeRecord(recordBytes, recordOff, file.file.name);
             if ("record" in outcome) {
+                if (records.length === 0) leadingNoFixSeconds = recordIdx - 1;
                 records.push(outcome.record);
             } else {
                 skipped.push({
@@ -386,11 +394,13 @@ export async function extractNovatekTsGps(
 
     // Local-clock quarantine (see header): flag every record and hand the
     // time layer trustworthy per-record offsets so reanchorUnsyncedTimes
-    // places them at startUtc+offset instead of spreading evenly.
+    // places them at startUtc+offset instead of spreading evenly. The first
+    // valid point keeps the one-record-per-second delay represented by leading
+    // no-fix rows; clock deltas preserve gaps after that point.
     const base = records[0]!.unixSeconds;
     for (const rec of records) {
         rec.timeUnsynced = true;
-        rec.relStartSeconds = rec.unixSeconds - base;
+        rec.relStartSeconds = leadingNoFixSeconds + rec.unixSeconds - base;
     }
     return { records, skipped };
 }

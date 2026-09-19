@@ -1078,6 +1078,19 @@ describe("rec-single techniques", () => {
 // Novatek MPEG-TS OEMs: <14-digit>_<6-digit>.ts - the ddpai-normal name
 // scheme in a TS container. Disjoint from FitCamX (trailing letter there).
 describe("novatek-ts techniques", () => {
+    it.each([
+        ["", "normal"],
+        ["DCIM/VIDEO/", "normal"],
+        ["DCIM/Movie/RO/", "event"],
+        ["DCIM/Movie/ro/", "event"],
+    ])("resolves the recording mode under %s", (folder, mode) => {
+        const name = "20260101120000_000188.TS";
+        expect(matchFilenameMode(vf(name, `${folder}${name}`))).toEqual({
+            value: mode,
+            matchedId: "novatek-mode",
+        });
+    });
+
     it("time/sequence resolve via the dedicated technique, not the generic fallback", () => {
         const name = "20260101120000_000188.TS";
         const t = matchFilenameTime(vf(name));
@@ -1087,7 +1100,10 @@ describe("novatek-ts techniques", () => {
         expect(seq.matchedId).toBe("novatek-ts-sequence");
         expect(seq.value).toBe(188);
         expect(matchFilenameChannel(vf(name)).matchedId).toBeNull();
-        expect(matchFilenameMode(vf(name)).matchedId).toBeNull();
+        expect(matchFilenameMode(vf(name, `DCIM/VIDEO/${name}`))).toEqual({
+            value: "normal",
+            matchedId: "novatek-mode",
+        });
     });
 
     it("camera-key is stable across timestamps", () => {

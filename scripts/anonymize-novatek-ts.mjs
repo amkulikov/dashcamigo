@@ -5,9 +5,10 @@
 // Strategy (differs from anonymize-juscar-ts.mjs on purpose): the GPS PES in
 // this format is NOT advertised in the PMT, so ffmpeg cannot -map/-c:d copy
 // it reliably. Instead of recoding the original container we:
-//   1. Extract the first N GPS PES packet groups (all 6 TS packets each,
-//      byte-exact - PES header, continuation split and AF stuffing are the
-//      container quirks the fixture exists to preserve).
+//   1. Extract N GPS PES packet groups (all 6 TS packets each, byte-exact -
+//      PES header, continuation split and AF stuffing are the container quirks
+//      the fixture exists to preserve). When a clip starts without a fix, keep
+//      the last three no-fix groups and the first fixed groups.
 //   2. Patch the coordinates in each PUSI packet to a moving sentinel
 //      (50 N / 30 E + i*0.0001 deg, the repo-wide convention). Timestamps
 //      are kept (not sensitive without coordinates); speed/course are kept
@@ -36,7 +37,7 @@ if (!existsSync(inputPath)) {
     process.exit(1);
 }
 const maxRecords = Number(recordsArg ?? 10);
-if (!Number.isFinite(maxRecords) || maxRecords <= 0) {
+if (!Number.isSafeInteger(maxRecords) || maxRecords <= 0) {
     console.error(`invalid records count: ${recordsArg}`);
     process.exit(1);
 }
@@ -49,11 +50,11 @@ const SENTINEL_LON = 30; // degrees E
 // ---- step 1: collect GPS PES packet groups from the input ----
 
 const input = readFileSync(inputPath);
-const groups = []; // Array<Buffer[]> - TS packets of one PES each
+const allGroups = []; // Array<{ packets: Buffer[], isActive: boolean }>
 let gpsPid = null;
 let current = null;
 
-for (let off = 0; off + TS_SIZE <= input.length && groups.length < maxRecords; off += TS_SIZE) {
+for (let off = 0; off + TS_SIZE <= input.length; off += TS_SIZE) {
     if (input[off] !== TS_SYNC) continue;
     const b1 = input[off + 1];
     const pid = ((b1 & 0x1f) << 8) | input[off + 2];
@@ -61,26 +62,31 @@ for (let off = 0; off + TS_SIZE <= input.length && groups.length < maxRecords; o
     if (gpsPid !== null && pid !== gpsPid) continue;
     if (pusi) {
         if (current) {
-            groups.push(current);
+            allGroups.push(current);
             current = null;
-            if (groups.length >= maxRecords) break;
         }
         const bodyOff = pesBodyOffset(input, off);
         if (bodyOff !== null && isGpsRecordAt(input, bodyOff, off + TS_SIZE)) {
             gpsPid = pid;
-            current = [Buffer.from(input.subarray(off, off + TS_SIZE))];
+            current = {
+                packets: [Buffer.from(input.subarray(off, off + TS_SIZE))],
+                isActive: input[bodyOff + 24] === 0x41,
+            };
         }
     } else if (current) {
-        current.push(Buffer.from(input.subarray(off, off + TS_SIZE)));
+        current.packets.push(Buffer.from(input.subarray(off, off + TS_SIZE)));
     }
 }
-if (current && groups.length < maxRecords) groups.push(current);
+if (current) allGroups.push(current);
 
-if (groups.length === 0) {
+if (allGroups.length === 0) {
     console.error("no gps pes found in input - not a novatek-ts file?");
     process.exit(1);
 }
-console.error(`collected ${groups.length} gps pes groups on pid 0x${gpsPid.toString(16)}`);
+const firstActive = allGroups.findIndex((group) => group.isActive);
+const start = firstActive > 0 ? Math.max(0, firstActive - Math.min(3, maxRecords - 1)) : 0;
+const groups = allGroups.slice(start, start + maxRecords);
+console.error(`collected ${groups.length} of ${allGroups.length} gps pes groups on pid 0x${gpsPid.toString(16)}`);
 
 // ---- step 2: patch coordinates to the moving sentinel ----
 
@@ -89,15 +95,22 @@ function ddmm(deg) {
     return Math.floor(abs) * 100 + (abs - Math.floor(abs)) * 60;
 }
 
-groups.forEach((packets, i) => {
-    const pusiPkt = packets[0];
+let activeIdx = 0;
+groups.forEach((group) => {
+    const pusiPkt = group.packets[0];
     const bodyOff = pesBodyOffset(pusiPkt, 0);
+    if (!group.isActive) {
+        // A void fix can retain the receiver's last known coordinates.
+        pusiPkt.fill(0, bodyOff + 28, bodyOff + 36);
+        return;
+    }
     pusiPkt[bodyOff + 25] = "N".charCodeAt(0);
     pusiPkt[bodyOff + 26] = "E".charCodeAt(0);
-    pusiPkt.writeFloatLE(ddmm(SENTINEL_LAT + i * 0.0001), bodyOff + 28);
-    pusiPkt.writeFloatLE(ddmm(SENTINEL_LON + i * 0.0001), bodyOff + 32);
+    pusiPkt.writeFloatLE(ddmm(SENTINEL_LAT + activeIdx * 0.0001), bodyOff + 28);
+    pusiPkt.writeFloatLE(ddmm(SENTINEL_LON + activeIdx * 0.0001), bodyOff + 32);
+    activeIdx++;
 });
-console.error(`patched coordinates to sentinel ${SENTINEL_LAT}N/${SENTINEL_LON}E in ${groups.length} records`);
+console.error(`patched coordinates to sentinel ${SENTINEL_LAT}N/${SENTINEL_LON}E in ${activeIdx} records`);
 
 // ---- step 3: synthetic video base ----
 
@@ -151,11 +164,11 @@ const basePackets = Math.floor(base.length / TS_SIZE);
 const stride = Math.max(1, Math.floor(basePackets / (groups.length + 1)));
 const parts = [];
 let cursor = 0;
-groups.forEach((packets, i) => {
+groups.forEach((group, i) => {
     const upTo = Math.min((i + 1) * stride * TS_SIZE, base.length);
     parts.push(base.subarray(cursor, upTo));
     cursor = upTo;
-    parts.push(...packets);
+    parts.push(...group.packets);
 });
 parts.push(base.subarray(cursor));
 writeFileSync(outputPath, Buffer.concat(parts));
@@ -183,8 +196,14 @@ function isGpsRecordAt(buf, off, end) {
     const fix = buf[off + 24];
     if (fix !== 0x41 && fix !== 0x56) return false;
     const ns = buf[off + 25];
-    if (ns !== 0x4e && ns !== 0x53) return false;
     const ew = buf[off + 26];
+    if (fix === 0x56 && ns === 0x30 && ew === 0x30 && buf[off + 27] === 0) {
+        for (let i = off + 28; i < off + 44; i++) {
+            if (buf[i] !== 0) return false;
+        }
+        return true;
+    }
+    if (ns !== 0x4e && ns !== 0x53) return false;
     if (ew !== 0x45 && ew !== 0x57) return false;
     if (buf[off + 27] !== 0) return false;
     const h = buf.readUInt32LE(off);
@@ -194,6 +213,6 @@ function isGpsRecordAt(buf, off, end) {
     const mo = buf.readUInt32LE(off + 16);
     const d = buf.readUInt32LE(off + 20);
     if (h > 23 || mi > 59 || s > 59) return false;
-    if (y > 99 || mo < 1 || mo > 12 || d < 1 || d > 31) return false;
+    if (!((y <= 99 || (y >= 2000 && y <= 2099)) && mo >= 1 && mo <= 12 && d >= 1 && d <= 31)) return false;
     return true;
 }
