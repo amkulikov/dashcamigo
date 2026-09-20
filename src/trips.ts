@@ -1670,10 +1670,9 @@ const OFFSET_INHERIT_MAX_GAP_SEC = 48 * 3600;
 /**
  * One contiguous recording run of a camera: samples whose name times chain
  * (next within prev + duration + RUN_CHAIN_SLACK_SEC). The unit over which the
- * camera's RTC-vs-GPS offset is constant enough to share: within a run the RTC
- * cannot drift measurably and the camera never rebooted (no resync), while
- * across a multi-day card the offset wanders by tens of seconds - one MAX over
- * the whole card anchored every other session wrong by the spread.
+ * camera's RTC-vs-GPS offset is expected to stay constant enough to share.
+ * Name-time proximity cannot rule out a clock resync, so deriveStartUtc
+ * validates the shared offset against each clip's own GPS window.
  */
 export interface ClockOffsetRun {
     /** Name-clock time of the run's first GPS-bearing sample (naive unix sec). */
@@ -1842,8 +1841,7 @@ const GPS_WINDOW_TOLERANCE_SEC = 5;
 /**
  * Checks whether GPS window [firstGps, lastGps] fits inside video window
  * [startUtc, startUtc+durationSec] with GPS_WINDOW_TOLERANCE_SEC on both edges.
- * Used in deriveStartUtc to choose between mvhd-as-start and mvhd-as-finalize:
- * the correct startUtc is the one where the GPS window actually fits inside the video.
+ * Used in deriveStartUtc to validate container and filename clock anchors.
  */
 function gpsFitsVideoWindow(firstGpsUnix: number, lastGpsUnix: number, startUtc: number, durationSec: number): boolean {
     return (
@@ -2015,12 +2013,9 @@ interface DeriveStartUtcArgs {
     // Precise (NOT 15-min-snapped) offset of this camera's filename clock from
     // GPS, in seconds, measured over THIS FILE's recording run (resolved via
     // resolvePreciseClockOffsetForFile from estimatePreciseClockOffsetByFingerprint
-    // runs). When present, the filename is the PRIMARY anchor: startUtc =
-    // filenameNaive - this, with no per-file GPS window validation - GPS only
-    // MEASURED the offset, it does not judge the filename. null for a lone clip
-    // with no run to inherit (offset cannot be measured from one file) or a
-    // camera with no filename time; the per-file self-calibration is then used
-    // instead. See deriveStartUtc.
+    // runs). The filename minus this offset anchors the clip when its own GPS
+    // window fits. null when no run can supply an offset; the per-file
+    // self-calibration is then used instead. See deriveStartUtc.
     preciseFilenameOffsetSec: number | null;
     // Wall-clock of video frame 0 reported by the GPS extractor itself, if it
     // can tie it (RVMI tReV). Highest-priority signal: trusted whenever set,
@@ -2054,11 +2049,10 @@ interface DeriveStartUtcArgs {
  *   2. FILENAME via the run-measured precise clock offset
  *      (preciseFilenameOffsetSec, max over the file's recording run of filename
  *      minus firstGps - see estimatePreciseClockOffsetByFingerprint). This is the
- *      primary anchor for no-mvhd cameras (70mai). GPS only MEASURED the offset;
- *      the only per-file check is a firstGps-inside-clip sanity gate that bounds
- *      a corrupt/pooled offset (NOT the tail - the sidecar tail overshoot is the
- *      bug this fixes). Subtracting a run-constant offset removes THIS file's
- *      cold-start lag, which is what kept a continuous trip glued.
+ *      primary anchor for no-mvhd cameras (70mai). The clip's own GPS window
+ *      must fit after correction: a nearby recording can have a different
+ *      filename-clock offset. A valid shared offset removes this file's
+ *      cold-start lag without moving its GPS tail beyond the video.
  *   3. Lone clip (no trustworthy run offset): self-calibrate the filename TZ
  *      from this file's own delta to firstGps (snapped to the 15-min grid) and
  *      accept only if the window contains the GPS - rejects a clock drifted by
@@ -2111,10 +2105,8 @@ function localUnixFromNaiveClock(naiveUnixSec: number): number {
  * contains the GPS. Each self-calibrates its TZ from its own mvhd-minus-firstGps
  * delta, so only the GPS fix delay stays in the residual.
  *
- * The FILENAME is deliberately NOT a candidate here - it is handled separately
- * in deriveStartUtc as the PRIMARY anchor (filename minus the run-measured
- * clock offset), not validated per file against the GPS window. Only mvhd needs
- * the window check, because only mvhd has the start/finalize ambiguity.
+ * The filename is handled separately in deriveStartUtc because it uses the
+ * run-measured clock offset and has no start/finalize ambiguity.
  *
  * Ordering: the fleet TZ (per-fingerprint median, when measured) comes FIRST,
  * then the per-file self-calibration. The self-calibrated snap folds THIS clip's
@@ -2189,12 +2181,8 @@ export function deriveStartUtc({
         return { startUtc: embeddedStartUtcHint, source: "embedded" };
     }
 
-    // WITH GPS: anchor in priority order. mvhd candidates (start/finalize) are
-    // window-validated for their ISOBMFF ambiguity; the filename is the PRIMARY
-    // anchor via the fleet-measured precise offset (GPS only measured it, it does
-    // not judge the filename - just a per-file firstGps-inside-clip sanity gate);
-    // then the lone-clip self-calibrated+validated filename; then firstGps. See
-    // mvhdStartCandidates and estimatePreciseClockOffsetByFingerprint.
+    // Validate inferred anchors against this file's GPS window; neighboring
+    // recordings may carry a different filename-clock offset.
     if (firstGpsUnix !== null) {
         // lastSyncedRecord (not records[last]) so a synced run that ends with a
         // few trailing unsynced rows still uses a real time for the window end.
@@ -2225,29 +2213,18 @@ export function deriveStartUtc({
         // between GPS-bearing and GPS-less clips of the same drive.
         const mvhdRejected = createdUtc !== null;
 
-        // Filename = the camera's own clock, the PRIMARY anchor. GPS is used only
-        // to MEASURE the camera's clock offset across this file's recording run
-        // (preciseFilenameOffsetSec), never to validate or reject the filename per
-        // file. Subtracting the measured offset places t=0 immune to THIS file's
-        // GPS cold-start lag, so it beats firstGps even when the file's own GPS
-        // window is shifted by the lag (the bug that split a continuous trip).
+        // A shared offset can recover the start before this file's first fix,
+        // provided its own GPS window supports that offset.
         const localDate = parseFilenameLocalTime(file);
         if (localDate !== null) {
             const nameNaive = localDate.getTime() / 1000;
             if (preciseFilenameOffsetSec !== null) {
                 const anchored = nameNaive - preciseFilenameOffsetSec;
-                // Sanity-gate the fleet offset per file: the FIRST GPS fix must
-                // land inside THIS clip. A correct offset places it there (the
-                // window now contains the GPS - that is the point); a corrupt
-                // offset (an outlier that survived the estimator, or two identical
-                // units pooled into one fingerprint) mis-anchors the clip so
-                // firstGps falls outside, and we drop to the self-calibrated path.
-                // Gate on firstGps ONLY, never the tail: the sidecar log's last
-                // record routinely sits a few seconds past the true clip end (the
-                // very overshoot this fix exists for), and the tail says nothing
-                // about whether t=0 is right.
+                // A first-fix-only check accepts an early anchor when a nearby
+                // clip's clock differs. Check the tail too; the window tolerance
+                // still allows ordinary sidecar overshoot and rounding.
                 if (
-                    firstGpsUnix >= anchored - GPS_WINDOW_TOLERANCE_SEC &&
+                    gpsFitsVideoWindow(firstGpsUnix, lastGpsUnix, anchored, windowSpanSec) &&
                     firstGpsUnix <= anchored + windowSpanSec + GPS_WINDOW_TOLERANCE_SEC
                 ) {
                     return { startUtc: anchored, source: "name", mvhdRejected };

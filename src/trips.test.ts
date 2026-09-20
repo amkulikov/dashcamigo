@@ -1781,6 +1781,55 @@ describe("deriveStartUtc: run clock offset anchors back-to-back no-mvhd clips", 
 // no-GPS siblings must share the GPS sibling's exact anchor; a corrupt/pooled
 // offset must not anchor blindly; the estimator must shrug off a gross outlier.
 describe("deriveStartUtc: run offset robustness", () => {
+    it.each([
+        { mode: "realtime", durationSec: 60, wallDurationSec: null, tailSec: 63, expectedStartSec: 0 },
+        { mode: "realtime at tolerance", durationSec: 60, wallDurationSec: null, tailSec: 65, expectedStartSec: 0 },
+        {
+            mode: "realtime past tolerance",
+            durationSec: 60,
+            wallDurationSec: null,
+            tailSec: 65.01,
+            expectedStartSec: 12,
+        },
+        { mode: "time-lapse", durationSec: 4, wallDurationSec: 60, tailSec: 63, expectedStartSec: 0 },
+        { mode: "time-lapse at tolerance", durationSec: 4, wallDurationSec: 60, tailSec: 65, expectedStartSec: 0 },
+        {
+            mode: "time-lapse past tolerance",
+            durationSec: 4,
+            wallDurationSec: 60,
+            tailSec: 65.01,
+            expectedStartSec: 12,
+        },
+    ])(
+        "validates the shared clock against the synced GPS tail in $mode video",
+        ({ durationSec, wallDurationSec, tailSec, expectedStartSec }) => {
+            const startUtc = 1_700_000_000;
+            const offsetSec = 18_040;
+            const result = deriveStartUtc({
+                file: makeVendorFile("clip.mp4"),
+                fingerprint: DEFAULT_FP,
+                createdUtc: null,
+                durationSec,
+                records: [
+                    { ...makeRecord(0), timeUnsynced: true },
+                    makeRecord(startUtc + 12),
+                    makeRecord(startUtc + tailSec),
+                    { ...makeRecord(0), timeUnsynced: true },
+                ],
+                fingerprintTz: null,
+                parseFilenameLocalTime: () => new Date((startUtc + offsetSec) * 1000),
+                preciseFilenameOffsetSec: offsetSec,
+                embeddedStartUtcHint: null,
+                isTimelapse: wallDurationSec !== null,
+                wallDurationSec,
+            });
+            expect(result.startUtc, "only a GPS window within tolerance supports the shared offset").toBe(
+                startUtc + expectedStartSec,
+            );
+            expect(result.source).toBe(expectedStartSec === 0 ? "name" : "gps");
+        },
+    );
+
     // 70mai-mc: GPS only on the front. Clock offset = 5h TZ + 40s RTC drift; the
     // 40s is NOT a 900-multiple and exceeds the 15s frame-snap radius, so before
     // the fix the precise (unsnapped) front and the 15-min-snapped rear diverged
@@ -1966,6 +2015,89 @@ describe("estimatePreciseClockOffsetByFingerprint: per-run offsets", () => {
 
     it("a file with no parseable name time resolves to null", () => {
         expect(resolve("unknown.mp4")).toBeNull();
+    });
+});
+
+describe("rederiveStartUtcForCandidates: isolated GPS-bearing clips", () => {
+    const base = Date.UTC(2026, 5, 11, 20, 0, 0) / 1000;
+
+    function clip(name: string, firstGpsUnix: number): VideoCandidate {
+        return makeCandidate({
+            name,
+            startUtc: 0,
+            durationSec: 60,
+            channel: "front",
+            fingerprint: "ligogps-trailer-ts|camera",
+            records: [makeRecord(firstGpsUnix), makeRecord(firstGpsUnix + 59)],
+        });
+    }
+
+    it.each(["chronological", "reversed"])(
+        "keeps an isolated clip anchored when another recording run is added in %s order",
+        (order) => {
+            const isolated = clip("20260611_200000F.ts", base + 11);
+            rederiveStartUtcForCandidates([isolated], classifyFilenameTime);
+            expect(isolated.startUtc, "the full GPS window anchors the isolated clip").toBe(base + 11);
+
+            // The camera clock can resync between recording sessions. Another
+            // session's warm-GPS offset cannot replace this clip's own evidence.
+            const later = [clip("20260611_210000F.ts", base + 3600), clip("20260611_210100F.ts", base + 3660)];
+            const candidates = [isolated, ...later];
+            if (order === "reversed") candidates.reverse();
+            rederiveStartUtcForCandidates(candidates, classifyFilenameTime);
+            expect(isolated.startUtc, "unrelated recordings preserve the isolated clip's clock").toBe(base + 11);
+            expect(later[0]!.startUtc, "the later run keeps its own clock").toBe(base + 3600);
+            expect(later[1]!.startUtc, "the later run remains continuous").toBe(base + 3660);
+
+            rederiveStartUtcForCandidates(candidates, classifyFilenameTime);
+            expect(isolated.startUtc, "repeated clock refinement is stable").toBe(base + 11);
+        },
+    );
+});
+
+describe("rederiveStartUtcForCandidates: changing filename clocks within a run", () => {
+    function pair(namePrefix: string, firstGpsUnix: number, lastGpsUnix: number): VideoCandidate[] {
+        return (
+            [
+                ["F", "front"],
+                ["R", "rear"],
+            ] as const
+        ).map(([suffix, channel]) =>
+            makeCandidate({
+                name: `${namePrefix}${suffix}.ts`,
+                startUtc: 0,
+                durationSec: 60.08,
+                channel,
+                fingerprint: "ligogps-trailer-ts|camera",
+                records: [makeRecord(firstGpsUnix), makeRecord(lastGpsUnix)],
+            }),
+        );
+    }
+
+    it("preserves a paired clip's GPS clock and playback position when an earlier pair is added", () => {
+        const base = Date.UTC(2026, 5, 11, 21, 10, 0) / 1000;
+        const later = pair("20260611_211201", base + 131, base + 190);
+        rederiveStartUtcForCandidates(later, classifyFilenameTime);
+        const isolatedStart = later[0]!.startUtc;
+        expect(isolatedStart, "the later pair's own GPS window anchors its start").toBe(base + 131);
+
+        // These names still chain as one run, but the filename clock differs
+        // from GPS by three seconds in the first pair and ten in the second.
+        const earlier = pair("20260611_211011", base + 14, base + 70);
+        rederiveStartUtcForCandidates([...earlier, ...later], classifyFilenameTime);
+        for (const candidate of later) {
+            expect(candidate.startUtc, `${candidate.channel} retains its own GPS anchor`).toBe(isolatedStart);
+        }
+
+        const trips = groupTrips([...earlier, ...later], 300);
+        expect(trips, "both channel pairs remain in one trip").toHaveLength(1);
+        const trip = trips[0]!;
+        expect(trip.frames, "front and rear share each playback frame").toHaveLength(2);
+        const segment = trip.timeline.segments[1]!;
+        expect(
+            contentToWallUtc(trip.timeline, segment.contentStart + 25),
+            "playback uses the clip's own clock",
+        ).toBeCloseTo(isolatedStart + 25, 6);
     });
 });
 
