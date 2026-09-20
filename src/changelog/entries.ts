@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-09-20.1",
+        category: "fix",
+        text: {
+            en: "A clip’s GPS alignment no longer shifts when other recordings have different clocks.",
+            ru: "GPS-привязка клипа не сдвигается из-за других записей с отличающимися часами.",
+            de: "Die GPS-Zuordnung eines Clips verschiebt sich nicht mehr, wenn andere Aufnahmen abweichende Uhrzeiten haben.",
+            es: "La sincronización GPS de un clip ya no se desplaza cuando otras grabaciones tienen horas distintas.",
+            fr: "La synchronisation GPS d’un clip ne se décale plus lorsque d’autres enregistrements ont des horloges différentes.",
+            pl: "Synchronizacja GPS klipu nie przesuwa się już, gdy inne nagrania mają inny czas zegara.",
+            pt: "A sincronização GPS de um clipe deixa de se deslocar quando outras gravações têm horários diferentes.",
+            zh: "其他录像的时钟不一致时，不再导致片段的 GPS 同步发生偏移。",
+            ja: "他の録画の時計が異なっていても、クリップの GPS 同期がずれなくなりました。",
+            ko: "다른 녹화의 시계가 달라도 클립의 GPS 동기화가 어긋나지 않아요.",
+        },
+    },
+    {
         id: "2026-09-19.5",
         category: "feature",
         text: {
