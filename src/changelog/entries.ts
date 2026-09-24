@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-09-25.1",
+        category: "improvement",
+        text: {
+            en: "Minor fixes and dependency updates.",
+            ru: "Небольшие правки и обновление зависимостей.",
+            de: "Kleine Korrekturen und aktualisierte Abhängigkeiten.",
+            es: "Pequeñas correcciones y actualización de dependencias.",
+            fr: "Petites corrections et mise à jour des dépendances.",
+            pl: "Drobne poprawki i aktualizacja zależności.",
+            pt: "Pequenas correções e atualização de dependências.",
+            zh: "小幅修正和依赖更新。",
+            ja: "軽微な修正と依存ライブラリの更新。",
+            ko: "사소한 수정과 의존성 업데이트.",
+        },
+    },
+    {
         id: "2026-09-20.1",
         category: "fix",
         text: {
