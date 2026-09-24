@@ -2957,10 +2957,8 @@ async function onSaveClick(): Promise<void> {
                 notifyExportStateChanged();
             },
             onError: (messageKey, params) => {
-                // Move to a terminal error phase with a way back to the configure
-                // view - staying in "progress" left a frozen bar and a dead Cancel
-                // button as the only controls. messageKey is already one of the
-                // friendly export.error.* keys; show it directly, no "Error:" wrap.
+                // Keep a way back to configuration after a failure. The message
+                // is already localized; show it directly, no "Error:" wrap.
                 setErrorStatus(t(messageKey, params));
                 exportPanelState.phase = "error";
                 notifyExportStateChanged();

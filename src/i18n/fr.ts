@@ -219,6 +219,7 @@ export const frDict = {
     "status.hvccRepaired": "{n, plural, one {# fichier endommagé réparé} other {# fichiers endommagés réparés}}",
     "status.audioDamaged": "{n, plural, one {# fichier au son endommagé — vidéo seule} other {# fichiers au son endommagé — vidéo seule}}",
     "status.dropReadFailed": "Impossible de lire certains fichiers. Vérifie que la carte mémoire ou le disque est branché, puis ouvre à nouveau le dossier.",
+    "filePicker.busy": "Une fenêtre de sélection de fichier est déjà ouverte. Ferme-la et réessaie. Si tu ne la trouves pas, recharge cette page et rouvre tes enregistrements.",
     "status.nothingLoaded": "aucun enregistrement lisible trouvé",
     "status.tripOpenFailed": "Impossible d’ouvrir ce trajet. Vérifie que la carte mémoire ou le disque est branché, puis ouvre à nouveau le dossier. Si le problème persiste, signale-le-nous.",
     "status.gpxChooseTrip": "Ouvre le trajet voulu, puis ajoute à nouveau le fichier GPX.",

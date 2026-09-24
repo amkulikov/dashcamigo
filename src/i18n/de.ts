@@ -216,6 +216,7 @@ export const deDict = {
     "status.hvccRepaired": "{n, plural, one {# beschädigte Datei repariert} other {# beschädigte Dateien repariert}}",
     "status.audioDamaged": "{n, plural, one {# Datei mit defektem Ton — nur Video} other {# Dateien mit defektem Ton — nur Video}}",
     "status.dropReadFailed": "Einige Dateien konnten nicht gelesen werden. Prüfe, ob die Speicherkarte oder das Laufwerk angeschlossen ist, und öffne den Ordner erneut.",
+    "filePicker.busy": "Ein Dateidialog ist bereits geöffnet. Schließe ihn und versuche es erneut. Wenn du ihn nicht findest, lade die Seite neu und öffne deine Aufnahmen erneut.",
     "status.nothingLoaded": "keine abspielbaren Aufnahmen gefunden",
     "status.tripOpenFailed": "Diese Fahrt konnte nicht geöffnet werden. Prüfe, ob die Speicherkarte oder das Laufwerk angeschlossen ist, und öffne den Ordner erneut. Wenn es weiterhin nicht klappt, melde uns das Problem.",
     "status.gpxChooseTrip": "Öffne die gewünschte Fahrt und füge die GPX-Datei erneut hinzu.",

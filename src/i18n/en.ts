@@ -216,6 +216,7 @@ export const enDict = {
     "status.hvccRepaired": "fixed {n, plural, one {# damaged file} other {# damaged files}}",
     "status.audioDamaged": "{n, plural, one {# file has broken audio — video only} other {# files have broken audio — video only}}",
     "status.dropReadFailed": "Couldn't read some files. Check that the memory card or drive is connected, then open the folder again.",
+    "filePicker.busy": "A file dialog is already open. Close it and try again. If you can't find it, reload this page and reopen your recordings.",
     "status.nothingLoaded": "no playable recordings found",
     "status.tripOpenFailed": "Couldn't open this trip. Check that the memory card or drive is connected and open the folder again. If it still fails, report the problem.",
     "status.gpxChooseTrip": "Open the trip you want, then add the GPX file again.",

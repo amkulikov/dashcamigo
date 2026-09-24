@@ -214,6 +214,7 @@ export const zhDict = {
     "status.hvccRepaired": "{n, plural, other {已修复 # 个损坏的文件}}",
     "status.audioDamaged": "{n, plural, other {# 个文件音频损坏，仅播放视频}}",
     "status.dropReadFailed": "无法读取部分文件。请确认存储卡或硬盘已连接，然后重新打开文件夹。",
+    "filePicker.busy": "文件选择窗口已打开。请关闭后重试。如果找不到该窗口，请刷新此页面并重新打开录像。",
     "status.nothingLoaded": "未找到可播放的录像",
     "status.tripOpenFailed": "无法打开这段行程。请确认存储卡或硬盘已连接，然后重新打开文件夹。如果仍然失败，请反馈问题。",
     "status.gpxChooseTrip": "打开目标行程，然后重新添加 GPX 文件。",

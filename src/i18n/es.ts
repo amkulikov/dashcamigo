@@ -217,6 +217,7 @@ export const esDict = {
     "status.hvccRepaired": "{n, plural, one {# archivo dañado reparado} other {# archivos dañados reparados}}",
     "status.audioDamaged": "{n, plural, one {# archivo con audio dañado — solo vídeo} other {# archivos con audio dañado — solo vídeo}}",
     "status.dropReadFailed": "No se pudieron leer algunos archivos. Comprueba que la tarjeta de memoria o la unidad estén conectadas y vuelve a abrir la carpeta.",
+    "filePicker.busy": "Ya hay un diálogo de archivos abierto. Ciérralo y vuelve a intentarlo. Si no lo encuentras, recarga esta página y vuelve a abrir tus grabaciones.",
     "status.nothingLoaded": "no se encontraron grabaciones reproducibles",
     "status.tripOpenFailed": "No se pudo abrir este trayecto. Comprueba que la tarjeta de memoria o la unidad estén conectadas y vuelve a abrir la carpeta. Si sigue fallando, cuéntanos el problema.",
     "status.gpxChooseTrip": "Abre el trayecto que quieras y vuelve a añadir el archivo GPX.",

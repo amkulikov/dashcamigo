@@ -217,6 +217,7 @@ export const ptDict = {
     "status.hvccRepaired": "{n, plural, one {# arquivo danificado corrigido} other {# arquivos danificados corrigidos}}",
     "status.audioDamaged": "{n, plural, one {# arquivo com áudio danificado — só vídeo} other {# arquivos com áudio danificado — só vídeo}}",
     "status.dropReadFailed": "Não foi possível ler alguns arquivos. Verifique a conexão do cartão de memória ou da unidade e abra a pasta novamente.",
+    "filePicker.busy": "Uma janela de seleção de arquivo já está aberta. Feche-a e tente novamente. Se não a encontrar, recarregue esta página e abra suas gravações novamente.",
     "status.nothingLoaded": "nenhuma gravação reproduzível encontrada",
     "status.tripOpenFailed": "Não foi possível abrir esta viagem. Verifique a conexão do cartão de memória ou da unidade e abra a pasta novamente. Se ainda não funcionar, relate o problema.",
     "status.gpxChooseTrip": "Abra a viagem desejada e adicione o arquivo GPX novamente.",

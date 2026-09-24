@@ -257,6 +257,7 @@ export type I18nKey =
     | "status.hvccRepaired"
     | "status.audioDamaged"
     | "status.dropReadFailed"
+    | "filePicker.busy"
     | "status.nothingLoaded"
     | "status.tripOpenFailed"
     | "status.gpxChooseTrip"

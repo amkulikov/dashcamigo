@@ -424,9 +424,13 @@ export interface ExportSinkFailure {
     errorName: string;
 }
 
-interface ExportCaptureInit {
+interface ExportCaptureOptions {
+    pickerDelayMs?: number;
+    pickerErrorOnce?: { name: string; message: string };
+}
+
+interface ExportCaptureInit extends ExportCaptureOptions {
     fail?: ExportSinkFailure;
-    pickerDelayMs: number;
 }
 
 /** Screenshot helper - artifacts for human review, written next to the suite. */
@@ -452,11 +456,11 @@ export async function shot(page: Page, name: string): Promise<void> {
 export async function installExportCapture(
     page: Page,
     failure?: ExportSinkFailure,
-    opts?: { pickerDelayMs?: number },
+    opts?: ExportCaptureOptions,
 ): Promise<void> {
-    const initConfig: ExportCaptureInit = { fail: failure, pickerDelayMs: opts?.pickerDelayMs ?? 0 };
+    const initConfig: ExportCaptureInit = { fail: failure, ...opts };
     await page.addInitScript((config: ExportCaptureInit) => {
-        const { fail, pickerDelayMs } = config;
+        const { fail, pickerDelayMs = 0, pickerErrorOnce } = config;
         const enc = new TextEncoder();
         const toU8 = (data: unknown): Uint8Array => {
             if (data == null) return new Uint8Array(0);
@@ -549,10 +553,16 @@ export async function installExportCapture(
             showSaveFilePicker: unknown;
             __lastExportHandle: unknown;
             __exportPickerOpened: boolean;
+            __exportPickerCalls: number;
         };
+        w.__exportPickerCalls = 0;
         w.showSaveFilePicker = async (options?: { suggestedName?: string }) => {
+            w.__exportPickerCalls++;
             w.__exportPickerOpened = true;
             if (pickerDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, pickerDelayMs));
+            if (pickerErrorOnce && w.__exportPickerCalls === 1) {
+                throw new DOMException(pickerErrorOnce.message, pickerErrorOnce.name);
+            }
             const h = makeHandle(options?.suggestedName ?? "export.mp4");
             w.__lastExportHandle = h;
             return h;

@@ -224,6 +224,7 @@ export const koDict = {
     "status.hvccRepaired": "손상된 파일 {n, plural, other {# 개}}를 고쳤어요",
     "status.audioDamaged": "오디오가 손상된 파일 {n, plural, other {# 개}}, 영상만 재생해요",
     "status.dropReadFailed": "일부 파일을 읽지 못했어요. 메모리 카드나 드라이브가 연결되어 있는지 확인한 뒤 폴더를 다시 열어 주세요.",
+    "filePicker.busy": "파일 선택 창이 이미 열려 있어요. 창을 닫고 다시 시도해 주세요. 창이 보이지 않으면 이 페이지를 새로고침하고 녹화 파일을 다시 열어 주세요.",
     "status.nothingLoaded": "재생할 수 있는 녹화를 찾지 못했어요",
     "status.tripOpenFailed": "이 주행을 열지 못했어요. 메모리 카드나 드라이브가 연결되어 있는지 확인한 뒤 폴더를 다시 열어 주세요. 그래도 안 되면 문제를 알려 주세요.",
     "status.gpxChooseTrip": "원하는 주행을 연 다음 GPX 파일을 다시 추가하세요.",

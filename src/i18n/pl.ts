@@ -215,6 +215,7 @@ export const plDict = {
     "status.hvccRepaired": "{n, plural, one {naprawiono # uszkodzony plik} few {naprawiono # uszkodzone pliki} many {naprawiono # uszkodzonych plików} other {naprawiono # uszkodzonego pliku}}",
     "status.audioDamaged": "{n, plural, one {# plik z uszkodzonym dźwiękiem — tylko obraz} few {# pliki z uszkodzonym dźwiękiem — tylko obraz} many {# plików z uszkodzonym dźwiękiem — tylko obraz} other {# pliku z uszkodzonym dźwiękiem — tylko obraz}}",
     "status.dropReadFailed": "Nie udało się odczytać części plików. Sprawdź, czy karta pamięci lub dysk są podłączone, i otwórz folder ponownie.",
+    "filePicker.busy": "Okno wyboru pliku jest już otwarte. Zamknij je i spróbuj ponownie. Jeśli go nie widzisz, odśwież stronę i ponownie otwórz nagrania.",
     "status.nothingLoaded": "nie znaleziono żadnych odtwarzalnych nagrań",
     "status.tripOpenFailed": "Nie udało się otworzyć tego przejazdu. Sprawdź, czy karta pamięci lub dysk są podłączone, i otwórz folder ponownie. Jeśli to nie pomoże, zgłoś problem.",
     "status.gpxChooseTrip": "Otwórz wybrany przejazd i ponownie dodaj plik GPX.",

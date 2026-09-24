@@ -23,6 +23,7 @@ import {
     waitForAnnotationsReady,
 } from "./annotations.js";
 import { notify } from "./notifications.js";
+import { withFilePicker } from "./file-picker.js";
 import {
     refreshFolderSources,
     registerFolderOpenedHook,
@@ -337,16 +338,21 @@ function onAnnotationsChanged(): void {
 }
 
 async function createSidecarFile(): Promise<NotesConnectResult> {
-    if (typeof window.showSaveFilePicker !== "function") return "failed";
+    const pickSaveFile = window.showSaveFilePicker;
+    if (typeof pickSaveFile !== "function") return "failed";
     let handle: FileSystemFileHandle;
     try {
-        handle = await window.showSaveFilePicker({
-            id: "annotations-sidecar",
-            ...(currentFolderHandle ? { startIn: currentFolderHandle } : {}),
-            suggestedName: SIDECAR_SUGGESTED_NAME,
-            excludeAcceptAllOption: true,
-            types: [sidecarFileType()],
-        });
+        const picked = await withFilePicker("save", () =>
+            pickSaveFile.call(window, {
+                id: "annotations-sidecar",
+                ...(currentFolderHandle ? { startIn: currentFolderHandle } : {}),
+                suggestedName: SIDECAR_SUGGESTED_NAME,
+                excludeAcceptAllOption: true,
+                types: [sidecarFileType()],
+            }),
+        );
+        if (!picked) return "cancelled";
+        handle = picked;
     } catch (err) {
         if (isPickerDismissal(err)) return "cancelled";
         log.warn("notes save picker failed", { err: err instanceof Error ? err.message : String(err) });
@@ -358,16 +364,21 @@ async function createSidecarFile(): Promise<NotesConnectResult> {
 }
 
 async function useExistingSidecarFile(forWrite = false): Promise<NotesConnectResult> {
-    if (typeof window.showOpenFilePicker !== "function") return "failed";
+    const pickOpenFile = window.showOpenFilePicker;
+    if (typeof pickOpenFile !== "function") return "failed";
     let handle: FileSystemFileHandle | undefined;
     try {
-        [handle] = await window.showOpenFilePicker({
-            id: "annotations-sidecar",
-            ...(currentFolderHandle ? { startIn: currentFolderHandle } : {}),
-            multiple: false,
-            excludeAcceptAllOption: true,
-            types: [sidecarFileType()],
-        });
+        const picked = await withFilePicker("open", () =>
+            pickOpenFile.call(window, {
+                id: "annotations-sidecar",
+                ...(currentFolderHandle ? { startIn: currentFolderHandle } : {}),
+                multiple: false,
+                excludeAcceptAllOption: true,
+                types: [sidecarFileType()],
+            }),
+        );
+        if (!picked) return "cancelled";
+        [handle] = picked;
     } catch (err) {
         if (isPickerDismissal(err)) return "cancelled";
         log.warn("notes open picker failed", { err: err instanceof Error ? err.message : String(err) });

@@ -32,6 +32,7 @@ import type { VendorFile } from "../parsers/types.js";
 import { t } from "../i18n/index.js";
 
 import { dom } from "./dom.js";
+import { withFilePicker } from "./file-picker.js";
 import {
     bindSourceToFolder,
     disambiguatedLabels,
@@ -85,13 +86,21 @@ export async function initPersistentFolders(): Promise<void> {
  */
 export async function openViaDirectoryPicker(): Promise<void> {
     if (pickerInFlight) return;
-    if (typeof window.showDirectoryPicker !== "function") return;
+    const pickDirectory = window.showDirectoryPicker;
+    if (typeof pickDirectory !== "function") return;
     pickerInFlight = true;
     try {
         beginPreIngestReading();
         let handle: FileSystemDirectoryHandle;
         try {
-            handle = await window.showDirectoryPicker({ id: "recordings", mode: "read" });
+            const picked = await withFilePicker("directory", () =>
+                pickDirectory.call(window, { id: "recordings", mode: "read" }),
+            );
+            if (!picked) {
+                endPreIngestReading();
+                return;
+            }
+            handle = picked;
         } catch (err) {
             endPreIngestReading();
             // AbortError = the user dismissed the picker; silent, mirrors the

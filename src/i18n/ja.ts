@@ -225,6 +225,7 @@ export const jaDict = {
     "status.hvccRepaired": "{n, plural, other {壊れたファイルを # 件修復しました}}",
     "status.audioDamaged": "{n, plural, other {音声が壊れたファイル # 件、映像のみ再生します}}",
     "status.dropReadFailed": "一部のファイルを読み込めませんでした。メモリーカードやドライブの接続を確認して、フォルダーを開き直してください。",
+    "filePicker.busy": "ファイル選択画面がすでに開いています。閉じてからもう一度お試しください。見つからない場合は、このページを再読み込みして録画を開き直してください。",
     "status.nothingLoaded": "再生できる記録が見つかりませんでした",
     "status.tripOpenFailed": "この走行を開けませんでした。メモリーカードやドライブの接続を確認して、フォルダーを開き直してください。それでも開けない場合は、問題を報告してください。",
     "status.gpxChooseTrip": "対象の走行を開いてから、GPX ファイルをもう一度追加してください。",

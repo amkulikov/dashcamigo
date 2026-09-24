@@ -64,6 +64,7 @@ import { isMediabunnyReadAssert } from "./mediabunny-read-assert.js";
 import { isQuotaExceededError } from "./quota-error.js";
 import { isSourceReadError } from "../source-read-error.js";
 import { dom } from "./dom.js";
+import { withFilePicker } from "./file-picker.js";
 import { exportPanelState, OVERLAY_STATE_ACCESSORS, type Quality } from "./export-state.js";
 import { activeBlurRegions } from "./blur-regions-state.js";
 import {
@@ -763,7 +764,7 @@ export interface ExportFlowHooks {
     /** Error path. Takes an i18n key (+ params) rather than a resolved string so
      *  the panel can re-localize the error on a language switch, and so a raw
      *  browser exception never reaches the user - the flow always maps a failure
-     *  to one of the known, friendly export.error.* keys. */
+     *  to a localized error key. */
     onError: (messageKey: I18nKey, params?: Record<string, string | number | boolean>) => void;
     /** Called when the export is cancelled (user clicked Cancel). */
     onCancel: () => void;
@@ -916,18 +917,20 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
         >;
     } else {
         try {
-            mp4Handle = await showSaveFilePicker({
-                suggestedName: fileName,
-                types: [{ description: "MP4 video", accept: { "video/mp4": [".mp4"] } }],
-            });
+            const picked = await withFilePicker(
+                "save",
+                () =>
+                    showSaveFilePicker({
+                        suggestedName: fileName,
+                        types: [{ description: "MP4 video", accept: { "video/mp4": [".mp4"] } }],
+                    }),
+                () => hooks.onError("filePicker.busy"),
+            );
+            if (!picked) return;
+            mp4Handle = picked;
         } catch (err) {
             if (err instanceof Error && err.name === "AbortError") return;
-            // Non-abort picker failures are real (SecurityError on a consumed
-            // user activation, NotAllowedError when a picker is already open
-            // after a fast double-click). Rethrowing escaped runExportFlow as
-            // an unhandledrejection with zero user feedback - map to the
-            // friendly key like every other failure in this flow.
-            log.warn("save picker failed", err);
+            log.warn("save picker failed", { err: err instanceof Error ? err.message : String(err) });
             hooks.onError("export.error.generic");
             return;
         }
