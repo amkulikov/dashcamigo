@@ -1,7 +1,8 @@
+import { getVersion } from "maplibre-gl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { installMapRenderCadence } from "./map-render-cadence.js";
 
-function renderTarget(version = "6.10.0") {
+function renderTarget(version = getVersion()) {
     const listeners = new Map<string, Set<() => void>>();
     let paints = 0;
     let scheduled = false;
@@ -56,6 +57,12 @@ describe("map render cadence", () => {
         callbacks.clear();
         for (const callback of pending) callback(0);
     };
+
+    it("enables frame pacing for the installed MapLibre release", () => {
+        const target = renderTarget();
+        const cadence = installMapRenderCadence(target.map, () => ({}));
+        expect(cadence.enabled).toBe(true);
+    });
 
     it("coalesces repeated requests until another camera frame is applied", () => {
         const target = renderTarget();

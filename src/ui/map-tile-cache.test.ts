@@ -279,10 +279,16 @@ describe("shared map tile cache", () => {
         expect(response.data).toEqual({ tiles: ["https://example.test/{z}/{x}/{y}.pbf"] });
     });
 
-    it("rejects malformed JSON without caching it or reporting recovery", async () => {
+    it.each([
+        { body: "<html>upstream error</html>", error: SyntaxError },
+        { body: "null", error: TypeError },
+        { body: "false", error: TypeError },
+        { body: "42", error: TypeError },
+        { body: '"upstream error"', error: TypeError },
+    ])("rejects $body without caching it or reporting recovery", async ({ body, error }) => {
         const fetcher = vi
             .fn()
-            .mockResolvedValueOnce(new Response("<html>upstream error</html>"))
+            .mockResolvedValueOnce(new Response(body))
             .mockResolvedValueOnce(new Response(JSON.stringify({ tiles: ["https://example.test/{z}/{x}/{y}.pbf"] })));
         vi.stubGlobal("fetch", fetcher);
         const probe = vi.fn(async () => false);
@@ -296,7 +302,7 @@ describe("shared map tile cache", () => {
 
         const failure = await loader(request, new AbortController()).catch((error: unknown) => error);
 
-        expect(failure).toMatchObject({ status: 0, url: source, cause: expect.any(SyntaxError) });
+        expect(failure).toMatchObject({ status: 0, url: source, cause: expect.any(error) });
         expect(getSharedMapTileCacheStats()).toMatchObject({ entries: 0, bytes: 0 });
         expect(isOffline()).toBe(true);
         await reportMapProviderTileError(failure);

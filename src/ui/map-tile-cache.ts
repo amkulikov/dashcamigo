@@ -128,6 +128,12 @@ function tileRequestError(url: string, status: number, statusText: string, cause
     return error;
 }
 
+function parseMapResourceJson(data: ArrayBuffer): object {
+    const value: unknown = JSON.parse(new TextDecoder().decode(data));
+    if (value === null || typeof value !== "object") throw new TypeError("map resource json must be an object");
+    return value;
+}
+
 async function fetchTile(url: string, signal: AbortSignal, type?: RequestParameters["type"]): Promise<TilePayload> {
     if (mapProviderForTileUrl(url) === "yandex") await waitForYandexRequest(signal);
     if (signal.aborted) throw abortError(signal.reason);
@@ -148,7 +154,7 @@ async function fetchTile(url: string, signal: AbortSignal, type?: RequestParamet
         };
         // A successful HTTP response can still contain an upstream error page.
         // Reject it before it enters the shared cache or signals recovery.
-        if (type === "json") JSON.parse(new TextDecoder().decode(payload.data));
+        if (type === "json") parseMapResourceJson(payload.data);
         // Local GeoJSON and memory-cache hits cannot prove network recovery.
         if (mapProviderForTileUrl(url) === getMapProvider()) reportMapTilesOk();
         return payload;
@@ -336,8 +342,8 @@ function unwrapTileUrl(protocolUrl: string): string {
 
 const loadSharedTile: AddProtocolAction = async (request, abortController) => {
     const payload = await sharedTileCache.load(unwrapTileUrl(request.url), abortController.signal, request.type);
-    let data: unknown = payload.data;
-    if (request.type === "json") data = JSON.parse(new TextDecoder().decode(payload.data));
+    let data: ArrayBuffer | object | string = payload.data;
+    if (request.type === "json") data = parseMapResourceJson(payload.data);
     else if (request.type === "string") data = new TextDecoder().decode(payload.data);
     return { ...payload, data };
 };
