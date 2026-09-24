@@ -37,6 +37,11 @@ describe("escortMapSidecar.matches", () => {
         const known = new Set(["20260511_0016_CAM.MP4"]);
         expect(escortMapSidecar.matches(sidecar, known)).toBeNull();
     });
+
+    it("does not attach numbered CAM maps with different filename casing", () => {
+        const sidecar = makeVendorFile("Normal_Front/20260923_0134_cam1.MAP", "");
+        expect(escortMapSidecar.matches(sidecar, new Set(["20260923_0134_CAM1.mp4"]))).toBeNull();
+    });
 });
 
 describe("parseMapText: happy path (synthetic)", () => {
@@ -58,6 +63,13 @@ describe("parseMapText: happy path (synthetic)", () => {
 });
 
 describe("parseMapText: edge cases (synthetic)", () => {
+    it.each(["\n", "\r\n", "\r"])("accepts %j record separators without losing the last point", (ending) => {
+        const text = readFileSync(resolve(FIXTURES_DIR, "synthetic-happy.map"), "utf8");
+        const parsed = parseMapText(text.replace(/\r?\n/g, ending), "20260511_0016_CAM.MP4");
+        expect(parsed.records).toHaveLength(5);
+        expect(parsed.skipped).toEqual([]);
+    });
+
     it("segregates malformed lines into skipped, parses valid ones", () => {
         const text = readFileSync(resolve(FIXTURES_DIR, "synthetic-edge.map"), "utf8");
         const { records, skipped } = parseMapText(text, "20260511_0016_CAM.MP4");

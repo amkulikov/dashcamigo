@@ -13,7 +13,7 @@
 //  4. Leaves speed as-is - not sensitive without coordinates.
 //
 // Run:
-//   node scripts/anonymize-escort-log.mjs
+//   node scripts/anonymize-escort-log.mjs <input.map> <output.map>
 //
 // The script is idempotent: re-running gives the same output for the same input.
 
@@ -22,8 +22,8 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const INPUT = resolve(REPO_ROOT, "private/incoming/new/20260511_0016_CAM.map");
-const OUTPUT = resolve(REPO_ROOT, "src/parsers/__fixtures__/escort/real-anonymized.map");
+const INPUT = resolve(REPO_ROOT, process.argv[2] ?? "private/incoming/new/20260511_0016_CAM.map");
+const OUTPUT = resolve(REPO_ROOT, process.argv[3] ?? "src/parsers/__fixtures__/escort/real-anonymized.map");
 
 const MAX_LINES = 10;
 
@@ -38,13 +38,13 @@ function roundCoordToDegree(value) {
 
 function main() {
     const text = readFileSync(INPUT, "utf8");
-    const lines = text.split(/\r?\n/);
     const out = [];
 
     let kept = 0;
-    for (let i = 0; i < lines.length && kept < MAX_LINES; i++) {
-        const raw = lines[i];
-        if (raw === "") continue;
+    // Preserve line endings, including a lone final CR, for parser regressions.
+    for (const match of text.matchAll(/([^\r\n]+)(\r\n|\r|\n|$)/g)) {
+        if (kept >= MAX_LINES) break;
+        const [, raw, ending] = match;
         // Strip the ";" terminator so split by "," doesn't pull it into the last field.
         const body = raw.endsWith(";") ? raw.slice(0, -1) : raw;
         const parts = body.split(",");
@@ -67,13 +67,12 @@ function main() {
             parts[9], // accel Y
             parts[10], // accel Z
         ];
-        out.push(`${newParts.join(",")};`);
+        out.push(`${newParts.join(",")};${ending}`);
         kept++;
     }
 
-    out.push("");
     mkdirSync(dirname(OUTPUT), { recursive: true });
-    writeFileSync(OUTPUT, out.join("\n"));
+    writeFileSync(OUTPUT, out.join(""));
     console.log(`wrote ${kept} anonymized records to ${OUTPUT}`);
 }
 

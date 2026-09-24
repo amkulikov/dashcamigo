@@ -31,15 +31,9 @@ const ENTRY_HTML = resolve(DIST, "en/index.html");
 // Budget for the SUM of eagerly preloaded vendor chunks (the <link
 // rel=modulepreload> set, which excludes the entry <script> itself).
 //
-// Current legit eager vendors: intl-messageformat (~34KB, needed for the first
-// render's translations) + native-file-system-adapter (~11KB) = ~45KB. maplibre,
-// chart.js and mediabunny are all lazy now (T9) and must NOT appear here.
-//
-// The budget sits below "current + chart.js" (~45 + 167 = 212KB): if any of the
-// three lazy libs (chart ~167KB, mediabunny ~239KB, maplibre ~1MB) leaks back
-// into the eager set, the sum blows past it. ~75KB of headroom for i18n/fsa
-// growth before a deliberate bump is needed.
-const EAGER_VENDOR_BUDGET_BYTES = 120 * 1024;
+// Shared app helpers also land in this set. Allow small parser additions while
+// keeping the headroom well below any of the guarded viewer libraries.
+const EAGER_VENDOR_BUDGET_BYTES = 125 * 1024;
 
 // Budget for ALL eager JS the landing downloads: the entry <script src> chunk
 // PLUS the modulepreload set. The vendor budget above is blind to the entry

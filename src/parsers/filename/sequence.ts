@@ -6,6 +6,7 @@ import type { VendorFile } from "../types.js";
 import {
     RX_70MAI,
     RX_CARCAM,
+    RX_DATE_SEQUENCE_CAM,
     RX_DDPAI_EVENT,
     RX_DDPAI_NORMAL,
     RX_DDPAI_TIMELAPSE,
@@ -74,6 +75,14 @@ const ddpaiSequence: FilenameSequenceTechnique = {
         const ev = file.file.name.match(RX_DDPAI_EVENT);
         if (ev) return Number(ev[2]);
         return null;
+    },
+};
+
+const dateSequenceCamSequence: FilenameSequenceTechnique = {
+    id: "date-sequence-cam-sequence",
+    extract(file: VendorFile): number | null {
+        const match = file.file.name.match(RX_DATE_SEQUENCE_CAM);
+        return match ? Number(match[2]) : null;
     },
 };
 
@@ -189,6 +198,7 @@ export const FILENAME_SEQUENCE: readonly FilenameSequenceTechnique[] = [
     carcamSequence,
     recSingleSequence,
     ddpaiSequence,
+    dateSequenceCamSequence,
     fitcamxSequence,
     sectionedNmeaSequence,
     movSeqFriSequence,

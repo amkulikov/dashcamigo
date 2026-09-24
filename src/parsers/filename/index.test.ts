@@ -41,6 +41,78 @@ function vf(name: string, relativePath: string = name): VendorFile {
     return { file: new File([new Uint8Array(0)], name), relativePath };
 }
 
+describe("date-sequence-cam filenames", () => {
+    it.each([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])("recognizes CAM%s and uses the folder for its mount", (index) => {
+        const name = `20260923_0134_CAM${index}.MP4`;
+        const file = vf(name, `card/Normal_Front/${name}`);
+        expect(classifyFilenameSequence(file)).toBe(134);
+        expect(classifyFilenameTime(file)).toBeNull();
+        expect(classifyFilenameChannel(file)).toEqual({ channel: "front", confident: true });
+        expect(classifyFilenameMode(file)).toBe("normal");
+        expect(cameraFingerprint(file)).toBe(
+            cameraFingerprint(vf("20260923_0134_CAM1.MP4", "card/Normal_Front/20260923_0134_CAM1.MP4")),
+        );
+    });
+
+    it("preserves unknown channel indices without inventing mounts or merging their streams", () => {
+        const fingerprints = [0, 3, 4, 5, 6, 7, 8, 9].map((index) => {
+            const file = vf(`20260923_0134_CAM${index}.MP4`);
+            const next = vf(`20260923_0135_CAM${index}.MP4`);
+            expect(classifyFilenameChannel(file)).toBeNull();
+            expect(cameraFingerprint(file)).toBe(cameraFingerprint(next));
+            expect(cameraFingerprint(file)).not.toBe(cameraFingerprint(vf("20260923_0134_CAM1.MP4")));
+            return cameraFingerprint(file);
+        });
+        expect(new Set(fingerprints).size).toBe(fingerprints.length);
+    });
+
+    it.each(["CAM10", "CAMA"])("does not claim the unsupported %s suffix", (suffix) => {
+        const file = vf(`20260923_0134_${suffix}.MP4`, `Normal_Front/20260923_0134_${suffix}.MP4`);
+        expect(classifyFilenameSequence(file)).toBeNull();
+        expect(classifyFilenameChannel(file)).toBeNull();
+        expect(classifyFilenameMode(file)).toBeNull();
+    });
+
+    it.each(["0060", "0134", "2359"])("reads %s as a sequence without inventing a clock", (counter) => {
+        const file = vf(`20260923_${counter}_CAM1.MP4`, `card/Normal_Front/20260923_${counter}_CAM1.MP4`);
+        expect(matchFilenameTime(file)).toEqual({ value: null, matchedId: null });
+        expect(matchFilenameSequence(file)).toEqual({
+            value: Number(counter),
+            matchedId: "date-sequence-cam-sequence",
+        });
+        expect(matchFilenameChannel(file)).toEqual({
+            value: { channel: "front", confident: true },
+            matchedId: "date-sequence-cam-channel",
+        });
+        expect(matchFilenameMode(file)).toEqual({ value: "normal", matchedId: "date-sequence-cam-mode" });
+    });
+
+    it("keeps channels and modes in one camera key while preserving enclosing camera roots", () => {
+        const front = vf("20260923_0134_CAM1.MP4", "card/Normal_Front/Normal_Front/20260923_0134_CAM1.MP4");
+        const rear = vf("20260923_0135_CAM2.MP4", "card/Normal_Front/Event_Rear/20260923_0135_CAM2.MP4");
+        expect(cameraFingerprint(front)).toBe(cameraFingerprint(rear));
+        expect(cameraFingerprint(front)).not.toBe(cameraFingerprint(vf(front.file.name, `card/${front.file.name}`)));
+        expect(classifyFilenameMode(rear)).toBe("event");
+        expect(classifyFilenameChannel(rear)).toEqual({ channel: "rear", confident: true });
+    });
+
+    it("recognizes a flat CAM1 file without guessing a recording mode", () => {
+        const file = vf("20260923_0134_cam1.mp4");
+        expect(classifyFilenameChannel(file)).toEqual({ channel: "front", confident: true });
+        expect(classifyFilenameMode(file)).toBeNull();
+        expect(classifyFilenameChannel(vf("20260923_0134_CAM2.MP4"))).toEqual({ channel: "rear", confident: false });
+    });
+
+    it("leaves unnumbered CAM clocks and unrelated folder contents unchanged", () => {
+        const legacy = vf("20260511_0016_CAM.MP4");
+        expect(matchFilenameTime(legacy).matchedId).toBe("escort-time");
+        expect(classifyFilenameSequence(legacy)).toBeNull();
+        const other = vf("random.mp4", "Normal_Front/random.mp4");
+        expect(classifyFilenameChannel(other)).toBeNull();
+        expect(classifyFilenameMode(other)).toBeNull();
+    });
+});
+
 describe("matchFilenameTime", () => {
     it("70mai-time wins on NO-prefix", () => {
         const r = matchFilenameTime(vf("NO20240429-182640F.MP4"));

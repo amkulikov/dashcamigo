@@ -12,6 +12,8 @@ import {
     RX_CARCAM,
     RX_CARCAM_PATH_EVENT,
     RX_CARCAM_PATH_PARKING,
+    RX_DATE_SEQUENCE_CAM,
+    RX_DATE_SEQUENCE_CAM_PATH,
     RX_DDPAI_EVENT,
     RX_DDPAI_NORMAL,
     RX_DDPAI_TIMELAPSE,
@@ -186,6 +188,18 @@ const escortMode: FilenameModeTechnique = {
         if (RX_ESCORT_PATH_EVENT.test(path)) return "event";
         if (RX_ESCORT_PATH_MANUAL.test(path)) return "manual";
         if (RX_ESCORT_PATH_NORMAL.test(path)) return "normal";
+        return null;
+    },
+};
+
+const dateSequenceCamMode: FilenameModeTechnique = {
+    id: "date-sequence-cam-mode",
+    extract(file: VendorFile): RecordingMode | null {
+        if (!RX_DATE_SEQUENCE_CAM.test(file.file.name)) return null;
+        const mode = file.relativePath.match(RX_DATE_SEQUENCE_CAM_PATH)?.[1]?.toLowerCase();
+        if (mode === "normal") return "normal";
+        if (mode === "event") return "event";
+        if (mode === "favorites") return "manual";
         return null;
     },
 };
@@ -450,6 +464,7 @@ export const FILENAME_MODE: readonly FilenameModeTechnique[] = [
     ddpaiMode,
     eaceMode,
     escortMode,
+    dateSequenceCamMode,
     // novatek-mode precedes fitcamx-mode so the mnemonic P/E letter and the
     // Movie/RO/ lock folder stay authoritative regardless of walk changes;
     // fitcamx's Movie|EMR path claim is additionally name-gated, so it cannot

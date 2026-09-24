@@ -38,6 +38,7 @@
 // (forward-azimuth). Endpoint records get the bearing of their only neighbour.
 
 import type { GpsRecord, SidecarHandler, SkippedLine, VendorFile } from "../types.js";
+import { RX_DATE_SEQUENCE_CAM } from "../filename/_patterns.js";
 import { utcMillisecondsFromParts } from "../internal/calendar.js";
 import { parseNmeaCoord } from "../internal/nmea.js";
 import { matchByBasename } from "./_basename.js";
@@ -100,7 +101,7 @@ function computeBearingDeg(lat1: number, lon1: number, lat2: number, lon2: numbe
  * returns only records).
  */
 export function parseMapText(text: string, mp4Filename: string): { records: GpsRecord[]; skipped: SkippedLine[] } {
-    const lines = text.split(/\r?\n/);
+    const lines = text.split(/\r\n|[\r\n]/);
     const records: GpsRecord[] = [];
     const skipped: SkippedLine[] = [];
 
@@ -221,7 +222,10 @@ export function parseMapText(text: string, mp4Filename: string): { records: GpsR
 export const escortMapSidecar: SidecarHandler = {
     id: "escort-map",
     matches(file: VendorFile, knownVideos: Set<string>): string | null {
-        return matchByBasename(file, knownVideos, RX_MAP_SIDECAR);
+        const match = matchByBasename(file, knownVideos, RX_MAP_SIDECAR);
+        // Numbered CAM clips carry freeGPS in the video. Their .map can refer
+        // to an earlier recording; accepting it suppresses the embedded track.
+        return match && !RX_DATE_SEQUENCE_CAM.test(match) ? match : null;
     },
     async parse(file: VendorFile, mp4Filename: string, signal?: AbortSignal): Promise<GpsRecord[]> {
         const text = await readSidecarText(file, signal);

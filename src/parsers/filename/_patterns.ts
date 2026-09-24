@@ -127,6 +127,10 @@ export const RX_ESCORT_PATH_EVENT = /(?:^|\/)event\//i;
 export const RX_ESCORT_PATH_MANUAL = /(?:^|\/)favorites\//i;
 export const RX_ESCORT_PATH_NORMAL = /(?:^|\/)normal\//i;
 
+// Numbered CAM clips use a sequence, not HHMM. Keep separate from RX_ESCORT.
+export const RX_DATE_SEQUENCE_CAM = /^(\d{8})_(\d{4})_CAM([0-9])\.mp4$/i;
+export const RX_DATE_SEQUENCE_CAM_PATH = /(?:^|\/)(normal|event|favorites)_(front|rear)\/(?=[^/]+$)/i;
+
 // FitCamX: 14-digit timestamp + _ + 6-digit token + letter + .ts.
 // Channel/mode come from parent folder (Movie / Movie_E / EMR / EMR_E).
 export const RX_FITCAMX = /^(\d{14})_(\d{6})([A-Z])\.ts$/i;

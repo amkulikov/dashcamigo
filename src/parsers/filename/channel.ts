@@ -24,6 +24,8 @@ import {
     RX_CARCAM_PATH_INTERIOR,
     RX_CARCAM_PATH_REAR,
     RX_CARCAM_PATH_SIDE,
+    RX_DATE_SEQUENCE_CAM,
+    RX_DATE_SEQUENCE_CAM_PATH,
     RX_DDPAI_EVENT,
     RX_DDPAI_NORMAL,
     RX_DDPAI_TIMELAPSE,
@@ -153,6 +155,19 @@ const blackvueChannel: FilenameChannelTechnique = {
         const m = file.file.name.match(RX_BLACKVUE);
         if (!m) return null;
         return mnemonicChannel(m[4]!);
+    },
+};
+
+const dateSequenceCamChannel: FilenameChannelTechnique = {
+    id: "date-sequence-cam-channel",
+    extract(file: VendorFile): ChannelMatch | null {
+        const match = file.file.name.match(RX_DATE_SEQUENCE_CAM);
+        if (!match) return null;
+        const path = file.relativePath.match(RX_DATE_SEQUENCE_CAM_PATH);
+        if (path) return sure(path[2]!.toLowerCase() === "front" ? "front" : "rear");
+        if (match[3] === "1") return sure("front");
+        if (match[3] === "2") return guess("rear");
+        return null;
     },
 };
 
@@ -573,6 +588,7 @@ export const FILENAME_CHANNEL: readonly FilenameChannelTechnique[] = [
     mai70Channel,
     beferichChannel,
     blackvueChannel,
+    dateSequenceCamChannel,
     recSingleChannel,
     seiDoubleGpsChannel,
     carcamChannel,

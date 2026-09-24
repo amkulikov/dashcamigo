@@ -20,6 +20,7 @@ import {
     RX_BEFERICH,
     RX_BLACKVUE,
     RX_CARCAM,
+    RX_DATE_SEQUENCE_CAM,
     RX_DDPAI_EVENT,
     RX_DDPAI_NORMAL,
     RX_DDPAI_TIMELAPSE,
@@ -178,6 +179,11 @@ const GPS_SOURCE_HINTS: readonly GpsSourceHint[] = [
         id: "escort",
         matches: (f) => RX_ESCORT.test(f.file.name),
         source: "basename-sidecar",
+    },
+    {
+        id: "date-sequence-cam",
+        matches: (f) => RX_DATE_SEQUENCE_CAM.test(f.file.name),
+        source: "embedded",
     },
     // 360CARDVR: one preallocated 360GPSINFO JSONL log spans the loop-recording
     // MP4 files under REC/. The path gate keeps the shared MP4 name language

@@ -28,6 +28,8 @@ import {
     RX_BEFERICH,
     RX_BLACKVUE,
     RX_CARCAM,
+    RX_DATE_SEQUENCE_CAM,
+    RX_DATE_SEQUENCE_CAM_PATH,
     RX_DDPAI_EVENT,
     RX_DDPAI_NORMAL,
     RX_DDPAI_TIMELAPSE,
@@ -320,6 +322,23 @@ const escortCameraKey: FilenameCameraKeyTechnique = {
         // boundary, which is not what we want for the channel-key concept.
         const dir = strippedParentDir(file.relativePath, []);
         return `escort|${dir}|${maskName(file.file.name)}`;
+    },
+};
+
+const dateSequenceCamCameraKey: FilenameCameraKeyTechnique = {
+    id: "date-sequence-cam-camera-key",
+    extract(file: VendorFile): string | null {
+        const match = file.file.name.match(RX_DATE_SEQUENCE_CAM);
+        if (!match) return null;
+        const channelIndex = match[3]!;
+        // Unknown mounts share the fallback front slot. Preserve their index
+        // so simultaneous streams cannot become one interleaved trip.
+        const hasMount =
+            RX_DATE_SEQUENCE_CAM_PATH.test(file.relativePath) || channelIndex === "1" || channelIndex === "2";
+        const path = file.relativePath.replace(RX_DATE_SEQUENCE_CAM_PATH, "/");
+        const dir = strippedParentDir(path, []);
+        const channelKey = hasMount ? "" : `|cam${channelIndex}`;
+        return `date-sequence-cam|${dir}|${maskName(file.file.name)}${channelKey}`;
     },
 };
 
@@ -705,6 +724,7 @@ export const FILENAME_CAMERA_KEY: readonly FilenameCameraKeyTechnique[] = [
     novatekTsCameraKey,
     eaceCameraKey,
     escortCameraKey,
+    dateSequenceCamCameraKey,
     fitcamxCameraKey,
     fordCameraKey,
     hpimCameraKey,
