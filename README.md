@@ -11,9 +11,6 @@ brands. It has no backend: your files stay on your device while the app joins
 clips into trips and keeps cameras in sync. Watch the video alongside the route,
 speed and G-force, then trim and save the part you need as an MP4.
 
-See the [privacy policy](https://dashcamigo.app/privacy) for the hosted site's
-network activity.
-
 ## Getting started
 
 - [**dashcamigo.app**](https://dashcamigo.app) — the latest stable release.
