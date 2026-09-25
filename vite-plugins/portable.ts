@@ -156,7 +156,7 @@ export function portablePlugin(options: PortableOptions): Plugin {
                         /<script type="module" src="\/src\/app\.ts"><\/script>/,
                         () => `<script type="module">${js.replace(/<\/script/gi, "<\\/script")}</script>`,
                     )
-                    .replaceAll("__PORTABLE_FULL_VERSION_URL__", escapeAttr(options.fullVersionUrl));
+                    .replaceAll("__PORTABLE_FULL_VERSION_URL__", () => escapeAttr(options.fullVersionUrl));
                 // Resolve website links against the explicit edition destination; file: has no site root.
                 html = html.replace(
                     /(<a\b[^>]*\bhref=")(\/[^"#]*)"/g,

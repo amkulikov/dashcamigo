@@ -12,7 +12,7 @@ beforeAll(() => {
 });
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
 
-function buildArtifact(name: string, overrides: NodeJS.ProcessEnv = {}): Buffer {
+function buildArtifact(name: string, overrides: NodeJS.ProcessEnv = {}, fullVersionUrl?: string): Buffer {
     const outDir = join(directory, name);
     execFileSync(
         process.execPath,
@@ -25,6 +25,7 @@ function buildArtifact(name: string, overrides: NodeJS.ProcessEnv = {}): Buffer 
             "v2026.01.01",
             "--out-dir",
             outDir,
+            ...(fullVersionUrl ? ["--full-version-url", fullVersionUrl] : []),
         ],
         {
             cwd: resolve("."),
@@ -32,7 +33,11 @@ function buildArtifact(name: string, overrides: NodeJS.ProcessEnv = {}): Buffer 
             stdio: "pipe",
         },
     );
-    const manifest = parsePortableManifest(JSON.parse(readFileSync(join(outDir, "manifest.json"), "utf8")));
+    const manifest = parsePortableManifest(
+        JSON.parse(readFileSync(join(outDir, "manifest.json"), "utf8")),
+        false,
+        Boolean(fullVersionUrl),
+    );
     expect(manifest).not.toBeNull();
     const artifact = readFileSync(join(outDir, manifest!.files.ru!.filename));
     const outer = artifact.toString();
@@ -78,14 +83,19 @@ it("produces identical public bytes with unrelated hosted configuration present"
     expect(html).not.toMatch(/(?:img|connect)-src[^;]+https:\/\/tiles\.api-maps\.yandex\.ru/);
 }, 30_000);
 
-it("embeds the explicit portable Yandex browser key and permits its tiles", () => {
+it("embeds the explicit portable inputs and preserves literal custom URL characters", () => {
     const key = "synthetic-portable-key";
-    const artifact = buildArtifact("yandex", {
-        PORTABLE_YANDEX_TILES_API_KEY: `  ${key}  `,
-        VITE_YANDEX_TILES_API_KEY: "synthetic-hosted-key",
-        VITE_DEFAULT_MAP_PROVIDER: "yandex",
-        VITE_SENTRY_DSN: "https://synthetic@example.invalid/1",
-    });
+    const fullVersionUrl = "https://mirror.invalid/viewer/$&/";
+    const artifact = buildArtifact(
+        "yandex",
+        {
+            PORTABLE_YANDEX_TILES_API_KEY: `  ${key}  `,
+            VITE_YANDEX_TILES_API_KEY: "synthetic-hosted-key",
+            VITE_DEFAULT_MAP_PROVIDER: "yandex",
+            VITE_SENTRY_DSN: "https://synthetic@example.invalid/1",
+        },
+        fullVersionUrl,
+    );
     const outer = artifact.toString();
     const html = decodePortableHtml(outer);
     expect(html).toContain(key);
@@ -93,6 +103,10 @@ it("embeds the explicit portable Yandex browser key and permits its tiles", () =
     expect(html).toContain("https://tiles.api-maps.yandex.ru/v1/tiles/");
     expect(html).toContain("projection=web_mercator&apikey=");
     for (const content of [outer, html]) {
+        expect(content.includes('href="https://mirror.invalid/viewer/$&amp;/"'), "literal custom destination").toBe(
+            true,
+        );
+        expect(content).not.toContain("__PORTABLE_FULL_VERSION_URL__");
         expect(content).not.toContain("synthetic-hosted-key");
         expect(content).not.toContain("example.invalid");
         expect(content).toMatch(/img-src[^;]+https:\/\/tiles\.api-maps\.yandex\.ru/);
