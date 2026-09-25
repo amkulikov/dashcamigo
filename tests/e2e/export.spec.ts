@@ -819,7 +819,8 @@ test.describe("export", () => {
         expect(await page.evaluate(() => (window as any).__dashcamigo.state.isPreviewZoom)).toBe(true);
 
         // Pause the one-click preview before asserting the independent seek clamp.
-        if ((await play.getAttribute("data-paused")) === "false") await play.click();
+        await expect(play).toHaveAttribute("data-paused", "false");
+        await play.click();
         await expect(play).toHaveAttribute("data-paused", "true");
 
         // Digit "9" jumps to 90% of the TRIP (~3.6s) - a trip-time seek that
