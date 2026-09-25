@@ -102,21 +102,28 @@ test.describe("layout stability", () => {
         await expect(page.locator("#landing")).toBeVisible();
 
         const whatsNew = page.locator("#whats-new-btn");
+        const offlineUse = page.locator("#offline-use-btn");
+        await expect(offlineUse).toBeVisible();
         const beforeInstall = await whatsNew.boundingBox();
+        const offlineBefore = await offlineUse.boundingBox();
         expect(beforeInstall, "what's-new button has initial geometry").not.toBeNull();
+        expect(offlineBefore, "offline-use button has initial geometry").not.toBeNull();
 
         // Chromium supplies this event after installability checks, well after
         // first paint. The synthetic event drives the same production handler.
         await page.evaluate(() => {
             dispatchEvent(new Event("beforeinstallprompt", { cancelable: true }));
         });
-        await expect(page.locator("#install-btn")).toBeVisible();
+        await expect(offlineUse).toBeVisible();
         const afterInstall = await whatsNew.boundingBox();
-        expect(afterInstall, "what's-new button keeps geometry after install reveal").not.toBeNull();
+        expect(afterInstall, "what's-new button keeps geometry after install eligibility changes").not.toBeNull();
         expect(
             Math.abs(afterInstall!.x - beforeInstall!.x),
-            "install reveal does not move #whats-new-btn",
+            "install eligibility does not move #whats-new-btn",
         ).toBeLessThan(0.5);
+        expect(await offlineUse.boundingBox(), "install eligibility preserves the offline-use button").toEqual(
+            offlineBefore,
+        );
 
         await page.locator("#folder-input").setInputFiles(SAMPLE_70MAI);
         await expect(page.locator("li.trip:not(.unindexed-note)").first()).toBeVisible({ timeout: 30_000 });

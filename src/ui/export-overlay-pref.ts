@@ -11,7 +11,9 @@ export const OVERLAY_PREFERENCES_STORAGE_KEY = "dashcamigo:export:overlays";
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 const OVERLAY_STYLES = ["min", "card", "bold"] as const;
 const MAP_SHAPES = ["rect", "circle"] as const;
-const MAP_PROVIDERS = ["openfreemap", "osm-vector"] as const satisfies readonly OverlayMapProviderPreference[];
+const MAP_PROVIDERS: readonly OverlayMapProviderPreference[] = __PORTABLE__
+    ? ["route-only", "openfreemap", "osm-vector"]
+    : ["openfreemap", "osm-vector"];
 const MAP_THEMES = ["light", "dark", "neon"] as const;
 const MAP_LABEL_SIZES = [100, 125, 150, 200] as const;
 const MAP_LABEL_DENSITIES = ["standard", "more", "max"] as const;

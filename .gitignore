@@ -25,6 +25,7 @@ Thumbs.db
 # Node.js / Vite
 /node_modules/
 /dist/
+/dist-portable/
 /.vite/
 *.tsbuildinfo
 
@@ -57,4 +58,3 @@ Thumbs.db
 
 # Coverage reports (npm run test:coverage) - on-demand, never committed.
 /tests/coverage/
-

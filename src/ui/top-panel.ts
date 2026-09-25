@@ -126,8 +126,6 @@ export function syncTopPanel(): void {
     if (controls) controls.hidden = !isMulti;
     const summary = document.getElementById("top-panel-controls-summary");
     if (summary) summary.textContent = t("plurals.camera", { n: state.composition.channelOrder.length });
-    const hint = document.getElementById("top-panel-hint");
-    if (hint) hint.hidden = !isMulti;
 
     // Trip-name header is only useful when the sidebar is hidden (export
     // mode on desktop) - duplicating the sidebar trip card is noise.

@@ -21,7 +21,7 @@ beforeAll(async () => {
     const bundle = await rolldown({
         input: fileURLToPath(new URL("./per-file-mse-worker.ts", import.meta.url)),
         platform: "node",
-        transform: { define: { "import.meta.env.DEV": "false" } },
+        transform: { define: { "import.meta.env.DEV": "false", __PORTABLE__: "false" } },
     });
     try {
         await bundle.write({ file: join(tempDirectory, "worker.mjs"), format: "esm" });

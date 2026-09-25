@@ -38,7 +38,7 @@ test.describe("camera reflection", () => {
             input: resolve(REPO_ROOT, "tests/helpers/camera-flip-harness.ts"),
             platform: "browser",
             resolve: { extensionAlias: { ".js": [".ts", ".js"] } },
-            transform: { define: { "import.meta.env": "{}" } },
+            transform: { define: { "import.meta.env": "{}", __PORTABLE__: "false" } },
         });
         let code: string;
         try {

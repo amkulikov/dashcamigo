@@ -122,6 +122,7 @@
 (function(){var K="dc-asset-retry",D=[4000,15000,45000,90000],armed=false,booted=false,timer=0;function go(){location.reload()}function note(){if(document.getElementById("dc-retry-note"))return;var d=document.createElement("div");d.id="dc-retry-note";d.textContent=(document.documentElement.lang||"").indexOf("ru")===0?"Обновляем приложение…":"Updating the app…";(document.body||document.documentElement).appendChild(d)}window.__dcRetryNote=note;addEventListener("dc:ready",function(){booted=true;setTimeout(function(){if(document.getElementById("dc-retry-note"))return;try{sessionStorage.removeItem(K)}catch(e){}},30000);if(timer)clearTimeout(timer);removeEventListener("online",go);var d=document.getElementById("dc-retry-note");if(d)d.remove()},{once:true});addEventListener("error",function(ev){var el=ev.target;if(armed||booted||!el||!el.tagName)return;var tag=el.tagName;if(tag!=="SCRIPT"&&tag!=="LINK")return;var u=el.src||el.href||"";if(typeof u!=="string"||u.indexOf(location.origin+"/assets/")!==0)return;var n;try{n=parseInt(sessionStorage.getItem(K)||"0",10)||0;if(n>=D.length)return;sessionStorage.setItem(K,String(n+1))}catch(e){return}armed=true;note();if(navigator.onLine===false){addEventListener("online",go,{once:true})}else{timer=setTimeout(go,D[n])}},true)})();
     </script>
 
+    <!-- web-only:start -->
     <!-- Description for SERPs. The literal in HTML is English (baseline for
          crawlers and unfurl bots - the .app TLD is international). For Russian-
          speaking users applyStaticI18n() swaps content to Russian via data-i18n-attr.
@@ -400,6 +401,7 @@
         ]
     }
     </script>
+    <!-- web-only:end -->
     <!-- Title and text in HTML are the English baseline for crawlers and
          unfurl bots (they don't execute JS). For Russian-speaking users
          applyStaticI18n() swaps to Russian after first paint - the English
@@ -445,6 +447,7 @@
          meta description and continue-link, so prerender translates this
          block per locale via the same regex pass. href="/cameras/..." is
          rewritten by seo-prerender to "/<lang>/cameras/..." per locale. -->
+    <!-- web-only:start -->
     <noscript>
         <div>
             <h2 data-i18n="page.title">Dashcam Player & Editor Online — GPS map, trim & export | dashcamigo</h2>
@@ -459,6 +462,7 @@
             <p><a href="/en/" data-i18n="noscript.continue">Continue to dashcamigo</a></p>
         </div>
     </noscript>
+    <!-- web-only:end -->
 
     <!-- Thin ingest progress strip above the header. It stays indeterminate:
          classification and sidecar parsing have no honest shared percentage. -->
@@ -511,30 +515,34 @@
 
         <!-- Spacer pushes the rest of the topbar to the right.
              Replaces the old #status text element (now via notifications). -->
+        <!-- portable-only:start -->
+        <div class="portable-identity">
+            <span class="portable-edition" data-i18n="portable.label">Offline edition</span>
+            <details class="portable-beta">
+                <summary data-i18n="portable.beta">Beta</summary>
+                <div class="portable-beta-popover">
+                    <p data-i18n="portable.beta.description">This version is experimental and may have issues. Tell us what went wrong by email.</p>
+                    <a href="mailto:feedback@dashcamigo.app">feedback@dashcamigo.app</a>
+                </div>
+            </details>
+        </div>
+        <!-- portable-only:end -->
         <div class="topbar-spacer"></div>
-
-        <!-- PWA install - button appears only if the app is installable.
-             It comes first in the right-anchored control group so a late
-             beforeinstallprompt reveal consumes spacer width without moving
-             the stable controls that follow it. Visibility is driven by
-             src/ui/pwa-install.ts:
-             - Chromium desktop/Android (beforeinstallprompt fired): unhidden,
-               click triggers the native install prompt.
-             - Safari macOS: unhidden, click opens #install-modal pointing
-               the user to Chrome for an offline-capable install.
-             - Safari iOS/iPadOS, Firefox, already-standalone: stays hidden.
-             Lucide monitor-down: monitor with a down arrow - the standard
-             "install as an app" metaphor. -->
-        <button id="install-btn" type="button" class="topbar-iconbtn" hidden
-                data-i18n-attr="aria-label:pwa.install.cta,title:pwa.install.cta"
-                aria-label="Install app" title="Install app">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        <!-- portable-only:start -->
+        <a id="portable-full-version" class="portable-header-link" href="__PORTABLE_FULL_VERSION_URL__" target="_blank" rel="noopener noreferrer" data-i18n="portable.fullVersion">Full version</a>
+        <a id="portable-github" class="portable-header-link" href="https://github.com/amkulikov/dashcamigo" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a id="portable-update" class="portable-header-link portable-update" target="_blank" rel="noopener noreferrer" data-i18n="portable.update" hidden>A newer version is available</a>
+        <!-- portable-only:end -->
+        <!-- web-only:start -->
+        <button id="offline-use-btn" type="button" class="dc-btn dc-btn--secondary offline-use-entry"
+                aria-haspopup="dialog" aria-controls="offline-use-modal">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M12 13V3"/>
-                <path d="m8 9 4 4 4-4"/>
-                <rect x="2" y="15" width="20" height="6" rx="2"/>
+                <path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4"/>
             </svg>
+            <span data-i18n="offlineUse.entry">Use offline</span>
         </button>
+        <!-- web-only:end -->
 
         <!-- Notifications bell. Hidden until the first notification of the
              session (revealed by src/ui/notifications.ts). Red dot marks
@@ -550,6 +558,7 @@
             <span id="notif-bell-dot" class="topbar-unread-dot" hidden aria-hidden="true"></span>
         </button>
 
+        <!-- web-only:start -->
         <span class="topbar-whats-slot">
             <!-- "What's new" - opens the changelog panel (#whats-new-modal). The
                  dot lights up when entries newer than the last acknowledged one
@@ -616,6 +625,7 @@
                 </div>
             </div>
         </span>
+        <!-- web-only:end -->
 
         <!-- UX-26: feedback button. Lucide message-circle-question - a bubble
              with a ?, a universal "ask a question / report" metaphor.
@@ -704,6 +714,7 @@
              language doesn't require an HTML edit. The structure mirrors
              .player-speed-wrap (button + ul popover) - one popover-menu
              model across the project. -->
+        <!-- web-only:start -->
         <div class="lang-wrap">
             <button id="lang-toggle" class="topbar-iconbtn lang-toggle" type="button" aria-haspopup="true" aria-expanded="false"
                     data-i18n-attr="aria-label:topbar.langMenu.label,title:topbar.langMenu.title">
@@ -719,6 +730,7 @@
             </button>
             <ul id="lang-menu" class="lang-menu" role="menu" aria-labelledby="lang-toggle" hidden></ul>
         </div>
+        <!-- web-only:end -->
 
         <!-- Overflow (kebab) - a container for buttons that don't fit on a narrow
              topbar. Hidden by default; src/ui/overflow-bar.ts uses a ResizeObserver
@@ -871,12 +883,20 @@
                     <!-- The primary action precedes the product preview on narrow screens. -->
                     <section class="landing-hero">
                         <div class="landing-hero-main">
+                            <!-- portable-only:start -->
+                            <div class="portable-intro">
+                                <h1 class="portable-open-title" data-i18n="portable.open.title">Open your recordings</h1>
+                                <p class="portable-open-description" data-i18n="portable.open.description">Watch a trip, check its route, or save a clip.</p>
+                            </div>
+                            <!-- portable-only:end -->
                             <!-- H1 is split into three text nodes around the orange highlight
                                  span. applyStaticI18n uses textContent (no inline markup
                                  in i18n values), so the highlight is a DOM sibling, not a tag
                                  inside a translated string. -->
+                            <!-- web-only:start -->
                             <h1 class="landing-hero-h1"><span data-i18n="landing.hero.h1.before">Dashcam player in your browser — </span><span class="landing-hero-h1-hl" data-i18n="landing.hero.h1.hl">map, speed, events</span><span data-i18n="landing.hero.h1.after">.</span></h1>
                             <p class="landing-hero-kicker" data-i18n="landing.hero.kicker">The whole drive, start to finish, as one trip.</p>
+                            <!-- web-only:end -->
                             <!-- Drop-CTA. The outer <label> is the click+drop target wired to
                                  #folder-input (lives in <body>). The inner <button id="landing-cta">
                                  is the FLIP source - landing.ts measures its rect at first ingest
@@ -884,6 +904,11 @@
                                  click bubbles to the label, label triggers the input by virtue
                                  of for=, so the file picker opens once. -->
                             <label class="landing-drop" id="landing-drop" for="folder-input">
+                                <!-- portable-only:start -->
+                                <span class="portable-folder-icon" aria-hidden="true">
+                                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2Z"/><path d="M8 12h8m-8 4h5"/></svg>
+                                </span>
+                                <!-- portable-only:end -->
                                 <div class="landing-drop-text">
                                     <span class="landing-drop-t1">
                                         <svg class="landing-drop-folder" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2Z"/></svg>
@@ -910,6 +935,29 @@
                                 </p>
                             </label>
 
+                            <!-- portable-only:start -->
+                            <div class="portable-features">
+                                <section class="portable-feature">
+                                    <h2 class="portable-feature-title">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M9 6h7a4 4 0 0 1 0 8H8a4 4 0 0 0 0 8"/></svg>
+                                        <span data-i18n="portable.offline.title">Works offline</span>
+                                    </h2>
+                                    <p data-i18n="portable.offline.description">Playback, routes, charts, manual blur and clip export.</p>
+                                </section>
+                                <section class="portable-feature">
+                                    <h2 class="portable-feature-title">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a17 17 0 0 1 0 18 17 17 0 0 1 0-18Z"/></svg>
+                                        <span data-i18n="portable.online.title">With internet</span>
+                                    </h2>
+                                    <p data-i18n="portable.notice">Map backgrounds need a connection. Automatic plate and face detection and object following are in the full version.</p>
+                                    <a class="portable-full-link" href="__PORTABLE_FULL_VERSION_URL__" target="_blank" rel="noopener noreferrer">
+                                        <span data-i18n="portable.fullVersion">Full version</span>
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M7 7h10v10"/></svg>
+                                    </a>
+                                </section>
+                            </div>
+                            <!-- portable-only:end -->
+
                             <!-- Recent folders (persistent-folder mode, Chromium-only).
                                  Kept OUTSIDE the label above: a chip click must not bubble
                                  into the label's open-picker handler. Hidden until
@@ -924,6 +972,7 @@
                         </div>
 
                         <!-- The preview follows the primary action in reading and focus order. -->
+                        <!-- web-only:start -->
                         <div class="landing-hero-side">
 
                             <!-- Product glimpse: desktop shot + the phone shot overlapping
@@ -954,9 +1003,11 @@
                                 </button>
                             </div>
                         </div>
+                        <!-- web-only:end -->
                     </section>
 
                     <!-- How it works: 3-step strip with arrows between cards (>880px). -->
+                    <!-- web-only:start -->
                     <section class="landing-how" id="landing-how" aria-label="How it works">
                         <div class="landing-step">
                             <span class="landing-step-num" data-i18n="landing.how.s1.num">STEP 01</span>
@@ -977,8 +1028,10 @@
                             <p data-i18n="landing.how.s3.body">Video, route on the map, speed and events — all on one screen with a shared timeline.</p>
                         </div>
                     </section>
+                    <!-- web-only:end -->
 
                     <!-- Capabilities -->
+                    <!-- web-only:start -->
                     <ul class="landing-caps">
                         <li>
                             <span class="landing-cap-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg></span>
@@ -1005,10 +1058,12 @@
                             <div><b data-i18n="landing.caps.d.title">Hide plates &amp; faces</b><span data-i18n="landing.caps.d.body.lead">You can </span><a class="landing-brand-link" href="/blur-license-plate-in-dashcam-video/" data-i18n="landing.caps.d.link">blur a license plate or a face</a><span data-i18n="landing.caps.d.body.tail"> before sharing — the cover follows the object as it moves.</span></div>
                         </li>
                     </ul>
+                    <!-- web-only:end -->
 
                     <!-- "safety wall". Always-dark surface (overrides
                          light theme) - product decision: privacy block is visually
                          anchored by high contrast regardless of UI theme. -->
+                    <!-- web-only:start -->
                     <aside class="landing-safety" aria-labelledby="landing-safety-h2">
                         <div class="landing-safety-head">
                             <p class="landing-safety-eyebrow"><span class="landing-safety-dot"></span><span data-i18n="landing.safety.eyebrow">Privacy by default</span></p>
@@ -1035,9 +1090,11 @@
                             <a class="landing-oss-link" href="https://github.com/amkulikov/dashcamigo" target="_blank" rel="noopener" data-i18n="landing.oss.cta">Source on GitHub →</a>
                         </p>
                     </aside>
+                    <!-- web-only:end -->
 
                     <!-- "Runs anywhere a browser runs": two stacked rows of monochrome
                          brand chips (currentColor fill). 5 OSes + 9 browsers. -->
+                    <!-- web-only:start -->
                     <section class="landing-works" aria-labelledby="landing-works-title">
                         <div class="landing-works-head">
                             <h2 id="landing-works-title" class="landing-works-title" data-i18n="landing.works.title">On your computer, tablet or phone</h2>
@@ -1088,11 +1145,13 @@
                         </div>
                         <p class="landing-works-note" data-i18n="landing.works.note">Playback depends on your browser and recording format. Editing and export work best in Chrome and other Chromium-based browsers.</p>
                     </section>
+                    <!-- web-only:end -->
 
                     <!-- FAQ: sticky title (>880px) + native <details> accordion.
                          Q2 answer weaves vendor links between i18n fragments - same
                          pattern as hero-lead. DOM and #faq-jsonld must stay in sync
                          (Google rich snippets). -->
+                    <!-- web-only:start -->
                     <section class="landing-faq" aria-labelledby="landing-faq-title">
                         <div class="landing-faq-head">
                             <span class="landing-faq-eyebrow" data-i18n="landing.faq.eyebrow">FAQ</span>
@@ -1153,6 +1212,7 @@
                             </details>
                         </div>
                     </section>
+                    <!-- web-only:end -->
 
                 </div>
 
@@ -1166,6 +1226,7 @@
                      settings-modal.
                      Minimalist styling: transparent background with no border-top,
                      so it doesn't look like the page cuts off. -->
+                <!-- web-only:start -->
                 <footer class="site-footer">
                     <div id="seo-language-links"></div>
                     <div class="site-footer-links">
@@ -1238,6 +1299,7 @@
                          it (visual.vrt.ts). -->
                     <p class="site-footer-version" id="footer-version" hidden></p>
                 </footer>
+                <!-- web-only:end -->
 
                 <!-- Docked CTA: appears when the inline drop card scrolls out of
                      view (IntersectionObserver in src/ui/landing-dock.ts), so the
@@ -1246,6 +1308,7 @@
                      drop card (file-sources.ts) - label-for semantics alone would
                      skip clicks on the inner <button>. Lives inside .landing, so
                      it disappears with the landing after the first ingest. -->
+                <!-- web-only:start -->
                 <label class="landing-dock" id="landing-dock" for="folder-input" hidden>
                     <svg class="landing-dock-folder" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2Z"/></svg>
                     <!-- Drag copy is meaningless on touch - reuse the drop card's
@@ -1257,6 +1320,7 @@
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
                     </button>
                 </label>
+                <!-- web-only:end -->
         </div>
 
         <section class="viewer" data-nosnippet>
@@ -1334,7 +1398,6 @@
                         <div id="top-panel-layout" class="top-panel__group top-panel__group--layout" hidden></div>
                         <div id="top-panel-channels" class="top-panel__group top-panel__group--channels" hidden></div>
                         <div id="top-panel-audio" class="top-panel__group top-panel__group--audio" hidden></div>
-                        <p id="top-panel-hint" class="top-panel__hint" data-i18n="topPanel.channels.hint" hidden>Selected cameras appear in the preview and saved video.</p>
                     </div>
                 </details>
             </div>
@@ -2231,6 +2294,7 @@
          bundled), which clears the loaded recordings - warn before that. Default
          focus lands on Cancel (destructive confirm). Structure mirrors
          upload-warning-modal. -->
+    <!-- web-only:start -->
     <div data-nosnippet id="switch-lang-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="switch-lang-modal-title">
         <div class="export-modal-card modal-card">
             <div class="export-modal-title" id="switch-lang-modal-title" data-i18n="switchLang.title">Reload to switch language?</div>
@@ -2243,6 +2307,7 @@
             </div>
         </div>
     </div>
+    <!-- web-only:end -->
 
     <!-- Mandatory decision shown only after an annotation-changing action.
          There is intentionally no close button or backdrop dismissal: the
@@ -2444,6 +2509,7 @@
          (a lazy chunk - the list loads on first open); rendered by
          src/ui/whats-new-modal.ts. Opening acknowledges everything and turns
          the topbar dot off. -->
+    <!-- web-only:start -->
     <div data-nosnippet id="whats-new-modal" class="whats-new-modal modal-overlay" hidden tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="whats-new-modal-title">
         <!-- tabindex="-1": the card takes initial focus so keyboard scrolling
              works when the list outgrows the viewport (whats-new-modal.ts). -->
@@ -2455,6 +2521,7 @@
             <div class="whats-new-modal-foot" data-i18n="whatsnew.dismissHint">Esc or tap outside to close</div>
         </div>
     </div>
+    <!-- web-only:end -->
 
     <!-- Fullscreen overlay while dragging over any part of the page.
          Hidden by default, JS shows it on dragenter with files in DataTransfer
@@ -2685,6 +2752,7 @@
                     <p class="settings-toggle-desc" data-i18n="settings.ingest.gap.description">Applies to folders you open from now on and re-groups trips already loaded.</p>
                 </div>
             </div>
+            <!-- web-only:start -->
             <div class="export-modal-section" id="settings-privacy-section">
                 <h3 class="settings-section-title" data-i18n="settings.privacy.section">Privacy</h3>
                 <div class="settings-row" id="settings-crash-row">
@@ -2698,6 +2766,7 @@
                        data-i18n="settings.privacy.policyLink">Privacy policy</a>
                 </div>
             </div>
+            <!-- web-only:end -->
             <div class="export-modal-section">
                 <h3 class="settings-section-title" data-i18n="settings.notes.section">Trip notes</h3>
                 <div class="settings-row">
@@ -2759,11 +2828,14 @@
                             data-i18n="settings.about.download.label">Download diagnostics log</button>
                     <p class="settings-toggle-desc" data-i18n="settings.about.download.description">Attach this file when reporting a bug.</p>
                 </div>
+                <!-- portable-notices -->
+                <!-- web-only:start -->
                 <div class="settings-row">
                     <button id="settings-clear-cache-btn" class="dc-btn dc-btn--secondary" type="button"
                             data-i18n="settings.about.clearCache.label">Refresh offline app</button>
                     <p class="settings-toggle-desc" data-i18n="settings.about.clearCache.description">Downloads a fresh copy of the app next time you open it. Settings and language stay the same.</p>
                 </div>
+                <!-- web-only:end -->
             </div>
             <!-- Danger zone. Wired up in src/ui/settings-modal.ts: the button
                  opens #reset-confirm-modal; the actual wipe lives in
@@ -2777,7 +2849,7 @@
                             data-i18n="settings.danger.onboarding.cta">Replay tips</button>
                 </div>
                 <div class="settings-row">
-                    <p class="settings-toggle-desc" data-i18n="settings.danger.description">Erases dashcamigo data saved in this browser: settings, language, theme, privacy choices, offline data, trip names, notes, favorites, markers and remembered folders. Your recording files stay unchanged.</p>
+                    <p class="settings-toggle-desc" data-i18n="settings.danger.description" data-portable-i18n="portable.reset.description">Erases dashcamigo data saved in this browser: settings, language, theme, privacy choices, offline data, trip names, notes, favorites, markers and remembered folders. Your recording files stay unchanged.</p>
                     <button id="settings-reset-btn" class="dc-btn dc-btn--danger" type="button"
                             data-i18n="settings.danger.cta">Reset everything</button>
                 </div>
@@ -2796,8 +2868,8 @@
         <div class="export-modal-card modal-card">
             <div class="export-modal-title" id="reset-confirm-modal-title" data-i18n="settings.danger.confirm.title">Reset all local data?</div>
             <div class="install-modal-body">
-                <p class="install-modal-intro" data-i18n="settings.danger.confirm.body">Local storage, cookies, offline cache and service worker will be wiped, then the page will reload. This cannot be undone.</p>
-                <p class="reset-confirm-note" data-i18n="settings.danger.confirm.note">An installed app shortcut, browser permissions and your notes backups aren't touched.</p>
+                <p class="install-modal-intro" data-i18n="settings.danger.confirm.body" data-portable-i18n="portable.reset.body">Local storage, cookies, offline cache and service worker will be wiped, then the page will reload. This cannot be undone.</p>
+                <p class="reset-confirm-note" data-i18n="settings.danger.confirm.note" data-portable-i18n="portable.reset.note">An installed app shortcut, browser permissions and your notes backups aren't touched.</p>
             </div>
             <div class="export-modal-actions">
                 <button id="reset-confirm-cancel" class="dc-btn dc-btn--secondary" type="button"
@@ -2813,6 +2885,7 @@
          dismissed it before (see src/ui/pwa-install.ts). Reuses the shared
          .sticky-banner bottom-sticky-bar styles (.install-banner adds its
          own z-index and button order). -->
+    <!-- web-only:start -->
     <div data-nosnippet id="install-banner" class="sticky-banner install-banner" hidden role="dialog" aria-modal="false"
          aria-labelledby="install-banner-title">
         <div class="sticky-banner-body">
@@ -2831,6 +2904,7 @@
             </div>
         </div>
     </div>
+    <!-- web-only:end -->
 
     <div data-nosnippet id="recognition-banner" class="sticky-banner" hidden role="region" aria-labelledby="recognition-title">
         <div class="sticky-banner-body" role="status">
@@ -2847,6 +2921,7 @@
     </div>
 
     <!-- Project-support prompt eligibility is owned by src/ui/support-prompt.ts. -->
+    <!-- web-only:start -->
     <div data-nosnippet id="support-banner" class="sticky-banner support-banner" hidden role="dialog" aria-modal="false"
         aria-labelledby="support-banner-title" aria-describedby="support-banner-body">
         <div class="sticky-banner-body">
@@ -2868,12 +2943,57 @@
             </div>
         </div>
     </div>
+    <!-- web-only:end -->
 
-    <!-- PWA install guide modal: shown in browsers without an install API
-         (Safari macOS - we chose to point the user at Chrome for an
-         offline-capable install). The container reuses .export-modal styles
-         like every other modal in the project. The body content varies per
-         browser and is populated by src/ui/pwa-install.ts. -->
+    <!-- web-only:start -->
+    <div data-nosnippet id="offline-use-modal" class="export-modal modal-overlay" hidden role="dialog"
+         aria-modal="true" aria-labelledby="offline-use-title">
+        <div class="export-modal-card modal-card offline-use-card">
+            <div class="offline-use-heading">
+                <h2 id="offline-use-title" data-i18n="offlineUse.title">Keep dashcamigo with you</h2>
+                <button id="offline-use-close" class="topbar-iconbtn" type="button"
+                        data-i18n-attr="aria-label:pwa.guide.close" aria-label="Close">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg>
+                </button>
+            </div>
+            <div class="offline-use-options">
+                <section class="offline-use-option" aria-labelledby="offline-use-app-title">
+                    <svg class="offline-use-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="3" y="3" width="18" height="13" rx="2"/><path d="M8 21h8m-4-5v5"/>
+                    </svg>
+                    <h3 id="offline-use-app-title" data-i18n="offlineUse.app.title">On this device</h3>
+                    <p data-i18n="offlineUse.app.description">Launch it from your apps. Updates arrive when you’re online.</p>
+                    <p id="offline-use-app-status" class="offline-use-status" hidden></p>
+                    <button id="install-btn" type="button" class="dc-btn dc-btn--secondary offline-use-action"
+                            aria-describedby="offline-use-app-status" data-i18n="pwa.install.cta">Install app</button>
+                </section>
+                <section id="offline-use-file" class="offline-use-option" aria-labelledby="offline-use-file-title" hidden>
+                    <div class="offline-use-file-heading">
+                        <svg class="offline-use-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                             stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M6 3h9l4 4v14H5V3h1Zm3 0v5h7M8 17h8M8 13h8"/>
+                        </svg>
+                        <span class="offline-use-beta" data-i18n="portable.beta">Beta</span>
+                    </div>
+                    <h3 id="offline-use-file-title" data-i18n="offlineUse.file.title">On your memory card</h3>
+                    <p data-i18n="offlineUse.file.description">One file to use offline. Download a fresh copy to update.</p>
+                    <p class="offline-use-limits" data-i18n="offlineUse.file.limits">Some features aren’t available, and the newest additions may arrive later.</p>
+                    <a id="portable-download" class="dc-btn dc-btn--secondary offline-use-action" hidden download
+                       aria-describedby="offline-use-file-title">
+                        <span data-i18n="offlineUse.file.action">Download file</span>
+                        <span id="offline-use-size" class="offline-use-size"></span>
+                    </a>
+                </section>
+            </div>
+            <p class="offline-use-note" data-i18n="offlineUse.note">Let the installed app load online before using it offline. Street maps need internet.</p>
+        </div>
+    </div>
+    <!-- web-only:end -->
+
+    <!-- The installation guide varies by browser; src/ui/pwa-install.ts fills it. -->
+    <!-- web-only:start -->
     <div data-nosnippet id="install-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="install-modal-title">
         <div class="export-modal-card modal-card">
             <div class="export-modal-title" id="install-modal-title" data-i18n="pwa.guide.title">Install as a desktop app</div>
@@ -2884,6 +3004,7 @@
             </div>
         </div>
     </div>
+    <!-- web-only:end -->
 
     <!-- WebGL guide for a missing map. Surfaced the first time the map fails to
          init (not at startup), and on demand from the in-panel #map-unavailable-how
@@ -2939,6 +3060,7 @@
          variants; landing-shot.ts unhides the one whose thumb was clicked and
          swaps the dialog label. Images are lazy: [hidden] keeps them out of the
          initial page load. -->
+    <!-- web-only:start -->
     <div data-nosnippet class="landing-shot-lightbox" id="landing-shot-lightbox" role="dialog" aria-modal="true" tabindex="-1"
          data-i18n-attr="aria-label:landing.hero.shot.alt"
          aria-label="Inside dashcamigo: two cameras side by side, the speed chart with event marks and the route on the map" hidden>
@@ -2947,6 +3069,7 @@
         <img class="landing-shot-lightbox-phone" src="/landing/app-phone-600.webp"
              width="600" height="1298" loading="lazy" decoding="async" alt="" hidden>
     </div>
+    <!-- web-only:end -->
 
     <!-- Active locale's i18n dictionary, baked in by the prerender per /<lang>/
          page (vite-plugins/seo-prerender.ts fills this). type="application/json"

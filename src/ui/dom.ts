@@ -247,7 +247,7 @@ export const dom = {
      *  through the same picker gate as landingDrop - label-for semantics skip
      *  clicks on the inner <button>, so the explicit handler is what makes the
      *  button work (see file-sources.ts). */
-    landingDock: $id<HTMLLabelElement>("landing-dock") as HTMLLabelElement | null,
+    landingDock: document.getElementById("landing-dock") as HTMLLabelElement | null,
     sidebarCta: $id<HTMLElement>("sidebar-cta"),
     landingRoot: document.getElementById("landing") as HTMLElement | null,
     tripAnalysisStatus: $id<HTMLElement>("trip-analysis-status"),
@@ -406,9 +406,9 @@ export const dom = {
     iosFolderWarningModalFiles: $id<HTMLButtonElement>("ios-folder-warning-modal-files"),
     iosFolderWarningModalFolder: $id<HTMLButtonElement>("ios-folder-warning-modal-folder"),
     iosFolderWarningModalCancel: $id<HTMLButtonElement>("ios-folder-warning-modal-cancel"),
-    switchLangModal: $id<HTMLElement>("switch-lang-modal"),
-    switchLangModalConfirm: $id<HTMLButtonElement>("switch-lang-modal-confirm"),
-    switchLangModalCancel: $id<HTMLButtonElement>("switch-lang-modal-cancel"),
+    switchLangModal: document.getElementById("switch-lang-modal") as HTMLElement | null,
+    switchLangModalConfirm: document.getElementById("switch-lang-modal-confirm") as HTMLButtonElement | null,
+    switchLangModalCancel: document.getElementById("switch-lang-modal-cancel") as HTMLButtonElement | null,
     tripPreparation: $id<HTMLElement>("trip-preparation"),
     tripPreparationTitle: $id<HTMLElement>("trip-preparation-title"),
     tripPreparationProgress: $id<HTMLElement>("trip-preparation-progress"),
@@ -455,6 +455,6 @@ export const dom = {
     playerChartHoverCursor: $id<HTMLDivElement>("player-chart-hover-cursor"),
     viewMenuButton: $id<HTMLButtonElement>("player-view-menu"),
     viewMenuPopover: $id<HTMLDivElement>("player-view-menu-popover"),
-    langToggle: $id<HTMLButtonElement>("lang-toggle"),
-    langMenu: $id<HTMLUListElement>("lang-menu"),
+    langToggle: document.getElementById("lang-toggle") as HTMLButtonElement | null,
+    langMenu: document.getElementById("lang-menu") as HTMLUListElement | null,
 };

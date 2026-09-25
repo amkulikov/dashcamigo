@@ -159,18 +159,20 @@ export function initExportPanel(opts: { onCompositionApply: () => void }): void 
     subscribeBlurRegions(syncBlurGroup);
     // Track-pass lifecycle ticks re-render the zone rows and keep Save blocked
     // until Follow has committed a complete result.
-    subscribeTrackPasses(() => {
-        syncBlurGroup();
-        syncSaveAvailability();
-    });
-    // Model asset download state drives the consent / progress / offline strips
-    // (Follow's and the detect checkboxes' - separate rows, same machinery).
-    subscribeBlurAssets(syncBlurDownloadStrips);
-    // Detect pass lifecycle (progress %, fresh counts) re-renders its status row.
-    subscribeBlurDetect(syncDetectGroup);
-    // Model files are same-origin; a tile provider outage does not block them.
-    window.addEventListener("online", syncBlurDownloadStrips);
-    window.addEventListener("offline", syncBlurDownloadStrips);
+    if (!__PORTABLE__) {
+        subscribeTrackPasses(() => {
+            syncBlurGroup();
+            syncSaveAvailability();
+        });
+        // Model asset download state drives the consent / progress / offline strips
+        // (Follow's and the detect checkboxes' - separate rows, same machinery).
+        subscribeBlurAssets(syncBlurDownloadStrips);
+        // Detect pass lifecycle (progress %, fresh counts) re-renders its status row.
+        subscribeBlurDetect(syncDetectGroup);
+        // Model files are same-origin; a tile provider outage does not block them.
+        window.addEventListener("online", syncBlurDownloadStrips);
+        window.addEventListener("offline", syncBlurDownloadStrips);
+    }
     // The device encode ceiling resolves asynchronously (a WebCodecs probe). When
     // it lands, re-run the estimate so the size / device-cap note / Save state
     // reflect what this device can actually encode - without a full panel notify
@@ -197,14 +199,14 @@ function syncExportPanel(): void {
     const hasJustOpened = state.exportModeOpen && !wasExportModeOpen;
     if (!state.exportModeOpen && wasExportModeOpen && hasSavedClip) {
         hasSavedClip = false;
-        void maybeShowPostExportToast();
+        if (!__PORTABLE__) void maybeShowPostExportToast();
     }
     wasExportModeOpen = state.exportModeOpen;
     if (hasJustOpened && selectedOverlayKey === "map") refreshOverlayInspector();
     syncBlurGroup();
     // Trip switches and range edits re-key the detect state (per-trip flags,
     // stale results) - keep the checkbox block honest alongside the zones.
-    syncDetectGroup();
+    if (!__PORTABLE__) syncDetectGroup();
     const phase = exportPanelState.phase;
     if (phase !== previousPhase) {
         shouldFocusPhase =
@@ -452,7 +454,7 @@ function renderOptionsSection(): void {
     const warn = document.createElement("div");
     warn.id = "export-panel-fallback-warn";
     warn.className = "export-panel__warn";
-    warn.textContent = t("export.fallbackWarn");
+    warn.textContent = t(__PORTABLE__ ? "portable.export.memory" : "export.fallbackWarn");
     warn.hidden = true;
     fallbackWarnEl = warn;
     actions.appendChild(warn);
@@ -488,13 +490,15 @@ function renderOptionsSection(): void {
     buttons.append(trimBtn, saveBtn);
     actions.appendChild(buttons);
 
-    const followNote = document.createElement("div");
-    followNote.id = "export-panel-follow-save-note";
-    followNote.className = "export-panel__warn";
-    followNote.textContent = t("export.blur.tracker.saveBlocked");
-    followNote.hidden = true;
-    followSaveNoteEl = followNote;
-    actions.appendChild(followNote);
+    if (!__PORTABLE__) {
+        const followNote = document.createElement("div");
+        followNote.id = "export-panel-follow-save-note";
+        followNote.className = "export-panel__warn";
+        followNote.textContent = t("export.blur.tracker.saveBlocked");
+        followNote.hidden = true;
+        followSaveNoteEl = followNote;
+        actions.appendChild(followNote);
+    }
     actionsObserver?.disconnect();
     actionsObserver = new ResizeObserver(() => {
         document.documentElement.style.setProperty("--dc-export-actions-h", `${actions.offsetHeight}px`);
@@ -1084,6 +1088,7 @@ function syncEncodeNote(est: ReturnType<typeof estimateExport>): void {
  *  unfinished too: the user already asked for Follow and must explicitly
  *  cancel that intent before saving without it. */
 function followWorkPending(): boolean {
+    if (__PORTABLE__) return false;
     return pendingFollowRegionIds.size > 0 || activeBlurRegions().some((region) => trackPassOf(region.id) !== null);
 }
 
@@ -1242,65 +1247,66 @@ function renderBlurGroup(): HTMLElement {
     legend.textContent = t("export.blur.legend");
     wrap.appendChild(legend);
 
-    // Two labeled halves - automatic (the find-everything checkboxes) and
-    // manual (zones) - so the panel reads as two distinct tools, not one
-    // stack of controls.
-    const autoHead = document.createElement("div");
-    autoHead.className = "export-panel__blur-subhead";
-    autoHead.textContent = t("export.blur.auto.legend");
-    // "beta" pill: detection quality is not guaranteed yet - set that
-    // expectation before the first toggle, not after a disappointing result.
-    const betaBadge = document.createElement("span");
-    betaBadge.className = "export-panel__blur-beta-badge";
-    betaBadge.textContent = t("export.blur.auto.beta");
-    autoHead.appendChild(betaBadge);
-    wrap.appendChild(autoHead);
-    // Range-first + takes-a-while nudge ABOVE the checkboxes: it must land
-    // before the first toggle burns minutes scanning the wrong span.
-    const detectHint = document.createElement("div");
-    detectHint.className = "export-panel__note";
-    detectHint.textContent = t("export.blur.detect.hint");
-    wrap.appendChild(detectHint);
-    const platesRow = renderCheckbox("export-panel-blur-plates", t("export.blur.detect.plates"), false, (v) =>
-        onDetectToggle("plate", v),
-    );
-    blurDetectPlatesCbEl = platesRow.querySelector("input");
-    wrap.appendChild(platesRow);
-    const facesRow = renderCheckbox("export-panel-blur-faces", t("export.blur.detect.faces"), false, (v) =>
-        onDetectToggle("face", v),
-    );
-    blurDetectFacesCbEl = facesRow.querySelector("input");
-    wrap.appendChild(facesRow);
-    // Detection is WebGPU-only (see blur-detect.ts) - when the adapter is
-    // absent both checkboxes are disabled and this note says why. Availability
-    // resolves from an async probe, so syncDetectGroup owns both states.
-    const gpuNote = document.createElement("div");
-    gpuNote.className = "export-panel__note";
-    gpuNote.textContent = t("export.blur.detect.needsGpu");
-    gpuNote.hidden = true;
-    blurDetectGpuNoteEl = gpuNote;
-    wrap.appendChild(gpuNote);
-    // No-guarantees note BELOW the checkboxes: check the result, cover any
-    // miss with a manual zone.
-    const reviewNote = document.createElement("div");
-    reviewNote.className = "export-panel__note";
-    reviewNote.textContent = t("export.blur.detect.review");
-    wrap.appendChild(reviewNote);
-    // Detect model-download strip (consent / progress / offline / error) -
-    // same machinery as the Follow strip below, keyed to the checkbox intent.
-    // Own class (not __blur-tracker): e2e locators address each strip uniquely.
-    const detectStrip = document.createElement("div");
-    detectStrip.className = "export-panel__blur-detect-strip";
-    detectStrip.hidden = true;
-    blurDetectStripEl = detectStrip;
-    wrap.appendChild(detectStrip);
-    // Live pass status: "Scanning… {pct}%" while running, found-counts after.
-    const detectStatus = document.createElement("div");
-    detectStatus.className = "export-panel__blur-detect-status";
-    detectStatus.hidden = true;
-    blurDetectStatusEl = detectStatus;
-    wrap.appendChild(detectStatus);
-
+    if (!__PORTABLE__) {
+        // Two labeled halves - automatic (the find-everything checkboxes) and
+        // manual (zones) - so the panel reads as two distinct tools, not one
+        // stack of controls.
+        const autoHead = document.createElement("div");
+        autoHead.className = "export-panel__blur-subhead";
+        autoHead.textContent = t("export.blur.auto.legend");
+        // "beta" pill: detection quality is not guaranteed yet - set that
+        // expectation before the first toggle, not after a disappointing result.
+        const betaBadge = document.createElement("span");
+        betaBadge.className = "export-panel__blur-beta-badge";
+        betaBadge.textContent = t("export.blur.auto.beta");
+        autoHead.appendChild(betaBadge);
+        wrap.appendChild(autoHead);
+        // Range-first + takes-a-while nudge ABOVE the checkboxes: it must land
+        // before the first toggle burns minutes scanning the wrong span.
+        const detectHint = document.createElement("div");
+        detectHint.className = "export-panel__note";
+        detectHint.textContent = t("export.blur.detect.hint");
+        wrap.appendChild(detectHint);
+        const platesRow = renderCheckbox("export-panel-blur-plates", t("export.blur.detect.plates"), false, (v) =>
+            onDetectToggle("plate", v),
+        );
+        blurDetectPlatesCbEl = platesRow.querySelector("input");
+        wrap.appendChild(platesRow);
+        const facesRow = renderCheckbox("export-panel-blur-faces", t("export.blur.detect.faces"), false, (v) =>
+            onDetectToggle("face", v),
+        );
+        blurDetectFacesCbEl = facesRow.querySelector("input");
+        wrap.appendChild(facesRow);
+        // Detection is WebGPU-only (see blur-detect.ts) - when the adapter is
+        // absent both checkboxes are disabled and this note says why. Availability
+        // resolves from an async probe, so syncDetectGroup owns both states.
+        const gpuNote = document.createElement("div");
+        gpuNote.className = "export-panel__note";
+        gpuNote.textContent = t("export.blur.detect.needsGpu");
+        gpuNote.hidden = true;
+        blurDetectGpuNoteEl = gpuNote;
+        wrap.appendChild(gpuNote);
+        // No-guarantees note BELOW the checkboxes: check the result, cover any
+        // miss with a manual zone.
+        const reviewNote = document.createElement("div");
+        reviewNote.className = "export-panel__note";
+        reviewNote.textContent = t("export.blur.detect.review");
+        wrap.appendChild(reviewNote);
+        // Detect model-download strip (consent / progress / offline / error) -
+        // same machinery as the Follow strip below, keyed to the checkbox intent.
+        // Own class (not __blur-tracker): e2e locators address each strip uniquely.
+        const detectStrip = document.createElement("div");
+        detectStrip.className = "export-panel__blur-detect-strip";
+        detectStrip.hidden = true;
+        blurDetectStripEl = detectStrip;
+        wrap.appendChild(detectStrip);
+        // Live pass status: "Scanning… {pct}%" while running, found-counts after.
+        const detectStatus = document.createElement("div");
+        detectStatus.className = "export-panel__blur-detect-status";
+        detectStatus.hidden = true;
+        blurDetectStatusEl = detectStatus;
+        wrap.appendChild(detectStatus);
+    }
     const manualHead = document.createElement("div");
     manualHead.className = "export-panel__blur-subhead";
     manualHead.textContent = t("export.blur.manual.legend");
@@ -1311,7 +1317,7 @@ function renderBlurGroup(): HTMLElement {
     // under the list once a zone exists.
     const explainer = document.createElement("div");
     explainer.className = "export-panel__note export-panel__blur-explainer";
-    explainer.textContent = t("export.blur.explainer");
+    explainer.textContent = t(__PORTABLE__ ? "portable.blur.explainer" : "export.blur.explainer");
     wrap.appendChild(explainer);
 
     const btn = document.createElement("button");
@@ -1344,7 +1350,7 @@ function renderBlurGroup(): HTMLElement {
         exportPanelState.blurStyle = style;
         for (const region of activeBlurRegions()) region.style = style;
         // Auto-detected regions follow the same select - one style for all blur.
-        setDetectStyle(style);
+        if (!__PORTABLE__) setDetectStyle(style);
         notifyBlurRegionsChanged();
         notifyExportStateChanged();
     });
@@ -1353,14 +1359,15 @@ function renderBlurGroup(): HTMLElement {
     blurStyleRowEl = styleRow;
     wrap.appendChild(styleRow);
 
-    // One-time tracker-download strip: consent / progress / offline / error.
-    // Hidden until a Follow needs the assets (syncTrackerStrip owns visibility).
-    const strip = document.createElement("div");
-    strip.className = "export-panel__blur-tracker";
-    strip.hidden = true;
-    blurTrackerStripEl = strip;
-    wrap.appendChild(strip);
-
+    if (!__PORTABLE__) {
+        // One-time tracker-download strip: consent / progress / offline / error.
+        // Hidden until a Follow needs the assets (syncTrackerStrip owns visibility).
+        const strip = document.createElement("div");
+        strip.className = "export-panel__blur-tracker";
+        strip.hidden = true;
+        blurTrackerStripEl = strip;
+        wrap.appendChild(strip);
+    }
     const list = document.createElement("div");
     list.className = "export-panel__blur-list";
     blurListEl = list;
@@ -1377,8 +1384,8 @@ function renderBlurGroup(): HTMLElement {
     wrap.appendChild(moveHint);
 
     syncBlurGroup();
-    syncTrackerStrip();
-    syncDetectGroup();
+    if (!__PORTABLE__) syncTrackerStrip();
+    if (!__PORTABLE__) syncDetectGroup();
     return wrap;
 }
 
@@ -1408,7 +1415,7 @@ function onFollowClick(region: BlurRegion): void {
         // for an explicit click before pulling ~14 MB.
         pendingFollowRegionIds.add(region.id);
         syncBlurGroup();
-        syncTrackerStrip();
+        if (!__PORTABLE__) syncTrackerStrip();
         return;
     }
     // Already consented once (assets cached): warm from cache (fast) and follow.
@@ -1422,7 +1429,7 @@ function cancelRegionFollow(regionId: string): void {
     cancelTrackPass(regionId);
     if (!wasPending) return;
     if (pendingFollowRegionIds.size === 0) trackerDownloadCtrl?.abort();
-    syncTrackerStrip();
+    if (!__PORTABLE__) syncTrackerStrip();
 }
 
 /** Flips the zone to auto-tracked and starts the pass. Follow always owns the
@@ -1470,7 +1477,7 @@ async function startTrackerDownload(): Promise<void> {
             if (region) runFollow(region);
         }
     }
-    syncTrackerStrip();
+    if (!__PORTABLE__) syncTrackerStrip();
 }
 
 type BlurDownloadStripPhase = "hidden" | "downloading" | "offline" | "error" | "consent";
@@ -1486,7 +1493,7 @@ interface BlurDownloadStripOptions {
 }
 
 function syncBlurDownloadStrips(): void {
-    syncTrackerStrip();
+    if (!__PORTABLE__) syncTrackerStrip();
     syncDetectStrip();
 }
 
@@ -1575,7 +1582,7 @@ function syncTrackerStrip(): void {
 function dismissTrackerStrip(): void {
     pendingFollowRegionIds.clear();
     syncBlurGroup();
-    syncTrackerStrip();
+    if (!__PORTABLE__) syncTrackerStrip();
 }
 
 // --- detect checkboxes ("blur all plates / faces") ---------------------------
@@ -1595,7 +1602,7 @@ function onDetectToggle(kind: DetectKind, on: boolean): void {
     setDetectEnabled(kind, on);
     if (on) void startDetectDownload({ canDownloadNew: false });
     else if (enabledDetectKinds().length === 0) cancelDetectDownload();
-    syncDetectGroup();
+    if (!__PORTABLE__) syncDetectGroup();
     // The re-encode gate + size estimate flip with the checkbox (a pending scan
     // is assumed to find something - see anyBlurRegionInExport).
     notifyExportStateChanged();
@@ -1613,7 +1620,7 @@ async function startDetectDownload(options?: BlurAssetDownloadOptions): Promise<
         detectDownloadControllers.delete(ctrl);
     }
     if (ok && !ctrl.signal.aborted && blurAssetsReady(detectAssetGroups(enabledDetectKinds()))) ensureDetectPass();
-    syncDetectGroup();
+    if (!__PORTABLE__) syncDetectGroup();
 }
 
 /** "Not now": un-check the kinds that still need a download - a checked box
@@ -1624,7 +1631,7 @@ function dismissDetectStrip(): void {
         if (blurAssetsNeedDownload(detectAssetGroups([kind]))) setDetectEnabled(kind, false);
     }
     if (enabledDetectKinds().length > 0) void startDetectDownload({ canDownloadNew: false });
-    syncDetectGroup();
+    if (!__PORTABLE__) syncDetectGroup();
     notifyExportStateChanged();
 }
 
@@ -1753,7 +1760,7 @@ function cancelTrackerDownload(): void {
     trackerDownloadCtrl?.abort();
     pendingFollowRegionIds.clear();
     syncBlurGroup();
-    syncTrackerStrip();
+    if (!__PORTABLE__) syncTrackerStrip();
 }
 
 function trackerMessageNode(text: string): HTMLElement {
@@ -1849,12 +1856,12 @@ function syncBlurGroup(): void {
     const list = blurListEl;
     if (!list) return;
     const regions = activeBlurRegions();
-    const autoStyle = detectStyle();
+    const autoStyle = __PORTABLE__ ? null : detectStyle();
     // Manual zones are authoritative when present; an auto-only trip uses its
     // own remembered detect style. Do this before the signature early-return:
     // switching between two trips with no manual rows must still update Select.
     const effectiveStyle = regions[0]?.style ?? autoStyle ?? exportPanelState.blurStyle;
-    if (regions.length > 0 && autoStyle !== effectiveStyle) setDetectStyle(effectiveStyle);
+    if (!__PORTABLE__ && regions.length > 0 && autoStyle !== effectiveStyle) setDetectStyle(effectiveStyle);
     exportPanelState.blurStyle = effectiveStyle;
     if (blurStyleRowEl) {
         blurStyleRowEl.hidden = regions.length === 0 && enabledDetectKinds().length === 0;
@@ -1874,7 +1881,7 @@ function syncBlurGroup(): void {
         }
         if (changed) {
             if (pendingFollowRegionIds.size === 0) trackerDownloadCtrl?.abort();
-            syncTrackerStrip();
+            if (!__PORTABLE__) syncTrackerStrip();
         }
     }
     // Box drags notify at pointermove rate but only touch keyframes - skip
@@ -2029,7 +2036,7 @@ function renderBlurRow(region: BlurRegion, index: number): HTMLElement {
     // The state badge gets its own line: sharing the header with the time range
     // truncated it mid-word in the narrow drawer, and "check end" is a privacy
     // warning that must stay fully readable.
-    const stateLabel = zoneStateLabel(region);
+    const stateLabel = __PORTABLE__ ? null : zoneStateLabel(region);
     if (stateLabel) {
         const badge = document.createElement("span");
         badge.className = "export-panel__blur-row-state";
@@ -2039,60 +2046,65 @@ function renderBlurRow(region: BlurRegion, index: number): HTMLElement {
         row.appendChild(badge);
     }
 
-    // --- mode: Follow-owned vs user-owned timing -------------------------------
-    const seg = document.createElement("div");
-    seg.className = "export-panel__segmented export-panel__blur-duration";
-    const mkSeg = (
-        action: string,
-        label: string,
-        title: string,
-        active: boolean,
-        onClick: () => void,
-    ): HTMLButtonElement => {
-        const b = document.createElement("button");
-        b.type = "button";
-        b.dataset.action = action;
-        b.className = "export-panel__seg-btn";
-        b.textContent = label;
-        b.title = title;
-        b.setAttribute("aria-label", title);
-        b.classList.toggle("active", active);
-        b.setAttribute("aria-pressed", String(active));
-        b.addEventListener("click", onClick);
-        return b;
-    };
+    if (!__PORTABLE__) {
+        // --- mode: Follow-owned vs user-owned timing -------------------------------
+        const seg = document.createElement("div");
+        seg.className = "export-panel__segmented export-panel__blur-duration";
+        const mkSeg = (
+            action: string,
+            label: string,
+            title: string,
+            active: boolean,
+            onClick: () => void,
+        ): HTMLButtonElement => {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.dataset.action = action;
+            b.className = "export-panel__seg-btn";
+            b.textContent = label;
+            b.title = title;
+            b.setAttribute("aria-label", title);
+            b.classList.toggle("active", active);
+            b.setAttribute("aria-pressed", String(active));
+            b.addEventListener("click", onClick);
+            return b;
+        };
 
-    const pass = trackPassOf(region.id);
-    const running = !!pass;
-    const pending = pendingFollowRegionIds.has(region.id);
-    // Follow shows live decode progress ("Following… 42%") while a pass runs and
-    // cancels on click - the async pass is otherwise invisible and reads as stuck.
-    // The percent tracks footage decoded; on early loss it ends before 100%
-    // (loss-defined span), which is honest.
-    const followSeg = mkSeg(
-        "follow",
-        running
-            ? t("export.blur.tracker.working", { pct: Math.round((pass?.fractionDone ?? 0) * 100) })
-            : pending
-              ? t("export.blur.tracker.cancel")
-              : t("export.blur.follow"),
-        running || pending ? t("export.blur.row.trackCancel") : t("export.blur.row.track"),
-        region.autoEnd || pending,
-        () => onFollowClick(region),
-    );
-    followSeg.classList.add("export-panel__blur-follow-btn");
-    followSeg.classList.toggle("is-running", running);
-    if (pass) followProgressButtons.set(region.id, { button: followSeg, pct: Math.round(pass.fractionDone * 100) });
-    seg.appendChild(followSeg);
-    seg.appendChild(
-        mkSeg("fixed", t("export.blur.mode.fixed"), t("export.blur.mode.fixedHint"), !region.autoEnd && !pending, () =>
-            setBlurManualTimeMode(region),
-        ),
-    );
-    row.appendChild(seg);
-
+        const pass = trackPassOf(region.id);
+        const running = !!pass;
+        const pending = pendingFollowRegionIds.has(region.id);
+        // Follow shows live decode progress ("Following… 42%") while a pass runs and
+        // cancels on click - the async pass is otherwise invisible and reads as stuck.
+        // The percent tracks footage decoded; on early loss it ends before 100%
+        // (loss-defined span), which is honest.
+        const followSeg = mkSeg(
+            "follow",
+            running
+                ? t("export.blur.tracker.working", { pct: Math.round((pass?.fractionDone ?? 0) * 100) })
+                : pending
+                  ? t("export.blur.tracker.cancel")
+                  : t("export.blur.follow"),
+            running || pending ? t("export.blur.row.trackCancel") : t("export.blur.row.track"),
+            region.autoEnd || pending,
+            () => onFollowClick(region),
+        );
+        followSeg.classList.add("export-panel__blur-follow-btn");
+        followSeg.classList.toggle("is-running", running);
+        if (pass) followProgressButtons.set(region.id, { button: followSeg, pct: Math.round(pass.fractionDone * 100) });
+        seg.appendChild(followSeg);
+        seg.appendChild(
+            mkSeg(
+                "fixed",
+                t("export.blur.mode.fixed"),
+                t("export.blur.mode.fixedHint"),
+                !region.autoEnd && !pending,
+                () => setBlurManualTimeMode(region),
+            ),
+        );
+        row.appendChild(seg);
+    }
     // --- Manual timing: playhead setters + a whole-clip shortcut --------------
-    if (!region.autoEnd) {
+    if (__PORTABLE__ || !region.autoEnd) {
         const fixed = document.createElement("div");
         fixed.className = "export-panel__blur-row-actions";
         const mkBtn = (action: string, label: string, title: string, onClick: () => void): HTMLButtonElement => {
@@ -2605,8 +2617,11 @@ function renderMapProviderField(): HTMLElement {
     note.id = "export-map-provider-description";
     note.className = "export-panel__note";
     note.textContent = t("export.overlays.mapProvider.yandexUnavailable");
-    select.setAttribute("aria-describedby", note.id);
-    wrap.append(label, select, note);
+    wrap.append(label, select);
+    if (!__PORTABLE__) {
+        select.setAttribute("aria-describedby", note.id);
+        wrap.append(note);
+    }
     return wrap;
 }
 

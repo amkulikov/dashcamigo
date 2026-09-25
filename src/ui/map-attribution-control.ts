@@ -1,5 +1,7 @@
 import type { IControl, Map as MapLibreMap } from "maplibre-gl";
 
+import yandexLogoEn from "../assets/credits/yandex-en.svg?no-inline";
+import yandexLogoRu from "../assets/credits/yandex-ru.svg?no-inline";
 import { getCurrentLang, t } from "../i18n/index.js";
 import type { MapProvider } from "./map-provider.js";
 
@@ -83,13 +85,19 @@ export class MapAttributionControl implements IControl {
         if (!root) return;
         root.replaceChildren();
         root.classList.toggle("dc-map-attrib--yandex", provider === "yandex");
-        if (provider === "yandex") {
+        root.hidden = provider === "route-only";
+        if (provider === "route-only") {
+            if (this.options.reserveBottomSpace) {
+                this.reservedBottom = 0;
+                this.map?.setPadding({ bottom: 0 });
+            }
+        } else if (provider === "yandex") {
             const logo = attributionLink("https://yandex.ru/maps/", "");
             logo.className = "dc-map-logo";
             logo.title = t("map.yandex.open");
             const image = document.createElement("img");
             const lang = getCurrentLang() === "ru" ? "ru" : "en";
-            image.src = `/assets/credits/yandex-${lang}.svg`;
+            image.src = lang === "ru" ? yandexLogoRu : yandexLogoEn;
             image.alt = lang === "ru" ? "Яндекс" : "Yandex";
             image.width = lang === "ru" ? 88 : 91;
             image.height = 48;

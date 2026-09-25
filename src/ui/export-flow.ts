@@ -75,7 +75,12 @@ import {
     detectStale,
     ensureDetectRegionsForExport,
 } from "./blur-detect.js";
-import { asInMemoryExportHandle, createInMemoryFileHandle, nativeFsaAvailable } from "./in-memory-file.js";
+import {
+    asInMemoryExportHandle,
+    createInMemoryFileHandle,
+    markNativeSaveBlocked,
+    nativeFsaAvailable,
+} from "./in-memory-file.js";
 import { notify } from "./notifications.js";
 import { clipBasename, formatBytes, randomFilenameSuffix } from "./format.js";
 import { activeTrip, activeTripHasGps, state, mainChannel } from "./state.js";
@@ -904,18 +909,10 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
     const noNative = !nativeFsaAvailable();
 
     // Drives the done-view delivery (see buildPendingDownload).
-    const deliveryMode: "ram" | "native" = noNative ? "ram" : "native";
+    let deliveryMode: "ram" | "native" = noNative ? "ram" : "native";
 
-    let mp4Handle: Awaited<ReturnType<typeof showSaveFilePicker>>;
-    if (noNative) {
-        // RAM shim: supports the full positional-write + truncate + re-open
-        // protocol the mux and GPMF injection need. Pre-size its buffer to the
-        // estimated output (stream-copy's estimate is close) so the resizable
-        // backing never has to grow - no realloc spike during the mux.
-        mp4Handle = createInMemoryFileHandle(fileName, expectedBytes) as unknown as Awaited<
-            ReturnType<typeof showSaveFilePicker>
-        >;
-    } else {
+    let mp4Handle: Awaited<ReturnType<typeof showSaveFilePicker>> | null = null;
+    if (!noNative) {
         try {
             const picked = await withFilePicker(
                 "save",
@@ -931,16 +928,19 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
         } catch (err) {
             if (err instanceof Error && err.name === "AbortError") return;
             log.warn("save picker failed", { err: err instanceof Error ? err.message : String(err) });
-            hooks.onError("export.error.generic");
-            return;
+            if (__PORTABLE__ && err instanceof Error && err.name === "SecurityError") {
+                markNativeSaveBlocked();
+                deliveryMode = "ram";
+                notify({ severity: "warn", messageKey: "portable.export.memory" });
+            } else {
+                hooks.onError("export.error.generic");
+                return;
+            }
         }
     }
-
     // User-facing name for the download, GPX sidecar and done summary. Native:
-    // the name the user picked in the save dialog. RAM: the suggested fileName,
-    // which the in-memory shim carries as its handle name. Either way it is
-    // mp4Handle.name.
-    const downloadName = mp4Handle.name;
+    // the name the user picked in the save dialog. RAM: the suggested fileName.
+    const downloadName = mp4Handle?.name ?? fileName;
 
     // Re-encode preflight: split / crop / overlays / speed-up all decode and
     // RE-ENCODE via WebCodecs, and the pipeline emits a High-profile H.264
@@ -1066,15 +1066,18 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
     // degradation notices, done summary, telemetry. One implementation so a fix
     // cannot land on one branch only (the size-read block used to be a verbatim
     // copy in both).
-    const finishExport = async (opts: {
-        gpmfInjected: boolean;
-        mapOverlayDropped?: boolean;
-        decodeTruncated?: boolean;
-        audioDroppedHeterogeneous?: boolean;
-        audioDroppedNoEncoder?: boolean;
-        audioReencodedToOpus?: boolean;
-    }): Promise<void> => {
-        const inMem = asInMemoryExportHandle(mp4Handle);
+    const finishExport = async (
+        handle: Awaited<ReturnType<typeof showSaveFilePicker>>,
+        opts: {
+            gpmfInjected: boolean;
+            mapOverlayDropped?: boolean;
+            decodeTruncated?: boolean;
+            audioDroppedHeterogeneous?: boolean;
+            audioDroppedNoEncoder?: boolean;
+            audioReencodedToOpus?: boolean;
+        },
+    ): Promise<void> => {
+        const inMem = asInMemoryExportHandle(handle);
         if (inMem) {
             // RAM path: takeDownloadBlob() IS the delivery, not a cosmetic
             // size read - its snapshot allocates the full file size again and
@@ -1092,7 +1095,7 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
                 // feeds the size figure in the done summary. THAT is the
                 // genuinely cosmetic read (unreliable in some FSA polyfill
                 // paths), so only this branch may swallow.
-                sizeBytes = (await mp4Handle.getFile()).size;
+                sizeBytes = (await handle.getFile()).size;
             } catch (err) {
                 // Breadcrumb for a "done summary says 0 MB" report.
                 log.debug("export size read failed", { err: String(err) });
@@ -1120,6 +1123,11 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
     // encode branches read them.
     let detectedBlurRegions: BlurRegion[] = [];
     try {
+        // Even the empty RAM handle allocates. Keep it after capability probes
+        // and inside this catch so allocation failure always reaches the UI.
+        mp4Handle ??= createInMemoryFileHandle(fileName, expectedBytes) as unknown as Awaited<
+            ReturnType<typeof showSaveFilePicker>
+        >;
         // Detection pre-pass (the "blur all plates / faces" checkboxes): must
         // settle BEFORE the encode so found regions burn into THIS export.
         // Placed after the GPX download - that anchor download rides the save
@@ -1204,7 +1212,7 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
             }
             // Stream-copy can never carry a map overlay (canStreamCopy requires
             // no overlays), so only the GPMF outcome is relevant here.
-            await finishExport({
+            await finishExport(mp4Handle, {
                 gpmfInjected: clipResult?.gpmfInjected ?? false,
                 audioDroppedHeterogeneous: clipResult?.audioDroppedHeterogeneous,
             });
@@ -1291,7 +1299,7 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
                 activeExportController.signal,
                 transcodeResult.capturedMoov,
             );
-            await finishExport({
+            await finishExport(mp4Handle, {
                 gpmfInjected,
                 mapOverlayDropped: transcodeResult.mapOverlayDropped,
                 decodeTruncated: transcodeResult.decodeTruncated,
@@ -1331,7 +1339,9 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
                 : isQuotaExceededError(err)
                   ? "export.error.diskFull"
                   : isAllocationFailure(err)
-                    ? "export.error.tooLargeForMemory"
+                    ? __PORTABLE__
+                        ? "portable.export.tooLargeForMemory"
+                        : "export.error.tooLargeForMemory"
                     : isDestinationLostError(err)
                       ? "export.error.destinationLost"
                       : !isSinkFailure(err) && isSourceReadError(err)

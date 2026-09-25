@@ -43,6 +43,12 @@ import { createLogger } from "../log.js";
 
 const log = createLogger("export-flow");
 
+let nativeSaveBlocked = false;
+
+export function markNativeSaveBlocked(): void {
+    nativeSaveBlocked = true;
+}
+
 /** True when the browser exposes the native File System Access save picker.
  *  When false the export must buffer in memory (this module) instead of the
  *  broken ponyfill streaming path. Checks for a callable (not just presence) so
@@ -50,9 +56,15 @@ const log = createLogger("export-flow");
  *  call per UI tick. */
 export function nativeFsaAvailable(): boolean {
     return (
+        !nativeSaveBlocked &&
         typeof window !== "undefined" &&
         typeof (window as { showSaveFilePicker?: unknown }).showSaveFilePicker === "function"
     );
+}
+
+/** Test-only reset of the page-scoped picker capability. */
+export function _resetForTests(): void {
+    nativeSaveBlocked = false;
 }
 
 const MP4_MIME = "video/mp4";

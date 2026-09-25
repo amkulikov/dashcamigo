@@ -62,28 +62,3 @@
     color: var(--fg);
     vertical-align: -5px;
 }
-
-/* Pulse the topbar #install-btn on its first reveal so the user notices
-   the new affordance. JS removes the class after ~4.5s. Animation only
-   touches box-shadow and transform - no layout reflow. */
-@keyframes install-btn-pulse {
-    0%,
-    100% {
-        box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 50%, transparent);
-        transform: scale(1);
-    }
-    50% {
-        box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 0%, transparent);
-        transform: scale(1.08);
-    }
-}
-.topbar-iconbtn.install-btn-pulse {
-    animation: install-btn-pulse 1.4s ease-out 3;
-}
-/* Respect users who asked for reduced motion - the pulse is decorative,
-   they still see the button appear, that's enough. */
-@media (prefers-reduced-motion: reduce) {
-    .topbar-iconbtn.install-btn-pulse {
-        animation: none;
-    }
-}

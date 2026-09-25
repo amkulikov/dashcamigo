@@ -11,10 +11,12 @@ import {
     resolveSeoDeploymentContext,
 } from "./vite-plugins/deployment-profile.js";
 import { dynamicBaselinePlugin } from "./vite-plugins/dynamic-baseline.js";
+import { editionMarkupPlugin } from "./vite-plugins/edition-markup.js";
 import { indexnowKeyPlugin } from "./vite-plugins/indexnow-key.js";
 import { llmsTxtPlugin } from "./vite-plugins/llms-txt.js";
 import { redirectsPlugin } from "./vite-plugins/redirects.js";
 import { rootStubPlugin } from "./vite-plugins/root-stub.js";
+import { portableDownloadsPlugin } from "./vite-plugins/portable-downloads.js";
 import { staticSearchMetaPlugin } from "./vite-plugins/static-search-meta.js";
 import { computeTrackerAssets, trackerAssetsPlugin } from "./vite-plugins/tracker-assets.js";
 import { swPrecachePlugin } from "./vite-plugins/sw-precache.js";
@@ -150,6 +152,9 @@ export default defineConfig(({ command }) => {
     const trackerAssets = computeTrackerAssets(command);
     return {
     define: {
+        __PORTABLE__: "false",
+        __PORTABLE_LOCALE__: JSON.stringify(""),
+        __PORTABLE_MAP_ASSETS__: "{}",
         // Available across app code as `__APP_VERSION__: string`. Inlined
         // literally by the minifier (Oxc) - typed in `src/version.ts`.
         __APP_VERSION__: JSON.stringify(APP_VERSION),
@@ -168,6 +173,7 @@ export default defineConfig(({ command }) => {
         __SENTRY_TRACING__: JSON.stringify(false),
     },
     plugins: [
+        editionMarkupPlugin(),
         // Dev-only: serve public/<slug>.html for its extension-less clean URL
         // (/add-my-camera, /privacy, ...). Cloudflare Pages (prod) and `vite
         // preview` resolve clean URLs to the .html automatically; `vite dev`
@@ -241,6 +247,8 @@ export default defineConfig(({ command }) => {
         // search policy to those standalone documents before CSP and precache
         // hash their final bytes.
         staticSearchMetaPlugin({ noIndex: NO_INDEX, deployment: SEO_DEPLOYMENT }),
+        // Unit tests must not depend on locally staged download artifacts.
+        !process.env.VITEST && portableDownloadsPlugin(),
         // CSP for the inline bootstrap: 'sha256-...' into dist/_headers, plus
         // (META_CSP=1 builds) the policy as a <meta> in every HTML for hosts
         // that cannot send headers. MUST run AFTER every HTML-writing plugin

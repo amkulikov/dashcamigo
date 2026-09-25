@@ -42,6 +42,7 @@ import { applyStaticI18n, getCurrentLang } from "./i18n/index.js";
 import { createLogger, downloadLogBuffer, getLogBuffer } from "./log.js";
 import { initSentry } from "./sentry.js";
 import { APP_VERSION } from "./version.js";
+import { initPortableUpdates } from "./portable/updates.js";
 
 import { initCapabilityGate, surfaceDegradedCapabilities, surfaceMapUnavailable } from "./ui/capability-gate.js";
 import { initConnectivity } from "./ui/connectivity.js";
@@ -67,6 +68,7 @@ import { registerTimelineOverlaySync } from "./ui/chart.js";
 import { initIngestOverlay } from "./ui/ingest-overlay.js";
 import { initNotifications, notify } from "./ui/notifications.js";
 import { initPwaInstall } from "./ui/pwa-install.js";
+import { initOfflineUse } from "./ui/offline-use.js";
 import { initMapSettingsPopover } from "./ui/map-settings-popover.js";
 import { initGpsSyncModal } from "./ui/gps-sync-modal.js";
 import { initSettingsModal } from "./ui/settings-modal.js";
@@ -160,7 +162,7 @@ registerRegroupAppliedListener(reconcileActiveTripAfterRegroup);
 // in AND the user has not opted out in settings (default ON). The SDK is
 // dynamically imported, so an empty DSN ships nothing and the SEO landing entry
 // stays lean. Privacy/scrubbing details live in src/sentry.ts + sentry-scrub.ts.
-initSentry();
+if (!__PORTABLE__) initSentry();
 
 // --- browser capability gate ---
 //
@@ -300,42 +302,43 @@ const ASSET_RETRY_BACKOFF_MS = [4000, 15000, 45000, 90000];
 // same "updating" note: the skew window lasts seconds to minutes, so an
 // immediate reload would just burn the budget into a visible flicker.
 let assetRetryReloadArmed = false;
-window.addEventListener("vite:preloadError", (ev) => {
-    if (state.trips.length > 0 || state.ingestController !== null) return;
-    // Offline a reload cannot fetch the missing chunk anyway - don't burn a
-    // retry from the budget; the failure surfaces through the usual error
-    // paths (the boot-time retry in dc-bootstrap waits for `online` instead).
-    if (navigator.onLine === false) return;
-    if (assetRetryReloadArmed) {
-        // A reload is already scheduled; a second failing chunk changes
-        // nothing - just keep Vite from rethrowing.
-        ev.preventDefault();
-        return;
-    }
-    let attempts = 0;
-    try {
-        attempts = Number.parseInt(sessionStorage.getItem(ASSET_RETRY_STORAGE_KEY) ?? "0", 10) || 0;
-        if (attempts >= ASSET_RETRY_MAX_ATTEMPTS) return;
-        sessionStorage.setItem(ASSET_RETRY_STORAGE_KEY, String(attempts + 1));
-    } catch {
-        // Storage unavailable: no way to cap - a visible failure beats a
-        // potential reload loop.
-        return;
-    }
-    assetRetryReloadArmed = true;
-    ev.preventDefault();
-    window.__dcRetryNote?.();
-    setTimeout(() => {
-        // The backoff wait opened a window for the user to start something:
-        // re-check, and step down (note included) rather than destroy it.
-        if (state.trips.length > 0 || state.ingestController !== null) {
-            document.getElementById("dc-retry-note")?.remove();
+if (!__PORTABLE__)
+    window.addEventListener("vite:preloadError", (ev) => {
+        if (state.trips.length > 0 || state.ingestController !== null) return;
+        // Offline a reload cannot fetch the missing chunk anyway - don't burn a
+        // retry from the budget; the failure surfaces through the usual error
+        // paths (the boot-time retry in dc-bootstrap waits for `online` instead).
+        if (navigator.onLine === false) return;
+        if (assetRetryReloadArmed) {
+            // A reload is already scheduled; a second failing chunk changes
+            // nothing - just keep Vite from rethrowing.
+            ev.preventDefault();
             return;
         }
-        location.reload();
-        // In-bounds by construction: attempts < MAX_ATTEMPTS = ladder length.
-    }, ASSET_RETRY_BACKOFF_MS[attempts]!);
-});
+        let attempts = 0;
+        try {
+            attempts = Number.parseInt(sessionStorage.getItem(ASSET_RETRY_STORAGE_KEY) ?? "0", 10) || 0;
+            if (attempts >= ASSET_RETRY_MAX_ATTEMPTS) return;
+            sessionStorage.setItem(ASSET_RETRY_STORAGE_KEY, String(attempts + 1));
+        } catch {
+            // Storage unavailable: no way to cap - a visible failure beats a
+            // potential reload loop.
+            return;
+        }
+        assetRetryReloadArmed = true;
+        ev.preventDefault();
+        window.__dcRetryNote?.();
+        setTimeout(() => {
+            // The backoff wait opened a window for the user to start something:
+            // re-check, and step down (note included) rather than destroy it.
+            if (state.trips.length > 0 || state.ingestController !== null) {
+                document.getElementById("dc-retry-note")?.remove();
+                return;
+            }
+            location.reload();
+            // In-bounds by construction: attempts < MAX_ATTEMPTS = ladder length.
+        }, ASSET_RETRY_BACKOFF_MS[attempts]!);
+    });
 
 // Warn before close/reload. No backend: loaded trips and the index live
 // only in the current tab's memory - reload resets state, files on disk
@@ -375,6 +378,7 @@ window.addEventListener("beforeunload", (ev) => {
     }
     appLog.info("app started", {
         version: APP_VERSION,
+        edition: __PORTABLE__ ? "portable" : "web",
         userAgent: navigator.userAgent,
         lang: navigator.language,
         resolvedLang: getCurrentLang(),
@@ -419,7 +423,7 @@ initThemeToggle({
     },
 });
 
-initLangSwitcher();
+if (!__PORTABLE__) initLangSwitcher();
 // Footer build id: which release this copy serves - tells the mirror and a
 // self-host apart from production at a glance. Filled at runtime so the
 // prerendered HTML stays build-agnostic; hidden when the build had no git.
@@ -441,7 +445,7 @@ initNotifications();
 // binds online/offline; initOfflineBanner subscribes and reflects it (the
 // subscription fires immediately, so an offline launch shows the banner at once).
 initConnectivity();
-initOfflineBanner();
+if (!__PORTABLE__) initOfflineBanner();
 // GPS calibration stays scoped to the open trip or an explicit set of loaded
 // trips from the same camera.
 initGpsSyncModal({ getTripCurrentTime });
@@ -456,10 +460,10 @@ initNoRecordingsModal();
 // listeners to the modals' own buttons.
 initUploadWarningModal();
 initIosFolderWarningModal();
-initSwitchLangModal();
+if (!__PORTABLE__) initSwitchLangModal();
 initTripPreparation();
 initHotkeysModal();
-initWhatsNewModal();
+if (!__PORTABLE__) initWhatsNewModal();
 // "View" dropdown - chart/strip/readout toggles plus the map's off/mini/large
 // control. Reads visibility from localStorage; map.ts registers the layout
 // transition handler once MapLibre is ready.
@@ -502,18 +506,18 @@ initPlayerBlur();
 // abort that zone's in-flight Follow pass, or the orphaned pass keeps holding
 // the tracker worker's single-pass gate. Wired here (not a direct import in
 // blur-regions-state) to keep that module out of blur-track's import graph.
-setDroppedRegionPassCanceller(cancelTrackPass);
+if (!__PORTABLE__) setDroppedRegionPassCanceller(cancelTrackPass);
 subscribeBlurTripRegroup((_oldTrips, _newTrips, invalidatedRegionCount) => {
     if (invalidatedRegionCount > 0) notify({ severity: "warn", messageKey: "export.blur.regroupChanged" });
 });
 initFeedbackModal();
 initRecognitionHelp();
 // Hero-shot lightbox: landing right-column thumb -> full-size screenshot.
-initLandingShot();
+if (!__PORTABLE__) initLandingShot();
 // The topbar shares the landing background until the landing starts scrolling.
 initLandingTopbar();
 // Docked CTA: keeps the drop/open action reachable at any landing scroll depth.
-initLandingDock();
+if (!__PORTABLE__) initLandingDock();
 // Wire the "turn the map on" guide before surfaceDegradedCapabilities() below
 // may auto-open it on a recoverable WebGL gap.
 initWebglEnableModal();
@@ -522,7 +526,7 @@ initMobileDrawer();
 // Onboarding tours: only wires live re-localization here; the tours themselves
 // fire from their own seams (ingest done, trip open, export open).
 initOnboarding();
-initSupportPrompt();
+if (!__PORTABLE__) initSupportPrompt();
 initFileSources();
 // The folder rows above the trip list: where the loaded trips came from and
 // whether that folder is remembered. Wired before the first ingest can
@@ -547,6 +551,7 @@ void initPersistentFolders()
         // stuck storage.
         requestAnimationFrame(() => {
             dispatchEvent(new Event("dc:ready"));
+            if (__PORTABLE__) initPortableUpdates(APP_VERSION, getCurrentLang());
         });
     });
 // Trip annotations: load the stored records before the first ingest can
@@ -731,7 +736,7 @@ syncEmptyState();
 //
 // BASE_URL ensures correct registration when deployed to a subdirectory
 // (e.g. example.com/dashcamigo/); a hardcoded "/sw.js" would 404.
-if ("serviceWorker" in navigator) {
+if (!__PORTABLE__ && "serviceWorker" in navigator) {
     const swUrl = `${import.meta.env.BASE_URL || "/"}sw.js`;
     const swLog = createLogger("sw");
     // updateViaCache:"none" - the browser's SW update check must bypass the HTTP
@@ -817,19 +822,18 @@ if ("serviceWorker" in navigator) {
     });
 }
 
-// PWA install. Detects the strategy (Chromium / Safari mac / skip) and wires
-// up beforeinstallprompt/appinstalled listeners. The #install-btn icon in
-// the topbar is hidden from HTML; the module reveals it when the browser
-// confirms the app is installable, or immediately for Safari macOS where
-// the click opens the "install Chrome" guide.
-initPwaInstall();
+// Installation detection must be ready before the offline-use chooser subscribes.
+if (!__PORTABLE__) {
+    initPwaInstall();
+    initOfflineUse();
+}
 
 // Lang-suggestion banner. Shown when the URL has an explicit locale segment
 // but navigator.language points at a different supported locale - the
 // share-link scenario where a Russian user kicked /ru/cameras/70mai/ to an
 // English friend. Dismissable forever via localStorage. No-op on the root
 // stub (bootstrap already redirected) and on privacy.html.
-initLangSuggestionBanner();
+if (!__PORTABLE__) initLangSuggestionBanner();
 
 // T9 pulled the heavy viewer libs (maplibre ~1MB, chart) and the ingest worker
 // chunks off the landing critical path - lazy on first use. That keeps the
@@ -886,10 +890,12 @@ function prefetchDeferredLibs(): void {
 // Skip eager worker prewarm on a fatal browser - `new Worker` would throw on a
 // Worker-less engine and the gate already blocks all interaction.
 if (!capabilityFatal) {
-    if (document.readyState === "complete") {
-        prefetchDeferredLibs();
-    } else {
-        window.addEventListener("load", prefetchDeferredLibs, { once: true });
+    if (!__PORTABLE__) {
+        if (document.readyState === "complete") {
+            prefetchDeferredLibs();
+        } else {
+            window.addEventListener("load", prefetchDeferredLibs, { once: true });
+        }
     }
     // Proactive heads-up for user-visible degraded gaps (no map / no editor /
     // no H.264 decode). Notifications are initialized above; this fires once per

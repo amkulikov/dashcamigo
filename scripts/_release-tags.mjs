@@ -4,6 +4,9 @@
 // guaranteed to strip types.
 
 import { execFileSync } from "node:child_process";
+import { compareReleaseTags, isReleaseTag } from "../src/portable/release-tags.mjs";
+
+export { compareReleaseTags } from "../src/portable/release-tags.mjs";
 
 export const ENTRIES_PATH = "src/changelog/entries.ts";
 
@@ -20,28 +23,6 @@ export function git(...args) {
     return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
 }
 
-// Only tags following the release convention participate in "previous
-// release" ordering - anything else a clone may carry is ignored.
-const RELEASE_TAG_RE = /^v\d{4}\.\d{2}\.\d{2}(\.\d+)?$/;
-
-/**
- * Chronological order for two convention tags: segment-wise numeric compare.
- * The date segments are zero-padded but the `.<n>` suffix is not, so plain
- * string order would misplace "….10" below "….2" - the same trap
- * compareChangelogIds in src/changelog/id.ts documents for entry ids. A tag
- * without the suffix sorts before ".1" of the same date.
- */
-export function compareReleaseTags(a, b) {
-    const aSegments = a.slice(1).split(".").map(Number);
-    const bSegments = b.slice(1).split(".").map(Number);
-    for (let i = 0; i < Math.max(aSegments.length, bSegments.length); i++) {
-        const aValue = aSegments[i] ?? -1;
-        const bValue = bSegments[i] ?? -1;
-        if (aValue !== bValue) return aValue - bValue;
-    }
-    return 0;
-}
-
 /**
  * The release preceding `tag`: the highest convention v* tag ordering below
  * it, or undefined for the first release. "Below current" (not "second
@@ -50,7 +31,7 @@ export function compareReleaseTags(a, b) {
 export function previousReleaseTag(tag) {
     return git("tag", "--list", "v*")
         .split("\n")
-        .filter((t) => RELEASE_TAG_RE.test(t) && compareReleaseTags(t, tag) < 0)
+        .filter((t) => isReleaseTag(t) && compareReleaseTags(t, tag) < 0)
         .sort(compareReleaseTags)
         .at(-1);
 }
@@ -71,7 +52,9 @@ export function entryIdsAt(rev) {
     }
     const ids = source.match(ENTRY_ID_LINE_RE);
     if (!ids) {
-        throw new Error(`no entry ids matched in ${ENTRIES_PATH} at ${rev} - id extraction drifted from the file format`);
+        throw new Error(
+            `no entry ids matched in ${ENTRIES_PATH} at ${rev} - id extraction drifted from the file format`,
+        );
     }
     return ids;
 }

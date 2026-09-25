@@ -56,6 +56,40 @@ jobs:
           fi
           node scripts/check-release-changelog.mjs
 
+  portable:
+    needs: [changelog-guard]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build the public portable files once
+        env:
+          PORTABLE_YANDEX_TILES_API_KEY: ${{ secrets.VITE_YANDEX_TILES_API_KEY }}
+        run: |
+          version="${GITHUB_REF_NAME}"
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            version="dev-$(git rev-parse --short HEAD)"
+          fi
+          npm run build:portable -- --version "${version}"
+          PORTABLE_ALLOW_DEV=1 node scripts/validate-portable-artifacts.mjs
+      - run: npx playwright install --with-deps chromium
+      - name: Test the final HTML from disk
+        run: npx playwright test --config=tests/playwright.portable.config.ts
+      - uses: actions/upload-artifact@v7
+        with:
+          name: portable-html
+          path: dist-portable/
+          retention-days: 7
+
   # Book-keeping: move the `release` branch pointer to the tagged commit, so
   # the repo records what production runs (the actual deploy is the `deploy`
   # job below; CF does not build from git).
@@ -63,8 +97,8 @@ jobs:
   # means the tag is not a descendant of the deployed history (tagged off the
   # wrong base) and fails the job - resolve by hand, never force over it.
   promote:
-    if: github.event_name == 'push'
-    needs: [changelog-guard]
+    if: always() && github.event_name == 'push' && needs.deploy.outputs.deployed == 'true'
+    needs: [deploy]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -107,7 +141,12 @@ jobs:
   # self-skip and still get their GitHub Release from the jobs below.
   deploy:
     if: github.event_name == 'push'
-    needs: [changelog-guard]
+    needs: [changelog-guard, release]
+    concurrency:
+      group: production-pages
+      cancel-in-progress: false
+    outputs:
+      deployed: ${{ steps.publish.outputs.deployed }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -142,9 +181,16 @@ jobs:
       - run: npm ci
         if: steps.gate.outputs.deploy == 'true'
 
+      - uses: actions/download-artifact@v7
+        if: steps.gate.outputs.deploy == 'true'
+        with:
+          name: portable-html
+          path: dist-portable
+
       - name: Build (production env)
         if: steps.gate.outputs.deploy == 'true'
         env:
+          PORTABLE_MANIFEST: ${{ github.workspace }}/dist-portable/manifest.json
           # Optional multi-origin SEO ownership. Values stay in Actions;
           # unset keeps the historical single-origin build unchanged.
           SEO_MIRROR_CONFIG: ${{ secrets.SEO_MIRROR_CONFIG }}
@@ -179,7 +225,14 @@ jobs:
         if: always() && steps.gate.outputs.deploy == 'true'
         run: find dist -type f -name '*.map' -delete
 
+      - name: Retain earlier published portable downloads
+        if: steps.gate.outputs.deploy == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/retain-portable-downloads.mjs
+
       - name: Deploy to Cloudflare Pages (production branch release)
+        id: publish
         if: steps.gate.outputs.deploy == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -192,6 +245,11 @@ jobs:
             --branch=release \
             --commit-hash="$(git rev-parse HEAD)" \
             --commit-dirty=false
+          echo "deployed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Verify published portable files and metadata
+        if: steps.gate.outputs.deploy == 'true'
+        run: node scripts/smoke-portable-downloads.mjs
 
   # IndexNow ping, chained after the production deploy. Engines fetch the
   # submitted URLs and the served key file when they process a ping, so it
@@ -221,7 +279,7 @@ jobs:
           node scripts/indexnow-ping.mjs
 
   release:
-    needs: [changelog-guard]
+    needs: [changelog-guard, portable]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -235,8 +293,6 @@ jobs:
       attestations: write
       # ghcr.io image push (container image step below).
       packages: write
-      # Pages-mirror dispatch (last step below).
-      actions: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -250,6 +306,11 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: portable-html
+          path: dist-portable
 
       # Release notes = the changelog entries added since the previous v* tag
       # (src/changelog/entries.ts diffed between tags - the script header has
@@ -293,7 +354,14 @@ jobs:
           cp LICENSE "${STAGE}/"
           zip -qr9 "${ZIP}" "${STAGE}"
           tar -czf "${TGZ}" "${STAGE}"
-          sha256sum "${ZIP}" "${TGZ}" > SHA256SUMS
+          PORTABLE_ALLOW_DEV=1 node scripts/stage-portable-release.mjs
+          mapfile -t portable_assets < portable-assets.txt
+          sha256sum "${ZIP}" "${TGZ}" "${portable_assets[@]}" portable-manifest.json > SHA256SUMS
+          {
+            echo "portable-assets<<PORTABLE_ASSETS_EOF"
+            cat portable-assets.txt
+            echo "PORTABLE_ASSETS_EOF"
+          } >> "$GITHUB_OUTPUT"
           echo "zip=${ZIP}" >> "$GITHUB_OUTPUT"
           echo "tgz=${TGZ}" >> "$GITHUB_OUTPUT"
           unzip -l "${ZIP}" | tail -2
@@ -316,6 +384,8 @@ jobs:
             ${{ steps.pack.outputs.zip }}
             ${{ steps.pack.outputs.tgz }}
             SHA256SUMS
+            ${{ steps.pack.outputs.portable-assets }}
+            portable-manifest.json
 
       # Prebuilt container image: the SAME dist/ this run built, tested and
       # attested, wrapped in nginx (docker/Dockerfile.prebuilt) - NOT a second
@@ -373,27 +443,10 @@ jobs:
             # Leftover draft from an interrupted run - drafts are still mutable.
             gh release delete "$TAG" --yes
           fi
-          gh release create "$TAG" "$ZIP" "$TGZ" SHA256SUMS \
+          mapfile -t portable_assets < portable-assets.txt
+          gh release create "$TAG" "$ZIP" "$TGZ" SHA256SUMS "${portable_assets[@]}" portable-manifest.json \
             --draft --verify-tag --notes-file RELEASE_NOTES.md --title "dashcamigo $TAG"
           gh release edit "$TAG" --draft=false
-
-      # Hand the fresh release to the Pages mirror. Its release-published
-      # trigger cannot see it: events created with GITHUB_TOKEN never start
-      # other workflows (GitHub's anti-recursion rule), and the publish above
-      # runs on exactly that token - workflow_dispatch is the documented
-      # exception, hence the explicit dispatch. Ref = the tag: the
-      # github-pages environment admits only v* tag refs (docs/deploy.md,
-      # "GitHub Pages mirror") - a main-ref run is rejected by environment
-      # protection before its first step.
-      - name: Dispatch the Pages mirror re-deploy (tag push only)
-        if: github.event_name == 'push'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh workflow run mirror.yml --repo "${GITHUB_REPOSITORY}" --ref "${GITHUB_REF_NAME}" || {
-            echo "::error::the release itself is published; only the mirror dispatch failed - run the Mirror workflow manually, do NOT re-run this job (the immutability guard fails a re-run)"
-            exit 1
-          }
 
       - name: Upload dry-run artifact (manual run only)
         if: github.event_name == 'workflow_dispatch'
@@ -404,4 +457,22 @@ jobs:
             ${{ steps.pack.outputs.zip }}
             ${{ steps.pack.outputs.tgz }}
             SHA256SUMS
+            ${{ steps.pack.outputs.portable-assets }}
+            portable-manifest.json
           retention-days: 7
+
+  mirror:
+    if: github.event_name == 'push'
+    needs: [release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      # GITHUB_TOKEN-created release events do not start other workflows.
+      # workflow_dispatch is the supported exception.
+      - name: Dispatch the Pages mirror re-deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run mirror.yml --repo "${GITHUB_REPOSITORY}" --ref "${GITHUB_REF_NAME}"

@@ -1,7 +1,6 @@
-// The one IndexedDB database behind the persistent-folder feature. The Danger
-// zone reset (ui/reset.ts) wipes it along with every other database on the
-// origin - deliberate: "reset all app state" includes remembered folders and
-// annotations.
+// The one IndexedDB database behind remembered folders, notes and cached
+// recording info. The reset flow shares its name to avoid clearing databases
+// owned by unrelated local HTML files.
 //
 // Availability is not guaranteed (private mode, storage disabled, quota):
 // every caller must treat a rejected open as "feature degrades to
@@ -10,7 +9,7 @@
 import { type DBSchema, type IDBPDatabase, openDB } from "idb";
 import type { AnnotationRecord, CachedFileIndex, NotesFileRecord, RememberedFolder } from "./types.js";
 
-const DB_NAME = "dashcamigo";
+export const PERSIST_DB_NAME = "dashcamigo";
 const DB_VERSION = 4;
 
 interface PersistDbSchema extends DBSchema {
@@ -43,7 +42,7 @@ let dbPromise: Promise<PersistDb> | null = null;
  */
 export function openPersistDb(): Promise<PersistDb> {
     if (dbPromise === null) {
-        dbPromise = openDB<PersistDbSchema>(DB_NAME, DB_VERSION, {
+        dbPromise = openDB<PersistDbSchema>(PERSIST_DB_NAME, DB_VERSION, {
             upgrade(db, oldVersion, _newVersion, transaction) {
                 if (oldVersion < 1) {
                     db.createObjectStore("folders", { keyPath: "id" });

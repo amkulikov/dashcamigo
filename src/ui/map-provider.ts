@@ -2,11 +2,11 @@
 // Export overlays have isolated sessions so viewer choices cannot enter a video.
 
 import { createLogger } from "../log.js";
-import { isYandexMapAvailable } from "./yandex-map.js";
+import { isYandexMapAvailable, yandexMapTileTemplate } from "./yandex-map.js";
 
 const log = createLogger("map-provider");
 
-export type MapProvider = "openfreemap" | "osm-vector" | "osm-raster" | "yandex";
+export type MapProvider = "route-only" | "openfreemap" | "osm-vector" | "osm-raster" | "yandex";
 export type MapProviderPreference = Exclude<MapProvider, "osm-raster">;
 export type OverlayMapProviderPreference = Exclude<MapProviderPreference, "yandex">;
 export type OverlayMapProvider = Exclude<MapProvider, "yandex">;
@@ -17,7 +17,7 @@ const FAILURE_THRESHOLD = 2;
 // A blocked host can leave fetch pending until the browser's network timeout.
 export const MAP_PROVIDER_REQUEST_TIMEOUT_MS = 3_000;
 
-const PROBE_URLS: Record<OverlayMapProvider, string> = {
+const PROBE_URLS: Record<Exclude<OverlayMapProvider, "route-only">, string> = {
     openfreemap: "https://tiles.openfreemap.org/planet",
     "osm-vector": "https://vector.openstreetmap.org/shortbread_v1/0/0/0.mvt",
     "osm-raster": "https://tile.openstreetmap.org/0/0/0.png",
@@ -39,6 +39,7 @@ interface MapProviderSession<Provider extends MapProvider> {
 
 interface MutableMapProviderSession<Provider extends MapProvider> extends MapProviderSession<Provider> {
     reset(provider: Provider, order?: readonly Provider[], shouldNotify?: boolean): void;
+    retry(): Promise<boolean>;
 }
 
 export type OverlayMapProviderSession = MapProviderSession<OverlayMapProvider>;
@@ -48,18 +49,23 @@ let viewerSession: MutableMapProviderSession<MapProvider> | null = null;
 const preferenceListeners = new Set<PreferenceListener>();
 
 function overlayProviderOrder(preference: OverlayMapProviderPreference): OverlayMapProvider[] {
-    return preference === "osm-vector"
-        ? ["osm-vector", "openfreemap", "osm-raster"]
-        : ["openfreemap", "osm-vector", "osm-raster"];
+    if (preference === "route-only") return ["route-only"];
+    const order: OverlayMapProvider[] =
+        preference === "osm-vector"
+            ? ["osm-vector", "openfreemap", "osm-raster"]
+            : ["openfreemap", "osm-vector", "osm-raster"];
+    if (__PORTABLE__) order.push("route-only");
+    return order;
 }
 
 function viewerProviderOrder(preference: MapProviderPreference): MapProvider[] {
     return preference === "yandex"
-        ? ["yandex", "openfreemap", "osm-vector", "osm-raster"]
+        ? ["yandex", ...overlayProviderOrder("openfreemap")]
         : overlayProviderOrder(preference);
 }
 
 function availablePreference(value: string | null | undefined): MapProviderPreference | null {
+    if (__PORTABLE__ && value === "route-only") return value;
     if (value === "openfreemap" || value === "osm-vector") return value;
     return value === "yandex" && isYandexMapAvailable() ? value : null;
 }
@@ -76,13 +82,41 @@ export function getMapProviderPreference(): MapProviderPreference {
 }
 
 async function fetchProbe(provider: MapProvider): Promise<boolean> {
-    // Yandex is never a fallback target or background probe.
-    if (provider === "yandex") return false;
+    if (provider === "route-only") return false;
+    let url: string;
+    if (provider === "yandex") {
+        // A configured key alone must not trigger paid requests. Only recover
+        // the user's selected Yandex map after every online source failed.
+        if (!__PORTABLE__ || getMapProvider() !== "route-only" || getMapProviderPreference() !== "yandex") return false;
+        const template = yandexMapTileTemplate();
+        if (!template) return false;
+        url = template.replace("{x}", "0").replace("{y}", "0").replace("{z}", "0");
+    } else {
+        url = PROBE_URLS[provider];
+    }
     const ctrl = new AbortController();
     const timeoutId = setTimeout(() => ctrl.abort("timeout"), MAP_PROVIDER_REQUEST_TIMEOUT_MS);
     try {
-        const response = await fetch(PROBE_URLS[provider], { signal: ctrl.signal });
-        return response.ok;
+        const response = await fetch(url, {
+            signal: ctrl.signal,
+            // An old cached tile cannot prove the service is reachable now.
+            cache: "no-store",
+        });
+        if (!response.ok) return false;
+        if (provider !== "openfreemap") return true;
+        // A 200 error page must not replace a working local route with a
+        // bootstrap that cannot supply any tiles.
+        const tilejson: unknown = await response.json();
+        return (
+            typeof tilejson === "object" &&
+            tilejson !== null &&
+            "tiles" in tilejson &&
+            Array.isArray(tilejson.tiles) &&
+            tilejson.tiles.length > 0 &&
+            tilejson.tiles.every(
+                (tile: unknown) => typeof tile === "string" && ["https:", "http:"].includes(new URL(tile).protocol),
+            )
+        );
     } catch {
         return false;
     } finally {
@@ -106,6 +140,12 @@ export function getMapProvider(): MapProvider {
 
 export function subscribeMapProvider(listener: ProviderListener): () => void {
     return getViewerSession().subscribe(listener);
+}
+
+/** Recover an automatic local fallback without reloading a still-offline map. */
+export function retryMapProvider(): Promise<boolean> {
+    if (getMapProviderPreference() === "route-only") return Promise.resolve(false);
+    return getViewerSession().retry();
 }
 
 export function subscribeMapProviderPreference(listener: PreferenceListener): () => void {
@@ -167,6 +207,7 @@ function createProviderSession<Provider extends MapProvider>(
     let order = initialOrder;
     let failedTiles = new Map<string, number>();
     let transitionPromise: Promise<void> | null = null;
+    let recoveryPromise: Promise<boolean> | null = null;
     let providerRevision = 0;
     let isDisposed = false;
     const listeners = new Set<ProviderListener<Provider>>();
@@ -181,17 +222,32 @@ function createProviderSession<Provider extends MapProvider>(
         for (const listener of listeners) listener(next, previous);
     }
 
-    async function downgradeProvider(failedProvider: Provider, expectedRevision: number): Promise<void> {
-        for (const provider of order.slice(order.indexOf(failedProvider) + 1)) {
+    async function tryProviders(
+        candidates: readonly Provider[],
+        previous: Provider,
+        expectedRevision: number,
+    ): Promise<boolean> {
+        for (const provider of candidates) {
+            // The terminal fallback needs no network and must also work offline.
+            if (provider === "route-only") {
+                if (isDisposed || providerRevision !== expectedRevision || activeProvider !== previous) return false;
+                switchProvider(provider);
+                return true;
+            }
             log.info("map provider probe", { provider });
             const isAvailable = await probe(provider);
-            if (isDisposed || providerRevision !== expectedRevision || activeProvider !== failedProvider) return;
+            if (isDisposed || providerRevision !== expectedRevision || activeProvider !== previous) return false;
             log.info("map provider probe result", { provider, available: isAvailable });
             if (isAvailable) {
                 switchProvider(provider);
-                return;
+                return true;
             }
         }
+        return false;
+    }
+
+    async function downgradeProvider(failedProvider: Provider, expectedRevision: number): Promise<void> {
+        await tryProviders(order.slice(order.indexOf(failedProvider) + 1), failedProvider, expectedRevision);
     }
 
     return {
@@ -206,7 +262,8 @@ function createProviderSession<Provider extends MapProvider>(
             if (isDisposed) return null;
             const url = errorUrl(error);
             const failedProvider = url ? mapProviderForTileUrl(url) : null;
-            if (!url || failedProvider !== activeProvider || activeProvider === "osm-raster") return null;
+            if (!url || failedProvider !== activeProvider || (activeProvider === "osm-raster" && !__PORTABLE__))
+                return null;
             for (const [failedUrl, failedAt] of failedTiles) {
                 if (now - failedAt > FAILURE_WINDOW_MS) failedTiles.delete(failedUrl);
             }
@@ -235,10 +292,25 @@ function createProviderSession<Provider extends MapProvider>(
             transitionPromise = transition;
             return transitionPromise;
         },
+        retry(): Promise<boolean> {
+            if (isDisposed || activeProvider !== "route-only" || order[0] === "route-only")
+                return Promise.resolve(false);
+            if (recoveryPromise) return recoveryPromise;
+            const recovery = tryProviders(
+                order.filter((provider) => provider !== "route-only"),
+                activeProvider,
+                providerRevision,
+            ).finally(() => {
+                if (recoveryPromise === recovery) recoveryPromise = null;
+            });
+            recoveryPromise = recovery;
+            return recovery;
+        },
         reset(provider, nextOrder = order, shouldNotify = false): void {
             if (isDisposed) return;
             order = nextOrder;
             transitionPromise = null;
+            recoveryPromise = null;
             // Increment even on a no-op so a late probe cannot undo a user choice.
             switchProvider(provider, shouldNotify);
         },
@@ -246,6 +318,7 @@ function createProviderSession<Provider extends MapProvider>(
             isDisposed = true;
             providerRevision++;
             transitionPromise = null;
+            recoveryPromise = null;
             failedTiles.clear();
             listeners.clear();
         },
@@ -257,7 +330,7 @@ export function createOverlayMapProviderSession(
     preference: OverlayMapProviderPreference = "openfreemap",
 ): OverlayMapProviderSession {
     // Runtime validation also covers malformed persisted values and JS callers.
-    const safePreference = preference === "osm-vector" ? "osm-vector" : "openfreemap";
+    const safePreference = preference === "route-only" || preference === "osm-vector" ? preference : "openfreemap";
     return createProviderSession(safePreference, overlayProviderOrder(safePreference), probeProvider);
 }
 
@@ -268,7 +341,7 @@ export function reportMapProviderTileError(error: unknown, now = Date.now()): Pr
 
 /** Store the user's first choice and immediately retry it on the current page. */
 export function setMapProviderPreference(provider: MapProviderPreference): void {
-    if (provider !== "openfreemap" && provider !== "osm-vector" && provider !== "yandex") {
+    if (provider !== "route-only" && provider !== "openfreemap" && provider !== "osm-vector" && provider !== "yandex") {
         throw new Error("unknown map provider");
     }
     if (provider === "yandex" && !isYandexMapAvailable()) throw new Error("yandex map key is not configured");
@@ -285,7 +358,13 @@ export function setMapProviderPreference(provider: MapProviderPreference): void 
 
 /** Page-scoped DevTools override. A reload restores the saved preference. */
 export function forceMapProvider(provider: MapProvider): MapProvider {
-    if (provider !== "openfreemap" && provider !== "osm-vector" && provider !== "osm-raster" && provider !== "yandex") {
+    if (
+        provider !== "route-only" &&
+        provider !== "openfreemap" &&
+        provider !== "osm-vector" &&
+        provider !== "osm-raster" &&
+        provider !== "yandex"
+    ) {
         throw new Error("unknown map provider");
     }
     if (provider === "yandex" && !isYandexMapAvailable()) throw new Error("yandex map key is not configured");

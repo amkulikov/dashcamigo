@@ -236,7 +236,11 @@ self.addEventListener("fetch", (evt) => {
     const req = evt.request;
     if (req.method !== "GET") return;
     const url = new URL(req.url);
-    if (url.origin !== self.location.origin || url.pathname === MANIFEST_KEY) return;
+    if (
+        url.origin !== self.location.origin ||
+        url.pathname === MANIFEST_KEY ||
+        url.pathname.startsWith("/downloads/")
+    ) return;
     // Partial responses cannot be put into Cache Storage, and a cached full
     // response must not replace a requested media byte range.
     if (req.headers.has("range")) return;

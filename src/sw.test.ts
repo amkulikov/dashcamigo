@@ -208,12 +208,12 @@ function loadSw(options: LoadOptions = {}) {
             const response = await navigationResponse(navRequest(url), evt);
             return { response, settled: () => evt.settled() };
         },
-        async dispatchFetch(url: string, headers: HeadersInit = {}) {
+        async dispatchFetch(url: string, headers: HeadersInit = {}, mode = "same-origin") {
             const evt = event();
             let response: Promise<CachedResponse> | undefined;
             listeners.get("fetch")?.({
                 ...evt,
-                request: { method: "GET", url: abs(url), mode: "same-origin", headers: new Headers(headers) },
+                request: { method: "GET", url: abs(url), mode, headers: new Headers(headers) },
                 respondWith(value: Promise<CachedResponse>) {
                     response = value;
                 },
@@ -252,6 +252,22 @@ afterEach(() => {
 });
 
 describe("service worker navigation", () => {
+    it("leaves portable downloads and release metadata entirely to the network", async () => {
+        const sw = loadSw({ pre: { "/en/": res("cached application") } });
+        for (const path of [
+            "/downloads/portable/latest.json",
+            "/downloads/portable/v2026.09.25/dashcamigo-2026-09-25-en",
+        ]) {
+            for (const mode of ["same-origin", "navigate"]) {
+                const result = await sw.dispatchFetch(path, {}, mode);
+                await result.settled();
+                expect(result.response).toBeUndefined();
+            }
+        }
+        expect(sw.fetchSpy).not.toHaveBeenCalled();
+        expect(await sw.rt.keys()).toEqual([]);
+    });
+
     it("serves fresh online HTML while preserving the complete offline shell", async () => {
         const sw = loadSw({ pre: { "/ru/": res("cached") } });
         const result = await sw.navigate("/ru/?source=pwa");

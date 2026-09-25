@@ -241,13 +241,6 @@
     }
 }
 
-.top-panel__hint {
-    flex-basis: 100%;
-    margin: 0;
-    color: var(--fg-mute);
-    font-size: var(--dc-text-sm);
-}
-
 .top-panel__controls {
     min-width: 0;
     flex: 1;

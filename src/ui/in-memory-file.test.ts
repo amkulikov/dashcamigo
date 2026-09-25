@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { asInMemoryExportHandle, BLOB_CHUNK, createInMemoryFileHandle, nativeFsaAvailable } from "./in-memory-file.js";
+import {
+    _resetForTests,
+    asInMemoryExportHandle,
+    BLOB_CHUNK,
+    createInMemoryFileHandle,
+    markNativeSaveBlocked,
+    nativeFsaAvailable,
+} from "./in-memory-file.js";
 
 // Helper: read the handle's current bytes.
 async function bytesOf(handle: FileSystemFileHandle): Promise<Uint8Array> {
@@ -201,7 +208,10 @@ describe("createInMemoryFileHandle", () => {
 });
 
 describe("nativeFsaAvailable", () => {
-    afterEach(() => vi.unstubAllGlobals());
+    afterEach(() => {
+        vi.unstubAllGlobals();
+        _resetForTests();
+    });
 
     it("is false without a window exposing showSaveFilePicker", () => {
         vi.stubGlobal("window", {});
@@ -210,6 +220,14 @@ describe("nativeFsaAvailable", () => {
 
     it("is true when window.showSaveFilePicker exists", () => {
         vi.stubGlobal("window", { showSaveFilePicker: () => {} });
+        expect(nativeFsaAvailable()).toBe(true);
+    });
+
+    it("keeps a denied native picker unavailable for the page lifetime", () => {
+        vi.stubGlobal("window", { showSaveFilePicker: () => {} });
+        markNativeSaveBlocked();
+        expect(nativeFsaAvailable()).toBe(false);
+        _resetForTests();
         expect(nativeFsaAvailable()).toBe(true);
     });
 });

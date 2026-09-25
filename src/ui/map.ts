@@ -72,8 +72,10 @@ import {
 } from "./map-marker-renderer.js";
 import {
     getMapProvider,
+    getMapProviderPreference,
     mapProviderErrorKey,
     reportMapProviderTileError,
+    retryMapProvider,
     subscribeMapProvider,
     type MapProvider,
 } from "./map-provider.js";
@@ -81,6 +83,8 @@ import { MAP_PROVIDER_REGISTRY, MAX_MAP_PITCH_DEG } from "./map-provider-registr
 import { MapAttributionControl } from "./map-attribution-control.js";
 import { createYandexMapStyle } from "./yandex-map.js";
 import { registerSharedMapTileCache, transformMapTileRequest } from "./map-tile-cache.js";
+import { createPortableMapAssetLoader } from "./portable-map-assets.js";
+import { loadMapStyleSource } from "./map-style-source.js";
 import {
     createFallbackMapStyle,
     OSM_SHORTBREAD_BUILDING_SOURCE_LAYER,
@@ -150,6 +154,7 @@ export async function loadMaplibre(): Promise<MaplibreNamespace> {
         // first Map is constructed - the dispatcher is created eagerly with it.
         mod.setWorkerUrl(maplibreWorkerUrl);
         registerSharedMapTileCache(mod.addProtocol);
+        if (__PORTABLE__) mod.addProtocol("dcasset", createPortableMapAssetLoader(__PORTABLE_MAP_ASSETS__));
         mlg = mod;
     }
     return mlg;
@@ -165,15 +170,6 @@ interface MapCallbacks {
 let callbacks: MapCallbacks = {
     onSeekTripTime: () => {},
     onChartLayoutChange: () => {},
-};
-
-// Self-hosted palettes share the canonical layers and OpenFreeMap tile cache.
-const MAP_STYLE_URLS: Record<MapStyleId, string> = {
-    light: "/styles/light.json",
-    dark: "/styles/dark.json",
-    // Export-only: a semi-transparent black slot with orange-glowing features.
-    // Never selected by the live map (currentMapTheme() returns only light/dark).
-    neon: "/styles/neon.json",
 };
 
 // 10 s timeout for style.json fetch. The file is same-origin (CF Pages) and
@@ -275,6 +271,10 @@ export function loadMapStyle(
     source: MapLoadSource = "main",
     provider: MapProvider = getMapProvider(),
 ): Promise<maplibregl.StyleSpecification | null> {
+    if (provider === "route-only") {
+        clearMapStyleFailure(source, theme, provider);
+        return Promise.resolve(EMPTY_MAP_STYLE);
+    }
     const key = styleCacheKey(provider, theme);
     if (force) {
         // Actually abort the previous fetch instead of just dropping the
@@ -316,11 +316,7 @@ export function loadMapStyle(
     const timeoutId = window.setTimeout(() => ctrl.abort("timeout"), MAP_STYLE_TIMEOUT_MS);
     const fetchStart = performance.now();
 
-    const promise: Promise<maplibregl.StyleSpecification | null> = fetch(MAP_STYLE_URLS[theme], { signal: ctrl.signal })
-        .then((r) => {
-            if (!r.ok) throw new Error(`http ${r.status}`);
-            return r.json() as Promise<maplibregl.StyleSpecification>;
-        })
+    const promise: Promise<maplibregl.StyleSpecification | null> = loadMapStyleSource(theme, ctrl.signal)
         .then((style) => {
             if (ctrl.signal.aborted && ctrl.signal.reason === "superseded") return null;
             // MapLibre refuses relative sprite/glyphs URLs at runtime
@@ -467,8 +463,19 @@ function hideMapStyleError(): void {
 const MAP_RECOVERY_RETRY_MS = 15_000;
 let mapRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
 
+function needsMapRecovery(): boolean {
+    if (getMapProvider() === "route-only") return getMapProviderPreference() !== "route-only";
+    return isOffline() || lastFailedStyle !== null;
+}
+
 function retryMapResources(): void {
     if ((!state.map && !state.miniMap) || navigator.onLine === false) return;
+    if (getMapProvider() === "route-only") {
+        // Probe before touching a working local map; failed retries must not
+        // rebuild its style or interrupt the route and follow camera.
+        void retryMapProvider();
+        return;
+    }
     const theme = lastFailedStyle?.theme ?? currentMapTheme();
     const provider = lastFailedStyle?.provider ?? getMapProvider();
     const source = lastFailedStyle?.source ?? "main";
@@ -478,10 +485,10 @@ function retryMapResources(): void {
 }
 
 function scheduleMapRecovery(): void {
-    if (mapRecoveryTimer !== null || (!isOffline() && lastFailedStyle === null)) return;
+    if (mapRecoveryTimer !== null || !needsMapRecovery()) return;
     mapRecoveryTimer = setTimeout(() => {
         mapRecoveryTimer = null;
-        if (!isOffline() && lastFailedStyle === null) return;
+        if (!needsMapRecovery()) return;
         retryMapResources();
         scheduleMapRecovery();
     }, MAP_RECOVERY_RETRY_MS);
@@ -3280,7 +3287,7 @@ export function initMap(cb: MapCallbacks): void {
                 // style swap aborts the old map's remaining tile consumers.
                 mapRecoveryTimer = setTimeout(() => {
                     mapRecoveryTimer = null;
-                    if (isOffline()) scheduleMapRecovery();
+                    if (needsMapRecovery()) scheduleMapRecovery();
                     else retryMapResources();
                 }, 0);
             }
@@ -3290,11 +3297,18 @@ export function initMap(cb: MapCallbacks): void {
     window.addEventListener("online", () => {
         // The navigator flag may clear while a tile failure still holds the
         // combined offline state, so this cannot rely on a state transition.
-        if (isOffline() || lastFailedStyle !== null) retryMapResources();
+        if (needsMapRecovery()) retryMapResources();
     });
 
     subscribeMapProvider((provider, previous) => {
         if (previous === null) return;
+        // Automatic local fallback keeps probing; an explicit local choice
+        // stops recovery even if failed tiles still mark connectivity offline.
+        if (provider === "route-only") {
+            if (mapRecoveryTimer !== null) clearTimeout(mapRecoveryTimer);
+            mapRecoveryTimer = null;
+        }
+        scheduleMapRecovery();
         syncProviderCamera();
         const theme = currentMapTheme();
         loadMapStyle(theme, false, "main", provider).then((style) => {

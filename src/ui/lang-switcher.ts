@@ -54,7 +54,9 @@ function navigateToLocale(code: Lang): void {
 }
 
 function renderLangMenu(): void {
-    dom.langMenu.innerHTML = "";
+    const { langMenu, langToggle } = dom;
+    if (!langMenu || !langToggle) return;
+    langMenu.innerHTML = "";
     const current = getCurrentLang();
     for (const { code, endonym } of LANGS) {
         const li = document.createElement("li");
@@ -68,39 +70,45 @@ function renderLangMenu(): void {
         button.lang = code;
         button.textContent = endonym;
         li.appendChild(button);
-        dom.langMenu.appendChild(li);
+        langMenu.appendChild(li);
     }
 }
 
 function openLangMenu(): void {
-    dom.langMenu.hidden = false;
-    dom.langToggle.setAttribute("aria-expanded", "true");
-    dom.langMenu.querySelector<HTMLElement>('[aria-checked="true"]')?.focus();
+    const { langMenu, langToggle } = dom;
+    if (!langMenu || !langToggle) return;
+    langMenu.hidden = false;
+    langToggle.setAttribute("aria-expanded", "true");
+    langMenu.querySelector<HTMLElement>('[aria-checked="true"]')?.focus();
 }
 
 function closeLangMenu(restoreFocus = false): void {
-    dom.langMenu.hidden = true;
-    dom.langToggle.setAttribute("aria-expanded", "false");
-    if (restoreFocus) dom.langToggle.focus();
+    const { langMenu, langToggle } = dom;
+    if (!langMenu || !langToggle) return;
+    langMenu.hidden = true;
+    langToggle.setAttribute("aria-expanded", "false");
+    if (restoreFocus) langToggle.focus();
 }
 
 export function initLangSwitcher(): void {
+    const { langMenu, langToggle } = dom;
+    if (!langMenu || !langToggle) return;
     // Button is the static SVG icon from index.html; no text code is injected.
     // Active language is visible in the popover as the highlighted item.
     renderLangMenu();
     initMenuKeyboard({
-        button: dom.langToggle,
-        menu: dom.langMenu,
+        button: langToggle,
+        menu: langMenu,
         itemSelector: 'button[role="menuitemradio"]',
         onOpen: openLangMenu,
         onClose: () => closeLangMenu(),
     });
-    dom.langToggle.addEventListener("click", (ev) => {
+    langToggle.addEventListener("click", (ev) => {
         ev.stopPropagation();
-        if (dom.langMenu.hidden) openLangMenu();
+        if (langMenu.hidden) openLangMenu();
         else closeLangMenu();
     });
-    dom.langMenu.addEventListener("click", (ev) => {
+    langMenu.addEventListener("click", (ev) => {
         const target = ev.target;
         if (!(target instanceof HTMLElement)) return;
         const code = target.dataset.lang;
@@ -124,15 +132,15 @@ export function initLangSwitcher(): void {
     // Click outside the menu closes the popover. Standard pattern for popovers
     // without a backdrop so the rest of the UI stays interactive.
     document.addEventListener("click", (ev) => {
-        if (dom.langMenu.hidden) return;
+        if (langMenu.hidden) return;
         const target = ev.target;
-        if (target instanceof Node && (dom.langMenu.contains(target) || dom.langToggle.contains(target))) return;
+        if (target instanceof Node && (langMenu.contains(target) || langToggle.contains(target))) return;
         closeLangMenu();
     });
     // Escape closes the popover - parity with the sibling header popovers
     // (overflow bar, view menu, notifications drawer).
     document.addEventListener("keydown", (ev) => {
-        if (ev.key === "Escape" && !dom.langMenu.hidden) {
+        if (ev.key === "Escape" && !langMenu.hidden) {
             ev.preventDefault();
             closeLangMenu(true);
         }

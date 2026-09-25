@@ -136,6 +136,27 @@ task seems to require crossing one, stop and ask - never work around it silently
   commit message. Do not manufacture a dynamic-import boundary solely to
   preserve the previous number.
 
+### Portable HTML
+
+- Keep the portable edition on shared application code. Use the existing edition
+  boundary to exclude hosted features; hiding their controls is not enough.
+  The artifact must open directly from `file://` without a server or companion
+  files. Browser API availability alone does not prove it works on a file origin.
+- Keep its build independent of hosted configuration and checkout `.env` files.
+  Accept only explicit portable inputs. The optional Yandex browser key is an
+  intentional embedded input; unrelated hosted keys, telemetry configuration and
+  private delivery settings must not enter public artifacts.
+- Treat route-only as the last automatic map fallback, while preserving an
+  explicit local-only choice. Failed recovery probes must not rebuild a working
+  local map or overwrite preferences. Export map sessions remain independent.
+- Inspect compressed artifacts through `scripts/_portable-content.mjs`; compute
+  publication sizes and hashes from the actual downloaded bytes. Publish only
+  validated manifest entries, with artifacts available before links/latest metadata.
+- For portable changes, rebuild the affected artifacts and run the relevant
+  `tests/portable/` scenarios against real file URLs. Shared viewer changes also
+  need hosted regression coverage. Keep external requests intercepted in tests;
+  use synthetic keys for configured-provider tests and public recording fixtures.
+
 ### Logging (`src/log.ts`)
 
 - One central logger. **No direct `console.*` in project code** - the in-memory ring
@@ -346,6 +367,10 @@ go through a `themeColors()` cache invalidated on `prefers-color-scheme` change.
   `scripts/generate-changelog-md.mjs`, `scripts/generate-release-notes.mjs`;
   maintenance -> `.claude/skills/changelog/SKILL.md`
 - Dependencies and versions -> `package.json`
+- Portable build and publication -> `scripts/build-portable.mjs`,
+  `vite.portable.config.ts`, `vite-plugins/portable.ts`, `vite-plugins/portable-downloads.ts`
+- Portable bootstrap/update runtime -> `src/portable/`; file-origin browser
+  regression suite -> `tests/portable/`, `tests/playwright.portable.config.ts`
 - SEO / IndexNow runbook -> `docs/seo.md`;
   GPS format coverage -> `docs/gps-format-coverage.md`
 - Deep-dives: per-format breakdowns -> `docs/format-*.md`;

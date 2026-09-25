@@ -28,6 +28,12 @@ const RASTER_CAMERA: MapCameraPolicy = {
 };
 
 export const MAP_PROVIDER_REGISTRY = {
+    "route-only": {
+        tileType: "vector",
+        camera: VECTOR_CAMERA,
+        supportsAppearanceSettings: true,
+        usesSelectedTheme: true,
+    },
     openfreemap: {
         tileType: "vector",
         camera: VECTOR_CAMERA,

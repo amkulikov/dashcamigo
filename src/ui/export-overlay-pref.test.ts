@@ -120,8 +120,8 @@ describe("export overlay preferences", () => {
         expect(values.has(OVERLAY_PREFERENCES_STORAGE_KEY)).toBe(false);
     });
 
-    it("rejects Yandex and unknown overlay providers without discarding the layout", () => {
-        for (const provider of ["yandex", "osm-raster", "unknown", undefined]) {
+    it("rejects unavailable overlay providers without discarding the layout", () => {
+        for (const provider of ["route-only", "yandex", "osm-raster", "unknown", undefined]) {
             const restored = normalizeOverlayPreferences(
                 { overlayMap: { provider, enabled: true, theme: "dark", zoomKm: 2 } },
                 defaults(),

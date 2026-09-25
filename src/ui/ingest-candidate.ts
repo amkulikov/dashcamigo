@@ -226,15 +226,13 @@ export async function checkCanPlay(candidates: VideoCandidate[]): Promise<void> 
     }
     if (checks.size === 0) return;
     const decodableByKey = new Map<string, boolean>();
-    // Dynamic import: this module is in the landing startup graph, and a static
-    // value import of mediabunny here would add its whole ~300 KB graph to the
-    // entry chunk (guarded by scripts/check-lazy-chunks.mjs).
-    // The probe already awaits per-codec checks, so one more await is free.
-    const { canDecodeVideo } = await import("mediabunny");
+    // Keep codec capabilities out of the landing graph. The shared helper's
+    // named Mediabunny imports expose only the exports the application uses.
+    const { canDecodeVideoStream } = await import("../transcode/capabilities.js");
     await Promise.all(
         [...checks].map(async ([key, { codec, codecString }]) => {
             try {
-                decodableByKey.set(key, await canDecodeVideo(codec, codecString ? { codec: codecString } : undefined));
+                decodableByKey.set(key, await canDecodeVideoStream(codec, codecString));
             } catch (err) {
                 log.warn("codec check threw, optimistically allowing playback", {
                     codec,

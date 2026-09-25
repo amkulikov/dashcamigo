@@ -17,7 +17,7 @@
 //    done FOR privacy must not claim otherwise.
 
 import { createLogger } from "../log.js";
-import { closePersistDb } from "../persist/db.js";
+import { closePersistDb, PERSIST_DB_NAME } from "../persist/db.js";
 
 const log = createLogger("reset");
 
@@ -61,17 +61,19 @@ export async function resetAllAppState(): Promise<void> {
     // 1) Service Workers + Cache Storage. Done first so the reload below
     // cannot pick up the still-active SW and serve cached shell content
     // from a moment before we wiped storage.
-    await clearServiceWorkerAndCaches();
+    if (!__PORTABLE__) await clearServiceWorkerAndCaches();
 
     // 2) localStorage + sessionStorage. .clear() is synchronous and can
     // throw if storage is disabled (private mode, quota); we just log.
     try {
-        localStorage.clear();
+        if (__PORTABLE__) clearOwnedStorage(localStorage);
+        else localStorage.clear();
     } catch (err) {
         log.warn("localStorage clear failed", err);
     }
     try {
-        sessionStorage.clear();
+        if (__PORTABLE__) clearOwnedStorage(sessionStorage);
+        else sessionStorage.clear();
     } catch (err) {
         log.warn("sessionStorage clear failed", err);
     }
@@ -82,7 +84,7 @@ export async function resetAllAppState(): Promise<void> {
     // domain scope - the browser silently ignores combinations that don't
     // match an existing cookie.
     try {
-        clearAllCookies();
+        if (!__PORTABLE__) clearAllCookies();
     } catch (err) {
         log.warn("cookies clear failed", err);
     }
@@ -101,9 +103,10 @@ export async function resetAllAppState(): Promise<void> {
     } catch (err) {
         log.warn("persist db close failed", err);
     }
-    if (typeof indexedDB !== "undefined" && typeof indexedDB.databases === "function") {
-        try {
-            const dbs = await indexedDB.databases();
+    try {
+        if (typeof indexedDB !== "undefined" && (__PORTABLE__ || typeof indexedDB.databases === "function")) {
+            // Browsers may share file:// storage across unrelated HTML files.
+            const dbs = __PORTABLE__ ? [{ name: PERSIST_DB_NAME }] : await indexedDB.databases();
             await Promise.all(
                 dbs
                     .filter((db) => typeof db.name === "string" && db.name.length > 0)
@@ -118,9 +121,9 @@ export async function resetAllAppState(): Promise<void> {
                             }),
                     ),
             );
-        } catch (err) {
-            log.warn("indexedDB clear failed", err);
         }
+    } catch (err) {
+        log.warn("indexedDB clear failed", err);
     }
 
     log.info("reset finished, reloading");
@@ -143,6 +146,21 @@ function clearAllCookies(): void {
         for (const domain of domains) {
             // biome-ignore lint/suspicious/noDocumentCookie: Cookie Store API is Chromium-only (Chrome 87+); we ship to Safari + Firefox too, document.cookie is the portable way to expire cookies.
             document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/${domain}`;
+        }
+    }
+}
+
+function clearOwnedStorage(storage: Storage): void {
+    for (let index = storage.length - 1; index >= 0; index--) {
+        const key = storage.key(index);
+        if (
+            key &&
+            (key.startsWith("dashcamigo:") ||
+                key === "dc.viewer.panels" ||
+                key === "dc-theme" ||
+                key === "dc-asset-retry")
+        ) {
+            storage.removeItem(key);
         }
     }
 }

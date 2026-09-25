@@ -135,6 +135,10 @@ function isKnownLang(code: string): code is Lang {
  * and re-runs this detection with the URL segment now winning.
  */
 export function detectInitialLang(): Lang {
+    if (__PORTABLE__) {
+        if (!isKnownLang(__PORTABLE_LOCALE__)) throw new Error("invalid portable locale");
+        return __PORTABLE_LOCALE__;
+    }
     if (typeof location !== "undefined") {
         const fromUrl = parseLangFromPath(location.pathname);
         if (fromUrl !== null) return fromUrl;

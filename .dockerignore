@@ -5,6 +5,7 @@
 # image must contact nothing.
 node_modules
 dist
+dist-portable
 .git
 private
 tests

@@ -1,25 +1,5 @@
-// PWA install flow. Topbar button #install-btn + one-shot toast #install-banner
-// after a saved clip + #install-modal with a guide for browsers without a
-// native install API.
-//
-// Strategies (see detectStrategy):
-//   - already-installed - app is open as standalone PWA (or via legacy iOS
-//     navigator.standalone). No CTA.
-//   - skip - iOS/iPadOS Safari (the SD-card flow doesn't work there anyway),
-//     Firefox (no install API on desktop, on Android the browser menu does
-//     it), and unknown browsers. No CTA.
-//   - chromium - Chrome/Edge/Brave/Opera/Yandex and friends. Wait for
-//     beforeinstallprompt and call prompt() on click.
-//   - safari-mac - Safari on macOS desktop. No install API, so the button
-//     opens a modal that points the user to Chrome - chosen over the native
-//     "Share -> Add to Dock" path because installing via Chrome gives a real
-//     offline-capable PWA (our SW only works in Chromium).
-//
-// Analytics funnel:
-//   pwa_cta_shown (header or toast) -> pwa_cta_clicked -> either
-//   pwa_prompt_outcome (native dialog) or pwa_guide_shown (modal).
-//   pwa_installed fires from window.appinstalled - even if the user installed
-//   through the address bar bypassing our button.
+// Installation state and native prompt for the offline-use chooser, plus the
+// one-shot post-export toast and the fallback installation guide.
 
 import { t } from "../i18n/index.js";
 import { createLogger } from "../log.js";
@@ -71,34 +51,29 @@ const STORAGE_TOAST_DISMISSED_AT = "dashcamigo:pwa:toast:dismissedAt";
 // authoritative source says we're NOT installed: a fired beforeinstallprompt
 // (only fires when installable, i.e. not installed) or a getInstalledRelatedApps
 // negative on browsers that have the API. Without that, an install->uninstall
-// cycle leaves the button hidden until the user wipes site data. See
+// cycle leaves the install action unavailable until the user wipes site data. See
 // clearInstalledSignal() and its callers.
 const STORAGE_INSTALLED_SIGNAL = "dashcamigo:pwa:installed";
 
-// After an explicit dismiss, suppress the toast for 30 days. The topbar
-// button is always available, so the toast is just a one-shot reminder.
+// After an explicit dismiss, suppress the toast for 30 days. The offline-use
+// chooser stays available, so the toast is just a one-shot reminder.
 const TOAST_DISMISS_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
 
 type InstallStrategy = "skip" | "already-installed" | "chromium" | "safari-mac";
+export type PwaInstallState = "install" | "guide" | "installed" | "unsupported";
 
 // Module state. Reset on every full page reload.
 let strategy: InstallStrategy = "skip";
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
+let initialized = false;
+let installRevision = 0;
+let lastEmittedState: PwaInstallState = "unsupported";
+const stateListeners = new Set<(state: PwaInstallState) => void>();
 
-// Cached promise from navigator.getInstalledRelatedApps. The query is
-// fired once at init; both initialization (sync strategy override) and
-// the post-export toast path await this same promise so they never race
-// with the OS-level installation check.
-let relatedAppsCheckPromise: Promise<boolean> | null = null;
-// Synchronous mirror of the above promise's resolved value. Used by
-// show-functions that must run on a click handler without awaiting.
-// Stays `false` until the promise resolves; if installation is detected
-// later, init's .then() flips the strategy and hides any visible UI.
+// Unknown results must not clear a stored installation signal.
+let relatedAppsCheckPromise: Promise<boolean | null> | null = null;
+// Confirmed installation survives a blocked localStorage write in this page.
 let installedAccordingToOS = false;
-
-// One-time flag so the header CTA attention pulse plays only on the first
-// reveal, not on every re-show after a transient hide.
-let headerCtaTracked = false;
 
 // --- Detection ---
 
@@ -168,14 +143,14 @@ function detectStrategy(): InstallStrategy {
  * and don't trigger a second IPC.
  *
  * Chrome/Edge only (Android 84+, Desktop 140+). On browsers without the
- * API, resolves to `false` immediately. Errors are logged and swallowed -
+ * API, resolves to `null` immediately. Errors are logged and return `null` -
  * we never want this defensive check to break the install flow.
  */
-function checkInstalledRelatedAppsOnce(): Promise<boolean> {
+function checkInstalledRelatedAppsOnce(): Promise<boolean | null> {
     if (relatedAppsCheckPromise) return relatedAppsCheckPromise;
     const nav = navigator as NavWithRelatedApps;
     if (typeof nav.getInstalledRelatedApps !== "function") {
-        relatedAppsCheckPromise = Promise.resolve(false);
+        relatedAppsCheckPromise = Promise.resolve(null);
         return relatedAppsCheckPromise;
     }
     relatedAppsCheckPromise = nav
@@ -186,8 +161,8 @@ function checkInstalledRelatedAppsOnce(): Promise<boolean> {
             return found;
         })
         .catch((err: unknown) => {
-            log.warn("getInstalledRelatedApps failed", err);
-            return false;
+            log.warn("getInstalledRelatedApps failed", { error: err instanceof Error ? err.message : String(err) });
+            return null;
         });
     return relatedAppsCheckPromise;
 }
@@ -224,25 +199,10 @@ function clearInstalledSignal(): void {
     }
 }
 
-/** True if getInstalledRelatedApps exists in this browser (Chrome/Edge only). */
-function hasRelatedAppsApi(): boolean {
-    return typeof (navigator as NavWithRelatedApps).getInstalledRelatedApps === "function";
-}
-
-/**
- * Reveals the topbar button for the current strategy after a stale signal was
- * cleared mid-session. showInstallBtn() still guards against any remaining
- * install signal, so this is a no-op when we're genuinely installed.
- */
-function revealInstallCta(): void {
-    if (strategy === "safari-mac") showInstallBtn();
-    else if (strategy === "chromium" && deferredPrompt) showInstallBtn();
-}
-
 /**
  * Synchronous "is the app already installed?" combining all three local
  * signals. Used by show-functions to suppress the install CTA and by
- * handleInstallClick to swap the action. Does NOT include the async
+ * requestPwaInstall to swap the action. Does NOT include the async
  * getInstalledRelatedApps result - callers that can await get it
  * separately via checkInstalledRelatedAppsOnce().
  */
@@ -250,14 +210,30 @@ function isLikelyInstalled(): boolean {
     return isStandalone() || installedAccordingToOS || hasInstalledSignal();
 }
 
+export function getPwaInstallState(): PwaInstallState {
+    if (isLikelyInstalled()) return "installed";
+    if (strategy === "chromium") return deferredPrompt ? "install" : "guide";
+    if (strategy === "safari-mac") return "guide";
+    return "unsupported";
+}
+
+export function subscribePwaInstallState(listener: (state: PwaInstallState) => void): () => void {
+    stateListeners.add(listener);
+    listener(getPwaInstallState());
+    return () => stateListeners.delete(listener);
+}
+
+function emitInstallState(): void {
+    const state = getPwaInstallState();
+    if (state === lastEmittedState) return;
+    lastEmittedState = state;
+    for (const listener of stateListeners) listener(state);
+}
+
 // --- DOM helpers ---
 
 function $btn(id: string): HTMLButtonElement | null {
     return document.getElementById(id) as HTMLButtonElement | null;
-}
-
-function getInstallBtn(): HTMLButtonElement | null {
-    return $btn("install-btn");
 }
 
 function getBanner(): HTMLElement | null {
@@ -269,36 +245,6 @@ function getModal(): HTMLElement | null {
 }
 
 // --- Show / hide ---
-
-function showInstallBtn(): void {
-    // Last-ditch sync guard against Chrome firing beforeinstallprompt in
-    // browser tabs while the PWA is already installed for the same origin
-    // elsewhere. isLikelyInstalled() folds all three sync signals.
-    if (isLikelyInstalled()) {
-        log.warn("showInstallBtn suppressed: detected as installed");
-        return;
-    }
-    const btn = getInstallBtn();
-    if (!btn) return;
-    const firstReveal = btn.hidden;
-    btn.hidden = false;
-    // Pulse the button briefly the FIRST time it appears in this session,
-    // so the user notices the new affordance in the topbar. CSS handles
-    // the animation; we just toggle the class and remove it after the
-    // animation finishes (3 iterations * 1.4s = ~4.2s).
-    if (firstReveal && !headerCtaTracked) {
-        btn.classList.add("install-btn-pulse");
-        setTimeout(() => btn.classList.remove("install-btn-pulse"), 4500);
-    }
-    if (!headerCtaTracked) {
-        headerCtaTracked = true;
-    }
-}
-
-function hideInstallBtn(): void {
-    const btn = getInstallBtn();
-    if (btn) btn.hidden = true;
-}
 
 function hideBanner(): void {
     const banner = getBanner();
@@ -323,14 +269,14 @@ function activateInstallModal(modal: HTMLElement): void {
 
 // --- Click handlers ---
 
-async function handleInstallClick(): Promise<void> {
+export async function requestPwaInstall(): Promise<void> {
     // At-click detection. The button may have surfaced before our install
     // signals fired (Chrome quirk firing beforeinstallprompt in browser tab
     // even when the PWA is installed for the same origin; localhost where
     // getInstalledRelatedApps refuses to work). When that happens, swap the
     // action: instead of triggering a prompt that won't work, point the
     // user at where the installed app actually lives.
-    if (isLikelyInstalled() || (await checkInstalledRelatedAppsOnce())) {
+    if (isLikelyInstalled()) {
         log.info("install click on already-installed app, showing launch hint");
         openAlreadyInstalledModal();
         return;
@@ -338,40 +284,27 @@ async function handleInstallClick(): Promise<void> {
 
     // Chromium with a captured beforeinstallprompt - fire the native dialog.
     if (strategy === "chromium" && deferredPrompt) {
+        // prompt() needs the click's user activation and each event is single-use.
+        // Keep a local reference: appinstalled can clear shared state while awaited.
+        const prompt = deferredPrompt;
+        deferredPrompt = null;
+        emitInstallState();
         try {
-            await deferredPrompt.prompt();
-            const { outcome } = await deferredPrompt.userChoice;
+            await prompt.prompt();
+            const { outcome } = await prompt.userChoice;
             log.info("native install prompt outcome", { outcome });
-            // Chrome does not redeliver the same event - drop it.
-            deferredPrompt = null;
-            if (outcome === "accepted") {
-                // appinstalled will hide everything, but on dismiss we also
-                // hide the header button - no further install path exists.
-                hideInstallBtn();
-            }
         } catch (err) {
-            // prompt() rejects silently in Chrome when the PWA is already
-            // installed for this scope - the event lingered from before
-            // install and the browser refuses to surface the dialog. Without
-            // this fallback the user clicks and nothing visible happens.
-            // Switch to the launch-hint modal so the user sees something.
-            //
-            // The signal is persisted ONLY for InvalidStateError - that's
-            // the specific code Chrome throws for the "already installed"
-            // case. Generic failures (transient API issues, future error
-            // types) don't poison detection for future sessions.
-            log.warn("native install prompt failed", err);
-            deferredPrompt = null;
-            if (err instanceof DOMException && err.name === "InvalidStateError") {
-                setInstalledSignal();
-            }
-            openAlreadyInstalledModal();
+            // A failed prompt is not proof of installation; its browser service
+            // may be unavailable. Only installation signals justify the hint.
+            log.warn("native install prompt failed", { error: err instanceof Error ? err.message : String(err) });
+            if (isLikelyInstalled()) openAlreadyInstalledModal();
+            else openGuideModal();
         }
         return;
     }
 
     // No deferredPrompt (safari-mac, or chromium before the event arrived) -
-    // open the guide modal instead.
+    // keep the guide usable even while the background OS query is pending.
     openGuideModal();
 }
 
@@ -485,8 +418,7 @@ function renderChromiumGuide(): HTMLElement[] {
 }
 
 /**
- * Inline SVG copy of the Lucide monitor-down icon - the same glyph our
- * topbar #install-btn uses and a visual stand-in for Chrome's address-bar
+ * Inline SVG copy of the Lucide monitor-down icon, a visual stand-in for Chrome's address-bar
  * install icon. Wrapped in a chip-style span so it reads as a clickable
  * artifact, not body text.
  */
@@ -513,7 +445,7 @@ function shouldShowToast(): boolean {
     if (strategy !== "chromium" && strategy !== "safari-mac") return false;
     try {
         // Already shown in a previous session - do not re-pester. The user
-        // still has the topbar button if they want to install.
+        // still has the offline-use chooser if they want to install.
         if (localStorage.getItem(STORAGE_TOAST_SHOWN) === "1") return false;
         // If a dismissedAt timestamp exists - respect the cooldown. SHOWN is
         // always set together with the toast display, so this check is
@@ -527,7 +459,6 @@ function shouldShowToast(): boolean {
 }
 
 function showToast(): void {
-    // Mirror of the showInstallBtn guard.
     if (isLikelyInstalled()) {
         log.warn("showToast suppressed: detected as installed");
         return;
@@ -563,56 +494,48 @@ export async function maybeShowPostExportToast(): Promise<void> {
 
 // --- Init ---
 
-/**
- * Initializes the PWA install module. Called exactly once from app.ts.
- * Detects the strategy from browser/display-mode, wires up listeners, and -
- * for safari-mac - reveals the topbar button immediately. For chromium the
- * button appears later, once the browser fires beforeinstallprompt.
- */
+/** Initializes installation detection and guide/toast controls once per page. */
 export function initPwaInstall(): void {
+    if (initialized) return;
+    initialized = true;
     strategy = detectStrategy();
 
-    // If this load is itself a standalone PWA, we are literally running inside
-    // the installed app: persist the signal for future browser-tab loads and
-    // stop - no install CTA makes sense here. This is the only "certain"
-    // installed state; a leftover localStorage signal is NOT (the app may have
-    // been uninstalled since), so it must not force an early return - otherwise
-    // an install->uninstall cycle hides the button forever (no appuninstalled
-    // event to clear the signal). The isLikelyInstalled() guards inside
-    // showInstallBtn/showToast suppress proactive CTA while a signal lingers;
-    // the authoritative-negative paths below clear it.
+    // The already-installed hint uses this modal even on unsupported browsers.
+    $btn("install-modal-close")?.addEventListener("click", closeGuideModal);
+    const guideModal = getModal();
+    if (guideModal) wireBackdropDismiss(guideModal, closeGuideModal, { cardSelector: ".export-modal-card" });
+    // Escape is handled centrally by the modal manager (activateInstallModal).
+
+    // Standalone is conclusive; a stored signal must still be reconciled with
+    // the browser because there is no appuninstalled event to clear it.
     if (strategy === "already-installed") {
+        installedAccordingToOS = true;
         setInstalledSignal();
         log.info("strategy detected", { strategy });
+        emitInstallState();
         return;
     }
     log.info("strategy detected", { strategy, installedSignal: hasInstalledSignal() });
+    emitInstallState();
 
-    // Fire the OS-level installation check in the background and reconcile both
-    // directions. Authoritative on Chrome/Edge 140+ desktop and Android 84+.
-    const relatedAppsApiPresent = hasRelatedAppsApi();
+    // A delayed OS result must not overwrite a newer native install event.
+    const checkRevision = installRevision;
     void checkInstalledRelatedAppsOnce().then((installed) => {
+        if (checkRevision !== installRevision) return;
         if (installed) {
-            // Confirmed installed (this tab or another window). Persist the
-            // signal so future loads short-circuit, and drop any visible CTA.
             installedAccordingToOS = true;
-            strategy = "already-installed";
             setInstalledSignal();
-            hideInstallBtn();
             hideBanner();
             closeGuideModal();
+            emitInstallState();
             return;
         }
-        // OS says not installed. If a signal lingers, the PWA was uninstalled
-        // (or the signal was set in error): clear it so the CTA is no longer
-        // suppressed, and re-reveal it. Guarded by relatedAppsApiPresent - a
-        // bare false from a browser without the API means "unknown", not "not
-        // installed", and must not wipe the cross-window signal.
-        if (relatedAppsApiPresent && hasInstalledSignal()) {
+        // Missing or failed detection is unknown, not proof of an uninstall.
+        if (installed === false && hasInstalledSignal()) {
             log.info("OS reports not installed but a stale installed-signal exists; clearing it");
             clearInstalledSignal();
             installedAccordingToOS = false;
-            revealInstallCta();
+            emitInstallState();
         }
     });
 
@@ -620,14 +543,9 @@ export function initPwaInstall(): void {
         return;
     }
 
-    // Topbar button.
-    getInstallBtn()?.addEventListener("click", () => {
-        void handleInstallClick();
-    });
-
     // Toast buttons.
     $btn("install-banner-install")?.addEventListener("click", () => {
-        void handleInstallClick();
+        void requestPwaInstall();
         hideBanner();
     });
     $btn("install-banner-dismiss")?.addEventListener("click", () => {
@@ -640,45 +558,34 @@ export function initPwaInstall(): void {
         }
     });
 
-    // Modal close: Close button, backdrop click, Escape.
-    $btn("install-modal-close")?.addEventListener("click", closeGuideModal);
-    const guideModal = getModal();
-    if (guideModal) wireBackdropDismiss(guideModal, closeGuideModal, { cardSelector: ".export-modal-card" });
-    // Escape is handled centrally by the modal manager (activateInstallModal).
-
-    // Safari macOS - no install API, but we can show the guide. Reveal the
-    // topbar button immediately so the user has an entry point.
-    if (strategy === "safari-mac") {
-        showInstallBtn();
-    }
-
     // Chromium - wait for the event. preventDefault() is mandatory, otherwise
     // Chrome will show its own mini-banner on mobile and steal the UX.
     window.addEventListener("beforeinstallprompt", (ev) => {
         ev.preventDefault();
+        installRevision++;
         deferredPrompt = ev;
         log.debug("beforeinstallprompt captured", { platforms: ev.platforms });
-        // The event fires only when the app is installable - i.e. NOT installed
-        // (desktop + WebAPK Android). So a lingering installed-signal is stale
-        // (install->uninstall cycle); drop it before showInstallBtn(), whose
-        // isLikelyInstalled() guard would otherwise keep the button hidden.
+        // An installable app supersedes the stored/OS result from an earlier
+        // installation; there is no separate appuninstalled event.
         if (hasInstalledSignal()) {
             log.info("beforeinstallprompt fired with a stale installed-signal; clearing it");
             clearInstalledSignal();
         }
         installedAccordingToOS = false;
-        showInstallBtn();
+        emitInstallState();
     });
 
     // Install completed - regardless of who triggered it. Hide everything
     // and persist the cross-window signal so future tab loads short-circuit.
     window.addEventListener("appinstalled", () => {
         log.info("pwa appinstalled");
+        installRevision++;
+        installedAccordingToOS = true;
         setInstalledSignal();
         deferredPrompt = null;
-        hideInstallBtn();
         hideBanner();
         closeGuideModal();
+        emitInstallState();
     });
 
     // Display-mode can flip mid-session (e.g. user toggled fullscreen, or the
@@ -688,11 +595,13 @@ export function initPwaInstall(): void {
     // installed app right now".
     for (const mode of ["standalone", "window-controls-overlay"]) {
         window.matchMedia?.(`(display-mode: ${mode})`).addEventListener("change", (ev) => {
-            if (!ev.matches) return;
-            log.info("display-mode changed to installed", { mode });
-            hideInstallBtn();
-            hideBanner();
-            closeGuideModal();
+            installRevision++;
+            if (ev.matches) {
+                log.info("display-mode changed to installed", { mode });
+                hideBanner();
+                closeGuideModal();
+            }
+            emitInstallState();
         });
     }
 }

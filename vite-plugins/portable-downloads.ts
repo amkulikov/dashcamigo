@@ -1,0 +1,128 @@
+import { createHash } from "node:crypto";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import type { Plugin } from "vite";
+import { readPortableArtifacts, stagePortableArtifacts } from "../scripts/_portable-artifacts.mjs";
+import type { PortableManifest } from "../src/portable/manifest.mjs";
+
+const DOWNLOAD_ANCHOR = /<a\b(?=[^>]*\bid="portable-download")[^>]*>[\s\S]*?<\/a>/g;
+
+function renderPortableDownload(html: string, manifest: PortableManifest | null, locale?: string): string {
+    const file = locale ? manifest?.files[locale] : undefined;
+    return html.replace(DOWNLOAD_ANCHOR, (anchor) => {
+        if (!file) return "";
+        const size = new Intl.NumberFormat(locale ?? "en", {
+            style: "unit", unit: "megabyte", unitDisplay: "short", maximumFractionDigits: 1,
+        }).format(file.bytes / 1000000);
+        const details = `${manifest?.version} · ${size}`;
+        const withTitle = /\stitle="[^"]*"/.test(anchor)
+            ? anchor.replace(/(\stitle=")([^"]*)(")/, `$1$2 · ${details}$3`)
+            : anchor.replace("<a ", `<a title="${details}" `);
+        return withTitle
+            .replace(/\s+data-i18n-attr="title:portable.download.description"/, "")
+            .replace(/\s+hidden(?:="[^"]*")?/, "")
+            .replace(/\s+download(?:="[^"]*")?/, "")
+            .replace("<a ", `<a href="${file.path}" download="${file.filename}" data-portable-bytes="${file.bytes}" data-portable-version="${manifest?.version}" `);
+    });
+}
+
+export function publishPortableDownloads(dist: string, manifestPath?: string, allowCustom = false): void {
+    const manifest = manifestPath ? stagePortableArtifacts(resolve(manifestPath), dist, true, allowCustom) : null;
+    // Process shells and their marketing descendants after prerendering.
+    function updatePages(directory: string, locale?: string): void {
+        for (const entry of readdirSync(directory, { withFileTypes: true })) {
+            if (entry.name === "downloads") continue;
+            const path = join(directory, entry.name);
+            if (entry.isDirectory()) {
+                updatePages(path, locale ?? (/^[a-z]{2}$/.test(entry.name) ? entry.name : undefined));
+            } else if (entry.name.endsWith(".html")) {
+                const html = readFileSync(path, "utf8");
+                const updated = renderPortableDownload(html, manifest, locale);
+                if (html !== updated) writeFileSync(path, updated);
+            }
+        }
+    }
+    updatePages(dist);
+    if (!manifest) return;
+    const headers = join(dist, "_headers");
+    // Clean URLs retain the dated .html filename; no-transform protects the
+    // attested bytes from edge HTML rewriting, including analytics injection.
+    writeFileSync(headers, `${readFileSync(headers, "utf8")}\n/downloads/portable/:version/:filename\n  Content-Type: application/octet-stream\n  Content-Disposition: attachment; filename=":filename.html"\n  Cache-Control: public, max-age=31536000, immutable, no-transform\n  X-Robots-Tag: noindex\n\n/downloads/portable/latest.json\n  Content-Type: application/json; charset=utf-8\n  Access-Control-Allow-Origin: *\n  Cache-Control: public, max-age=0, must-revalidate, no-transform\n  X-Robots-Tag: noindex\n`);
+}
+
+export function portableDownloadsPlugin(options: { allowCustom?: boolean } = {}): Plugin {
+    let isBuild = false;
+    let developmentManifest: PortableManifest | null = null;
+    return {
+        name: "dashcamigo-portable-downloads",
+        configResolved(config) {
+            isBuild = config.command === "build";
+        },
+        configureServer(server) {
+            const explicitManifest = process.env.PORTABLE_MANIFEST;
+            const manifestPath = resolve(server.config.root, explicitManifest || "dist-portable/manifest.json");
+            if (explicitManifest || existsSync(manifestPath)) {
+                try {
+                    developmentManifest = readPortableArtifacts(manifestPath, true);
+                } catch {
+                    // Artifact paths may point outside the public checkout.
+                    throw new Error("invalid public portable artifacts for local development");
+                }
+            }
+            const manifest = developmentManifest;
+            const files = new Map(Object.values(manifest?.files ?? {}).map((file) => [file.path, file]));
+            server.middlewares.use((request, response, next) => {
+                const pathname = request.url?.split("?")[0] ?? "";
+                if (!pathname.startsWith("/downloads/portable/")) return next();
+                response.setHeader("Cache-Control", "no-store, no-transform");
+                response.setHeader("X-Content-Type-Options", "nosniff");
+                response.setHeader("X-Robots-Tag", "noindex");
+                if (request.method !== "GET" && request.method !== "HEAD") {
+                    response.setHeader("Allow", "GET, HEAD");
+                    response.statusCode = 405;
+                    response.end();
+                    return;
+                }
+                if (pathname === "/downloads/portable/latest.json" && manifest) {
+                    const body = `${JSON.stringify(manifest)}\n`;
+                    response.setHeader("Content-Type", "application/json; charset=utf-8");
+                    response.setHeader("Access-Control-Allow-Origin", "*");
+                    response.setHeader("Content-Length", Buffer.byteLength(body));
+                    response.end(request.method === "HEAD" ? undefined : body);
+                    return;
+                }
+                const file = files.get(pathname);
+                if (!file) {
+                    response.statusCode = 404;
+                    response.end();
+                    return;
+                }
+                try {
+                    const bytes = readFileSync(resolve(dirname(manifestPath), file.filename));
+                    // Rebuilding while Vite runs must never serve bytes under stale metadata.
+                    if (bytes.length !== file.bytes || createHash("sha256").update(bytes).digest("hex") !== file.sha256) {
+                        throw new Error("portable artifact integrity mismatch");
+                    }
+                    response.setHeader("Content-Type", "application/octet-stream");
+                    response.setHeader("Content-Disposition", `attachment; filename="${file.filename}"`);
+                    response.setHeader("Content-Length", bytes.length);
+                    response.end(request.method === "HEAD" ? undefined : bytes);
+                } catch {
+                    response.statusCode = 503;
+                    response.end("portable artifact unavailable; restart the development server after rebuilding");
+                }
+            });
+        },
+        transformIndexHtml(html, context) {
+            if (isBuild) return html;
+            const pathname = (context.originalUrl ?? context.path).split("?")[0] ?? "";
+            const locale = /^\/([a-z]{2})(?:\/|$)/.exec(pathname)?.[1];
+            return renderPortableDownload(html, developmentManifest, locale);
+        },
+        closeBundle() {
+            if (isBuild) {
+                publishPortableDownloads(resolve(process.cwd(), "dist"), process.env.PORTABLE_MANIFEST, options.allowCustom);
+            }
+        },
+    };
+}

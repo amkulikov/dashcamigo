@@ -55,6 +55,7 @@
 @import "./components/offline-banner.css";
 @import "./components/settings.css";
 @import "./modals/install-pwa.css";
+@import "./modals/offline-use.css";
 @import "./components/notifications.css";
 @import "./components/lang-banner.css";
 @import "./components/forms.css";

@@ -63,6 +63,7 @@ interface DiagPayload {
     schemaVersion: 1;
     capturedAt: string;
     appVersion: string;
+    edition: "portable" | "web";
     userAgent: string;
     languages: readonly string[];
     timezone: string;
@@ -158,6 +159,7 @@ export function collectDiagnostics(extras?: { storageQuota?: number; storageUsag
         schemaVersion: 1,
         capturedAt: new Date().toISOString(),
         appVersion: APP_VERSION,
+        edition: __PORTABLE__ ? "portable" : "web",
         userAgent: navigator.userAgent,
         languages: navigator.languages,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -226,7 +228,7 @@ export function serializeDiagnosticsText(p: DiagPayload): string {
     const push = (s = "") => out.push(s);
 
     push("== environment ==");
-    push(`dashcamigo: ${p.appVersion}`);
+    push(`dashcamigo: ${p.appVersion} (${p.edition})`);
     push(`browser: ${p.userAgent}`);
     push(`languages: ${p.languages.join(", ")}`);
     push(`timezone: ${p.timezone}`);

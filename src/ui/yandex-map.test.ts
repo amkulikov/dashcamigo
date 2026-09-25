@@ -1,6 +1,6 @@
 import { validateStyleMin } from "@maplibre/maplibre-gl-style-spec";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createYandexMapStyle, isYandexMapAvailable } from "./yandex-map.js";
+import { createYandexMapStyle, isYandexMapAvailable, yandexMapTileTemplate } from "./yandex-map.js";
 
 describe("Yandex map configuration", () => {
     afterEach(() => vi.unstubAllEnvs());
@@ -9,6 +9,7 @@ describe("Yandex map configuration", () => {
         vi.stubEnv("VITE_YANDEX_TILES_API_KEY", "  ");
         expect(isYandexMapAvailable()).toBe(false);
         expect(createYandexMapStyle()).toBeNull();
+        expect(yandexMapTileTemplate()).toBeNull();
     });
 
     it.each([
@@ -23,6 +24,7 @@ describe("Yandex map configuration", () => {
         expect(validateStyleMin(style)).toEqual([]);
         const source = style.sources.yandex;
         if (source?.type !== "raster") throw new Error("missing raster source");
+        expect(source.tiles![0]).toBe(yandexMapTileTemplate(language));
         const url = new URL(source.tiles![0]!);
         expect(url.origin).toBe("https://tiles.api-maps.yandex.ru");
         expect(url.searchParams.get("projection")).toBe("web_mercator");

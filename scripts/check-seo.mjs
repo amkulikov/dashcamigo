@@ -69,6 +69,7 @@ function sameAlternates(left, right) {
 
 function htmlFiles(directory) {
     return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+        if (entry.name === "downloads") return [];
         const path = join(directory, entry.name);
         return entry.isDirectory() ? htmlFiles(path) : entry.name.endsWith(".html") ? [path] : [];
     });

@@ -1,12 +1,12 @@
 // Overflow-bar configuration for the topbar.
-// When the header shrinks the low-priority buttons (what's new/install/feedback/
+// When the header shrinks the low-priority buttons (what's new/offline-use/feedback/
 // theme/settings) move into the kebab menu. Bell and language stay visible.
 //
 // This module is only wiring: which buttons collapse, in what order, how they
 // look in the menu. The generic measuring and rendering logic is in
 // ./overflow-bar.ts.
 
-import { t } from "../i18n/index.js";
+import { type I18nKey, t } from "../i18n/index.js";
 import { type OverflowableItem, initOverflowBar } from "./overflow-bar.js";
 
 export function initTopbarOverflow() {
@@ -20,12 +20,28 @@ export function initTopbarOverflow() {
     }
 
     const feedbackBtn = document.getElementById("feedback-btn") as HTMLButtonElement | null;
-    const installBtn = document.getElementById("install-btn") as HTMLButtonElement | null;
+    const offlineUseBtn = document.getElementById("offline-use-btn") as HTMLButtonElement | null;
     const whatsNewBtn = document.getElementById("whats-new-btn") as HTMLButtonElement | null;
     const settingsBtn = document.getElementById("settings-btn") as HTMLButtonElement | null;
     const themeToggle = topbar.querySelector<HTMLElement>(".theme-toggle");
 
     const items: OverflowableItem[] = [];
+
+    const portableLinks: { id: string; key?: I18nKey; priority: number }[] = [
+        { id: "portable-update", key: "portable.update", priority: 3 },
+        { id: "portable-full-version", key: "portable.fullVersion", priority: 4 },
+        { id: "portable-github", priority: 5 },
+    ];
+    for (const { id, key, priority } of portableLinks) {
+        const link = document.getElementById(id);
+        if (!link) continue;
+        items.push({
+            el: link,
+            priority,
+            label: () => (key ? t(key) : (link.textContent ?? "")),
+            isAvailable: () => !link.hidden,
+        });
+    }
 
     if (whatsNewBtn) {
         items.push({
@@ -47,12 +63,11 @@ export function initTopbarOverflow() {
         });
     }
 
-    if (installBtn) {
+    if (offlineUseBtn) {
         items.push({
-            el: installBtn,
-            priority: 4, // install is usually hidden entirely
-            label: () => t("pwa.install.cta"),
-            isAvailable: () => !installBtn.hidden,
+            el: offlineUseBtn,
+            priority: 4,
+            label: () => t("offlineUse.entry"),
         });
     }
 

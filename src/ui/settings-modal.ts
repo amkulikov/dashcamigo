@@ -105,7 +105,7 @@ function isOpen(el: HTMLElement | null): boolean {
 function openSettings(): void {
     const m = modalEl();
     if (!m) return;
-    syncCrashToggleFromState();
+    if (!__PORTABLE__) syncCrashToggleFromState();
     syncUnitsSelect();
     syncMapLabelScaleSelect();
     syncMapMarkerControl();
@@ -240,7 +240,7 @@ function refreshCacheUsageValue(): void {
 /** Writes version + storage estimate into the About section. Called on open. */
 function syncAboutInfo(): void {
     const v = document.getElementById("settings-version-value");
-    if (v) v.textContent = APP_VERSION;
+    if (v) v.textContent = __PORTABLE__ ? `${APP_VERSION} · ${t("portable.label")}` : APP_VERSION;
 
     const s = document.getElementById("settings-storage-value");
     if (!s) return;
@@ -353,7 +353,7 @@ export function initSettingsModal(): void {
     // Privacy section holds the crash-reports toggle (opt-OUT, Sentry build
     // flag). Hidden entirely when crash reporting is not built into this
     // bundle, so a fork without a Sentry DSN sees no dangling Privacy header.
-    const crashBuilt = isCrashReportingBuilt();
+    const crashBuilt = !__PORTABLE__ && isCrashReportingBuilt();
     if (!crashBuilt) {
         const crashRow = document.getElementById("settings-crash-row");
         if (crashRow) crashRow.hidden = true;
@@ -380,10 +380,11 @@ export function initSettingsModal(): void {
 
     // Crash reporting toggle (opt-OUT). Flipping it persists the choice and
     // spins up / tears down Sentry at runtime - no reload needed.
-    crashToggleEl()?.addEventListener("change", (ev) => {
-        const target = ev.target as HTMLInputElement;
-        setCrashReportingEnabled(target.checked);
-    });
+    if (!__PORTABLE__)
+        crashToggleEl()?.addEventListener("change", (ev) => {
+            const target = ev.target as HTMLInputElement;
+            setCrashReportingEnabled(target.checked);
+        });
 
     // --- Playback: units select ---
 
@@ -618,21 +619,22 @@ export function initSettingsModal(): void {
         downloadLogBuffer();
     });
 
-    document.getElementById("settings-clear-cache-btn")?.addEventListener("click", () => {
-        const btn = document.getElementById("settings-clear-cache-btn") as HTMLButtonElement | null;
-        if (btn) btn.disabled = true;
-        // Lighter than the full Danger zone reset: only Cache Storage + SW.
-        // Preferences and language remain intact. Reload (success path only)
-        // picks up the freshly downloaded shell.
-        void clearServiceWorkerAndCaches()
-            .then(() => location.reload())
-            .catch((err) => {
-                // Re-enable on failure: we did NOT reload, so leaving the button
-                // disabled would strand the control with no way to retry.
-                log.warn("clear offline cache failed", err);
-                if (btn) btn.disabled = false;
-            });
-    });
+    if (!__PORTABLE__)
+        document.getElementById("settings-clear-cache-btn")?.addEventListener("click", () => {
+            const btn = document.getElementById("settings-clear-cache-btn") as HTMLButtonElement | null;
+            if (btn) btn.disabled = true;
+            // Lighter than the full Danger zone reset: only Cache Storage + SW.
+            // Preferences and language remain intact. Reload (success path only)
+            // picks up the freshly downloaded shell.
+            void clearServiceWorkerAndCaches()
+                .then(() => location.reload())
+                .catch((err) => {
+                    // Re-enable on failure: we did NOT reload, so leaving the button
+                    // disabled would strand the control with no way to retry.
+                    log.warn("clear offline cache failed", err);
+                    if (btn) btn.disabled = false;
+                });
+        });
 
     // --- Reset / Danger zone ---
 

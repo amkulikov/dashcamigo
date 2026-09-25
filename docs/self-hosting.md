@@ -2,8 +2,8 @@
 
 This guide is for personal and internal installations: a local computer, a home
 network or an organization's private server. dashcamigo is a static web app, so
-you can run a prebuilt release, use the Docker image, copy the files to an
-internal web server or build the project yourself. Recordings stay in the
+you can open a portable HTML, run a prebuilt release, use the Docker image,
+copy the files to an internal web server or build the project yourself. Recordings stay in the
 browser whichever route you choose.
 
 The project is not distributed as a white-label product. These instructions do
@@ -19,11 +19,59 @@ you need a private installation you control.
 ## Choose a setup
 
 - **Node.js is already installed:** [download and run a release](#run-a-release-with-nodejs).
+- **You want a file you can open directly:** [use the portable HTML](#open-the-portable-html).
 - **You prefer a container:** [run the Docker image](#run-with-docker).
 - **You already have nginx, Caddy, a NAS or an internal web server:** download a
   release and follow the [server requirements](#serve-it-on-an-internal-web-server).
 - **You want to change the code:** [build from source](#build-from-source).
 - **You want Yandex Maps:** [set up your own API key](#enable-yandex-maps).
+
+## Open the portable HTML
+
+The portable edition is a beta distribution.
+
+Choose **Use offline → Download file** on the website, or download the dated HTML
+for your language from the [latest release](https://github.com/amkulikov/dashcamigo/releases/latest).
+Each HTML is a complete application. No server, installation, companion files
+or first online visit is needed.
+
+You can keep it on your dashcam's memory card. Connect the card to your computer,
+open the HTML in a desktop browser, and select the recordings folder in the app.
+Opening the HTML does not grant access to adjacent recordings automatically.
+The recorder does not run the application, and formatting the card erases the
+HTML along with its other files.
+
+The portable edition includes playback, GPS, charts, notes, manual blur and
+clip export. Automatic face/plate detection, object following, PWA installation,
+analytics and remote crash reporting are omitted. Editing and export still
+depend on the browser's media capabilities; the app explains unavailable
+features. The direct-file workflow has been verified in desktop Chromium.
+Native save dialogs and direct file opening in Firefox, Safari and mobile
+browsers have not been verified.
+
+The map tries online backgrounds automatically. If no provider is reachable,
+the route and markers remain visible on a local background; the app retries
+when connectivity returns. Select **Route only** to keep the map local.
+After startup the app also makes a small, credential-free request to the primary
+dashcamigo website to check for a
+newer portable release. It sends no recording information or local notes.
+An unavailable endpoint does not block playback or export and does not mean
+your copy is current. The check never downloads a new HTML automatically.
+
+The update notice offers a new dated file. Save and open that file when you are
+ready; it does not replace the running copy or reload an open trip. The language
+is fixed in each HTML, including after renaming or moving it.
+
+Browser storage is local to that browser and may depend on the file's location.
+Copying the HTML does not transfer notes, settings or remembered folder access.
+Export your notes file before changing computers, browsers or HTML filenames,
+then import it into the new copy. Keep that notes file separately from the HTML;
+the app merges imported notes with existing notes. A read-only card can still
+be viewed; save exports and notes to a writable location.
+
+Use the [release verification commands](#verify-a-downloaded-release) with the
+HTML filename to verify its origin. License texts and third-party notices are
+embedded in the HTML.
 
 ## Run a release with Node.js
 
@@ -69,8 +117,8 @@ gh attestation verify dashcamigo.tar.gz -R amkulikov/dashcamigo \
 
 The first command checks that the archive matches the immutable GitHub release.
 The second confirms that this repository's release workflow built it from the
-recorded commit. The same commands work for the zip archive when you substitute
-its filename.
+recorded commit. The same commands work for the zip archive and portable HTML
+when you substitute the downloaded filename.
 
 ## Run with Docker
 
@@ -124,6 +172,23 @@ npx serve dist
 Open the address printed by `npx serve`. The build needs no accounts, API keys
 or local configuration.
 
+To build the portable HTML files, run `npm run build:portable` and open a file
+from `dist-portable/` directly in the browser. For one language, use
+`npm run build:portable -- --locale ru`. After building, `npm run dev` exposes
+these public portable files through the download button on matching language
+pages. Restart the development server after rebuilding the portable files.
+
+To include Yandex in the portable viewer, pass your browser key explicitly:
+
+```sh
+PORTABLE_YANDEX_TILES_API_KEY=YOUR_TILES_API_KEY npm run build:portable
+```
+
+The key is included in the HTML and its map requests, just as in a hosted
+browser build. Portable builds do not read `.env` files. Without this variable,
+the other map providers remain available. Yandex is a viewer option; video
+export uses the other providers.
+
 All environment variables are optional and documented in `.env.example`. With
 none set, crash reporting is left out of the build. The build only needs network
 access to install npm packages; fonts and map styles are already in the
@@ -136,9 +201,10 @@ but links such as `/privacy` return 404 without an additional rewrite rule.
 
 ## Enable Yandex Maps
 
-Build your own copy to enable Yandex Maps. The published release archives and
-Docker image contain no Yandex key, and adding a key to a running server or
-container cannot change their browser assets.
+Build your own hosted app to enable Yandex Maps. Its browser assets in the
+published release archives and Docker image contain no Yandex key. Separately
+bundled portable HTML may include the public browser key supplied to its build.
+Adding a key to a running server or container cannot change built browser assets.
 
 1. Follow the [Yandex Tiles API quickstart](https://yandex.ru/maps-api/docs/tiles-api/quickstart.html)
    to obtain a key for the **Tiles API** package. Wait for the key to activate.
@@ -208,7 +274,7 @@ Use HTTPS through your web server or reverse proxy when other devices connect
 to dashcamigo over the network. The app also explains this limitation when it
 detects an insecure address.
 
-## Network access at runtime
+## Network access for server installations
 
 See the [privacy policy](https://dashcamigo.app/privacy) for map-service requests.
 

@@ -80,10 +80,10 @@ export function initMapViewControls(host: HTMLElement, idPrefix: string): void {
     const providerHint = document.createElement("span");
     providerHint.id = `${idPrefix}-provider-description`;
     providerHint.className = "map-view-controls__hint";
-    providerHint.textContent = t("settings.map.provider.description");
+    providerHint.textContent = t(__PORTABLE__ ? "portable.map.description" : "settings.map.provider.description");
     provider.setAttribute("aria-describedby", providerHint.id);
     host.append(providerRow, providerHint);
-    if (!isYandexMapAvailable()) {
+    if (!__PORTABLE__ && !isYandexMapAvailable()) {
         const unavailableHint = document.createElement("span");
         unavailableHint.id = `${idPrefix}-provider-unavailable`;
         unavailableHint.className = "map-view-controls__hint";

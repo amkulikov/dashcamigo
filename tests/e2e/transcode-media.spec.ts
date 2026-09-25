@@ -12,7 +12,7 @@ test.beforeAll(async () => {
         input: resolve(REPO_ROOT, "tests/helpers/transcode-harness.ts"),
         platform: "browser",
         resolve: { extensionAlias: { ".js": [".ts", ".js"] } },
-        transform: { define: { "import.meta.env": "{}" } },
+        transform: { define: { "import.meta.env": "{}", __PORTABLE__: "false" } },
     });
     try {
         const output = await bundle.generate({ format: "es", codeSplitting: false });

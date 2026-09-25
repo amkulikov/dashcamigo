@@ -372,3 +372,21 @@ body.no-trips .topbar-burger {
         overscroll-behavior: contain;
     }
 }
+
+.portable-header-link {
+    flex-shrink: 0;
+    color: var(--fg);
+    font-size: var(--dc-text-sm);
+    text-decoration: none;
+    padding: var(--dc-space-2);
+    border-radius: var(--dc-radius-sm);
+}
+
+.portable-header-link:hover,
+.portable-header-link:focus-visible {
+    color: var(--fg);
+    background: var(--bg-hover);
+    text-decoration: underline;
+    text-decoration-color: var(--accent-ink);
+    text-underline-offset: 3px;
+}

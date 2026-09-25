@@ -129,9 +129,9 @@ export function initPlayerBlur(): void {
         if (trip !== lastSeenTrip) {
             lastSeenTrip = trip;
             disarmDraw();
-            cancelTrackPassesExceptTrip(state.exportModeOpen ? trip : null);
+            if (!__PORTABLE__) cancelTrackPassesExceptTrip(state.exportModeOpen ? trip : null);
         } else if (!state.exportModeOpen) {
-            cancelTrackPassesExceptTrip(null);
+            if (!__PORTABLE__) cancelTrackPassesExceptTrip(null);
         }
         geometryEpoch++;
         syncLifecycle();
@@ -142,23 +142,24 @@ export function initPlayerBlur(): void {
     });
     // Auto-detected regions arrive/expire without touching the manual list -
     // repaint (and start/stop the loop) on their changes too.
-    subscribeBlurDetect(() => {
-        if (!state.exportModeOpen) return;
-        const regions = detectRegions();
-        // Progress does not change privacy geometry. Keep paused previews and
-        // editor boxes asleep until results arrive, expire, or change style.
-        if (
-            regions.length === detectedPreviewRegions.length &&
-            regions.every(
-                (region, i) => region === detectedPreviewRegions[i] && region.style === detectedPreviewStyles[i],
+    if (!__PORTABLE__)
+        subscribeBlurDetect(() => {
+            if (!state.exportModeOpen) return;
+            const regions = detectRegions();
+            // Progress does not change privacy geometry. Keep paused previews and
+            // editor boxes asleep until results arrive, expire, or change style.
+            if (
+                regions.length === detectedPreviewRegions.length &&
+                regions.every(
+                    (region, i) => region === detectedPreviewRegions[i] && region.style === detectedPreviewStyles[i],
+                )
             )
-        )
-            return;
-        detectedPreviewRegions = regions.slice();
-        detectedPreviewStyles = regions.map((region) => region.style);
-        geometryEpoch++;
-        syncLifecycle();
-    });
+                return;
+            detectedPreviewRegions = regions.slice();
+            detectedPreviewStyles = regions.map((region) => region.style);
+            geometryEpoch++;
+            syncLifecycle();
+        });
     forEachVideoSlot((video, ch) => {
         const schedule = (): void => {
             if (video === channelPlayers[ch]) schedulePaint();
@@ -602,7 +603,7 @@ function commitRect(region: BlurRegion, rect: CropRect, frame: ChannelPresentedF
     // flight. The export has its own snapshot; stop the editor too so a late
     // pointerup does not create a zone that appears to belong to that run.
     if (!blurEditorActive() || !samePresentedFrame(frame, channelPresentedFrame(region.channel, true))) return;
-    cancelTrackPass(region.id);
+    if (!__PORTABLE__) cancelTrackPass(region.id);
     upsertKeyframe(region, frame.contentSec, rect, true);
     geometryEpoch++;
     notifyBlurRegionsChanged();

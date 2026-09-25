@@ -79,7 +79,7 @@ Don't see your camera yet? You can help us add it:
 
 Self-hosting here means a personal or internal installation: on your computer,
 home network or an organization's private server. The
-[self-hosting guide](docs/self-hosting.md) covers Node.js, Docker, HTTPS,
+[self-hosting guide](docs/self-hosting.md) covers portable HTML, Node.js, Docker, HTTPS,
 updates and release verification. It is not a white-label distribution guide
 or permission to publish a separate service under the dashcamigo identity.
 

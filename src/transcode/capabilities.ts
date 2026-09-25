@@ -1,4 +1,4 @@
-// WebCodecs encode capability for the re-encode export path.
+// WebCodecs capability probes for playback and re-encode export.
 //
 // The split / crop / overlay / speed-up export decodes, composites, and
 // RE-ENCODES via WebCodecs. mediabunny configures a VideoEncoder for codec "avc"
@@ -11,12 +11,24 @@
 // export UI detect that up front and keep the user on stream-copy instead of
 // failing with a raw codec error.
 
-import { AudioSampleSource, canEncodeVideo, getFirstEncodableAudioCodec, Quality } from "mediabunny";
+import {
+    AudioSampleSource,
+    canDecodeVideo,
+    canEncodeVideo,
+    getFirstEncodableAudioCodec,
+    Quality,
+    type VideoCodec,
+} from "mediabunny";
 
 import { createLogger } from "../log.js";
 import { AUDIO_TARGET_BITRATE, AUDIO_TARGET_CHANNELS, AUDIO_TARGET_SAMPLE_RATE } from "./types.js";
 
 const log = createLogger("transcode:caps");
+
+/** Probes the indexed codec and profile; callers decide how a failed probe affects playback. */
+export function canDecodeVideoStream(codec: VideoCodec, codecString: string | null): Promise<boolean> {
+    return canDecodeVideo(codec, codecString ? { codec: codecString } : undefined);
+}
 
 /**
  * Picks the audio codec the re-encode export should emit when it has to encode

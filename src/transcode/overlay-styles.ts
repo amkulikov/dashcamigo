@@ -155,12 +155,16 @@ const LATIN_FONTS: FontSpec[] = [
     { family: "JetBrains Mono", weight: "100 800", url: "/fonts/jetbrains-mono-var-latin-ext.woff2" },
 ];
 
-const CYRILLIC_FONTS: FontSpec[] = [
-    { family: "Inter", weight: "100 900", url: "/fonts/inter-var-cyrillic.woff2" },
-    { family: "Inter", weight: "100 900", url: "/fonts/inter-var-cyrillic-ext.woff2" },
-    { family: "JetBrains Mono", weight: "100 800", url: "/fonts/jetbrains-mono-var-cyrillic.woff2" },
-    { family: "JetBrains Mono", weight: "100 800", url: "/fonts/jetbrains-mono-var-cyrillic-ext.woff2" },
-];
+// Portable overlays use the fixed edition locale; other locales never request Cyrillic.
+const CYRILLIC_FONTS: FontSpec[] =
+    __PORTABLE__ && __PORTABLE_LOCALE__ !== "ru"
+        ? []
+        : [
+              { family: "Inter", weight: "100 900", url: "/fonts/inter-var-cyrillic.woff2" },
+              { family: "Inter", weight: "100 900", url: "/fonts/inter-var-cyrillic-ext.woff2" },
+              { family: "JetBrains Mono", weight: "100 800", url: "/fonts/jetbrains-mono-var-cyrillic.woff2" },
+              { family: "JetBrains Mono", weight: "100 800", url: "/fonts/jetbrains-mono-var-cyrillic-ext.woff2" },
+          ];
 
 // Cached per script: one run uses a single locale, but a later export in another
 // language must load its subset without discarding the first run's cache.

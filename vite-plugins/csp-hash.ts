@@ -103,6 +103,8 @@ export function injectMetaCsp(html: string, policy: string): string {
 
 function findHtmlFiles(dir: string, out: string[] = []): string[] {
     for (const entry of readdirSync(dir)) {
+        // Portable files carry their own final inline-script hashes.
+        if (entry === "downloads") continue;
         const full = resolve(dir, entry);
         if (statSync(full).isDirectory()) {
             findHtmlFiles(full, out);
