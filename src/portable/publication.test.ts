@@ -79,7 +79,8 @@ describe("portable website publication", () => {
         (version) => {
             const { dist, manifestPath, file, bytes, manifest } = fixture(version);
             publishPortableDownloads(dist, manifestPath, false, version.startsWith("dev-"));
-            expect(readFileSync(join(dist, `${file.path.slice(1)}.html`))).toEqual(bytes);
+            expect(readFileSync(join(dist, file.path.slice(1)))).toEqual(bytes);
+            expect(existsSync(join(dist, `${file.path.slice(1)}.html`))).toBe(false);
             expect(JSON.parse(readFileSync(join(dist, "downloads/portable/latest.json"), "utf8"))).toEqual(manifest);
             for (const page of ["en/index.html", "en/cameras/index.html"]) {
                 const html = readFileSync(join(dist, page), "utf8");
@@ -121,7 +122,8 @@ describe("portable website publication", () => {
         const older = fixture("v2026.09.24");
         publishPortableDownloads(current.dist, current.manifestPath);
         stagePortableArtifacts(older.manifestPath, current.dist, false);
-        expect(readFileSync(join(current.dist, `${older.file.path.slice(1)}.html`))).toEqual(older.bytes);
+        expect(readFileSync(join(current.dist, older.file.path.slice(1)))).toEqual(older.bytes);
+        expect(existsSync(join(current.dist, `${older.file.path.slice(1)}.html`))).toBe(false);
         expect(JSON.parse(readFileSync(join(current.dist, "downloads/portable/latest.json"), "utf8"))).toEqual(
             current.manifest,
         );

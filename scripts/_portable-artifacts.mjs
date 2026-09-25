@@ -28,7 +28,9 @@ export function stagePortableArtifacts(
 ) {
     const manifest = readPortableArtifacts(manifestPath, allowDevelopment, allowCustom);
     for (const file of Object.values(manifest.files)) {
-        const target = resolve(distDir, `${file.path.slice(1)}.html`);
+        // Pages injects analytics into .html assets even with no-transform.
+        // The attachment header supplies the download's .html extension.
+        const target = resolve(distDir, file.path.slice(1));
         mkdirSync(dirname(target), { recursive: true });
         copyFileSync(resolve(dirname(manifestPath), file.filename), target);
     }

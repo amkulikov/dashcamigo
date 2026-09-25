@@ -52,8 +52,8 @@ export function publishPortableDownloads(
     updatePages(dist);
     if (!manifest) return;
     const headers = join(dist, "_headers");
-    // Clean URLs retain the dated .html filename; no-transform protects the
-    // attested bytes from edge HTML rewriting, including analytics injection.
+    // Binary assets retain the dated .html download filename. Pages Analytics
+    // checks the uploaded asset type before these response headers apply.
     writeFileSync(headers, `${readFileSync(headers, "utf8")}\n/downloads/portable/:version/:filename\n  Content-Type: application/octet-stream\n  Content-Disposition: attachment; filename=":filename.html"\n  Cache-Control: public, max-age=31536000, immutable, no-transform\n  X-Robots-Tag: noindex\n\n/downloads/portable/latest.json\n  Content-Type: application/json; charset=utf-8\n  Access-Control-Allow-Origin: *\n  Cache-Control: public, max-age=0, must-revalidate, no-transform\n  X-Robots-Tag: noindex\n`);
 }
 
