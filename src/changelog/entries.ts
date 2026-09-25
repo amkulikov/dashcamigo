@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-09-25.2",
+        category: "feature",
+        text: {
+            en: "Added an experimental offline mode.",
+            ru: "Добавлен экспериментальный офлайн-режим.",
+            de: "Experimenteller Offline-Modus hinzugefügt.",
+            es: "Se ha añadido un modo sin conexión experimental.",
+            fr: "Ajout d’un mode hors ligne expérimental.",
+            pl: "Dodano eksperymentalny tryb offline.",
+            pt: "Adicionado um modo offline experimental.",
+            zh: "新增实验性离线模式。",
+            ja: "実験的なオフラインモードを追加しました。",
+            ko: "실험적인 오프라인 모드가 추가됐어요.",
+        },
+    },
+    {
         id: "2026-09-25.1",
         category: "improvement",
         text: {

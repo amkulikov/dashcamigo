@@ -9,6 +9,7 @@ release tag. Localized texts ship inside the app (the "What's new" panel).
 
 ## 2026-09-25
 
+- **New:** Added an experimental offline mode.
 - **Improved:** Minor fixes and dependency updates.
 
 ## 2026-09-20
