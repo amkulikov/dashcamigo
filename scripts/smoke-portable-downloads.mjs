@@ -3,8 +3,10 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parsePortableManifest, PORTABLE_PRIMARY_ORIGIN } from "../src/portable/manifest.mjs";
 
+const allowDevelopment = process.env.PORTABLE_ALLOW_DEV === "1";
 const expected = parsePortableManifest(
     JSON.parse(readFileSync(resolve(process.env.PORTABLE_MANIFEST ?? "dist-portable/manifest.json"), "utf8")),
+    allowDevelopment,
 );
 if (!expected) throw new Error("invalid expected portable manifest");
 const origin = new URL(process.env.PORTABLE_SMOKE_ORIGIN ?? PORTABLE_PRIMARY_ORIGIN).origin;
@@ -27,7 +29,7 @@ if (
     /immutable/.test(latest.headers.get("cache-control") ?? "")
 )
     throw new Error("portable metadata cache policy does not revalidate");
-const manifest = parsePortableManifest(await latest.json());
+const manifest = parsePortableManifest(await latest.json(), allowDevelopment);
 if (!manifest || JSON.stringify(manifest) !== JSON.stringify(expected))
     throw new Error("published portable metadata differs from the tested artifact");
 for (const file of Object.values(manifest.files)) {

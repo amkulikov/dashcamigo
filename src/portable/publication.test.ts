@@ -67,22 +67,34 @@ describe("portable website publication", () => {
         expect(existsSync(join(dist, "downloads/portable/latest.json"))).toBe(true);
     });
 
-    it("copies tested bytes, exposes only matching-locale links and leaves portable files out of precache", () => {
-        const { dist, manifestPath, file, bytes, manifest } = fixture();
-        publishPortableDownloads(dist, manifestPath);
-        expect(readFileSync(join(dist, `${file.path.slice(1)}.html`))).toEqual(bytes);
-        expect(JSON.parse(readFileSync(join(dist, "downloads/portable/latest.json"), "utf8"))).toEqual(manifest);
-        for (const page of ["en/index.html", "en/cameras/index.html"]) {
-            const html = readFileSync(join(dist, page), "utf8");
-            expect(html).toContain(`href="${file.path}"`);
-            expect(html).toContain(`download="${file.filename}"`);
-            expect(html).not.toContain(" hidden");
-            expect(html).toContain(`data-portable-bytes="${bytes.length}"`);
-            expect(html).toContain('title="v2026.09.25 · 0 MB"');
-        }
-        expect(readFileSync(join(dist, "ru/index.html"), "utf8")).not.toContain("portable-download");
-        expect(collectPrecacheEntries(dist, ["en", "ru"]).some(({ url }) => url.startsWith("/downloads/"))).toBe(false);
+    it("rejects development builds unless their publication is explicitly enabled", () => {
+        const { dist, manifestPath } = fixture("dev-abcdef1234567");
+        expect(() => publishPortableDownloads(dist, manifestPath)).toThrow(/invalid portable artifact manifest/);
+        expect(existsSync(join(dist, "downloads"))).toBe(false);
+        expect(readFileSync(join(dist, "en/index.html"), "utf8")).toBe(shell);
     });
+
+    it.each(["v2026.09.25", "dev-abcdef1234567"])(
+        "publishes %s with exact bytes and matching-locale links outside precache",
+        (version) => {
+            const { dist, manifestPath, file, bytes, manifest } = fixture(version);
+            publishPortableDownloads(dist, manifestPath, false, version.startsWith("dev-"));
+            expect(readFileSync(join(dist, `${file.path.slice(1)}.html`))).toEqual(bytes);
+            expect(JSON.parse(readFileSync(join(dist, "downloads/portable/latest.json"), "utf8"))).toEqual(manifest);
+            for (const page of ["en/index.html", "en/cameras/index.html"]) {
+                const html = readFileSync(join(dist, page), "utf8");
+                expect(html).toContain(`href="${file.path}"`);
+                expect(html).toContain(`download="${file.filename}"`);
+                expect(html).not.toContain(" hidden");
+                expect(html).toContain(`data-portable-bytes="${bytes.length}"`);
+                expect(html).toContain(`title="${version} · 0 MB"`);
+            }
+            expect(readFileSync(join(dist, "ru/index.html"), "utf8")).not.toContain("portable-download");
+            expect(collectPrecacheEntries(dist, ["en", "ru"]).some(({ url }) => url.startsWith("/downloads/"))).toBe(
+                false,
+            );
+        },
+    );
 
     it("removes downloads from builds without an explicit artifact manifest", () => {
         const { dist } = fixture();
@@ -91,13 +103,18 @@ describe("portable website publication", () => {
         expect(existsSync(join(dist, "downloads"))).toBe(false);
     });
 
-    it("rejects corrupted artifacts before exposing metadata or changing links", () => {
-        const { dist, artifacts, manifestPath, file } = fixture();
-        writeFileSync(join(artifacts, file.filename), "corrupted");
-        expect(() => publishPortableDownloads(dist, manifestPath)).toThrow(/integrity mismatch/);
-        expect(existsSync(join(dist, "downloads/portable/latest.json"))).toBe(false);
-        expect(readFileSync(join(dist, "en/index.html"), "utf8")).toBe(shell);
-    });
+    it.each(["v2026.09.25", "dev-abcdef1234567"])(
+        "rejects corrupted %s artifacts before exposing metadata or changing links",
+        (version) => {
+            const { dist, artifacts, manifestPath, file } = fixture(version);
+            writeFileSync(join(artifacts, file.filename), "corrupted");
+            expect(() => publishPortableDownloads(dist, manifestPath, false, version.startsWith("dev-"))).toThrow(
+                /integrity mismatch/,
+            );
+            expect(existsSync(join(dist, "downloads/portable/latest.json"))).toBe(false);
+            expect(readFileSync(join(dist, "en/index.html"), "utf8")).toBe(shell);
+        },
+    );
 
     it("keeps historical downloads without advancing the current pointer", () => {
         const current = fixture();

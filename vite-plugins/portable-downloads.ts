@@ -26,8 +26,15 @@ function renderPortableDownload(html: string, manifest: PortableManifest | null,
     });
 }
 
-export function publishPortableDownloads(dist: string, manifestPath?: string, allowCustom = false): void {
-    const manifest = manifestPath ? stagePortableArtifacts(resolve(manifestPath), dist, true, allowCustom) : null;
+export function publishPortableDownloads(
+    dist: string,
+    manifestPath?: string,
+    allowCustom = false,
+    allowDevelopment = false,
+): void {
+    const manifest = manifestPath
+        ? stagePortableArtifacts(resolve(manifestPath), dist, true, allowCustom, allowDevelopment)
+        : null;
     // Process shells and their marketing descendants after prerendering.
     function updatePages(directory: string, locale?: string): void {
         for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -121,7 +128,12 @@ export function portableDownloadsPlugin(options: { allowCustom?: boolean } = {})
         },
         closeBundle() {
             if (isBuild) {
-                publishPortableDownloads(resolve(process.cwd(), "dist"), process.env.PORTABLE_MANIFEST, options.allowCustom);
+                publishPortableDownloads(
+                    resolve(process.cwd(), "dist"),
+                    process.env.PORTABLE_MANIFEST,
+                    options.allowCustom,
+                    process.env.PORTABLE_ALLOW_DEV === "1",
+                );
             }
         },
     };

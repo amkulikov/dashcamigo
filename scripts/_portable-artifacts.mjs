@@ -19,8 +19,14 @@ export function readPortableArtifacts(manifestPath, allowDevelopment = false, al
     return manifest;
 }
 
-export function stagePortableArtifacts(manifestPath, distDir, publishLatest = true, allowCustom = false) {
-    const manifest = readPortableArtifacts(manifestPath, false, allowCustom);
+export function stagePortableArtifacts(
+    manifestPath,
+    distDir,
+    publishLatest = true,
+    allowCustom = false,
+    allowDevelopment = false,
+) {
+    const manifest = readPortableArtifacts(manifestPath, allowDevelopment, allowCustom);
     for (const file of Object.values(manifest.files)) {
         const target = resolve(distDir, `${file.path.slice(1)}.html`);
         mkdirSync(dirname(target), { recursive: true });

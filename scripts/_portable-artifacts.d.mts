@@ -9,6 +9,7 @@ export declare function stagePortableArtifacts(
     distDir: string,
     publishLatest?: boolean,
     allowCustom?: boolean,
+    allowDevelopment?: boolean,
 ): PortableManifest;
 export declare function stagePortableRelease(
     manifestPath: string,
