@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Keep two real Viidure PES packets, round coordinates to whole degrees,
 // and interleave them into fresh testsrc2/sine media. No source media is copied.
+// H.264 keeps GPS/pairing playback checks independent of OS-specific HEVC support.
 // Usage: node scripts/anonymize-viidure-ts.mjs <input.ts> <output.ts>
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -70,11 +71,13 @@ try {
             "-i",
             "sine=frequency=1000:sample_rate=16000:duration=2",
             "-c:v",
-            "libx265",
+            "libx264",
             "-preset",
             "ultrafast",
-            "-x265-params",
-            "log-level=error:crf=35",
+            "-crf",
+            "35",
+            "-pix_fmt",
+            "yuv420p",
             "-c:a",
             "aac",
             "-ac",
