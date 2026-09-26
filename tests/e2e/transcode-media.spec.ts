@@ -5,8 +5,17 @@ import { expect, REPO_ROOT, test } from "./_fixtures.js";
 import type { runTranscodeRegression } from "../helpers/transcode-harness.js";
 
 let harness: string;
-// The cancel case intentionally exercises the pipeline's logged abort path.
-test.use({ tolerateConsole: [/\[transcode:split\] split transcode aborted or failed.*AbortError: aborted/] });
+// Fault injection exercises the logged abort and decoder failure paths.
+test.use({
+    tolerateConsole: [
+        [
+            /\[transcode:split\] split transcode aborted or failed.*AbortError: aborted/,
+            /\[transcode(?::(?:split|finalize))?\].*injected source decode failure/,
+            /^\[transcode:finalize\] decode failed before a recoverable tail /,
+        ],
+        { scope: "test" },
+    ],
+});
 test.beforeAll(async () => {
     const bundle = await rolldown({
         input: resolve(REPO_ROOT, "tests/helpers/transcode-harness.ts"),
@@ -34,7 +43,18 @@ test.beforeEach(async ({ page }) => {
     await page.goto("/transcode-harness.html");
 });
 
-for (const kind of ["split", "single-ts", "split-ts", "split-large", "split-empty-mp4", "cancel"] as const) {
+for (const kind of [
+    "split",
+    "single-ts",
+    "split-ts",
+    "split-large",
+    "split-empty-mp4",
+    "split-tail",
+    "single-tail",
+    "split-decode-error",
+    "single-decode-error",
+    "cancel",
+] as const) {
     test(`transcode ${kind} releases decoders and preserves the media timeline`, async ({ page }) => {
         test.setTimeout(120_000);
         const fixture = kind.endsWith("-ts") ? "juscar/real-anonymized.TS" : "generic/clip-h264.mkv";
@@ -51,12 +71,25 @@ for (const kind of ["split", "single-ts", "split-ts", "split-large", "split-empt
         if (!result.supported) throw new Error("encoder capability check inconsistent");
         expect(result.decoded, "real video frames are decoded").toBeGreaterThan(0);
         expect(result.unclosedFrames, "all decoded frames are closed before the pipeline settles").toBe(0);
+        expect(result.failed).toBe(kind.endsWith("-decode-error"));
+        if (result.failed) {
+            expect(result.aborted, "failed export discards its output").toBe(true);
+            expect(result.closed, "failed export never commits a partial file").toBe(false);
+            return;
+        }
         expect(result.cancelled).toBe(kind === "cancel");
         if (result.cancelled) return;
         expect(result.resultFrames).toBeGreaterThan(0);
         expect(result.reportedBytes).toBe(result.actualBytes);
         expect(result.actualBytes).toBeGreaterThan(1024);
         if (kind === "split-large") expect(result.actualBytes).toBeGreaterThan(4 * 1024 * 1024);
+        if (kind.endsWith("-tail")) {
+            expect(result.decodeTruncated, "the damaged tail is reported").toBe(true);
+            expect(result.videoEnd, "intact files after the damaged tail are exported").toBeGreaterThan(
+                result.selectedDuration - 0.1,
+            );
+            expect(result.videoEnd).toBeLessThan(result.selectedDuration + 0.1);
+        }
         if (kind.endsWith("-ts")) {
             expect(result.audioStart, "TS audio is retained").not.toBeNull();
             expect(result.audioStart!).toBeCloseTo(0, 5);

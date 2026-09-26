@@ -58,15 +58,22 @@ function candidate(file: File, startUtc: number, durationSec: number): VideoCand
 
 function captureOutput() {
     const writes: { position: number; data: Uint8Array<ArrayBuffer> }[] = [];
+    const terminal = { closed: false, aborted: false };
     const writable = {
         async write(chunk: { position: number; data: Uint8Array }) {
             writes.push({ position: chunk.position, data: chunk.data.slice() });
         },
-        async close() {},
-        async abort() {},
+        async close() {
+            if (terminal.aborted) throw new TypeError("cannot close after abort");
+            terminal.closed = true;
+        },
+        async abort() {
+            terminal.aborted = true;
+        },
     } as unknown as FileSystemWritableFileStream;
     return {
         writable,
+        terminal,
         file() {
             const size = writes.reduce((max, write) => Math.max(max, write.position + write.data.byteLength), 0);
             const bytes = new Uint8Array(size);
@@ -120,7 +127,17 @@ async function withEmptyVideoPacket(file: File): Promise<File> {
 
 export async function runTranscodeRegression(
     bytes: number[],
-    kind: "split" | "single-ts" | "split-ts" | "split-large" | "split-empty-mp4" | "cancel",
+    kind:
+        | "split"
+        | "single-ts"
+        | "split-ts"
+        | "split-large"
+        | "split-empty-mp4"
+        | "split-tail"
+        | "single-tail"
+        | "split-decode-error"
+        | "single-decode-error"
+        | "cancel",
 ) {
     if (!(await canReencodeH264(640, 360, 1_000_000))) return { supported: false as const };
     const isTs = kind.endsWith("-ts");
@@ -150,6 +167,8 @@ export async function runTranscodeRegression(
     const originalClose = VideoFrame.prototype.close;
     const OriginalDecoder = globalThis.VideoDecoder;
     const originalSamples = VideoSampleSink.prototype.samples;
+    const hasDamagedTail = kind.endsWith("-tail");
+    const hasDecodeFailure = kind.endsWith("-decode-error");
     const iterators: AsyncGenerator<VideoSample, void, unknown>[] = [];
     VideoFrame.prototype.close = function () {
         live.delete(this);
@@ -171,7 +190,19 @@ export async function runTranscodeRegression(
     // Retain abandoned iterators so GC cannot conceal missing close()/return().
     VideoSampleSink.prototype.samples = function (...args) {
         const iterator = originalSamples.apply(this, args);
+        const isFirst = iterators.length === 0;
         iterators.push(iterator);
+        if ((hasDamagedTail || hasDecodeFailure) && isFirst) {
+            return (async function* () {
+                for await (const sample of iterator) {
+                    if (sample.timestamp >= timing.duration * (hasDamagedTail ? 0.95 : 0.5)) {
+                        sample.close();
+                        throw new DOMException("injected source decode failure", "EncodingError");
+                    }
+                    yield sample;
+                }
+            })();
+        }
         return iterator;
     };
     const abort = new AbortController();
@@ -185,7 +216,7 @@ export async function runTranscodeRegression(
                 withAudio: isTs,
                 letterboxFill: "black" as const,
                 overlays: null,
-                speedFactor: isTs || kind === "split-large" ? 1 : 32,
+                speedFactor: isTs || kind === "split-large" || hasDamagedTail || hasDecodeFailure ? 1 : 32,
                 blurRegions: null,
             },
             writable: captured.writable,
@@ -197,29 +228,50 @@ export async function runTranscodeRegression(
         let cancelled = false;
         let result: Awaited<ReturnType<typeof transcode>> | null = null;
         try {
-            result =
-                kind === "single-ts"
-                    ? await transcode({
-                          ...common,
-                          source: { trip, channel: "front", startTripSec: 0, endTripSec: timing.duration },
-                          output: { ...common.output, crop: null },
-                      })
-                    : await transcodeSplit({
-                          ...common,
-                          source: {
-                              trip,
-                              slotChannels: ["front", "rear"],
-                              startTripSec: 0,
-                              endTripSec: trip.timeline.contentDurationSec,
-                          },
-                          output: { ...common.output, layout: "h2" },
-                      });
+            result = kind.startsWith("single-")
+                ? await transcode({
+                      ...common,
+                      source: {
+                          trip,
+                          channel: "front",
+                          startTripSec: 0,
+                          endTripSec: trip.timeline.contentDurationSec,
+                      },
+                      output: { ...common.output, crop: null },
+                  })
+                : await transcodeSplit({
+                      ...common,
+                      source: {
+                          trip,
+                          slotChannels: ["front", "rear"],
+                          startTripSec: 0,
+                          endTripSec: trip.timeline.contentDurationSec,
+                      },
+                      output: { ...common.output, layout: "h2" },
+                  });
         } catch (error) {
+            if (hasDecodeFailure && error instanceof DOMException && error.name === "EncodingError") {
+                return {
+                    supported: true as const,
+                    cancelled: false as const,
+                    failed: true as const,
+                    decoded,
+                    unclosedFrames: live.size,
+                    ...captured.terminal,
+                };
+            }
             if (kind !== "cancel" || !(error instanceof DOMException) || error.name !== "AbortError") throw error;
             cancelled = true;
         }
         const unclosedFrames = live.size;
-        if (cancelled) return { supported: true as const, cancelled: true as const, decoded, unclosedFrames };
+        if (cancelled)
+            return {
+                supported: true as const,
+                cancelled: true as const,
+                failed: false as const,
+                decoded,
+                unclosedFrames,
+            };
         const outputFile = captured.file();
         const input = new Input({ source: new BlobSource(outputFile), formats: VIDEO_INPUT_FORMATS });
         try {
@@ -228,6 +280,7 @@ export async function runTranscodeRegression(
             return {
                 supported: true as const,
                 cancelled: false as const,
+                failed: false as const,
                 decoded,
                 unclosedFrames,
                 resultFrames: result!.framesEncoded,
@@ -238,6 +291,8 @@ export async function runTranscodeRegression(
                 audioStart: audio ? await audio.getFirstTimestamp() : null,
                 audioEnd: audio ? await audio.computeDuration() : null,
                 sourceDuration: timing.duration,
+                selectedDuration: trip.timeline.contentDurationSec,
+                decodeTruncated: result!.decodeTruncated,
                 sourceVideoStart: timing.firstTimestamp,
             };
         } finally {

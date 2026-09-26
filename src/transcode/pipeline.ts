@@ -82,6 +82,7 @@ import {
     frameNeedsNoComposite,
     joinAllOrThrowFirst,
     nextTolerant,
+    type DecodeProgress,
     round2,
 } from "./pipeline-common.js";
 import { drawMapPlaceholder } from "./map-overlay.js";
@@ -480,21 +481,27 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
                     const segBaseOutSec = videoAccumOutSec;
 
                     const runSegmentVideo = async (): Promise<void> => {
-                        // Manual iterator drive (not `for await`) so a decode error from
-                        // .next() is told apart from a body error: nextTolerant swallows
-                        // the former (damaged source tail -> stop this segment, keep what
-                        // we have), while drawMain / muxer add / abort still propagate.
+                        // Only the bounded tail policy may tolerate a decoder failure;
+                        // composition, encoding and cancellation always propagate.
+                        const decodeProgress: DecodeProgress = {
+                            startTimestamp: seg.startInFile + timeOrigin,
+                            endTimestamp: seg.endInFile + timeOrigin,
+                            fileEndTimestamp: seg.fileDurationSec + timeOrigin,
+                            lastSampleEnd: null,
+                            segmentIndex: segIdx,
+                        };
                         const sampleIter = videoSink
                             .samples(seg.startInFile + timeOrigin, seg.endInFile + timeOrigin)
                             [Symbol.asyncIterator]();
                         try {
                             for (;;) {
-                                const pull = await nextTolerant(sampleIter);
+                                const pull = await nextTolerant(sampleIter, decodeProgress);
                                 if (pull.done) {
                                     if (pull.truncated) {
                                         decodeTruncated = true;
                                         log.warn("decode stopped early", {
                                             file: seg.file.name,
+                                            ...decodeProgress,
                                             framesDone,
                                             err: pull.error,
                                         });
@@ -648,6 +655,7 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
                             await feedSegmentAudio({
                                 audioSource: audioPlan.source,
                                 input: audioInput,
+                                fileDurationSec: seg.fileDurationSec,
                                 startInFile: seg.startInFile,
                                 endInFile: seg.endInFile,
                                 segBaseOutSec,

@@ -10,6 +10,7 @@ import {
     finalizeTranscodeOutput,
     joinAllOrThrowFirst,
     nextTolerant,
+    type DecodeProgress,
     resolveAudioPlan,
 } from "./pipeline-common.js";
 
@@ -69,52 +70,71 @@ function fakeIterator<T>(values: T[], throwAtEnd?: unknown): AsyncIterator<T> {
 }
 
 describe("nextTolerant", () => {
-    it("returns the yielded value while the iterator produces samples", async () => {
-        const it = fakeIterator([1, 2]);
-        await expect(nextTolerant(it)).resolves.toEqual({ done: false, value: 1 });
-        await expect(nextTolerant(it)).resolves.toEqual({ done: false, value: 2 });
+    const sample = { timestamp: 58, duration: 0.04 };
+    const progress = (): DecodeProgress => ({
+        startTimestamp: 0,
+        endTimestamp: 60,
+        fileEndTimestamp: 60,
+        lastSampleEnd: null,
+    });
+    const decodeError = () => new DOMException("Decoding error.", "EncodingError");
+
+    it("tracks decoded source time and returns samples unchanged", async () => {
+        const state = progress();
+        const iterator = fakeIterator([sample]);
+        const result = await nextTolerant(iterator, state);
+        expect(result).toEqual({ done: false, value: sample });
+        expect(state.lastSampleEnd).toBeCloseTo(58.04);
+        await expect(nextTolerant(iterator, state)).resolves.toEqual({ done: true, truncated: false });
     });
 
-    it("reports a clean end of stream as a non-truncated done", async () => {
-        const it = fakeIterator<number>([]);
-        await expect(nextTolerant(it)).resolves.toEqual({ done: true, truncated: false });
+    it("preserves a small damaged tail after decoding frames", async () => {
+        const state = progress();
+        const iterator = fakeIterator([sample], decodeError());
+        await nextTolerant(iterator, state);
+        await expect(nextTolerant(iterator, state)).resolves.toEqual({
+            done: true,
+            truncated: true,
+            error: "Decoding error.",
+        });
     });
 
-    it("turns a decode error (damaged tail) into a truncated done, not a throw", async () => {
-        // mediabunny surfaces a WebCodecs decoder failure as this DOMException.
-        const decodeErr = new DOMException("Decoding error", "EncodingError");
-        const it = fakeIterator([1], decodeErr);
-        await expect(nextTolerant(it)).resolves.toEqual({ done: false, value: 1 });
-        await expect(nextTolerant(it)).resolves.toEqual({ done: true, truncated: true, error: "Decoding error" });
+    it.each([
+        ["before any frame", {}],
+        ["in the middle of a file", { lastSampleEnd: 30 }],
+        ["outside the tail loss bound", { lastSampleEnd: 57.99 }],
+        ["at a trim boundary inside the file", { lastSampleEnd: 29, endTimestamp: 30 }],
+        ["after decoding only a keyframe before the selected range", { startTimestamp: 59, lastSampleEnd: 58.5 }],
+        ["with most of a short selection missing", { startTimestamp: 58, lastSampleEnd: 58.5 }],
+        ["with invalid progress", { lastSampleEnd: NaN }],
+        ["with an invalid file duration", { lastSampleEnd: 59, fileEndTimestamp: Infinity }],
+    ])("propagates a decoder failure %s", async (_label, fields) => {
+        const err = decodeError();
+        await expect(nextTolerant(fakeIterator([], err), { ...progress(), ...fields })).rejects.toBe(err);
     });
 
-    it("tolerates a non-DOMException decode error too", async () => {
-        const it = fakeIterator<number>([], new Error("decoder closed"));
-        await expect(nextTolerant(it)).resolves.toEqual({ done: true, truncated: true, error: "decoder closed" });
+    it("uses the same timestamp origin for source samples and file end", async () => {
+        const state: DecodeProgress = {
+            startTimestamp: 120,
+            endTimestamp: 180,
+            fileEndTimestamp: 180,
+            lastSampleEnd: null,
+        };
+        const iterator = fakeIterator([{ timestamp: 179, duration: 0.04 }], decodeError());
+        await nextTolerant(iterator, state);
+        await expect(nextTolerant(iterator, state)).resolves.toMatchObject({ done: true, truncated: true });
     });
 
-    it("rethrows AbortError - cancellation is the caller's, not a source defect", async () => {
-        const it = fakeIterator<number>([], new DOMException("aborted", "AbortError"));
-        await expect(nextTolerant(it)).rejects.toThrow("aborted");
-    });
-
-    it("preserves cancellation reconstructed as an Error across a worker boundary", async () => {
-        const aborted = Object.assign(new Error("cancelled"), { name: "AbortError" });
-        await expect(nextTolerant(fakeIterator<number>([], aborted))).rejects.toBe(aborted);
-    });
-
-    it("rethrows Chromium's blob read failure instead of masking it as a damaged tail", async () => {
-        // The literal Blink throws when a source file stops being readable
-        // mid-export (card dropped, scanner lock) - see source-read-error.ts.
-        const readErr = new TypeError("network error");
-        const it = fakeIterator<number>([], readErr);
-        await expect(nextTolerant(it)).rejects.toBe(readErr);
-    });
-
-    it("rethrows the NotReadableError read-failure shape too", async () => {
-        const readErr = new DOMException("read failed", "NotReadableError");
-        const it = fakeIterator<number>([], readErr);
-        await expect(nextTolerant(it)).rejects.toBe(readErr);
+    it.each([
+        new Error("decoder closed"),
+        new DOMException("Encoding error. (Can't readback frame textures.)", "OperationError"),
+        new DOMException("aborted", "AbortError"),
+        Object.assign(new Error("cancelled"), { name: "AbortError" }),
+        new TypeError("network error"),
+        new DOMException("read failed", "NotReadableError"),
+        "unexpected rejection",
+    ])("preserves non-decode failures even at the file tail: %s", async (err) => {
+        await expect(nextTolerant(fakeIterator([], err), { ...progress(), lastSampleEnd: 59 })).rejects.toBe(err);
     });
 });
 

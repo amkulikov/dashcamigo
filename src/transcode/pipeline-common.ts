@@ -246,6 +246,7 @@ export async function feedSegmentAudio(opts: {
     input: Input;
     startInFile: number;
     endInFile: number;
+    fileDurationSec: number;
     segBaseOutSec: number;
     silenceFormat: SilenceFormat;
     signal: AbortSignal;
@@ -273,9 +274,15 @@ export async function feedSegmentAudio(opts: {
     const rangeEnd = endInFile + origin;
     const audioSink = new AudioSampleSink(audioTrack);
     const audioIter = audioSink.samples(rangeStart, rangeEnd)[Symbol.asyncIterator]();
+    const decodeProgress: DecodeProgress = {
+        startTimestamp: rangeStart,
+        endTimestamp: rangeEnd,
+        fileEndTimestamp: opts.fileDurationSec + origin,
+        lastSampleEnd: null,
+    };
     try {
         for (;;) {
-            const pull = await nextTolerant(audioIter);
+            const pull = await nextTolerant(audioIter, decodeProgress);
             if (pull.done) {
                 if (pull.truncated) {
                     onTruncated();
@@ -536,33 +543,53 @@ export type TolerantNext<T> =
     | { done: true; truncated: false }
     | { done: true; truncated: true; error: string };
 
-/**
- * Pulls the next sample from a mediabunny VideoSampleSink / AudioSampleSink
- * iterator, tolerating a WebCodecs decode error on a damaged source tail.
- *
- * Why: a power-cut dashcam recording leaves the last file's final GOP
- * incomplete; mediabunny's WebCodecs decoder reaches it and fires its error
- * callback ("EncodingError: Decoding error"), which the iterator rethrows on
- * .next(). The native MSE player conceals this (it just stops near the end);
- * the export decoder does not. Aborting a multi-minute export over a couple of
- * unreadable frames at the very end is the wrong trade - so a non-abort error
- * resolves to { done: true, truncated: true } and the caller finalizes with the
- * frames decoded so far. AbortError still propagates (cancellation is the
- * caller's, not a source defect).
- *
- * A SOURCE READ failure also propagates: it means the file itself stopped being
- * readable (card dropped, a scanner's transient lock), not a damaged tail.
- * Treating it as truncation would deliver a silently cut-short "successful"
- * export whenever no other reader is around to surface the real error.
- */
-export async function nextTolerant<T>(iterator: AsyncIterator<T>): Promise<TolerantNext<T>> {
+export interface DecodeProgress {
+    startTimestamp: number;
+    endTimestamp: number;
+    fileEndTimestamp: number;
+    lastSampleEnd: number | null;
+    segmentIndex?: number;
+    slot?: number;
+}
+
+// Bound tolerated loss; a decoder error alone does not prove a damaged GOP.
+const MAX_DECODE_TAIL_LOSS_SEC = 2;
+
+/** Accepts only a small missing tail at the physical file end. Runtime decoder
+ * failures elsewhere must not silently discard the rest of a segment. */
+export async function nextTolerant<T extends { timestamp: number; duration: number }>(
+    iterator: AsyncIterator<T>,
+    progress: DecodeProgress,
+): Promise<TolerantNext<T>> {
     try {
         const r = await iterator.next();
-        return r.done ? { done: true, truncated: false } : { done: false, value: r.value };
+        if (r.done) return { done: true, truncated: false };
+        progress.lastSampleEnd = r.value.timestamp + r.value.duration;
+        return { done: false, value: r.value };
     } catch (err) {
         if (err instanceof Error && err.name === "AbortError") throw err;
         if (isSourceReadError(err)) throw err;
-        return { done: true, truncated: true, error: err instanceof Error ? err.message : String(err) };
+        const lastEnd = progress.lastSampleEnd;
+        const remaining = lastEnd === null ? Infinity : progress.fileEndTimestamp - lastEnd;
+        const maxLoss = Math.min(MAX_DECODE_TAIL_LOSS_SEC, (progress.endTimestamp - progress.startTimestamp) * 0.1);
+        const isDecodeError = err instanceof Error && err.name === "EncodingError";
+        const isSmallTail =
+            lastEnd !== null &&
+            Number.isFinite(lastEnd) &&
+            lastEnd > progress.startTimestamp &&
+            Number.isFinite(remaining) &&
+            remaining >= 0 &&
+            remaining <= maxLoss &&
+            Math.abs(progress.endTimestamp - progress.fileEndTimestamp) < 0.001;
+        if (!isDecodeError || !isSmallTail) {
+            log.error("decode failed before a recoverable tail", {
+                ...progress,
+                errKind: err instanceof Error ? err.name : "unknown",
+                err: err instanceof Error ? err.message : String(err),
+            });
+            throw err;
+        }
+        return { done: true, truncated: true, error: err.message };
     }
 }
 

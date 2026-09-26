@@ -65,6 +65,7 @@ import {
     finalizeTranscodeOutput,
     joinAllOrThrowFirst,
     nextTolerant,
+    type DecodeProgress,
     round2,
 } from "./pipeline-common.js";
 import { drawMapPlaceholder } from "./map-overlay.js";
@@ -367,10 +368,7 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
             sink: VideoSampleSink | null;
             iter: AsyncIterator<VideoSample> | null;
             iterDone: boolean;
-            // True when this slot's iter ended via a decode error on a damaged tail
-            // (vs a clean end-of-stream). The master slot failing this way ends the
-            // main loop; a non-master slot just freezes on rt.current.
-            decodeFailed: boolean;
+            decodeProgress: DecodeProgress | null;
             // current = last decoded sample with timestamp ≤ current request.
             // May be reused across several output frames when source fps > output fps.
             // Not closed on composite - closed on segment swap.
@@ -388,7 +386,7 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
             sink: null,
             iter: null,
             iterDone: false,
-            decodeFailed: false,
+            decodeProgress: null,
             current: null,
             next: null,
         }));
@@ -423,8 +421,8 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
             }
             rt.sink = null;
             rt.iter = null;
+            rt.decodeProgress = null;
             rt.iterDone = false;
-            rt.decodeFailed = false;
         };
         const disposeAllSlots = async (): Promise<void> => {
             await Promise.all(slotRuntimes.map(disposeSlot));
@@ -507,28 +505,35 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
             rt.iterDone = false;
             rt.currentSegmentIdx = activeIdx;
             rt.segTripStart = seg.tripStart;
+            rt.decodeProgress = {
+                startTimestamp: seg.startInFile + rt.timeOrigin,
+                endTimestamp: seg.endInFile + rt.timeOrigin,
+                fileEndTimestamp: seg.fileDurationSec + rt.timeOrigin,
+                lastSampleEnd: null,
+                segmentIndex: activeIdx,
+                slot: slotIdx,
+            };
             // Pre-fetch the first sample into rt.next.
             await advanceSlotIter(slotIdx);
         };
 
-        /** Advances the slot iter by 1 sample. Puts the result in rt.next, or sets
-         *  iterDone. A decode error on a damaged tail (nextTolerant) ends the iter
-         *  with decodeFailed=true and keeps rt.current as the last good frame. */
+        /** Keeps the last good frame across a tolerated tail. Later segments
+         * still get decoded, including when the damaged file is in slot zero. */
         const advanceSlotIter = async (slotIdx: number): Promise<void> => {
             const rt = slotRuntimes[slotIdx]!;
-            if (!rt.iter || rt.iterDone) return;
-            const pull = await nextTolerant(rt.iter);
+            if (!rt.iter || rt.iterDone || !rt.decodeProgress) return;
+            const pull = await nextTolerant(rt.iter, rt.decodeProgress);
             if (pull.done) {
                 rt.iterDone = true;
                 rt.next = null;
                 if (pull.truncated) {
-                    rt.decodeFailed = true;
                     decodeTruncated = true;
                     const fileName = slotSegments[slotIdx]?.[rt.currentSegmentIdx]?.file.name;
                     log.warn("split slot decode stopped early", {
                         slot: slotIdx,
                         channel: source.slotChannels[slotIdx],
                         file: fileName,
+                        ...rt.decodeProgress,
                         framesDone,
                         err: pull.error,
                     });
@@ -638,23 +643,6 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
                                 () => {},
                             );
                         throw err;
-                    }
-
-                    // Master (slot 0) decode died on a damaged tail: it can no longer
-                    // supply frames, so end the clip here instead of padding the
-                    // remaining ticks with its last frozen frame. A non-master slot that
-                    // died just keeps showing rt.current until this point. decodeTruncated
-                    // was already latched in advanceSlotIter.
-                    if (slotRuntimes[0]!.decodeFailed) {
-                        // Same as the catch above: the snapshot for this frame is never
-                        // consumed past the break, so release it.
-                        if (snapPromise)
-                            snapPromise.then(
-                                (b) => b.close(),
-                                () => {},
-                            );
-                        log.warn("split master slot exhausted by decode failure, finalizing early", { framesDone });
-                        break;
                     }
 
                     // Compose split-screen directly into the final output canvas.
@@ -812,6 +800,7 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
                                     await feedSegmentAudio({
                                         audioSource: audioPlan.source,
                                         input,
+                                        fileDurationSec: seg.fileDurationSec,
                                         startInFile: seg.startInFile,
                                         endInFile: seg.endInFile,
                                         segBaseOutSec,

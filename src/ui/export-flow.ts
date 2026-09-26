@@ -1015,6 +1015,15 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
     // let, not const: the detection pre-pass below can settle a pessimistic
     // "assume blur" gate into a fresh empty result, re-enabling stream-copy.
     let streamCopy = initiallyStreamCopy;
+    const exportStartedAt = performance.now();
+    let lastProgress: TranscodeProgress | null = null;
+    const onTranscodeProgress = (progress: TranscodeProgress): void => {
+        lastProgress = { ...progress };
+        hooks.onProgress(progress);
+    };
+    // Capture counts before awaits can change the active trip. No filenames,
+    // coordinates or recording dates belong in the export diagnostic.
+    const segmentCounts = channelOrder.map((ch) => sliceTripChannelForRange(trip, ch, startTripSec, endTripSec).length);
 
     hooks.onInProgress(true);
     void acquireExportWakeLock();
@@ -1252,7 +1261,7 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
                         },
                         writable,
                         signal: activeExportController.signal,
-                        onProgress: hooks.onProgress,
+                        onProgress: onTranscodeProgress,
                         // The final disk-commit flush is opaque (no progress events) -
                         // sweep an indeterminate bar for its duration, like stream-copy.
                     },
@@ -1282,7 +1291,7 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
                         },
                         writable,
                         signal: activeExportController.signal,
-                        onProgress: hooks.onProgress,
+                        onProgress: onTranscodeProgress,
                         // Same indeterminate-bar bracket as the split path above.
                     },
                     hooks.onProgressIndeterminate,
@@ -1363,6 +1372,26 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
         // muxer error, a codec crash) stay separate instead of merging into one
         // "generic Error" blob.
         captureSentryException(err, {
+            // Breadcrumbs roll over on long exports; retain the run settings
+            // and last progress on the failure event itself.
+            extra: {
+                export: {
+                    outputWidth: dims.width,
+                    outputHeight: dims.height,
+                    bitrate: streamCopy ? null : reencodeBitrate || desiredBitrate,
+                    frameRate,
+                    durationSec: endTripSec - startTripSec,
+                    speedFactor,
+                    channelCount: channelOrder.length,
+                    segmentCounts,
+                    layout,
+                    mapOverlay: !!overlays?.map,
+                    withAudio: streamCopy ? withAudio : reencodeAudio,
+                    deliveryMode,
+                    elapsedMs: Math.round(performance.now() - exportStartedAt),
+                    progress: lastProgress,
+                },
+            },
             fingerprint: readAssert
                 ? ["export", "stream-copy", "mediabunny-read-assert"]
                 : errorKey === "export.error.generic"

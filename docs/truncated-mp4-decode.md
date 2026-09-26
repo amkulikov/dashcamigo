@@ -201,14 +201,10 @@ on a different axis than the Firefox playback signal above:
   decodes through the browser's MSE pipeline (error concealment, just stops near
   the end); export decodes through a raw WebCodecs `VideoDecoder` (fail-on-error),
   so one bad frame aborted the whole multi-minute re-encode.
-- **Fix:** the re-encode pipelines (`pipeline.ts`, `pipeline-split.ts`)
-  pull samples through `nextTolerant` (`pipeline-common.ts`): a non-`AbortError`
-  decode failure resolves to a graceful end-of-stream instead of throwing. The
-  clip finalizes with the frames decoded so far; in split, a master-slot failure
-  ends the loop and a non-master slot freezes on its last frame. `TranscodeResult.
-  decodeTruncated` surfaces a soft `export.notify.damagedEnd` notice so the early
-  cut is not silent. Stream-copy is unaffected - it copies encoded packets without
-  decoding (the truncated tail's packets are structurally present and copy fine).
+- **Recovery policy:** see `nextTolerant` in `src/transcode/pipeline-common.ts`
+  and its callers. Tolerating a damaged source tail must not hide runtime decoder
+  failures or discard later intact files. The export reports tolerated loss;
+  stream-copy does not decode packets and follows a separate failure path.
 - Not addressed here: trimming the undecodable tail at ingest so the player/chart/
   export agree on the usable duration. That is the bigger data-contract change
   (option parallel to the playback fixes above); the pipeline tolerance is the

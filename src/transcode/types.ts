@@ -213,11 +213,8 @@ export interface TranscodeResult {
      *  caller surfaces this so the missing map is not a silent surprise. Absent /
      *  false when no map overlay was requested or it rendered fine. */
     mapOverlayDropped?: boolean;
-    /** True when a source decoder hit an unrecoverable error mid-range (a
-     *  truncated / power-cut recording tail is the usual cause) and the pipeline
-     *  finalized with the frames decoded so far instead of aborting the whole
-     *  export. The caller surfaces a soft "damaged end" notice. Absent/false on
-     *  a clean decode. */
+    /** True when the bounded source-tail policy tolerated a decode failure.
+     * The caller surfaces a soft "damaged end" notice. */
     decodeTruncated?: boolean;
     /** True when audio was requested but dropped because the range's segments
      *  carry mixed audio formats (a single output audio track cannot span them).
