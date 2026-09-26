@@ -124,14 +124,14 @@ for (const locale of ["en", "ru"] as const) {
             await expect(compass).toHaveAccessibleName(
                 locale === "en" ? "North up is available in flat view" : "Север сверху доступен в плоском режиме",
             );
-            const before = await page.evaluate(() => {
+            // Follow uses per-frame jumpTo calls that can run while isMoving() is false.
+            // Observe only the click handler's effects, without a follow frame in between.
+            const { before, after } = await compass.evaluate((button) => {
                 const map = window.__dashcamigo.state.map!;
-                return { bearing: map.getBearing(), pitch: map.getPitch() };
-            });
-            await compass.dispatchEvent("click");
-            const after = await page.evaluate(() => {
-                const map = window.__dashcamigo.state.map!;
-                return { bearing: map.getBearing(), pitch: map.getPitch(), moving: map.isMoving() };
+                const before = { bearing: map.getBearing(), pitch: map.getPitch() };
+                button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+                const after = { bearing: map.getBearing(), pitch: map.getPitch(), moving: map.isMoving() };
+                return { before, after };
             });
             expect(after.bearing, "a disabled compass preserves the camera bearing").toBeCloseTo(before.bearing);
             expect(after.pitch, "a disabled compass preserves the camera tilt").toBeCloseTo(before.pitch);
