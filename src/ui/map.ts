@@ -389,6 +389,13 @@ interface RenderedMapTrack {
 }
 let renderedMapTrack: RenderedMapTrack | null = null;
 let preservedStyleTrack: RenderedMapTrack | null = null;
+// A lost context cannot accept style changes. Retain only the latest choice.
+const lostViewerMapStyles = new WeakMap<maplibregl.Map, maplibregl.StyleSpecification | null>();
+
+function setViewerMapStyle(map: maplibregl.Map, style: maplibregl.StyleSpecification): void {
+    if (lostViewerMapStyles.has(map)) lostViewerMapStyles.set(map, style);
+    else map.setStyle(style, { diff: false });
+}
 
 /** Applies only the current theme/provider; style.load restores local overlays. */
 function applyLoadedStyle(
@@ -415,11 +422,11 @@ function applyLoadedStyle(
         // setStyle retains the camera. A different trip loaded during the swap
         // must still get its own framing when the style is ready.
         preservedStyleTrack = shouldPreserveCamera ? renderedMapTrack : null;
-        map.setStyle(styled, { diff: false });
+        setViewerMapStyle(map, styled);
         mapAttributionControl.setProvider(provider);
     }
     if (state.miniMap) {
-        state.miniMap.setStyle(styled, { diff: false });
+        setViewerMapStyle(state.miniMap, styled);
         miniMapAttributionControl.setProvider(provider);
     }
 }
@@ -662,9 +669,13 @@ function observeViewerMap(map: maplibregl.Map, surface: "main" | "mini"): void {
         seenErrors.add(key);
         log.error(`maplibre ${prefix}error`, error instanceof Error ? error : { message });
     });
-    // MapLibre restores its style after context loss; style.load redraws the
-    // local track. These handlers only measure whether recovery succeeds.
     map.on("webglcontextlost", () => {
+        // MapLibre discards the style without styledataloading. Block overlay
+        // writes until recovery emits style.load: addSource on a missing style
+        // synchronously emits style.load and re-enters track creation.
+        if (surface === "main") state.mapReady = false;
+        else state.miniMapReady = false;
+        lostViewerMapStyles.set(map, null);
         log.warn(`${prefix}webgl context lost`);
         captureSentryMessage("map webgl context lost", {
             level: "warning",
@@ -673,6 +684,9 @@ function observeViewerMap(map: maplibregl.Map, surface: "main" | "mini"): void {
         });
     });
     map.on("webglcontextrestored", () => {
+        const pendingStyle = lostViewerMapStyles.get(map);
+        lostViewerMapStyles.delete(map);
+        if (pendingStyle) setViewerMapStyle(map, pendingStyle);
         log.info(`${prefix}webgl context restored`);
         captureSentryMessage("map webgl context restored", {
             fingerprint: ["map_webgl_context_restored"],
@@ -1077,7 +1091,7 @@ export function ensureMiniMap(): maplibregl.Map | null {
     const provider = getMapProvider();
     const cached = cachedMapStyles.get(styleCacheKey(provider, theme));
     if (cached && state.miniMap) {
-        state.miniMap.setStyle(applyViewerMapStyle(cached), { diff: false });
+        setViewerMapStyle(state.miniMap, applyViewerMapStyle(cached));
         miniMapAttributionControl.setProvider(provider);
     }
 

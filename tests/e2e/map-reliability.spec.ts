@@ -3,6 +3,116 @@ import { DESKTOP, expect, gotoApp, loadTrip, presetLocalStorage, test } from "./
 
 test.use({ serviceWorkers: "block" });
 
+for (const { restoreOrder, changeTheme } of [
+    { restoreOrder: ["map", "miniMap"], changeTheme: false },
+    { restoreOrder: ["miniMap", "map"], changeTheme: false },
+    { restoreOrder: ["miniMap"], changeTheme: false },
+    { restoreOrder: ["map", "miniMap"], changeTheme: true },
+] as const) {
+    test(`regroups during WebGL loss and restores ${restoreOrder.join(" then ")}${changeTheme ? " with a new theme" : ""}`, async ({
+        page,
+    }) => {
+        await presetLocalStorage(page);
+        await gotoApp(page);
+        await loadTrip(page);
+        await expect
+            .poll(() =>
+                page.evaluate(() => {
+                    const { map, miniMap } = window.__dashcamigo.state;
+                    return Boolean(map?.getLayer("trip-line") && miniMap?.getLayer("trip-line"));
+                }),
+            )
+            .toBe(true);
+        await page.locator("#settings-btn").click();
+        const contexts = await page.evaluateHandle(async (surfaces) => {
+            window.__dashcamigo.dom.player.pause();
+            const contexts = new Map<string, WEBGL_lose_context>();
+            await Promise.all(
+                surfaces.map(async (surface) => {
+                    const map = window.__dashcamigo.state[surface]!;
+                    const extension = map.getCanvas().getContext("webgl2")?.getExtension("WEBGL_lose_context");
+                    if (!extension) throw new Error("context loss extension is missing");
+                    contexts.set(surface, extension);
+                    const lost = map.once("webglcontextlost");
+                    extension.loseContext();
+                    await lost;
+                }),
+            );
+            return contexts;
+        }, restoreOrder);
+
+        if (changeTheme) {
+            await page.locator("#settings-map-theme-select").selectOption("light");
+            await expect(page.locator("#settings-map-theme-select")).toHaveValue("light");
+        }
+
+        // Exercise the same settings callback as a regroup with a lost GPU.
+        await page.locator("label:has(#settings-trip-gap-never)").click();
+        await expect(page.locator("#settings-trip-gap-never")).toBeChecked();
+        expect(
+            await page.evaluate(
+                (surfaces) =>
+                    surfaces.every((surface) => {
+                        const state = window.__dashcamigo.state;
+                        return !state[surface === "map" ? "mapReady" : "miniMapReady"] && !state[surface]?.getStyle();
+                    }),
+                restoreOrder,
+            ),
+        ).toBe(true);
+
+        for (const surface of restoreOrder) {
+            await contexts.evaluate(async (contexts, surface) => {
+                const map = window.__dashcamigo.state[surface]!;
+                const loaded = map.once("style.load");
+                contexts.get(surface)!.restoreContext();
+                await loaded;
+            }, surface);
+        }
+        await contexts.dispose();
+        if (changeTheme) {
+            await expect
+                .poll(() =>
+                    page.evaluate(() => {
+                        const { map, miniMap } = window.__dashcamigo.state;
+                        return [map, miniMap].every(
+                            (map) => map?.getPaintProperty("background", "background-color") === "#f5f4ef",
+                        );
+                    }),
+                )
+                .toBe(true);
+        }
+        await expect
+            .poll(() =>
+                page.evaluate(() => {
+                    const { map, miniMap, mapReady, miniMapReady } = window.__dashcamigo.state;
+                    return (
+                        mapReady &&
+                        miniMapReady &&
+                        [map, miniMap].every((map) =>
+                            ["trip-line", "trip-line-outline", "trip-line-halo"].every((id) =>
+                                Boolean(map?.getLayer(id)),
+                            ),
+                        )
+                    );
+                }),
+            )
+            .toBe(true);
+        for (const selector of ["#map", "#mini-map"]) {
+            await expect(page.locator(`${selector} .endpoint-marker-wrap`)).toHaveCount(2);
+            await expect(page.locator(`${selector} .car-marker-wrap`)).toHaveCount(1);
+        }
+        // A subsequent regroup must also leave a single working track.
+        await page.locator("label:has(#settings-trip-gap-never)").click();
+        await expect(page.locator("#settings-trip-gap-never")).not.toBeChecked();
+        expect(
+            await page.evaluate(() => {
+                const { map, miniMap } = window.__dashcamigo.state;
+                return Boolean(map?.getLayer("trip-line") && miniMap?.getLayer("trip-line"));
+            }),
+        ).toBe(true);
+    });
+}
+
 test("completes the saved chase tilt when the basemap interrupts initial entry", async ({ page }) => {
     await presetLocalStorage(page);
     await page.addInitScript(() =>
