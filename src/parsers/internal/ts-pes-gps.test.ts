@@ -335,6 +335,6 @@ describe("dialect separation", () => {
         expect(gpsAt).toBeGreaterThan(LIMIT);
         stream.set(gps, gpsAt);
 
-        await expect(extractTsPesGps(vendorFile(stream), null)).rejects.toThrow(/no innovv\/dod pes signature/);
+        await expect(extractTsPesGps(vendorFile(stream), null)).rejects.toThrow(/no supported gps pes signature/);
     }, 60_000);
 });

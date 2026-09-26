@@ -28,6 +28,38 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-09-27.2",
+        category: "support",
+        text: {
+            en: "Added support for INNOVV N2.",
+            ru: "Добавлена поддержка INNOVV N2.",
+            de: "Unterstützung für INNOVV N2 hinzugefügt.",
+            es: "Se ha añadido compatibilidad con INNOVV N2.",
+            fr: "Ajout de la prise en charge d’INNOVV N2.",
+            pl: "Dodano obsługę INNOVV N2.",
+            pt: "Adicionado suporte para INNOVV N2.",
+            zh: "新增对 INNOVV N2 的支持。",
+            ja: "INNOVV N2に対応しました。",
+            ko: "INNOVV N2 지원이 추가됐어요.",
+        },
+    },
+    {
+        id: "2026-09-27.1",
+        category: "fix",
+        text: {
+            en: "Minor fixes.",
+            ru: "Небольшие исправления.",
+            de: "Kleine Fehlerbehebungen.",
+            es: "Pequeñas correcciones.",
+            fr: "Corrections mineures.",
+            pl: "Drobne poprawki.",
+            pt: "Pequenas correções.",
+            zh: "小幅修复。",
+            ja: "軽微な修正。",
+            ko: "사소한 오류 수정.",
+        },
+    },
+    {
         id: "2026-09-25.2",
         category: "feature",
         text: {

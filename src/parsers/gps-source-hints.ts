@@ -16,6 +16,7 @@
 import type { VendorFile } from "./types.js";
 import {
     RX_360_CARDVR_REC_PATH,
+    RX_DATETIME_CHANNEL_TS,
     RX_70MAI,
     RX_BEFERICH,
     RX_BLACKVUE,
@@ -88,6 +89,7 @@ interface GpsSourceHint {
 }
 
 const GPS_SOURCE_HINTS: readonly GpsSourceHint[] = [
+    { id: "datetime-channel-ts", matches: (f) => RX_DATETIME_CHANNEL_TS.test(f.file.name), source: "embedded" },
     {
         id: "sei-double-gps",
         matches: (f) => RX_SEI_DOUBLE_GPS.test(f.file.name),

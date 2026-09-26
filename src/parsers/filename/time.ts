@@ -10,6 +10,7 @@
 import type { VendorFile } from "../types.js";
 import { utcMillisecondsFromParts } from "../internal/calendar.js";
 import {
+    RX_DATETIME_CHANNEL_TS,
     RX_70MAI,
     RX_BEFERICH,
     RX_BLACKVUE,
@@ -379,6 +380,14 @@ const genericDatetimeTime: FilenameTimeTechnique = {
     },
 };
 
+const datetimeChannelTsTime: FilenameTimeTechnique = {
+    id: "datetime-channel-ts-time",
+    extract(file: VendorFile): Date | null {
+        const m = file.file.name.match(RX_DATETIME_CHANNEL_TS);
+        return m ? ymdHmsFromSplit(m[1]!, m[2]!) : null;
+    },
+};
+
 /**
  * Time-extraction techniques in walk order.
  *
@@ -389,6 +398,7 @@ const genericDatetimeTime: FilenameTimeTechnique = {
  * stable.
  */
 export const FILENAME_TIME: readonly FilenameTimeTechnique[] = [
+    datetimeChannelTsTime,
     mai70Time,
     beferichTime,
     blackvueTime,

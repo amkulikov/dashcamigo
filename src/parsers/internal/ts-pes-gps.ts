@@ -1,6 +1,6 @@
-// Two more GPS dialects carried by a private PES in an MPEG-TS dashcam
-// recording, both from ExifTool's M2TS.pm ProcessTSPacket branches (v13.55),
-// neither validated against a real sample:
+// GPS dialects carried by a private PES in an MPEG-TS dashcam
+// recording. The binary layouts below come from ExifTool's M2TS.pm
+// ProcessTSPacket branches (v13.55), without real-sample validation:
 //
 //   - INNOVV (motorcycle cams), M2TS.pm:376-401. The RECORD is byte-identical
 //     to the one the MP4 freeGPS path already decodes, so `parseInnovvRecord`
@@ -8,17 +8,20 @@
 //   - DOD LS600W, M2TS.pm:511-537. 32-byte big-endian records from body offset
 //     32, decimal-degree int32 coordinates.
 //
-// They share this file because they share the carrier: one TS scan, two body
-// signatures, and the scan is the expensive part.
+// Viidure plaintext is validated against real INNOVV N2 recordings.
+// Reuse one carrier scan because reading the media dominates parsing cost.
 
 import { type GpsRecord, type ParsedRecords, type SkippedLine, type VendorFile, WrongFormatError } from "../types.js";
+import { hasViidureBody, parseViidureBody } from "./viidure.js";
 import { utcMillisecondsFromParts } from "./calendar.js";
 import { hasInnovvRecordSignature, parseInnovvRecord } from "./freegps.js";
 import { collectPesBody, pesBodyExtent, TS_SIZE, TS_SYNC } from "./ts-walk.js";
 
+type Dialect = "innovv" | "dod" | "viidure";
+
 const CHUNK_BYTES = 4 * 1024 * 1024;
 
-// Bound on how much of one PES is reassembled. Both dialects pack records into
+// Bound on how much of one PES is reassembled. These dialects pack records into
 // a PES of a few hundred bytes; this only stops a corrupt length field from
 // asking for megabytes.
 const MAX_PES_BODY = 8 * 1024;
@@ -157,7 +160,7 @@ function i32be(bytes: Uint8Array, off: number): number {
  * first PES that matches, or null. Used by the primitive's marker and to lock
  * the PID before the full scan.
  */
-export function findTsPesGpsStream(bytes: Uint8Array): { pid: number; dialect: "innovv" | "dod" } | null {
+export function findTsPesGpsStream(bytes: Uint8Array): { pid: number; dialect: Dialect } | null {
     if (bytes.length < TS_SIZE || bytes[0] !== TS_SYNC) return null;
     const limit = bytes.length - TS_SIZE;
     for (let off = 0; off <= limit; off += TS_SIZE) {
@@ -169,6 +172,7 @@ export function findTsPesGpsStream(bytes: Uint8Array): { pid: number; dialect: "
         if (!body) continue;
         if (hasInnovvPesBody(body)) return { pid, dialect: "innovv" };
         if (hasDodPesBody(body)) return { pid, dialect: "dod" };
+        if (hasViidureBody(body)) return { pid, dialect: "viidure" };
     }
     return null;
 }
@@ -183,11 +187,11 @@ function bodyAt(buf: Uint8Array, off: number, pid: number): Uint8Array | null {
 }
 
 /**
- * Extracts GPS from an INNOVV or DOD LS600W TS recording: one sequential pass
+ * Extracts GPS from a supported private PES in a TS recording: one sequential pass
  * in 4 MB chunks over the PES-start packets of the GPS PID.
  *
- * Throws WrongFormatError when nothing matches - the marker may have fired on
- * a filename fallback, and a foreign TS must not be scanned to EOF first.
+ * Throws WrongFormatError when nothing matches. A foreign TS must not be
+ * scanned to EOF before rejection.
  */
 export async function extractTsPesGps(
     file: VendorFile,
@@ -196,7 +200,7 @@ export async function extractTsPesGps(
 ): Promise<ParsedRecords> {
     const seed = headerBytes ? findTsPesGpsStream(headerBytes) : null;
     let pid: number | null = seed?.pid ?? null;
-    let dialect: "innovv" | "dod" | null = seed?.dialect ?? null;
+    let dialect: Dialect | null = seed?.dialect ?? null;
 
     const records: GpsRecord[] = [];
     const skipped: SkippedLine[] = [];
@@ -255,7 +259,15 @@ export async function extractTsPesGps(
             }
 
             const body = assembled.body;
-            const matched = dialect ?? (hasInnovvPesBody(body) ? "innovv" : hasDodPesBody(body) ? "dod" : null);
+            const matched =
+                dialect ??
+                (hasInnovvPesBody(body)
+                    ? "innovv"
+                    : hasDodPesBody(body)
+                      ? "dod"
+                      : hasViidureBody(body)
+                        ? "viidure"
+                        : null);
             if (matched === "innovv" && hasInnovvPesBody(body)) {
                 pid = packetPid;
                 dialect = "innovv";
@@ -264,6 +276,17 @@ export async function extractTsPesGps(
                 pid = packetPid;
                 dialect = "dod";
                 records.push(...decodeDodBody(body, file.file.name, skipped));
+            } else if (matched === "viidure" && hasViidureBody(body)) {
+                pid = packetPid;
+                dialect = "viidure";
+                const record = parseViidureBody(body, file.file.name);
+                if (record) records.push(record);
+                else
+                    skipped.push({
+                        line: records.length + skipped.length + 1,
+                        raw: "",
+                        reason: "invalid viidure gps record",
+                    });
             }
             off += TS_SIZE;
         }
@@ -273,7 +296,7 @@ export async function extractTsPesGps(
 
         if (pid === null && chunkStart >= SIGNATURE_LIMIT_BYTES) {
             throw new WrongFormatError(
-                `ts-pes-gps: no innovv/dod pes signature in the leading ${SIGNATURE_LIMIT_BYTES >> 20} mib`,
+                `ts-pes-gps: no supported gps pes signature in the leading ${SIGNATURE_LIMIT_BYTES >> 20} mib`,
             );
         }
     }
@@ -281,6 +304,6 @@ export async function extractTsPesGps(
     if (records.length === 0) throw new WrongFormatError("ts-pes-gps: no gps records found in ts stream");
 
     // INNOVV carries no clock of any kind (parseInnovvRecord already flags
-    // every record); DOD stamps each record with real UTC, so it is left alone.
+    // every record); DOD and Viidure stamp records with UTC.
     return { records, skipped };
 }

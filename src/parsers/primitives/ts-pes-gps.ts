@@ -1,4 +1,4 @@
-// INNOVV / DOD LS600W GPS in an MPEG-TS private PES. Parsing lives in
+// INNOVV / DOD LS600W / Viidure GPS in an MPEG-TS private PES. Parsing lives in
 // internal/ts-pes-gps.ts.
 
 import { type ParsedRecords, type VendorFile, WrongFormatError } from "../types.js";
@@ -8,12 +8,11 @@ import type { Primitive } from "./types.js";
 
 export const tsPesGpsPrimitive: Primitive = {
     id: "ts-pes-gps",
-    displayName: "INNOVV / DOD LS600W GPS in MPEG-TS PES",
+    displayName: "INNOVV / DOD / Viidure GPS in MPEG-TS PES",
     kind: "video-embedded",
 
     async marker(_file: VendorFile, index?: Mp4Index): Promise<boolean> {
-        // Content-only: no filename fallback. Neither format has a documented
-        // name shape, and TS files reach this walk from several vendors.
+        // Probe the payload so renamed recordings keep their GPS.
         const bytes = index?.headerBytes;
         return bytes ? findTsPesGpsStream(bytes) !== null : false;
     },

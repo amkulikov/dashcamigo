@@ -15,6 +15,7 @@
 
 import type { Channel, VendorFile } from "../types.js";
 import {
+    RX_DATETIME_CHANNEL_TS,
     RX_70MAI,
     RX_70MAI_PATH_CHANNEL,
     RX_BEFERICH,
@@ -579,7 +580,16 @@ const wolfboxChannel: FilenameChannelTechnique = {
     },
 };
 
+const datetimeChannelTsChannel: FilenameChannelTechnique = {
+    id: "datetime-channel-ts-channel",
+    extract(file: VendorFile): ChannelMatch | null {
+        const m = file.file.name.match(RX_DATETIME_CHANNEL_TS);
+        return m ? sure(m[3]!.toUpperCase() === "F" ? "front" : "rear") : null;
+    },
+};
+
 export const FILENAME_CHANNEL: readonly FilenameChannelTechnique[] = [
+    datetimeChannelTsChannel,
     // Exact name-gated families stay first for stable diagnostics. The
     // unscoped path fallbacks are marked heuristic, so a user-created folder
     // cannot override a later camera-specific channel suffix.

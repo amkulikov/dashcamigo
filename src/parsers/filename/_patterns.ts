@@ -401,3 +401,6 @@ export const RX_GENERIC_DATETIME = /(\d{4})[-_T]?(\d{2})[-_T]?(\d{2})[-_T ]?(\d{
 // is available only in the channel-specific SD-card folder layout.
 export const RX_SEI_DOUBLE_GPS = /^\d{6}_\d{3}_\d{3}_[A-Z]\.mp4$/i;
 export const RX_SEI_DOUBLE_GPS_PATH = /(?:^|\/)(InternalView|ExteriorView)\/(\d{6})\/[^/]+$/i;
+
+// INNOVV N2: date, clock and mnemonic camera suffix in separate tokens.
+export const RX_DATETIME_CHANNEL_TS = /^(20\d{6})_(\d{6})_([FR])\.ts$/i;

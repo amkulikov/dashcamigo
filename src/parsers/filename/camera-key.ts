@@ -23,6 +23,7 @@ import type { VendorFile } from "../types.js";
 import {
     MAI70_MODE_FOLDERS,
     REDTIGER_MODE_FOLDERS,
+    RX_DATETIME_CHANNEL_TS,
     RX_70MAI,
     RX_70MAI_CHANNEL_STRIP,
     RX_BEFERICH,
@@ -700,6 +701,17 @@ const wolfboxCameraKey: FilenameCameraKeyTechnique = {
     },
 };
 
+const datetimeChannelTsCameraKey: FilenameCameraKeyTechnique = {
+    id: "datetime-channel-ts-camera-key",
+    extract(file: VendorFile): string | null {
+        const m = file.file.name.match(RX_DATETIME_CHANNEL_TS);
+        if (!m) return null;
+        // Only the leaf is a channel; an enclosing root may itself be named front/back.
+        const dir = strippedParentDir(file.relativePath, [], ["front", "back", "rear", "f", "r"]);
+        return `datetime-channel-ts|${dir}|${maskName(`${m[1]}_${m[2]}.ts`)}`;
+    },
+};
+
 /**
  * Camera-key techniques in walk order. Each returns a cross-channel string
  * or null when the format does not match.
@@ -710,6 +722,7 @@ const wolfboxCameraKey: FilenameCameraKeyTechnique = {
  * narrower neighbours to keep diagnostics stable.
  */
 export const FILENAME_CAMERA_KEY: readonly FilenameCameraKeyTechnique[] = [
+    datetimeChannelTsCameraKey,
     mai70CameraKey,
     beferichCameraKey,
     blackvueCameraKey,
