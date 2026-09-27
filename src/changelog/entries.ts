@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-09-28.1",
+        category: "improvement",
+        text: {
+            en: "Vueroid S1 4K Infinite support.",
+            ru: "Улучшена поддержка Vueroid S1 4K Infinite.",
+            de: "Verbesserte Unterstützung für Vueroid S1 4K Infinite.",
+            es: "Se ha mejorado la compatibilidad con Vueroid S1 4K Infinite.",
+            fr: "Prise en charge de Vueroid S1 4K Infinite améliorée.",
+            pl: "Ulepszono obsługę Vueroid S1 4K Infinite.",
+            pt: "Suporte para Vueroid S1 4K Infinite melhorado.",
+            zh: "改进了对 Vueroid S1 4K Infinite 的支持。",
+            ja: "Vueroid S1 4K Infiniteへの対応を改善しました。",
+            ko: "Vueroid S1 4K Infinite 지원이 개선됐어요.",
+        },
+    },
+    {
         id: "2026-09-27.2",
         category: "support",
         text: {
