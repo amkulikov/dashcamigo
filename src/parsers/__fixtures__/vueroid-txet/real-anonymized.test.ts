@@ -1,8 +1,6 @@
-// Regression test on a real-anonymized Vueroid S1 4K Infinite fixture:
-// actual container structure (freeRECO config boxes + tvxt/mp4s track with
-// the real 50/51 ms stts cadence and the zeroed terminator row), coordinates
-// replaced with a sentinel (50.0 N / 30.0 W - the file's own N/W hemisphere
-// flags are kept), accel/speed/altitude/timestamps kept verbatim.
+// Real-anonymized N/W and N/E recordings retain the original TXET cadence,
+// terminator, hemisphere codes, accel, speed, altitude and timestamps.
+// Coordinates use sentinels around 50 N / 30 W or E.
 //
 // Source: scripts/anonymize-vueroid-mp4.mjs.
 
@@ -12,6 +10,9 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { buildMp4Index } from "../../internal/mp4-index.js";
+import { classifyFiles, dispatchParseVideoEmbeddedGps } from "../../registry.js";
+import { decodeVueroidTxetRow, findVueroidTxetTrack } from "../../internal/vueroid-txet-extract.js";
+import { readSampleTable } from "../../internal/mp4-walker.js";
 import { vueroidTxetPrimitive } from "../../primitives/vueroid-txet.js";
 
 const FIXTURE = resolve(dirname(fileURLToPath(import.meta.url)), "real-anonymized.mp4");
@@ -86,5 +87,53 @@ describe("real-anonymized Vueroid S1 4K Infinite fixture", () => {
         for (const r of result.records) {
             expect(Math.hypot(r.accelXg, r.accelYg, r.accelZg)).toBeLessThan(1);
         }
+    });
+});
+
+describe("real-anonymized Vueroid N/E fixture", () => {
+    function loadFile() {
+        const buf = readFileSync(resolve(dirname(FIXTURE), "real-anonymized-ne.mp4"));
+        const file = new File([buf], "20260923_134906_INF_F_N.mp4");
+        return { file, relativePath: `INF/${file.name}` };
+    }
+
+    it("dispatches eastern-longitude fixes with the real media cadence", async () => {
+        const result = await dispatchParseVideoEmbeddedGps(await classifyFiles([loadFile()]));
+        expect(result.appliedExtractors).toEqual(["vueroid-txet"]);
+        expect(result.errors).toEqual([]);
+        expect(result.skipped).toEqual([]);
+        expect(result.records).toHaveLength(38);
+        const first = result.records[0]!;
+        expect(first.lat).toBeCloseTo(50, 5);
+        expect(first.lon).toBeCloseTo(30, 5);
+        expect(first.speedMs).toBeCloseTo(82 / 3.6, 5);
+        expect(first.unixSeconds).toBe(Date.UTC(2026, 8, 23, 13, 49, 5) / 1000);
+        for (const [i, record] of result.records.entries()) {
+            expect(record.timeUnsynced).toBe(true);
+            expect(record.lat).toBeGreaterThanOrEqual(50);
+            expect(record.lat).toBeLessThan(50.001);
+            expect(record.lon).toBeGreaterThanOrEqual(30);
+            expect(record.lon).toBeLessThan(30.001);
+            expect(record.speedMs).toBeGreaterThan(0);
+            expect(record.speedMs).toBeLessThan(30);
+            if (i === 0) continue;
+            const previous = result.records[i - 1]!;
+            expect(record.unixSeconds - previous.unixSeconds).toBeGreaterThan(0.04);
+            expect(record.unixSeconds - previous.unixSeconds).toBeLessThan(0.06);
+            expect(record.relStartSeconds! - previous.relStartSeconds!).toBeCloseTo(
+                record.unixSeconds - previous.unixSeconds,
+                5,
+            );
+        }
+    });
+
+    it.each([0x0000, 0x0002, 0x0004, 0x0006, 0x0101, 0xffff])("rejects unverified hemisphere code %i", async (code) => {
+        const { file } = loadFile();
+        const index = await buildMp4Index(file);
+        const track = findVueroidTxetTrack(index)!;
+        const sample = readSampleTable(index.moovView!, track.trakBox)![0]!;
+        const row = new DataView(await file.slice(sample.offset, sample.offset + sample.size).arrayBuffer());
+        row.setUint16(0x34, code, true);
+        expect(decodeVueroidTxetRow(row)).toBeNull();
     });
 });

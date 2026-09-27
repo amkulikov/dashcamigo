@@ -386,12 +386,16 @@ export const RX_TESLA_PATH_SENTRY = /(?:^|\/)teslacam\/sentryclips\//i;
 export const RX_THINKWARE = /^(REC|EVT|PARK|MAN)_.+_([A-Z])\.mp4$/i;
 
 // Vueroid (S1 4K Infinite): 8-digit date _ 6-digit time _ INF _ channel letter _
-// N/E/P mode. "INF" is the model tag (Infinite), a fixed literal - it is what
-// keeps the shape disjoint from BlackVue/Vantrue/E-Ace underscore names.
+// N/E/P mode. Keep the observed INF infix literal until other filename
+// variants are sampled; it separates this shape from other underscore names.
 // N = normal is the real-sample-validated shape; E = event and P = parking
 // are assumed from the mnemonic, as is the R rear channel (front-only
 // corpus). No sequence counter in the name.
 export const RX_VUEROID = /^(\d{8})_(\d{6})_INF_([A-Z])_([NEP])\.mp4$/i;
+
+export const VUEROID_MODE_FOLDERS = ["inf", "event", "pevent", "park", "user"] as const;
+// Match only the card folder adjoining the file, not an enclosing archive name.
+export const RX_VUEROID_PATH_MODE = new RegExp(`(?:^|/)(${VUEROID_MODE_FOLDERS.join("|")})/[^/]+$`, "i");
 
 // Generic-datetime fallback: matches any YYYYMMDDhhmmss embedded in a filename
 // under any separator. Registered last in FILENAME_TIME.

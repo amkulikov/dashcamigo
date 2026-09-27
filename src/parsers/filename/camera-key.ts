@@ -61,6 +61,7 @@ import {
     RX_TESLA_RECENT,
     RX_THINKWARE,
     RX_VUEROID,
+    VUEROID_MODE_FOLDERS,
     RX_WOLFBOX,
     matchNovatekNvtMovFilename,
     matchNovatekSingleFilename,
@@ -582,17 +583,13 @@ const vueroidCameraKey: FilenameCameraKeyTechnique = {
     extract(file: VendorFile): string | null {
         const m = file.file.name.match(RX_VUEROID);
         if (!m) return null;
-        // The channel letter (group [3]) sits mid-name (`_F_N.mp4`), not
-        // before the extension, so the shared trailing-letter helper cannot
-        // find it - strip via a replace anchored to the same
-        // `_<channel>_<mode>.mp4` tail RX_VUEROID matched. The N/E/P mode
-        // letter is folded to N: mode is a per-clip attribute, not camera
-        // identity - an event clip written mid-loop must share the fingerprint
-        // of its N siblings to chain into one trip (the mai70 EV/LA/PA
-        // rationale; E/P shapes are corpus-unvalidated, folding is the safe
-        // direction either way).
+        // Mode and channel are per-clip attributes, not camera identity.
         const stripped = file.file.name.replace(/_[A-Z]_[NEP](\.mp4)$/i, "_N$1");
-        const dir = strippedParentDir(file.relativePath, ["front", "rear", "interior"], [m[3]!]);
+        const dir = strippedParentDir(
+            file.relativePath,
+            [...VUEROID_MODE_FOLDERS, "front", "rear", "interior"],
+            [m[3]!],
+        );
         return `vueroid|${dir}|${maskName(stripped)}`;
     },
 };

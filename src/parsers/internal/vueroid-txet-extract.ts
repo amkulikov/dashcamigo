@@ -6,36 +6,10 @@
 // they corroborate the format but the structural track gate below is strict
 // enough on its own, and header bytes are not always probed.
 //
-// Reverse-engineered from two real S1 4K Infinite clips (2384 samples); no
-// public spec exists. Sample layout (all little-endian):
-//   [0x00..0x28)  reserved - all zeros in the observed corpus
-//   0x28  f32  accel axis A ("g"-like unit, gravity-included; see below)
-//   0x2c  f32  accel axis B
-//   0x30  f32  accel axis C
-//   0x34  u8   read as lat hemisphere: 1 = N, 0 = S (ASSUMPTION - below)
-//   0x35  u8   read as lon hemisphere: 1 = E, 0 = W (ASSUMPTION - below)
-//   0x36  u16  altitude, meters (not emitted - GpsRecord has no altitude)
-//   0x38  f32  speed, km/h (verified: haversine-of-coords ratio 0.98)
-//   0x3c  f32  latitude, NMEA DDmm.mmmm, unsigned
-//   0x40  f32  longitude, NMEA DDDmm.mmmm, unsigned
-//   0x44  u32  camera-local wall clock stored as fake unix-UTC, 1 Hz
-//              granularity (equals the local filename time and the mvhd
-//              creation_time, which for the verified clips is provably NOT
-//              UTC - a "day" recording at 08:54 in lon ~-121 territory)
-//
-// Coordinates and the clock field advance at 1 Hz; accel and speed carry
-// real ~20 Hz dynamics. The last sample of every observed clip is a fully
-// zeroed terminator row.
-//
-// HEMISPHERE ASSUMPTION (single-hemisphere corpus): every fix row in the
-// corpus has (0x34, 0x35) = (1, 0) and the sample region is N/W, matching
-// "1=N, 0=W". But the zeroed terminator rows carry (0, 0), so the pair is
-// equally consistent with a u16 fix-status field that we never need (no-fix
-// rows are already skipped via zero coordinates). Nothing else in the file
-// (freeRECO config boxes, stsd esds, the other 70 bytes) carries a
-// hemisphere. REVALIDATE on the first S- or E-hemisphere sample (Vueroid is
-// a Korean brand - a domestic clip is N/E): if such a clip decodes to a
-// negative longitude, byte 0x35 is not "east" and this mapping is wrong.
+// Layout and validation evidence: docs/format-vueroid-txet.md.
+// Hemisphere code 0x0001 identifies N/W and 0x0005 identifies N/E.
+// Southern-hemisphere codes are unverified: reject other codes rather than
+// drawing a plausible track in the wrong hemisphere.
 //
 // Accel: the three floats are quantized to 1/256 and show ~20 Hz dynamics
 // that correlate with the speed derivative, but the static (gravity) vector
@@ -57,9 +31,8 @@ import { loadSamples, readMediaTimescale, readSampleStartsInTicks, readSampleTab
 export const VUEROID_TXET_SAMPLE_SIZE = 72;
 
 const OFF_ACCEL = 0x28;
-const OFF_LAT_NORTH = 0x34;
-const OFF_LON_EAST = 0x35;
-// 0x36 u16 altitude - documented above, intentionally not read.
+const OFF_HEMISPHERE = 0x34;
+// 0x36 u16 altitude is not represented by GpsRecord.
 const OFF_SPEED_KMH = 0x38;
 const OFF_LAT_DDMM = 0x3c;
 const OFF_LON_DDMM = 0x40;
@@ -128,11 +101,8 @@ export function decodeVueroidTxetRow(dv: DataView): DecodedRow | "zero" | null {
     // firmware writes as the last sample of every observed clip.
     if (latRaw === 0 && lonRaw === 0) return "zero";
 
-    // Hemisphere flag bytes are 0/1 in every observed fix row - any other
-    // value marks foreign bytes (e.g. ASCII text) in a look-alike track.
-    const northFlag = dv.getUint8(OFF_LAT_NORTH);
-    const eastFlag = dv.getUint8(OFF_LON_EAST);
-    if (northFlag > 1 || eastFlag > 1) return null;
+    const hemisphere = dv.getUint16(OFF_HEMISPHERE, true);
+    if (hemisphere !== 0x0001 && hemisphere !== 0x0005) return null;
 
     // Unsigned DDmm floats: sign lives in the flags, minutes must be < 60.
     if (!Number.isFinite(latRaw) || latRaw < 0 || latRaw % 100 >= 60) return null;
@@ -150,8 +120,8 @@ export function decodeVueroidTxetRow(dv: DataView): DecodedRow | "zero" | null {
     const speedValid = Number.isFinite(speedKmh) && speedKmh >= 0 && speedKmh <= MAX_PLAUSIBLE_SPEED_KMH;
 
     return {
-        lat: northFlag === 1 ? latAbs : -latAbs,
-        lon: eastFlag === 1 ? lonAbs : -lonAbs,
+        lat: latAbs,
+        lon: hemisphere === 0x0005 ? lonAbs : -lonAbs,
         speedMs: speedValid ? speedKmh * KMH_TO_MS : 0,
         speedValid,
         localUnix,

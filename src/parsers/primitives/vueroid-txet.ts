@@ -1,7 +1,7 @@
 // Vueroid TXET extractor - Vueroid S1 4K "Infinite" (and, presumably, the
 // sibling S-series firmware). 72-byte binary GPS+accel samples at ~20 Hz in
-// a 'tvxt'-handler / 'mp4s'-format track. Layout, the single-hemisphere
-// assumption and the local-clock quarantine live in
+// a 'tvxt'-handler / 'mp4s'-format track. Layout, hemisphere codes
+// and the local-clock quarantine live in
 // internal/vueroid-txet-extract.ts; format breakdown in
 // docs/format-vueroid-txet.md.
 

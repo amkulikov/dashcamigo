@@ -49,6 +49,7 @@ import {
     RX_TESLA_PATH_SENTRY,
     RX_THINKWARE,
     RX_VUEROID,
+    RX_VUEROID_PATH_MODE,
     RX_WOLFBOX,
     RX_WOLFBOX_PATH_EVENT,
     RX_WOLFBOX_PATH_NORMAL,
@@ -380,6 +381,20 @@ const vueroidMode: FilenameModeTechnique = {
     extract(file: VendorFile): RecordingMode | null {
         const m = file.file.name.match(RX_VUEROID);
         if (!m) return null;
+        // The documented card folder distinguishes manual and parked-impact
+        // recordings; the unverified E/P suffix meanings are only a fallback.
+        const folder = file.relativePath.match(RX_VUEROID_PATH_MODE)?.[1]?.toLowerCase();
+        switch (folder) {
+            case "inf":
+                return "normal";
+            case "event":
+            case "pevent":
+                return "event";
+            case "park":
+                return "parking";
+            case "user":
+                return "manual";
+        }
         // N = normal is real-sample-validated; E = event and P = parking are
         // assumed from the mnemonic (no E/P sample in the corpus yet).
         switch (m[4]!.toUpperCase()) {

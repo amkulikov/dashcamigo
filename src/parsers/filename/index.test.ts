@@ -1023,6 +1023,30 @@ describe("vueroid techniques", () => {
         );
     });
 
+    it.each([
+        ["INF", "normal"],
+        ["Event", "event"],
+        ["Pevent", "event"],
+        ["PARK", "parking"],
+        ["USER", "manual"],
+    ])("uses the %s card folder for mode and keeps one camera identity", (folder, mode) => {
+        const name = "20260101_120000_INF_F_N.mp4";
+        const file = vf(name, `card/${folder}/${name}`);
+        expect(matchFilenameMode(file)).toEqual({ value: mode, matchedId: "vueroid-mode" });
+        expect(classifyFilenameMode(vf(name, `card/${folder.toLowerCase()}/${name}`))).toBe(mode);
+        expect(cameraFingerprint(file)).toBe(cameraFingerprint(vf(name, `card/INF/${name}`)));
+        expect(cameraFingerprint(file)).not.toBe(cameraFingerprint(vf(name, `other-card/INF/${name}`)));
+    });
+
+    it("prefers the card folder over an assumed suffix and ignores archive ancestors", () => {
+        const name = "20260101_120000_INF_F_P.mp4";
+        expect(classifyFilenameMode(vf(name, `card/Pevent/${name}`))).toBe("event");
+        expect(classifyFilenameMode(vf(name, `USER/archive/${name}`))).toBe("parking");
+        expect(classifyFilenameMode(vf(name, `card/USER-backup/${name}`))).toBe("parking");
+        expect(matchFilenameMode(vf("clip.mp4", "card/USER/clip.mp4")).matchedId).not.toBe("vueroid-mode");
+        expect(matchFilenameMode(vf("image.jpg", "card/Bookmark/image.jpg")).matchedId).not.toBe("vueroid-mode");
+    });
+
     it("negative: underscore families with no INF literal stay on their own techniques", () => {
         expect(RX_VUEROID.test("20260101_120000_NF.mp4")).toBe(false);
         expect(matchFilenameChannel(vf("20260101_120000_NF.mp4")).matchedId).toBe("blackvue-channel");

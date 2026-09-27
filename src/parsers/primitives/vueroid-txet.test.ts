@@ -103,17 +103,13 @@ describe("vueroidTxetPrimitive.parse - happy path", () => {
 });
 
 describe("vueroidTxetPrimitive.parse - edge fixture", () => {
-    it("decodes all four hemisphere flag combos and skips implausible rows", async () => {
+    it("decodes the validated hemisphere codes and skips implausible rows", async () => {
         const vf = loadFixture("vueroid-txet/synthetic-edge.mp4", "20260315_100000_INF_F_N.mp4");
         const result = await vueroidTxetPrimitive.parse(vf, await indexOf(vf));
 
-        // Valid rows: N/W, S/E, S/W (happy covers N/E) plus the NaN-speed
-        // row - garbage speed on an otherwise valid row degrades to 0, it
-        // does not drop the coordinate. SINGLE-HEMISPHERE CORPUS ASSUMPTION
-        // pinned here: flag 0x34 signs lat (1=N), flag 0x35 signs lon (1=E) -
-        // see internal/vueroid-txet-extract.ts.
+        // Garbage speed degrades to zero without dropping the coordinate.
         expect(result.records).toHaveLength(4);
-        const [nw, se, sw, nanSpeed] = result.records as [
+        const [nw, ne, nwNext, nanSpeed] = result.records as [
             (typeof result.records)[0],
             (typeof result.records)[0],
             (typeof result.records)[0],
@@ -121,17 +117,17 @@ describe("vueroidTxetPrimitive.parse - edge fixture", () => {
         ];
         expect(nw.lat).toBeCloseTo(50.0, 4);
         expect(nw.lon).toBeCloseTo(-30.0, 4);
-        expect(se.lat).toBeCloseTo(-50.0001, 4);
-        expect(se.lon).toBeCloseTo(30.0001, 4);
-        expect(sw.lat).toBeCloseTo(-50.0002, 4);
-        expect(sw.lon).toBeCloseTo(-30.0002, 4);
+        expect(ne.lat).toBeCloseTo(50.0001, 4);
+        expect(ne.lon).toBeCloseTo(30.0001, 4);
+        expect(nwNext.lat).toBeCloseTo(50.0002, 4);
+        expect(nwNext.lon).toBeCloseTo(-30.0002, 4);
         expect(nanSpeed.lat).toBeCloseTo(50.0, 4);
         expect(nanSpeed.speedMs).toBe(0); // NaN speed -> unknown, not a reject
 
         // Clock anchors at the FIRST fix row (tick 500), not media time 0:
         // the leading zeroed row must not shift the baseline.
         expect(nw.unixSeconds).toBeCloseTo(BASE_LOCAL_UNIX, 6);
-        expect(se.unixSeconds).toBeCloseTo(BASE_LOCAL_UNIX + 0.5, 6);
+        expect(ne.unixSeconds).toBeCloseTo(BASE_LOCAL_UNIX + 0.5, 6);
         expect(nw.relStartSeconds).toBeCloseTo(0.5, 6);
         // NaN-speed row sits at sample 8 (tick 4000).
         expect(nanSpeed.unixSeconds).toBeCloseTo(BASE_LOCAL_UNIX + 3.5, 6);
@@ -167,8 +163,7 @@ function txetRow(opts: {
     b.writeFloatLE(0.6, 0x28);
     b.writeFloatLE(0.0, 0x2c);
     b.writeFloatLE(0.2, 0x30);
-    b.writeUInt8(1, 0x34); // N
-    b.writeUInt8(1, 0x35); // E
+    b.writeUInt16LE(5, 0x34); // N/E
     b.writeUInt16LE(55, 0x36);
     if (opts.nanSpeed) b.writeUInt32LE(0x7fc00000, 0x38);
     else b.writeFloatLE(opts.speedKmh ?? 27, 0x38);

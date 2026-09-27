@@ -3,8 +3,8 @@
 // 50N/30E, field map per internal/vueroid-txet-extract.ts):
 //   synthetic-happy.mp4        - 5 clean N/E fixes + the zeroed terminator
 //                                row real firmware writes as the last sample
-//   synthetic-edge.mp4         - mid-file zero row, all four hemisphere
-//                                combos, minutes>=60, lon>180, junk flag
+//   synthetic-edge.mp4         - mid-file zero row, both validated hemisphere
+//                                codes, minutes>=60, lon>180, junk flag
 //                                byte, out-of-century clock, NaN speed,
 //                                negative raw latitude
 //   synthetic-wrong-format.mp4 - structurally identical track (tvxt/mp4s,
@@ -42,14 +42,13 @@ function degToDdmm(deg) {
 }
 
 // One 72-byte row. lat/lon are UNSIGNED decimal degrees; hemispheres come
-// from the flag pair like the real layout.
-function row({ latDeg, lonDeg, north = 1, east = 1, altM = 55, speedKmh = 27, unix = BASE_LOCAL_UNIX, ax = 0.6, ay = 0.0, az = 0.2, rawLatDdmm = null, rawLonDdmm = null, rawSpeedBits = null }) {
+// from the packed code like the real layout.
+function row({ latDeg, lonDeg, hemisphere = 5, altM = 55, speedKmh = 27, unix = BASE_LOCAL_UNIX, ax = 0.6, ay = 0.0, az = 0.2, rawLatDdmm = null, rawLonDdmm = null, rawSpeedBits = null }) {
     const b = Buffer.alloc(SAMPLE_SIZE);
     b.writeFloatLE(ax, 0x28);
     b.writeFloatLE(ay, 0x2c);
     b.writeFloatLE(az, 0x30);
-    b.writeUInt8(north, 0x34);
-    b.writeUInt8(east, 0x35);
+    b.writeUInt16LE(hemisphere, 0x34);
     b.writeUInt16LE(altM, 0x36);
     if (rawSpeedBits !== null) b.writeUInt32LE(rawSpeedBits, 0x38);
     else b.writeFloatLE(speedKmh, 0x38);
@@ -147,7 +146,7 @@ const happy = buildMp4(
 
 // Edge cases:
 //   [0] zeroed row mid-file (no-fix) - silent skip
-//   [1] N/W fix   [2] S/E fix   [3] S/W fix - hemisphere combos
+//   [1] N/W fix   [2] N/E fix   [3] N/W fix - hemisphere combos
 //   [4] minutes >= 60 in lat (50 deg 75 min) - skipped
 //   [5] lon > 180 after conversion (181.5 deg) - skipped
 //   [6] flag byte 2 - skipped
@@ -157,12 +156,12 @@ const happy = buildMp4(
 const edge = buildMp4(
     [
         zeroRow(),
-        row({ latDeg: 50.0, lonDeg: 30.0, north: 1, east: 0, unix: BASE_LOCAL_UNIX }),
-        row({ latDeg: 50.0001, lonDeg: 30.0001, north: 0, east: 1, unix: BASE_LOCAL_UNIX + 1 }),
-        row({ latDeg: 50.0002, lonDeg: 30.0002, north: 0, east: 0, unix: BASE_LOCAL_UNIX + 1 }),
+        row({ latDeg: 50.0, lonDeg: 30.0, hemisphere: 1, unix: BASE_LOCAL_UNIX }),
+        row({ latDeg: 50.0001, lonDeg: 30.0001, hemisphere: 5, unix: BASE_LOCAL_UNIX + 1 }),
+        row({ latDeg: 50.0002, lonDeg: 30.0002, hemisphere: 1, unix: BASE_LOCAL_UNIX + 1 }),
         row({ latDeg: 50.0, lonDeg: 30.0, rawLatDdmm: 5075.0, unix: BASE_LOCAL_UNIX + 2 }),
         row({ latDeg: 50.0, lonDeg: 30.0, rawLonDdmm: 18130.0, unix: BASE_LOCAL_UNIX + 2 }),
-        row({ latDeg: 50.0, lonDeg: 30.0, north: 2, unix: BASE_LOCAL_UNIX + 3 }),
+        row({ latDeg: 50.0, lonDeg: 30.0, hemisphere: 2, unix: BASE_LOCAL_UNIX + 3 }),
         row({ latDeg: 50.0, lonDeg: 30.0, unix: 100 }),
         row({ latDeg: 50.0, lonDeg: 30.0, rawSpeedBits: 0x7fc00000, unix: BASE_LOCAL_UNIX + 3 }),
         row({ latDeg: 50.0, lonDeg: 30.0, rawLatDdmm: -5000.0, unix: BASE_LOCAL_UNIX + 4 }),

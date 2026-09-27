@@ -1,9 +1,7 @@
 # Vueroid TXET track GPS format
 
-Source: reverse-engineered from two real 60-second clips of a Vueroid S1 4K
-"Infinite" (2384 samples total). No public spec exists - exiftool, dashcamtalk
-and GitHub carry nothing on this track layout, and Vueroid documents only its
-own PC viewer. Expect correction as new samples appear.
+Source: reverse-engineered from real Vueroid S1 4K Infinite recordings in
+N/W and N/E regions. The telemetry layout has no published specification.
 
 Parser: `src/parsers/primitives/vueroid-txet.ts` +
 `src/parsers/internal/vueroid-txet-extract.ts`. Anonymizer:
@@ -29,12 +27,11 @@ A dedicated track inside the MP4:
 
 | Offset | Type | Meaning | Confidence |
 |--------|------|---------|------------|
-| 0x00..0x27 | - | reserved, all zeros in the corpus | assumption (0 nonzero bytes across 2384 samples) |
+| 0x00..0x27 | - | reserved, all zeros in the corpus | observed in both regional corpora |
 | 0x28 | f32 | accel axis A, "g"-like unit, gravity-included | medium - see accel note |
 | 0x2c | f32 | accel axis B | medium |
 | 0x30 | f32 | accel axis C | medium |
-| 0x34 | u8 | lat hemisphere: 1 = N, 0 = S | **assumption** - see hemisphere note |
-| 0x35 | u8 | lon hemisphere: 1 = E, 0 = W | **assumption** - see hemisphere note |
+| 0x34 | u16 | packed hemisphere code: `0x0001` = N/W, `0x0005` = N/E | validated against recordings from both regions; other codes unverified |
 | 0x36 | u16 | altitude, meters | high (matches terrain, drifts by 1 m) |
 | 0x38 | f32 | speed, km/h (degradation policy for a garbage float: `decodeVueroidTxetRow`) | high (haversine-of-track ratio 0.98 vs 1.58 for mph) |
 | 0x3c | f32 | latitude, NMEA `DDmm.mmmm`, unsigned | high |
@@ -49,10 +46,9 @@ no-fix, not present in the corpus).
 
 ## Clock is camera-local, not UTC
 
-The u32 at 0x44 equals the local filename time (`YYYYMMDD_HHMMSS_...` -> the
-first row decodes to exactly that HH:MM:SS as "UTC") and the mvhd
-creation_time, while the implied UTC would put this daytime recording in the
-middle of the night for the region the coordinates fall in.
+The u32 at 0x44 follows the camera-local filename clock, stored as fake UTC.
+A fix can trail the filename start by one second. Treating the field as UTC
+would put the N/W daytime recordings in the middle of the night.
 Same treatment as other local-clock formats: every record is flagged
 `timeUnsynced` with `relStartSeconds` = media-time offset, so the time layer
 re-anchors onto the video window instead of poisoning per-fingerprint TZ
@@ -61,15 +57,13 @@ the 1 Hz clock field. Both the dead-RTC whole-file fallback and the
 isolated-bad-clock per-row skip are specified on `extractFromVueroidTxetTrack`
 in `src/parsers/internal/vueroid-txet-extract.ts`.
 
-## Hemisphere: single-hemisphere corpus assumption
+## Hemisphere validation
 
-Both flags are constant across the corpus: (1, 0) on every fix row of an
-N/W-hemisphere recording, (0, 0) on the zeroed terminator rows. That is
-consistent with "0x34 = north, 0x35 = east", but equally with a u16
-fix-status field. Nothing else in the container carries a hemisphere.
-**Revalidate on the first
-S- or E-hemisphere sample** (Vueroid is a Korean brand - a domestic clip is
-N/E): if such a clip decodes to negative longitude, 0x35 is not "east".
+The N/W corpus carries `0x0001` at 0x34; the N/E corpus carries `0x0005`.
+The longitude sign changes with bit 2 of byte 0x34, not byte 0x35.
+Both corpora use unsigned DDmm coordinates and zeroed terminator rows.
+Southern-hemisphere codes remain unverified: require a real sample before
+extending the accepted code set in `decodeVueroidTxetRow`.
 
 ## Accel caveats
 
@@ -84,6 +78,13 @@ g-event appears, recheck the scale.
 
 ## Filename / channel
 
-`YYYYMMDD_HHMMSS_INF_F_N.mp4` - local datetime, fixed model tag `INF`,
-channel `F`/`R`, mode `N`/`E`/`P`. Filename techniques and the GPS source
-hint key off `RX_VUEROID` in `src/parsers/filename/_patterns.ts`.
+Filename techniques and the GPS source hint key off `RX_VUEROID` in
+`src/parsers/filename/_patterns.ts`. Mode folders come from the
+[manufacturer's manual, “Location of Saved File”](https://vueroid.com/wp-content/uploads/2025/02/VUEROID_S1-4K-Infinite_MANUAL_v.1.0.pdf).
+`Pevent` is an impact event while parked, not a background parking recording.
+`Bookmark` holds screenshots, not recording clips. The `PARK` folder alone
+does not distinguish motion recording from time-lapse.
+
+Folder meanings are documented; E/P filename suffixes and the rear channel
+remain mnemonic assumptions pending real samples. The `INF` filename token
+alone does not establish the recording mode.
