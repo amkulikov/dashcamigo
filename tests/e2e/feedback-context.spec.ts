@@ -56,10 +56,10 @@ test.describe("contextual feedback", () => {
         expect(decoded).toContain("Dashcam model:");
         expect(decoded).toContain("Expected number of cameras:");
         expect(decoded).toContain("What I expected to see (GPS, cameras):");
-        expect(decoded).toContain("Recordings link (optional):");
+        expect(decoded).toContain("Recordings link:");
         expect(decoded).not.toContain("Attach this file:");
         await page.locator("#feedback-context-recordings summary").click();
-        await expect(page.locator("#feedback-context-samples")).toContainText("any GPS file stored beside it");
+        await expect(page.locator("#feedback-context-samples")).toContainText("every file stored beside them");
         await expect(page.locator("#feedback-modal")).toHaveCSS("opacity", "1");
         await shot(page, "feedback-gps-report-en");
 
@@ -72,16 +72,15 @@ test.describe("contextual feedback", () => {
         await expect(page.locator("#feedback-context-recordings")).toBeHidden();
     });
 
-    test("camera help fits a narrow Russian screen and keeps original samples optional", async ({ page }) => {
+    test("camera help fits a narrow Russian screen and asks for untouched original samples", async ({ page }) => {
         await page.setViewportSize(MOBILE);
         await gotoApp(page, "ru");
         await openContextFeedback(page, "cameras");
         await expect(page.locator("#feedback-context-hint")).toContainText("Открой всю папку карты памяти");
         await expect(page.locator("#feedback-context-email")).toBeVisible();
         await page.locator("#feedback-context-recordings summary").click();
-        await expect(page.locator("#feedback-context-samples")).toContainText(
-            "одного и того же момента с каждой камеры",
-        );
+        await expect(page.locator("#feedback-context-samples")).toContainText("одного и того же момента со всех камер");
+        await expect(page.locator("#feedback-context-samples")).toContainText("не переименовывай файлы");
         const card = page.locator(".feedback-modal-card");
         expect(await card.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
         await expect(page.locator("#feedback-modal")).toHaveCSS("opacity", "1");
