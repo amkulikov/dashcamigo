@@ -33,6 +33,7 @@ for (const bufferedChannel of ["front", "rear"]) {
         test(`seeks both TS cameras with only ${bufferedChannel} buffered while ${isPlaying ? "playing" : "paused"}`, async ({
             page,
         }) => {
+            if (!isPlaying && bufferedChannel === "front") await page.clock.install();
             await presetLocalStorage(page);
             await gotoApp(page, "en");
             await page.locator("#file-input").setInputFiles(
@@ -85,9 +86,13 @@ for (const bufferedChannel of ["front", "rear"]) {
                 .toBe(true);
             if (!isPlaying && bufferedChannel === "front") {
                 // The playhead pin expires after six seconds; it must expose the new position.
-                await page.waitForTimeout(6500);
+                await page.clock.fastForward(6500);
                 await expect(page.locator("#player-mini-progress")).toHaveAttribute("aria-valuenow", "30");
-                expect((await readChannels(page)).every((channel) => Math.abs(channel.time - 10.8) < 0.2)).toBe(true);
+                expect(
+                    (await readChannels(page)).every(
+                        (channel) => channel.paused && Math.abs(channel.time - 10.8) < 0.2,
+                    ),
+                ).toBe(true);
             }
             if (isPlaying) {
                 await expect

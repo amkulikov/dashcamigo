@@ -19,6 +19,9 @@ import {
     test,
 } from "./_fixtures.js";
 
+test.describe.configure({ mode: "parallel" });
+test.use({ viewerMap: "route-only", reducedMotion: "reduce" });
+
 // Timecode helpers for the range-input assertions, mirroring src/ui/format.ts
 // formatTime (default, unpadded minutes): "m:ss" under an hour, "h:mm:ss" above.
 function parseClock(s: string): number {

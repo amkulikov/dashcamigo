@@ -157,13 +157,14 @@ function isEgressAllowed(reqUrl: string, baseHost: string): boolean {
 }
 
 // Override the built-in `page` fixture.
-export const test = base.extend<{ tolerateConsole: RegExp[] }>({
+export const test = base.extend<{ tolerateConsole: RegExp[]; viewerMap: "default" | "route-only" }>({
     // Per-spec opt-in tolerance for console errors a fault-injection spec
     // causes ON PURPOSE (e.g. asset-retry 404s the bundle). Default empty so
     // the suite stays fail-loud; a spec opts in via
     // test.use({ tolerateConsole: [...] }).
     tolerateConsole: [[], { option: true }],
-    page: async ({ page, baseURL, tolerateConsole }, use) => {
+    viewerMap: ["default", { option: true }],
+    page: async ({ page, baseURL, tolerateConsole, viewerMap }, use) => {
         const pageErrors: string[] = [];
         const consoleErrors: string[] = [];
         // Invariant #1 guard: nothing may be uploaded. Record every request; on
@@ -196,6 +197,16 @@ export const test = base.extend<{ tolerateConsole: RegExp[] }>({
         await page.route(/openfreemap\.org|(?:tile|vector)\.openstreetmap\.org|tiles\.api-maps\.yandex\.ru/i, (route) =>
             route.abort(),
         );
+
+        if (viewerMap === "route-only") {
+            // Keep MapLibre and local overlays real without parsing basemap styles
+            // in scenarios that exercise other viewer controls.
+            await page.addInitScript(() => {
+                window.addEventListener("dc:ready", () => window.__dashcamigo.setMapProvider("route-only"), {
+                    once: true,
+                });
+            });
+        }
 
         await use(page);
 
@@ -318,6 +329,7 @@ export async function loadTrip(page: Page, sampleDir: string = SAMPLE_70MAI): Pr
             const total = document.getElementById("player-total");
             return total !== null && total.textContent !== null && total.textContent !== "0:00";
         },
+        null,
         { timeout: 15_000 },
     );
 }

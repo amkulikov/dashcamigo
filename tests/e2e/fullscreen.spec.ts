@@ -15,6 +15,8 @@ import {
     test,
 } from "./_fixtures.js";
 
+test.use({ viewerMap: "route-only" });
+
 async function startLoopingPlayback(page: Page): Promise<void> {
     await pausePlayback(page);
     await page.keyboard.press("r");
@@ -163,18 +165,20 @@ test("fullscreen keeps a separate detail view and restores the paused recording"
 });
 
 test("paused fullscreen keeps controls visible beyond the idle deadline", async ({ page }) => {
+    await page.clock.install();
     await gotoApp(page);
     await loadTrip(page, SAMPLE_70MAI);
     await pausePlayback(page);
     await enterFullscreen(page);
     await moveAwayFromControls(page);
     // The idle deadline itself is under test.
-    await page.waitForTimeout(3300);
+    await page.clock.fastForward(3300);
     await expect(page.locator("#player-wrap")).toHaveClass(/controls-visible/);
     await expect(page.locator("#player-play")).toHaveAttribute("data-paused", "true");
 });
 
 test("pinning and an open menu keep fullscreen controls available during playback", async ({ page }) => {
+    await page.clock.install();
     await gotoApp(page);
     await loadTrip(page, SAMPLE_70MAI);
     await startLoopingPlayback(page);
@@ -187,19 +191,21 @@ test("pinning and an open menu keep fullscreen controls available during playbac
     await expect(pin).toHaveAttribute("aria-pressed", "true");
     await expect(pin).toHaveAccessibleName("Keep controls visible");
     await moveAwayFromControls(page);
-    await page.waitForTimeout(3300);
+    await page.clock.fastForward(3300);
     await expect(player).toHaveClass(/controls-visible/);
     await pin.click();
     await moveAwayFromControls(page);
+    await page.clock.fastForward(3300);
     await expect(player).not.toHaveClass(/controls-visible/);
     await page.keyboard.press("Tab");
     await expect(player).toHaveClass(/controls-visible/);
     await expect(page.locator("#player-play")).toHaveAttribute("data-paused", "false");
     await page.locator("#player-speed").click();
     await moveAwayFromControls(page);
-    await page.waitForTimeout(3300);
+    await page.clock.fastForward(3300);
     await expect(page.locator("#player-speed-menu")).toBeVisible();
     await expect(player).toHaveClass(/controls-visible/);
+    await expect(page.locator("#player-play")).toHaveAttribute("data-paused", "false");
 });
 
 for (const method of ["button", "shortcut"]) {
@@ -314,6 +320,7 @@ test.describe("touch fullscreen", () => {
     }
 
     test("the first tap reveals hidden controls without pausing the recording", async ({ page }) => {
+        await page.clock.install();
         await page.setViewportSize(MOBILE_LANDSCAPE);
         await gotoApp(page);
         // A single-camera tap normally toggles playback; multichannel taps only route audio.
@@ -335,11 +342,13 @@ test.describe("touch fullscreen", () => {
         await expect(player).toHaveClass(/player-expanded/);
         // Expansion can place controls under the setup's synthetic mouse pointer.
         await moveAwayFromControls(page);
+        await page.clock.fastForward(3300);
         await expect(player).not.toHaveClass(/controls-visible/);
         const video = await boxOf(page, ".video-tile.active");
         await page.touchscreen.tap(video.x + video.width / 2, video.y + video.height / 2);
         await expect(player).toHaveClass(/controls-visible/);
         await expect(page.locator("#player-play")).toHaveAttribute("data-paused", "false");
+        await page.clock.fastForward(3300);
         await expect(player).not.toHaveClass(/controls-visible/);
         await expect(page.locator("#player-play")).toHaveAttribute("data-paused", "false");
     });

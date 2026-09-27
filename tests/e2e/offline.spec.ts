@@ -16,6 +16,8 @@ import {
 
 const READY_TIMEOUT = 20_000;
 
+test.use({ serviceWorkers: "allow" });
+
 // Load /en/ online and wait until OUR service worker controls the page.
 // `controller` alone is the sufficient (and strongest) signal: it is set by
 // clients.claim() in the activate handler, which the browser runs only after

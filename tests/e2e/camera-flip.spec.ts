@@ -19,6 +19,8 @@ import {
     test,
 } from "./_fixtures.js";
 
+test.use({ viewerMap: "route-only" });
+
 const COLOR_ERROR_LIMIT = 20;
 
 function meanRgb(pixels: number[]): number[] {

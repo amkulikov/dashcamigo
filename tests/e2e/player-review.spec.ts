@@ -97,6 +97,7 @@ test("transport follows the video center with expanded map and fullscreen", asyn
 });
 
 test("transport buttons match arrow seeks, repeat while held, and stop after leaving", async ({ page }) => {
+    await page.clock.install();
     await gotoApp(page);
     await loadTrip(page, SAMPLE_70MAI);
     await pausePlayback(page);
@@ -132,17 +133,17 @@ test("transport buttons match arrow seeks, repeat while held, and stop after lea
     await forward.hover();
     await page.mouse.down();
     await expect.poll(() => masterVideoTime(page)).toBeCloseTo(1, 1);
-    await page.waitForTimeout(1_100);
-    await page.mouse.up();
+    await page.clock.fastForward(1_100);
     await expect.poll(() => masterVideoTime(page)).toBeCloseTo(1.5, 1);
-    await page.waitForTimeout(1_100);
+    await page.mouse.up();
+    await page.clock.fastForward(1_100);
     expect(await masterVideoTime(page)).toBeCloseTo(1.5, 1);
 
     await back.hover();
     await page.mouse.down();
     await expect.poll(() => masterVideoTime(page)).toBeCloseTo(1, 1);
     await page.mouse.move(0, 0);
-    await page.waitForTimeout(1_100);
+    await page.clock.fastForward(1_100);
     await page.mouse.up();
     expect(await masterVideoTime(page)).toBeCloseTo(1, 1);
     await expect(page.locator("#player-play")).toHaveAttribute("data-paused", "true");
@@ -391,6 +392,7 @@ test("expanded map fills a narrow desktop viewer after sidebar resizing", async 
 });
 
 test("fullscreen controls remain available while hovered or keyboard focused", async ({ page }) => {
+    await page.clock.install();
     await gotoApp(page);
     await loadTrip(page, SAMPLE_70MAI);
     await page.keyboard.press("r");
@@ -403,14 +405,16 @@ test("fullscreen controls remain available while hovered or keyboard focused", a
     await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
     await page.locator("#player-speed").hover();
     // The idle deadline itself is under test: controls must survive beyond it.
-    await page.waitForTimeout(3300);
+    await page.clock.fastForward(3300);
     await expect(player).toHaveClass(/controls-visible/);
     await page.mouse.move(10, 10);
+    await page.clock.fastForward(3300);
     await expect(player).not.toHaveClass(/controls-visible/);
     await page.keyboard.press("Tab");
     await expect(player).toHaveClass(/controls-visible/);
-    await page.waitForTimeout(3300);
+    await page.clock.fastForward(3300);
     await expect(player).toHaveClass(/controls-visible/);
+    await expect(play).toHaveAttribute("data-paused", "false");
     await page.locator("#player-fullscreen-exit").click();
     await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(false);
 });

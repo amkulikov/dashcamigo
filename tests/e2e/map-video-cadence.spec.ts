@@ -1,17 +1,6 @@
 import type { Page } from "@playwright/test";
 import { DESKTOP, SAMPLE_70MAI, expect, gotoApp, loadTrip, presetLocalStorage, test } from "./_fixtures.js";
 
-test.use({
-    serviceWorkers: "block",
-    launchOptions: {
-        args: [
-            "--disable-background-timer-throttling",
-            "--disable-backgrounding-occluded-windows",
-            "--disable-renderer-backgrounding",
-        ],
-    },
-});
-
 async function waitForMapIdle(page: Page): Promise<void> {
     await page.evaluate(
         () =>
@@ -95,6 +84,7 @@ async function measureChase(page: Page) {
         let styleLoads = 0;
         let raf: number | null = null;
         let frameCallback: number | null = null;
+        let onEnoughVideoFrames: (() => void) | undefined;
         const interruptions: string[] = [];
         const interruptTypes = ["pause", "waiting", "stalled", "ended", "seeking", "emptied", "error"] as const;
         const onInterruption = (event: Event): void => {
@@ -111,6 +101,7 @@ async function measureChase(page: Page) {
         };
         const frame = (): void => {
             videoFrames++;
+            onEnoughVideoFrames?.();
             frameCallback = player.requestVideoFrameCallback(frame);
         };
         const animationFrame = (): void => {
@@ -123,6 +114,7 @@ async function measureChase(page: Page) {
             await player.play();
             // Start inside a fully decoded clip, after playback and camera entry settle.
             await new Promise((resolve) => setTimeout(resolve, 500));
+            const startedAt = performance.now();
             const startTime = player.currentTime;
             const startCenter = map.getCenter();
             const before = player.getVideoPlaybackQuality();
@@ -136,9 +128,24 @@ async function measureChase(page: Page) {
             }
             raf = requestAnimationFrame(animationFrame);
             await new Promise((resolve) => setTimeout(resolve, 1600));
+            // Presentation callbacks can be skipped under load. Keep one
+            // continuous sample so all playback interruptions remain observable.
+            if (typeof player.requestVideoFrameCallback === "function" && videoFrames < 9) {
+                await new Promise<void>((resolve) => {
+                    const remainingMs = Math.max(0, 3200 - (performance.now() - startedAt));
+                    const deadline = setTimeout(resolve, remainingMs);
+                    onEnoughVideoFrames = () => {
+                        if (videoFrames < 9) return;
+                        clearTimeout(deadline);
+                        resolve();
+                    };
+                });
+            }
+            const sampledMs = performance.now() - startedAt;
             const after = player.getVideoPlaybackQuality();
             const endCenter = map.getCenter();
             return {
+                sampledMs,
                 renders,
                 moves,
                 videoFrames,
@@ -157,6 +164,7 @@ async function measureChase(page: Page) {
                 mode: state.followMode,
             };
         } finally {
+            onEnoughVideoFrames = undefined;
             if (raf !== null) cancelAnimationFrame(raf);
             if (frameCallback !== null) player.cancelVideoFrameCallback(frameCallback);
             map.off("render", onRender);

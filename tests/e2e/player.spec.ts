@@ -20,6 +20,8 @@ import {
     test,
 } from "./_fixtures.js";
 
+test.describe.configure({ mode: "parallel" });
+
 // Mirrors the mini-map drag geometry in ui/map.ts (padding around the widget
 // inside its frame, and the movement that turns a press into a drag). Copied,
 // not imported: both live inside the module's DOM-singleton graph, and the

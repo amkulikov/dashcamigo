@@ -23,6 +23,8 @@ import {
 } from "./_fixtures.js";
 import type { Page } from "@playwright/test";
 
+test.use({ viewerMap: "route-only", reducedMotion: "reduce" });
+
 /** Drags a marquee on the front tile's draw layer between two fractional
  *  points of the layer box. */
 async function drawZone(page: Page, x0: number, y0: number, x1: number, y1: number, channel = "front"): Promise<void> {

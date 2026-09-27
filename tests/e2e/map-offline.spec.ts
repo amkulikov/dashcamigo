@@ -54,6 +54,7 @@ for (const hasOnlineEvent of [true, false]) {
         page,
         context,
     }) => {
+        if (!hasOnlineEvent) await page.clock.install();
         let canLoadTiles = false;
         let bootstrapRequests = 0;
         await page.route("https://tiles.openfreemap.org/**", async (route) => {
@@ -93,6 +94,7 @@ for (const hasOnlineEvent of [true, false]) {
         await expectLocalTrack(page);
         expect(await page.evaluate(() => navigator.onLine)).toBe(true);
         const requestsBeforeRecovery = bootstrapRequests;
+        expect(requestsBeforeRecovery, "the map bootstrap failed before recovery").toBeGreaterThan(0);
         await page.evaluate(() => {
             window.__dashcamigo.state.followMode = "off";
             window.__dashcamigo.state.map?.jumpTo({ center: [65, 45], zoom: 9, bearing: 20 });
@@ -101,8 +103,10 @@ for (const hasOnlineEvent of [true, false]) {
         if (hasOnlineEvent) await context.setOffline(true);
         canLoadTiles = true;
         if (hasOnlineEvent) await context.setOffline(false);
+        // Exercise the scheduled retry while the browser remains online.
+        else await page.clock.fastForward(15_000);
 
-        await expect.poll(() => bootstrapRequests, { timeout: 25_000 }).toBeGreaterThan(requestsBeforeRecovery);
+        await expect.poll(() => bootstrapRequests).toBeGreaterThan(requestsBeforeRecovery);
         await expect(page.locator("#offline-banner")).toBeHidden();
         await expectLocalTrack(page);
         await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map?.getCenter().lng)).toBeCloseTo(65);
@@ -248,6 +252,7 @@ for (const fault of ["http", "json"] as const) {
     test(`recovers from a temporary ${fault === "http" ? "503 response" : "invalid TileJSON response"} without reloading the page`, async ({
         page,
     }) => {
+        await page.clock.install();
         let canLoadTiles = false;
         let bootstrapRequests = 0;
         await page.route(/openfreemap\.org|(?:tile|vector)\.openstreetmap\.org/i, async (route) => {
@@ -287,8 +292,10 @@ for (const fault of ["http", "json"] as const) {
         await expectLocalTrack(page);
         await expect(page.locator("#offline-banner")).toBeVisible();
         const requestsBeforeRecovery = bootstrapRequests;
+        expect(requestsBeforeRecovery, "the invalid response was requested before recovery").toBeGreaterThan(0);
         canLoadTiles = true;
-        await expect.poll(() => bootstrapRequests, { timeout: 25_000 }).toBeGreaterThan(requestsBeforeRecovery);
+        await page.clock.fastForward(15_000);
+        await expect.poll(() => bootstrapRequests).toBeGreaterThan(requestsBeforeRecovery);
         await expect(page.locator("#offline-banner")).toBeHidden();
         await expectLocalTrack(page);
     });

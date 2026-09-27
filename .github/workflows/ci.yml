@@ -20,7 +20,7 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  checks:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -56,19 +56,79 @@ jobs:
       - name: Unit tests (vitest)
         run: npm test
 
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      # A failed shard must not cancel coverage or diagnostics from the others.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
       - name: Install Playwright browser
         run: npx playwright install --with-deps --no-shell chromium
 
-      # Bare `playwright test` instead of `npm run test:e2e` (which is
-      # `npm run build && playwright test ...`): dist/ was built fresh by the
-      # Build step of this same job, so the "stale dist masks fixes" foot-gun
-      # the npm script guards against (CLAUDE.md, Tests) does not apply here,
-      # and we skip a second identical build.
       - name: E2E tests (playwright)
-        run: npx playwright test --config=tests/playwright.e2e.config.ts
+        run: npm run test:e2e -- --shard=${{ matrix.shard }}/4 --workers=2 --reporter=list,github,blob
+        env:
+          PLAYWRIGHT_BLOB_OUTPUT_DIR: ${{ runner.temp }}/blob-report
 
-      # Preserve diagnostics for failed, flaky and cancelled runs. The GitHub
-      # reporter also annotates failures inline in the PR diff.
+      - name: Upload e2e blob report (incl. flaky retries)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-blob-${{ matrix.shard }}
+          path: ${{ runner.temp }}/blob-report/
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Upload e2e screenshots
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-screenshots-${{ matrix.shard }}
+          path: tests/e2e/screenshots/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # Keep one stable check name, including when an upstream job fails or skips.
+  test:
+    if: always()
+    needs: [checks, e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Download e2e blob reports
+        uses: actions/download-artifact@v8
+        with:
+          pattern: playwright-blob-*
+          path: ${{ runner.temp }}/blob-reports
+          merge-multiple: true
+
+      - name: Merge e2e reports
+        run: npx playwright merge-reports --reporter=html "$RUNNER_TEMP/blob-reports"
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: tests/playwright-report
+          PLAYWRIGHT_HTML_OPEN: never
+
       - name: Upload e2e report (incl. flaky retries)
         if: always()
         uses: actions/upload-artifact@v7
@@ -77,6 +137,17 @@ jobs:
           path: tests/playwright-report/
           retention-days: 7
           if-no-files-found: ignore
+
+      - name: Check all test jobs
+        if: always()
+        env:
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          E2E_RESULT: ${{ needs.e2e.result }}
+        run: |
+          if [[ "$CHECKS_RESULT" != success || "$E2E_RESULT" != success ]]; then
+            echo "::error::checks=$CHECKS_RESULT; e2e=$E2E_RESULT"
+            exit 1
+          fi
 
   # Exercise the hosted chunk graph without credentials or Sentry uploads.
   # The plain build tree-shakes reporting code and omits debug-ID injection.

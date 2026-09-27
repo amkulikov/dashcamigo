@@ -5,15 +5,16 @@
 //  - playwright.perf.config.ts   -> perf timings (tests/perf/)
 //
 // Design choices baked in here:
-//  - workers: 2 / fullyParallel: false - spec files share one preview server,
-//    while tests inside each file remain sequential. This overlaps independent
-//    browser contexts without making one export/player spec compete with itself.
+//  - cap local parallelism to leave room for video decoding and WebGL; CI
+//    distributes the suite across runners instead of overloading one machine.
+//  - files opt into parallel tests when their setup and outputs are independent.
 //  - channel "chromium" (full, not headless-shell) - WebGL (MapLibre) and
 //    WebCodecs (decode/transcode) need the real pipeline.
 //  - trace on-first-retry - cheap post-mortem exactly when a flake/regression
 //    happens, per Playwright CI guidance.
 //  - retries on CI collect traces; retry-only passes still fail the job.
 
+import { availableParallelism } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "@playwright/test";
@@ -39,7 +40,7 @@ const withFirefox = !!process.env.PW_FIREFOX;
 export default defineConfig({
     testDir: "./e2e",
     outputDir: resolve(ARTIFACT_ROOT, "test-results"),
-    workers: 2,
+    workers: isCI ? 2 : Math.min(5, Math.max(1, Math.floor(availableParallelism() / 2))),
     fullyParallel: false,
     forbidOnly: isCI,
     failOnFlakyTests: true,
@@ -52,6 +53,8 @@ export default defineConfig({
         screenshot: "off", // specs screenshot explicitly as review artifacts
         video: "off",
         trace: "on-first-retry",
+        // Offline specs cover installation and cached playback explicitly.
+        serviceWorkers: "block",
         baseURL: "http://localhost:4173",
         // No --autoplay-policy override: tests drive playback through real button
         // clicks (trusted gestures), which the policy already permits. Forcing
@@ -87,7 +90,7 @@ export default defineConfig({
         : [["list"]],
     webServer: {
         // Serves whatever is in dist/. The npm script (`test:e2e`) runs `build`
-        // first; locally `reuseExistingServer` skips the rebuild+boot wait on
+        // first; locally `reuseExistingServer` skips the server boot wait on
         // iterative runs against an already-running preview.
         command: "npm run preview -- --port 4173",
         port: 4173,
