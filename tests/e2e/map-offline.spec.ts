@@ -92,6 +92,15 @@ for (const hasOnlineEvent of [true, false]) {
         await loadTrip(page);
         await expect(page.locator("#offline-banner")).toBeVisible();
         await expectLocalTrack(page);
+        // The closing ingest regroup fits the track again, even after the
+        // analysis indicator clears. Set the recovery camera only after it.
+        await expect
+            .poll(() =>
+                page.evaluate(() =>
+                    window.__dashcamigo.dumpLog().some((entry) => entry.msg === "recording metadata complete"),
+                ),
+            )
+            .toBe(true);
         expect(await page.evaluate(() => navigator.onLine)).toBe(true);
         const requestsBeforeRecovery = bootstrapRequests;
         expect(requestsBeforeRecovery, "the map bootstrap failed before recovery").toBeGreaterThan(0);
