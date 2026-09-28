@@ -40,7 +40,7 @@ const withFirefox = !!process.env.PW_FIREFOX;
 export default defineConfig({
     testDir: "./e2e",
     outputDir: resolve(ARTIFACT_ROOT, "test-results"),
-    workers: isCI ? 2 : Math.min(5, Math.max(1, Math.floor(availableParallelism() / 2))),
+    workers: isCI ? 1 : Math.min(5, Math.max(1, Math.floor(availableParallelism() / 2))),
     fullyParallel: false,
     forbidOnly: isCI,
     failOnFlakyTests: true,
