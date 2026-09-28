@@ -181,7 +181,7 @@ jobs:
       - run: npm ci
         if: steps.gate.outputs.deploy == 'true'
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         if: steps.gate.outputs.deploy == 'true'
         with:
           name: portable-html
@@ -307,7 +307,7 @@ jobs:
 
       - run: npm ci
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: portable-html
           path: dist-portable
