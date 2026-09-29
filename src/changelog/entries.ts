@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-09-29.1",
+        category: "improvement",
+        text: {
+            en: "Dependency updates.",
+            ru: "Обновление зависимостей.",
+            de: "Aktualisierte Abhängigkeiten.",
+            es: "Actualización de dependencias.",
+            fr: "Mise à jour des dépendances.",
+            pl: "Aktualizacja zależności.",
+            pt: "Atualização de dependências.",
+            zh: "依赖更新。",
+            ja: "依存ライブラリの更新。",
+            ko: "의존성 업데이트.",
+        },
+    },
+    {
         id: "2026-09-28.1",
         category: "improvement",
         text: {
