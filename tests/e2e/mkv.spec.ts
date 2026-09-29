@@ -18,6 +18,7 @@ import {
     installExportCapture,
     loadTrip,
     openExport,
+    pausePlayback,
     presetLocalStorage,
     readExportResult,
     shot,
@@ -35,9 +36,8 @@ test.describe("mkv (matroska) container", () => {
     test("plays back through the MSE remux backend", async ({ page }) => {
         await loadTrip(page, SAMPLE_MKV);
         // loadTrip resolves on the chart/duration, which can precede the async
-        // MSE backend attach. Wait until the remuxed stream is actually up
-        // (blob src + decoded frames) before pressing play - otherwise the click
-        // hits a source-less <video> and no-ops. readyState >= 2 = HAVE_CURRENT_DATA.
+        // MSE backend attach. Wait for a decoded frame, then pause the autoplay
+        // before clicking Play so the click cannot toggle playback back off.
         await expect
             .poll(
                 () =>
@@ -48,6 +48,13 @@ test.describe("mkv (matroska) container", () => {
                 { timeout: 15_000 },
             )
             .toBeGreaterThanOrEqual(2);
+        await pausePlayback(page);
+        await page.evaluate(() => {
+            (document.getElementById("player") as HTMLVideoElement).currentTime = 0;
+        });
+        await expect
+            .poll(() => page.evaluate(() => !(document.getElementById("player") as HTMLVideoElement).seeking))
+            .toBe(true);
         // Require real playback: currentTime advances only if the remuxed
         // segments fed to MediaSource actually decode - i.e. mediabunny read the
         // Matroska stream and the fMP4 output is valid.
@@ -56,7 +63,7 @@ test.describe("mkv (matroska) container", () => {
             .poll(() => page.evaluate(() => (document.getElementById("player") as HTMLVideoElement).currentTime), {
                 timeout: 8000,
             })
-            .toBeGreaterThan(0);
+            .toBeGreaterThan(0.25);
         await shot(page, "mkv-01-playing");
     });
 
