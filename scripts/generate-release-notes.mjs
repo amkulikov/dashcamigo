@@ -1,19 +1,22 @@
 // Emits the GitHub release notes for a tag: the changelog entries added since
-// the previous v* tag, rendered as English markdown. Wired into
+// the previous published release, rendered as English markdown. Wired into
 // .github/workflows/release.yml (gh release create --notes-file); runnable
 // locally for a preview:
 //
-//   node scripts/generate-release-notes.mjs --tag v2026.08.08 [--out FILE]
+//   node scripts/generate-release-notes.mjs --tag v2026.08.08 [--previous-tag TAG] [--out FILE]
 //
 // "Added since" is a diff of entry ids between this revision's entries.ts and
-// the previous tag's - not a date comparison, so same-day tags and late-dated
-// entries attribute unambiguously. Requires tags in the clone (CI checks out
-// with fetch-depth: 0).
+// the previous release tag's - not a date comparison, so same-day tags and
+// late-dated entries attribute unambiguously. CI passes --previous-tag from
+// GitHub releases, since a failed, unpublished tag must not consume entries.
+// Without the option, local previews use the previous v* tag. Requires tags
+// in the clone (CI checks out with fetch-depth: 0).
 
 import { writeFileSync } from "node:fs";
 
 import { loadChangelogEntries, renderEntryBullet } from "./_changelog-render.mjs";
 import { ENTRIES_PATH, entryIdsAt, previousReleaseTag } from "./_release-tags.mjs";
+import { compareReleaseTags, isReleaseTag } from "../src/portable/release-tags.mjs";
 
 function arg(name) {
     const i = process.argv.indexOf(name);
@@ -29,7 +32,10 @@ if (!tag?.startsWith("v")) {
 // outside CI without --repo).
 const repo = arg("--repo") ?? process.env.GITHUB_REPOSITORY ?? "";
 
-const previousTag = previousReleaseTag(tag);
+const previousTag = arg("--previous-tag") ?? previousReleaseTag(tag);
+if (previousTag && (!isReleaseTag(previousTag) || compareReleaseTags(previousTag, tag) >= 0)) {
+    throw new Error(`previous release tag ${previousTag} must precede ${tag}`);
+}
 
 // Entry ids present at the previous tag (extraction contract: entryIdsAt in
 // _release-tags.mjs). Absent file (the release predates the changelog) = no

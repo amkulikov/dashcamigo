@@ -12,6 +12,7 @@ import { expectLocalRoute, isPortableMapRequest, openPortable, test, TEST_MAP_TI
 async function selectViewerMap(page: Page, provider: string): Promise<void> {
     await page.locator("#settings-btn").click();
     await page.locator("#settings-map-provider-select").selectOption(provider);
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("dashcamigo:mapProvider"))).toBe(provider);
     await page.locator("#settings-modal-header-close").click();
 }
 
@@ -118,7 +119,9 @@ test("persists explicit route-only mode without tile requests or reconnect probe
     await page.clock.fastForward(20_000);
     await expectLocalRoute(page);
     expect(requests.filter(isPortableMapRequest)).toEqual([]);
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("dashcamigo:mapProvider"))).toBe("route-only");
 
+    await page.clock.resume();
     await page.reload();
     await expect(page.locator("html")).not.toHaveClass(/is-loading/);
     await expect(page.locator("#settings-map-provider-select")).toHaveValue("route-only");

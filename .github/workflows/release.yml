@@ -312,14 +312,18 @@ jobs:
           name: portable-html
           path: dist-portable
 
-      # Release notes = the changelog entries added since the previous v* tag
-      # (src/changelog/entries.ts diffed between tags - the script header has
-      # the contract). Needs the full-history checkout above for the tags.
+      # Release notes = changelog entries added since the last published
+      # release. A failed tag never published a release, so it must not consume
+      # entries. Needs the full-history checkout above for the tags.
       # Runs BEFORE the build/image/publish steps: a notes failure must abort
       # while nothing has been pushed anywhere yet.
       - name: Generate release notes from the changelog (tag push only)
         if: github.event_name == 'push'
-        run: node scripts/generate-release-notes.mjs --out RELEASE_NOTES.md
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          previous_tag="$(gh release list --exclude-drafts --exclude-pre-releases --limit 100 --json tagName | jq -r --arg current "$GITHUB_REF_NAME" '[.[] | select(.tagName != $current)][0].tagName // ""')"
+          node scripts/generate-release-notes.mjs --previous-tag "$previous_tag" --out RELEASE_NOTES.md
 
       - name: Build (no env - analytics/crash-reporting compiled out)
         run: npm run build
