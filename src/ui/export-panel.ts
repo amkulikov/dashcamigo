@@ -10,6 +10,7 @@ import { maybeShowPostExportToast } from "./pwa-install.js";
 // stream-copy vs transcode vs split routing.
 
 import { identifyBrowser } from "../capabilities.js";
+import { getEncoderPreference } from "../encoder-pref.js";
 import { clampManualBitrateMbps, MANUAL_BITRATE_MAX_MBPS, MANUAL_BITRATE_MIN_MBPS } from "../export-bitrate.js";
 import { createLogger } from "../log.js";
 import { dom } from "./dom.js";
@@ -1067,7 +1068,11 @@ function syncEncodeNote(est: ReturnType<typeof estimateExport>): void {
         } else if (blocked) {
             note.hidden = false;
             note.classList.add("is-error");
-            note.textContent = t("export.error.cannotEncodeResolution");
+            note.textContent = t(
+                getEncoderPreference() === "auto"
+                    ? "export.error.cannotEncodeResolution"
+                    : "export.error.encoderUnavailable",
+            );
         } else if (capped) {
             note.hidden = false;
             note.classList.remove("is-error");

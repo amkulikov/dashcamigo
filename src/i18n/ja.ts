@@ -17,6 +17,17 @@
 import type { I18nKey } from "./keys.js";
 
 export const jaDict = {
+    "settings.export.section": "エクスポート",
+    "settings.export.encoder.label": "動画のエンコード",
+    "settings.export.encoder.auto": "自動",
+    "settings.export.encoder.hardware": "ハードウェア",
+    "settings.export.encoder.software": "ソフトウェア",
+    "settings.export.encoder.autoHint": "エクスポート前に短いサンプルを確認し、細部をよりよく保てる場合はソフトウェアに切り替えます。変更せずに保存する録画では確認は不要です。",
+    "settings.export.encoder.hardwareHint": "デバイスの動画処理用ハードウェアを優先します。通常は高速で、バッテリー消費も少なくなります。利用できない場合は「自動」を選んでください。",
+    "settings.export.encoder.softwareHint": "CPUでのエンコードを優先します。書き出した動画の細部が失われる場合に役立ちますが、処理が遅くなり電力消費が増える場合があります。利用できない場合は「自動」を選んでください。",
+    "export.progress.checkingEncoder": "エクスポートの画質を確認中…",
+    "export.notify.softwareEncoder": "ソフトウェアエンコードに自動で切り替えました。通常のエンコーダーではビットレートが極端に低くなり、細部が失われました。設定でモードを変更できます。",
+    "export.error.encoderUnavailable": "選択したエクスポートではこのエンコードモードを利用できません。設定で「自動」を選ぶか、解像度を下げてください。",
     "page.title": "無料のドライブレコーダー再生・編集（オンライン）— GPSマップ、カット＆書き出し | dashcamigo",
     "meta.description": "ブラウザで使える無料・オープンソースのドラレコ再生・編集ツール。複数のカメラを 1 本の動画にまとめ、速度・GPS・動く地図を重ねて、そのまま書き出し — ぜんぶブラウザの中で。アップロード不要、インストール不要、広告なし。",
     "noscript.continue": "dashcamigo を開く",

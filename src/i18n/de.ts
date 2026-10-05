@@ -5,6 +5,17 @@
 import type { I18nKey } from "./keys.js";
 
 export const deDict = {
+    "settings.export.section": "Export",
+    "settings.export.encoder.label": "Videokodierung",
+    "settings.export.encoder.auto": "Automatisch",
+    "settings.export.encoder.hardware": "Hardware",
+    "settings.export.encoder.software": "Software",
+    "settings.export.encoder.autoHint": "Prüft vor dem Export eine kurze Probe und wechselt zu Software, wenn dadurch mehr Details erhalten bleiben. Unverändert gespeicherte Aufnahmen brauchen diese Prüfung nicht.",
+    "settings.export.encoder.hardwareHint": "Bevorzugt die Videohardware deines Geräts. Meist schneller und akkuschonender. Falls dieser Modus nicht verfügbar ist, wähle Automatisch.",
+    "settings.export.encoder.softwareHint": "Bevorzugt die Kodierung auf der CPU. Kann bei Detailverlust im exportierten Video helfen, aber langsamer sein und mehr Energie verbrauchen. Falls nicht verfügbar, wähle Automatisch.",
+    "export.progress.checkingEncoder": "Exportqualität wird geprüft…",
+    "export.notify.softwareEncoder": "Automatisch auf Softwarekodierung umgestellt: Der Standardencoder lieferte eine sehr niedrige Bitrate und verlor Details. Du kannst den Modus in den Einstellungen ändern.",
+    "export.error.encoderUnavailable": "Dieser Kodierungsmodus ist für den gewählten Export nicht verfügbar. Wähle Automatisch in den Einstellungen oder verringere die Auflösung.",
     "page.title": "Kostenloser Dashcam-Player & -Editor online — GPS-Karte, schneiden & exportieren | dashcamigo",
     "meta.description": "Kostenloser Open-Source-Dashcam-Player & -Editor im Browser. Mehrere Kameras zu einem Video kombinieren, Geschwindigkeit, GPS und Karte einblenden, dann exportieren. Kein Upload, keine Installation, keine Werbung.",
     "noscript.continue": "Weiter zu dashcamigo",

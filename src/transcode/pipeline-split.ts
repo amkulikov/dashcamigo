@@ -87,6 +87,7 @@ interface TranscodeSplitSource {
 }
 
 interface TranscodeSplitOutput {
+    hardwareAcceleration?: HardwareAcceleration;
     height: number;
     aspect: AspectId;
     layout: SplitLayout;
@@ -269,7 +270,7 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
         // Encoder + AAC target shared with pipeline.ts via pipeline-common - one
         // place so a tuning fix cannot land on one pipeline only.
         const encoderDiagnostics = createVideoEncodingDiagnostics();
-        const videoSource = createH264VideoSource(canvas, bitrate, encoderDiagnostics);
+        const videoSource = createH264VideoSource(canvas, bitrate, encoderDiagnostics, output.hardwareAcceleration);
         out.addVideoTrack(videoSource, { frameRate: outputFps });
 
         // Audio plan from the master channel: passthrough (stream-copy AAC/MP3, no

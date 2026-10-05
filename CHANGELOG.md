@@ -9,6 +9,7 @@ release tag. Localized texts ship inside the app (the "What's new" panel).
 
 ## 2026-10-05
 
+- **New:** Automatic encoder selection with a choice of mode in Settings.
 - **Improved:** Diagnostic reports include more GPU details.
 - **New camera support:** RedTiger F17.
 

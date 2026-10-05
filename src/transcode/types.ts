@@ -45,6 +45,7 @@ interface TranscodeSource {
 
 /** Output parameters. */
 interface TranscodeOutput {
+    hardwareAcceleration?: HardwareAcceleration;
     /** Target frame height. Width is computed from aspect (compose.computeOutputSize). */
     height: number;
     aspect: AspectId;

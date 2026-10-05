@@ -101,6 +101,8 @@ test("plays and seeks offline, draws GPS and exports manual blur with a route ov
     expect(report).toContain("video encoder config requested");
     expect(report).toMatch(/videoBitrateKbps=\d+/);
     expect(workerNamesSeen).toContain("transcode-worker");
+    expect(workerNamesSeen).toContain("encoder-probe-worker");
+    expect(report).toContain("encoder trial measured");
     expect(await readFile(fileURLToPath(htmlUrl)), "opening a card leaves its portable HTML unchanged").toEqual(
         htmlBefore,
     );

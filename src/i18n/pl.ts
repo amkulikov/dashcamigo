@@ -7,6 +7,17 @@
 import type { I18nKey } from "./keys.js";
 
 export const plDict = {
+    "settings.export.section": "Eksport",
+    "settings.export.encoder.label": "Kodowanie wideo",
+    "settings.export.encoder.auto": "Automatycznie",
+    "settings.export.encoder.hardware": "Sprzętowe",
+    "settings.export.encoder.software": "Programowe",
+    "settings.export.encoder.autoHint": "Sprawdza krótką próbkę przed eksportem i przełącza na kodowanie programowe, jeśli zachowuje ono więcej szczegółów. Nagrania zapisywane bez zmian nie wymagają tego sprawdzenia.",
+    "settings.export.encoder.hardwareHint": "Preferuje sprzętowe kodowanie wideo. Zwykle działa szybciej i zużywa mniej baterii. Jeśli ten tryb jest niedostępny, wybierz Automatycznie.",
+    "settings.export.encoder.softwareHint": "Preferuje kodowanie na procesorze. Może pomóc, gdy eksportowane wideo traci szczegóły, ale może działać wolniej i zużywać więcej energii. Jeśli jest niedostępne, wybierz Automatycznie.",
+    "export.progress.checkingEncoder": "Sprawdzanie jakości eksportu…",
+    "export.notify.softwareEncoder": "Automatycznie przełączono na kodowanie programowe: domyślny koder uzyskał bardzo niski bitrate i utracił szczegóły. Możesz zmienić tryb w ustawieniach.",
+    "export.error.encoderUnavailable": "Ten tryb kodowania jest niedostępny dla wybranego eksportu. Wybierz Automatycznie w ustawieniach lub zmniejsz rozdzielczość.",
     "page.title": "Darmowy odtwarzacz i edytor nagrań z wideorejestratora online — mapa GPS, przycinanie i eksport | dashcamigo",
     "meta.description": "Darmowy odtwarzacz i edytor nagrań z wideorejestratora w przeglądarce, z otwartym kodem źródłowym. Połącz obrazy z kilku kamer, dodaj prędkość, GPS i ruchomą mapę, a potem zapisz wideo. Bez wysyłania, instalacji i reklam.",
     "noscript.continue": "Przejdź do dashcamigo",

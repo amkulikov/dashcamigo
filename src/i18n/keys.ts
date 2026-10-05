@@ -10,6 +10,17 @@
 //    - ICU knows Russian plural rules from CLDR.
 
 export type I18nKey =
+    | "settings.export.section"
+    | "settings.export.encoder.label"
+    | "settings.export.encoder.auto"
+    | "settings.export.encoder.hardware"
+    | "settings.export.encoder.software"
+    | "settings.export.encoder.autoHint"
+    | "settings.export.encoder.hardwareHint"
+    | "settings.export.encoder.softwareHint"
+    | "export.progress.checkingEncoder"
+    | "export.notify.softwareEncoder"
+    | "export.error.encoderUnavailable"
     // Offline-use choices.
     | "offlineUse.entry"
     | "offlineUse.title"

@@ -19,6 +19,7 @@ import {
     setBrakeThresholdG,
 } from "../events.js";
 import { t } from "../i18n/index.js";
+import { getEncoderPreference, isEncoderPreference, setEncoderPreference } from "../encoder-pref.js";
 import { createLogger, downloadLogBuffer } from "../log.js";
 import { crashReportingEnabled, isCrashReportingBuilt, setCrashReportingEnabled } from "../sentry.js";
 import { setTripGapSec, tripAllCandidates, getTripGapSec, projectEventsOntoTimeline } from "../trips.js";
@@ -107,6 +108,7 @@ function openSettings(): void {
     if (!m) return;
     if (!__PORTABLE__) syncCrashToggleFromState();
     syncUnitsSelect();
+    syncEncoderSelect();
     syncMapLabelScaleSelect();
     syncMapMarkerControl();
     syncSeekStepInputs();
@@ -157,6 +159,18 @@ function syncEventsThresholdInputs(): void {
 function syncUnitsSelect(): void {
     const sel = document.getElementById("settings-units-select") as HTMLSelectElement | null;
     if (sel) sel.value = getUnits();
+}
+
+function syncEncoderSelect(): void {
+    const select = document.getElementById("settings-encoder-select") as HTMLSelectElement | null;
+    const hint = document.getElementById("settings-encoder-hint");
+    const preference = getEncoderPreference();
+    if (select) select.value = preference;
+    if (hint) {
+        const key = `settings.export.encoder.${preference}Hint` as const;
+        hint.dataset.i18n = key;
+        hint.textContent = t(key);
+    }
 }
 
 function syncMapLabelScaleSelect(): void {
@@ -394,6 +408,12 @@ export function initSettingsModal(): void {
         if (v === "metric" || v === "imperial") {
             setUnits(v as Units);
         }
+    });
+
+    document.getElementById("settings-encoder-select")?.addEventListener("change", (ev) => {
+        const value = (ev.target as HTMLSelectElement).value;
+        if (isEncoderPreference(value)) setEncoderPreference(value);
+        syncEncoderSelect();
     });
 
     // --- Map provider ---

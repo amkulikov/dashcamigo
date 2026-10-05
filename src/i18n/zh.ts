@@ -6,6 +6,17 @@
 import type { I18nKey } from "./keys.js";
 
 export const zhDict = {
+    "settings.export.section": "导出",
+    "settings.export.encoder.label": "视频编码",
+    "settings.export.encoder.auto": "自动",
+    "settings.export.encoder.hardware": "硬件",
+    "settings.export.encoder.software": "软件",
+    "settings.export.encoder.autoHint": "导出前检查一段短样本，如果软件编码能保留更多细节，就切换到软件编码。原样保存的录像无需此检查。",
+    "settings.export.encoder.hardwareHint": "优先使用设备的视频硬件。通常速度更快，也更省电。如果此模式不可用，请选择“自动”。",
+    "settings.export.encoder.softwareHint": "优先使用 CPU 编码。当导出视频丢失细节时可能有所帮助，但速度可能更慢、耗电更多。如果不可用，请选择“自动”。",
+    "export.progress.checkingEncoder": "正在检查导出画质…",
+    "export.notify.softwareEncoder": "已自动切换到软件编码：默认编码器输出的码率过低，导致细节丢失。你可以在设置中更改模式。",
+    "export.error.encoderUnavailable": "所选导出无法使用此编码模式。请在设置中选择“自动”，或降低分辨率。",
     "page.title": "免费在线行车记录仪播放器和编辑器 — GPS 地图、剪辑与导出 | dashcamigo",
     "meta.description": "免费开源的在线行车记录仪播放器和编辑器。把多路摄像头拼成一段视频，叠加速度、GPS 和动态地图，再导出 — 全在你的浏览器里完成。无需上传，无需安装，无广告。",
     "noscript.continue": "前往 dashcamigo",

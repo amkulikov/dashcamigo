@@ -1,5 +1,5 @@
 import { CanvasSource, Mp4OutputFormat, NullTarget, Output, Quality } from "mediabunny";
-import { createScene } from "./scene.js";
+import { createEncoderProbeScene as createScene } from "../../src/transcode/encoder-probe-scene.js";
 import { errorMessage, initialResult, type TestCase, type WorkerMessage } from "./shared.js";
 
 function hex(bytes: Uint8Array): string {

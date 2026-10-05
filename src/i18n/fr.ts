@@ -7,6 +7,17 @@
 import type { I18nKey } from "./keys.js";
 
 export const frDict = {
+    "settings.export.section": "Export",
+    "settings.export.encoder.label": "Encodage vidéo",
+    "settings.export.encoder.auto": "Automatique",
+    "settings.export.encoder.hardware": "Matériel",
+    "settings.export.encoder.software": "Logiciel",
+    "settings.export.encoder.autoHint": "Vérifie un court échantillon avant l’export et passe au logiciel s’il conserve plus de détails. Les enregistrements sauvegardés sans modification n’ont pas besoin de ce contrôle.",
+    "settings.export.encoder.hardwareHint": "Privilégie le matériel vidéo de ton appareil. Généralement plus rapide et moins gourmand en batterie. Si ce mode est indisponible, choisis Automatique.",
+    "settings.export.encoder.softwareHint": "Privilégie l’encodage sur le processeur. Peut aider si la vidéo exportée perd des détails, mais peut être plus lent et consommer plus d’énergie. Si indisponible, choisis Automatique.",
+    "export.progress.checkingEncoder": "Vérification de la qualité d’export…",
+    "export.notify.softwareEncoder": "Passage automatique à l’encodage logiciel : l’encodeur par défaut a produit un débit très faible et perdu des détails. Tu peux changer le mode dans les paramètres.",
+    "export.error.encoderUnavailable": "Ce mode d’encodage est indisponible pour l’export choisi. Choisis Automatique dans les paramètres ou réduis la résolution.",
     "page.title": "Lecteur et éditeur dashcam en ligne gratuit — carte GPS, découper et exporter | dashcamigo",
     "meta.description": "Lecteur et éditeur dashcam gratuit et open source, dans le navigateur. Combine plusieurs caméras en une vidéo, incruste vitesse, GPS et carte animée, puis exporte. Sans envoi, sans installation et sans pub.",
     "noscript.continue": "Continuer vers dashcamigo",

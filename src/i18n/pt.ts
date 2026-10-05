@@ -7,6 +7,17 @@
 import type { I18nKey } from "./keys.js";
 
 export const ptDict = {
+    "settings.export.section": "Exportação",
+    "settings.export.encoder.label": "Codificação de vídeo",
+    "settings.export.encoder.auto": "Automática",
+    "settings.export.encoder.hardware": "Hardware",
+    "settings.export.encoder.software": "Software",
+    "settings.export.encoder.autoHint": "Verifica uma amostra curta antes de exportar e muda para software se preservar mais detalhes. Gravações salvas sem alterações não precisam dessa verificação.",
+    "settings.export.encoder.hardwareHint": "Prefere o hardware de vídeo do dispositivo. Geralmente é mais rápido e consome menos bateria. Se esse modo não estiver disponível, escolha Automática.",
+    "settings.export.encoder.softwareHint": "Prefere a codificação na CPU. Pode ajudar quando o vídeo exportado perde detalhes, mas pode ser mais lento e consumir mais energia. Se não estiver disponível, escolha Automática.",
+    "export.progress.checkingEncoder": "Verificando a qualidade da exportação…",
+    "export.notify.softwareEncoder": "Mudamos automaticamente para codificação por software: o codificador padrão produziu uma taxa de bits muito baixa e perdeu detalhes. Você pode mudar o modo nas configurações.",
+    "export.error.encoderUnavailable": "Esse modo de codificação não está disponível para a exportação selecionada. Escolha Automática nas configurações ou reduza a resolução.",
     "page.title": "Player e editor de gravações de câmera veicular online grátis — mapa GPS, cortar e exportar | dashcamigo",
     "meta.description": "Player e editor de câmera veicular grátis e de código aberto no navegador. Junte várias câmeras num vídeo só, sobreponha velocidade, GPS e um mapa em movimento, e exporte. Sem upload, sem instalação, sem anúncios.",
     "noscript.continue": "Ir para o dashcamigo",

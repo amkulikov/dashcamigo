@@ -188,13 +188,15 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
         !output.watermarkAnchor &&
         !anyOverlay &&
         !output.blurRegions?.length;
-    // Encoder config shared with pipeline-split (one place for the load-bearing
-    // hardwareAcceleration rationale). The sample flavour is a superset of the
-    // canvas one: composited frames are wrapped in a VideoSample here, which is
-    // exactly what CanvasSource does internally.
+    // Both sources use the same encoder config; CanvasSource wraps the composed
+    // frame in a VideoSample internally.
     const encoderDiagnostics = createVideoEncodingDiagnostics();
-    const canvasSource = noOverlayLayer ? null : createH264VideoSource(canvas, bitrate, encoderDiagnostics);
-    const sampleSource = noOverlayLayer ? createH264SampleSource(bitrate, encoderDiagnostics) : null;
+    const canvasSource = noOverlayLayer
+        ? null
+        : createH264VideoSource(canvas, bitrate, encoderDiagnostics, output.hardwareAcceleration);
+    const sampleSource = noOverlayLayer
+        ? createH264SampleSource(bitrate, encoderDiagnostics, output.hardwareAcceleration)
+        : null;
     out.addVideoTrack(canvasSource ?? sampleSource!, { frameRate: outputFps });
 
     /** Encodes the frame currently on the canvas at the output-axis timing. */

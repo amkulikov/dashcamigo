@@ -7,6 +7,17 @@
 import type { I18nKey } from "./keys.js";
 
 export const esDict = {
+    "settings.export.section": "Exportación",
+    "settings.export.encoder.label": "Codificación de vídeo",
+    "settings.export.encoder.auto": "Automática",
+    "settings.export.encoder.hardware": "Por hardware",
+    "settings.export.encoder.software": "Por software",
+    "settings.export.encoder.autoHint": "Comprueba una muestra corta antes de exportar y cambia a software si conserva más detalle. Las grabaciones guardadas sin cambios no necesitan esta comprobación.",
+    "settings.export.encoder.hardwareHint": "Prefiere el hardware de vídeo del dispositivo. Suele ser más rápido y consumir menos batería. Si este modo no está disponible, elige Automática.",
+    "settings.export.encoder.softwareHint": "Prefiere codificar con la CPU. Puede ayudar si el vídeo exportado pierde detalle, pero puede ser más lento y consumir más energía. Si no está disponible, elige Automática.",
+    "export.progress.checkingEncoder": "Comprobando la calidad de exportación…",
+    "export.notify.softwareEncoder": "Se ha cambiado automáticamente a codificación por software: el codificador predeterminado produjo una tasa de bits muy baja y perdió detalle. Puedes cambiar el modo en Ajustes.",
+    "export.error.encoderUnavailable": "Este modo de codificación no está disponible para la exportación seleccionada. Elige Automática en Ajustes o reduce la resolución.",
     "page.title": "Reproductor y editor de dashcam online gratis — mapa GPS, recortar y exportar | dashcamigo",
     "meta.description": "Reproductor y editor de dashcam gratis y de código abierto en tu navegador. Une varias cámaras en un vídeo, superpón velocidad, GPS y un mapa en movimiento, y exporta. Sin subidas, instalación ni anuncios.",
     "noscript.continue": "Continuar a dashcamigo",

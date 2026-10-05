@@ -5,6 +5,17 @@
 import type { I18nKey } from "./keys.js";
 
 export const enDict = {
+    "settings.export.section": "Export",
+    "settings.export.encoder.label": "Video encoding",
+    "settings.export.encoder.auto": "Automatic",
+    "settings.export.encoder.hardware": "Hardware",
+    "settings.export.encoder.software": "Software",
+    "settings.export.encoder.autoHint": "Checks a short sample before export and switches to software if it preserves more detail. Recordings saved without changes do not need this check.",
+    "settings.export.encoder.hardwareHint": "Prefers the device’s video hardware. Usually faster and uses less battery. If this mode is unavailable, choose Automatic.",
+    "settings.export.encoder.softwareHint": "Prefers encoding on the CPU. Can help when exported video loses detail, but may be slower and use more power. If unavailable, choose Automatic.",
+    "export.progress.checkingEncoder": "Checking export quality…",
+    "export.notify.softwareEncoder": "Automatically switched to software encoding: the default encoder produced a very low bitrate and lost detail. You can change this in Settings.",
+    "export.error.encoderUnavailable": "This encoding mode is unavailable for the selected export. Choose Automatic in Settings or lower the resolution.",
     "page.title": "Free Dashcam Player & Editor Online — GPS map, trim & export | dashcamigo",
     "meta.description": "Free, open-source online dashcam player & editor. Combine multiple cameras into one video, overlay speed, GPS and a moving map, then export — right in your browser. No upload, no install, no ads.",
     "noscript.continue": "Continue to dashcamigo",

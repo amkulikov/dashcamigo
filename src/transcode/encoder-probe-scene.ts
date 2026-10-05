@@ -1,5 +1,5 @@
 /** A fixed moving texture makes bitrate comparisons use identical, nontrivial input. */
-export function createScene(
+export function createEncoderProbeScene(
     width: number,
     height: number,
 ): { canvas: OffscreenCanvas; draw: (seconds: number) => void } {

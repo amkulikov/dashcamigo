@@ -22,6 +22,7 @@ import {
 
 import { createLogger } from "../log.js";
 import { AUDIO_TARGET_BITRATE, AUDIO_TARGET_CHANNELS, AUDIO_TARGET_SAMPLE_RATE } from "./types.js";
+import { h264EncodingConfig } from "./h264-encoding.js";
 
 const log = createLogger("transcode:caps");
 
@@ -102,7 +103,7 @@ export function createEncodeAudioSource(codec: "aac" | "opus"): AudioSampleSourc
  * Whether the browser can encode the H.264 stream the re-encode export emits at
  * the given output size, bitrate and frame rate. Mirrors the pipeline's encoder config:
  * codec "avc" (mediabunny hardcodes High profile 0x64 and derives only the H.264
- * level from resolution, bitrate and frame rate) + hardwareAcceleration "no-preference".
+ * level from resolution, bitrate and frame rate), with the selected acceleration preference.
  *
  * We ask mediabunny's own canEncodeVideo rather than a bare isConfigSupported:
  * it builds the same encoder config the pipeline uses AND, on Firefox (where
@@ -123,17 +124,14 @@ export async function canReencodeH264(
     height: number,
     bitrate: number,
     frameRate?: number,
+    hardwareAcceleration: HardwareAcceleration = "no-preference",
 ): Promise<boolean> {
     try {
         return await canEncodeVideo("avc", {
+            ...h264EncodingConfig(bitrate, hardwareAcceleration),
             width,
             height,
             frameRate,
-            // Explicit bitrate only - never a quantizer or a subjective level, so
-            // the probe resolves to the exact bitrate-driven isConfigSupported
-            // check the binary search in resolveEncodableH264 depends on.
-            quality: new Quality({ bitrate }),
-            hardwareAcceleration: "no-preference",
         });
     } catch (err) {
         // canEncodeVideo is defensive, but guard anyway: a probe failure must
@@ -195,12 +193,13 @@ export async function resolveEncodableH264(
     height: number,
     desiredBitrate: number,
     frameRate?: number,
+    hardwareAcceleration: HardwareAcceleration = "no-preference",
 ): Promise<EncodableH264 | null> {
-    if (await canReencodeH264(width, height, desiredBitrate, frameRate)) {
+    if (await canReencodeH264(width, height, desiredBitrate, frameRate, hardwareAcceleration)) {
         return { bitrate: desiredBitrate, degraded: false };
     }
     const floor = Math.round(width * height * 4 * FLOOR_FRACTION);
-    if (floor >= desiredBitrate || !(await canReencodeH264(width, height, floor, frameRate))) {
+    if (floor >= desiredBitrate || !(await canReencodeH264(width, height, floor, frameRate, hardwareAcceleration))) {
         return null;
     }
 
@@ -208,7 +207,7 @@ export async function resolveEncodableH264(
     let bad = desiredBitrate;
     for (let probes = 0; bad - good > SEARCH_STOP_BPS && probes < MAX_SEARCH_PROBES; probes++) {
         const mid = Math.round((good + bad) / 2);
-        if (await canReencodeH264(width, height, mid, frameRate)) {
+        if (await canReencodeH264(width, height, mid, frameRate, hardwareAcceleration)) {
             good = mid;
         } else {
             bad = mid;

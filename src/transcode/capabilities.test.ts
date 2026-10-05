@@ -129,4 +129,26 @@ describe("resolveEncodableH264", () => {
         expect(checked.length).toBeGreaterThan(2);
         expect(checked.every((fps) => fps === 60)).toBe(true);
     });
+
+    it("keeps the explicit encoder preference throughout bitrate fallback", async () => {
+        const checked: VideoEncoderConfig[] = [];
+        vi.stubGlobal("VideoEncoder", {
+            isConfigSupported: async (config: VideoEncoderConfig) => {
+                checked.push(config);
+                return { supported: config.hardwareAcceleration === "prefer-software" && config.bitrate! <= 3_000_000 };
+            },
+        });
+        const result = await resolveEncodableH264(1160, 650, 8_000_000, 25, "prefer-software");
+        expect(result?.bitrate).toBeLessThanOrEqual(3_000_000);
+        expect(checked.length).toBeGreaterThan(2);
+        expect(
+            checked.every(
+                (config) =>
+                    config.hardwareAcceleration === "prefer-software" &&
+                    config.latencyMode === "quality" &&
+                    config.bitrateMode === "variable",
+            ),
+        ).toBe(true);
+        await expect(canReencodeH264(1160, 650, 3_000_000, 25, "prefer-hardware")).resolves.toBe(false);
+    });
 });

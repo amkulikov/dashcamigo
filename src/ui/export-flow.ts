@@ -55,6 +55,8 @@ import type { Trip } from "../trips.js";
 import { getBrakeThresholdG } from "../events.js";
 import { computeCumulativeDistanceM, sampleSpeedAcross } from "../transcode/frame-pos.js";
 import { getUnits } from "../units-pref.js";
+import { encoderAcceleration, getEncoderPreference, subscribeEncoderPreference } from "../encoder-pref.js";
+import { selectAutoEncoder } from "./encoder-selection.js";
 
 import { anyRegionIntersectsRange, cloneBlurRegions, type BlurRegion } from "../blur-regions.js";
 
@@ -426,7 +428,7 @@ export function subscribeEncodeCeiling(listener: () => void): () => void {
 }
 
 function ceilingKey(dims: OutputDims, desiredBitrate: number, frameRate: number): string {
-    return `${dims.width}x${dims.height}@${frameRate}:${desiredBitrate}`;
+    return `${dims.width}x${dims.height}@${frameRate}:${desiredBitrate}:${getEncoderPreference()}`;
 }
 
 /**
@@ -451,10 +453,13 @@ export function refreshEncodeCeiling(): void {
     const desiredBitrate = resolveReencodeBitrate(trip, dims);
     const frameRate = resolveOutputFps(measureRangeSource(trip).fps);
     const key = ceilingKey(dims, desiredBitrate, frameRate);
+    const acceleration = encoderAcceleration(getEncoderPreference());
     if (key === encodeCeilingInFlightKey) return; // already probed / probing
     encodeCeilingInFlightKey = key;
     void import("../transcode/capabilities.js")
-        .then(({ resolveEncodableH264 }) => resolveEncodableH264(dims.width, dims.height, desiredBitrate, frameRate))
+        .then(({ resolveEncodableH264 }) =>
+            resolveEncodableH264(dims.width, dims.height, desiredBitrate, frameRate, acceleration),
+        )
         .then((res) => {
             // Drop a result whose config was superseded while the probe ran.
             if (key !== encodeCeilingInFlightKey) return;
@@ -464,6 +469,8 @@ export function refreshEncodeCeiling(): void {
             for (const listener of encodeCeilingListeners) listener();
         });
 }
+
+subscribeEncoderPreference(refreshEncodeCeiling);
 
 /** The cached ceiling for the given config, or null if it does not match (stale
  *  / pending / cleared). Used by estimateExport to fold the device cap into the
@@ -858,6 +865,7 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
     const slotPipPositions = state.composition.perSlotPipPositions.map((pos) => (pos ? { ...pos } : null));
     const slotPipScales = [...state.composition.perSlotScales];
     const quality = exportPanelState.quality;
+    const encoderPreference = getEncoderPreference();
     const manualBitrateMbps = exportPanelState.manualBitrateMbps;
     const outputPresetId = exportPanelState.outputPresetId;
     const letterboxFill = exportPanelState.letterboxFill;
@@ -957,6 +965,7 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
     // is the authoritative backstop (and the only gate if the user clicked Save
     // before the panel's async probe resolved).
     let reencodeBitrate = 0;
+    let hardwareAcceleration = encoderAcceleration(encoderPreference);
     if (!initiallyStreamCopy) {
         // Decode preflight: a source this browser cannot decode makes every
         // re-encode branch impossible. The panel already disables Save with
@@ -969,14 +978,24 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
             return;
         }
         const { resolveEncodableH264 } = await import("../transcode/capabilities.js");
-        const encodable = await resolveEncodableH264(dims.width, dims.height, desiredBitrate, frameRate);
+        const encodable = await resolveEncodableH264(
+            dims.width,
+            dims.height,
+            desiredBitrate,
+            frameRate,
+            hardwareAcceleration,
+        );
         if (!encodable) {
             log.warn("re-encode export blocked: device cannot encode at this resolution", {
                 width: dims.width,
                 height: dims.height,
                 desiredBitrate,
             });
-            hooks.onError("export.error.cannotEncodeResolution");
+            hooks.onError(
+                encoderPreference === "auto"
+                    ? "export.error.cannotEncodeResolution"
+                    : "export.error.encoderUnavailable",
+            );
             return;
         }
         reencodeBitrate = encodable.bitrate;
@@ -1160,6 +1179,24 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
 
         const effectiveBlurRegions = blurRegionsForExport(manualBlurRegions, detectedBlurRegions);
 
+        if (!streamCopy && encoderPreference === "auto") {
+            hooks.onStatus(t("export.progress.checkingEncoder"));
+            const selection = await selectAutoEncoder(
+                {
+                    width: dims.width,
+                    height: dims.height,
+                    frameRate,
+                    bitrate: reencodeBitrate || desiredBitrate,
+                },
+                activeExportController.signal,
+            );
+            hardwareAcceleration = selection.hardwareAcceleration;
+            if (selection.reason === "confirmed")
+                notify({ severity: "warn", messageKey: "export.notify.softwareEncoder" });
+            hooks.onStatus(t("export.status.preparing"));
+        }
+        activeExportController.signal.throwIfAborted();
+
         // Tagged so a failure thrown by the SINK can be told apart from a
         // source-side one that shares its DOMException name (see destination-error.ts).
         writable = tagSinkFailures(await mp4Handle.createWritable());
@@ -1175,6 +1212,8 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
             speedFactor,
             desiredBitrate: streamCopy ? null : desiredBitrate,
             encodeBitrate: streamCopy ? null : reencodeBitrate || desiredBitrate,
+            encoderPreference,
+            hardwareAcceleration: streamCopy ? null : hardwareAcceleration,
         });
 
         if (streamCopy) {
@@ -1262,6 +1301,7 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
                             aspect: dims.aspect,
                             layout,
                             bitrate,
+                            hardwareAcceleration,
                             watermarkAnchor,
                             withAudio: reencodeAudio,
                             speedFactor,
@@ -1294,6 +1334,7 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
                             height: dims.height,
                             aspect: dims.aspect,
                             bitrate,
+                            hardwareAcceleration,
                             crop: slotCrops[0] ?? null,
                             flip: slotFlips[0],
                             watermarkAnchor,

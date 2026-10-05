@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-10-05.3",
+        category: "feature",
+        text: {
+            en: "Automatic encoder selection with a choice of mode in Settings.",
+            ru: "Добавлен автоматический выбор кодировщика с возможностью изменить режим в настройках.",
+            de: "Automatische Auswahl des Encoders mit Moduswahl in den Einstellungen.",
+            es: "Selección automática del codificador con opción de cambiar el modo en Ajustes.",
+            fr: "Sélection automatique de l’encodeur avec choix du mode dans les réglages.",
+            pl: "Automatyczny wybór kodera z możliwością zmiany trybu w ustawieniach.",
+            pt: "Seleção automática do codificador com opção de alterar o modo nas configurações.",
+            zh: "自动选择编码器，并可在设置中更改模式。",
+            ja: "エンコーダーの自動選択と、設定でのモード変更に対応しました。",
+            ko: "인코더를 자동으로 선택하고 설정에서 모드를 바꿀 수 있어요.",
+        },
+    },
+    {
         id: "2026-10-05.2",
         category: "improvement",
         text: {

@@ -14,16 +14,14 @@ import {
     type Input,
     Mp4OutputFormat,
     Output,
-    Quality,
     StreamTarget,
     VideoSampleSource,
     type AudioCodec,
-    type VideoCodec,
-    type VideoEncodingConfig,
 } from "mediabunny";
 
 import { createLogger } from "../log.js";
 import type { VideoEncodingDiagnostics } from "./encoder-diagnostics.js";
+import { h264EncodingConfig } from "./h264-encoding.js";
 import { createExportHeartbeat } from "./export-heartbeat.js";
 import { isSourceReadError } from "../source-read-error.js";
 import { getInputTimeOrigin } from "../media-time.js";
@@ -437,50 +435,6 @@ export async function feedSegmentAudioCopy(opts: {
 }
 
 /**
- * The encoder config both pipelines and both source flavours must share - one
- * place so a tuning fix cannot land on one path only.
- */
-function h264EncodingConfig(bitrate: number, diagnostics: VideoEncodingDiagnostics): VideoEncodingConfig {
-    return {
-        // mediabunny's universal H.264 type - it selects the avcC
-        // profile/level automatically from the encoded stream.
-        codec: "avc" satisfies VideoCodec,
-        // Explicit bitrate only - never a quantizer or a subjective level.
-        // Either of those flips mediabunny into quantizer rate control, which
-        // is wrong for this pipeline on three counts: WebCodecs only offers a
-        // fixed per-frame QP (CQP - "like CRF" in the mediabunny docs oversells
-        // it), so output size is unbounded on noisy footage; only Chromium
-        // supports the quantizer bitrateMode, and mediabunny silently falls
-        // back to its own bitrate heuristic elsewhere, making the output
-        // browser-dependent; and the panel's size estimate plus the
-        // resolveEncodableH264 ceiling probe both assume a known bitrate.
-        // VBR (the WebCodecs default) gives the better quality-per-byte for
-        // dashcam batch export; pin it EXPLICITLY so a future "make export
-        // smaller" edit cannot silently switch to constant.
-        quality: new Quality({ bitrate, bitrateMode: "variable" }),
-        keyFrameInterval: 2,
-        sizeChangeBehavior: "deny",
-        // Batch export, not a live stream: keep the encoder in "quality" mode
-        // (the mediabunny default) EXPLICITLY so a future "make export faster"
-        // edit cannot silently flip it to "realtime" - which "may drop frames if
-        // the encoder becomes overloaded" (WebCodecs), corrupting the output. The
-        // throughput knob here is hardwareAcceleration below, not latencyMode.
-        latencyMode: "quality",
-        // "no-preference" (the WebCodecs default): the UA uses a hardware
-        // encoder when one is available (VideoToolbox / QSV / NVENC / VAAPI,
-        // ~3-5x faster than software at 1080p) and transparently falls back to
-        // software otherwise - both at configure time and on a runtime error.
-        // NOT "prefer-hardware": Chrome treats that as a hard requirement, so
-        // mediabunny's single isConfigSupported() check throws on any browser
-        // without a hardware H.264 encoder (headless Linux CI, software-only
-        // desktops) instead of degrading. See media-source.js encoder init.
-        hardwareAcceleration: "no-preference",
-        onEncoderConfig: diagnostics.onEncoderConfig,
-        onEncodedPacket: diagnostics.onEncodedPacket,
-    };
-}
-
-/**
  * H.264 source bound to the composition canvas: the encode loop calls
  * `add(timestamp, duration)` and mediabunny captures the canvas state at that
  * call (no per-frame VideoSample to allocate and close). Used wherever every
@@ -491,8 +445,13 @@ export function createH264VideoSource(
     canvas: OffscreenCanvas,
     bitrate: number,
     diagnostics: VideoEncodingDiagnostics,
+    hardwareAcceleration: HardwareAcceleration = "no-preference",
 ): CanvasSource {
-    return new CanvasSource(canvas, h264EncodingConfig(bitrate, diagnostics));
+    return new CanvasSource(canvas, {
+        ...h264EncodingConfig(bitrate, hardwareAcceleration),
+        onEncoderConfig: diagnostics.onEncoderConfig,
+        onEncodedPacket: diagnostics.onEncodedPacket,
+    });
 }
 
 /**
@@ -503,8 +462,16 @@ export function createH264VideoSource(
  * caller wraps its canvas in a VideoSample for the frames that DO need
  * compositing, which is exactly what CanvasSource does internally.
  */
-export function createH264SampleSource(bitrate: number, diagnostics: VideoEncodingDiagnostics): VideoSampleSource {
-    return new VideoSampleSource(h264EncodingConfig(bitrate, diagnostics));
+export function createH264SampleSource(
+    bitrate: number,
+    diagnostics: VideoEncodingDiagnostics,
+    hardwareAcceleration: HardwareAcceleration = "no-preference",
+): VideoSampleSource {
+    return new VideoSampleSource({
+        ...h264EncodingConfig(bitrate, hardwareAcceleration),
+        onEncoderConfig: diagnostics.onEncoderConfig,
+        onEncodedPacket: diagnostics.onEncodedPacket,
+    });
 }
 
 /**

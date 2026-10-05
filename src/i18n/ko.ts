@@ -16,6 +16,17 @@
 import type { I18nKey } from "./keys.js";
 
 export const koDict = {
+    "settings.export.section": "내보내기",
+    "settings.export.encoder.label": "동영상 인코딩",
+    "settings.export.encoder.auto": "자동",
+    "settings.export.encoder.hardware": "하드웨어",
+    "settings.export.encoder.software": "소프트웨어",
+    "settings.export.encoder.autoHint": "내보내기 전에 짧은 샘플을 확인하고 세부 묘사가 더 잘 보존되면 소프트웨어로 전환해요. 변경 없이 저장하는 녹화에는 이 확인이 필요하지 않아요.",
+    "settings.export.encoder.hardwareHint": "기기의 동영상 처리 하드웨어를 우선 사용해요. 보통 더 빠르고 배터리를 덜 사용해요. 이 모드를 사용할 수 없으면 자동을 선택하세요.",
+    "settings.export.encoder.softwareHint": "CPU 인코딩을 우선 사용해요. 내보낸 동영상에서 세부 묘사가 손실될 때 도움이 될 수 있지만, 더 느리고 전력을 더 사용할 수 있어요. 사용할 수 없으면 자동을 선택하세요.",
+    "export.progress.checkingEncoder": "내보내기 화질 확인 중…",
+    "export.notify.softwareEncoder": "소프트웨어 인코딩으로 자동 전환했어요. 기본 인코더의 비트레이트가 너무 낮아 세부 묘사가 손실됐어요. 설정에서 모드를 변경할 수 있어요.",
+    "export.error.encoderUnavailable": "선택한 내보내기에서는 이 인코딩 모드를 사용할 수 없어요. 설정에서 자동을 선택하거나 해상도를 낮추세요.",
     "page.title": "무료 온라인 블랙박스 플레이어·편집기 — GPS 지도, 자르기·내보내기 | dashcamigo",
     "meta.description": "브라우저에서 쓰는 무료 오픈소스 블랙박스 플레이어 및 편집기. 여러 카메라를 한 영상으로 합치고, 속도·GPS·움직이는 지도를 얹어 내보내요 — 전부 브라우저 안에서. 업로드 없이, 설치 없이, 광고 없이.",
     "noscript.continue": "dashcamigo로 이동",

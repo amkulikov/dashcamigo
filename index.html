@@ -2672,6 +2672,20 @@
                     <p class="settings-toggle-desc" data-i18n="settings.playback.seekStep.description">How far the left / right arrow keys jump in the player. Shift extends the jump.</p>
                 </div>
             </div>
+            <div class="export-modal-section">
+                <h3 class="settings-section-title" data-i18n="settings.export.section">Export</h3>
+                <div class="settings-row">
+                    <label class="settings-select-row">
+                        <span class="settings-select-label" data-i18n="settings.export.encoder.label">Video encoding</span>
+                        <select id="settings-encoder-select" class="settings-select" aria-describedby="settings-encoder-hint">
+                            <option value="auto" data-i18n="settings.export.encoder.auto">Automatic</option>
+                            <option value="hardware" data-i18n="settings.export.encoder.hardware">Hardware</option>
+                            <option value="software" data-i18n="settings.export.encoder.software">Software</option>
+                        </select>
+                    </label>
+                    <p id="settings-encoder-hint" class="settings-toggle-desc" data-i18n="settings.export.encoder.autoHint">Checks a short sample before export and switches to software if it preserves more detail. Recordings saved without changes do not need this check.</p>
+                </div>
+            </div>
             <!-- Viewer map preferences; export overlays have separate controls. -->
             <div class="export-modal-section">
                 <h3 class="settings-section-title" data-i18n="settings.map.section">Map</h3>
