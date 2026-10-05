@@ -5,6 +5,7 @@
 // preference is applied to each freshly-derived Trip at the regroup boundary.
 
 import { recordsHaveGps } from "./parser.js";
+import { usableCandidateRecords } from "./stale-gps.js";
 import { fileIdentityKey } from "./persist/identity.js";
 import { applyGpsSyncToTrip, rawTripGpsRecords, type Trip, tripAllCandidates } from "./trips.js";
 
@@ -183,7 +184,9 @@ export function applyStoredGpsSyncToTrips(trips: readonly Trip[]): void {
 /** Raw-GPS predicate for launch controls. Unlike trip.records it stays true
  *  when a bad offset plus trimming temporarily moves every point off-video. */
 export function tripHasRawGps(trip: Trip | null): boolean {
-    return trip !== null && tripAllCandidates(trip).some((candidate) => recordsHaveGps(candidate.records));
+    return (
+        trip !== null && tripAllCandidates(trip).some((candidate) => recordsHaveGps(usableCandidateRecords(candidate)))
+    );
 }
 
 function tripCameraFingerprint(trip: Trip): string | null {

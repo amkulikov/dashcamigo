@@ -18,6 +18,8 @@ import type { GpsRecord, Channel, RecordingMode, VendorFile } from "./parsers/ty
 import type { VideoCodec } from "mediabunny";
 import type { Mp4Rotation } from "./indexer.js";
 import { createLogger } from "./log.js";
+import { classifyFilenameRecordingKey, classifyFilenameTime } from "./parsers/filename/index.js";
+import { findStaleGpsCandidates, usableCandidateRecords } from "./stale-gps.js";
 
 const log = createLogger("trips");
 
@@ -140,6 +142,11 @@ export interface VideoCandidate {
     createdUtc: Date | null;
     // GPS points for this MP4 (may be empty)
     records: GpsRecord[];
+    // Recomputed from the loaded recording set; raw GPS stays available for
+    // diagnosis, but cannot anchor clocks or contribute to the displayed track.
+    hasStaleGps?: boolean;
+    // A filename clock recovered without corroborating UTC from nearby footage.
+    hasUncalibratedClock?: boolean;
     // codec of primary video track (from indexer). null if undetermined;
     // canPlay is then optimistically true.
     codec: VideoCodec | null;
@@ -726,6 +733,7 @@ export function groupTrips(videos: VideoCandidate[], gapSec: number = getTripGap
         const bSeq = b.sequence ?? Number.POSITIVE_INFINITY;
         return aSeq - bSeq;
     });
+    const collisionOwners = collisionFrameOwners(sorted);
 
     // Step 1: group into frames. Key = `${fingerprint}|t${snapped}`.
     // fingerprint is cross-channel (camera-key library strips channel letter
@@ -744,7 +752,7 @@ export function groupTrips(videos: VideoCandidate[], gapSec: number = getTripGap
     const framesByKey = new Map<string, TripFrame>();
     for (const video of sorted) {
         const channel: Channel = video.channel ?? DEFAULT_CHANNEL;
-        const owner = candidateGroupingKey(video);
+        const owner = collisionOwners.get(video) ?? candidateGroupingKey(video);
         // Snap is used ONLY as the grouping key for multi-channel frames:
         // F and B are recorded simultaneously but their startUtc may differ by 0.x sec
         // (different startSource: F used GPS-first, B used mvhd+TZ).
@@ -826,7 +834,7 @@ export function groupTrips(videos: VideoCandidate[], gapSec: number = getTripGap
         // All candidates in a frame share a fingerprint (it is part of the frame
         // key), so any present channel answers for the whole frame.
         const canonical = frameCanonicalCandidate(frame);
-        const fingerprint = canonical ? candidateGroupingKey(canonical) : "";
+        const fingerprint = canonical ? (collisionOwners.get(canonical) ?? candidateGroupingKey(canonical)) : "";
         let group = framesByFingerprint.get(fingerprint);
         if (!group) {
             group = [];
@@ -950,6 +958,102 @@ function isCandidateNormalOrUnknown(candidate: VideoCandidate): boolean {
 
 function candidateGroupingKey(candidate: VideoCandidate): string {
     return JSON.stringify([candidate.sourceKey ?? null, candidate.fingerprint]);
+}
+
+/** Colliding channel clocks need independent recording identity. Isolating
+ *  their trip owner also prevents interval normalization from re-pairing them. */
+function collisionFrameOwners(candidates: readonly VideoCandidate[]): Map<VideoCandidate, string> {
+    const buckets = new Map<string, VideoCandidate[]>();
+    const bucketKey = (candidate: VideoCandidate, delta = 0): string =>
+        `${candidateGroupingKey(candidate)}|t${Math.round(candidate.startUtc / FRAME_TIMESTAMP_SNAP_SEC) + delta}`;
+    for (const candidate of candidates) {
+        const key = bucketKey(candidate);
+        const bucket = buckets.get(key) ?? [];
+        bucket.push(candidate);
+        buckets.set(key, bucket);
+    }
+    const ambiguous = new Set<string>();
+    const nameTimes = new Map<VideoCandidate, number>();
+    for (const [key, bucket] of buckets) {
+        const byChannel = new Map<Channel, VideoCandidate>();
+        let firstNameTime = Number.POSITIVE_INFINITY;
+        let lastNameTime = Number.NEGATIVE_INFINITY;
+        for (const candidate of bucket) {
+            if (!isCandidateNormalOrUnknown(candidate) || candidate.isTimelapse) continue;
+            const recording = classifyFilenameRecordingKey(candidate);
+            if (recording !== null) {
+                const nameTime = classifyFilenameTime(candidate)?.getTime();
+                if (nameTime !== undefined) {
+                    nameTimes.set(candidate, nameTime);
+                    firstNameTime = Math.min(firstNameTime, nameTime);
+                    lastNameTime = Math.max(lastNameTime, nameTime);
+                    if (lastNameTime - firstNameTime > FRAME_TIMESTAMP_SNAP_SEC * 1000) ambiguous.add(key);
+                }
+            }
+            const channel = candidate.channel ?? DEFAULT_CHANNEL;
+            const previous = byChannel.get(channel);
+            if (
+                previous &&
+                Math.min(previous.startUtc + previous.durationSec, candidate.startUtc + candidate.durationSec) -
+                    candidate.startUtc >
+                    OVERLAP_SPLIT_TOLERANCE_SEC
+            )
+                ambiguous.add(key);
+            byChannel.set(channel, candidate);
+        }
+    }
+    // Boundary rescue can join adjacent buckets only within half a snap.
+    // Walk backwards so the eligible suffix of the earlier bucket only grows.
+    for (const [key, bucket] of buckets) {
+        const previousKey = bucketKey(bucket[0]!, -1);
+        const previous = buckets.get(previousKey);
+        if (!previous || (ambiguous.has(key) && ambiguous.has(previousKey))) continue;
+        let previousIndex = previous.length - 1;
+        let firstNameTime = Number.POSITIVE_INFINITY;
+        let lastNameTime = Number.NEGATIVE_INFINITY;
+        for (let i = bucket.length - 1; i >= 0; i--) {
+            const candidate = bucket[i]!;
+            const nameTime = nameTimes.get(candidate);
+            if (nameTime === undefined) continue;
+            while (
+                previousIndex >= 0 &&
+                candidate.startUtc - previous[previousIndex]!.startUtc <= FRAME_TIMESTAMP_SNAP_SEC / 2
+            ) {
+                const previousNameTime = nameTimes.get(previous[previousIndex--]!);
+                if (previousNameTime === undefined) continue;
+                firstNameTime = Math.min(firstNameTime, previousNameTime);
+                lastNameTime = Math.max(lastNameTime, previousNameTime);
+            }
+            if (
+                nameTime - firstNameTime > FRAME_TIMESTAMP_SNAP_SEC * 1000 ||
+                lastNameTime - nameTime > FRAME_TIMESTAMP_SNAP_SEC * 1000
+            ) {
+                ambiguous.add(key);
+                ambiguous.add(previousKey);
+                break;
+            }
+        }
+    }
+    const duplicates = new Set<string>();
+    const occupied = new Set<string>();
+    for (const candidate of candidates) {
+        const recording = classifyFilenameRecordingKey(candidate);
+        if (recording === null) continue;
+        const key = JSON.stringify([candidateGroupingKey(candidate), recording]);
+        const slot = JSON.stringify([key, candidate.channel]);
+        if (occupied.has(slot)) duplicates.add(key);
+        occupied.add(slot);
+    }
+    const owners = new Map<VideoCandidate, string>();
+    for (const candidate of candidates) {
+        // Include neighbouring buckets so boundary rescue cannot bypass the guard.
+        if (![0, -1, 1].some((delta) => ambiguous.has(bucketKey(candidate, delta)))) continue;
+        const recording = classifyFilenameRecordingKey(candidate);
+        const isDuplicate = duplicates.has(JSON.stringify([candidateGroupingKey(candidate), recording]));
+        const identity = recording === null || isDuplicate ? ["unpaired", owners.size] : ["recording", recording];
+        owners.set(candidate, JSON.stringify([candidateGroupingKey(candidate), identity]));
+    }
+    return owners;
 }
 
 function rememberNormalChannels(frame: TripFrame, latest: Map<Channel, VideoCandidate>): void {
@@ -1372,7 +1476,7 @@ function collectRawTripRecords(frames: readonly TripFrame[]): { records: GpsReco
     const indexByKey = new Map<string, number>();
     const merged: GpsRecord[] = [];
     for (const c of uniqueFrameCandidates(frames)) {
-        for (const r of c.records) {
+        for (const r of usableCandidateRecords(c)) {
             const key = `${r.unixSeconds}|${r.lat}|${r.lon}`;
             const existingIdx = indexByKey.get(key);
             if (existingIdx === undefined) {
@@ -2492,6 +2596,9 @@ export function rederiveStartUtcForCandidates(
         return parsed;
     };
 
+    const staleGps = findStaleGpsCandidates(candidates, memoizedFilenameTime);
+    for (const candidate of candidates) candidate.hasStaleGps = staleGps.has(candidate);
+
     const tzSamples: TzSample[] = [];
     // Dedup by File IDENTITY, not basename: two DISTINCT files can share a
     // basename (a Viofo RO/ protected copy vs its Movie/ sibling, or the same
@@ -2504,12 +2611,12 @@ export function rederiveStartUtcForCandidates(
         if (seen.has(c.file)) continue;
         // firstSyncedRecord, not records[0]: cold-start (timeUnsynced) rows carry
         // a placeholder clock and must not feed the TZ estimate.
-        const firstSynced = firstSyncedRecord(c.records);
+        const firstSynced = firstSyncedRecord(usableCandidateRecords(c));
         if (!firstSynced) continue;
         seen.add(c.file);
         tzSamples.push({
             file: { file: c.file, relativePath: c.relativePath },
-            fingerprint: c.fingerprint,
+            fingerprint: candidateGroupingKey(c),
             firstGpsUnix: firstSynced.unixSeconds,
             mvhdNaiveUnix: c.createdUtc !== null ? c.createdUtc.getTime() / 1000 : null,
             durationSec: c.durationSec,
@@ -2533,7 +2640,7 @@ export function rederiveStartUtcForCandidates(
             isTimelapse: c.isTimelapse || canInferTimelapse,
             durationSec: c.durationSec,
             createdUtc: c.createdUtc,
-            records: c.records,
+            records: usableCandidateRecords(c),
             filenameNaiveSec: filenameLocal !== null ? filenameLocal.getTime() / 1000 : null,
         });
         if (!c.isTimelapse && canInferTimelapse && c.wallDurationSec !== null) {
@@ -2552,20 +2659,23 @@ export function rederiveStartUtcForCandidates(
     // Per-fingerprint tally of clips whose mvhd could not be reconciled with
     // their own GPS window (see the tripwire log after the loop).
     const mvhdRejects = new Map<string, number[]>();
-
+    const anchors = new Map<VideoCandidate, ReturnType<typeof deriveStartUtc>>();
+    const recoverySamples = new Map<string, TzSample>();
     for (const c of candidates) {
         const vendorFile = { file: c.file, relativePath: c.relativePath };
-        const { startUtc, source, mvhdRejected } = deriveStartUtc({
+        if (c.hasStaleGps) continue;
+        const scope = candidateGroupingKey(c);
+        const derived = deriveStartUtc({
             file: vendorFile,
             fingerprint: c.fingerprint,
             createdUtc: c.createdUtc,
             durationSec: c.durationSec,
             records: c.records,
-            fingerprintTz: tzByFingerprint.get(c.fingerprint) ?? null,
+            fingerprintTz: tzByFingerprint.get(scope) ?? null,
             parseFilenameLocalTime: memoizedFilenameTime,
             preciseFilenameOffsetSec: resolvePreciseClockOffsetForFile(
                 preciseOffsetRuns,
-                c.fingerprint,
+                scope,
                 vendorFile,
                 memoizedFilenameTime,
             ),
@@ -2573,12 +2683,70 @@ export function rederiveStartUtcForCandidates(
             isTimelapse: c.isTimelapse,
             wallDurationSec: c.wallDurationSec,
         });
+        anchors.set(c, derived);
+        const first = firstSyncedRecord(c.records);
+        const last = lastSyncedRecord(c.records);
+        const name = memoizedFilenameTime(vendorFile);
+        if (
+            name &&
+            first &&
+            last &&
+            last.unixSeconds > first.unixSeconds &&
+            (derived.source === "mp4" || derived.source === "name")
+        ) {
+            const key = JSON.stringify([scope, name.getTime()]);
+            // Simultaneous channels corroborate one recording, not several.
+            if (!recoverySamples.has(key) || c.channel === "front")
+                recoverySamples.set(key, {
+                    file: vendorFile,
+                    fingerprint: scope,
+                    firstGpsUnix: derived.startUtc,
+                    mvhdNaiveUnix: null,
+                    durationSec: c.durationSec,
+                });
+        }
+    }
+    const recoveryRuns = estimatePreciseClockOffsetByFingerprint([...recoverySamples.values()], memoizedFilenameTime);
+    for (const [scope, runs] of recoveryRuns) {
+        recoveryRuns.set(
+            scope,
+            runs.filter((run) => {
+                const offsets = [...recoverySamples.values()]
+                    .filter((sample) => sample.fingerprint === scope)
+                    .flatMap((sample) => {
+                        const name = memoizedFilenameTime(sample.file)!.getTime() / 1000;
+                        return name >= run.startNameUnix && name <= run.endNameUnix ? [name - sample.firstGpsUnix] : [];
+                    });
+                return Math.max(...offsets) - Math.min(...offsets) <= GPS_WINDOW_TOLERANCE_SEC;
+            }),
+        );
+    }
+    for (const c of candidates) {
+        const scope = candidateGroupingKey(c);
+        let derived = anchors.get(c);
+        let hasRecoveryOffset = false;
+        if (c.hasStaleGps) {
+            const name = memoizedFilenameTime(c);
+            if (name !== null) {
+                const offset = resolvePreciseClockOffsetForFile(recoveryRuns, scope, c, memoizedFilenameTime);
+                hasRecoveryOffset = offset !== null;
+                const naive = name.getTime() / 1000;
+                derived = {
+                    startUtc: offset !== null ? naive - offset : localUnixFromNaiveClock(naive),
+                    source: "name",
+                };
+            }
+        }
+        if (!derived) throw new Error("recording has no clock anchor");
+        const { startUtc, source, mvhdRejected } = derived;
         c.startUtc = startUtc;
         c.startSource = source;
+        c.hasUncalibratedClock = c.hasStaleGps === true && !hasRecoveryOffset;
         // Display-layer snapshot, NOT an anchor input: the UI renders
         // startUtc + this (see displayTzSec). filenameTzSec only - the mvhd
         // estimate reflects the container clock, not the OSD clock.
-        c.cameraTzSec = tzByFingerprint.get(c.fingerprint)?.filenameTzSec ?? null;
+        c.cameraTzSec =
+            c.hasStaleGps && !hasRecoveryOffset ? null : (tzByFingerprint.get(scope)?.filenameTzSec ?? null);
         if (mvhdRejected && c.createdUtc !== null) {
             const firstSynced = firstSyncedRecord(c.records);
             if (firstSynced) {
@@ -2594,7 +2762,7 @@ export function rederiveStartUtcForCandidates(
         // position, unsynced clock) onto the video window - the WALL window
         // for a time-lapse clip (its records cover real seconds, not video
         // seconds). No-op when none.
-        reanchorUnsyncedTimes(c.records, startUtc, c.wallDurationSec ?? c.durationSec);
+        reanchorUnsyncedTimes(usableCandidateRecords(c), startUtc, c.wallDurationSec ?? c.durationSec);
     }
 
     // Tripwire for the class of bug where a camera stamps one of its two clocks

@@ -24,6 +24,7 @@ import type { VendorFile } from "../parsers/types.js";
 import { cameraFingerprint } from "../parsers/camera-fingerprint.js";
 import { classifyFilenameTime } from "../parsers/filename/index.js";
 import { estimatePreciseClockOffsetByFingerprint, estimateTzByFingerprint, tripAllCandidates } from "../trips.js";
+import { usableCandidateRecords } from "../stale-gps.js";
 import type { Trip, TzSample, VideoCandidate } from "../trips.js";
 
 import { registerIngestSource } from "./folder-sources.js";
@@ -577,7 +578,7 @@ async function ingestFilesInternal(
             }
         }
         for (const c of allCandidates) {
-            const firstSynced = firstSyncedRecord(c.records);
+            const firstSynced = firstSyncedRecord(usableCandidateRecords(c));
             if (firstSynced && !seen.has(c.file)) {
                 tzSamples.push({
                     file: { file: c.file, relativePath: c.relativePath },

@@ -60,6 +60,7 @@ export type FilenameSequenceTechnique = FilenameTechnique<number>;
  * timestamps happen to fall inside the 30s snap window.
  */
 export type FilenameCameraKeyTechnique = FilenameTechnique<string>;
+export type FilenameRecordingKeyTechnique = FilenameTechnique<string>;
 
 /** Walk result: the value plus the id of the technique that produced it. */
 export interface FilenameMatch<T> {

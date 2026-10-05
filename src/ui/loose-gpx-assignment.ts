@@ -3,6 +3,7 @@
 // evidence only; the modal still requires the user to confirm every mapping.
 
 import { recordsHaveGps } from "../parser.js";
+import { usableCandidateRecords } from "../stale-gps.js";
 import type { GpxTimeRange } from "../parsers/sidecars/gpx.js";
 import type { GpsRecord, VendorFile } from "../parsers/types.js";
 import { pickFrameChannel, tripAllCandidates, type Trip } from "../trips.js";
@@ -44,12 +45,14 @@ export function looseGpxTargets(
             videoKey: vendorFileKey(anchor),
             label: formatTripTitle(trip),
             hasGps:
-                candidates.some((candidate) => recordsHaveGps(candidate.records)) ||
+                candidates.some((candidate) => recordsHaveGps(usableCandidateRecords(candidate))) ||
                 candidates.some((candidate) => protectedGpsVideoKeys.has(vendorFileKey(candidate))),
             // Filesystem mtime is explicitly a fallback, not recording-clock
             // evidence. One uncertain clip makes the provisional trip unsafe
             // for an automatic recommendation.
-            timeReliable: candidates.every((candidate) => candidate.startSource !== "mtime"),
+            timeReliable: candidates.every(
+                (candidate) => candidate.startSource !== "mtime" && !candidate.hasUncalibratedClock,
+            ),
             footageRanges: tripFootageRanges(trip),
         });
     }

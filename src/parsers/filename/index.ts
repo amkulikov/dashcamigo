@@ -15,6 +15,7 @@ import { FILENAME_CAMERA_KEY } from "./camera-key.js";
 import { FILENAME_CHANNEL } from "./channel.js";
 import { FILENAME_MODE } from "./mode.js";
 import { FILENAME_SEQUENCE } from "./sequence.js";
+import { FILENAME_RECORDING_KEY } from "./recording-key.js";
 import { FILENAME_TIME } from "./time.js";
 import { FILENAME_CLOCK_TIMELAPSE, FILENAME_TIMELAPSE } from "./timelapse.js";
 import type { ChannelMatch, FilenameMatch, FilenameTechnique } from "./types.js";
@@ -80,4 +81,9 @@ export function classifyFilenameClockTimelapse(file: VendorFile): boolean {
  */
 export function classifyFilenameCameraKey(file: VendorFile): string | null {
     return walk(FILENAME_CAMERA_KEY, file).value;
+}
+
+/** Exact recording identity shared by synchronized sibling channels. */
+export function classifyFilenameRecordingKey(file: VendorFile): string | null {
+    return walk(FILENAME_RECORDING_KEY, file).value;
 }

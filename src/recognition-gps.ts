@@ -1,4 +1,5 @@
 import { recordsHaveGps } from "./parser.js";
+import { usableCandidateRecords } from "./stale-gps.js";
 import { tripAllCandidates, type Trip, type VideoCandidate } from "./trips.js";
 import { vendorFileKey } from "./vendor-file-key.js";
 
@@ -25,6 +26,10 @@ export function failedGpsFilesForTrip(trip: Trip, status: GpsRecognitionState): 
     const candidates = tripAllCandidates(trip);
     if (hasUnfinishedRecognition(candidates, status)) return [];
     // GPS may live on another camera or arrive from a separately loaded track.
-    if (recordsHaveGps(trip.records) || candidates.some((candidate) => recordsHaveGps(candidate.records))) return [];
+    if (
+        recordsHaveGps(trip.records) ||
+        candidates.some((candidate) => recordsHaveGps(usableCandidateRecords(candidate)))
+    )
+        return [];
     return candidates.filter((candidate) => status.failedEmbeddedGps.has(vendorFileKey(candidate))).map(vendorFileKey);
 }

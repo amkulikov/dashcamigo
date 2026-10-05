@@ -42,6 +42,8 @@ interface DiagFileEntry {
     };
     channel: string | null;
     startSource: string;
+    hasStaleGps: boolean;
+    hasUncalibratedClock: boolean;
     canPlay: boolean;
 }
 
@@ -145,6 +147,8 @@ export function collectDiagnostics(extras?: { storageQuota?: number; storageUsag
                     classifierMatches: cand.classifierMatches,
                     channel,
                     startSource: cand.startSource,
+                    hasStaleGps: cand.hasStaleGps === true,
+                    hasUncalibratedClock: cand.hasUncalibratedClock === true,
                     canPlay: cand.canPlay,
                 });
             }
@@ -261,7 +265,7 @@ export function serializeDiagnosticsText(p: DiagPayload): string {
         const nameMatch = `time=${cm.time ?? "-"} cam=${cm.channel ?? "-"} mode=${cm.mode ?? "-"} seq=${cm.sequence ?? "-"}`;
         const gps = f.appliedExtractors.length > 0 ? f.appliedExtractors.join("+") : "none";
         push(
-            `${f.name} · ${f.sizeBytes} B · ${dur} · ${f.codec ?? "?"} · fp=${f.fingerprint} · cam=${f.channel ?? "-"} · start=${f.startSource} · play=${f.canPlay} · gps=${gps} · name[${nameMatch}]`,
+            `${f.name} · ${f.sizeBytes} B · ${dur} · ${f.codec ?? "?"} · fp=${f.fingerprint} · cam=${f.channel ?? "-"} · start=${f.startSource} · play=${f.canPlay} · gps=${gps}${f.hasStaleGps ? " · gps-clock=repeated" : ""}${f.hasUncalibratedClock ? " · clock=uncalibrated" : ""} · name[${nameMatch}]`,
         );
     }
     push();
