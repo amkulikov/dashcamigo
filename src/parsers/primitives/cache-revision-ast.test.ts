@@ -14,11 +14,6 @@ describe("canonicalProgram", () => {
         ["redundant parentheses", "const a = b + c;", "const a = (b + c);"],
         ["number spelling", "const a = 16;", "const a = 0x10;"],
         ["string quotes", 'const a = "x";', "const a = 'x';"],
-        [
-            "deconflict suffix numbers",
-            "const log$1 = 1; const log$2 = 2; export { log$1 as a, log$2 as b };",
-            "const log$3 = 1; const log$7 = 2; export { log$3 as a, log$7 as b };",
-        ],
     ])("ignores %s", (_label, left, right) => {
         expect(canonical(left)).toBe(canonical(right));
     });
@@ -31,6 +26,29 @@ describe("canonicalProgram", () => {
         ["regex flags", "const a = /x/g;", "const a = /x/gi;"],
         ["a bigint", "const a = 1n;", "const a = 2n;"],
         ["an identifier", "const a = b;", "const a = c;"],
+        ["a suffixed free variable", "export default value$1;", "export default value$2;"],
+        ["a suffixed property read", "export default record.value$1;", "export default record.value$2;"],
+        ["a suffixed property key", "export default { value$1: 1 };", "export default { value$2: 1 };"],
+        [
+            "a suffixed destructuring key",
+            "const { value$1: value } = record; export default value;",
+            "const { value$2: value } = record; export default value;",
+        ],
+        [
+            "a suffixed import name",
+            'import { parse$1 as parse } from "external"; export default parse;',
+            'import { parse$2 as parse } from "external"; export default parse;',
+        ],
+        [
+            "a suffixed export name",
+            "const value = 1; export { value as result$1 };",
+            "const value = 1; export { value as result$2 };",
+        ],
+        [
+            "an observable suffixed function name",
+            "function parse$1() {} export default parse$1.name;",
+            "function parse$2() {} export default parse$2.name;",
+        ],
         [
             "which deconflicted binding a reference uses",
             "const log$1 = 1; const log$2 = 2; export { log$1 as a, log$2 as b };",
