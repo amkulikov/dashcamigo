@@ -1,6 +1,15 @@
 import type { Page } from "@playwright/test";
 import { computeTrackerAssets } from "../../vite-plugins/tracker-assets.js";
-import { DESKTOP, expect, gotoApp, loadTrip, openExport, presetLocalStorage, test } from "./_fixtures.js";
+import {
+    DESKTOP,
+    expect,
+    gotoApp,
+    loadTrip,
+    openExport,
+    pausePlayback,
+    presetLocalStorage,
+    test,
+} from "./_fixtures.js";
 
 test.use({ serviceWorkers: "block" });
 
@@ -77,11 +86,15 @@ async function openBlurProgress(page: Page): Promise<void> {
     await includes.nth(2).click();
     await includes.nth(1).click();
     await expect(page.locator(".top-panel__channel-include:checked")).toHaveCount(1);
+    await pausePlayback(page);
 }
 
 async function addCenteredZone(page: Page): Promise<void> {
+    const rows = page.locator(".export-panel__blur-row");
+    const count = await rows.count();
     await page.locator(".export-panel__blur-add-btn").click();
     await page.locator(".blur-draw-layer").press("Enter");
+    await expect(rows).toHaveCount(count + 1);
 }
 
 test("Follow progress preserves zone rows and keyboard focus", async ({ page }) => {
