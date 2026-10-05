@@ -7,6 +7,15 @@ User-facing changes, newest first. Dates are when the change landed on
 [beta](https://beta.dashcamigo.app); production picks it up with the next
 release tag. Localized texts ship inside the app (the "What's new" panel).
 
+## 2026-10-05
+
+- **Improved:** Diagnostic reports include more GPU details.
+- **New camera support:** RedTiger F17.
+
+## 2026-10-04
+
+- **Improved:** Dependency updates.
+
 ## 2026-09-29
 
 - **Improved:** Dependency updates.

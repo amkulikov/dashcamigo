@@ -28,6 +28,54 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-10-05.2",
+        category: "improvement",
+        text: {
+            en: "Diagnostic reports include more GPU details.",
+            ru: "В диагностических отчётах больше сведений о GPU.",
+            de: "Diagnoseberichte enthalten mehr Details zur GPU.",
+            es: "Los informes de diagnóstico incluyen más detalles sobre la GPU.",
+            fr: "Les rapports de diagnostic incluent plus de détails sur le GPU.",
+            pl: "Raporty diagnostyczne zawierają więcej szczegółów o GPU.",
+            pt: "Os relatórios de diagnóstico incluem mais detalhes sobre a GPU.",
+            zh: "诊断报告包含更多 GPU 详细信息。",
+            ja: "診断レポートに GPU の詳細情報を追加しました。",
+            ko: "진단 보고서에 GPU 정보가 더 자세히 표시돼요.",
+        },
+    },
+    {
+        id: "2026-10-05.1",
+        category: "support",
+        text: {
+            en: "RedTiger F17.",
+            ru: "Добавлена поддержка RedTiger F17.",
+            de: "Unterstützung für RedTiger F17 hinzugefügt.",
+            es: "Se ha añadido compatibilidad con RedTiger F17.",
+            fr: "Ajout de la prise en charge de RedTiger F17.",
+            pl: "Dodano obsługę RedTiger F17.",
+            pt: "Adicionado suporte para RedTiger F17.",
+            zh: "新增对 RedTiger F17 的支持。",
+            ja: "RedTiger F17 に対応しました。",
+            ko: "RedTiger F17 지원이 추가됐어요.",
+        },
+    },
+    {
+        id: "2026-10-04.1",
+        category: "improvement",
+        text: {
+            en: "Dependency updates.",
+            ru: "Обновление зависимостей.",
+            de: "Aktualisierte Abhängigkeiten.",
+            es: "Actualización de dependencias.",
+            fr: "Mise à jour des dépendances.",
+            pl: "Aktualizacja zależności.",
+            pt: "Atualização de dependências.",
+            zh: "依赖更新。",
+            ja: "依存ライブラリの更新。",
+            ko: "의존성 업데이트.",
+        },
+    },
+    {
         id: "2026-09-29.1",
         category: "improvement",
         text: {
