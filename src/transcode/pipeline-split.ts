@@ -10,6 +10,7 @@
 //  - getSample(localTime) for that tripTime, one composition via drawSplitScreen.
 
 import { resolveOutputFps } from "./frame-rate.js";
+import { createVideoEncodingDiagnostics } from "./encoder-diagnostics.js";
 import type { CameraFlip } from "../camera-flip.js";
 import { Input, type VideoSample, VideoSampleSink } from "mediabunny";
 import { createRetryingBlobSource } from "../retrying-blob-source.js";
@@ -267,7 +268,8 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
 
         // Encoder + AAC target shared with pipeline.ts via pipeline-common - one
         // place so a tuning fix cannot land on one pipeline only.
-        const videoSource = createH264VideoSource(canvas, bitrate);
+        const encoderDiagnostics = createVideoEncodingDiagnostics();
+        const videoSource = createH264VideoSource(canvas, bitrate, encoderDiagnostics);
         out.addVideoTrack(videoSource, { frameRate: outputFps });
 
         // Audio plan from the master channel: passthrough (stream-copy AAC/MP3, no
@@ -853,10 +855,9 @@ export async function transcodeSplit(args: TranscodeSplitArgs): Promise<Transcod
             framesEncoded: framesDone,
             durationSec: round2(framesDone * (1 / outputFps)),
             sizeBytes: totalBytesWritten,
-            // See pipeline.ts: requested vs delivered is the one pair that tells a
-            // too-low budget apart from an encoder that undershot it.
             bitrateKbps: Math.round(bitrate / 1000),
             achievedKbps: achievedKbps(totalBytesWritten, framesDone / outputFps),
+            ...encoderDiagnostics.summarize(),
             elapsedMs: Math.round(performance.now() - startMs),
             mapOverlayDropped: mapOverlayFailed,
             decodeTruncated,

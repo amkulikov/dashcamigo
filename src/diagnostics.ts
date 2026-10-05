@@ -20,6 +20,8 @@
 // file, so the download is the real review point.
 
 import { getLogBuffer } from "./log.js";
+import { capabilitySignature, detectCapabilities } from "./capabilities.js";
+import { collectGraphicsDiagnostics, type GraphicsDiagnostics } from "./graphics-diagnostics.js";
 import { tripAllCandidates } from "./trips.js";
 import { isPipLayout, mainChannel, state } from "./ui/state.js";
 import { APP_VERSION } from "./version.js";
@@ -73,6 +75,8 @@ interface DiagPayload {
     onLine: boolean;
     hardwareConcurrency: number | null;
     deviceMemory: number | null;
+    capabilities: string;
+    graphics: GraphicsDiagnostics;
     storageQuota: number | null;
     storageUsage: number | null;
     state: {
@@ -97,7 +101,7 @@ interface DiagPayload {
 }
 
 /**
- * Collects diagnostics into a flat JSON object. Idempotent and side-effect free.
+ * Collects a local snapshot, including a short-lived graphics probe.
  *
  * Synchronous by design: navigator.storage.estimate() could provide quota/usage
  * but is async. Callers that need it can call estimate() themselves and pass the
@@ -171,6 +175,8 @@ export function collectDiagnostics(extras?: { storageQuota?: number; storageUsag
         onLine: navigator.onLine,
         hardwareConcurrency: navigator.hardwareConcurrency || null,
         deviceMemory: navAny.deviceMemory ?? null,
+        capabilities: capabilitySignature(detectCapabilities()),
+        graphics: collectGraphicsDiagnostics(),
         storageQuota: extras?.storageQuota ?? null,
         storageUsage: extras?.storageUsage ?? null,
         state: {
@@ -240,10 +246,23 @@ export function serializeDiagnosticsText(p: DiagPayload): string {
     push(`online: ${p.onLine}`);
     if (p.hardwareConcurrency != null) push(`cpu threads: ${p.hardwareConcurrency}`);
     if (p.deviceMemory != null) push(`device memory: ${p.deviceMemory} GB`);
+    push(`startup capabilities: ${p.capabilities}`);
     if (p.storageQuota != null || p.storageUsage != null) {
         push(`storage: ${p.storageUsage ?? "?"} / ${p.storageQuota ?? "?"} bytes`);
     }
     push(`captured: ${p.capturedAt}`);
+    push();
+
+    const g = p.graphics;
+    push("== graphics ==");
+    push(`context: ${g.context}`);
+    push(`vendor: ${g.vendor ?? "unavailable"}`);
+    push(`renderer: ${g.renderer ?? "unavailable"}`);
+    push(`unmasked vendor: ${g.unmaskedVendor ?? "unavailable"}`);
+    push(`unmasked renderer: ${g.unmaskedRenderer ?? "unavailable"}`);
+    if (g.error) push(`probe error: ${g.error}`);
+    push("The WebGL renderer does not identify the video encoder.");
+    push("Video encoder implementation and driver: not exposed by WebCodecs.");
     push();
 
     const s = p.state;

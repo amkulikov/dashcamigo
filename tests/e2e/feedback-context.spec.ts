@@ -145,6 +145,10 @@ test.describe("contextual feedback", () => {
         await page.locator("#feedback-primary").click();
         const download = await downloadPromise;
         const report = readFileSync(await download.path(), "utf8");
+        expect(report).toContain("startup capabilities:");
+        expect(report).toContain("== graphics ==\ncontext: webgl2");
+        expect(report).toMatch(/\nrenderer: (?!unavailable).+/);
+        expect(report).toContain("Video encoder implementation and driver: not exposed by WebCodecs.");
         expect(report).toContain("== recognition issue ==\nembedded GPS reader failed for the open trip");
         expect(report).toContain(`File: ${original.file}`);
         expect(report).toContain(`active: trip ${original.trip} / frame ${original.frame}`);

@@ -92,6 +92,14 @@ test("plays and seeks offline, draws GPS and exports manual blur with a route ov
     await expect(page.locator('.video-tile[data-channel="front"] .blur-box:not([hidden])')).toBeVisible();
     await page.screenshot({ path: info.outputPath("manual-blur-route-overlay.png") });
     await saveAndInspectVideo(page, info.outputPath("blur-route.mp4"));
+    await page.locator("#feedback-btn").click();
+    await page.locator("#feedback-recordings-skip").click();
+    const reportPromise = page.waitForEvent("download");
+    await page.locator("#feedback-primary").click();
+    const report = await readFile(await (await reportPromise).path(), "utf8");
+    expect(report).toContain("== graphics ==\ncontext: webgl2");
+    expect(report).toContain("video encoder config requested");
+    expect(report).toMatch(/videoBitrateKbps=\d+/);
     expect(workerNamesSeen).toContain("transcode-worker");
     expect(await readFile(fileURLToPath(htmlUrl)), "opening a card leaves its portable HTML unchanged").toEqual(
         htmlBefore,

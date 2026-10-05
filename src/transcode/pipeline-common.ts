@@ -23,6 +23,7 @@ import {
 } from "mediabunny";
 
 import { createLogger } from "../log.js";
+import type { VideoEncodingDiagnostics } from "./encoder-diagnostics.js";
 import { createExportHeartbeat } from "./export-heartbeat.js";
 import { isSourceReadError } from "../source-read-error.js";
 import { getInputTimeOrigin } from "../media-time.js";
@@ -439,7 +440,7 @@ export async function feedSegmentAudioCopy(opts: {
  * The encoder config both pipelines and both source flavours must share - one
  * place so a tuning fix cannot land on one path only.
  */
-function h264EncodingConfig(bitrate: number): VideoEncodingConfig {
+function h264EncodingConfig(bitrate: number, diagnostics: VideoEncodingDiagnostics): VideoEncodingConfig {
     return {
         // mediabunny's universal H.264 type - it selects the avcC
         // profile/level automatically from the encoded stream.
@@ -474,6 +475,8 @@ function h264EncodingConfig(bitrate: number): VideoEncodingConfig {
         // without a hardware H.264 encoder (headless Linux CI, software-only
         // desktops) instead of degrading. See media-source.js encoder init.
         hardwareAcceleration: "no-preference",
+        onEncoderConfig: diagnostics.onEncoderConfig,
+        onEncodedPacket: diagnostics.onEncodedPacket,
     };
 }
 
@@ -484,8 +487,12 @@ function h264EncodingConfig(bitrate: number): VideoEncodingConfig {
  * frame is composited - the split pipeline, and single-channel exports that
  * paint anything on top of the video.
  */
-export function createH264VideoSource(canvas: OffscreenCanvas, bitrate: number): CanvasSource {
-    return new CanvasSource(canvas, h264EncodingConfig(bitrate));
+export function createH264VideoSource(
+    canvas: OffscreenCanvas,
+    bitrate: number,
+    diagnostics: VideoEncodingDiagnostics,
+): CanvasSource {
+    return new CanvasSource(canvas, h264EncodingConfig(bitrate, diagnostics));
 }
 
 /**
@@ -496,8 +503,8 @@ export function createH264VideoSource(canvas: OffscreenCanvas, bitrate: number):
  * caller wraps its canvas in a VideoSample for the frames that DO need
  * compositing, which is exactly what CanvasSource does internally.
  */
-export function createH264SampleSource(bitrate: number): VideoSampleSource {
-    return new VideoSampleSource(h264EncodingConfig(bitrate));
+export function createH264SampleSource(bitrate: number, diagnostics: VideoEncodingDiagnostics): VideoSampleSource {
+    return new VideoSampleSource(h264EncodingConfig(bitrate, diagnostics));
 }
 
 /**

@@ -169,6 +169,7 @@ test.describe("export run", () => {
         // stream-copies its packets through the compositing export with NO audio
         // encoder (the codec-stripped-Chromium fix). A regression here = silent clip.
         expect(r!.soun, "audio (AAC passthrough) must survive the re-encode export").toBe(true);
+        await expectEncoderDiagnostics(page, "split transcode done");
     });
 
     test("re-encode single channel takes the composite-free path", async ({ page, browserName }) => {
@@ -210,8 +211,59 @@ test.describe("export run", () => {
         expect(done, "the transcode worker must have logged its done line").not.toBeNull();
         expect(done!.framesEncoded, "frames must have been encoded").toBeGreaterThan(0);
         expect(done!.framesDirect, "every frame should have bypassed the canvas").toBe(done!.framesEncoded);
+        await expectEncoderDiagnostics(page, "transcode done");
     });
 });
+
+async function expectEncoderDiagnostics(page: Page, doneMessage: string): Promise<void> {
+    const { bytes, config, summary } = await page.evaluate((doneMessage) => {
+        const logs = window.__dashcamigo.dumpLog().reverse();
+        const handle = (window as unknown as { __lastExportHandle: { _buf: Uint8Array } }).__lastExportHandle;
+        return {
+            bytes: Array.from(handle._buf),
+            config: logs.find((record) => record.msg === "video encoder config requested")?.ctx,
+            summary: logs.find((record) => record.msg === doneMessage)?.ctx,
+        };
+    }, doneMessage);
+    expect(config).toMatchObject({
+        bitrateMode: "variable",
+        latencyMode: "quality",
+        hardwareAcceleration: "no-preference",
+    });
+    expect(Math.round(Number(config?.bitrate) / 1000)).toBe(summary?.bitrateKbps);
+    const input = new Input({ source: new BufferSource(new Uint8Array(bytes)), formats: [MP4] });
+    try {
+        const video = (await input.getPrimaryVideoTrack())!;
+        let videoBytes = 0;
+        let packets = 0;
+        let keyPackets = 0;
+        let first = Infinity;
+        let last = -Infinity;
+        for await (const packet of new EncodedPacketSink(video).packets()) {
+            videoBytes += packet.byteLength;
+            packets++;
+            if (packet.type === "key") keyPackets++;
+            first = Math.min(first, packet.timestamp);
+            last = Math.max(last, packet.timestamp + packet.duration);
+        }
+        expect(summary).toMatchObject({ videoPackets: packets, videoKeyPackets: keyPackets, videoBytes });
+        expect(summary?.videoPackets).toBe(summary?.framesEncoded);
+        expect(summary?.encodedCodec).toMatch(/^avc1\./);
+        expect(summary?.videoBytes).toBeLessThan(bytes.length);
+        expect(Number(summary?.videoDurationSec)).toBeCloseTo(last - first, 5);
+        expect(summary?.videoBitrateKbps).toBe(Math.round((videoBytes * 8) / (last - first) / 1000));
+    } finally {
+        input.dispose();
+    }
+    await page.locator("#feedback-btn").click();
+    await page.locator("#feedback-recordings-skip").click();
+    const downloadPromise = page.waitForEvent("download");
+    await page.locator("#feedback-primary").click();
+    const report = readFileSync(await (await downloadPromise).path(), "utf8");
+    expect(report).toContain("video encoder config requested");
+    expect(report).toContain(`videoBytes=${summary?.videoBytes}`);
+    expect(report).toContain("export settings");
+}
 
 async function inspectTrimmedPlayback(page: Page, sources: number[][]) {
     return page.evaluate(async (sources) => {

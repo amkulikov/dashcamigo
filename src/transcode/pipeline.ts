@@ -37,6 +37,7 @@
 //  - canvas - one OffscreenCanvas for the entire exec, reused.
 
 import { resolveOutputFps } from "./frame-rate.js";
+import { createVideoEncodingDiagnostics } from "./encoder-diagnostics.js";
 import { hasCameraFlip } from "../camera-flip.js";
 import { Input, VideoSample, VideoSampleSink } from "mediabunny";
 import { createRetryingBlobSource } from "../retrying-blob-source.js";
@@ -191,8 +192,9 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
     // hardwareAcceleration rationale). The sample flavour is a superset of the
     // canvas one: composited frames are wrapped in a VideoSample here, which is
     // exactly what CanvasSource does internally.
-    const canvasSource = noOverlayLayer ? null : createH264VideoSource(canvas, bitrate);
-    const sampleSource = noOverlayLayer ? createH264SampleSource(bitrate) : null;
+    const encoderDiagnostics = createVideoEncodingDiagnostics();
+    const canvasSource = noOverlayLayer ? null : createH264VideoSource(canvas, bitrate, encoderDiagnostics);
+    const sampleSource = noOverlayLayer ? createH264SampleSource(bitrate, encoderDiagnostics) : null;
     out.addVideoTrack(canvasSource ?? sampleSource!, { frameRate: outputFps });
 
     /** Encodes the frame currently on the canvas at the output-axis timing. */
@@ -731,12 +733,10 @@ export async function transcode(args: TranscodeArgs): Promise<TranscodeResult> {
             framesDirect,
             durationSec: round2(outputDurationSec),
             sizeBytes: totalBytesWritten,
-            // Requested vs delivered. A "the export looks soft" report is otherwise
-            // undiagnosable: it separates a budget we set too low from an encoder
-            // that undershot the budget we asked for, and only the first is ours to
-            // fix. Both numbers are already in this file; the ratio is not.
+            // The file rate includes audio and container overhead; packet statistics isolate video.
             bitrateKbps: Math.round(bitrate / 1000),
             achievedKbps: achievedKbps(totalBytesWritten, outputDurationSec),
+            ...encoderDiagnostics.summarize(),
             elapsedMs: Math.round(performance.now() - startMs),
             mapOverlayDropped: mapOverlayFailed,
             decodeTruncated,

@@ -858,6 +858,7 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
     const slotPipPositions = state.composition.perSlotPipPositions.map((pos) => (pos ? { ...pos } : null));
     const slotPipScales = [...state.composition.perSlotScales];
     const quality = exportPanelState.quality;
+    const manualBitrateMbps = exportPanelState.manualBitrateMbps;
     const outputPresetId = exportPanelState.outputPresetId;
     const letterboxFill = exportPanelState.letterboxFill;
     const speedFactor = exportPanelState.speedFactor;
@@ -1162,6 +1163,19 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
         // Tagged so a failure thrown by the SINK can be told apart from a
         // source-side one that shares its DOMException name (see destination-error.ts).
         writable = tagSinkFailures(await mp4Handle.createWritable());
+
+        log.info("export settings", {
+            mode: streamCopy ? "stream-copy" : isSplit ? "composite" : "single",
+            quality,
+            manualBitrateMbps,
+            outputPresetId,
+            width: dims.width,
+            height: dims.height,
+            frameRate,
+            speedFactor,
+            desiredBitrate: streamCopy ? null : desiredBitrate,
+            encodeBitrate: streamCopy ? null : reencodeBitrate || desiredBitrate,
+        });
 
         if (streamCopy) {
             // exportClip closes `writable` itself via output.finalize() on
