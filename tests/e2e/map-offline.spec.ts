@@ -50,10 +50,12 @@ test("draws the local track while remote map bootstrap remains pending, includin
 });
 
 for (const hasOnlineEvent of [true, false]) {
-    test(`retries a failed map bootstrap ${hasOnlineEvent ? "when the browser reconnects" : "when the WAN returns without an online event"}`, async ({
-        page,
-        context,
-    }) => {
+    const recoveryTest = test.extend({
+        // The injected browser disconnect can fail an in-flight local asset request.
+        tolerateConsole: hasOnlineEvent ? [/^Failed to load resource: net::ERR_INTERNET_DISCONNECTED$/] : [],
+    });
+    const recovery = hasOnlineEvent ? "when the browser reconnects" : "when the WAN returns without an online event";
+    recoveryTest(`retries a failed map bootstrap ${recovery}`, async ({ page, context }) => {
         if (!hasOnlineEvent) await page.clock.install();
         let canLoadTiles = false;
         let bootstrapRequests = 0;
