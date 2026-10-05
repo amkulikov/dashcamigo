@@ -26,6 +26,7 @@ Thumbs.db
 /node_modules/
 /dist/
 /dist-portable/
+/dist-diagnostics/
 /.vite/
 *.tsbuildinfo
 

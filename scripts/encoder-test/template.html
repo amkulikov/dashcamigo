@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; worker-src blob:; style-src 'unsafe-inline'; connect-src 'none'">
+    <meta name="mediabunny-version" content="__MEDIABUNNY_VERSION__">
+    <title>Export test · dashcamigo</title>
+    <style>
+        :root { color-scheme: light; font-family: system-ui, -apple-system, sans-serif; color: #20302c; background: #f3f6f4; }
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 40px 20px; }
+        main { max-width: 850px; margin: auto; }
+        .brand { color: #386453; font-size: 18px; font-weight: 750; letter-spacing: -0.6px; margin-bottom: 28px; }
+        .card { background: #fff; border: 1px solid #dce5df; border-radius: 20px; padding: 36px; box-shadow: 0 8px 30px #20302c06; }
+        h1 { font-size: clamp(28px, 5vw, 36px); line-height: 1.15; letter-spacing: -1px; margin: 0 0 18px; }
+        p, li { line-height: 1.6; }
+        p { margin: 12px 0; }
+        .intro { max-width: 620px; font-size: 18px; }
+        ol { padding-left: 23px; margin: 24px 0; }
+        li { padding-left: 5px; margin: 7px 0; }
+        .muted { color: #52685e; font-size: 14px; }
+        .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+        button { border: 1px solid #bfd0c6; border-radius: 10px; padding: 12px 19px; background: #fff; color: #20302c; font: inherit; font-weight: 650; cursor: pointer; }
+        button.primary { background: #245d47; color: #fff; border-color: #245d47; }
+        button:hover:not(:disabled) { filter: brightness(0.94); }
+        button:focus-visible, summary:focus-visible { outline: 3px solid #93bfa8; outline-offset: 3px; }
+        button:disabled { opacity: 0.45; cursor: default; }
+        progress { width: 100%; height: 10px; accent-color: #245d47; margin-top: 28px; }
+        #status { min-height: 48px; margin-bottom: 0; }
+        details { margin-top: 22px; }
+        summary { cursor: pointer; font-weight: 600; }
+        .scroll { overflow: auto; max-height: 440px; margin-top: 16px; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
+        th, td { border-bottom: 1px solid #dce5df; padding: 10px 8px; white-space: nowrap; }
+        th { background: #f3f6f4; }
+        pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 ui-monospace, monospace; max-height: 320px; overflow: auto; padding: 16px; background: #f3f6f4; border-radius: 10px; }
+        footer { padding: 6px 4px; }
+        @media (max-width: 540px) { body { padding: 24px 14px; } .card { padding: 24px; } button { flex-grow: 1; } }
+    </style>
+</head>
+<body>
+<main>
+    <div class="brand">dashcamigo</div>
+    <section class="card" aria-labelledby="title">
+        <h1 id="title">Help us check video exports</h1>
+        <p class="intro">This test checks how your browser saves video at different quality settings.</p>
+        <ol>
+            <li>Open this file in <strong>Chrome on the computer where you noticed the problem</strong>.</li>
+            <li>Click <strong>Run test</strong> and keep this tab open. It may take a few minutes.</li>
+            <li>Click <strong>Download report</strong> and attach the file to your reply.</li>
+        </ol>
+        <p class="muted">The test creates its own moving pictures. You don’t need to select any recordings or install anything. Everything runs offline; nothing is sent automatically.</p>
+        <div class="actions">
+            <button id="run" class="primary" type="button">Run test</button>
+            <button id="stop" type="button" disabled>Stop</button>
+            <button id="download" type="button" disabled>Download report</button>
+        </div>
+        <progress id="progress" value="0" max="1" aria-label="Test progress"></progress>
+        <p id="status" role="status" aria-live="polite">Ready when you are.</p>
+        <noscript><p>JavaScript is disabled. Enable it in Chrome, then reopen this file.</p></noscript>
+        <details>
+            <summary>Technical details</summary>
+            <p class="muted">Compares native WebCodecs with bundled Mediabunny using H.264 at 5 and 32 Mbps, including VBR, CBR, resolution and software preference controls. A supported setting does not guarantee the target bitrate. Synthetic results may differ from real recordings.</p>
+            <div class="scroll">
+                <table><thead><tr><th>Test</th><th>Status</th><th>Measured video rate</th><th>Frames</th></tr></thead><tbody id="results"></tbody></table>
+            </div>
+            <pre id="report">The report will appear here after you start.</pre>
+        </details>
+    </section>
+    <footer>
+        <p class="muted">The report includes browser and graphics information, requested settings, measured output sizes and test errors. It does not include recordings or local file paths.</p>
+        <details class="muted"><summary>Source and licenses</summary><p>Build from the dashcamigo repository with <code>npm run build:encoder-test</code>. Sources: <code>scripts/encoder-test/</code>. Source repository: https://github.com/amkulikov/dashcamigo</p><pre>__LICENSES__</pre></details>
+    </footer>
+</main>
+<script id="worker-source" type="application/octet-stream">__WORKER_BASE64__</script>
+<script>__MAIN_SCRIPT__</script>
+</body>
+</html>
