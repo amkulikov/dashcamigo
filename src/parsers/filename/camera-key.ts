@@ -23,6 +23,7 @@ import type { VendorFile } from "../types.js";
 import {
     MAI70_MODE_FOLDERS,
     REDTIGER_MODE_FOLDERS,
+    eaceChannelFolderStem,
     RX_DATETIME_CHANNEL_TS,
     RX_70MAI,
     RX_70MAI_CHANNEL_STRIP,
@@ -309,7 +310,14 @@ const eaceCameraKey: FilenameCameraKeyTechnique = {
         } else {
             masked = maskName(file.file.name);
         }
-        const dir = strippedParentDir(file.relativePath, ["front", "rear", "inside", "interior"], [ch ?? ""]);
+        // A `<Mode>_<channel word>` leaf keeps only its mode stem: channels
+        // converge, while Event clips keep their own key. Unlike
+        // redtiger-camera-key, no corpus shows whether an event replaces its
+        // loop segment or duplicates it; a shared key would turn a duplicate
+        // into a dup frame inside the drive.
+        const stem = eaceChannelFolderStem(file.relativePath);
+        const path = stem === null ? file.relativePath : file.relativePath.replace(/[^/]+(?=\/[^/]+$)/, stem);
+        const dir = strippedParentDir(path, ["front", "rear", "inside", "interior"], [ch ?? ""]);
         return `e-ace|${dir}|${masked}`;
     },
 };

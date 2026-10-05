@@ -4,6 +4,7 @@
 
 import type { RecordingMode, VendorFile } from "../types.js";
 import {
+    eaceChannelFolderStem,
     RX_360_CARDVR_REC_PATH,
     RX_70MAI,
     RX_70MAI_PATH_MODE,
@@ -177,7 +178,8 @@ const ddpaiMode: FilenameModeTechnique = {
 const eaceMode: FilenameModeTechnique = {
     id: "e-ace-mode",
     extract(file: VendorFile): RecordingMode | null {
-        return RX_E_ACE.test(file.file.name) ? "normal" : null;
+        if (!RX_E_ACE.test(file.file.name)) return null;
+        return eaceChannelFolderStem(file.relativePath)?.toLowerCase() === "event" ? "event" : "normal";
     },
 };
 

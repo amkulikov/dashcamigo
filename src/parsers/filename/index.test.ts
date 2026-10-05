@@ -1397,6 +1397,32 @@ describe("timestamp plus channel-letter MP4 techniques", () => {
         }
     });
 
+    it("merges Video_<channel> sibling folders into one camera", () => {
+        const channelKeys = (root: string) =>
+            ["Front", "Inside", "Rear"].map((folder) => {
+                const name = `20260927_144534${folder[0]}.MP4`;
+                return cameraFingerprint(vf(name, `${root}/Video_${folder}/${name}`));
+            });
+        const keys = channelKeys("card");
+        expect(new Set(keys).size).toBe(1);
+        // A Windows drive-root pick surfaces as a `\` top segment.
+        expect(new Set(channelKeys("\\")).size, "drive-root pick").toBe(1);
+        expect(keys[0]).toBe(cameraFingerprint(vf("20260927_144834F.MP4", "card/Video_Front/20260927_144834F.MP4")));
+        expect(keys[0]).not.toBe(
+            cameraFingerprint(vf("20260927_144534F.MP4", "other/Video_Front/20260927_144534F.MP4")),
+        );
+    });
+
+    it("reads Event_<channel> folders as event clips of their own camera key", () => {
+        const front = vf("20260927_144534F.MP4", "card/Event_Front/20260927_144534F.MP4");
+        const rear = vf("20260927_144534R.MP4", "card/Event_Rear/20260927_144534R.MP4");
+        const loop = vf("20260927_144534F.MP4", "card/Video_Front/20260927_144534F.MP4");
+        expect(matchFilenameMode(front)).toEqual({ matchedId: "e-ace-mode", value: "event" });
+        expect(matchFilenameMode(loop)).toEqual({ matchedId: "e-ace-mode", value: "normal" });
+        expect(cameraFingerprint(rear)).toBe(cameraFingerprint(front));
+        expect(cameraFingerprint(front)).not.toBe(cameraFingerprint(loop));
+    });
+
     it("keeps an unseen letter in the same camera without claiming its mount", () => {
         const front = vf("20260101_120000F.MP4", "card/Front/20260101_120000F.MP4");
         const cabin = vf("20260101_120000C.MP4", "card/C/20260101_120000C.MP4");

@@ -120,6 +120,18 @@ export const RX_DDPAI_TIMESTAMP_TOKEN = /(\d{14})/;
 
 // E-Ace-shaped clips: digits_digits<channel>.mp4 (suffix optional on single-channel models).
 export const RX_E_ACE = /^(\d{8})_(\d{6})([A-Z])?\.mp4$/i;
+// Leaf folder of an E-Ace-shaped 3-channel card that splits streams into
+// `<Mode>_<channel word>/` siblings (RedTiger F17: Video_Front/, Video_Inside/,
+// Video_Rear/, with Event_* next to them). Group 1 = the mode stem.
+const RX_E_ACE_CHANNEL_FOLDER = /^(video|event)_(?:front|rear|inside)$/i;
+
+/** Mode stem ("Video"/"Event", case as on the card) of a path whose leaf
+ *  folder is an E-Ace `<Mode>_<channel word>` folder, or null. */
+export function eaceChannelFolderStem(relativePath: string): string | null {
+    const segs = relativePath.split("/");
+    if (segs.length < 2) return null;
+    return segs[segs.length - 2]!.match(RX_E_ACE_CHANNEL_FOLDER)?.[1] ?? null;
+}
 
 // Escort M2: digits_digits_CAM.mp4. Time has no seconds field.
 export const RX_ESCORT = /^(\d{8})_(\d{4})_CAM\.mp4$/i;
