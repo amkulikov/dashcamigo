@@ -564,11 +564,7 @@ function renderNotesPanel(): void {
                     actions.push(notesPanelAction(t("notesFile.choose"), () => connector.useExisting()));
                 }
             }
-            const labels = [notesStatusLabel(label)];
-            if (!canPersistFileHandles() && (status.state === "ready" || status.state === "connected")) {
-                labels.push(notesStatusLabel(t("notesFile.reopenHint")));
-            }
-            panel.replaceChildren(...labels, ...actions);
+            panel.replaceChildren(notesStatusLabel(label), ...actions);
         })
         .catch((err: unknown) => {
             log.warn("notes-file status failed", { err: err instanceof Error ? err.message : String(err) });
@@ -655,16 +651,7 @@ function buildRow(_sourceId: string, source: FolderSource, resolvedLabel?: strin
     label.title = displayLabel;
     row.appendChild(label);
 
-    if (!source.handle) return row;
-
-    if (!canPersistFileHandles()) {
-        const hint = document.createElement("span");
-        hint.className = "folder-source__state folder-source__reopen";
-        hint.textContent = t("folderSources.reopen");
-        hint.title = t("folderSources.reopenHint");
-        row.appendChild(hint);
-        return row;
-    }
+    if (!source.handle || !canPersistFileHandles()) return row;
 
     if (source.folderId) {
         const badge = document.createElement("span");

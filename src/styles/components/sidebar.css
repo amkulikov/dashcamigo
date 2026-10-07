@@ -1114,12 +1114,6 @@
     }
 }
 
-.notes-file > summary {
-    cursor: pointer;
-    padding-block: 8px;
-    font-size: var(--dc-text-sm);
-    color: var(--fg-dim);
-}
 .trip-events-list {
     border-top: 1px solid var(--border);
     padding: var(--dc-space-1) var(--dc-space-2);

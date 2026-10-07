@@ -140,8 +140,6 @@ export type I18nKey =
     | "folderSources.remembered"
     | "folderSources.rememberedHint"
     | "folderSources.rememberFailed"
-    | "folderSources.reopen"
-    | "folderSources.reopenHint"
     | "folderSources.menu"
     | "folderSources.menuAria"
     // current notes file, selected independently of folder settings
@@ -153,7 +151,6 @@ export type I18nKey =
     | "notesFile.session"
     | "notesFile.ready"
     | "notesFile.connected"
-    | "notesFile.reopenHint"
     | "notesFile.problem"
     | "notesFile.create"
     | "notesFile.choose"

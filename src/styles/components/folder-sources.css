@@ -24,8 +24,9 @@
 }
 
 .folder-sources-help {
-    /* The heading is the containing block, so the popup can start at the
-       sidebar's left edge instead of being clipped to the right of the icon. */
+    grid-column: 2;
+    grid-row: 1;
+    /* Anchor the popup to the section, not the small help icon. */
     position: static;
 }
 
@@ -33,8 +34,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: var(--notes-control-size);
+    height: var(--notes-control-size);
     border-radius: var(--dc-radius-sm);
     color: var(--fg-mute);
     cursor: pointer;
@@ -60,7 +61,7 @@
 .folder-sources-help__popup {
     position: absolute;
     z-index: var(--dc-z-popover);
-    top: calc(100% + var(--dc-space-1));
+    top: calc(var(--notes-control-size) + var(--dc-space-1));
     left: 0;
     width: min(19rem, 100%);
     padding: var(--dc-space-3);
@@ -217,8 +218,7 @@
 
 /* Keep adjacent folder actions apart when a finger replaces the pointer. */
 @media (pointer: coarse) {
-    .folder-source__menu,
-    .folder-sources-help summary {
+    .folder-source__menu {
         width: 44px;
         height: 44px;
     }
@@ -263,20 +263,34 @@
     }
 }
 
-.folder-source__reopen {
-    grid-column: 2 / -1;
-    grid-row: 2;
-    min-width: 0;
-    white-space: normal;
-    overflow-wrap: anywhere;
-}
-
-.notes-file {
+.notes-file-section {
+    --notes-control-size: 24px;
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) var(--notes-control-size);
+    align-items: start;
     margin-top: var(--dc-space-3);
 }
 
-.notes-file__heading {
-    margin-bottom: var(--dc-space-1);
+.notes-file {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    min-width: 0;
+}
+
+.notes-file > summary {
+    min-height: var(--notes-control-size);
+    padding-inline-end: var(--notes-control-size);
+    line-height: var(--notes-control-size);
+    cursor: pointer;
+    font-size: var(--dc-text-sm);
+    color: var(--fg-dim);
+}
+
+@media (pointer: coarse) {
+    .notes-file-section {
+        --notes-control-size: 44px;
+    }
 }
 
 .notes-file-status {
@@ -285,7 +299,7 @@
     align-items: baseline;
     gap: var(--dc-space-1) var(--dc-space-2);
     min-width: 0;
-    padding: 0 var(--dc-space-1);
+    padding: var(--dc-space-1) 0 0 var(--dc-space-3);
     color: var(--fg-mute);
     font-size: var(--dc-text-xs);
     line-height: 1.35;

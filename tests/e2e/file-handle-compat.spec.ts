@@ -33,15 +33,14 @@ test("keeps notes writable and annotations persistent without storing file handl
     const source = page.locator("#folder-sources .folder-source");
     await expect(source).toContainText("SESSION-CARD");
     await expect(source.locator(".folder-source__remember")).toHaveCount(0);
-    await expect(source.locator(".folder-source__state")).toHaveText("Reopen next time");
+    await expect(source.locator(".folder-source__state")).toHaveCount(0);
 
     await card.locator(".trip-fav").click();
     const storageModal = page.locator("#notes-storage-modal");
     await expect(storageModal).toBeVisible();
     await storageModal.getByRole("button", { name: "Save to a file" }).click();
     await expect(storageModal).toBeHidden();
-    await expect(page.locator("#notes-file-status")).toContainText("Saving to notes.dashcamigo");
-    await expect(page.locator("#notes-file-status")).toContainText("Choose this file again after reloading.");
+    await expect(page.locator(".notes-file-status__label")).toHaveText(["Saving to notes.dashcamigo."]);
     await captureHints(page, testInfo, "en");
     await expect
         .poll(
@@ -132,11 +131,8 @@ test("opens a native local directory and notes handle without crashing on reload
     const source = page.locator("#folder-sources .folder-source");
     await expect(source).toContainText("NATIVE-CARD");
     await expect(source.locator(".folder-source__remember")).toHaveCount(0);
-    await expect(source.locator(".folder-source__state")).toHaveText("В следующий раз открой заново");
-    await expect(page.locator("#notes-file-status")).toContainText("Файл notes.dashcamigo подключён");
-    await expect(page.locator("#notes-file-status")).toContainText(
-        "После перезагрузки страницы выбери этот файл заново.",
-    );
+    await expect(source.locator(".folder-source__state")).toHaveCount(0);
+    await expect(page.locator(".notes-file-status__label")).toHaveText(["notes.dashcamigo подключён."]);
     await captureHints(page, testInfo, "ru");
     await expect.poll(() => readPersistedState(page)).toEqual({ folders: 0, notesFiles: 0, favorites: 0 });
 
@@ -191,14 +187,29 @@ async function captureHints(page: Page, testInfo: TestInfo, locale: string): Pro
     ] as const) {
         await page.setViewportSize(viewport);
         const sidebar = await boxOf(page, "#sidebar");
-        for (const selector of [".folder-source__label", ".folder-source__reopen", "#notes-file-status"]) {
+        for (const selector of [".folder-source__label", "#notes-file-status", ".folder-sources-help > summary"]) {
             const element = await boxOf(page, selector);
             expect(element.x, `${selector} fits the ${locale} ${name} sidebar`).toBeGreaterThanOrEqual(sidebar.x);
             expect(element.x + element.width, `${selector} fits the ${locale} ${name} sidebar`).toBeLessThanOrEqual(
                 sidebar.x + sidebar.width,
             );
         }
+        const heading = await boxOf(page, ".notes-file > summary");
+        const help = await boxOf(page, ".folder-sources-help > summary");
+        expect(help.y + help.height / 2, "help stays aligned with the section heading").toBeCloseTo(
+            heading.y + heading.height / 2,
+            0,
+        );
         await page.screenshot({ path: testInfo.outputPath(`file-handle-hints-${locale}-${name}.png`) });
+        await page.locator(".folder-sources-help > summary").click();
+        await expect(page.locator(".folder-sources-help__popup")).toBeVisible();
+        const popup = await boxOf(page, ".folder-sources-help__popup");
+        expect(popup.x).toBeGreaterThanOrEqual(sidebar.x);
+        expect(popup.x + popup.width).toBeLessThanOrEqual(sidebar.x + sidebar.width);
+        await page.keyboard.press("Escape");
+        await expect(page.locator(".folder-sources-help__popup")).toBeHidden();
+        await expect(page.locator(".folder-sources-help > summary")).toBeFocused();
+        await expect(page.locator("#notes-file-status")).toBeVisible();
     }
     await page.setViewportSize(DESKTOP);
 }
