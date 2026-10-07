@@ -483,6 +483,7 @@ export const zhDict = {
     "player.zoom.minimap.aria": "缩放位置预览 — 点击或拖动以移动视图",
     "player.zoom.minimap.title": "滚轮缩放，拖动平移，Z 键复位",
     "player.zoom.reset": "重置缩放",
+    "speed.estimated": "估算速度",
     "player.metrics.placeholder": "-",
     "player.progress": "行程进度",
     "player.progress.position": "{total} 中 {cur}",

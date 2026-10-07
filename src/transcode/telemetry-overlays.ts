@@ -68,12 +68,12 @@ export function drawTelemetryOverlays(
     if (overlays.speed) {
         if (pos.hasFix) {
             drawWidgetBox(ctx, widthPx, heightPx, overlays.speed, style, accent, {
-                value: formatSpeedValue(pos.speedMs, units),
+                value: formatSpeedValue(pos.speedMs, units, pos.speedSource),
                 unit: overlays.unitSpeed,
                 valueScale: 1,
                 // Reserve 3 digits (0-999 km/h / mph) so the plate does not breathe
                 // as the reading crosses 9->10->100.
-                reserveValue: "000",
+                reserveValue: pos.speedSource === "estimated" ? "≈000" : "000",
                 // bold style turns this into the hero readout (accent + hazard
                 // stripe); min/card draw it plainly.
                 hero: true,

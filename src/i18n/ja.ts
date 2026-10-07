@@ -494,6 +494,7 @@ export const jaDict = {
     "player.zoom.minimap.aria": "拡大位置のプレビュー — クリックまたはドラッグで表示位置を移動",
     "player.zoom.minimap.title": "ホイール：ズーム、ドラッグ：移動、Z：リセット",
     "player.zoom.reset": "ズームをリセット",
+    "speed.estimated": "推定速度",
     "player.metrics.placeholder": "-",
     "player.progress": "走行の進捗",
     "player.progress.position": "{total} 中 {cur}",

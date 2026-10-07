@@ -9,7 +9,8 @@
 // Type-only: the Chart constructor is loaded lazily via loadChart() (see the
 // holder below). All `Chart` references in this file are type positions
 // (state.chart, callback params) and are erased at build.
-import type { Chart } from "chart.js/auto";
+import { hasSpeed, isSameTrackSegment } from "../gps-telemetry.js";
+import type { Chart, ChartDataset } from "chart.js/auto";
 
 // --- lazy chart.js loading (T9) ---
 //
@@ -852,7 +853,7 @@ export function initChart(cb: ChartCallbacks): void {
                     // fill removed - the trip strip background (G3) sits under the
                     // speed curve; a semi-transparent fill would obscure the frames.
                     fill: false,
-                    spanGaps: true,
+                    spanGaps: false,
                     parsing: false,
                     // tension + monotone mode smooth the 1 Hz "fence" into a
                     // continuous curve. Monotone does not overshoot beyond the data
@@ -2097,6 +2098,8 @@ export function rebuildChartFromTrip(trip: Trip): void {
     }
 
     const speedData: Array<{ x: number; y: number }> = [];
+    const estimatedIndices = new Set<number>();
+    let previous: Trip["records"][number] | undefined;
     const accelData: Array<{ x: number; y: number }> = [];
     for (const r of trip.records) {
         // Project the wall-clock record onto the footage axis so pauses collapse
@@ -2105,10 +2108,20 @@ export function rebuildChartFromTrip(trip: Trip): void {
         const x = wallToContentSec(trip.timeline, r.unixSeconds);
         // Speed scaled to the user's unit preference (km/h or mph); the Y-axis
         // overlay label is updated separately via syncSpeedAxisUnit().
-        if (r.active) speedData.push({ x, y: formatSpeedFromMs(r.speedMs).value });
+        if (previous && !isSameTrackSegment(previous, r)) {
+            speedData.push({ x: (wallToContentSec(trip.timeline, previous.unixSeconds) + x) / 2, y: Number.NaN });
+        }
+        if (r.speedSource === "estimated") estimatedIndices.add(speedData.length);
+        speedData.push({ x, y: r.active && hasSpeed(r) ? formatSpeedFromMs(r.speedMs).value : Number.NaN });
+        previous = r;
         accelData.push({ x, y: gMagnitude(r) });
     }
     state.chart.data.datasets[0]!.data = speedData;
+    const speedDataset = state.chart.data.datasets[0]! as ChartDataset<"line">;
+    speedDataset.segment = {
+        borderDash: (context) =>
+            estimatedIndices.has(context.p0DataIndex) || estimatedIndices.has(context.p1DataIndex) ? [4, 3] : [],
+    };
     state.chart.data.datasets[1]!.data = accelData;
     // options.scales.x comes as ScaleOptions | undefined; we know it was configured in initChart.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2116,7 +2129,7 @@ export function rebuildChartFromTrip(trip: Trip): void {
     xOpts.min = 0;
     xOpts.max = trip.timeline.contentDurationSec || 1;
     // GPS controls the speed axis; accelerometer-only recordings keep their own curve.
-    const noGps = speedData.length === 0;
+    const noGps = !speedData.some((point) => Number.isFinite(point.y));
     // A format without an accelerometer (e.g. GPS-only embedded tracks) yields
     // all-zero |G| - a flat line at 0 reads as "no G-force ever", so hide the
     // curve, its axis and the "g" unit overlay instead of charting zeros.

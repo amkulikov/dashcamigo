@@ -102,7 +102,7 @@ describe("gpxSidecar.parse", () => {
         expect(records[0]!.bearingDeg).toBeCloseTo(90, 6);
     });
 
-    it("defaults speed/course to 0 when missing", async () => {
+    it("marks a missing singleton speed unavailable", async () => {
         const text = gpxDoc(
             `<trk><trkseg><trkpt lat="55" lon="37"><time>2024-01-15T12:34:56Z</time></trkpt></trkseg></trk>`,
         );
@@ -392,8 +392,8 @@ describe("serializeGpx", () => {
 
     it("formats speed/course with 2 decimals", () => {
         const out = serializeGpx({ records: [rec(0, 0, 0, { speedMs: 12.3456, bearingDeg: 90.987 })], trackName: "t" });
-        expect(out).toContain("<speed>12.35</speed>");
-        expect(out).toContain("<course>90.99</course>");
+        expect(out).toContain('<dc:speed source="measured">12.35</dc:speed>');
+        expect(out).toContain("<dc:course>90.99</dc:course>");
     });
 
     it("metadata <time> takes first record's unix", () => {

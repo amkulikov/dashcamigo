@@ -7,6 +7,7 @@
 // deliberately Web Mercator: it must match how MapLibre measures line-progress,
 // or every consumer of these fractions lands at the wrong spot on the line.
 
+import { hasSpeed } from "../gps-telemetry.js";
 import type { GpsRecord } from "../parser.js";
 import { mercatorY, wrapDegrees } from "../coordinates.js";
 import { speedKmhToColor, themeColors } from "./theme.js";
@@ -54,13 +55,13 @@ export function buildSpeedGradient(recs: GpsRecord[], cumDist: number[], total: 
     // color (no line will be drawn anyway, but MapLibre still validates the
     // expression).
     if (recs.length < 2) {
-        const c = recs.length === 1 ? speedKmhToColor(recs[0]!.speedMs * 3.6) : themeColors().chartSpeed;
+        const c = recs.length === 1 ? recordSpeedColor(recs[0]!) : themeColors().chartSpeed;
         return ["interpolate", ["linear"], ["line-progress"], 0, c, 1, c];
     }
     if (total === 0) {
         // All points coincide - theoretically impossible after dedup, but
         // guard for numerical stability.
-        const c = speedKmhToColor(recs[0]!.speedMs * 3.6);
+        const c = recordSpeedColor(recs[0]!);
         return ["interpolate", ["linear"], ["line-progress"], 0, c, 1, c];
     }
 
@@ -72,7 +73,11 @@ export function buildSpeedGradient(recs: GpsRecord[], cumDist: number[], total: 
         let progress = i === recs.length - 1 ? 1 : cumDist[i]! / total;
         if (progress <= lastProgress) progress = lastProgress + 1e-9;
         lastProgress = progress;
-        stops.push(progress, speedKmhToColor(recs[i]!.speedMs * 3.6));
+        stops.push(progress, recordSpeedColor(recs[i]!));
     }
     return stops;
+}
+
+function recordSpeedColor(record: GpsRecord): string {
+    return hasSpeed(record) ? speedKmhToColor(record.speedMs * 3.6) : themeColors().chartSpeed;
 }

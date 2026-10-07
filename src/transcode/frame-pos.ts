@@ -11,7 +11,8 @@
 // real accelerometer still contribute: their lateral magnitude lifts gMag when
 // GPS smoothing misses a sharp event. All formulas are pure and unit-tested.
 
-import type { GpsRecord } from "../parsers/types.js";
+import type { GpsRecord, InterpolatedPosition, SpeedSample } from "../parsers/types.js";
+import { hasMeasuredSpeed, hasSpeed, interpolateSpeed, isSameTrackSegment } from "../gps-telemetry.js";
 
 /** Standard gravity (m/s^2) - converts m/s^2 to g. */
 const G = 9.80665;
@@ -24,10 +25,9 @@ const EARTH_R = 6_371_000;
 const DERIV_HALF_WINDOW_SEC = 1.5;
 
 /** Expanded per-frame position handed to the widget drawing code. */
-export interface FramePos {
+export interface FramePos extends SpeedSample {
     lat: number;
     lon: number;
-    speedMs: number;
     /** Course over ground, degrees [0..360). */
     headingDeg: number;
     /** Longitudinal g: negative = braking, positive = accelerating. */
@@ -77,7 +77,8 @@ export function computeCumulativeDistanceM(records: GpsRecord[]): number[] {
         if (i > 0) {
             const a = records[i - 1]!;
             const b = records[i]!;
-            if (drawable(a) && drawable(b)) acc += haversineMeters(a.lat, a.lon, b.lat, b.lon);
+            if (drawable(a) && drawable(b) && isSameTrackSegment(a, b))
+                acc += haversineMeters(a.lat, a.lon, b.lat, b.lon);
         }
         out[i] = acc;
     }
@@ -152,19 +153,17 @@ export function interpScalar(records: GpsRecord[], values: number[], target: num
 }
 
 /** Interpolated speed (m/s) at target, clamped to ends. */
-function interpSpeed(records: GpsRecord[], target: number): number {
+function speedAt(records: GpsRecord[], target: number): SpeedSample {
     const n = records.length;
-    if (n === 0) return 0;
-    if (n === 1) return records[0]!.speedMs;
+    if (n === 0) return { speedMs: 0, speedSource: "unavailable" };
     const i = lastLeq(records, target);
-    if (i < 0) return records[0]!.speedMs;
-    if (i >= n - 1) return records[n - 1]!.speedMs;
+    if (i < 0) return records[0]!;
+    if (i >= n - 1 || records[i]!.unixSeconds === target) return records[i]!;
     const a = records[i]!;
     const b = records[i + 1]!;
+    if (!isSameTrackSegment(a, b)) return { speedMs: 0, speedSource: "unavailable" };
     const span = b.unixSeconds - a.unixSeconds;
-    if (span <= 0) return a.speedMs;
-    const t = (target - a.unixSeconds) / span;
-    return a.speedMs + (b.speedMs - a.speedMs) * t;
+    return span <= 0 ? a : interpolateSpeed(a, b, (target - a.unixSeconds) / span);
 }
 
 /** Interpolated heading (deg) at target via shortest-arc, clamped to ends. */
@@ -189,28 +188,42 @@ function interpHeading(records: GpsRecord[], target: number): number {
     return h;
 }
 
+function hasMeasuredSpeedWindow(records: GpsRecord[], target: number): boolean {
+    if (records.length < 2) return false;
+    const start = Math.max(0, lastLeq(records, target - DERIV_HALF_WINDOW_SEC));
+    const end = Math.min(records.length - 1, lastLeq(records, target + DERIV_HALF_WINDOW_SEC) + 1);
+    for (let i = start; i <= end; i++) {
+        const record = records[i]!;
+        if (!record.active || !hasMeasuredSpeed(record)) return false;
+        if (i > start && !isSameTrackSegment(records[i - 1]!, record)) return false;
+    }
+    return true;
+}
+
 /** Longitudinal g from the speed slope across a centered window. Negative =
  *  braking. */
 export function deriveGLong(records: GpsRecord[], target: number): number {
-    if (records.length < 2) return 0;
-    const before = interpSpeed(records, target - DERIV_HALF_WINDOW_SEC);
-    const after = interpSpeed(records, target + DERIV_HALF_WINDOW_SEC);
-    const dvdt = (after - before) / (2 * DERIV_HALF_WINDOW_SEC);
+    if (!hasMeasuredSpeedWindow(records, target)) return 0;
+    const before = speedAt(records, target - DERIV_HALF_WINDOW_SEC);
+    const after = speedAt(records, target + DERIV_HALF_WINDOW_SEC);
+    if (!hasMeasuredSpeed(before) || !hasMeasuredSpeed(after)) return 0;
+    const dvdt = (after.speedMs - before.speedMs) / (2 * DERIV_HALF_WINDOW_SEC);
     const g = dvdt / G;
     return Number.isFinite(g) ? g : 0;
 }
 
 /** Lateral g from yaw rate * speed across a centered window. */
 export function deriveGLat(records: GpsRecord[], target: number): number {
-    if (records.length < 2) return 0;
+    if (!hasMeasuredSpeedWindow(records, target)) return 0;
     const hBefore = interpHeading(records, target - DERIV_HALF_WINDOW_SEC);
     const hAfter = interpHeading(records, target + DERIV_HALF_WINDOW_SEC);
     let dh = hAfter - hBefore;
     if (dh > 180) dh -= 360;
     else if (dh < -180) dh += 360;
     const omega = (dh * (Math.PI / 180)) / (2 * DERIV_HALF_WINDOW_SEC); // rad/s
-    const v = interpSpeed(records, target);
-    const g = (v * omega) / G;
+    const speed = speedAt(records, target);
+    if (!hasMeasuredSpeed(speed)) return 0;
+    const g = (speed.speedMs * omega) / G;
     return Number.isFinite(g) ? g : 0;
 }
 
@@ -237,8 +250,8 @@ export function sampleSpeedAcross(records: GpsRecord[], startUnix: number, endUn
     const span = endUnix - startUnix;
     for (let i = 0; i < n; i++) {
         const t = startUnix + (span * i) / (n - 1);
-        const v = interpSpeed(records, t);
-        out[i] = Number.isFinite(v) && v > 0 ? v : 0;
+        const speed = speedAt(records, t);
+        out[i] = hasSpeed(speed) ? speed.speedMs : Number.NaN;
     }
     return out;
 }
@@ -252,7 +265,7 @@ export function sampleSpeedAcross(records: GpsRecord[], startUnix: number, endUn
  */
 export function resolveFramePos(opts: {
     records: GpsRecord[];
-    base: { lat: number; lon: number; speedMs: number; bearingDeg: number };
+    base: InterpolatedPosition;
     cumulative: number[] | null;
     distanceBaseM: number;
     frameUtc: number;
@@ -267,6 +280,7 @@ export function resolveFramePos(opts: {
         lat: base.lat,
         lon: base.lon,
         speedMs: base.speedMs,
+        ...(base.speedSource ? { speedSource: base.speedSource } : {}),
         headingDeg: base.bearingDeg,
         gLong,
         gLat,

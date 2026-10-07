@@ -1,0 +1,140 @@
+import { GPS_POSITION_TOLERANCE_SEC, isValidGpsFix } from "./parser.js";
+import type { Channel, GpsRecord } from "./parsers/types.js";
+
+export interface TripGpsSource {
+    records: readonly GpsRecord[];
+    startUtc: number;
+    endUtc: number;
+    channel: Channel | null;
+}
+
+interface SourceSegment {
+    source: TripGpsSource | string;
+    start: number;
+    end: number;
+    hasFix: boolean;
+    parent: SourceSegment | null;
+}
+
+function component(segment: SourceSegment): SourceSegment {
+    let root = segment;
+    while (root.parent !== null) root = root.parent;
+    while (segment.parent !== null && segment.parent !== root) {
+        const next = segment.parent;
+        segment.parent = root;
+        segment = next;
+    }
+    return root;
+}
+
+function join(a: SourceSegment, b: SourceSegment): void {
+    const first = component(a);
+    const second = component(b);
+    if (first !== second) second.parent = first;
+}
+
+/** Source-local segment numbers become trip-local continuity components before
+ * channels are interleaved. A second channel can cover a first channel's gap;
+ * a file rollover alone does not interrupt the route. Input records stay intact. */
+export function normalizeTripTrackSegments(sources: readonly TripGpsSource[]): readonly (readonly GpsRecord[])[] {
+    if (!sources.some((source) => source.records.some((record) => record.trackSegment !== undefined))) {
+        return sources.map((source) => source.records);
+    }
+
+    const bySource = new Map<TripGpsSource | string, Map<string, SourceSegment>>();
+    const sourceSegments = sources.map((source) => {
+        let fixRun = 0;
+        let previousHasFix: boolean | undefined;
+        return source.records.map((record) => {
+            const hasFix = isValidGpsFix(record);
+            if (previousHasFix !== undefined && previousHasFix !== hasFix) fixRun++;
+            previousHasFix = hasFix;
+            const identity = record.externalTrackKey ?? source;
+            let segments = bySource.get(identity);
+            if (!segments) {
+                segments = new Map();
+                bySource.set(identity, segments);
+            }
+            const key = `${record.trackSegment ?? ""}|${fixRun}`;
+            let segment = segments.get(key);
+            if (!segment) {
+                segment = {
+                    source: identity,
+                    start: record.unixSeconds,
+                    end: record.unixSeconds,
+                    hasFix,
+                    parent: null,
+                };
+                segments.set(key, segment);
+            }
+            segment.start = Math.min(segment.start, record.unixSeconds);
+            segment.end = Math.max(segment.end, record.unixSeconds);
+            return segment;
+        });
+    });
+
+    const segments = [...bySource.values()].flatMap((source) => [...source.values()]);
+    const spans = segments
+        .filter((segment) => segment.hasFix && segment.start < segment.end)
+        .sort((a, b) => a.start - b.start);
+    let active: SourceSegment[] = [];
+    for (const segment of spans) {
+        active = active.filter((other) => other.end > segment.start);
+        for (const other of active) {
+            if (other.source !== segment.source) join(other, segment);
+        }
+        active.push(segment);
+    }
+    // A singleton supplies no interval. Attach it to one covered component,
+    // without letting a point at a cut reconnect two explicitly separate spans.
+    const singletons = segments
+        .filter((segment) => segment.hasFix && segment.start === segment.end)
+        .sort((a, b) => a.start - b.start);
+    active = [];
+    let spanIndex = 0;
+    for (const segment of singletons) {
+        while (spanIndex < spans.length && spans[spanIndex]!.start <= segment.start) {
+            active.push(spans[spanIndex++]!);
+        }
+        active = active.filter((other) => other.end >= segment.start);
+        const covered = active.find((other) => other.source !== segment.source);
+        if (covered) join(covered, segment);
+    }
+
+    const previousByChannel = new Map<Channel | null, number>();
+    const sourceOrder = sources
+        .map((source, index) => ({ source, index }))
+        .sort((a, b) => a.source.startUtc - b.source.startUtc);
+    for (const { source, index } of sourceOrder) {
+        const previousIndex = previousByChannel.get(source.channel);
+        // A short protected copy must not hide the enclosing loop clip's end.
+        if (previousIndex === undefined || source.endUtc > sources[previousIndex]!.endUtc) {
+            previousByChannel.set(source.channel, index);
+        }
+        if (previousIndex === undefined) continue;
+        const previous = sources[previousIndex]!;
+        const last = sourceSegments[previousIndex]!.at(-1);
+        const first = sourceSegments[index]![0];
+        if (!last?.hasFix || !first?.hasFix || typeof last.source === "string" || typeof first.source === "string")
+            continue;
+        if (
+            Math.abs(source.startUtc - previous.endUtc) <= GPS_POSITION_TOLERANCE_SEC &&
+            Math.abs(last.end - previous.endUtc) <= GPS_POSITION_TOLERANCE_SEC &&
+            Math.abs(first.start - source.startUtc) <= GPS_POSITION_TOLERANCE_SEC
+        )
+            join(last, first);
+    }
+
+    const ids = new Map<SourceSegment, number>();
+    return sources.map((source, sourceIndex) =>
+        source.records.map((record, recordIndex) => {
+            const root = component(sourceSegments[sourceIndex]![recordIndex]!);
+            let id = ids.get(root);
+            if (id === undefined) {
+                id = ids.size;
+                ids.set(root, id);
+            }
+            return { ...record, trackSegment: id };
+        }),
+    );
+}

@@ -5,6 +5,7 @@
 // STYLE_CHROME + the run accent. Sizes are a fraction of the frame's shorter
 // side so a widget reads the same on 16:9 / 9:16 / 1:1.
 
+import { formatSpeedValue } from "./text-overlay.js";
 import { circlePath, clamp, drawNoFixIcon, measureTextWidth, roundRectPath } from "./canvas-draw.js";
 import { composeFont, resolveStyleColor, STYLE_CHROME } from "./overlay-styles.js";
 import type { OverlayStyleId } from "./types.js";
@@ -279,43 +280,47 @@ export function drawGraph(
     const sx = (i: number): number => gx0 + (i / (samples.length - 1)) * gw;
     const sy = (v: number): number => gy0 + gh - (v / maxV) * gh;
 
-    // full faint line
+    const trace = (end: number, fill: boolean): void => {
+        ctx.beginPath();
+        let runStart = -1;
+        const closeRun = (last: number): void => {
+            if (runStart < 0) return;
+            if (fill) {
+                ctx.lineTo(sx(last), gy0 + gh);
+                ctx.lineTo(sx(runStart), gy0 + gh);
+                ctx.closePath();
+            }
+            runStart = -1;
+        };
+        for (let i = 0; i <= end; i++) {
+            const value = samples[i]!;
+            if (!Number.isFinite(value)) {
+                closeRun(i - 1);
+                continue;
+            }
+            if (runStart < 0) {
+                ctx.moveTo(sx(i), sy(value));
+                runStart = i;
+            } else ctx.lineTo(sx(i), sy(value));
+        }
+        closeRun(end);
+        if (fill) ctx.fill();
+        else ctx.stroke();
+    };
     ctx.strokeStyle = accent;
     ctx.globalAlpha = 0.35;
     ctx.lineWidth = Math.max(1, boxH * 0.04);
-    ctx.beginPath();
-    for (let i = 0; i < samples.length; i++) {
-        const px = sx(i);
-        const py = sy(samples[i]!);
-        if (i === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-    }
-    ctx.stroke();
+    trace(samples.length - 1, false);
     ctx.globalAlpha = 1;
 
-    // done portion + area
-    const nowIdx = Math.round(pos.progress * (samples.length - 1));
+    const nowIdx = Math.max(0, Math.min(samples.length - 1, Math.round(pos.progress * (samples.length - 1))));
     const nowX = gx0 + pos.progress * gw;
-    ctx.beginPath();
-    ctx.moveTo(gx0, gy0 + gh);
-    for (let i = 0; i <= nowIdx; i++) ctx.lineTo(sx(i), sy(samples[i]!));
-    ctx.lineTo(sx(Math.max(0, nowIdx)), gy0 + gh);
-    ctx.closePath();
     ctx.fillStyle = accent;
     ctx.globalAlpha = 0.18;
-    ctx.fill();
+    trace(nowIdx, true);
     ctx.globalAlpha = 1;
-
-    ctx.strokeStyle = accent;
     ctx.lineWidth = Math.max(1.5, boxH * 0.05);
-    ctx.beginPath();
-    for (let i = 0; i <= nowIdx; i++) {
-        const px = sx(i);
-        const py = sy(samples[i]!);
-        if (i === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-    }
-    ctx.stroke();
+    trace(nowIdx, false);
 
     // now line + dot
     ctx.strokeStyle = "#FFFFFF";
@@ -324,10 +329,12 @@ export function drawGraph(
     ctx.moveTo(nowX, y);
     ctx.lineTo(nowX, y + boxH);
     ctx.stroke();
-    const nowY = sy(samples[Math.max(0, Math.min(samples.length - 1, nowIdx))]!);
-    circlePath(ctx, nowX, nowY, Math.max(2, boxH * 0.06));
-    ctx.fillStyle = "#FFFFFF";
-    ctx.fill();
+    const nowSpeed = samples[nowIdx]!;
+    if (Number.isFinite(nowSpeed)) {
+        circlePath(ctx, nowX, sy(nowSpeed), Math.max(2, boxH * 0.06));
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fill();
+    }
 
     // current speed readout (top-right). units drives the m/s conversion; the
     // localized suffix comes from unitLabel (see OverlayPipelineArgs.unitSpeed).
@@ -341,13 +348,13 @@ export function drawGraph(
         ctx.restore();
         return;
     }
-    const v = units === "imperial" ? pos.speedMs * 3.6 * 0.621371 : pos.speedMs * 3.6;
+    const speedText = formatSpeedValue(pos.speedMs, units, pos.speedSource);
     ctx.font = composeFont("700", txtPx, MONO);
     ctx.fillStyle = "#FFFFFF";
     ctx.textAlign = "right";
     ctx.textBaseline = "top";
     softShadow(ctx, txtPx);
-    ctx.fillText(`${Math.round(v)} ${unitLabel}`, x + boxW - pad, y + pad);
+    ctx.fillText(`${speedText} ${unitLabel}`, x + boxW - pad, y + pad);
     ctx.restore();
 }
 

@@ -157,7 +157,7 @@ export function extractGpsFromSample(
             if (strm.fourCC !== "STRM" || strm.type !== 0) continue;
             const tags = collectStrmTags(strm);
             if (tags.gps5 || tags.gps9) {
-                extractGpsFromStreamTags(tags, mp4Filename, sampleDurationSec, out, kindsOut);
+                extractGpsFromStreamTags(tags, mp4Filename, sampleDurationSec, out, kindsOut, isOwnDevice);
             } else if (tags.accl && isOwnDevice) {
                 // Only for our own DEVC blocks - see OWN_DEVICE_NAME.
                 const samples = decodeAcclSamples(tags.accl, tags.scal);
@@ -185,6 +185,8 @@ interface StrmTags {
     gpsf: GpmfToken | null;
     gpsp: GpmfToken | null;
     accl: GpmfToken | null;
+    speedSources: GpmfToken | null;
+    trackSegments: GpmfToken | null;
 }
 
 function collectStrmTags(strm: GpmfToken): StrmTags {
@@ -196,6 +198,8 @@ function collectStrmTags(strm: GpmfToken): StrmTags {
         gpsf: null,
         gpsp: null,
         accl: null,
+        speedSources: null,
+        trackSegments: null,
     };
     for (const tag of iterTokens(strm.payload)) {
         switch (tag.fourCC) {
@@ -217,6 +221,12 @@ function collectStrmTags(strm: GpmfToken): StrmTags {
             case "GPSP":
                 tags.gpsp = tag;
                 break;
+            case "dcsp":
+                tags.speedSources = tag;
+                break;
+            case "dcsg":
+                tags.trackSegments = tag;
+                break;
             case "ACCL":
                 tags.accl = tag;
                 break;
@@ -231,6 +241,7 @@ function extractGpsFromStreamTags(
     sampleDurationSec: number,
     out: GpsRecord[],
     kindsOut?: GpmfGpsStreamKind[],
+    isOwnDevice = false,
 ): void {
     if (!tags.scal) return;
     const scalValues = decodeNumeric(tags.scal);
@@ -253,7 +264,16 @@ function extractGpsFromStreamTags(
         if (tags.gps9) {
             extractFromGps9(tags.gps9, scalValues, mp4Filename, out);
         } else if (tags.gps5) {
-            extractFromGps5(tags.gps5, scalValues, tags.gpsu, sampleDurationSec, mp4Filename, out);
+            extractFromGps5(
+                tags.gps5,
+                scalValues,
+                tags.gpsu,
+                sampleDurationSec,
+                mp4Filename,
+                out,
+                isOwnDevice && tags.speedSources ? decodeNumeric(tags.speedSources) : null,
+                isOwnDevice && tags.trackSegments ? decodeNumeric(tags.trackSegments) : null,
+            );
         }
     } finally {
         // finally keeps kindsOut parallel to out even on a decode throw
@@ -346,6 +366,8 @@ function extractFromGps5(
     sampleDurationSec: number,
     mp4Filename: string,
     out: GpsRecord[],
+    speedSources: number[] | null,
+    trackSegments: number[] | null,
 ): void {
     if (scal.length < 5) return;
     const [scalLat, scalLon, scalAlt, scalSpeed2d, scalSpeed3d] = scal as [number, number, number, number, number];
@@ -381,7 +403,13 @@ function extractFromGps5(
             lat,
             lon,
             bearingDeg: 0,
-            speedMs: speed2d,
+            speedMs: speedSources?.[i] === 2 ? 0 : speed2d,
+            ...(speedSources?.[i] === 1
+                ? { speedSource: "estimated" as const }
+                : speedSources?.[i] === 2
+                  ? { speedSource: "unavailable" as const }
+                  : {}),
+            ...(trackSegments?.[i] !== undefined && trackSegments[i]! >= 0 ? { trackSegment: trackSegments[i]! } : {}),
             accelXg: 0,
             accelYg: 0,
             accelZg: 0,

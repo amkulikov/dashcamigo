@@ -486,6 +486,7 @@ export const esDict = {
     "player.zoom.minimap.aria": "Mini-mapa de zoom — clic o arrastra para mover la vista",
     "player.zoom.minimap.title": "Rueda: zoom; arrastrar: mover; Z: restablecer",
     "player.zoom.reset": "Restablecer zoom",
+    "speed.estimated": "Velocidad estimada",
     "player.metrics.placeholder": "-",
     "player.progress": "Progreso del trayecto",
     "player.progress.position": "{cur} de {total}",

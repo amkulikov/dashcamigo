@@ -486,6 +486,7 @@ export const ptDict = {
     "player.zoom.minimap.aria": "Mini-mapa de zoom — clique ou arraste para mover a vista",
     "player.zoom.minimap.title": "Roda do mouse: zoom; arrastar: mover; Z: redefinir",
     "player.zoom.reset": "Redefinir zoom",
+    "speed.estimated": "Velocidade estimada",
     "player.metrics.placeholder": "-",
     "player.progress": "Progresso da viagem",
     "player.progress.position": "{cur} de {total}",

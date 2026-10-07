@@ -5,6 +5,7 @@
 // window so the numbers and the map marker disappear together.
 
 import { getDateLocale, t } from "../i18n/index.js";
+import { formatSpeedReading } from "../gps-telemetry.js";
 import { isValidGpsFix } from "../parser.js";
 import { contentToFrame, contentToWallUtc, displayClockDate, type Trip } from "../trips.js";
 import type { GpsRecord } from "../parser.js";
@@ -42,7 +43,10 @@ function localTimeFormatter(): Intl.DateTimeFormat {
  *  the bar's speed-only copy on phones. Only one of them is on screen at a
  *  time, but which one is a CSS breakpoint decision - so both are always
  *  current and neither needs a media query in JS. */
-function setSpeedText(value: string, unit: string): void {
+function setSpeedText(value: string, unit: string, isEstimated = false): void {
+    for (const element of [dom.metrics.speed, dom.metrics.barSpeed]) {
+        element.title = isEstimated ? t("speed.estimated") : "";
+    }
     dom.metrics.speed.textContent = value;
     dom.metrics.unit.textContent = unit;
     dom.metrics.barSpeed.textContent = value;
@@ -79,6 +83,7 @@ let shownActive: boolean | undefined;
 let shownLat: number | undefined;
 let shownLon: number | undefined;
 let shownSpeedMs: number | undefined;
+let shownSpeedSource: GpsRecord["speedSource"];
 let shownCameraTzSec: number | null = null;
 let shownDistanceKm: number | null = null;
 let shownUnits: ReturnType<typeof getUnits> | null = null;
@@ -104,6 +109,7 @@ function refreshMetrics(
         Object.is(rec?.lat, shownLat) &&
         Object.is(rec?.lon, shownLon) &&
         Object.is(rec?.speedMs, shownSpeedMs) &&
+        rec?.speedSource === shownSpeedSource &&
         cameraTzSec === shownCameraTzSec &&
         distanceKm === shownDistanceKm &&
         units === shownUnits &&
@@ -116,6 +122,7 @@ function refreshMetrics(
     shownLat = rec?.lat;
     shownLon = rec?.lon;
     shownSpeedMs = rec?.speedMs;
+    shownSpeedSource = rec?.speedSource;
     shownCameraTzSec = cameraTzSec;
     shownDistanceKm = distanceKm;
     shownUnits = units;
@@ -135,7 +142,7 @@ function refreshMetrics(
     }
     applyFixState("ok");
     const speed = formatSpeedFromMs(rec.speedMs);
-    setSpeedText(speed.value.toFixed(1), t(speed.unitKey));
+    setSpeedText(formatSpeedReading(rec, speed.value, 1), t(speed.unitKey), rec.speedSource === "estimated");
     // 4 decimal places = ~11m accuracy at mid-latitudes, enough for viewing.
     // Full 5-place accuracy is in tooltip popups.
     dom.metrics.coords.textContent = `${rec.lat.toFixed(4)}, ${rec.lon.toFixed(4)}`;

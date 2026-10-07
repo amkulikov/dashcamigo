@@ -171,6 +171,50 @@ describe("injectGpmdTrack - end-to-end round-trip on real mp4 fixture", () => {
         }
     });
 
+    it("preserves estimated and unavailable speeds and source boundaries in MP4 telemetry", async () => {
+        const track: GpsRecord[] = [
+            makeRecord({
+                unixSeconds: baseUtc,
+                lat: 50,
+                lon: 30,
+                speedMs: 0,
+                speedSource: "measured",
+                trackSegment: 0,
+                mp4Filename: "front.mp4",
+            }),
+            makeRecord({
+                unixSeconds: baseUtc + 1,
+                lat: 50.0001,
+                lon: 30,
+                speedMs: 11.119,
+                speedSource: "estimated",
+                trackSegment: 0,
+                mp4Filename: "rear.mp4",
+            }),
+            makeRecord({
+                unixSeconds: baseUtc + 2,
+                lat: 50.0002,
+                lon: 30,
+                speedMs: 0,
+                speedSource: "unavailable",
+                trackSegment: 1,
+            }),
+        ];
+        const handle = makeFakeHandle(new Uint8Array(readFileSync(FIXTURE_MP4)));
+        await injectGpmdTrack(handle, packAtUtc(track, baseUtc, 3, { includeAccel: false }));
+        const file = await handle.getFile();
+        const index = await buildMp4Index(file);
+        const gpmd = findGpmdTrack(index);
+        expect(gpmd).not.toBeNull();
+        const result = await extractFromGpmdTrack({ file, relativePath: "test.mp4" }, index, gpmd!);
+        expect(result!.records).toHaveLength(3);
+        expect(result!.records[0]!.speedMs).toBe(0);
+        expect(result!.records[1]!.speedSource).toBe("estimated");
+        expect(result!.records[1]!.speedMs).toBeCloseTo(11.119, 3);
+        expect(result!.records[2]!.speedSource).toBe("unavailable");
+        expect(result!.records.map((r) => r.trackSegment)).toEqual([0, 0, 1]);
+    });
+
     it("ACCL round-trip: pack with non-zero accel → extract gives same accel back", async () => {
         // Regression for troubles/dashcamigo_20260429_192226.mp4: GPS worked
         // after the first iteration but the accelerometer "disappeared". Root

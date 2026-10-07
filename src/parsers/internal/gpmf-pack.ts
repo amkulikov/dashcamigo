@@ -41,6 +41,7 @@
 // All integer fields are big-endian; ASCII strings are nul-padded, and each
 // KLV payload is padded to a multiple of 4 bytes.
 
+import { hasSpeed } from "../../gps-telemetry.js";
 import { concat } from "../../bytes.js";
 import type { GpsRecord } from "../types.js";
 import { type TripTimeline, wallToContentSecIfCovered, contentToWallUtc } from "../../trips.js";
@@ -172,6 +173,19 @@ function packDeviceSample(inSecond: GpsRecord[], secondStartUtc: number, writeAc
     return packNestedKlv("DEVC", devcChildren);
 }
 
+// Mixed-case keys are third-party GPMF tags. Keep per-sample provenance and
+// source boundaries on re-import; foreign GPS5 readers still receive speed in m/s.
+function packSpeedMetadata(samples: GpsRecord[]): Uint8Array[] {
+    if (!samples.some((r) => r.speedSource !== undefined || r.trackSegment !== undefined)) return [];
+    const sources = Uint8Array.from(samples, (r) => (!hasSpeed(r) ? 2 : r.speedSource === "estimated" ? 1 : 0));
+    const segments = new Uint8Array(samples.length * 4);
+    const view = new DataView(segments.buffer);
+    samples.forEach((r, i) => {
+        view.setInt32(i * 4, r.trackSegment ?? -1, false);
+    });
+    return [packKlv("dcsp", "B", 1, samples.length, sources), packKlv("dcsg", "l", 4, samples.length, segments)];
+}
+
 /** STRM with GPS5 and associated tags. */
 function packGpsStream(inSecond: GpsRecord[], secondStartUtc: number): Uint8Array {
     // No records this second: inject a placeholder lat=lon=0 / GPSF=0 so the
@@ -188,8 +202,9 @@ function packGpsStream(inSecond: GpsRecord[], secondStartUtc: number): Uint8Arra
         dv.setInt32(off, Math.round(r.lat * GPS5_SCAL[0]), false);
         dv.setInt32(off + 4, Math.round(r.lon * GPS5_SCAL[1]), false);
         dv.setInt32(off + 8, 0, false); // altitude: not in GpsRecord, always 0
-        dv.setInt32(off + 12, Math.round(r.speedMs * GPS5_SCAL[3]), false);
-        dv.setInt32(off + 16, Math.round(r.speedMs * GPS5_SCAL[4]), false); // 3D speed: duplicated from 2D
+        const speed = hasSpeed(r) ? r.speedMs : -1;
+        dv.setInt32(off + 12, Math.round(speed * GPS5_SCAL[3]), false);
+        dv.setInt32(off + 16, Math.round(speed * GPS5_SCAL[4]), false); // 3D speed: duplicated from 2D
     }
 
     const scalPayload = new Uint8Array(5 * 4);
@@ -213,6 +228,7 @@ function packGpsStream(inSecond: GpsRecord[], secondStartUtc: number): Uint8Arra
         // UNIT: sampleSize = max unit string length (3 for "m/s" / "deg"),
         // repeat = number of units. Each entry is right-padded with nuls.
         packKlv("UNIT", "c", 3, 5, encodeUnitArray(["deg", "deg", "m", "m/s", "m/s"], 3)),
+        ...packSpeedMetadata(samples),
         // GPS5: payload data.
         packKlv("GPS5", "l", 20, samples.length, gps5Payload),
     ]);

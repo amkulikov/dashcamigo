@@ -12,6 +12,7 @@ import { mai70NameCore } from "./parsers/filename/_patterns.js";
 import { blackvueChannelCloneGroup } from "./parsers/blackvue-clone-group.js";
 import type { GpsRecord, InterpolatedPosition, ParsedLog, SkippedLine, VendorFile } from "./parsers/types.js";
 import { vendorFileKey } from "./vendor-file-key.js";
+import { interpolateSpeed, isSameTrackSegment } from "./gps-telemetry.js";
 import { wrapDegrees } from "./coordinates.js";
 
 /**
@@ -57,7 +58,7 @@ export function dedupRecords(records: GpsRecord[]): GpsRecord[] {
         const clock = r.timeUnsynced
             ? `u|${Number.isFinite(r.relStartSeconds) ? r.relStartSeconds : ""}`
             : r.unixSeconds;
-        const key = `${clock}|${r.lat}|${r.lon}|${owner}`;
+        const key = `${clock}|${r.lat}|${r.lon}|${owner}|${r.trackSegment ?? ""}`;
         const existingIdx = indexByKey.get(key);
         if (existingIdx === undefined) {
             indexByKey.set(key, out.length);
@@ -122,7 +123,7 @@ export function thinDenseRecords(records: GpsRecord[]): GpsRecord[] {
         } else {
             bucketKey = String(Math.floor(r.unixSeconds * GPS_THIN_HZ));
         }
-        const key = `${bucketKey}|${r.videoKey ?? r.mp4Filename}`;
+        const key = `${bucketKey}|${r.videoKey ?? r.mp4Filename}|${r.trackSegment ?? ""}`;
         const existingIdx = indexByKey.get(key);
         if (existingIdx === undefined) {
             indexByKey.set(key, out.length);
@@ -187,7 +188,7 @@ export function totalDistanceKm(records: GpsRecord[] | null | undefined): number
     let sum = 0;
     for (const r of records) {
         if (!isValidGpsFix(r)) continue;
-        if (prev !== null) {
+        if (prev !== null && isSameTrackSegment(prev, r)) {
             sum += haversineKm(prev.lat, prev.lon, r.lat, r.lon);
         }
         prev = r;
@@ -215,7 +216,7 @@ export function cumulativeDistanceKm(records: GpsRecord[] | null | undefined): F
     for (let i = 0; i < records.length; i++) {
         const r = records[i]!;
         if (isValidGpsFix(r)) {
-            if (prev !== null) sum += haversineKm(prev.lat, prev.lon, r.lat, r.lon);
+            if (prev !== null && isSameTrackSegment(prev, r)) sum += haversineKm(prev.lat, prev.lon, r.lat, r.lon);
             prev = r;
         }
         out[i] = sum;
@@ -681,17 +682,18 @@ export function interpolatePosition(
     const prevIndex = validPositionIndexAt(sortedRecords, lo - 1);
     if (prevIndex < 0) return null;
     const prev = sortedRecords[prevIndex]!;
+    if (!isSameTrackSegment(prev, next)) return null;
     const span = next.unixSeconds - prev.unixSeconds;
     if (span <= 0) return positionFromRecord(prev);
     const t = Math.max(0, Math.min(1, (targetUnixSeconds - prev.unixSeconds) / span));
 
     const lat = prev.lat + (next.lat - prev.lat) * t;
     const lon = wrapDegrees(prev.lon + wrapDegrees(next.lon - prev.lon) * t);
-    const speedMs = prev.speedMs + (next.speedMs - prev.speedMs) * t;
+    const speed = interpolateSpeed(prev, next, t);
 
     const bearingDeg = (wrapDegrees(prev.bearingDeg + wrapDegrees(next.bearingDeg - prev.bearingDeg) * t) + 360) % 360;
 
-    return { lat, lon, bearingDeg, speedMs };
+    return { lat, lon, bearingDeg, ...speed };
 }
 
 function isValidPositionRecord(record: GpsRecord): boolean {
@@ -723,6 +725,7 @@ function positionFromRecord(record: GpsRecord): InterpolatedPosition {
         lon: wrapDegrees(record.lon),
         bearingDeg: (wrapDegrees(record.bearingDeg) + 360) % 360,
         speedMs: record.speedMs,
+        ...(record.speedSource ? { speedSource: record.speedSource } : {}),
     };
 }
 

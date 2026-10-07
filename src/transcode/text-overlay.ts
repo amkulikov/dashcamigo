@@ -10,6 +10,8 @@
 // frame; the UI preview calls the same code so what the user arranges matches
 // the file.
 
+import { formatSpeedReading } from "../gps-telemetry.js";
+import type { SpeedSample } from "../parsers/types.js";
 import { clamp, drawNoFixIcon, measureTextWidth, roundRectPath } from "./canvas-draw.js";
 import { composeFont, resolveStyleColor, type StyleChrome, STYLE_CHROME } from "./overlay-styles.js";
 import type { OverlayStyleId } from "./types.js";
@@ -342,10 +344,13 @@ function withShadow(ctx: AnyCtx, shadow: boolean, fontPx: number, draw: () => vo
 
 /** Speed value (no unit): m/s -> km/h or mph, rounded. "-" for an invalid
  *  reading. The unit string is supplied separately (OverlayPipelineArgs.unitSpeed). */
-export function formatSpeedValue(speedMs: number, units: "metric" | "imperial"): string {
-    if (!Number.isFinite(speedMs) || speedMs < 0) return "-";
-    if (units === "imperial") return String(Math.round(speedMs * 3.6 * 0.621371));
-    return String(Math.round(speedMs * 3.6));
+export function formatSpeedValue(
+    speedMs: number,
+    units: "metric" | "imperial",
+    speedSource?: SpeedSample["speedSource"],
+): string {
+    const value = speedMs * 3.6 * (units === "imperial" ? 0.621371 : 1);
+    return formatSpeedReading({ speedMs, speedSource }, value);
 }
 
 /** Distance value (no unit): meters -> km / miles, 1 decimal. The unit string

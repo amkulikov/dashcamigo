@@ -7,14 +7,23 @@
 // Novatek, knots for NMEA) to decimal degrees and m/s. Firmware quirks
 // (70mai 8h-bias, Y-up accel) are applied INSIDE the extractor; callers get
 // honest UTC and gravity-removed accel.
-export interface GpsRecord {
+export interface SpeedSample {
+    /** m/s; zero is only a placeholder when speedSource is unavailable. */
+    speedMs: number;
+    /** Absent preserves the existing device-parser contract. */
+    speedSource?: "measured" | "estimated" | "unavailable";
+}
+
+export interface GpsRecord extends SpeedSample {
     unixSeconds: number;
     // GPS fix was valid at record time (true = valid lat/lon).
     active: boolean;
     lat: number; // decimal degrees
     lon: number; // decimal degrees
     bearingDeg: number; // degrees [0..360)
-    speedMs: number; // m/s
+    /** Continuity ID within a record collection: source-local when parsed,
+     * remapped across files and channels when the trip is assembled. */
+    trackSegment?: number;
     // Acceleration in g, gravity-removed (dynamic component). At rest = 0,0,0.
     // Formats without an accelerometer (GPX, GPMF, NMEA sidecar, BlackVue
     // legacy) leave zeros; magnitude 0 -> brake-detector ignores.
@@ -116,11 +125,10 @@ export interface ParsedLog {
 
 // Interpolated position between adjacent GPS points. Acceleration is excluded
 // because interpolating it at 1 Hz sampling is meaningless.
-export interface InterpolatedPosition {
+export interface InterpolatedPosition extends SpeedSample {
     lat: number;
     lon: number;
     bearingDeg: number;
-    speedMs: number;
 }
 
 // File with path relative to the selected folder root. Path matters: some

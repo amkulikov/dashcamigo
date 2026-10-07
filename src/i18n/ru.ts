@@ -489,6 +489,7 @@ export const ruDict = {
     "player.zoom.minimap.aria": "Область просмотра — нажми или перетащи, чтобы сдвинуть изображение",
     "player.zoom.minimap.title": "Колесо мыши — зум, перетаскивание — сдвиг, Z — сброс",
     "player.zoom.reset": "Сбросить зум",
+    "speed.estimated": "Расчётная скорость",
     "player.metrics.placeholder": "-",
     "player.progress": "Прогресс поездки",
     "player.progress.position": "{cur} из {total}",

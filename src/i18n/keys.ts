@@ -682,6 +682,7 @@ export type I18nKey =
     | "player.zoom.minimap.aria"
     | "player.zoom.minimap.title"
     | "player.zoom.reset"
+    | "speed.estimated"
     | "player.metrics.placeholder"
     | "player.progress"
     | "player.progress.position"

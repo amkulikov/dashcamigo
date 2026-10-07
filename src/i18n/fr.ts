@@ -488,6 +488,7 @@ export const frDict = {
     "player.zoom.minimap.aria": "Mini-carte de zoom — clique ou glisse pour déplacer la vue",
     "player.zoom.minimap.title": "Molette : zoom ; glisser : déplacer ; Z : réinitialiser",
     "player.zoom.reset": "Réinitialiser le zoom",
+    "speed.estimated": "Vitesse estimée",
     "player.metrics.placeholder": "-",
     "player.progress": "Progression du trajet",
     "player.progress.position": "{cur} sur {total}",

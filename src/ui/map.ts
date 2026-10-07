@@ -1,4 +1,3 @@
-import { syncMobileViewNav } from "./mobile-view-nav.js";
 // Map (large + mini) on MapLibre. Single owner of map instances,
 // markers, popups, rAF marker loop, expand/collapse, mini-map morph animations,
 // follow modes, theme-aware tile style, and GPS-point hover popups.
@@ -11,6 +10,8 @@ import { syncMobileViewNav } from "./mobile-view-nav.js";
 // runtime namespace is loaded lazily via loadMaplibre() (see the holder under
 // the imports), which is what keeps maplibre off the landing critical path.
 // Namespace form: v6 is ESM-only and has no default export.
+import { formatSpeedReading } from "../gps-telemetry.js";
+import { syncMobileViewNav } from "./mobile-view-nav.js";
 import type * as maplibregl from "maplibre-gl";
 // Worker entry URL, resolved at build time to a string - the lib itself stays
 // out of the eager graph. `?worker&url` (not plain `?url`): the dist worker
@@ -1701,7 +1702,7 @@ export function buildRecordPopupHtml(rec: GpsRecord, trip: Trip): string {
     // gradient is still computed from km/h - we don't shift its breakpoints
     // between units.
     const speedFmt = formatSpeedFromMs(rec.speedMs);
-    const speedStr = speedFmt.value.toFixed(0);
+    const speedStr = formatSpeedReading(rec, speedFmt.value);
     const speedUnitKey = speedFmt.unitKey;
     // No accelerometer in this format - drop the G rows entirely rather than
     // show a constant 0.00 (same rule as the hidden |G| curve on the chart).
@@ -1717,7 +1718,7 @@ export function buildRecordPopupHtml(rec: GpsRecord, trip: Trip): string {
     return `
         <div class="track-popup">
             <div class="track-popup-title">${titleStr}</div>
-            <div class="track-popup-row"><span class="track-popup-label">${t("popup.label.speed")}</span><span>${speedStr} ${t(speedUnitKey)}</span></div>
+            <div class="track-popup-row"><span class="track-popup-label">${t(rec.speedSource === "estimated" ? "speed.estimated" : "popup.label.speed")}</span><span>${speedStr} ${t(speedUnitKey)}</span></div>
             ${gRows}
             <div class="track-popup-row mono"><span class="track-popup-label">${t("popup.label.coords")}</span><span>${rec.lat.toFixed(5)}, ${rec.lon.toFixed(5)}</span></div>
             <div class="track-popup-row mono"><span class="track-popup-label">${t("popup.label.file")}</span><span>${fileStr}</span></div>

@@ -5,7 +5,7 @@ export const VIDEO_EMBEDDED_DISPATCH_CACHE_REVISION = "a89573de9afcfcc5";
 
 export const VIDEO_EMBEDDED_PRIMITIVE_CACHE_REVISIONS = [
     { id: "rvmi", revision: "8d873cfbdff71179" },
-    { id: "sei-double-gps", revision: "4f72b551daab36ea" },
+    { id: "sei-double-gps", revision: "52b267ea81aa7bb7" },
     { id: "free-gps-box", revision: "b6793a71f8ec11e1" },
     { id: "ligogps", revision: "967ff5ee0f39fe48" },
     { id: "navitel-tail", revision: "20f3a36dc1cc017f" },
@@ -17,7 +17,7 @@ export const VIDEO_EMBEDDED_PRIMITIVE_CACHE_REVISIONS = [
     { id: "ligogps-trailer", revision: "f4f185c9f1f07a56" },
     { id: "gpslog-atom", revision: "988afddb265571e7" },
     { id: "nextbase-gdat", revision: "af08f1dbc6442eaf" },
-    { id: "gpmf", revision: "f85c2c0723ff9fd0" },
+    { id: "gpmf", revision: "cb25ea2b75c91ea5" },
     { id: "wolfbox-gpmd", revision: "fa7ff57da6299fbd" },
     { id: "vantrue-fmas", revision: "9678e0bab470abd6" },
     { id: "rove-gpmd", revision: "78267283625a2321" },

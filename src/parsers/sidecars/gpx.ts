@@ -12,12 +12,15 @@
 import type { GpsRecord, SidecarHandler, VendorFile } from "../types.js";
 import { escapeXml } from "../../escape.js";
 import { forwardFillBearingsIfAllZero } from "../../parser.js";
+import { hasSpeed, isSameTrackSegment } from "../../gps-telemetry.js";
 import { utcMillisecondsFromParts } from "../internal/calendar.js";
 import { isCoordinateInRange } from "../internal/ddmm.js";
 import { matchByBasename } from "./_basename.js";
 import { readSidecarText } from "./_read.js";
+import { type SpeedEstimationPoint, estimateSpeedSegments } from "../internal/position-speed.js";
 
 const RX_GPX = /\.gpx$/i;
+const GPX_EXTENSION_NS = "https://dashcamigo.app/xmlschemas/gpx/1";
 const RX_GPX_TIME = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$/i;
 // A source segment can still contain a device-off gap. Do not treat an
 // unobserved span longer than this as evidence that the GPX overlaps a trip.
@@ -74,7 +77,7 @@ export async function parseGpxTrack(
  * Parsed fields:
  *  - lat/lon (trkpt attributes) - required.
  *  - time (ISO8601, UTC) - required; without it the record cannot be linked to video.
- *  - speed (m/s) - optional, defaults to 0.
+ *  - speed (m/s) - optional; missing/invalid values are estimated within segments.
  *  - course (deg) - optional. If no point carries a non-zero course (a track
  *    re-exported without the camera's bearing, or a track-only GPX), heading is
  *    synthesized from position deltas so the map arrow follows travel instead of
@@ -101,15 +104,22 @@ function parseGpx(text: string, mp4Filename: string): ParsedGpxTrack {
     const records: GpsRecord[] = [];
     const timeRanges: GpxTimeRange[] = [];
     let hasExplicitTimezone = true;
+    let nextSegment = 0;
 
     const collectRange = (points: readonly Element[]): void => {
         const rangeRecords: GpsRecord[] = [];
-        for (const point of points) {
+        const parsedPoints = points.map((point) => {
             const parsed = trkptToRecord(point, mp4Filename);
-            if (!parsed) continue;
-            records.push(parsed.record);
+            if (!parsed) return null;
             rangeRecords.push(parsed.record);
             if (!parsed.hasExplicitTimezone) hasExplicitTimezone = false;
+            return parsed;
+        });
+        for (const segment of estimateSpeedSegments(parsedPoints)) {
+            for (const record of segment) record.trackSegment = nextSegment;
+            nextSegment++;
+            forwardFillBearingsIfAllZero(segment);
+            for (const record of segment) records.push(record);
         }
         if (rangeRecords.length === 0) return;
         rangeRecords.sort((a, b) => a.unixSeconds - b.unixSeconds);
@@ -151,12 +161,6 @@ function parseGpx(text: string, mp4Filename: string): ParsedGpxTrack {
     }
 
     records.sort((a, b) => a.unixSeconds - b.unixSeconds);
-    // Mirror the embedded-GPS path (registry.ts) and the escort .map sidecar:
-    // when the source omits course, derive bearing from consecutive positions.
-    // No-op the moment any <course> is non-zero, so a GPX that carries real
-    // heading keeps it. Per-file by construction - every record here shares the
-    // one mp4Filename, so this never bearings across a recording gap.
-    forwardFillBearingsIfAllZero(records);
     timeRanges.sort((a, b) => a.startUnix - b.startUnix);
     return { records, timeRanges, hasExplicitTimezone };
 }
@@ -223,7 +227,10 @@ function hasAncestorByLocalName(element: Element, name: string): boolean {
  * lat/lon or time are missing or invalid - silently skipped so one bad
  * element does not abort the whole file.
  */
-function trkptToRecord(el: Element, mp4Filename: string): { record: GpsRecord; hasExplicitTimezone: boolean } | null {
+function trkptToRecord(
+    el: Element,
+    mp4Filename: string,
+): (SpeedEstimationPoint & { hasExplicitTimezone: boolean }) | null {
     const latRaw = el.getAttribute("lat");
     const lonRaw = el.getAttribute("lon");
     if (latRaw === null || lonRaw === null || latRaw.trim() === "" || lonRaw.trim() === "") return null;
@@ -236,13 +243,21 @@ function trkptToRecord(el: Element, mp4Filename: string): { record: GpsRecord; h
     const parsedTime = parseGpxTime((timeEl.textContent ?? "").trim());
     if (parsedTime === null) return null;
 
-    // speed/course are common extensions. A bad optional field must not discard
-    // an otherwise valid point; normalize it to the contract's neutral value.
-    const speedEl = elementsByLocalName(el, "speed")[0];
+    // Empty, negative and non-finite speeds are missing evidence, never a stop.
+    const ownSpeed = el.getElementsByTagNameNS(GPX_EXTENSION_NS, "speed")[0];
+    const speedEl = ownSpeed ?? elementsByLocalName(el, "speed")[0];
     const courseEl = elementsByLocalName(el, "course")[0];
-    const speedValue = speedEl ? Number(speedEl.textContent) : 0;
+    const speedText = speedEl?.textContent?.trim() ?? "";
+    const speedValue = speedText === "" ? Number.NaN : Number(speedText);
     const courseValue = courseEl ? Number(courseEl.textContent) : 0;
-    const speedMs = Number.isFinite(speedValue) && speedValue >= 0 ? speedValue : 0;
+    const isExplicitlyUnavailable = ownSpeed?.getAttribute("source") === "unavailable";
+    const hasValidSpeed = !isExplicitlyUnavailable && Number.isFinite(speedValue) && speedValue >= 0;
+    const speedMs = hasValidSpeed ? speedValue : 0;
+    const speedSource = hasValidSpeed
+        ? ownSpeed?.getAttribute("source") === "estimated"
+            ? "estimated"
+            : "measured"
+        : "unavailable";
     const bearingDeg = Number.isFinite(courseValue) ? ((courseValue % 360) + 360) % 360 : 0;
 
     return {
@@ -253,6 +268,7 @@ function trkptToRecord(el: Element, mp4Filename: string): { record: GpsRecord; h
             lon,
             bearingDeg,
             speedMs,
+            speedSource,
             // GPX has no accelerometer data - brake events will not be detected
             // on these tracks (gMagnitude = 0).
             accelXg: 0,
@@ -261,6 +277,7 @@ function trkptToRecord(el: Element, mp4Filename: string): { record: GpsRecord; h
             mp4Filename,
         },
         hasExplicitTimezone: parsedTime.hasExplicitTimezone,
+        canEstimateSpeed: !hasValidSpeed && !isExplicitlyUnavailable,
     };
 }
 
@@ -277,14 +294,17 @@ interface SerializeGpxArgs {
  * Serializes an array of records to GPX 1.1. Track name and metadata time
  * are provided by the caller. Records must be sorted by unixSeconds.
  *
- * Produces one track with one segment. If segmentation on gaps is ever
- * needed, add a parameter then.
+ * Source boundaries are preserved so re-import cannot infer motion across gaps.
  */
 export function serializeGpx({ records, trackName, creator = "dashcamigo" }: SerializeGpxArgs): string {
-    const points = records
-        .filter((r) => r.active)
-        .map(serializeTrkpt)
-        .join("");
+    let points = "";
+    let previous: GpsRecord | null = null;
+    for (const record of records) {
+        if (!record.active) continue;
+        if (previous && !isSameTrackSegment(previous, record)) points += "\n    </trkseg>\n    <trkseg>";
+        points += serializeTrkpt(record);
+        previous = record;
+    }
 
     const metadataTime =
         records.length > 0 ? new Date(records[0]!.unixSeconds * 1000).toISOString() : new Date().toISOString();
@@ -292,6 +312,7 @@ export function serializeGpx({ records, trackName, creator = "dashcamigo" }: Ser
     return `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="${escapeXml(creator)}"
      xmlns="http://www.topografix.com/GPX/1/1"
+     xmlns:dc="${GPX_EXTENSION_NS}"
      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
      xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
   <metadata>
@@ -314,10 +335,15 @@ export function serializeGpx({ records, trackName, creator = "dashcamigo" }: Ser
  */
 function serializeTrkpt(r: GpsRecord): string {
     const time = new Date(r.unixSeconds * 1000).toISOString();
+    const speed = hasSpeed(r)
+        ? `<dc:speed source="${r.speedSource ?? "measured"}">${r.speedMs.toFixed(2)}</dc:speed>`
+        : '<dc:speed source="unavailable"/>';
     return `
       <trkpt lat="${r.lat.toFixed(6)}" lon="${r.lon.toFixed(6)}">
         <time>${time}</time>
-        <speed>${r.speedMs.toFixed(2)}</speed>
-        <course>${r.bearingDeg.toFixed(2)}</course>
+        <extensions>
+          ${speed}
+          <dc:course>${r.bearingDeg.toFixed(2)}</dc:course>
+        </extensions>
       </trkpt>`;
 }

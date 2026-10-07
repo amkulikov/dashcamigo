@@ -484,6 +484,7 @@ export const plDict = {
     "player.zoom.minimap.aria": "Minimapa zoomu — klik lub ciągnięcie przesuwa widok",
     "player.zoom.minimap.title": "Kółko: powiększenie; przeciąganie: przesunięcie; Z: przywrócenie widoku",
     "player.zoom.reset": "Resetuj powiększenie",
+    "speed.estimated": "Szacowana prędkość",
     "player.metrics.placeholder": "-",
     "player.progress": "Postęp przejazdu",
     "player.progress.position": "{cur} z {total}",

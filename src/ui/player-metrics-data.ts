@@ -23,7 +23,8 @@ export function resolvePlayerMetrics(records: GpsRecord[], targetUnix: number): 
     const nearestIndex = findNearestIndex(records, targetUnix);
     if (nearestIndex < 0) return { record: null, fix: "none", distanceKm: null };
     const nearest = records[nearestIndex]!;
-    if (!interpolatePosition(records, targetUnix)) {
+    const position = interpolatePosition(records, targetUnix);
+    if (!position) {
         const isNear = Math.abs(nearest.unixSeconds - targetUnix) <= GPS_POSITION_TOLERANCE_SEC;
         return { record: isNear ? nearest : null, fix: isNear ? "lost" : "none", distanceKm: null };
     }
@@ -35,7 +36,10 @@ export function resolvePlayerMetrics(records: GpsRecord[], targetUnix: number): 
         cumulative = cumulativeDistanceKm(records);
         distanceCache.set(records, cumulative);
     }
-    return { record, fix: "ok", distanceKm: cumulative[positionIndex] ?? 0 };
+    const reading = position.speedSource
+        ? { ...record, speedMs: position.speedMs, speedSource: position.speedSource }
+        : record;
+    return { record: reading, fix: "ok", distanceKm: cumulative[positionIndex] ?? 0 };
 }
 
 export function _resetForTests(): void {

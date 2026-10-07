@@ -34,6 +34,7 @@ import {
     type TzSample,
     type VideoCandidate,
 } from "./trips.js";
+import { haversineKm, interpolatePosition } from "./parser.js";
 import { cameraFingerprint } from "./parsers/camera-fingerprint.js";
 import {
     classifyFilenameChannel,
@@ -2425,12 +2426,197 @@ describe("finalizeTrip: teleport outlier filter", () => {
     });
 });
 
+describe("finalizeTrip: source track continuity", () => {
+    function record(name: string, seconds: number, trackSegment = 0): GpsRecord {
+        return {
+            ...makeRecord(1000 + seconds, 50 + seconds * 0.0001, 30),
+            mp4Filename: name,
+            speedMs: 11,
+            speedSource: "estimated",
+            trackSegment,
+        };
+    }
+
+    function candidate(
+        name: string,
+        channel: Channel,
+        records: GpsRecord[],
+        startSeconds = 0,
+        durationSec = 4,
+    ): VideoCandidate {
+        return makeCandidate({
+            name,
+            channel,
+            startUtc: 1000 + startSeconds,
+            durationSec,
+            sequence: startSeconds / 2 + 1,
+            records,
+        });
+    }
+
+    it.each(["GPX", "SEI"])("joins consecutive %s clips without a false telemetry gap", (format) => {
+        const first = [0, 1].map((seconds) => record("first.mp4", seconds));
+        const second = [2, 3].map((seconds) => record("second.mp4", seconds));
+        if (format === "SEI") {
+            for (const [records, start] of [
+                [first, 0],
+                [second, 2],
+            ] as const) {
+                for (const value of records) {
+                    value.timeUnsynced = true;
+                    value.relStartSeconds = value.unixSeconds - 1000 - start;
+                }
+            }
+        }
+        const trips = groupTrips([
+            candidate("first.mp4", "front", first, 0, 2),
+            candidate("second.mp4", "front", second, 2, 2),
+        ]);
+        expect(trips).toHaveLength(1);
+        const trip = trips[0]!;
+        expect(trip.distanceKm, "distance includes the interval across the file boundary").toBeCloseTo(
+            haversineKm(50, 30, 50.0003, 30),
+            8,
+        );
+        expect(interpolatePosition(trip.records, 1001.5), "position remains available across files").toMatchObject({
+            lat: expect.closeTo(50.00015, 8),
+            speedMs: 11,
+            speedSource: "estimated",
+        });
+    });
+
+    it("keeps one continuous trajectory when concurrent channels sample at different times", () => {
+        const trip = groupTrips([
+            candidate(
+                "front.mp4",
+                "front",
+                [0, 1, 2].map((seconds) => record("front.mp4", seconds)),
+            ),
+            candidate(
+                "rear.mp4",
+                "rear",
+                [0.5, 1.5, 2.5].map((seconds) => record("rear.mp4", seconds)),
+            ),
+        ])[0]!;
+        expect(trip.distanceKm, "interleaved owners retain the traveled distance").toBeCloseTo(
+            haversineKm(50, 30, 50.00025, 30),
+            8,
+        );
+        expect(interpolatePosition(trip.records, 1000.75), "interleaved owners retain interpolation").toMatchObject({
+            lat: expect.closeTo(50.000075, 8),
+            speedMs: 11,
+            speedSource: "estimated",
+        });
+    });
+
+    it("deduplicates concurrent positions when a channel dropout changes its local segment numbers", () => {
+        const front = [0, 1, 2, 3].map((seconds) => record("front.mp4", seconds));
+        const rear = [record("rear.mp4", 0), record("rear.mp4", 2, 1), record("rear.mp4", 3, 1)];
+        rear[1]!.accelXg = 1.2;
+        const trip = groupTrips([candidate("front.mp4", "front", front), candidate("rear.mp4", "rear", rear)])[0]!;
+        expect(trip.records, "segment numbers belong to their source, not the cross-channel dedup key").toHaveLength(4);
+        expect(trip.records.find((value) => value.unixSeconds === 1002)?.accelXg).toBe(1.2);
+        expect(trip.distanceKm).toBeCloseTo(haversineKm(50, 30, 50.0003, 30), 8);
+        expect(interpolatePosition(trip.records, 1002.5)).toMatchObject({
+            lat: expect.closeTo(50.00025, 8),
+            speedSource: "estimated",
+        });
+    });
+
+    it("preserves an explicit segment break inside a single source file", () => {
+        const records = [
+            record("track.mp4", 0),
+            record("track.mp4", 1),
+            record("track.mp4", 2, 1),
+            record("track.mp4", 3, 1),
+        ];
+        const trip = groupTrips([candidate("track.mp4", "front", records)])[0]!;
+        expect(interpolatePosition(trip.records, 1001.5), "a source break remains uninterpolated").toBeNull();
+        expect(trip.distanceKm, "distance excludes the interval across the source break").toBeCloseTo(
+            haversineKm(50, 30, 50.0001, 30) + haversineKm(50.0002, 30, 50.0003, 30),
+            8,
+        );
+        expect(interpolatePosition(trip.records, 1002.5)).toMatchObject({ speedSource: "estimated" });
+    });
+
+    it("still removes an isolated teleport when speed estimation splits its source segment", () => {
+        const records = [
+            record("track.mp4", 0),
+            record("track.mp4", 1),
+            { ...record("track.mp4", 2, 1), lat: 50.09 },
+            record("track.mp4", 3, 2),
+            record("track.mp4", 4, 2),
+        ];
+        const trip = groupTrips([candidate("track.mp4", "front", records, 0, 5)])[0]!;
+        expect(trip.records.map((value) => value.unixSeconds)).toEqual([1000, 1001, 1003, 1004]);
+    });
+
+    it("keeps parser-owned records unchanged when resolving continuity and regrouping", () => {
+        const candidates = [
+            candidate(
+                "first.mp4",
+                "front",
+                [0, 1].map((seconds) => record("first.mp4", seconds)),
+                0,
+                2,
+            ),
+            candidate(
+                "second.mp4",
+                "front",
+                [2, 3].map((seconds) => record("second.mp4", seconds)),
+                2,
+                2,
+            ),
+            candidate("rear.mp4", "rear", [record("rear.mp4", 0), record("rear.mp4", 1, 1)], 0, 2),
+        ];
+        const originalArrays = candidates.map((value) => value.records);
+        const originalRecords = originalArrays.map((records) => [...records]);
+        const snapshots = originalArrays.map((records) => records.map((value) => ({ ...value })));
+        const first = groupTrips(candidates);
+        const second = groupTrips(candidates);
+        expect(
+            second.map((trip) => trip.records),
+            "regrouping is deterministic",
+        ).toEqual(first.map((trip) => trip.records));
+        for (const [index, value] of candidates.entries()) {
+            expect(value.records, "candidate retains its parser-owned array").toBe(originalArrays[index]);
+            expect(value.records, "source fields remain unchanged").toEqual(snapshots[index]);
+            for (const [recordIndex, sourceRecord] of value.records.entries()) {
+                expect(sourceRecord, "candidate retains its parser-owned record").toBe(
+                    originalRecords[index]![recordIndex],
+                );
+            }
+        }
+    });
+});
+
 describe("finalizeTrip: cross-channel accel transplant (per-channel IMU)", () => {
     // A multi-GPS-channel camera can carry its own IMU per channel. Two records
     // at the same time+position collapse in the cross-channel dedup; front wins
     // (CHANNEL_PRIORITY), so a rear/interior-only impact spike must be
     // transplanted onto the survivor or it is lost before detectEvents.
     const SAME_CAM = "cam-imu";
+
+    it("deduplicates concurrent estimated tracks without breaking interpolation", () => {
+        const candidate = (name: string, channel: Channel) =>
+            makeCandidate({
+                name,
+                channel,
+                startUtc: 1000,
+                sequence: 1,
+                fingerprint: SAME_CAM,
+                records: [0, 1].map((i) => ({
+                    ...makeRecord(1000 + i, 50 + i * 0.0001, 30),
+                    mp4Filename: name,
+                    speedMs: 11,
+                    speedSource: "estimated",
+                    trackSegment: 0,
+                })),
+            });
+        const trip = groupTrips([candidate("f.mp4", "front"), candidate("r.mp4", "rear")])[0]!;
+        expect(trip.records).toHaveLength(2);
+        expect(interpolatePosition(trip.records, 1000.5)).toMatchObject({ speedSource: "estimated", speedMs: 11 });
+    });
 
     it("keeps a rear-channel spike that collides with the front record's time+position", () => {
         const frontRec: GpsRecord = { ...makeRecord(1000, 50, 30), accelXg: 0.01, mp4Filename: "f.mp4" };

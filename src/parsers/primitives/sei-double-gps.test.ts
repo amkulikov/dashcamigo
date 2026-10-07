@@ -32,7 +32,14 @@ describe("sei double gps primitive", () => {
             Array.from({ length: 12 }, (_, i) => i * 2),
         );
         for (const record of result.records) {
-            expect(record).toMatchObject({ lat: 50, lon: 30, active: true, timeUnsynced: true, speedMs: 0 });
+            expect(record).toMatchObject({
+                lat: 50,
+                lon: 30,
+                active: true,
+                timeUnsynced: true,
+                speedMs: 0,
+                speedSource: "estimated",
+            });
         }
     });
 
@@ -42,10 +49,24 @@ describe("sei double gps primitive", () => {
         bytes.writeDoubleLE(30.0005, offsets[1]! + 21);
         const vf = fixture(bytes);
         const result = await seiDoubleGpsPrimitive.parse(vf, await buildMp4Index(vf.file));
+        expect(result.records[1]!.speedSource).toBe("estimated");
         expect(result.records[1]!.speedMs).toBeGreaterThan(15);
         expect(result.records[1]!.speedMs).toBeLessThan(25);
         expect(result.records[0]!.bearingDeg).toBeCloseTo(90, 0);
         expect(result.records[1]!.unixSeconds - result.records[0]!.unixSeconds).toBe(2);
+    });
+
+    it("leaves a singleton before a no-fix packet unavailable and resumes estimation afterward", async () => {
+        const bytes = Buffer.from(FIXTURE);
+        const offsets = await sampleOffsets();
+        bytes.fill(0, offsets[1]! + 18, offsets[1]! + 20);
+        bytes[offsets[1]! + 20] = 2;
+        const vf = fixture(bytes);
+        const result = await seiDoubleGpsPrimitive.parse(vf, await buildMp4Index(vf.file));
+        expect(result.records).toHaveLength(11);
+        expect(result.records[0]!.speedSource).toBe("unavailable");
+        expect(result.records[1]!.speedSource).toBe("estimated");
+        expect(result.records[1]!.trackSegment).not.toBe(result.records[0]!.trackSegment);
     });
 
     it("applies hemisphere flags to coordinate magnitudes", async () => {

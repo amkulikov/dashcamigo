@@ -20,6 +20,7 @@ import type { Mp4Rotation } from "./indexer.js";
 import { createLogger } from "./log.js";
 import { classifyFilenameRecordingKey, classifyFilenameTime } from "./parsers/filename/index.js";
 import { findStaleGpsCandidates, usableCandidateRecords } from "./stale-gps.js";
+import { normalizeTripTrackSegments } from "./trip-track-segments.js";
 
 const log = createLogger("trips");
 
@@ -1475,9 +1476,15 @@ function collectRawTripRecords(frames: readonly TripFrame[]): { records: GpsReco
     // across regroups. indexByKey holds the survivor's slot in the pre-sort array.
     const indexByKey = new Map<string, number>();
     const merged: GpsRecord[] = [];
-    for (const c of uniqueFrameCandidates(frames)) {
-        for (const r of usableCandidateRecords(c)) {
-            const key = `${r.unixSeconds}|${r.lat}|${r.lon}`;
+    const sources = uniqueFrameCandidates(frames).map((candidate) => ({
+        records: usableCandidateRecords(candidate),
+        startUtc: candidate.startUtc,
+        endUtc: candidate.startUtc + (candidate.wallDurationSec ?? candidate.durationSec),
+        channel: candidate.channel,
+    }));
+    for (const records of normalizeTripTrackSegments(sources)) {
+        for (const r of records) {
+            const key = `${r.unixSeconds}|${r.lat}|${r.lon}|${r.trackSegment ?? ""}`;
             const existingIdx = indexByKey.get(key);
             if (existingIdx === undefined) {
                 indexByKey.set(key, merged.length);

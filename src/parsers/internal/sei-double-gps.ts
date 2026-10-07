@@ -1,10 +1,10 @@
-import { fillForwardBearings, haversineKm } from "../../parser.js";
+import { fillForwardBearings } from "../../parser.js";
+import { estimateSpeedSegments, type SpeedEstimationPoint } from "./position-speed.js";
 import type { GpsRecord, ParsedRecords, VendorFile } from "../types.js";
 import { getFirstSampleOfTrack, type Mp4Index, type TrackInfo } from "./mp4-index.js";
 import { loadSamples, readFirstSampleEntry, readSampleTable } from "./mp4-walker.js";
 
 const SAMPLE_SIZE = 40;
-const MAX_IMPLIED_SPEED_MS = 80;
 
 function hasPacketHeader(view: DataView): boolean {
     return (
@@ -61,7 +61,7 @@ export async function extractSeiDoubleGps(
     const samples = readSampleTable(index.moovView, track.trakBox);
     if (!samples?.length || samples.some((sample) => sample.size !== SAMPLE_SIZE)) return null;
     const buffers = await loadSamples(file.file, samples, index.sliceCost);
-    const records: GpsRecord[] = [];
+    const points: (SpeedEstimationPoint | null)[] = [];
     const skipped: ParsedRecords["skipped"] = [];
     let matchedPackets = 0;
     let lastCounter = -1;
@@ -72,6 +72,7 @@ export async function extractSeiDoubleGps(
         const view = new DataView(buffers[i]!);
         if (!hasPacketHeader(view) || (!isFixPacket(view) && !isNoFixPacket(view))) {
             skipped.push({ line: i + 1, raw: `<sei sample ${i + 1}>`, reason: "invalid sei gps packet" });
+            points.push(null);
             continue;
         }
         matchedPackets++;
@@ -80,10 +81,14 @@ export async function extractSeiDoubleGps(
         const counter = view.getUint16(8);
         if (counter <= lastCounter) {
             skipped.push({ line: i + 1, raw: `<sei sample ${i + 1}>`, reason: "nonmonotonic gps counter" });
+            points.push(null);
             continue;
         }
         lastCounter = counter;
-        if (isNoFixPacket(view)) continue;
+        if (isNoFixPacket(view)) {
+            points.push(null);
+            continue;
+        }
 
         const lonMagnitude = view.getFloat64(21, true);
         const latMagnitude = view.getFloat64(29, true);
@@ -97,32 +102,39 @@ export async function extractSeiDoubleGps(
             Math.abs(lon) > 180
         ) {
             skipped.push({ line: i + 1, raw: `<sei sample ${i + 1}>`, reason: "invalid gps coordinates" });
+            points.push(null);
             continue;
         }
         const unixSeconds = baseUnix / 1000 + counter;
-        const previous = records.at(-1);
-        const dt = previous ? unixSeconds - previous.unixSeconds : 0;
-        const impliedSpeedMs = previous && dt > 0 ? (haversineKm(previous.lat, previous.lon, lat, lon) * 1000) / dt : 0;
-        const speedMs = impliedSpeedMs <= MAX_IMPLIED_SPEED_MS ? impliedSpeedMs : 0;
-        records.push({
-            unixSeconds,
-            active: true,
-            lat,
-            lon,
-            bearingDeg: 0,
-            speedMs,
-            accelXg: 0,
-            accelYg: 0,
-            accelZg: 0,
-            mp4Filename: file.file.name,
-            // Packets have relative time, not a satellite UTC clock. The
-            // trip layer anchors them after it chooses the video's start.
-            timeUnsynced: true,
-            relStartSeconds: counter,
+        points.push({
+            canEstimateSpeed: true,
+            record: {
+                unixSeconds,
+                active: true,
+                lat,
+                lon,
+                bearingDeg: 0,
+                speedMs: 0,
+                speedSource: "unavailable",
+                accelXg: 0,
+                accelYg: 0,
+                accelZg: 0,
+                mp4Filename: file.file.name,
+                // Packets have relative time, not a satellite UTC clock. The
+                // trip layer anchors them after it chooses the video's start.
+                timeUnsynced: true,
+                relStartSeconds: counter,
+            },
         });
     }
     if (matchedPackets < Math.ceil(buffers.length / 2)) return null;
-    if (records.length > 1) records[0]!.speedMs = records[1]!.speedMs;
-    fillForwardBearings(records);
+    const records: GpsRecord[] = [];
+    for (const [segmentId, segment] of estimateSpeedSegments(points).entries()) {
+        for (const record of segment) {
+            record.trackSegment = segmentId;
+            records.push(record);
+        }
+        fillForwardBearings(segment);
+    }
     return { records, skipped };
 }

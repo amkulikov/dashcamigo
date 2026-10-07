@@ -485,6 +485,7 @@ export const enDict = {
     "player.zoom.minimap.aria": "Zoom mini-map — click or drag to pan the view",
     "player.zoom.minimap.title": "Wheel to zoom, drag to pan, Z to reset",
     "player.zoom.reset": "Reset zoom",
+    "speed.estimated": "Estimated speed",
     "player.metrics.placeholder": "-",
     "player.progress": "Trip progress",
     "player.progress.position": "{cur} of {total}",

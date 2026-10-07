@@ -244,6 +244,14 @@ function isCurrentEmbeddedGps(value: unknown, availableIdentityKeys: ReadonlySet
                 isFiniteNumber(raw.lon) &&
                 isFiniteNumber(raw.bearingDeg) &&
                 isFiniteNumber(raw.speedMs) &&
+                (raw.speedSource === undefined ||
+                    raw.speedSource === "measured" ||
+                    raw.speedSource === "estimated" ||
+                    raw.speedSource === "unavailable") &&
+                (raw.trackSegment === undefined ||
+                    (isFiniteNumber(raw.trackSegment) &&
+                        Number.isInteger(raw.trackSegment) &&
+                        raw.trackSegment >= 0)) &&
                 isFiniteNumber(raw.accelXg) &&
                 isFiniteNumber(raw.accelYg) &&
                 isFiniteNumber(raw.accelZg) &&

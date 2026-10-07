@@ -25,6 +25,7 @@
 // All thresholds are SI in the record's native units (m/s, deg) - independent
 // of the user's display preference.
 
+import { hasMeasuredSpeed, isSameTrackSegment } from "./gps-telemetry.js";
 import type { GpsRecord } from "./parsers/types.js";
 
 export type InferredSegmentKind = "stop" | "brake" | "turn" | "accel";
@@ -127,7 +128,15 @@ function detectStops(records: GpsRecord[], tripStartUtc: number, out: InferredSe
     let segStart = -1;
     for (let i = 0; i < records.length; i++) {
         const r = records[i]!;
-        const stationary = r.active && r.speedMs < SPEED_STOP_THRESHOLD_MS;
+        if (
+            segStart >= 0 &&
+            i > 0 &&
+            (!isSameTrackSegment(records[i - 1]!, r) || r.unixSeconds - records[i - 1]!.unixSeconds > 5)
+        ) {
+            flushStop(records, tripStartUtc, segStart, i - 1, out);
+            segStart = -1;
+        }
+        const stationary = r.active && hasMeasuredSpeed(r) && r.speedMs < SPEED_STOP_THRESHOLD_MS;
         if (stationary) {
             if (segStart < 0) segStart = i;
         } else if (segStart >= 0) {
@@ -168,7 +177,15 @@ function detectBrakeAndAccel(records: GpsRecord[], tripStartUtc: number, out: In
         // status "V") report speedMs=0 on a dropout, and a fix-loss next to a
         // moving record reads as a phantom full-intensity brake+accel pair.
         // Same gating detectStops applies via `r.active`.
-        if (dt <= 0 || dt > 5 || !prev.active || !cur.active) {
+        if (
+            dt <= 0 ||
+            dt > 5 ||
+            !prev.active ||
+            !cur.active ||
+            !hasMeasuredSpeed(prev) ||
+            !hasMeasuredSpeed(cur) ||
+            !isSameTrackSegment(prev, cur)
+        ) {
             flushBrake(i - 1);
             flushAccel(i - 1);
             continue;
@@ -214,7 +231,16 @@ function detectTurns(records: GpsRecord[], tripStartUtc: number, out: InferredSe
         const tooSlow = cur.speedMs < TURN_MIN_SPEED_MS || prev.speedMs < TURN_MIN_SPEED_MS;
         // !active: bearing on a no-fix record is garbage - same gating as
         // detectBrakeAndAccel (phantom events on fix dropouts).
-        if (dt <= 0 || dt > 5 || tooSlow || !prev.active || !cur.active) {
+        if (
+            dt <= 0 ||
+            dt > 5 ||
+            tooSlow ||
+            !prev.active ||
+            !cur.active ||
+            !hasMeasuredSpeed(prev) ||
+            !hasMeasuredSpeed(cur) ||
+            !isSameTrackSegment(prev, cur)
+        ) {
             flush(i - 1);
             continue;
         }
