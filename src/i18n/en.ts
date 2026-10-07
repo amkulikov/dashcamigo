@@ -552,6 +552,8 @@ export const enDict = {
     "viewMenu.map.mini": "Mini",
     "viewMenu.map.large": "Large",
     "viewMenu.readout": "GPS readouts",
+    "viewMenu.videoAbovePanels": "Video above panels",
+    "viewMenu.videoAbovePanels.description": "Keep controls visible below the video.",
     "hotkeys.action.playPause": "Play / pause",
     "hotkeys.action.mute": "Mute / unmute",
     "hotkeys.action.fullscreen": "Fullscreen",

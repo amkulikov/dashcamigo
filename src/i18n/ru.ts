@@ -556,6 +556,8 @@ export const ruDict = {
     "viewMenu.map.mini": "Мини",
     "viewMenu.map.large": "Большая",
     "viewMenu.readout": "Показания GPS",
+    "viewMenu.videoAbovePanels": "Видео над панелями",
+    "viewMenu.videoAbovePanels.description": "Управление всегда видно под видео.",
     "hotkeys.action.playPause": "Воспроизведение / пауза",
     "hotkeys.action.mute": "Звук вкл/выкл",
     "hotkeys.action.fullscreen": "Полный экран",

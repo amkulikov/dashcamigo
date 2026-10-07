@@ -555,6 +555,8 @@ export const frDict = {
     "viewMenu.map.mini": "Mini",
     "viewMenu.map.large": "Grande",
     "viewMenu.readout": "Valeurs GPS",
+    "viewMenu.videoAbovePanels": "Vidéo au-dessus des panneaux",
+    "viewMenu.videoAbovePanels.description": "Garde les commandes visibles sous la vidéo.",
     "hotkeys.action.playPause": "Lecture / pause",
     "hotkeys.action.mute": "Muet / son",
     "hotkeys.action.fullscreen": "Plein écran",

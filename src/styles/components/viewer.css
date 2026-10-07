@@ -154,6 +154,9 @@ body.export-mode .player-wrap:not(.player-expanded):not(.map-expanded) {
 .player-wrap .player-readout {
     grid-area: readout;
 }
+.player-panels {
+    display: contents;
+}
 .player-wrap .map-wrap {
     grid-area: map;
     min-width: 0;
@@ -1362,6 +1365,155 @@ body.has-expanded-player .viewer {
         /* The 50vh row above already provides the height - drop the
            portrait min-height which would force extra rows. */
         min-height: 0;
+    }
+}
+
+/* Keep playback and exit outside the video; only the detail stack scrolls
+   when the viewport cannot fit the selected panels at their normal height. */
+.player-wrap.player-expanded.player-panels-below {
+    --fullscreen-map-top: 0px;
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px)
+        env(safe-area-inset-left, 0px);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+        "actions"
+        "video"
+        "panels"
+        "bar";
+}
+.player-wrap.player-expanded.player-panels-below.map-expanded {
+    grid-template-columns:
+        minmax(0, 1fr)
+        4px
+        minmax(220px, var(--map-width, clamp(280px, 34%, 480px)));
+    grid-template-areas:
+        "actions actions actions"
+        "video vmr map"
+        "panels panels panels"
+        "bar bar bar";
+}
+.player-wrap.player-expanded.player-panels-below .player-panels {
+    display: flex;
+    flex-direction: column;
+    grid-area: panels;
+    min-width: 0;
+    min-height: 0;
+    max-height: min(
+        40dvh,
+        calc(
+            100dvh -
+            var(--fullscreen-bar-h) -
+            var(--fullscreen-action-size) -
+            2 *
+            var(--dc-space-1) -
+            env(safe-area-inset-top, 0px) -
+            env(safe-area-inset-bottom, 0px) -
+            80px
+        )
+    );
+    overflow: auto;
+    overscroll-behavior: contain;
+    background: var(--bg-elev);
+}
+.player-wrap.player-expanded.player-panels-below .player-chart,
+.player-wrap.player-expanded.player-panels-below .player-readout,
+.player-wrap.player-expanded.player-panels-below .player-bar,
+.player-wrap.player-expanded.player-panels-below .player-fullscreen-actions {
+    position: relative;
+    inset: auto;
+    transform: none;
+    opacity: 1;
+    pointer-events: auto;
+    animation: none;
+    transition: none;
+    background: var(--bg-elev);
+    backdrop-filter: none;
+    border-radius: 0;
+    box-shadow: none;
+}
+.player-wrap.player-expanded.player-panels-below .player-readout:not([hidden]) {
+    display: flex;
+}
+.player-wrap.player-expanded.player-panels-below .player-readout,
+.player-wrap.player-expanded.player-panels-below .player-chart {
+    flex: none;
+    grid-area: auto;
+    border-inline: 0;
+}
+.player-wrap.player-expanded.player-panels-below .player-chart {
+    overflow: visible;
+}
+.player-wrap.player-expanded.player-panels-below .player-mini-progress {
+    position: sticky;
+    top: 0;
+    z-index: 8;
+    background: var(--bg-elev);
+}
+.player-wrap.player-expanded.player-panels-below .player-bar {
+    grid-area: bar;
+    border-inline: 0;
+    border-bottom: 0;
+}
+.player-wrap.player-expanded.player-panels-below .player-fullscreen-actions {
+    grid-area: actions;
+    justify-content: flex-end;
+    max-width: none;
+    padding: var(--dc-space-1) var(--dc-space-2);
+}
+.player-wrap.player-expanded.player-panels-below:not(.controls-visible) {
+    cursor: auto;
+}
+.player-wrap.player-expanded.player-panels-below .video-minimap {
+    top: var(--dc-space-3);
+    right: var(--dc-space-3);
+}
+.player-wrap.player-expanded.player-panels-below .video-frame {
+    container-type: size;
+}
+/* Focus thumbnails must also fit the reduced height, including the gaps
+   above them. The primary keeps all remaining width without changing zoom. */
+.player-wrap.player-expanded.player-panels-below .video-grid[data-view-mode="focus"] {
+    --focus-thumb-count: 1;
+    grid-template-columns:
+        minmax(0, 1fr)
+        min(
+            clamp(96px, 20%, 240px),
+            calc((100cqh - var(--focus-thumb-count) * var(--dc-space-2)) / var(--focus-thumb-count) * 16 / 9)
+        );
+}
+.player-wrap.player-expanded.player-panels-below .video-grid[data-view-mode="focus"][data-channel-count="1"] {
+    grid-template-columns: minmax(0, 1fr);
+}
+.player-wrap.player-expanded.player-panels-below .video-grid[data-view-mode="focus"][data-channel-count="3"] {
+    --focus-thumb-count: 2;
+}
+.player-wrap.player-expanded.player-panels-below .video-grid[data-view-mode="focus"][data-channel-count="4"] {
+    --focus-thumb-count: 3;
+}
+body.export-mode .player-wrap.player-expanded.player-panels-below .video-frame {
+    display: flex;
+}
+@media (max-width: 767px) and (orientation: portrait) {
+    .player-wrap.player-expanded.player-panels-below.map-expanded {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr) auto auto;
+        grid-template-areas:
+            "actions"
+            "video"
+            "map"
+            "panels"
+            "bar";
+    }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+    .player-wrap.player-expanded.player-panels-below.map-expanded {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-areas:
+            "actions actions"
+            "video map"
+            "panels panels"
+            "bar bar";
     }
 }
 

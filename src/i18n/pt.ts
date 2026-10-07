@@ -553,6 +553,8 @@ export const ptDict = {
     "viewMenu.map.mini": "Mini",
     "viewMenu.map.large": "Grande",
     "viewMenu.readout": "Leituras GPS",
+    "viewMenu.videoAbovePanels": "Vídeo acima dos painéis",
+    "viewMenu.videoAbovePanels.description": "Mantenha os controles visíveis abaixo do vídeo.",
     "hotkeys.action.playPause": "Reproduzir / pausar",
     "hotkeys.action.mute": "Silenciar / ativar som",
     "hotkeys.action.fullscreen": "Tela cheia",

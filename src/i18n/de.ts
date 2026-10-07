@@ -552,6 +552,8 @@ export const deDict = {
     "viewMenu.map.mini": "Mini",
     "viewMenu.map.large": "Groß",
     "viewMenu.readout": "GPS-Werte",
+    "viewMenu.videoAbovePanels": "Video über den Bereichen",
+    "viewMenu.videoAbovePanels.description": "Bedienelemente bleiben unter dem Video sichtbar.",
     "hotkeys.action.playPause": "Abspielen / Pause",
     "hotkeys.action.mute": "Stumm / Ton an",
     "hotkeys.action.fullscreen": "Vollbild",

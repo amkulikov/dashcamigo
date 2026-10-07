@@ -561,6 +561,8 @@ export const jaDict = {
     "viewMenu.map.mini": "ミニ",
     "viewMenu.map.large": "大",
     "viewMenu.readout": "GPS表示",
+    "viewMenu.videoAbovePanels": "パネルの上に映像を表示",
+    "viewMenu.videoAbovePanels.description": "操作ボタンを映像の下に常に表示します。",
     "hotkeys.action.playPause": "再生 / 一時停止",
     "hotkeys.action.mute": "ミュート / 解除",
     "hotkeys.action.fullscreen": "フルスクリーン",

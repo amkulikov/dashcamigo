@@ -560,6 +560,8 @@ export const koDict = {
     "viewMenu.map.mini": "미니",
     "viewMenu.map.large": "크게",
     "viewMenu.readout": "GPS 값",
+    "viewMenu.videoAbovePanels": "패널 위에 영상 표시",
+    "viewMenu.videoAbovePanels.description": "영상 아래에 재생 컨트롤을 항상 표시해요.",
     "hotkeys.action.playPause": "재생 / 일시정지",
     "hotkeys.action.mute": "음소거 / 해제",
     "hotkeys.action.fullscreen": "전체 화면",

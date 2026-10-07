@@ -766,6 +766,8 @@ export type I18nKey =
     | "viewMenu.map.mini"
     | "viewMenu.map.large"
     | "viewMenu.readout"
+    | "viewMenu.videoAbovePanels"
+    | "viewMenu.videoAbovePanels.description"
     | "hotkeys.action.playPause"
     | "hotkeys.action.mute"
     | "hotkeys.action.fullscreen"

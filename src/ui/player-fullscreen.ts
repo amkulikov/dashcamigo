@@ -14,7 +14,8 @@ import { state } from "./state.js";
 import { setExpandedViewPanels } from "./view-menu.js";
 
 const log = createLogger("player");
-const HIDE_DELAY_MS = 3000;
+const HIDE_DELAY_MS = 1000;
+const PANELS_BELOW_STORAGE_KEY = "dashcamigo:player:panelsBelow";
 const CONTROL_SELECTOR = ".player-bar, .player-chart, .player-readout, .player-fullscreen-actions";
 const OPEN_MENU_SELECTOR =
     ".player-speed-menu:not([hidden]), .view-menu-popover:not([hidden]), .overflow-menu:not([hidden]), .player-volume-popover:not([hidden])";
@@ -25,6 +26,7 @@ let transition: Promise<boolean> | null = null;
 let isViewportExpanded = false;
 let hasShownHint = false;
 let isPinned = false;
+let hasPanelsBelow = false;
 let shouldRestoreFocus = true;
 let savedFocus: HTMLElement | null = null;
 let savedScroll: { element: Element; left: number; top: number }[] = [];
@@ -54,7 +56,7 @@ function revealControls(): void {
 
 function scheduleHideControls(): void {
     if (hideTimer !== null) return;
-    if (!isExpanded() || isPinned || dom.player.paused || dom.player.ended) return;
+    if (!isExpanded() || hasPanelsBelow || isPinned || dom.player.paused || dom.player.ended) return;
     hideTimer = setTimeout(() => {
         hideTimer = null;
         if (!isExpanded()) return;
@@ -62,6 +64,7 @@ function scheduleHideControls(): void {
         const hasKeyboardFocus =
             focused instanceof HTMLElement && focused.matches(":focus-visible") && dom.playerWrap.contains(focused);
         if (
+            hasPanelsBelow ||
             isPinned ||
             dom.player.paused ||
             dom.player.ended ||
@@ -78,7 +81,7 @@ function scheduleHideControls(): void {
     }, HIDE_DELAY_MS);
 }
 
-function showHint(key: I18nKey, delay = HIDE_DELAY_MS): void {
+function showHint(key: I18nKey, delay = 3000): void {
     const hint = document.getElementById("player-fullscreen-hint");
     if (!hint) return;
     if (hintTimer !== null) clearTimeout(hintTimer);
@@ -132,11 +135,10 @@ function syncExpandedState(expanded: boolean): void {
     activePointers.clear();
     dom.playerWrap.classList.remove("fullscreen-entering", "fullscreen-leaving");
     dom.playerWrap.classList.toggle("player-expanded", expanded);
+    dom.playerWrap.classList.toggle("player-panels-below", expanded && hasPanelsBelow);
     dom.playerWrap.classList.toggle("player-viewport", expanded && isViewportExpanded);
     document.body.classList.toggle("has-expanded-player", expanded);
     dom.playerWrap.classList.toggle("controls-visible", expanded);
-    const pin = document.getElementById("player-controls-pin");
-    if (pin) pin.hidden = !expanded;
     syncFullscreenButton();
     setExpandedViewPanels(expanded);
     if (expanded) {
@@ -270,13 +272,24 @@ export function syncFullscreenButton(): void {
     if (key) key.hidden = isCoarsePointer();
     const pin = document.getElementById("player-controls-pin");
     if (pin) {
+        pin.hidden = !expanded || hasPanelsBelow;
         pin.setAttribute("aria-label", t("player.controls.pin"));
         pin.setAttribute("aria-pressed", String(isPinned));
         pin.title = t("player.controls.pin");
     }
+    const panelsBelow = document.querySelector<HTMLElement>("[data-fullscreen-panels-below]");
+    if (panelsBelow) {
+        panelsBelow.hidden = !expanded;
+        panelsBelow.setAttribute("aria-checked", String(hasPanelsBelow));
+    }
 }
 
 export function initPlayerFullscreen(): void {
+    try {
+        hasPanelsBelow = localStorage.getItem(PANELS_BELOW_STORAGE_KEY) === "1";
+    } catch {
+        hasPanelsBelow = false;
+    }
     dom.playerBar.fullscreen.addEventListener("click", () => {
         // Overflow forwards clicks without focusing the hidden toolbar button.
         void toggleFullscreen(fullscreenEntryFocusTarget());
@@ -286,6 +299,21 @@ export function initPlayerFullscreen(): void {
         isPinned = !isPinned;
         syncFullscreenButton();
         revealControls();
+    });
+    const panelsBelow = document.querySelector<HTMLElement>("[data-fullscreen-panels-below]");
+    panelsBelow?.addEventListener("click", () => {
+        if (!isExpanded()) return;
+        panelsBelow.focus({ preventScroll: true });
+        hasPanelsBelow = !hasPanelsBelow;
+        try {
+            localStorage.setItem(PANELS_BELOW_STORAGE_KEY, hasPanelsBelow ? "1" : "0");
+        } catch {
+            // Keep the in-memory choice when storage is unavailable.
+        }
+        dom.playerWrap.classList.toggle("player-panels-below", hasPanelsBelow);
+        syncFullscreenButton();
+        revealControls();
+        applyMapLayout();
     });
     setExportModePreparation(() => (isExpanded() || transition ? exitExpandedPlayer(false) : null));
     subscribeExportState(syncFullscreenButton);

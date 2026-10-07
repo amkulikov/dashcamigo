@@ -553,6 +553,8 @@ export const esDict = {
     "viewMenu.map.mini": "Mini",
     "viewMenu.map.large": "Grande",
     "viewMenu.readout": "Lecturas GPS",
+    "viewMenu.videoAbovePanels": "Vídeo encima de los paneles",
+    "viewMenu.videoAbovePanels.description": "Mantén los controles visibles debajo del vídeo.",
     "hotkeys.action.playPause": "Reproducir / pausar",
     "hotkeys.action.mute": "Silenciar / activar",
     "hotkeys.action.fullscreen": "Pantalla completa",

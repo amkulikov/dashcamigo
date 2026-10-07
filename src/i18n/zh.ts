@@ -550,6 +550,8 @@ export const zhDict = {
     "viewMenu.map.mini": "小",
     "viewMenu.map.large": "大",
     "viewMenu.readout": "GPS 数值",
+    "viewMenu.videoAbovePanels": "视频显示在面板上方",
+    "viewMenu.videoAbovePanels.description": "在视频下方始终显示播放控件。",
     "hotkeys.action.playPause": "播放 / 暂停",
     "hotkeys.action.mute": "静音 / 取消静音",
     "hotkeys.action.fullscreen": "全屏",

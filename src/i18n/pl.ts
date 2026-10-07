@@ -551,6 +551,8 @@ export const plDict = {
     "viewMenu.map.mini": "Mini",
     "viewMenu.map.large": "Duża",
     "viewMenu.readout": "Odczyty GPS",
+    "viewMenu.videoAbovePanels": "Wideo nad panelami",
+    "viewMenu.videoAbovePanels.description": "Sterowanie pozostaje widoczne pod wideo.",
     "hotkeys.action.playPause": "Odtwarzaj / pauza",
     "hotkeys.action.mute": "Wycisz / dźwięk",
     "hotkeys.action.fullscreen": "Pełny ekran",

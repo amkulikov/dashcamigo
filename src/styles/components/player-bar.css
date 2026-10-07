@@ -495,6 +495,25 @@
     background: var(--bg-elev-2);
     outline: none;
 }
+.view-menu-row[hidden] {
+    display: none;
+}
+.view-menu-row--described {
+    align-items: flex-start;
+}
+.view-menu-row--described .view-menu-row__check {
+    margin-top: 3px;
+}
+.view-menu-row__text {
+    display: flex;
+    flex-direction: column;
+    gap: var(--dc-space-1);
+    min-width: 0;
+}
+.view-menu-row__description {
+    color: var(--fg-dim);
+    font: var(--dc-text-xs) / 1.4 var(--dc-font-ui);
+}
 .view-menu-row[data-disabled="true"] {
     opacity: 0.4;
     cursor: not-allowed;
