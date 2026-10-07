@@ -9,6 +9,8 @@ release tag. Localized texts ship inside the app (the "What's new" panel).
 
 ## 2026-10-07
 
+- **Improved:** Full-screen video can stay above the controls.
+- **New:** Missing speed readings are estimated from coordinates.
 - **New camera support:** INNOVV K3.
 
 ## 2026-10-05

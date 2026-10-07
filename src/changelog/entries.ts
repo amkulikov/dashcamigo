@@ -28,6 +28,38 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-10-07.3",
+        category: "improvement",
+        text: {
+            en: "Full-screen video can stay above the controls.",
+            ru: "В полном экране видео можно разместить над панелями управления.",
+            de: "Im Vollbild kann das Video über den Bedienelementen bleiben.",
+            es: "En pantalla completa, el vídeo puede quedar encima de los controles.",
+            fr: "En plein écran, la vidéo peut rester au-dessus des commandes.",
+            pl: "W trybie pełnoekranowym wideo może być wyświetlane nad elementami sterowania.",
+            pt: "Em tela cheia, o vídeo pode ficar acima dos controles.",
+            zh: "全屏时可将视频显示在控件上方。",
+            ja: "フルスクリーンで映像を操作パネルの上に配置できます。",
+            ko: "전체 화면에서 영상을 재생 컨트롤 위에 배치할 수 있어요.",
+        },
+    },
+    {
+        id: "2026-10-07.2",
+        category: "feature",
+        text: {
+            en: "Missing speed readings are estimated from coordinates.",
+            ru: "Если в записи нет скорости, она рассчитывается примерно по координатам.",
+            de: "Fehlende Geschwindigkeitswerte werden aus Koordinaten geschätzt.",
+            es: "Las lecturas de velocidad ausentes se estiman a partir de las coordenadas.",
+            fr: "Les valeurs de vitesse manquantes sont estimées à partir des coordonnées.",
+            pl: "Brakujące wartości prędkości są szacowane na podstawie współrzędnych.",
+            pt: "As leituras de velocidade ausentes são estimadas a partir das coordenadas.",
+            zh: "缺失的速度读数会根据坐标估算。",
+            ja: "速度の記録がない場合は、座標から推定します。",
+            ko: "속도 기록이 없으면 좌표를 바탕으로 추정해요.",
+        },
+    },
+    {
         id: "2026-10-07.1",
         category: "support",
         text: {
