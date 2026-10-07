@@ -348,6 +348,54 @@ describe("groupTrips: dual-channel pairs", () => {
         }
     });
 
+    it.each(["mixed-suffix", "channel-folder", "counter-folder"])(
+        "pairs %s recordings while keeping separate cards apart",
+        (shape) => {
+            const candidates = ["card-a", "card-b"].flatMap((root) =>
+                ["120000", "120100", "120200"].flatMap((time, index) =>
+                    ["Front", "Rear"].map((folder) => {
+                        const name =
+                            shape === "counter-folder"
+                                ? `20260101${time}_${index.toString().padStart(3, "0")}.mp4`
+                                : shape === "mixed-suffix" && folder === "Rear"
+                                  ? `20260101_${time}_r.mp4`
+                                  : `20260101_${time}.MP4`;
+                        const relativePath =
+                            shape === "mixed-suffix"
+                                ? `${root}/${name}`
+                                : shape === "channel-folder"
+                                  ? `${root}/Video_${folder}/${name}`
+                                  : `${root}/${folder}/${name}`;
+                        const source = { file: new File([], name), relativePath };
+                        const channel = classifyFilenameChannel(source);
+                        const start = classifyFilenameTime(source);
+                        if (!start) throw new Error(`unclassified filename: ${name}`);
+                        return makeCandidate({
+                            name,
+                            relativePath,
+                            startUtc: start.getTime() / 1000,
+                            durationSec: 60,
+                            channel: channel?.channel ?? null,
+                            channelConfident: channel?.confident ?? false,
+                            fingerprint: cameraFingerprint(source),
+                            sequence: classifyFilenameSequence(source),
+                            recordingMode: classifyFilenameMode(source),
+                        });
+                    }),
+                ),
+            );
+            const trips = groupTrips(candidates);
+            expect(trips).toHaveLength(2);
+            for (const trip of trips) {
+                expect(trip.frames).toHaveLength(3);
+                expect(trip.durationSec).toBe(180);
+                for (const frame of trip.frames) {
+                    expect(Object.keys(frame.channels).sort()).toEqual(["front", "rear"]);
+                }
+            }
+        },
+    );
+
     it("pairs INNOVV K3 channels with one-second clock differences across snap boundaries", () => {
         const candidates = (
             [

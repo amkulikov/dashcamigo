@@ -40,6 +40,11 @@ const TESLA_CAMERA_SEQUENCE: Record<string, number> = {
     cabin: 8,
 };
 
+function safeSequence(token: string): number | null {
+    const value = Number(token);
+    return Number.isSafeInteger(value) ? value : null;
+}
+
 const mai70Sequence: FilenameSequenceTechnique = {
     id: "70mai-sequence",
     extract(file: VendorFile): number | null {
@@ -61,7 +66,7 @@ const carcamSequence: FilenameSequenceTechnique = {
     id: "carcam-sequence",
     extract(file: VendorFile): number | null {
         const m = file.file.name.match(RX_CARCAM);
-        return m ? Number(m[3]) : null;
+        return m ? safeSequence(m[3]!) : null;
     },
 };
 
@@ -169,7 +174,7 @@ const recSingleSequence: FilenameSequenceTechnique = {
     id: "rec-single-sequence",
     extract(file: VendorFile): number | null {
         const m = file.file.name.match(RX_REC_SINGLE);
-        return m ? Number(m[3]) : null;
+        return m ? safeSequence(m[3]!) : null;
     },
 };
 

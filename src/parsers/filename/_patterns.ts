@@ -82,12 +82,12 @@ export function blackvueChannelGroupKey(name: string): string | null {
 
 // CarCam 4CH 360-WiFi: REC + date - time - sequence - channel letter.
 // A/B/C/D are the known port indices; the slot stays open for firmware variants.
-export const RX_CARCAM = /^REC(\d{8})-(\d{6})-(\d{1,5})-([A-Z])\.mp4$/i;
+export const RX_CARCAM = /^REC(\d{8})-(\d{6})-(\d+)-([A-Z])\.mp4$/i;
 // SigmaStar REC family: mode prefix + date - time - sequence, no channel suffix.
 // iZEEKER splits channels into Normal/A and Normal/B; iBox RoadScan uses
 // Normal|Event|Parking/F|R with REC|SOS|PAR prefixes. A bare REC name carries
 // no reliable channel or mode. The missing suffix keeps this off RX_CARCAM.
-export const RX_REC_SINGLE = /^(?:REC|SOS|PAR)(\d{8})-(\d{6})-(\d{1,5})\.mp4$/i;
+export const RX_REC_SINGLE = /^(?:REC|SOS|PAR)(\d{8})-(\d{6})-(\d+)\.mp4$/i;
 export const RX_REC_SINGLE_PATH_CHANNEL = /(?:^|\/)(Normal|Event|Parking)\/([A-Z])\/[^/]+$/i;
 export const RX_CARCAM_PATH_FRONT = /(?:^|\/)normal\/a\//i;
 export const RX_CARCAM_PATH_REAR = /(?:^|\/)normal\/b\//i;
@@ -118,19 +118,22 @@ export const RX_DDPAI_TIMELAPSE = /^([SQ])_(\d{14})_(\d{3,5})_(\d{2,4})\.mp4$/i;
 export const RX_DDPAI_EVENT = /^G_(\d{14})_(\d{2,5})_([LX])\.mp4$/i;
 export const RX_DDPAI_TIMESTAMP_TOKEN = /(\d{14})/;
 
-// Timestamp + optional channel letter; INNOVV K3 separates the letter with `_`.
-export const RX_E_ACE = /^(\d{8})_(\d{6})(?:_?([A-Z]))?\.mp4$/i;
+// A separator belongs to the channel token; a bare trailing separator is invalid.
+export const RX_E_ACE = /^(\d{8})_(\d{6})(?:[_-]?([A-Z]))?\.mp4$/i;
+// Leaf folders can supply metadata missing from otherwise generic timestamp names.
+export const RX_TIMESTAMP_PATH_CHANNEL = /(?:^|\/)(front|rear|inside)\/[^/]+$/i;
+export const RX_TIMESTAMP_PATH_MODE =
+    /(?:^|\/)(normal|video|event|parking|manual|favorites)\/(?:(?:front|rear|inside|interior)\/)?[^/]+$/i;
 // Leaf folder of an E-Ace-shaped 3-channel card that splits streams into
 // `<Mode>_<channel word>/` siblings (RedTiger F17: Video_Front/, Video_Inside/,
-// Video_Rear/, with Event_* next to them). Group 1 = the mode stem.
-const RX_E_ACE_CHANNEL_FOLDER = /^(video|event)_(?:front|rear|inside)$/i;
+// Video_Rear/, with Event_* next to them). Groups: mode stem, channel word.
+const RX_E_ACE_CHANNEL_FOLDER = /^(video|event)_(front|rear|inside)$/i;
 
-/** Mode stem ("Video"/"Event", case as on the card) of a path whose leaf
- *  folder is an E-Ace `<Mode>_<channel word>` folder, or null. */
-export function eaceChannelFolderStem(relativePath: string): string | null {
+/** Mode and channel of an E-Ace leaf folder, preserving the card's spelling. */
+export function matchEaceChannelFolder(relativePath: string): RegExpMatchArray | null {
     const segs = relativePath.split("/");
     if (segs.length < 2) return null;
-    return segs[segs.length - 2]!.match(RX_E_ACE_CHANNEL_FOLDER)?.[1] ?? null;
+    return segs[segs.length - 2]!.match(RX_E_ACE_CHANNEL_FOLDER);
 }
 
 // Escort M2: digits_digits_CAM.mp4. Time has no seconds field.
@@ -419,4 +422,4 @@ export const RX_SEI_DOUBLE_GPS = /^\d{6}_\d{3}_\d{3}_[A-Z]\.mp4$/i;
 export const RX_SEI_DOUBLE_GPS_PATH = /(?:^|\/)(InternalView|ExteriorView)\/(\d{6})\/[^/]+$/i;
 
 // INNOVV N2: date, clock and mnemonic camera suffix in separate tokens.
-export const RX_DATETIME_CHANNEL_TS = /^(20\d{6})_(\d{6})_([FR])\.ts$/i;
+export const RX_DATETIME_CHANNEL_TS = /^(20\d{6})_(\d{6})_([A-Z])\.ts$/i;

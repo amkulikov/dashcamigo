@@ -4,7 +4,7 @@
 
 import type { RecordingMode, VendorFile } from "../types.js";
 import {
-    eaceChannelFolderStem,
+    matchEaceChannelFolder,
     RX_360_CARDVR_REC_PATH,
     RX_70MAI,
     RX_70MAI_PATH_MODE,
@@ -49,6 +49,7 @@ import {
     RX_TESLA_PATH_SAVED,
     RX_TESLA_PATH_SENTRY,
     RX_THINKWARE,
+    RX_TIMESTAMP_PATH_MODE,
     RX_VUEROID,
     RX_VUEROID_PATH_MODE,
     RX_WOLFBOX,
@@ -164,13 +165,31 @@ const recSingleMode: FilenameModeTechnique = {
     },
 };
 
+function timestampFolderMode(file: VendorFile): RecordingMode | null {
+    const folder = file.relativePath.match(RX_TIMESTAMP_PATH_MODE)?.[1]?.toLowerCase();
+    switch (folder) {
+        case "normal":
+        case "video":
+            return "normal";
+        case "event":
+            return "event";
+        case "parking":
+            return "parking";
+        case "manual":
+        case "favorites":
+            return "manual";
+        default:
+            return null;
+    }
+}
+
 const ddpaiMode: FilenameModeTechnique = {
     id: "ddpai-mode",
     extract(file: VendorFile): RecordingMode | null {
         if (RX_DDPAI_TIMELAPSE.test(file.file.name)) return "parking";
         const ev = file.file.name.match(RX_DDPAI_EVENT);
         if (ev) return ev[3]!.toUpperCase() === "X" ? "parking" : "event";
-        if (RX_DDPAI_NORMAL.test(file.file.name)) return "normal";
+        if (RX_DDPAI_NORMAL.test(file.file.name)) return timestampFolderMode(file) ?? "normal";
         return null;
     },
 };
@@ -179,7 +198,9 @@ const eaceMode: FilenameModeTechnique = {
     id: "e-ace-mode",
     extract(file: VendorFile): RecordingMode | null {
         if (!RX_E_ACE.test(file.file.name)) return null;
-        return eaceChannelFolderStem(file.relativePath)?.toLowerCase() === "event" ? "event" : "normal";
+        const folder = matchEaceChannelFolder(file.relativePath);
+        if (folder) return folder[1]!.toLowerCase() === "event" ? "event" : "normal";
+        return timestampFolderMode(file) ?? "normal";
     },
 };
 

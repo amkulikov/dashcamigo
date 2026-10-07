@@ -58,12 +58,14 @@ import {
     RX_TESLA_PATH,
     RX_TESLA_RECENT,
     RX_THINKWARE,
+    RX_TIMESTAMP_PATH_CHANNEL,
     RX_VUEROID,
     RX_WOLFBOX,
     RX_WOLFBOX_PATH_FRONT,
     RX_WOLFBOX_PATH_INTERIOR,
     RX_WOLFBOX_PATH_REAR,
     matchNovatekSingleFilename,
+    matchEaceChannelFolder,
 } from "./_patterns.js";
 import type { ChannelMatch, FilenameChannelTechnique } from "./types.js";
 
@@ -90,6 +92,19 @@ function mnemonicChannel(letter: string): ChannelMatch {
             return guess("interior");
         default:
             return guess("side");
+    }
+}
+
+function folderChannel(word: string | undefined): ChannelMatch | null {
+    switch (word?.toLowerCase()) {
+        case "front":
+            return sure("front");
+        case "rear":
+            return sure("rear");
+        case "inside":
+            return sure("interior");
+        default:
+            return null;
     }
 }
 
@@ -272,7 +287,10 @@ const ddpaiChannel: FilenameChannelTechnique = {
         const normal = file.file.name.match(RX_DDPAI_NORMAL);
         if (normal) {
             const suffix = normal[3]?.toUpperCase();
-            if (!suffix) return guess("front");
+            // A missing suffix is weaker evidence than a spelled-out channel folder.
+            if (!suffix) {
+                return folderChannel(file.relativePath.match(RX_TIMESTAMP_PATH_CHANNEL)?.[1]) ?? guess("front");
+            }
             if (suffix === "A") return guess("rear");
             if (suffix === "F") return guess("front");
             return mnemonicChannel(suffix);
@@ -297,8 +315,9 @@ const eaceChannel: FilenameChannelTechnique = {
         if (!m) return null;
         const ch = m[3];
         if (ch) return mnemonicChannel(ch);
-        // No suffix - single-channel model; grouper assigns default 'front'.
-        return null;
+        return folderChannel(
+            matchEaceChannelFolder(file.relativePath)?.[2] ?? file.relativePath.match(RX_TIMESTAMP_PATH_CHANNEL)?.[1],
+        );
     },
 };
 
@@ -584,7 +603,7 @@ const datetimeChannelTsChannel: FilenameChannelTechnique = {
     id: "datetime-channel-ts-channel",
     extract(file: VendorFile): ChannelMatch | null {
         const m = file.file.name.match(RX_DATETIME_CHANNEL_TS);
-        return m ? sure(m[3]!.toUpperCase() === "F" ? "front" : "rear") : null;
+        return m ? mnemonicChannel(m[3]!) : null;
     },
 };
 

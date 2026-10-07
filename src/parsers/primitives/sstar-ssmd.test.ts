@@ -610,6 +610,9 @@ describe("localNaiveSecondsFromRecFilename", () => {
         expect(localNaiveSecondsFromRecFilename(`backup ${prefix}20260902-231922-661.mp4`)).toBe(
             Date.UTC(2026, 8, 2, 23, 19, 22) / 1000,
         );
+        expect(localNaiveSecondsFromRecFilename(`${prefix}20260902-231922-100000.mp4`)).toBe(
+            Date.UTC(2026, 8, 2, 23, 19, 22) / 1000,
+        );
         expect(localNaiveSecondsFromRecFilename(`${prefix}20260902-251922-661.mp4`)).toBeNull();
         expect(localNaiveSecondsFromRecFilename("clip-20260902-231922.mp4")).toBeNull();
     });

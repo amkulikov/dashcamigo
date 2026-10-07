@@ -1148,7 +1148,7 @@ describe("rec-single techniques", () => {
         },
     );
 
-    it.each(["clip.mp4", "SOS20260913-125521-1371-A.mp4", "PAR20260913-120859-123456.mp4"])(
+    it.each(["clip.mp4", "SOS20260913-125521-1371-A.mp4", "PAR20260913-120859-123.456.mp4"])(
         "does not claim foreign %s names based on F/R folders",
         (name) => {
             const file = vf(name, `card/Event/R/${name}`);
@@ -1165,8 +1165,7 @@ describe("rec-single techniques", () => {
         expect(matchFilenameChannel(vf("REC20260101-120000-228-A.mp4")).matchedId).toBe("carcam-channel");
     });
 
-    it("negative: 6-digit sequence and Thinkware REC_ names are not claimed", () => {
-        expect(RX_REC_SINGLE.test("REC20260101-120000-123456.mp4")).toBe(false);
+    it("keeps Thinkware REC_ names separate", () => {
         expect(matchFilenameTime(vf("REC_20210101_120000_F.mp4")).matchedId).not.toBe("rec-single-time");
         expect(matchFilenameChannel(vf("REC_20210101_120000_F.mp4")).matchedId).toBe("thinkware-channel");
     });
@@ -1381,7 +1380,7 @@ describe("ligogps-trailer-ts suffix techniques", () => {
 });
 
 describe("timestamp plus channel-letter MP4 techniques", () => {
-    it.each(["", "_"])("classifies F/R/I siblings with a '%s' channel separator", (separator) => {
+    it.each(["", "_", "-"])("classifies F/R/I siblings with a '%s' channel separator", (separator) => {
         for (const [suffix, channel] of [
             ["F", "front"],
             ["R", "rear"],

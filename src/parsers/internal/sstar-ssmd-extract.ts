@@ -224,7 +224,7 @@ const RX_NEOLINE_SUFFIX = /INF(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-\d+-[F
 
 // Shared by the DDmm and KTRX dialects; local for the same parser-layer
 // decoupling reason as RX_NEOLINE_SUFFIX above.
-const RX_REC_SUFFIX = /(?:REC|SOS|PAR)(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-\d{1,5}\.mp4$/i;
+const RX_REC_SUFFIX = /(?:REC|SOS|PAR)(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-\d+\.mp4$/i;
 
 // Generic fallback: the first plausible YYYYMMDD run anywhere in the name.
 const RX_GENERIC_DATE_RUN = /(?:^|\D)(20\d{2})(\d{2})(\d{2})(?=\D|$)/;

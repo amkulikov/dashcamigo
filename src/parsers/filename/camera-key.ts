@@ -23,7 +23,7 @@ import type { VendorFile } from "../types.js";
 import {
     MAI70_MODE_FOLDERS,
     REDTIGER_MODE_FOLDERS,
-    eaceChannelFolderStem,
+    matchEaceChannelFolder,
     RX_DATETIME_CHANNEL_TS,
     RX_70MAI,
     RX_70MAI_CHANNEL_STRIP,
@@ -269,15 +269,11 @@ const ddpaiCameraKey: FilenameCameraKeyTechnique = {
     id: "ddpai-camera-key",
     extract(file: VendorFile): string | null {
         const name = file.file.name;
-        // Normal: optional `_A` rear suffix at group [3]. Strip it AND its leading underscore.
+        // Normalize the channel token and extension spelling together.
         const normal = name.match(RX_DDPAI_NORMAL);
         if (normal) {
-            let stripped = name;
-            if (normal[3]) {
-                stripped = stripped.replace(/_[A-Z](\.mp4)$/i, "$1");
-            }
             const dir = strippedParentDir(file.relativePath, ["front", "rear", "inside"], [normal[3] ?? ""]);
-            return `ddpai|${dir}|${maskName(stripped)}`;
+            return `ddpai|${dir}|${maskName(`${normal[1]}_${normal[2]}.mp4`)}`;
         }
         // Timelapse: S_ (front) / Q_ (rear) prefix at group [1].
         const tl = name.match(RX_DDPAI_TIMELAPSE);
@@ -302,20 +298,15 @@ const eaceCameraKey: FilenameCameraKeyTechnique = {
     extract(file: VendorFile): string | null {
         const m = file.file.name.match(RX_E_ACE);
         if (!m) return null;
-        // Optional channel suffix at group [3], immediately before `.mp4`.
-        let masked: string;
+        // Channel separators and extension case do not identify a camera.
+        const masked = maskName(`${m[1]}_${m[2]}.mp4`);
         const ch = m[3];
-        if (ch) {
-            masked = maskNameWithTrailingLetterStripped(file.file.name, ch);
-        } else {
-            masked = maskName(file.file.name);
-        }
         // A `<Mode>_<channel word>` leaf keeps only its mode stem: channels
         // converge, while Event clips keep their own key. Unlike
         // redtiger-camera-key, no corpus shows whether an event replaces its
         // loop segment or duplicates it; a shared key would turn a duplicate
         // into a dup frame inside the drive.
-        const stem = eaceChannelFolderStem(file.relativePath);
+        const stem = matchEaceChannelFolder(file.relativePath)?.[1] ?? null;
         const path = stem === null ? file.relativePath : file.relativePath.replace(/[^/]+(?=\/[^/]+$)/, stem);
         const dir = strippedParentDir(path, ["front", "rear", "inside", "interior"], [ch ?? ""]);
         return `e-ace|${dir}|${masked}`;
@@ -712,7 +703,7 @@ const datetimeChannelTsCameraKey: FilenameCameraKeyTechnique = {
         const m = file.file.name.match(RX_DATETIME_CHANNEL_TS);
         if (!m) return null;
         // Only the leaf is a channel; an enclosing root may itself be named front/back.
-        const dir = strippedParentDir(file.relativePath, [], ["front", "back", "rear", "f", "r"]);
+        const dir = strippedParentDir(file.relativePath, [], ["front", "back", "rear", "f", "r", m[3]!]);
         return `datetime-channel-ts|${dir}|${maskName(`${m[1]}_${m[2]}.ts`)}`;
     },
 };

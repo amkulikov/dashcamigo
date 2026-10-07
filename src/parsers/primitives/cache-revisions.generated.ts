@@ -22,7 +22,7 @@ export const VIDEO_EMBEDDED_PRIMITIVE_CACHE_REVISIONS = [
     { id: "vantrue-fmas", revision: "9678e0bab470abd6" },
     { id: "rove-gpmd", revision: "78267283625a2321" },
     { id: "rove-ssmd", revision: "9cfa3c67779fe3f9" },
-    { id: "sstar-ssmd", revision: "203365bfd58ffa1d" },
+    { id: "sstar-ssmd", revision: "3f4f617f2d8d16ff" },
     { id: "vueroid-txet", revision: "a802ebb2594b1762" },
     { id: "pndm", revision: "1d2c332d24cd55f6" },
     { id: "nextbase-subtitle", revision: "a87bee8057cee57a" },
@@ -33,5 +33,5 @@ export const VIDEO_EMBEDDED_PRIMITIVE_CACHE_REVISIONS = [
     { id: "novatek-ts", revision: "4a49db40faa0b875" },
     { id: "ts-pes-gps", revision: "1d2ef80b21ff849c" },
     { id: "freegps-70mai", revision: "0a47377f0dbfc464" },
-    { id: "freegps", revision: "b0247d688a90d314" },
+    { id: "freegps", revision: "caf6f3ea944d93ca" },
 ] as const;
