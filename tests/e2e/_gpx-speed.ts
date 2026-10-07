@@ -78,3 +78,59 @@ export async function verifyGpxSpeed(page: Page, mode: "sidecar" | "manual", est
     expect(exported).toContain('<dc:speed source="measured">0.00</dc:speed>');
     expect(exported.match(/<trkseg>/g)).toHaveLength(2);
 }
+
+export async function verifyRobustGpxSpeed(page: Page): Promise<void> {
+    await loadTrip(page, SAMPLE_NOGPS);
+    await pausePlayback(page);
+    const start = await page.evaluate(() => {
+        const state = window.__dashcamigo.state;
+        return state.trips[state.active!.trip]!.timeline.segments[0]!.wallStart;
+    });
+    const metersPerDegree = (6_371_000 * Math.PI) / 180;
+    const points = Array.from({ length: 12 }, (_, i) => {
+        const time = i / 4;
+        const fixTime = time + (i === 5 ? 0.125 : i === 9 ? -0.125 : 0);
+        return `<trkpt lat="${50 + (fixTime * 30) / metersPerDegree}" lon="30"><time>${new Date((start + time) * 1000).toISOString()}</time></trkpt>`;
+    });
+    await page.locator("#file-input").setInputFiles({
+        name: "clip-no-gps.gpx",
+        mimeType: "application/gpx+xml",
+        buffer: Buffer.from(`<gpx><trk><trkseg>${points.join("")}</trkseg></trk></gpx>`),
+    });
+    await expect
+        .poll(() =>
+            page.evaluate(() => {
+                const state = window.__dashcamigo.state;
+                return state.trips[state.active!.trip]!.records.length;
+            }),
+        )
+        .toBe(12);
+    await page.locator("#player").evaluate((element) => {
+        (element as HTMLVideoElement).currentTime = 1.25;
+    });
+    await expect(page.locator("#pm-speed")).toHaveText("≈108.0");
+    await expect(page.locator("#pm-bar-speed")).toHaveText("≈108.0");
+    const telemetry = await page.evaluate(() => {
+        const state = window.__dashcamigo.state;
+        const trip = state.trips[state.active!.trip]!;
+        return {
+            readings: trip.records.map((r) => ({ speed: r.speedMs, source: r.speedSource })),
+            chart: state.chart!.data.datasets[0]!.data,
+            events: trip.inferredSegments,
+        };
+    });
+    for (const reading of telemetry.readings) {
+        expect(reading.source).toBe("estimated");
+        expect(reading.speed).toBeCloseTo(30, 3);
+    }
+    expect(telemetry.chart).toHaveLength(12);
+    for (const entry of telemetry.chart) expect(entry).toMatchObject({ y: expect.closeTo(108, 2) });
+    expect(telemetry.events).toEqual([]);
+
+    await openExport(page);
+    await page.locator('.export-panel__seg-btn[data-mode="gpx"]').click();
+    const downloadPromise = page.waitForEvent("download");
+    await page.locator("#export-panel-save-btn").click();
+    const exported = await readFile(await (await downloadPromise).path(), "utf8");
+    expect(exported.match(/<dc:speed source="estimated">30\.00<\/dc:speed>/g)).toHaveLength(12);
+}

@@ -5,7 +5,7 @@ export const VIDEO_EMBEDDED_DISPATCH_CACHE_REVISION = "a89573de9afcfcc5";
 
 export const VIDEO_EMBEDDED_PRIMITIVE_CACHE_REVISIONS = [
     { id: "rvmi", revision: "8d873cfbdff71179" },
-    { id: "sei-double-gps", revision: "52b267ea81aa7bb7" },
+    { id: "sei-double-gps", revision: "64a7bc0f1c51d42e" },
     { id: "free-gps-box", revision: "b6793a71f8ec11e1" },
     { id: "ligogps", revision: "967ff5ee0f39fe48" },
     { id: "navitel-tail", revision: "20f3a36dc1cc017f" },

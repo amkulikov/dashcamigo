@@ -1,4 +1,4 @@
-import { verifyGpxSpeed } from "./_gpx-speed.js";
+import { verifyGpxSpeed, verifyRobustGpxSpeed } from "./_gpx-speed.js";
 import { DESKTOP, gotoApp, presetLocalStorage, test } from "./_fixtures.js";
 
 test.use({ locale: "de-DE" });
@@ -15,3 +15,10 @@ for (const locale of ["en", "ru"]) {
         });
     }
 }
+
+test("GPS acquisition-time errors do not create speed spikes in the viewer or GPX export", async ({ page }) => {
+    await presetLocalStorage(page, { lang: "en" });
+    await page.setViewportSize(DESKTOP);
+    await gotoApp(page, "en");
+    await verifyRobustGpxSpeed(page);
+});

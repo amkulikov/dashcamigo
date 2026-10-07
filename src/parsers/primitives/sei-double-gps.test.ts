@@ -46,7 +46,7 @@ describe("sei double gps primitive", () => {
     it("derives speed from the packet counter despite the short second MP4 timestamp", async () => {
         const bytes = Buffer.from(FIXTURE);
         const offsets = await sampleOffsets();
-        bytes.writeDoubleLE(30.0005, offsets[1]! + 21);
+        for (const [i, offset] of offsets.entries()) bytes.writeDoubleLE(30 + i * 0.0005, offset + 21);
         const vf = fixture(bytes);
         const result = await seiDoubleGpsPrimitive.parse(vf, await buildMp4Index(vf.file));
         expect(result.records[1]!.speedSource).toBe("estimated");
@@ -54,6 +54,24 @@ describe("sei double gps primitive", () => {
         expect(result.records[1]!.speedMs).toBeLessThan(25);
         expect(result.records[0]!.bearingDeg).toBeCloseTo(90, 0);
         expect(result.records[1]!.unixSeconds - result.records[0]!.unixSeconds).toBe(2);
+    });
+
+    it("estimates steady movement despite isolated late and early fixes", async () => {
+        const bytes = Buffer.from(FIXTURE);
+        const offsets = await sampleOffsets();
+        const metersPerDegree = (6_371_000 * Math.PI) / 180;
+        for (const [i, offset] of offsets.entries()) {
+            const fixSeconds = i * 2 + (i === 5 ? 1 : i === 9 ? -1 : 0);
+            bytes.writeDoubleLE(50 + (fixSeconds * 30) / metersPerDegree, offset + 29);
+        }
+        const vf = fixture(bytes);
+        const result = await seiDoubleGpsPrimitive.parse(vf, await buildMp4Index(vf.file));
+        expect(result.records).toHaveLength(12);
+        expect(result.skipped).toEqual([]);
+        for (const record of result.records) {
+            expect(record.speedSource).toBe("estimated");
+            expect(record.speedMs).toBeCloseTo(30, 5);
+        }
     });
 
     it("leaves a singleton before a no-fix packet unavailable and resumes estimation afterward", async () => {
