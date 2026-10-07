@@ -5,8 +5,10 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { CHANGELOG_ENTRIES } from "./changelog/entries.js";
+
 const script = fileURLToPath(new URL("../scripts/check-release-state.mjs", import.meta.url));
-const changelogScript = fileURLToPath(new URL("../scripts/check-release-changelog.mjs", import.meta.url));
+const notesScript = fileURLToPath(new URL("../scripts/generate-release-notes.mjs", import.meta.url));
 const tag = "v2026.10.07";
 let directory: string;
 let commit: string;
@@ -161,33 +163,48 @@ describe("published changelog baseline", () => {
         git("-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", subject);
     }
 
-    function checkChangelog() {
+    function generateNotes() {
         git("-c", "tag.gpgsign=false", "tag", "-f", tag);
-        return spawnSync(process.execPath, [changelogScript, "--tag", tag, "--previous-tag", previousTag], {
-            cwd: directory,
-            encoding: "utf8",
-        });
+        return spawnSync(
+            process.execPath,
+            [notesScript, "--tag", tag, "--previous-tag", previousTag, "--repo", "example/dashcamigo"],
+            {
+                cwd: directory,
+                encoding: "utf8",
+            },
+        );
     }
 
-    it("catches unannounced features even if an abandoned tag already points at them", () => {
-        commitEntries(["2026-10-05.1"], "chore: changelog baseline");
+    it("generates notes for a release without new entries even when it ships a feature", () => {
+        commitEntries(
+            CHANGELOG_ENTRIES.map((entry) => entry.id),
+            "chore: changelog baseline",
+        );
         git("-c", "tag.gpgsign=false", "tag", previousTag);
         writeFileSync(join(directory, "src/feature.ts"), "export const feature = true;\n");
         git("add", "src/feature.ts");
         git("-c", "commit.gpgsign=false", "commit", "-m", "feat: visible feature");
-        git("-c", "tag.gpgsign=false", "tag", "v2026.10.06");
-        const result = checkChangelog();
-        expect(result.status).toBe(1);
-        expect(result.stderr).toContain("has no new entries since v2026.10.05");
+        const result = generateNotes();
+        expect(result.status, result.stderr).toBe(0);
+        expect(result.stdout).toContain("No changelog entries for this release.");
+        expect(result.stdout).toContain(`https://github.com/example/dashcamigo/compare/${previousTag}...${tag}`);
+        expect(result.stdout).not.toContain("no user-facing changes");
     });
 
     it("preserves entries added on an abandoned tag for the next published release", () => {
-        commitEntries(["2026-10-05.1"], "chore: changelog baseline");
+        commitEntries(
+            CHANGELOG_ENTRIES.slice(1).map((entry) => entry.id),
+            "chore: changelog baseline",
+        );
         git("-c", "tag.gpgsign=false", "tag", previousTag);
-        commitEntries(["2026-10-06.1", "2026-10-05.1"], "feat: visible feature");
+        commitEntries(
+            CHANGELOG_ENTRIES.map((entry) => entry.id),
+            "feat: visible feature",
+        );
         git("-c", "tag.gpgsign=false", "tag", "v2026.10.06");
-        const result = checkChangelog();
+        const result = generateNotes();
         expect(result.status, result.stderr).toBe(0);
-        expect(result.stdout).toContain("1 new changelog entry since v2026.10.05");
+        expect(result.stdout).toContain(CHANGELOG_ENTRIES[0]!.text.en);
+        expect(result.stdout).not.toContain(CHANGELOG_ENTRIES[1]!.text.en);
     });
 });

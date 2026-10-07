@@ -1,7 +1,4 @@
-// Release-tag helpers shared by generate-release-notes.mjs and
-// check-release-changelog.mjs. Kept free of TypeScript imports on purpose:
-// the changelog guard runs on the CI runner's stock Node, which is not
-// guaranteed to strip types.
+// Shared git and entry-id helpers for release scripts.
 
 import { execFileSync } from "node:child_process";
 import { compareReleaseTags, isReleaseTag } from "../src/portable/release-tags.mjs";

@@ -54,7 +54,7 @@ const lines = [];
 if (fresh.length > 0) {
     lines.push("## What's new", "", ...fresh.map(renderEntryBullet));
 } else {
-    lines.push("Maintenance release — no user-facing changes.");
+    lines.push("No changelog entries for this release.");
 }
 lines.push("");
 if (previousTag && repo) {

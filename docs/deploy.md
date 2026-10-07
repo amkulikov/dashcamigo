@@ -234,12 +234,8 @@ rebuild). The fixed asset name is load-bearing: the install one-liner in
 `docs/self-hosting.md` relies on `releases/latest/download/`. The
 artifact build gets no env vars, so crash reporting is compiled out (the
 production site build in the `deploy` job carries the production env). The
-release notes are generated at tag time from the user-facing changelog, and
-the `changelog-guard` job gates every deploy/publish job on it (rules and the
-bypass: `scripts/check-release-changelog.mjs` - it prints the way out on
-failure). Run the changelog skill (`.claude/skills/changelog/SKILL.md`) and
-land its commit on `main` before tagging - or let the release skill
-(`.claude/skills/release/SKILL.md`) drive the whole ritual. To cut a release,
+release notes are generated at tag time from the user-facing changelog.
+See `.claude/skills/release/SKILL.md` for release preparation. To cut a release,
 tag the `main` commit staging has validated:
 
 ```sh

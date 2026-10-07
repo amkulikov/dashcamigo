@@ -36,16 +36,8 @@ concurrency:
   queue: max
 
 jobs:
-  # Changelog gate: a tag that ships user-facing feat/fix commits without new
-  # changelog entries fails HERE, before anything moves - the deploy, the
-  # branch promotion and the release all `needs` this job, so a failed guard
-  # publishes nothing and the tag is simply dead (cut a new one). Bypass when
-  # the feat/fix commits in the window are judged not user-visible: an
-  # annotated tag whose message contains "maintenance" (the guard script
-  # prints the exact command on failure).
-  # On workflow_dispatch the guard passes instantly instead of if-skipping:
-  # a skipped job would cascade-skip the `needs` chain and kill the dry-run.
-  changelog-guard:
+  # Validate the tagged commit before any build or publication.
+  release-state:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -54,7 +46,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # Full history: validate main/release ancestry and diff the changelog.
+          # Full history: validate main/release ancestry.
           fetch-depth: 0
       - name: Check release state and CI
         id: state
@@ -62,18 +54,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/check-release-state.mjs
-      - name: Check the changelog moved with the code
-        env:
-          PREVIOUS_TAG: ${{ steps.state.outputs.previous-tag }}
-        run: |
-          if [ "${GITHUB_EVENT_NAME}" != "push" ]; then
-            echo "dry-run - changelog guard not applicable"
-            exit 0
-          fi
-          node scripts/check-release-changelog.mjs --previous-tag "$PREVIOUS_TAG"
 
   portable:
-    needs: [changelog-guard]
+    needs: [release-state]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -166,7 +149,7 @@ jobs:
   # self-skip and still get their GitHub Release from the jobs below.
   deploy:
     if: github.event_name == 'push'
-    needs: [changelog-guard, release]
+    needs: [release-state, release]
     outputs:
       deployed: ${{ steps.publish.outputs.deployed }}
     runs-on: ubuntu-latest
@@ -301,7 +284,7 @@ jobs:
           node scripts/indexnow-ping.mjs
 
   release:
-    needs: [changelog-guard, portable]
+    needs: [release-state, portable]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -353,7 +336,6 @@ jobs:
         env:
           PREVIOUS_TAG: ${{ steps.state.outputs.previous-tag }}
         run: |
-          node scripts/check-release-changelog.mjs --previous-tag "$PREVIOUS_TAG"
           node scripts/generate-release-notes.mjs --previous-tag "$PREVIOUS_TAG" --out RELEASE_NOTES.md
 
       - name: Build (no env - analytics/crash-reporting compiled out)

@@ -1,7 +1,4 @@
-// Hand-written declarations for _release-tags.mjs (plain JS on purpose - the
-// changelog guard runs on stock Node without type stripping) so
-// src/changelog/entries.test.ts can import ENTRY_ID_LINE_RE under the strict
-// tsconfig.
+// Declarations for release helpers used by TypeScript tests.
 
 export declare const ENTRIES_PATH: string;
 export declare const ENTRY_ID_LINE_RE: RegExp;
