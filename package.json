@@ -53,6 +53,7 @@
     "lint": "biome lint src tests",
     "format": "biome format src tests --write",
     "check": "biome check src tests --write",
+    "check:ci": "biome ci src tests",
     "knip": "knip",
     "indexnow": "node scripts/indexnow-ping.mjs",
     "generate:changelog": "node scripts/generate-changelog-md.mjs",

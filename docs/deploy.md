@@ -97,12 +97,12 @@ jobs self-skip. Build env vars live in the workflow files, not the CF dashboard
 - the `env:` blocks of `deploy.yml` and the `deploy` job of `release.yml` are
 the current set.
 
-Two properties of this shape to keep in mind:
+Deployment constraints:
 
-- **The deploy does not wait for CI.** A tag deploys even if `ci.yml` goes
-  red - the gate is advisory, check CI on `main` before tagging. A failed
-  production deploy shows as the red `deploy` job of the tag's release.yml
-  run.
+- **Production requires successful CI on the tagged commit.** Wait for CI on
+  `main` before tagging. Staging remains independent of CI. Release preflight
+  rules live in `scripts/check-release-state.mjs`; a failed preflight publishes
+  nothing. If CI is still running, wait for it to pass before retrying the run.
 - **The IndexNow ping must run post-deploy**, never as a build step: engines
   fetch the submitted URLs and the key file when they process a ping, so the
   script reads the live sitemap, not `dist/`. It runs as the `ping` job
@@ -304,7 +304,7 @@ compiled out, CSP delivered as a `<meta>` tag since Pages cannot send
 headers) and deploys it to GitHub Pages. `release.yml` dispatches it right
 after publishing a release - a GITHUB_TOKEN-published release never fires
 the release-published trigger (the WHY sits at the dispatch step in
-release.yml); a `workflow_dispatch` re-deploys from the latest release.
+release.yml); a `workflow_dispatch` re-deploys the selected tag's release.
 
 One-time setup:
 

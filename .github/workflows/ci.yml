@@ -33,7 +33,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
 
       - run: npm ci
@@ -41,8 +41,8 @@ jobs:
       - name: Type-check
         run: npm run typecheck
 
-      - name: Lint
-        run: npm run lint
+      - name: Lint and formatting
+        run: npm run check:ci
 
       # CHANGELOG.md is generated from src/changelog/entries.ts; a hand edit
       # or a skipped regeneration fails here, not inside a release asset.
@@ -74,7 +74,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
 
       - run: npm ci
@@ -83,7 +83,7 @@ jobs:
         run: npx playwright install --with-deps --no-shell chromium
 
       - name: E2E tests (playwright)
-        run: npm run test:e2e -- --shard=${{ matrix.shard }}/8 --workers=1 --reporter=list,github,blob
+        run: npm run test:e2e -- --shard=${{ matrix.shard }}/${{ strategy.job-total }} --workers=1 --reporter=list,github,blob
         env:
           PLAYWRIGHT_BLOB_OUTPUT_DIR: ${{ runner.temp }}/blob-report
 
@@ -95,6 +95,7 @@ jobs:
           path: ${{ runner.temp }}/blob-report/
           retention-days: 7
           if-no-files-found: error
+          compression-level: 0
 
       - name: Upload e2e screenshots
         if: failure()
@@ -105,10 +106,9 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  # Keep one stable check name, including when an upstream job fails or skips.
-  test:
-    if: ${{ !cancelled() }}
-    needs: [checks, e2e]
+  reports:
+    if: ${{ !cancelled() && needs.e2e.result != 'skipped' }}
+    needs: [e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -116,7 +116,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
 
       - run: npm ci
@@ -143,16 +143,49 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+  # Keep one stable check name, including when an upstream job fails or skips.
+  test:
+    if: ${{ !cancelled() }}
+    needs: [checks, e2e, portable, staging-build, deployment-profile, reports]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
       - name: Check all test jobs
-        if: always()
         env:
-          CHECKS_RESULT: ${{ needs.checks.result }}
-          E2E_RESULT: ${{ needs.e2e.result }}
+          JOB_RESULTS: ${{ toJSON(needs) }}
         run: |
-          if [[ "$CHECKS_RESULT" != success || "$E2E_RESULT" != success ]]; then
-            echo "::error::checks=$CHECKS_RESULT; e2e=$E2E_RESULT"
+          echo "$JOB_RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          if ! echo "$JOB_RESULTS" | jq -e 'all(.[]; .result == "success")' >/dev/null; then
+            echo "::error::one or more required CI jobs did not succeed"
             exit 1
           fi
+
+  portable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Build and validate portable HTML
+        run: |
+          npm run build:portable -- --version "dev-${GITHUB_SHA}"
+          PORTABLE_ALLOW_DEV=1 node scripts/validate-portable-artifacts.mjs
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps --no-shell chromium
+      - name: Test portable HTML from disk
+        run: npx playwright test --config=tests/playwright.portable.config.ts
+      - name: Upload portable failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: portable-test-results
+          path: tests/test-results/portable/
+          retention-days: 7
+          if-no-files-found: ignore
 
   # Exercise the hosted chunk graph without credentials or Sentry uploads.
   # The plain build tree-shakes reporting code and omits debug-ID injection.
@@ -169,7 +202,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
       - run: npm ci
       - name: Build with hosted instrumentation
@@ -193,7 +226,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
 
       - run: npm ci

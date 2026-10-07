@@ -1,16 +1,19 @@
 // Changelog guard for the release pipeline: fails when a tag ships
 // user-facing commits (feat/fix touching src/ or index.html since the
-// previous v* tag) without new changelog entries. Wired as the gate job in
+// previous release) without new changelog entries. Wired as the gate job in
 // .github/workflows/release.yml - nothing deploys or publishes until it
 // passes. Runnable locally for a preview:
 //
 //   node scripts/check-release-changelog.mjs --tag v2026.08.08
+//
+// CI passes --previous-tag from published releases; local previews use git tags.
 //
 // An intentional entry-less release passes by annotating the tag with a
 // message containing "maintenance" (git tag -a v... -m "maintenance: ...").
 // No TypeScript imports here - see _release-tags.mjs.
 
 import { ENTRIES_PATH, entryIdsAt, git, previousReleaseTag } from "./_release-tags.mjs";
+import { compareReleaseTags, isReleaseTag } from "../src/portable/release-tags.mjs";
 
 // index.html carries user-visible markup; everything else user-facing lives
 // under src/. Docs, scripts, workflows and tests never trip the guard.
@@ -22,12 +25,15 @@ function arg(name) {
 }
 
 const tag = arg("--tag") ?? process.env.GITHUB_REF_NAME;
-if (!tag?.startsWith("v")) {
+if (!isReleaseTag(tag)) {
     console.error("usage: check-release-changelog.mjs --tag v<yyyy>.<mm>.<dd>[.<n>]");
     process.exit(1);
 }
 
-const previousTag = previousReleaseTag(tag);
+// CI supplies the last published release; abandoned tags must not consume entries.
+const previousTag = arg("--previous-tag") ?? previousReleaseTag(tag);
+if (previousTag && (!isReleaseTag(previousTag) || compareReleaseTags(previousTag, tag) >= 0))
+    throw new Error(`previous release tag ${previousTag} must precede ${tag}`);
 if (!previousTag) {
     console.log(`no release before ${tag} - nothing to guard`);
     process.exit(0);
@@ -50,7 +56,9 @@ if (/maintenance/i.test(tagMessage)) {
 const previousIds = new Set(entryIdsAt(previousTag) ?? []);
 const freshIds = (entryIdsAt(tag) ?? []).filter((id) => !previousIds.has(id));
 if (freshIds.length > 0) {
-    console.log(`${freshIds.length} new changelog entr${freshIds.length === 1 ? "y" : "ies"} since ${previousTag} - ok`);
+    console.log(
+        `${freshIds.length} new changelog entr${freshIds.length === 1 ? "y" : "ies"} since ${previousTag} - ok`,
+    );
     process.exit(0);
 }
 

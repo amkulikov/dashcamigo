@@ -10,7 +10,7 @@
 # events created with GITHUB_TOKEN never trigger workflows (GitHub's
 # anti-recursion rule). The release trigger below covers only a release
 # published by hand from the UI; workflow_dispatch re-deploys from the
-# latest release without cutting a tag. Any run must carry a v* tag ref -
+# selected release without cutting a tag. Any run must carry a v* tag ref -
 # the github-pages environment admits nothing else, so a manual dispatch
 # picks a tag in the ref dropdown, never main.
 #
@@ -23,7 +23,7 @@ on:
     types: [published]
   workflow_dispatch:
 
-# Two runs must not interleave their Pages deployments; the newer one wins.
+# Two runs must not interleave their Pages deployments.
 concurrency:
   group: pages-mirror
   cancel-in-progress: false
@@ -46,15 +46,14 @@ jobs:
       - name: Download the release artifact
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || github.ref_name }}
         run: |
           set -euo pipefail
-          # A release event mirrors THAT release; a manual run - the latest.
-          TAG="${{ github.event.release.tag_name }}"
-          if [ -z "${TAG}" ]; then
-            TAG="$(gh release view --repo "${GITHUB_REPOSITORY}" --json tagName --jq .tagName)"
-          fi
           echo "mirroring release ${TAG}"
-          gh release download "${TAG}" --repo "${GITHUB_REPOSITORY}" --pattern dashcamigo.tar.gz
+          gh release download "${TAG}" --repo "${GITHUB_REPOSITORY}" --pattern dashcamigo.tar.gz --pattern SHA256SUMS
+          awk '$2 == "dashcamigo.tar.gz" { print }' SHA256SUMS > mirror-checksum.txt
+          test -s mirror-checksum.txt
+          sha256sum --check mirror-checksum.txt
           # The archive unpacks into a fixed-name "dashcamigo" folder
           # (release.yml, "Pack dist").
           tar -xzf dashcamigo.tar.gz

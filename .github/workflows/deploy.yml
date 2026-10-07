@@ -31,6 +31,7 @@ permissions:
 
 jobs:
   deploy:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -58,7 +59,7 @@ jobs:
       - uses: actions/setup-node@v7
         if: steps.gate.outputs.deploy == 'true'
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
 
       - run: npm ci
@@ -74,11 +75,20 @@ jobs:
 
       - name: Install Playwright browser
         if: steps.gate.outputs.deploy == 'true'
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps --no-shell chromium
 
       - name: Test the final portable HTML from disk
         if: steps.gate.outputs.deploy == 'true'
         run: npx playwright test --config=tests/playwright.portable.config.ts
+
+      - name: Upload portable failure diagnostics
+        if: failure() && steps.gate.outputs.deploy == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: portable-test-results
+          path: tests/test-results/portable/
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Build (staging env)
         if: steps.gate.outputs.deploy == 'true'
