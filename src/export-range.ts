@@ -4,7 +4,7 @@
 // stack, and a static import of it from any eagerly-loaded UI module drags that
 // whole graph (~450 KB min) into the landing entry chunk. This module must stay
 // dependency-light - no mediabunny value imports, no transcode imports (types
-// are fine). See scripts/check-lazy-chunks.mjs for the build-time guard.
+// are fine). See vite-plugins/lazy-boundaries.ts for the build-time guard.
 
 import type { AudioCodec } from "mediabunny";
 

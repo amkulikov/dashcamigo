@@ -128,13 +128,12 @@ task seems to require crossing one, stop and ask - never work around it silently
 ### Bundle boundaries
 
 - Treat lazy loading as an architectural boundary, not the automatic response
-  to a bundle-budget failure. Split a module when the graph is materially heavy
+  to payload growth. Split a module when the graph is materially heavy
   or the capability is genuinely optional and deferred; keep small cohesive
   runtime paths together even when they are uncommon.
-- When an intentional small entry-graph change crosses a measured budget, update
-  the owning limit, retain useful headroom, and explain the decision in the
-  commit message. Do not manufacture a dynamic-import boundary solely to
-  preserve the previous number.
+- Enforce hosted lazy boundaries in `vite-plugins/lazy-boundaries.ts`. Keep
+  payload sizes as diagnostics; do not substitute a moving byte limit for the
+  dependency check. Extend the guard when adding a heavy deferred dependency.
 
 ### Portable HTML
 

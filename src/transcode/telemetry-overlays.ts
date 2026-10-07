@@ -4,7 +4,7 @@
 // drawTelemetryOverlays too, and pipeline-common carries value imports of
 // mediabunny (muxer plumbing) that must stay out of the eager bundle. This
 // module must not import mediabunny by value (types are fine); the guard is
-// scripts/check-lazy-chunks.mjs.
+// vite-plugins/lazy-boundaries.ts.
 
 import type { FramePos } from "./frame-pos.js";
 import { drawCompass, drawGforce, drawGraph } from "./overlay-widgets.js";

@@ -5,7 +5,7 @@
 // Extraction itself (and the full Primitive objects) stays worker-side; each
 // primitive that defines cloneAcrossGroup imports its grouper from here, so the
 // grouping logic cannot drift between the shard planner and the dispatcher.
-// Guarded by scripts/check-lazy-chunks.mjs.
+// Guarded by vite-plugins/lazy-boundaries.ts.
 
 import type { VendorFile } from "../types.js";
 const GROUP_SEPARATOR = String.fromCharCode(0);

@@ -14,6 +14,7 @@ import { dynamicBaselinePlugin } from "./vite-plugins/dynamic-baseline.js";
 import { editionMarkupPlugin } from "./vite-plugins/edition-markup.js";
 import { indexnowKeyPlugin } from "./vite-plugins/indexnow-key.js";
 import { llmsTxtPlugin } from "./vite-plugins/llms-txt.js";
+import { lazyBoundariesPlugin } from "./vite-plugins/lazy-boundaries.js";
 import { redirectsPlugin } from "./vite-plugins/redirects.js";
 import { rootStubPlugin } from "./vite-plugins/root-stub.js";
 import { portableDownloadsPlugin } from "./vite-plugins/portable-downloads.js";
@@ -211,6 +212,7 @@ export default defineConfig(({ command }) => {
         // why the key is NOT a committed public/ file.
         indexnowKeyPlugin(),
         minifyHtmlPlugin(),
+        lazyBoundariesPlugin(),
         // SEO build pipeline. All three plugins run in closeBundle, AFTER vite
         // has written dist/index.html and html-minifier has minified it. See
         // vite-plugins/seo-prerender.ts for the rationale (hreflang, two
@@ -366,10 +368,7 @@ export default defineConfig(({ command }) => {
                 // when the pieces reference each other's top-level bindings.
                 // (Workers bundle their own copy of mediabunny independently -
                 // this is main-thread graph only.)
-                // Build-time guard scripts/check-lazy-chunks.mjs (in `npm run
-                // build`) fails loudly if maplibre/chart/mediabunny end up in the
-                // landing page's eager preload - a bundler/dep change gets caught
-                // at build time.
+                // Eager dependency boundaries are checked by lazyBoundariesPlugin.
                 //
                 // The object form of manualChunks was removed in Rolldown; the
                 // equivalent is codeSplitting.groups with { name, test }: test

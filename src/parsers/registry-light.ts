@@ -3,7 +3,7 @@
 // primitive and internal extractor (~90 KB min), so a value import of it from
 // the eager UI drags that whole graph into the landing entry chunk; the heavy
 // dispatchers stay there and load with the ingest/GPS workers. Guarded by
-// scripts/check-lazy-chunks.mjs.
+// vite-plugins/lazy-boundaries.ts.
 
 import { accelMagnitude } from "../parser.js";
 import type { AccelSample, GpsRecord, VendorFile } from "./types.js";
