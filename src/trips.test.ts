@@ -348,6 +348,44 @@ describe("groupTrips: dual-channel pairs", () => {
         }
     });
 
+    it("pairs INNOVV K3 channels with one-second clock differences across snap boundaries", () => {
+        const candidates = (
+            [
+                ["120014_F", 300],
+                ["120015_R", 300],
+                ["120515_F", 601],
+                ["120514_R", 601],
+                ["121516_F", 15],
+                ["121516_R", 15],
+            ] as const
+        ).map(([stamp, duration]) => {
+            const name = `20260101_${stamp}.MP4`;
+            const relativePath = `card/VIDEO/${name}`;
+            const source = { file: new File([], name), relativePath };
+            const channel = classifyFilenameChannel(source);
+            const start = classifyFilenameTime(source);
+            if (!channel || !start) throw new Error(`unclassified filename: ${name}`);
+            return makeCandidate({
+                name,
+                relativePath,
+                startUtc: start.getTime() / 1000,
+                durationSec: duration,
+                channel: channel.channel,
+                channelConfident: channel.confident,
+                fingerprint: cameraFingerprint(source),
+                sequence: classifyFilenameSequence(source),
+                recordingMode: classifyFilenameMode(source),
+            });
+        });
+        const trips = groupTrips(candidates);
+        expect(trips).toHaveLength(1);
+        expect(trips[0]!.frames).toHaveLength(3);
+        expect(trips[0]!.durationSec).toBe(917);
+        for (const frame of trips[0]!.frames) {
+            expect(Object.keys(frame.channels).sort()).toEqual(["front", "rear"]);
+        }
+    });
+
     it("two F/B pairs → one trip with two frames, each with both channels", () => {
         const f1 = makeCandidate({
             name: "f1.mp4",

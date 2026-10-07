@@ -118,8 +118,8 @@ export const RX_DDPAI_TIMELAPSE = /^([SQ])_(\d{14})_(\d{3,5})_(\d{2,4})\.mp4$/i;
 export const RX_DDPAI_EVENT = /^G_(\d{14})_(\d{2,5})_([LX])\.mp4$/i;
 export const RX_DDPAI_TIMESTAMP_TOKEN = /(\d{14})/;
 
-// E-Ace-shaped clips: digits_digits<channel>.mp4 (suffix optional on single-channel models).
-export const RX_E_ACE = /^(\d{8})_(\d{6})([A-Z])?\.mp4$/i;
+// Timestamp + optional channel letter; INNOVV K3 separates the letter with `_`.
+export const RX_E_ACE = /^(\d{8})_(\d{6})(?:_?([A-Z]))?\.mp4$/i;
 // Leaf folder of an E-Ace-shaped 3-channel card that splits streams into
 // `<Mode>_<channel word>/` siblings (RedTiger F17: Video_Front/, Video_Inside/,
 // Video_Rear/, with Event_* next to them). Group 1 = the mode stem.

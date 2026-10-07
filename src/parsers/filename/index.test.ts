@@ -10,6 +10,7 @@ import type { VendorFile } from "../types.js";
 import {
     RX_70MAI,
     RX_DDPAI_NORMAL,
+    RX_E_ACE,
     RX_FITCAMX_MP4,
     RX_FORD,
     RX_HPIM,
@@ -1380,13 +1381,13 @@ describe("ligogps-trailer-ts suffix techniques", () => {
 });
 
 describe("timestamp plus channel-letter MP4 techniques", () => {
-    it("classifies F/R/I siblings with the same time and mode", () => {
+    it.each(["", "_"])("classifies F/R/I siblings with a '%s' channel separator", (separator) => {
         for (const [suffix, channel] of [
             ["F", "front"],
             ["R", "rear"],
             ["I", "interior"],
         ] as const) {
-            const file = vf(`20260101_120000${suffix}.MP4`);
+            const file = vf(`20260101_120000${separator}${suffix}.MP4`);
             expect(matchFilenameTime(file).matchedId).toBe("e-ace-time");
             expect(classifyFilenameTime(file)?.toISOString()).toBe("2026-01-01T12:00:00.000Z");
             expect(matchFilenameChannel(file)).toEqual({
@@ -1394,7 +1395,37 @@ describe("timestamp plus channel-letter MP4 techniques", () => {
                 value: { channel, confident: true },
             });
             expect(matchFilenameMode(file)).toEqual({ matchedId: "e-ace-mode", value: "normal" });
+            expect(classifyFilenameSequence(file)).toBeNull();
         }
+    });
+
+    it.each(["", "card/VIDEO/", "card/Front/"])("pairs underscored channels under '%s'", (folder) => {
+        const front = vf("20260101_120014_F.MP4", `${folder}20260101_120014_F.MP4`);
+        const rearFolder = folder.replace("Front/", "Rear/");
+        const rear = vf("20260101_120015_R.MP4", `${rearFolder}20260101_120015_R.MP4`);
+        expect(cameraFingerprint(front)).toBe(cameraFingerprint(rear));
+        expect(matchFilenameChannel(rear).value).toEqual({ channel: "rear", confident: true });
+        expect(cameraFingerprint(front)).not.toBe(
+            cameraFingerprint(vf("20260101_120014_F.MP4", `other/${folder}20260101_120014_F.MP4`)),
+        );
+    });
+
+    it("recognizes lowercase underscored channels", () => {
+        const front = vf("20260101_120000_f.mp4");
+        const rear = vf("20260101_120000_r.mp4");
+        expect(matchFilenameChannel(rear).value).toEqual({ channel: "rear", confident: true });
+        expect(cameraFingerprint(front)).toBe(cameraFingerprint(rear));
+    });
+
+    it.each([
+        "20260101_120000_.MP4",
+        "20260101_120000__F.MP4",
+        "20260101_120000_NF.MP4",
+        "20260101_120000_F.TS",
+        "20260101_120000_F.MOV",
+        "20260101_120000_001_F.MP4",
+    ])("leaves %s outside the timestamp plus channel MP4 family", (name) => {
+        expect(RX_E_ACE.test(name)).toBe(false);
     });
 
     it("merges Video_<channel> sibling folders into one camera", () => {
@@ -1442,6 +1473,7 @@ describe("open channel-letter positions", () => {
         ["rec-single", "REC20260101-120000-1.mp4", "card/Normal/F", "REC20260101-120000-1.mp4", "card/Normal/X"],
         ["ddpai", "20260101120000_001_F.mp4", "card", "20260101120000_001_X.mp4", "card"],
         ["e-ace", "20260101_120000F.mp4", "card", "20260101_120000X.mp4", "card"],
+        ["e-ace", "20260101_120000_F.mp4", "card/VIDEO", "20260101_120000_X.mp4", "card/VIDEO"],
         ["fitcamx", "20260101120000_000001AAE.mp4", "card/EMR", "20260101120000_000001AXE.mp4", "card/EMR"],
         ["ibox", "FILE260101-120000F.mp4", "card/F", "FILE260101-120000X.mp4", "card/X"],
         ["juscar", "20260101_120000F.ts", "card/video/F", "20260101_120000X.ts", "card/video/X"],

@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-10-07.1",
+        category: "support",
+        text: {
+            en: "INNOVV K3.",
+            ru: "Добавлена поддержка INNOVV K3.",
+            de: "Unterstützung für INNOVV K3 hinzugefügt.",
+            es: "Se ha añadido compatibilidad con INNOVV K3.",
+            fr: "Ajout de la prise en charge d’INNOVV K3.",
+            pl: "Dodano obsługę INNOVV K3.",
+            pt: "Adicionado suporte para INNOVV K3.",
+            zh: "新增对 INNOVV K3 的支持。",
+            ja: "INNOVV K3 に対応しました。",
+            ko: "INNOVV K3 지원이 추가됐어요.",
+        },
+    },
+    {
         id: "2026-10-05.4",
         category: "improvement",
         text: {
