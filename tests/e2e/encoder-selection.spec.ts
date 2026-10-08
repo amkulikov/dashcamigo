@@ -34,20 +34,41 @@ async function saveExport(page: Page): Promise<void> {
     expect((await readExportResult(page))?.mdat).toBe(true);
 }
 
-async function restrictDefaultEncoder(page: Page): Promise<void> {
+interface EncoderRestriction {
+    higherTarget?: "responsive" | "unsupported";
+    softwareBitrate?: number;
+}
+
+async function restrictDefaultEncoder(page: Page, restriction: EncoderRestriction = {}): Promise<void> {
     await page.route(PROBE_WORKER, async (route) => {
         const response = await route.fetch();
-        // Exercise real encoding/decoding while simulating a backend that ignores the requested rate.
-        const inject = () => {
+        // Software keeps this faulty-backend simulation independent of the machine's graphics hardware.
+        const inject = (restriction: EncoderRestriction) => {
             const configure = VideoEncoder.prototype.configure;
+            let firstBitrate: number | undefined;
             VideoEncoder.prototype.configure = function (config: VideoEncoderConfig) {
-                configure.call(
-                    this,
-                    config.hardwareAcceleration === "no-preference" ? { ...config, bitrate: 100_000 } : config,
-                );
+                if (config.hardwareAcceleration === "no-preference") {
+                    firstBitrate ??= config.bitrate;
+                    const isHigherTarget = config.bitrate! > firstBitrate!;
+                    if (isHigherTarget && restriction.higherTarget === "unsupported")
+                        throw new DOMException("higher bitrate unavailable", "NotSupportedError");
+                    configure.call(this, {
+                        ...config,
+                        hardwareAcceleration: "prefer-software",
+                        bitrate: isHigherTarget && restriction.higherTarget === "responsive" ? config.bitrate : 100_000,
+                    });
+                } else {
+                    configure.call(
+                        this,
+                        restriction.softwareBitrate ? { ...config, bitrate: restriction.softwareBitrate } : config,
+                    );
+                }
             };
         };
-        await route.fulfill({ response, body: `(${inject.toString()})();\n${await response.text()}` });
+        await route.fulfill({
+            response,
+            body: `(${inject.toString()})(${JSON.stringify(restriction)});\n${await response.text()}`,
+        });
     });
 }
 
@@ -120,6 +141,7 @@ test("a real short probe retains detail-rich output despite bitrate undershoot",
     expect(result.standard?.psnr).toBeGreaterThanOrEqual(30);
     expect(result.hardwareAcceleration).toBe("no-preference");
     expect(result.software).toBeNull();
+    expect(result.response).toBeNull();
 });
 
 test("a real short probe confirms detail loss before choosing software", async ({ page }, info) => {
@@ -133,6 +155,71 @@ test("a real short probe confirms detail loss before choosing software", async (
     expect(result.software?.frames).toBe(50);
     expect(result.reason).toBe("confirmed");
     expect(result.hardwareAcceleration).toBe("prefer-software");
+    expect(result.response).toBeNull();
+});
+
+test("a medium-quality probe detects a default encoder that ignores bitrate increases", async ({ page }, info) => {
+    await restrictDefaultEncoder(page, { softwareBitrate: 14_000_000 });
+    await presetLocalStorage(page);
+    await gotoApp(page, "en");
+    const bitrate = 26_000_000;
+    const result = await runProbe(page, { width: 3840, height: 2160, frameRate: 25, bitrate });
+    await info.attach("measurement", { body: JSON.stringify(result), contentType: "application/json" });
+    expect(result.standard?.frames).toBe(50);
+    expect(result.software?.frames).toBe(50);
+    expect(result.standard?.psnr).toBeLessThan(30);
+    const gain = result.software!.psnr! - result.standard!.psnr!;
+    expect(gain).toBeGreaterThanOrEqual(0.5);
+    expect(gain).toBeLessThan(2);
+    expect(result.response?.bitrate).toBe(bitrate * 2);
+    expect(result.response?.measurement.frames).toBe(50);
+    expect(result.response?.measurement.bitrate).toBeCloseTo(result.standard!.bitrate, -3);
+    expect(result.response?.measurement.psnr).toBeCloseTo(result.standard!.psnr!, 1);
+    expect(result.reason).toBe("unresponsive");
+    expect(result.hardwareAcceleration).toBe("prefer-software");
+});
+
+test("a probe keeps the default when software exceeds the requested size", async ({ page }, info) => {
+    await restrictDefaultEncoder(page, { softwareBitrate: 50_000_000 });
+    await presetLocalStorage(page);
+    await gotoApp(page, "en");
+    const bitrate = 26_000_000;
+    const result = await runProbe(page, { width: 3840, height: 2160, frameRate: 25, bitrate });
+    await info.attach("measurement", { body: JSON.stringify(result), contentType: "application/json" });
+    expect(result.standard?.frames).toBe(50);
+    expect(result.software?.frames).toBe(50);
+    expect(result.standard?.psnr).toBeLessThan(30);
+    expect(result.software?.bitrate).toBeGreaterThan(bitrate * 1.5);
+    expect(result.reason).toBe("inconclusive");
+    expect(result.hardwareAcceleration).toBe("no-preference");
+    expect(result.response).toBeNull();
+});
+
+test("a probe retains a default encoder that responds to a higher bitrate", async ({ page }, info) => {
+    await restrictDefaultEncoder(page, { higherTarget: "responsive", softwareBitrate: 14_000_000 });
+    await presetLocalStorage(page);
+    await gotoApp(page, "en");
+    const bitrate = 26_000_000;
+    const result = await runProbe(page, { width: 3840, height: 2160, frameRate: 25, bitrate });
+    await info.attach("measurement", { body: JSON.stringify(result), contentType: "application/json" });
+    expect(result.response?.bitrate).toBe(bitrate * 2);
+    expect(result.response?.measurement.frames).toBe(50);
+    expect(result.response?.measurement.bitrate).toBeGreaterThan(result.standard!.bitrate * 1.05);
+    expect(result.reason).toBe("inconclusive");
+    expect(result.hardwareAcceleration).toBe("no-preference");
+});
+
+test("an unsupported higher bitrate preserves the original probe measurements", async ({ page }, info) => {
+    await restrictDefaultEncoder(page, { higherTarget: "unsupported", softwareBitrate: 14_000_000 });
+    await presetLocalStorage(page);
+    await gotoApp(page, "en");
+    const result = await runProbe(page, { width: 3840, height: 2160, frameRate: 25, bitrate: 26_000_000 });
+    await info.attach("measurement", { body: JSON.stringify(result), contentType: "application/json" });
+    expect(result.standard?.frames).toBe(50);
+    expect(result.software?.frames).toBe(50);
+    expect(result.response).toBeNull();
+    expect(result.reason).toBe("inconclusive");
+    expect(result.hardwareAcceleration).toBe("no-preference");
 });
 
 test("automatic selection reaches the export encoder and the standard notification drawer", async ({ page }, info) => {
@@ -141,7 +228,7 @@ test("automatic selection reaches the export encoder and the standard notificati
     page.on("worker", (worker) => {
         if (PROBE_WORKER.test(worker.url())) probes++;
     });
-    await restrictDefaultEncoder(page);
+    await restrictDefaultEncoder(page, { softwareBitrate: 20_000_000 });
     await prepareExport(page);
     await page.locator("#export-panel-output").selectOption("custom");
     const dimensions = page.locator('.export-panel__output-custom input[type="number"]');
@@ -167,6 +254,9 @@ test("automatic selection reaches the export encoder and the standard notificati
     expect(config, JSON.stringify(diagnostics)).toMatchObject({
         hardwareAcceleration: "prefer-software",
         bitrate: 32_000_000,
+    });
+    expect(diagnostics.find((entry) => entry.msg === "encoder trial measured")?.ctx).toMatchObject({
+        reason: "unresponsive",
     });
     await page.locator("#notif-bell").click();
     await expect(page.locator("#notif-drawer-list")).toContainText("Automatically switched to software encoding");

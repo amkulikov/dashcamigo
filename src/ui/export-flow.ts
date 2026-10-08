@@ -5,7 +5,7 @@
 //
 // Routing:
 //   - composition.layout === "single" + quality = "original" + output = "source"
-//     + no overlays  -> exportClip stream-copy (mediabunny).
+//     + no overlays + no manual bitrate -> exportClip stream-copy (mediabunny).
 //   - composition.layout != "single"                        -> transcodeSplit
 //   - else                                                   -> transcode
 //
@@ -194,14 +194,15 @@ function watermarkAnchorForExport(): WatermarkAnchor | null {
     return exportPanelState.withWatermark ? exportPanelState.watermarkAnchor : null;
 }
 
-/** The quality-independent half of the stream-copy gate: single channel +
- *  output=source + black letterbox + no crop + no overlays + real-time. When
+/** The quality-independent half of the stream-copy gate: no manual bitrate +
+ *  single channel + output=source + black letterbox + no crop + no overlays + real-time. When
  *  this is false the export MUST re-encode regardless of the chosen tier - the
  *  panel uses it to relabel the top tier "Original" -> "High". A speed-up drops
  *  frames and rewrites timestamps (impossible without decoding), so it counts as
  *  re-encode-forcing too. */
 function streamCopyEligibleConfig(): boolean {
     return (
+        exportPanelState.manualBitrateMbps === null &&
         exportPanelState.outputPresetId === "source" &&
         state.composition.channelOrder.length <= 1 &&
         !state.composition.perSlotCrops[0] &&
@@ -886,6 +887,7 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
     const initiallyStreamCopy = canStreamCopy();
     const streamCopyWithoutDetectedRegions =
         quality === "original" &&
+        manualBitrateMbps === null &&
         outputPresetId === "source" &&
         channelOrder.length <= 1 &&
         !slotCrops[0] &&
@@ -1191,7 +1193,7 @@ async function runExportFlowInner(hooks: ExportFlowHooks): Promise<void> {
                 activeExportController.signal,
             );
             hardwareAcceleration = selection.hardwareAcceleration;
-            if (selection.reason === "confirmed")
+            if (selection.hardwareAcceleration === "prefer-software")
                 notify({ severity: "warn", messageKey: "export.notify.softwareEncoder" });
             hooks.onStatus(t("export.status.preparing"));
         }

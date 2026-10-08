@@ -16,9 +16,10 @@ export interface EncoderProbeMeasurement {
 
 export interface EncoderProbeResult {
     hardwareAcceleration: "no-preference" | "prefer-software";
-    reason: "healthy" | "confirmed" | "inconclusive";
+    reason: "healthy" | "confirmed" | "unresponsive" | "inconclusive";
     standard: EncoderProbeMeasurement | null;
     software: EncoderProbeMeasurement | null;
+    response: { bitrate: number; measurement: EncoderProbeMeasurement } | null;
 }
 
 export function hasPoorEncoderQuality(measurement: EncoderProbeMeasurement): boolean {
@@ -41,22 +42,56 @@ export function isEncoderBitrateSuspicious(measurement: EncoderProbeMeasurement,
     return isComplete(measurement) && measurement.bitrate < target * 0.35;
 }
 
-export function shouldUseSoftwareEncoder(
+function softwareQualityGain(
+    standard: EncoderProbeMeasurement,
+    software: EncoderProbeMeasurement,
+    target: number,
+): number | null {
+    if (
+        !isEncoderBitrateSuspicious(standard, target) ||
+        !isComplete(software) ||
+        !hasPoorEncoderQuality(standard) ||
+        standard.psnr === null ||
+        software.psnr === null ||
+        !Number.isFinite(software.psnr) ||
+        software.bitrate < target * 0.65 ||
+        software.bitrate > target * 1.5
+    )
+        return null;
+    return software.psnr - standard.psnr;
+}
+
+export function shouldProbeEncoderResponse(
     standard: EncoderProbeMeasurement,
     software: EncoderProbeMeasurement,
     target: number,
 ): boolean {
+    const gain = softwareQualityGain(standard, software, target);
+    return gain !== null && gain >= 0.5 && gain < 2;
+}
+
+export function shouldUseSoftwareEncoder(
+    standard: EncoderProbeMeasurement,
+    software: EncoderProbeMeasurement,
+    target: number,
+    response: EncoderProbeResult["response"] = null,
+): boolean {
+    const gain = softwareQualityGain(standard, software, target);
+    if (gain === null || gain < 0.5) return false;
+    // Two decibels remove over a third of the measured squared error.
+    if (gain >= 2) return true;
+    // A smaller gain needs evidence that doubling the budget cannot restore default quality.
+    if (!response || !Number.isFinite(response.bitrate) || response.bitrate < target * 2) return false;
+    const higher = response.measurement;
     return (
-        isEncoderBitrateSuspicious(standard, target) &&
-        isComplete(software) &&
-        hasPoorEncoderQuality(standard) &&
+        isComplete(higher) &&
+        hasPoorEncoderQuality(higher) &&
+        higher.expectedFrames === standard.expectedFrames &&
+        Math.abs(higher.duration - standard.duration) < 1e-6 &&
+        Math.abs(higher.bitrate / standard.bitrate - 1) <= 0.05 &&
+        higher.psnr !== null &&
         standard.psnr !== null &&
-        software.psnr !== null &&
-        Number.isFinite(software.psnr) &&
-        // Two decibels remove over a third of the measured squared error.
-        software.psnr >= standard.psnr + 2 &&
-        software.bitrate >= target * 0.65 &&
-        software.bitrate <= target * 1.5
+        Math.abs(higher.psnr - standard.psnr) <= 0.25
     );
 }
 

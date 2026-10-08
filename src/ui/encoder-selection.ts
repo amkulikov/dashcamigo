@@ -33,7 +33,13 @@ export async function selectAutoEncoder(config: EncoderProbeConfig, signal: Abor
         // Worker disposal also uses AbortError; a deadline is not a user cancellation.
         if (!timedOut && err instanceof Error && err.name === "AbortError") throw err;
         log.warn("encoder trial unavailable", { err: err instanceof Error ? err.message : String(err), ...config });
-        result = { hardwareAcceleration: "no-preference", reason: "inconclusive", standard: null, software: null };
+        result = {
+            hardwareAcceleration: "no-preference",
+            reason: "inconclusive",
+            standard: null,
+            software: null,
+            response: null,
+        };
     } finally {
         clearTimeout(timeout);
         client?.dispose();

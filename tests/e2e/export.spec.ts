@@ -130,9 +130,17 @@ test.describe("export", () => {
         await shot(page, "export-03b-quality-tier-relabel");
     });
 
-    test("a manual bitrate takes over from the quality tiers and reverts on an empty field", async ({ page }) => {
+    test("a manual bitrate forces single-camera re-encode and clearing it restores stream-copy", async ({ page }) => {
+        const includes = page.locator(".top-panel__channel-include");
+        await includes.nth(2).click();
+        await includes.nth(1).click();
+        await expect(page.locator(".top-panel__channel-include:checked")).toHaveCount(1);
+        await expect(page.locator("#export-panel-output")).toHaveValue("source");
         const manual = page.locator("#export-panel-bitrate");
         const topRadio = page.locator('.export-panel__radio input[value="original"]');
+        const topTier = page.locator('.export-panel__radio:has(input[value="original"]) strong');
+        await expect(topRadio).toBeChecked();
+        await expect(topTier).toHaveText("Original");
         // Folded away by default - the tiers are the answer for almost everyone.
         await expect(manual).toBeHidden();
         await expect(topRadio).toBeEnabled();
@@ -144,14 +152,15 @@ test.describe("export", () => {
         // The source's own rate is the reference for picking a number.
         await expect(page.locator(".export-panel__manual-bitrate .export-panel__note").first()).toBeVisible();
 
-        // 2 Mbit/s sits well under this sample's automatic budget and under any
-        // device encode ceiling, so the estimate has to visibly shrink - which is
-        // what proves the field reaches the real bitrate resolver.
+        // The estimate must follow the requested bitrate instead of the source
+        // file size, even with Original selected and no other transforms.
         const size = page.locator(".export-panel__estimate-size");
         const autoSize = await size.textContent();
         await manual.fill("2");
         await manual.blur();
         await expect(size).not.toHaveText(autoSize ?? "");
+        await expect(size).toContainText("from");
+        await expect(topTier).toHaveText("High");
         // The override wins over the tiers, and the panel says so rather than
         // leaving two controls both claiming to set quality.
         await expect(topRadio).toBeDisabled();
@@ -161,6 +170,7 @@ test.describe("export", () => {
         await manual.fill("");
         await manual.blur();
         await expect(topRadio).toBeEnabled();
+        await expect(topTier).toHaveText("Original");
         await expect(size).toHaveText(autoSize ?? "");
     });
 

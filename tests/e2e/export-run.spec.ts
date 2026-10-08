@@ -135,6 +135,82 @@ test.describe("export run", () => {
         expect(playback.playedUntil, "native playback advances after seeking").toBeGreaterThan(1.35);
     });
 
+    test("manual bitrate re-encodes Original and clearing it copies the source packets", async ({
+        page,
+        browserName,
+    }) => {
+        test.skip(browserName === "firefox", "Firefox WebCodecs H.264 encode is broken (Bugzilla 1918769)");
+        test.skip(
+            !(await canEncodeHighProfileH264(page)),
+            "WebCodecs High-profile H.264 encode not available on this platform",
+        );
+        test.setTimeout(120_000);
+
+        const includes = page.locator(".top-panel__channel-include");
+        await includes.nth(2).click();
+        await includes.nth(1).click();
+        await expect(page.locator(".top-panel__channel-include:checked")).toHaveCount(1);
+        await expect(page.locator("#export-panel-output")).toHaveValue("source");
+        await expect(page.locator('input[name="export-panel-quality"][value="original"]')).toBeChecked();
+        await page.locator("#export-panel-watermark").uncheck();
+        await page.locator(".export-panel__manual-bitrate > summary").click();
+        const manual = page.locator("#export-panel-bitrate");
+        await manual.fill("2");
+        await manual.blur();
+        await page.locator("#export-panel-save-btn").click();
+        await expect(page.locator("#export-panel-done-summary")).toBeVisible({ timeout: 100_000 });
+
+        const done = await readTranscodeDoneFields(page);
+        expect(done?.framesEncoded, "the manual bitrate must run the encoder").toBeGreaterThan(0);
+        expect(
+            await page.evaluate(
+                () =>
+                    window.__dashcamigo
+                        .dumpLog()
+                        .reverse()
+                        .find((record) => record.msg === "export settings")?.ctx,
+            ),
+        ).toMatchObject({ mode: "single", quality: "original", manualBitrateMbps: 2, encodeBitrate: 2_000_000 });
+        const encoded = await readExportResult(page);
+        expect(encoded?.mdat, "the manual export must contain encoded media").toBe(true);
+
+        await page.locator("#export-panel-done button").click();
+        await openExport(page);
+        await manual.fill("");
+        await manual.blur();
+        await page.locator("#export-panel-save-btn").click();
+        await expect(page.locator("#export-panel-done-summary")).toBeVisible({ timeout: 60_000 });
+
+        const copied = await page.evaluate(() => {
+            const handle = (window as unknown as { __lastExportHandle: { _buf: Uint8Array } }).__lastExportHandle;
+            return {
+                bytes: Array.from(handle._buf),
+                settings: window.__dashcamigo
+                    .dumpLog()
+                    .reverse()
+                    .find((record) => record.msg === "export settings")?.ctx,
+            };
+        });
+        expect(copied.settings).toMatchObject({ mode: "stream-copy", manualBitrateMbps: null, encodeBitrate: null });
+        const exported = new Input({ source: new BufferSource(new Uint8Array(copied.bytes)), formats: [MP4] });
+        const source = new Input({
+            source: new BufferSource(readFileSync(resolve(SAMPLE_70MAI, "Normal/Front/NO20260101-120000-000001F.MP4"))),
+            formats: [MP4],
+        });
+        try {
+            const outputHead = await new EncodedPacketSink((await exported.getPrimaryVideoTrack())!).getFirstPacket();
+            const sourceHead = await new EncodedPacketSink((await source.getPrimaryVideoTrack())!).getFirstPacket();
+            expect(outputHead, "the restored copy contains video packets").not.toBeNull();
+            expect(sourceHead, "the source contains video packets").not.toBeNull();
+            expect(outputHead?.data, "clearing the override restores untouched source packets").toEqual(
+                sourceHead?.data,
+            );
+        } finally {
+            exported.dispose();
+            source.dispose();
+        }
+    });
+
     test("re-encode split-screen writes a valid MP4 (compositing pipeline)", async ({ page, browserName }) => {
         // Default multichannel keeps all 3 channels -> split-screen -> canStreamCopy
         // is false -> the decode/composite/re-encode WebCodecs pipeline runs. This

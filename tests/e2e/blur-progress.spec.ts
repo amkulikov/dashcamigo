@@ -1,13 +1,18 @@
 import type { Page } from "@playwright/test";
+import type { DetectResult } from "../../src/workers/tracker-protocol.js";
 import { computeTrackerAssets } from "../../vite-plugins/tracker-assets.js";
 import {
     DESKTOP,
+    canEncodeHighProfileH264,
     expect,
     gotoApp,
+    installExportCapture,
     loadTrip,
     openExport,
     pausePlayback,
     presetLocalStorage,
+    readExportResult,
+    readTranscodeDoneFields,
     test,
 } from "./_fixtures.js";
 
@@ -71,6 +76,24 @@ async function openBlurProgress(page: Page): Promise<void> {
                     ) {
                         this.progressData.set(message.type, message.data);
                         document.documentElement.setAttribute(`data-${message.type}-requested`, "true");
+                        if (message.type === "detect" && "id" in message && typeof message.id === "number") {
+                            const id = message.id;
+                            window.addEventListener(
+                                "e2e:detect-empty",
+                                () => {
+                                    const result: DetectResult = {
+                                        tracksByKind: {},
+                                        statsByKind: {},
+                                        decodedFrames: 0,
+                                        passMs: 0,
+                                    };
+                                    this.dispatchEvent(
+                                        new MessageEvent("message", { data: { __k: "res", id, ok: true, result } }),
+                                    );
+                                },
+                                { once: true },
+                            );
+                        }
                         return;
                     }
                 }
@@ -174,4 +197,46 @@ test("detection progress updates its bar without rebuilding nodes or repainting 
     expect(changes).toEqual({ replacedStatusNodes: 0, sameBar: true, repaints: 0 });
     await expect(status.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "100");
     await page.locator("#export-panel-blur-plates").uncheck();
+});
+
+test("an empty detection result preserves the manual bitrate captured at Save", async ({ page, browserName }) => {
+    test.skip(browserName === "firefox", "Firefox WebCodecs H.264 encode is broken (Bugzilla 1918769)");
+    test.setTimeout(120_000);
+    await installExportCapture(page);
+    await openBlurProgress(page);
+    test.skip(
+        !(await canEncodeHighProfileH264(page)),
+        "WebCodecs High-profile H.264 encode not available on this platform",
+    );
+    await expect(page.locator("#export-panel-output")).toHaveValue("source");
+    await expect(page.locator('input[name="export-panel-quality"][value="original"]')).toBeChecked();
+    await page.locator("#export-panel-watermark").uncheck();
+    await page.locator(".export-panel__manual-bitrate > summary").click();
+    const manual = page.locator("#export-panel-bitrate");
+    await manual.fill("2");
+    await manual.blur();
+    await page.locator("#export-panel-blur-plates").check();
+    await expect(page.locator("html")).toHaveAttribute("data-detect-requested", "true");
+    await page.locator("#export-panel-save-btn").click();
+    await expect(page.getByText("Finding plates and faces...", { exact: true })).toBeVisible();
+
+    // The running export owns its captured bitrate even if later state changes.
+    await manual.evaluate((input: HTMLInputElement) => {
+        input.value = "";
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await page.evaluate(() => window.dispatchEvent(new Event("e2e:detect-empty")));
+    await expect(page.locator("#export-panel-done-summary")).toBeVisible({ timeout: 90_000 });
+    expect((await readExportResult(page))?.mdat).toBe(true);
+    const done = await readTranscodeDoneFields(page);
+    expect(done?.framesEncoded, "empty detection must not turn a manual encode into a source copy").toBeGreaterThan(0);
+    expect(
+        await page.evaluate(
+            () =>
+                window.__dashcamigo
+                    .dumpLog()
+                    .reverse()
+                    .find((record) => record.msg === "export settings")?.ctx,
+        ),
+    ).toMatchObject({ mode: "single", manualBitrateMbps: 2, encodeBitrate: 2_000_000 });
 });

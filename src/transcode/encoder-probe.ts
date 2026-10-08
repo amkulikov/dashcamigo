@@ -1,10 +1,12 @@
 import { CanvasSource, Mp4OutputFormat, NullTarget, Output } from "mediabunny";
+import { createLogger } from "../log.js";
 import { h264EncodingConfig } from "./h264-encoding.js";
 import { createEncoderProbeScene } from "./encoder-probe-scene.js";
 import {
     hasPoorEncoderQuality,
     isEncoderBitrateSuspicious,
     luminanceSquaredError,
+    shouldProbeEncoderResponse,
     shouldUseSoftwareEncoder,
     type EncoderProbeConfig,
     type EncoderProbeMeasurement,
@@ -13,6 +15,7 @@ import {
 
 const PROBE_SECONDS = 2;
 const MAX_RETAINED_BYTES = 32 * 1024 * 1024;
+const log = createLogger("transcode:encoder-probe");
 
 interface ProbeEncoding {
     measurement: EncoderProbeMeasurement;
@@ -148,6 +151,7 @@ export async function probeEncoder(config: EncoderProbeConfig, signal: AbortSign
         reason: "inconclusive",
         standard: null,
         software: null,
+        response: null,
     };
     signal.throwIfAborted();
     // A bounded diagnostic must not allocate an arbitrarily large custom output.
@@ -165,9 +169,29 @@ export async function probeEncoder(config: EncoderProbeConfig, signal: AbortSign
     const software = await encodeScene(config, "prefer-software", signal);
     result.software = software.measurement;
     software.measurement.psnr = await measureQuality(software, config, signal);
+    software.packets.length = 0;
     if (shouldUseSoftwareEncoder(standard.measurement, software.measurement, config.bitrate)) {
         result.hardwareAcceleration = "prefer-software";
         result.reason = "confirmed";
+    } else if (shouldProbeEncoderResponse(standard.measurement, software.measurement, config.bitrate)) {
+        const higherConfig = { ...config, bitrate: config.bitrate * 2 };
+        try {
+            const higher = await encodeScene(higherConfig, "no-preference", signal);
+            result.response = { bitrate: higherConfig.bitrate, measurement: higher.measurement };
+            higher.measurement.psnr = await measureQuality(higher, higherConfig, signal);
+            if (shouldUseSoftwareEncoder(standard.measurement, software.measurement, config.bitrate, result.response)) {
+                result.hardwareAcceleration = "prefer-software";
+                result.reason = "unresponsive";
+            }
+        } catch (err) {
+            signal.throwIfAborted();
+            if (err instanceof Error && err.name === "AbortError") throw err;
+            // Rejecting the higher test bitrate says nothing about the usable original request.
+            log.warn("encoder bitrate response trial unavailable", {
+                ...higherConfig,
+                err: err instanceof Error ? err.message : String(err),
+            });
+        }
     }
     return result;
 }
