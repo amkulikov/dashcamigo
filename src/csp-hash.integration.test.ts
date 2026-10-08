@@ -28,6 +28,7 @@ import { injectMetaCsp, metaCspFromHeaderPolicy } from "../vite-plugins/csp-hash
 const DIST_DIR = resolve(__dirname, "..", "dist");
 const ROOT_HTML = resolve(DIST_DIR, "index.html");
 const HEADERS = resolve(DIST_DIR, "_headers");
+const RECOVERY_HTML = resolve(DIST_DIR, "migrate/index.html");
 
 // Read the inline <script id="dc-bootstrap">...</script> body. Mirrors the
 // regex in vite-plugins/csp-hash.ts so any deviation between extractor and
@@ -166,6 +167,28 @@ const META_TAG_RE = /<meta http-equiv="Content-Security-Policy" content="([^"]+)
 describe("meta CSP in built HTML (META_CSP flavor)", () => {
     const metaOn = Boolean(process.env.META_CSP);
 
+    itIf("recovery always keeps its isolated meta policy before loading resources", () => {
+        const html = readFileSync(RECOVERY_HTML, "utf-8");
+        const tags = html.match(new RegExp(META_TAG_RE.source, "g")) ?? [];
+        expect(tags.length, "recovery has exactly one meta CSP in every build flavor").toBe(1);
+        const policy = META_TAG_RE.exec(html)?.[1] ?? "";
+        expect(policy.split(/;\s*/).sort(), "recovery cannot inherit the viewer's external allowlists").toEqual(
+            [
+                "default-src 'none'",
+                "script-src 'self'",
+                "style-src 'self' 'unsafe-inline'",
+                "connect-src 'none'",
+                "base-uri 'none'",
+                "form-action 'none'",
+            ].sort(),
+        );
+        const firstResource = html.search(/<(?:script|link)\b/i);
+        expect(firstResource, "recovery loads its local resources").toBeGreaterThan(-1);
+        expect(html.indexOf(tags[0]!), "recovery meta CSP precedes scripts and stylesheets").toBeLessThan(
+            firstResource,
+        );
+    });
+
     itIf("dist HTML matches the META_CSP flag the build ran with", () => {
         const headers = readFileSync(HEADERS, "utf-8");
         const headerPolicy = /Content-Security-Policy: ([^\n]+)/.exec(headers)?.[1];
@@ -174,6 +197,7 @@ describe("meta CSP in built HTML (META_CSP flavor)", () => {
         expect(headerPolicy, "_headers policy keeps frame-ancestors").toContain("frame-ancestors");
 
         for (const file of findAllHtml(DIST_DIR)) {
+            if (file === RECOVERY_HTML) continue;
             const html = readFileSync(file, "utf-8");
             const tags = html.match(new RegExp(META_TAG_RE.source, "g")) ?? [];
             if (!metaOn) {
