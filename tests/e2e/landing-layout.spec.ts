@@ -1,3 +1,4 @@
+import { getLandingBrands } from "../../vite-plugins/supported-brands.js";
 import { expect, gotoApp, presetLocalStorage, shot, test } from "./_fixtures.js";
 
 test.describe("landing layout", () => {
@@ -6,6 +7,41 @@ test.describe("landing layout", () => {
     });
 
     for (const locale of ["en", "ru", "de"]) {
+        test(`FAQ keeps seven answers and matching structured data in ${locale}`, async ({ page }) => {
+            await page.setViewportSize(locale === "en" ? { width: 1440, height: 900 } : { width: 390, height: 844 });
+            await gotoApp(page, locale);
+            const faq = page.locator(".landing-faq");
+            const items = faq.locator("details");
+            await expect(items).toHaveCount(7);
+            const visibleEntries = await items.evaluateAll((elements) =>
+                elements.map((element) => ({
+                    "@type": "Question",
+                    name: element.querySelector("summary")?.textContent?.trim(),
+                    acceptedAnswer: {
+                        "@type": "Answer",
+                        text: element.querySelector(".landing-faq-body")?.textContent?.trim(),
+                    },
+                })),
+            );
+            const jsonLd = await page.locator("#faq-jsonld").textContent();
+            expect(JSON.parse(jsonLd ?? "null")).toEqual({
+                "@context": "https://schema.org",
+                "@type": "FAQPage",
+                mainEntity: visibleEntries,
+            });
+            await faq.scrollIntoViewIfNeeded();
+            await shot(page, `landing-faq-${locale}`);
+            await items.first().locator("summary").click();
+            await expect(items.first().locator("a")).toBeVisible();
+            await expect(items.first().locator("a")).toHaveAttribute("href", `/${locale}/cameras/`);
+            const help = items.nth(5);
+            await help.locator("summary").click();
+            await expect(help.locator("a")).toBeVisible();
+            await expect(help.locator("a")).toHaveAttribute("href", "/add-my-camera");
+            await expect(help.locator("a")).toHaveAttribute("target", "_blank");
+            await shot(page, `landing-faq-help-${locale}`);
+        });
+
         test(`folder dock keeps its action inside the panel in ${locale}`, async ({ page }) => {
             await page.setViewportSize({ width: 320, height: 568 });
             await gotoApp(page, locale);
@@ -71,6 +107,22 @@ test.describe("landing layout", () => {
         await expect(page).toHaveURL(/\/ru\/$/);
         await expect(page.locator("#landing h1")).toContainText(/[а-яё]/i);
     });
+});
+
+test("home keeps direct links to every camera page and the comparison hub in every locale", async ({ request }) => {
+    for (const locale of ["en", "ru", "de", "es", "fr", "pl", "pt", "zh", "ja", "ko"] as const) {
+        const response = await request.get(`/${locale}/`);
+        expect(response.ok(), locale).toBe(true);
+        const html = await response.text();
+        const anchors = html.match(/<a\b[^>]*>/g) ?? [];
+        const links = anchors.flatMap((anchor) => /\bhref="([^"]+)"/.exec(anchor)?.[1] ?? []);
+        for (const brand of getLandingBrands()) {
+            const targetLocale = brand.locales.includes(locale) ? locale : "en";
+            expect(links, `${locale}: ${brand.displayName}`).toContain(`/${targetLocale}/cameras/${brand.slug}/`);
+        }
+        expect(links, `${locale}: camera catalog`).toContain(`/${locale}/cameras/`);
+        expect(links, `${locale}: comparisons`).toContain(`/${locale}/alternatives/`);
+    }
 });
 
 test.describe("language menu on touch screens", () => {

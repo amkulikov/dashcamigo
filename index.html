@@ -304,34 +304,18 @@
         "mainEntity": [
             {
                 "@type": "Question",
-                "name": "dashcamigo is free — how can I help?",
-                "acceptedAnswer": {
-                    "@type": "Answer",
-                    "text": "We don't need donations. If dashcamigo helped, star it on GitHub. If you found it through a forum, social media or chat, go back and say what you thought. That helps more people find the project."
-                }
-            },
-            {
-                "@type": "Question",
-                "name": "Is there a dashcam app for PC, or do I need the vendor's app?",
-                "acceptedAnswer": {
-                    "@type": "Answer",
-                    "text": "You don't need a separate app. dashcamigo opens 70mai, BlackVue, Viofo and other recordings right in your browser — a free alternative to the vendor's app, with nothing to install and no account. You can also install it from the browser — it pins to your dock and works offline."
-                }
-            },
-            {
-                "@type": "Question",
-                "name": "My dashcam splits every drive into 1‑3 minute clips — can I watch them as one trip?",
-                "acceptedAnswer": {
-                    "@type": "Answer",
-                    "text": "Yes — automatically. Drop the SD‑card folder and the clips join into continuous trips: one timeline, one route on the map, playback that doesn't stop at file boundaries. Need a single file? Select a range — even one spanning several clips — and save it as one MP4."
-                }
-            },
-            {
-                "@type": "Question",
                 "name": "Which dashcams are supported?",
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "70mai, Viofo, BlackVue, GoPro, Garmin, Vantrue, Thinkware, Nextbase, REDTIGER, NAVITEL, Mio MiVue, Navman MiVue, FITCAMX, Vueroid, Botslab, Neoline, Juscar, Escort, Carcam, Beferich, DATAKAM, 2E Drive, Aspiring, Sony, JOOYFACT, HP, SilverStone F1, Roadgid and iBOX. Standard .mp4, .mov and .ts video also opens without setup; GPS depends on the recording format."
+                    "text": "70mai, Viofo, BlackVue, GoPro and many others — see all supported brands. GPS availability depends on the recording format."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "Which devices and browsers does it work on?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "On Windows, macOS, Linux, Android and iOS, right in your browser. Chrome or Edge is best for editing; Firefox and Safari support playback, the map and saving the original video. You can also install dashcamigo from a supported browser and use it offline."
                 }
             },
             {
@@ -344,58 +328,34 @@
             },
             {
                 "@type": "Question",
-                "name": "Which devices does it run on?",
+                "name": "Can I watch separate clips as one trip?",
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "On Windows, macOS, Linux, Android and iOS with a current browser. You can also install dashcamigo from a supported browser and use it offline."
+                    "text": "Yes. Open the SD-card folder and the clips join into continuous trips, with one timeline and one route on the map."
                 }
             },
             {
                 "@type": "Question",
-                "name": "How much does it cost?",
+                "name": "Can I save a clip and hide plates or faces?",
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "Free. No ads, no sign-up, no subscriptions, no hidden charges."
+                    "text": "Yes. Select a trip range, combine cameras, add speed or a mini-map, and save it as MP4. You can hide plates and faces with blur, pixels or a solid fill, all on your device."
                 }
             },
             {
                 "@type": "Question",
-                "name": "Is dashcamigo open source?",
+                "name": "Trips or cameras won't join, or GPS is missing?",
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "Yes. The code is public on GitHub: https://github.com/amkulikov/dashcamigo — you can see exactly what the app does with your files, and run your own copy on your computer or server. Either way, your recordings never leave your device."
+                    "text": "Tell us what went wrong and send sample recordings — we'll look into the format and help add support for your dashcam."
                 }
             },
             {
                 "@type": "Question",
-                "name": "Can I cut out a clip and save it as a file?",
+                "name": "Is it free? How can I help?",
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "Yes. Select a trip range, combine cameras and add speed, coordinates or a mini-map to the video, then save it as MP4. GPS data can be saved inside the video or as a separate .gpx track. You can also save a still image as .jpg."
-                }
-            },
-            {
-                "@type": "Question",
-                "name": "Can I blur a license plate or a face before sharing?",
-                "acceptedAnswer": {
-                    "@type": "Answer",
-                    "text": "Yes. Draw a box over the plate or face — pixelate, a solid fill or a soft blur — and it follows the object as it moves. Like everything else, it happens on your device."
-                }
-            },
-            {
-                "@type": "Question",
-                "name": "Which browser works best?",
-                "acceptedAnswer": {
-                    "@type": "Answer",
-                    "text": "For the full editor — trim with overlays, crop, change resolution — Chrome, Edge or another Chromium-based browser is best. Firefox and Safari play your recordings, show the map and export the original without setup."
-                }
-            },
-            {
-                "@type": "Question",
-                "name": "Switching from Dashcam Viewer, CamGeoPlayer or Telemetry Overlay?",
-                "acceptedAnswer": {
-                    "@type": "Answer",
-                    "text": "dashcamigo is a free, in-browser alternative to these dashcam tools. See how it compares to Dashcam Viewer, CamGeoPlayer and Telemetry Overlay — with playback, GPS and editing in one place."
+                    "text": "Free, with no ads, sign-up or subscriptions. If dashcamigo has been useful, share a link and a few words about your experience — it helps others find the project. A GitHub star is welcome too."
                 }
             }
         ]
@@ -1101,7 +1061,7 @@
                             <p class="landing-works-sub" data-i18n="landing.works.sub">No installs, no plugins, no drivers.</p>
                         </div>
                         <!-- Brand links use locale paths in the prerendered pages. -->
-                        <p class="landing-compat-copy"><span data-i18n="landing.hero.lead.before">Recordings in MP4, MOV or TS from most dashcams — </span><a class="landing-brand-link" href="/cameras/70mai/">70mai</a>, <a class="landing-brand-link" href="/cameras/viofo/">Viofo</a>, <a class="landing-brand-link" href="/cameras/blackvue/">BlackVue</a>, <a class="landing-brand-link" href="/cameras/gopro/">GoPro</a>, <a class="landing-brand-link" href="/cameras/garmin/">Garmin</a>, <a class="landing-brand-link" href="/cameras/vantrue/">Vantrue</a>, <a class="landing-brand-link" href="/cameras/thinkware/">Thinkware</a><span data-i18n="landing.hero.lead.brandsTail"> and more.</span><span data-i18n="landing.hero.lead.after"> GPS and events — the app reads them straight from the video and the files next to it, no setup.</span> <a class="landing-brand-link" href="/cameras/" data-i18n="landing.hero.allBrands">All supported brands →</a></p>
+                        <p class="landing-compat-copy"><span data-i18n="landing.hero.lead.before">Recordings in MP4, MOV or TS from most dashcams — </span><a class="landing-brand-link" href="/cameras/70mai/">70mai</a>, <a class="landing-brand-link" href="/cameras/viofo/">Viofo</a>, <a class="landing-brand-link" href="/cameras/blackvue/">BlackVue</a>, <a class="landing-brand-link" href="/cameras/gopro/">GoPro</a>, <a class="landing-brand-link" href="/cameras/garmin/">Garmin</a>, <a class="landing-brand-link" href="/cameras/vantrue/">Vantrue</a>, <a class="landing-brand-link" href="/cameras/thinkware/">Thinkware</a>, <a class="landing-brand-link" href="/cameras/nextbase/">Nextbase</a>, <a class="landing-brand-link" href="/cameras/redtiger/">REDTIGER</a>, <a class="landing-brand-link" href="/cameras/navitel/">NAVITEL</a>, <a class="landing-brand-link" href="/cameras/mio/">Mio MiVue</a>, <a class="landing-brand-link" href="/cameras/navman/">Navman MiVue</a>, <a class="landing-brand-link" href="/cameras/fitcamx/">FITCAMX</a><span data-i18n="landing.hero.lead.brandsTail"> and more.</span><span data-i18n="landing.hero.lead.after"> GPS and events — the app reads them straight from the video and the files next to it, no setup.</span> <a class="landing-brand-link" href="/cameras/" data-i18n="landing.hero.allBrands">All supported brands →</a></p>
                         <div class="landing-format-info">
                             <span class="landing-codecs">
                                 <span class="landing-codec">.mp4</span>
@@ -1147,10 +1107,7 @@
                     </section>
                     <!-- web-only:end -->
 
-                    <!-- FAQ: sticky title (>880px) + native <details> accordion.
-                         Q2 answer weaves vendor links between i18n fragments - same
-                         pattern as hero-lead. DOM and #faq-jsonld must stay in sync
-                         (Google rich snippets). -->
+                    <!-- Keep FAQ answers and #faq-jsonld in sync. -->
                     <!-- web-only:start -->
                     <section class="landing-faq" aria-labelledby="landing-faq-title">
                         <div class="landing-faq-head">
@@ -1159,56 +1116,32 @@
                         </div>
                         <div class="landing-faq-list">
                             <details class="landing-faq-item">
-                                <summary><span data-i18n="landing.faq.q12">dashcamigo is free — how can I help?</span><svg class="landing-faq-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
-                                <div class="landing-faq-body"><span data-i18n="landing.faq.a12.before">We don't need donations. If dashcamigo helped, </span><a class="landing-brand-link" href="https://github.com/amkulikov/dashcamigo" target="_blank" rel="noopener noreferrer" data-i18n="landing.faq.a12.link">star it on GitHub</a><span data-i18n="landing.faq.a12.after">. If you found it through a forum, social media or chat, go back and say what you thought. That helps more people find the project.</span></div>
-                            </details>
-                            <details class="landing-faq-item">
-                                <summary><span data-i18n="landing.faq.q1">Is there a dashcam app for PC, or do I need the vendor's app?</span><svg class="landing-faq-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
-                                <div class="landing-faq-body" data-i18n="landing.faq.a1">You don't need a separate app. dashcamigo opens 70mai, BlackVue, Viofo and other recordings right in your browser — a free alternative to the vendor's app, with nothing to install and no account. You can also install it from the browser — it pins to your dock and works offline.</div>
-                            </details>
-                            <details class="landing-faq-item">
-                                <summary><span data-i18n="landing.faq.q9">My dashcam splits every drive into 1‑3 minute clips — can I watch them as one trip?</span><svg class="landing-faq-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
-                                <div class="landing-faq-body" data-i18n="landing.faq.a9">Yes — automatically. Drop the SD‑card folder and the clips join into continuous trips: one timeline, one route on the map, playback that doesn't stop at file boundaries. Need a single file? Select a range — even one spanning several clips — and save it as one MP4.</div>
-                            </details>
-                            <details class="landing-faq-item">
                                 <summary><span data-i18n="landing.faq.q2">Which dashcams are supported?</span><svg class="landing-faq-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
-                                <div class="landing-faq-body"><a class="landing-brand-link" href="/cameras/70mai/">70mai</a>, <a class="landing-brand-link" href="/cameras/viofo/">Viofo</a>, <a class="landing-brand-link" href="/cameras/blackvue/">BlackVue</a>, <a class="landing-brand-link" href="/cameras/gopro/">GoPro</a>, <a class="landing-brand-link" href="/cameras/garmin/">Garmin</a>, <a class="landing-brand-link" href="/cameras/vantrue/">Vantrue</a>, <a class="landing-brand-link" href="/cameras/thinkware/">Thinkware</a>, <a class="landing-brand-link" href="/cameras/nextbase/">Nextbase</a>, <a class="landing-brand-link" href="/cameras/redtiger/">REDTIGER</a>, <a class="landing-brand-link" href="/cameras/navitel/">NAVITEL</a>, <a class="landing-brand-link" href="/cameras/mio/">Mio MiVue</a>, <a class="landing-brand-link" href="/cameras/navman/">Navman MiVue</a>, <a class="landing-brand-link" href="/cameras/fitcamx/">FITCAMX</a><span data-i18n="landing.faq.a2.after">, Vueroid, Botslab, Neoline, Juscar, Escort, Carcam, Beferich, DATAKAM, 2E Drive, Aspiring, Sony, JOOYFACT, HP, SilverStone F1, Roadgid and iBOX. Standard .mp4, .mov and .ts video also opens without setup; GPS depends on the recording format.</span></div>
+                                <div class="landing-faq-body"><span data-i18n="landing.faq.a2.before">70mai, Viofo, BlackVue, GoPro and many others — see </span><a class="landing-brand-link" href="/cameras/" data-i18n="landing.faq.a2.link">all supported brands</a><span data-i18n="landing.faq.a2.after">. GPS availability depends on the recording format.</span></div>
+                            </details>
+                            <details class="landing-faq-item">
+                                <summary><span data-i18n="landing.faq.q4">Which devices and browsers does it work on?</span><svg class="landing-faq-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+                                <div class="landing-faq-body" data-i18n="landing.faq.a4">On Windows, macOS, Linux, Android and iOS, right in your browser. Chrome or Edge is best for editing; Firefox and Safari support playback, the map and saving the original video. You can also install dashcamigo from a supported browser and use it offline.</div>
                             </details>
                             <details class="landing-faq-item">
                                 <summary><span data-i18n="landing.faq.q3">Are my recordings uploaded anywhere?</span><svg class="landing-faq-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
                                 <div class="landing-faq-body" data-i18n="landing.faq.a3">No. dashcamigo opens your recordings right on your device — they are never uploaded anywhere.</div>
                             </details>
                             <details class="landing-faq-item">
-                                <summary><span data-i18n="landing.faq.q4">Which devices does it run on?</span><svg class="landing-faq-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
-                                <div class="landing-faq-body" data-i18n="landing.faq.a4">On Windows, macOS, Linux, Android and iOS with a current browser. You can also install dashcamigo from a supported browser and use it offline.</div>
+                                <summary><span data-i18n="landing.faq.q9">Can I watch separate clips as one trip?</span><svg class="landing-faq-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+                                <div class="landing-faq-body" data-i18n="landing.faq.a9">Yes. Open the SD-card folder and the clips join into continuous trips, with one timeline and one route on the map.</div>
                             </details>
                             <details class="landing-faq-item">
-                                <summary><span data-i18n="landing.faq.q5">How much does it cost?</span><svg class="landing-faq-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
-                                <div class="landing-faq-body" data-i18n="landing.faq.a5">Free. No ads, no sign-up, no subscriptions, no hidden charges.</div>
+                                <summary><span data-i18n="landing.faq.q6">Can I save a clip and hide plates or faces?</span><svg class="landing-faq-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+                                <div class="landing-faq-body" data-i18n="landing.faq.a6">Yes. Select a trip range, combine cameras, add speed or a mini-map, and save it as MP4. You can hide plates and faces with blur, pixels or a solid fill, all on your device.</div>
                             </details>
                             <details class="landing-faq-item">
-                                <summary><span data-i18n="landing.faq.q11">Is dashcamigo open source?</span><svg class="landing-faq-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
-                                <div class="landing-faq-body"><span data-i18n="landing.faq.a11.before">Yes. The code is public on GitHub: </span><a class="landing-brand-link" href="https://github.com/amkulikov/dashcamigo" target="_blank" rel="noopener noreferrer">https://github.com/amkulikov/dashcamigo</a><span data-i18n="landing.faq.a11.after"> — you can see exactly what the app does with your files, and run your own copy on your computer or server. Either way, your recordings never leave your device.</span></div>
+                                <summary><span data-i18n="landing.faq.q13">Trips or cameras won't join, or GPS is missing?</span><svg class="landing-faq-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+                                <div class="landing-faq-body"><span data-i18n="landing.faq.a13.before">Tell us what went wrong and </span><a class="landing-brand-link" href="/add-my-camera" target="_blank" rel="noopener noreferrer" data-i18n="landing.faq.a13.link">send sample recordings</a><span data-i18n="landing.faq.a13.after"> — we'll look into the format and help add support for your dashcam.</span></div>
                             </details>
                             <details class="landing-faq-item">
-                                <summary><span data-i18n="landing.faq.q6">Can I cut out a clip and save it as a file?</span><svg class="landing-faq-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
-                                <div class="landing-faq-body" data-i18n="landing.faq.a6">Yes. Select a trip range, combine cameras and add speed, coordinates or a mini-map to the video, then save it as MP4. GPS data can be saved inside the video or as a separate .gpx track. You can also save a still image as .jpg.</div>
-                            </details>
-                            <details class="landing-faq-item">
-                                <summary><span data-i18n="landing.faq.q10">Can I blur a license plate or a face before sharing?</span><svg class="landing-faq-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
-                                <div class="landing-faq-body" data-i18n="landing.faq.a10">Yes. Draw a box over the plate or face — pixelate, a solid fill or a soft blur — and it follows the object as it moves. Like everything else, it happens on your device.</div>
-                            </details>
-                            <details class="landing-faq-item">
-                                <summary><span data-i18n="landing.faq.q7">Which browser works best?</span><svg class="landing-faq-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
-                                <div class="landing-faq-body" data-i18n="landing.faq.a7">For the full editor — trim with overlays, crop, change resolution — Chrome, Edge or another Chromium-based browser is best. Firefox and Safari play your recordings, show the map and export the original without setup.</div>
-                            </details>
-                            <!-- a8 weaves a link to /alternatives/ between i18n
-                                 fragments, like a2's vendor links.
-                                 seo-prerender rewrites href="/alternatives/" to the
-                                 per-locale /<lang>/alternatives/. -->
-                            <details class="landing-faq-item">
-                                <summary><span data-i18n="landing.faq.q8">Switching from Dashcam Viewer, CamGeoPlayer or Telemetry Overlay?</span><svg class="landing-faq-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
-                                <div class="landing-faq-body"><span data-i18n="landing.faq.a8.before">dashcamigo is a free, in-browser alternative to these dashcam tools. See how it </span><a class="landing-brand-link" href="/alternatives/" data-i18n="landing.faq.a8.link">compares to Dashcam Viewer, CamGeoPlayer and Telemetry Overlay</a><span data-i18n="landing.faq.a8.after"> — with playback, GPS and editing in one place.</span></div>
+                                <summary><span data-i18n="landing.faq.q12">Is it free? How can I help?</span><svg class="landing-faq-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+                                <div class="landing-faq-body"><span data-i18n="landing.faq.a12.before">Free, with no ads, sign-up or subscriptions. If dashcamigo has been useful, share a link and a few words about your experience — it helps others find the project. A </span><a class="landing-brand-link" href="https://github.com/amkulikov/dashcamigo" target="_blank" rel="noopener noreferrer" data-i18n="landing.faq.a12.link">GitHub star</a><span data-i18n="landing.faq.a12.after"> is welcome too.</span></div>
                             </details>
                         </div>
                     </section>
@@ -1233,6 +1166,7 @@
                         <a href="mailto:feedback@dashcamigo.app" class="site-footer-link">feedback@dashcamigo.app</a>
                         <a href="/add-my-camera" class="site-footer-link" data-i18n="footer.addCamera"
                            target="_blank" rel="noopener">Add your dashcam</a>
+                        <a href="/alternatives/" class="site-footer-link" data-i18n="footer.compare">Compare apps</a>
                         <a href="/privacy" class="site-footer-link" data-i18n="footer.privacy"
                            target="_blank" rel="noopener">Privacy policy</a>
                         <a href="/terms" class="site-footer-link" data-i18n="footer.terms"

@@ -64,7 +64,6 @@ import {
     getDefaultSeoLocale,
     getHreflangCodes,
     getIndexableSeoLocales,
-    REPO_URL,
     type SeoLocale,
 } from "../src/i18n/seo-config.js";
 import {
@@ -79,11 +78,7 @@ import { zhDict } from "../src/i18n/zh.js";
 import { getGitMtimeIso, maxGitMtimeIso } from "./git-mtime.js";
 import { escapeAttr, escapeText, stringifyJsonLd } from "./html-utils.js";
 import { renderSeoLanguageLinks } from "./seo-navigation.js";
-import {
-    getAllBrandsCommaSeparated,
-    getLandingBrands,
-    getLandingBrandsCommaSeparated,
-} from "./supported-brands.js";
+import { getAllBrandsCommaSeparated, getLandingBrands } from "./supported-brands.js";
 import { getAlternativeSitemapEntries } from "./alternative-pages.js";
 import { getFeatureListings, getFeatureSitemapEntries } from "./feature-pages.js";
 import { getVendorSitemapEntries } from "./vendor-pages.js";
@@ -726,10 +721,7 @@ export function applyLocale(html: string, locale: LocalePrerenderConfig, options
         `href="/${locale.seo.urlSegment}/cameras/"`,
     );
 
-    // Same per-locale rewrite for the landing FAQ's /alternatives/ link, so a
-    // visitor on /de/ stays on /de/ when they open the competitor comparison.
-    // Only the bare "/alternatives/" baseline href is used in the FAQ;
-    // absolute canonical / hreflang values are untouched.
+    // Keep comparison links in the visitor's locale.
     out = out.replace(/href="\/alternatives\//g, `href="/${locale.seo.urlSegment}/alternatives/`);
 
     // Footer links to the use-case feature pages use bare "/<slug>/" baselines
@@ -941,42 +933,18 @@ function rewriteFeatureList(existing: unknown): unknown[] {
     return out;
 }
 
-// Build the FAQPage JSON-LD by joining the same i18n fragments that the DOM
-// renders. Google requires the question/answer text in the JSON-LD to match
-// the visible DOM literally - if we diverge, the rich snippet can be dropped
-// or flagged as misleading. We derive both from the dict to guarantee parity.
-//
-// Question is a single key (q1..q6). Answer is one or more fragments because
-// DOM splits some answers around inline anchor nodes (a2 has vendor links).
-// The split has nothing to do with translation - it is a purely structural
-// artifact, so for the JSON-LD we re-stitch the fragments back together and
-// inject the same literal vendor list that the DOM shows.
-//
-// a2 ("which dashcams are supported?") starts with every brand that has a
-// dedicated landing page. The dict["landing.faq.a2.after"] tail completes the
-// inventory with supported brands that do not have their own page.
-
+// Structured answers must match visible copy, including inline link labels.
 function buildFaqJsonLd(dict: Record<I18nKey, string>): string {
-    // a12 stitches the GitHub anchor text between its surrounding copy.
-    const a12 = `${dict["landing.faq.a12.before"] ?? ""}${dict["landing.faq.a12.link"] ?? ""}${dict["landing.faq.a12.after"] ?? ""}`;
-    const a2 = `${getLandingBrandsCommaSeparated()}${dict["landing.faq.a2.after"] ?? ""}`;
-    const a11 = `${dict["landing.faq.a11.before"] ?? ""}${REPO_URL}${dict["landing.faq.a11.after"] ?? ""}`;
-    // a8 stitches the /alternatives/ link's anchor text between its fragments,
-    // and the visible DOM weaves an <a> there.
-    const a8 = `${dict["landing.faq.a8.before"] ?? ""}${dict["landing.faq.a8.link"] ?? ""}${dict["landing.faq.a8.after"] ?? ""}`;
+    const linkedAnswer = (id: 2 | 12 | 13): string =>
+        `${dict[`landing.faq.a${id}.before`]}${dict[`landing.faq.a${id}.link`]}${dict[`landing.faq.a${id}.after`]}`;
     const items: Array<{ q: string; a: string }> = [
-        { q: dict["landing.faq.q12"] ?? "", a: a12 },
-        { q: dict["landing.faq.q1"] ?? "", a: dict["landing.faq.a1"] ?? "" },
-        { q: dict["landing.faq.q9"] ?? "", a: dict["landing.faq.a9"] ?? "" },
-        { q: dict["landing.faq.q2"] ?? "", a: a2 },
-        { q: dict["landing.faq.q3"] ?? "", a: dict["landing.faq.a3"] ?? "" },
-        { q: dict["landing.faq.q4"] ?? "", a: dict["landing.faq.a4"] ?? "" },
-        { q: dict["landing.faq.q5"] ?? "", a: dict["landing.faq.a5"] ?? "" },
-        { q: dict["landing.faq.q11"] ?? "", a: a11 },
-        { q: dict["landing.faq.q6"] ?? "", a: dict["landing.faq.a6"] ?? "" },
-        { q: dict["landing.faq.q10"] ?? "", a: dict["landing.faq.a10"] ?? "" },
-        { q: dict["landing.faq.q7"] ?? "", a: dict["landing.faq.a7"] ?? "" },
-        { q: dict["landing.faq.q8"] ?? "", a: a8 },
+        { q: dict["landing.faq.q2"], a: linkedAnswer(2) },
+        { q: dict["landing.faq.q4"], a: dict["landing.faq.a4"] },
+        { q: dict["landing.faq.q3"], a: dict["landing.faq.a3"] },
+        { q: dict["landing.faq.q9"], a: dict["landing.faq.a9"] },
+        { q: dict["landing.faq.q6"], a: dict["landing.faq.a6"] },
+        { q: dict["landing.faq.q13"], a: linkedAnswer(13) },
+        { q: dict["landing.faq.q12"], a: linkedAnswer(12) },
     ];
     const payload = {
         "@context": "https://schema.org",

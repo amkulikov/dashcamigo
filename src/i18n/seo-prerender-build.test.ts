@@ -288,16 +288,12 @@ describe("applyLocale", () => {
         expect(out).not.toContain('href="/cameras/70mai/"');
     });
 
-    it("lists every dedicated camera brand once in FAQ JSON-LD", () => {
+    it("includes the camera catalog link label in FAQ JSON-LD", () => {
         const match = /<script[^>]*id="faq-jsonld"[^>]*>([\s\S]*?)<\/script>/.exec(out);
         expect(match).not.toBeNull();
         const payload = JSON.parse(match![1]!);
         const item = payload.mainEntity.find((candidate: { name?: string }) => candidate.name === ru.dict["landing.faq.q2"]);
-        const answer = item?.acceptedAnswer?.text;
-        expect(typeof answer).toBe("string");
-        for (const brand of getLandingBrands()) {
-            expect(answer.split(brand.displayName).length - 1, brand.displayName).toBe(1);
-        }
+        expect(item?.acceptedAnswer?.text).toBe(`${ru.dict["landing.faq.a2.before"]}${ru.dict["landing.faq.a2.link"]}${ru.dict["landing.faq.a2.after"]}`);
     });
 
     it("applies the OG description override to og:description / twitter:description", () => {
