@@ -7,6 +7,10 @@ User-facing changes, newest first. Dates are when the change landed on
 [beta](https://beta.dashcamigo.app); production picks it up with the next
 release tag. Localized texts ship inside the app (the "What's new" panel).
 
+## 2026-10-09
+
+- **New:** Prepare your notes for the move to everydashcam.app in Settings.
+
 ## 2026-10-07
 
 - **Improved:** Full-screen video can stay above the controls.

@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-10-09.1",
+        category: "feature",
+        text: {
+            en: "Prepare your notes for the move to everydashcam.app in Settings.",
+            ru: "В настройках можно подготовить заметки к переезду на everydashcam.app.",
+            de: "Bereite deine Notizen in den Einstellungen auf den Umzug zu everydashcam.app vor.",
+            es: "Prepara tus notas para el traslado a everydashcam.app en Ajustes.",
+            fr: "Prépare tes notes pour le passage à everydashcam.app dans les paramètres.",
+            pl: "Przygotuj notatki do przeniesienia na everydashcam.app w ustawieniach.",
+            pt: "Prepare suas notas para a mudança para everydashcam.app nas configurações.",
+            zh: "在设置中准备笔记，以便迁移到 everydashcam.app。",
+            ja: "設定から everydashcam.app への移行に備えてメモを準備できます。",
+            ko: "설정에서 everydashcam.app으로 옮길 메모를 준비할 수 있어요.",
+        },
+    },
+    {
         id: "2026-10-07.3",
         category: "improvement",
         text: {
