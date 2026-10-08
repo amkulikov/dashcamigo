@@ -104,13 +104,15 @@ function maskGsvLine(gsv) {
     return parts.join(",");
 }
 
-// "1234.5678" -> "1200.0000". DDmm.mmmm: the integer part before the dot is
-// DD*100 + MM; divide by 100, round to a whole degree, multiply back by 100, format.
+// "1234.5678" -> "1300.0000". DDmm.mmmm: the integer part before the dot is
+// DD*100 + MM; convert to decimal degrees, round to a whole degree and format
+// it back as DD00.0000.
 function roundCoordToDegree(value) {
     if (value === "") return value;
     const num = Number(value);
     if (!Number.isFinite(num)) return value;
-    const deg = Math.round(num / 100);
+    const degrees = Math.floor(num / 100);
+    const deg = Math.round(degrees + (num - degrees * 100) / 60);
     return (deg * 100).toFixed(4);
 }
 
