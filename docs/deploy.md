@@ -1,7 +1,7 @@
 # Official deployment runbook
 
-This document operates the official dashcamigo.app, beta.dashcamigo.app and
-gh.dashcamigo.app deployments. It is a maintainer runbook for dashcamigo's own
+This document operates the official dashcamigo.app and beta.dashcamigo.app
+deployments. It is a maintainer runbook for dashcamigo's own
 infrastructure, not a recipe for launching another public instance. For a
 personal or internal installation, use [the self-hosting guide](self-hosting.md).
 
@@ -84,8 +84,7 @@ uploaded:
 - `ci.yml` - typecheck / lint / unit / e2e on pushes to `main` and PRs.
 - `deploy.yml` - staging build + `wrangler pages deploy` on every `main` push.
 - `release.yml` (on `v*` tags) - the production build + deploy, the `release`
-  promote, the self-host artifacts, the chained IndexNow ping, and the
-  Pages-mirror dispatch.
+  promote, the self-host artifacts, and the chained IndexNow ping.
 - `indexnow.yml` - the manual re-ping button.
 
 The Pages project's git integration is unused - Pages cannot re-link a
@@ -289,47 +288,6 @@ Consequences the workflow is built around:
   Restrict deletions + Block force pushes) protects not-yet-released tags;
   note a repo admin can delete the ruleset, so it guards against accidents,
   not a compromised owner - the immutability above is the real lock.
-
-## GitHub Pages mirror (gh.dashcamigo.app)
-
-The primary site rides the Cloudflare edge, which parts of the audience
-cannot always reach (notably RU networks). The mirror serves the same bytes
-from GitHub's infrastructure: `mirror.yml` unpacks the published release
-artifact (`dashcamigo.tar.gz` - the self-host build: crash reporting
-compiled out, CSP delivered as a `<meta>` tag since Pages cannot send
-headers) and deploys it to GitHub Pages. `release.yml` dispatches it right
-after publishing a release - a GITHUB_TOKEN-published release never fires
-the release-published trigger (the WHY sits at the dispatch step in
-release.yml); a `workflow_dispatch` re-deploys the selected tag's release.
-
-One-time setup:
-
-1. Repo Settings -> Pages: Source = **GitHub Actions**; Custom domain =
-   `gh.dashcamigo.app`; enable Enforce HTTPS once the certificate is issued.
-2. DNS (zone dashcamigo.app): CNAME `gh` -> `amkulikov.github.io`,
-   **DNS-only** (grey cloud) - proxying it through Cloudflare would put the
-   mirror behind the same edge it exists to bypass.
-3. Settings -> Environments -> `github-pages` -> Deployment branches and
-   tags: **`v*` tag refs only** (drop the default-branch rule Pages
-   auto-creates). Every mirror run carries a tag ref: release.yml
-   dispatches on the release tag, a manual dispatch picks a tag in the
-   ref dropdown - a main-ref run is rejected by environment protection
-   before its first step.
-4. GitHub account Settings -> Pages -> **Add verified domain** for
-   `gh.dashcamigo.app` (one TXT record). Without it, a dangling CNAME after
-   any future Pages teardown lets another GitHub user claim the subdomain
-   onto their own Pages site.
-
-The custom domain gives the mirror the site root, so the root-only build
-constraint (see "Serving rules" in docs/self-hosting.md) holds without a
-subpath flavor. What the mirror lacks: response headers (no header CSP -
-the meta CSP covers it; no cache tuning - GitHub's default is acceptable
-and sw.js updates use `updateViaCache: "none"`), and the legacy
-`_redirects` 301s, which only ever mattered for old dashcamigo.app URLs.
-Canonicals point at dashcamigo.app, so the mirror does not compete with
-the primary in search. Scope of the hedge: it survives a Cloudflare-edge
-outage, not a block of the dashcamigo.app domain itself - the subdomain
-dies with the zone.
 
 ## What the repo ships for deployment
 

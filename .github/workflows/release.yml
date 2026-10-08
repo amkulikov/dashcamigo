@@ -5,8 +5,7 @@
 # what production runs, (c) publishes the prebuilt dist/ as a GitHub Release
 # (versioned zip + fixed-name tar.gz + ghcr image) for self-hosters who don't
 # want the Node toolchain (docs/self-hosting.md), (d) pings IndexNow
-# after the deploy (the `ping` job; manual re-ping button: indexnow.yml),
-# and (e) dispatches the GitHub Pages mirror re-deploy (mirror.yml).
+# after the deploy (the `ping` job; manual re-ping button: indexnow.yml).
 #
 # Trigger: push of a tag `v*` (cut from main - see docs/deploy.md, "Releases").
 # workflow_dispatch builds the same zip and uploads it as a run artifact
@@ -16,8 +15,8 @@
 # The build intentionally gets no VITE_*/SENTRY_* env: the published zip ships
 # with analytics and crash reporting compiled out (the tree-shake contract in
 # .env.example) - same env-less build ci.yml gates on every push, except for
-# META_CSP=1: the artifact targets header-less hosts (GitHub Pages mirror,
-# `npx serve`), so the CSP ships as a <meta> tag (vite-plugins/csp-hash.ts);
+# META_CSP=1: the artifact targets header-less hosts such as `npx serve`,
+# so the CSP ships as a <meta> tag (vite-plugins/csp-hash.ts);
 # the unit tests in this job run under the same flag and assert that flavor.
 # The e2e suite already gated this code on its way into main.
 
@@ -479,19 +478,3 @@ jobs:
             ${{ steps.pack.outputs.portable-assets }}
             portable-manifest.json
           retention-days: 7
-
-  mirror:
-    if: github.event_name == 'push'
-    needs: [release]
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      actions: write
-    steps:
-      # GITHUB_TOKEN-created release events do not start other workflows.
-      # workflow_dispatch is the supported exception.
-      - name: Dispatch the Pages mirror re-deploy
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh workflow run mirror.yml --repo "${GITHUB_REPOSITORY}" --ref "${GITHUB_REF_NAME}"
