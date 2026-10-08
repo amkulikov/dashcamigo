@@ -69,7 +69,7 @@ export function portablePlugin(options: PortableOptions): Plugin {
             // These entry points only initialize hosted UI. Their unused
             // module-level loggers and sets must not retain an excluded feature.
             const isHostedEntry =
-                /\/src\/ui\/(?:sw-registration|lang-suggestion-banner|pwa-install|whats-new-modal|lang-switcher|switch-lang-modal)\.ts$/.test(
+                /\/src\/ui\/(?:sw-registration|lang-suggestion-banner|pwa-install|whats-new-modal|lang-switcher|switch-lang-modal|support-prompt)\.ts$/.test(
                     id,
                 );
             return {
@@ -87,7 +87,7 @@ export function portablePlugin(options: PortableOptions): Plugin {
                     .filter(
                         ([id, module]) =>
                             module.renderedLength > 0 &&
-                            /onnxruntime|@sentry\/|native-file-system-adapter|tracker-worker|sentry-init|blur-(?:track|detect|assets)\.ts|\/(?:pwa-install|whats-new-modal|lang-switcher|lang-suggestion-banner|sw-registration)\.ts/.test(
+                            /onnxruntime|@sentry\/|native-file-system-adapter|tracker-worker|sentry-init|blur-(?:track|detect|assets)\.ts|\/(?:pwa-install|whats-new-modal|lang-switcher|lang-suggestion-banner|sw-registration|support-prompt)\.ts/.test(
                                 id,
                             ),
                     );

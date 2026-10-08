@@ -2841,6 +2841,21 @@
                  from JS at open time - DOM is static placeholders. -->
             <div class="export-modal-section">
                 <h3 class="settings-section-title" data-i18n="settings.about.section">About & diagnostics</h3>
+                <!-- web-only:start -->
+                <details id="settings-support-note" class="settings-support-note">
+                    <summary data-i18n="supportPrompt.title">From the author</summary>
+                    <div class="support-note-body">
+                        <p class="support-note-text" data-i18n="supportPrompt.body">If dashcamigo has been useful, tell people about it on a forum, in a chat or among friends — wherever it fits. A link and a few words about your experience are enough.</p>
+                        <p class="support-note-text" data-i18n="supportPrompt.reason">Recommendations like these mean a lot to me. They let me know the project is useful and help others find it.</p>
+                        <a class="support-github" href="https://github.com/amkulikov/dashcamigo" target="_blank" rel="noopener noreferrer"
+                           data-i18n="supportPrompt.github">A GitHub star is welcome too.</a>
+                        <div class="support-note-actions">
+                            <button type="button" class="dc-btn dc-btn--secondary support-copy"
+                                    aria-live="polite" data-i18n="supportPrompt.copy">Copy link</button>
+                        </div>
+                    </div>
+                </details>
+                <!-- web-only:end -->
                 <div class="settings-row">
                     <div class="settings-info-row">
                         <span class="settings-info-label" data-i18n="settings.about.version.label">Version</span>
@@ -2952,23 +2967,18 @@
     <!-- web-only:start -->
     <div data-nosnippet id="support-banner" class="sticky-banner support-banner" hidden role="dialog" aria-modal="false"
         aria-labelledby="support-banner-title" aria-describedby="support-banner-body">
-        <div class="sticky-banner-body">
-            <div class="sticky-banner-title" id="support-banner-title" data-i18n="supportPrompt.title">Did dashcamigo help?</div>
-            <p class="sticky-banner-lead" id="support-banner-body" data-i18n="supportPrompt.body">
-                We don't need donations. A GitHub star helps. If you found dashcamigo through a forum, social media or chat, go back and say what you thought there.
-            </p>
+        <div class="sticky-banner-title" id="support-banner-title" data-i18n="supportPrompt.title">From the author</div>
+        <div class="support-note-body" id="support-banner-body">
+            <p class="support-note-text" data-i18n="supportPrompt.body">If dashcamigo has been useful, tell people about it on a forum, in a chat or among friends — wherever it fits. A link and a few words about your experience are enough.</p>
+            <p class="support-note-text" data-i18n="supportPrompt.reason">Recommendations like these mean a lot to me. They let me know the project is useful and help others find it.</p>
+            <a id="support-banner-github" class="support-github" href="https://github.com/amkulikov/dashcamigo" target="_blank" rel="noopener noreferrer"
+               data-i18n="supportPrompt.github">A GitHub star is welcome too.</a>
         </div>
-        <div class="sticky-banner-footer">
-            <div class="sticky-banner-actions support-banner-actions">
-                <button id="support-banner-later" type="button" class="dc-btn dc-btn--ghost"
-                        data-i18n="supportPrompt.later">Maybe later</button>
-                <span class="sticky-banner-actions-spacer"></span>
-                <button id="support-banner-copy" type="button" class="dc-btn dc-btn--secondary"
-                        aria-live="polite" data-i18n="supportPrompt.copy">Copy link</button>
-                <a id="support-banner-github" class="dc-btn dc-btn--primary"
-                   href="https://github.com/amkulikov/dashcamigo" target="_blank" rel="noopener noreferrer"
-                   data-i18n="supportPrompt.github">Star on GitHub</a>
-            </div>
+        <div class="support-note-actions">
+            <button id="support-banner-copy" type="button" class="dc-btn dc-btn--secondary support-copy"
+                    aria-live="polite" data-i18n="supportPrompt.copy">Copy link</button>
+            <button id="support-banner-close" type="button" class="dc-btn dc-btn--ghost"
+                    data-i18n="supportPrompt.close">Close</button>
         </div>
     </div>
     <!-- web-only:end -->

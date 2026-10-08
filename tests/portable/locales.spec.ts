@@ -19,7 +19,7 @@ for (const locale of Object.keys(manifest.files)) {
         await expect(page.locator("#portable-github")).toBeVisible();
         await expect(
             page.locator(
-                "#lang-toggle, #install-btn, #offline-use-btn, #offline-use-modal, #whats-new-btn, #switch-lang-modal",
+                "#lang-toggle, #install-btn, #offline-use-btn, #offline-use-modal, #whats-new-btn, #switch-lang-modal, #support-banner, #settings-support-note",
             ),
         ).toHaveCount(0);
         await expect(page.locator('link[rel="manifest"], script[src], link[rel="stylesheet"]')).toHaveCount(0);

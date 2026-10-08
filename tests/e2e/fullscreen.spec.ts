@@ -585,16 +585,16 @@ test("expanded fallback isolates fixed banners while an existing GPS dialog stay
     });
     await expect(banner).toHaveCSS("position", "fixed");
     await expect(banner).toBeVisible();
-    const later = page.getByRole("button", { name: "Maybe later", exact: true });
+    const close = page.locator("#support-banner-close");
     // Role locators infer semantics from the DOM and still match inert nodes.
     const accessibility = await page.context().newCDPSession(page);
-    const accessibleLaterCount = async (): Promise<number> => {
+    const accessibleCopyCount = async (): Promise<number> => {
         const { nodes } = await accessibility.send("Accessibility.getFullAXTree");
         return nodes.filter(
-            (node) => !node.ignored && node.role?.value === "button" && node.name?.value === "Maybe later",
+            (node) => !node.ignored && node.role?.value === "button" && node.name?.value === "Copy link",
         ).length;
     };
-    await expect.poll(accessibleLaterCount).toBe(1);
+    await expect.poll(accessibleCopyCount).toBe(1);
     const topbar = page.locator(".topbar");
     await topbar.evaluate((element: HTMLElement) => {
         element.inert = true;
@@ -604,12 +604,12 @@ test("expanded fallback isolates fixed banners while an existing GPS dialog stay
     const player = page.locator("#player-wrap");
     await expect(player).toHaveClass(/player-expanded/);
     await expect(banner).toHaveAttribute("inert", "");
-    await expect.poll(accessibleLaterCount).toBe(0);
+    await expect.poll(accessibleCopyCount).toBe(0);
     await expect(player.locator("#gps-sync-modal")).toBeVisible();
     await expect(dialog).not.toHaveAttribute("inert");
     const offset = page.locator("#gps-sync-offset-input");
     await expect(offset).toBeFocused();
-    await page.locator("#support-banner-later").evaluate((element) => element.focus());
+    await page.locator("#support-banner-close").evaluate((element) => element.focus());
     await expect(offset).toBeFocused();
     await offset.fill("1");
     await offset.press("Enter");
@@ -622,8 +622,8 @@ test("expanded fallback isolates fixed banners while an existing GPS dialog stay
     await expect(player).not.toHaveClass(/player-expanded/);
     await expect(banner).not.toHaveAttribute("inert");
     await expect(topbar).toHaveAttribute("inert", "");
-    await expect.poll(accessibleLaterCount).toBe(1);
-    await later.click();
+    await expect.poll(accessibleCopyCount).toBe(1);
+    await close.click();
     await expect(banner).toBeHidden();
     await accessibility.detach();
 });

@@ -1336,7 +1336,7 @@ async function completeProgressiveRun(run: ProgressiveIngestRun, generation: num
         maybeRunIngestTour();
         maybeRunSourcesTour();
         const addedPlayableRecording = ctx.videosNewCount - run.metadataFailed > 0;
-        if (addedPlayableRecording && recordSuccessfulLoadForSupportPrompt()) {
+        if (!__PORTABLE__ && addedPlayableRecording && recordSuccessfulLoadForSupportPrompt()) {
             maybeShowSupportPrompt();
         }
     }

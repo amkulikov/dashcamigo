@@ -106,13 +106,63 @@
         flex: 1;
         padding: var(--dc-space-2) var(--dc-space-3);
     }
-    .support-banner-actions {
-        display: grid;
-        grid-template-columns: 1fr;
-    }
-    .support-banner-actions .dc-btn {
-        width: 100%;
-    }
+}
+
+.support-banner {
+    max-height: calc(100dvh - 2 * var(--dc-space-4));
+    overflow-y: auto;
+    animation: none;
+}
+.support-banner .sticky-banner-title {
+    font-size: var(--dc-text-md);
+    font-weight: 600;
+}
+.support-note-body {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--dc-space-3);
+}
+.support-note-text,
+.support-github {
+    margin: 0;
+    font-size: var(--dc-text-md);
+    line-height: 1.5;
+    color: var(--fg-dim);
+}
+.support-github {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.support-github:hover {
+    color: var(--fg);
+}
+.support-note-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--dc-space-2);
+}
+.support-note-actions .dc-btn {
+    flex: initial;
+    font-size: var(--dc-text-sm);
+    font-weight: 500;
+}
+.support-note-actions .dc-btn--ghost {
+    color: var(--fg-dim);
+}
+.settings-support-note {
+    margin-bottom: var(--dc-space-4);
+}
+.settings-support-note > summary {
+    width: fit-content;
+    padding-block: var(--dc-space-2);
+    color: var(--fg);
+    font-size: var(--dc-text-sm);
+    cursor: pointer;
+}
+.settings-support-note[open] > summary {
+    margin-bottom: var(--dc-space-2);
 }
 
 /* Settings privacy tab. We use .export-modal as the container; only

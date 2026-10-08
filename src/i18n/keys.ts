@@ -1357,15 +1357,15 @@ export type I18nKey =
     | "pwa.toast.install"
     | "pwa.toast.dismiss"
 
-    // Recurring project-support nudge after the user has successfully opened
-    // recordings more than once and finished the relevant first-run tips.
+    // Author’s note in About and the optional returning-use reminder.
     | "supportPrompt.title"
     | "supportPrompt.body"
+    | "supportPrompt.reason"
     | "supportPrompt.github"
     | "supportPrompt.copy"
     | "supportPrompt.copied"
     | "supportPrompt.copyFailed"
-    | "supportPrompt.later"
+    | "supportPrompt.close"
     | "pwa.guide.title"
     | "pwa.guide.close"
     | "pwa.guide.safariMac.intro"

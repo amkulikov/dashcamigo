@@ -1,15 +1,11 @@
-// Post-use project-support prompt. It counts only recording loads that added at
-// least one playable recording, appears no earlier than the second, and yields
-// to onboarding, modals, fullscreen and higher-priority banners. An earned
-// prompt stays armed while one of those temporary surfaces owns the UI, then
-// retries as soon as the surface leaves; it never requires another recording
-// load just because its first opportunity was busy. Dismissing it starts a
-// 30-day cooldown; completing one of its support actions retires it.
+// The author's note waits for returning use and a quiet moment. Automatic
+// reminders respect the cooldown; the note stays available in About.
 
 import { getCurrentLang, t } from "../i18n/index.js";
 import { REPO_URL } from "../i18n/seo-config.js";
 import { createLogger } from "../log.js";
 
+import { dom, onActivePlayerEvent } from "./dom.js";
 import { isAnyModalOpen } from "./modal-helper.js";
 import { isOnboardingSettledForSupportPrompt } from "./onboarding.js";
 import { state } from "./state.js";
@@ -17,35 +13,21 @@ import { observePromptSurfaces } from "./prompt-surfaces.js";
 
 const log = createLogger("support-prompt");
 
-const STORAGE_SUCCESSFUL_LOADS = "dashcamigo:support:successful-loads";
+const STORAGE_FIRST_USE_AT = "dashcamigo:support:first-use-at";
 const STORAGE_LAST_SHOWN_AT = "dashcamigo:support:last-shown-at";
 const STORAGE_ACTION_TAKEN = "dashcamigo:support:action-taken";
-const LOADS_BEFORE_PROMPT = 2;
+const RETURN_DELAY_MS = 24 * 60 * 60 * 1000;
 const PROMPT_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
 const COPY_FEEDBACK_MS = 1400;
 
 let promptRetryArmed = false;
 let promptRetryTimer: number | null = null;
 let blockerObserver: MutationObserver | null = null;
+let hasReturningUse = false;
+let returnFocus: HTMLElement | null = null;
 
 function getBanner(): HTMLElement | null {
     return document.getElementById("support-banner");
-}
-
-function getCopyButton(): HTMLButtonElement | null {
-    return document.getElementById("support-banner-copy") as HTMLButtonElement | null;
-}
-
-function readSuccessfulLoads(): number | null {
-    try {
-        const stored = Number.parseInt(localStorage.getItem(STORAGE_SUCCESSFUL_LOADS) ?? "0", 10);
-        if (!Number.isFinite(stored) || stored < 0) return 0;
-        return Math.min(stored, LOADS_BEFORE_PROMPT);
-    } catch {
-        // Without persistence we cannot enforce the cooldown, so the
-        // respectful fallback is not to show the prompt.
-        return null;
-    }
 }
 
 function wasSupportActionTaken(): boolean {
@@ -86,18 +68,25 @@ function markSupportActionTaken(): void {
     }
 }
 
-/** Records one meaningful load and returns whether the two-load threshold is met. */
+/** Only opening recordings can qualify a return; leaving a tab open cannot. */
 export function recordSuccessfulLoadForSupportPrompt(): boolean {
+    hasReturningUse = false;
     if (wasSupportActionTaken() || isPromptOnCooldown()) return false;
-    const previous = readSuccessfulLoads();
-    if (previous === null) return false;
-    const next = Math.min(previous + 1, LOADS_BEFORE_PROMPT);
     try {
-        localStorage.setItem(STORAGE_SUCCESSFUL_LOADS, String(next));
+        const now = Date.now();
+        // An earlier prompt is also evidence of past use.
+        const firstUseAt = Number(
+            localStorage.getItem(STORAGE_FIRST_USE_AT) ?? localStorage.getItem(STORAGE_LAST_SHOWN_AT) ?? "0",
+        );
+        if (!Number.isFinite(firstUseAt) || firstUseAt <= 0 || firstUseAt > now) {
+            localStorage.setItem(STORAGE_FIRST_USE_AT, String(now));
+            return false;
+        }
+        hasReturningUse = now - firstUseAt >= RETURN_DELAY_MS;
+        return hasReturningUse;
     } catch {
         return false;
     }
-    return next >= LOADS_BEFORE_PROMPT;
 }
 
 function hasCompetingBanner(): boolean {
@@ -135,6 +124,7 @@ function schedulePromptRetry(): void {
 function observePromptBlockers(): void {
     if (blockerObserver || typeof MutationObserver === "undefined") return;
     blockerObserver = observePromptSurfaces(schedulePromptRetry);
+    blockerObserver.observe(dom.viewer, { attributes: true, attributeFilter: ["class"] });
 }
 
 function armPromptRetry(): void {
@@ -148,8 +138,7 @@ export function maybeShowSupportPrompt(): boolean {
         disarmPromptRetry();
         return false;
     }
-    const successfulLoads = readSuccessfulLoads();
-    if (successfulLoads === null || successfulLoads < LOADS_BEFORE_PROMPT) {
+    if (!hasReturningUse) {
         disarmPromptRetry();
         return false;
     }
@@ -164,6 +153,10 @@ export function maybeShowSupportPrompt(): boolean {
         document.visibilityState !== "visible" ||
         (document.fullscreenElement ?? document.querySelector(".player-expanded")) !== null ||
         state.exportModeOpen ||
+        state.transcodeInProgress ||
+        !dom.player.paused ||
+        dom.player.seeking ||
+        dom.viewer.matches(".preparing, .codec-unsupported, .playback-failed") ||
         isAnyModalOpen() ||
         hasCompetingBanner() ||
         !isOnboardingSettledForSupportPrompt();
@@ -179,13 +172,18 @@ export function maybeShowSupportPrompt(): boolean {
         return false;
     }
     disarmPromptRetry();
+    returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     banner.hidden = false;
     return true;
 }
 
 function hideBanner(): void {
     const banner = getBanner();
-    if (banner) banner.hidden = true;
+    if (!banner) return;
+    const shouldRestoreFocus = banner.contains(document.activeElement);
+    banner.hidden = true;
+    if (shouldRestoreFocus) returnFocus?.focus({ preventScroll: true });
+    returnFocus = null;
 }
 
 function projectUrl(): string {
@@ -214,10 +212,7 @@ function fallbackCopy(text: string): boolean {
     return copied;
 }
 
-async function copyProjectLink(): Promise<void> {
-    const button = getCopyButton();
-    if (!button) return;
-
+async function copyProjectLink(button: HTMLButtonElement): Promise<void> {
     let copied = false;
     try {
         await navigator.clipboard.writeText(projectUrl());
@@ -229,14 +224,13 @@ async function copyProjectLink(): Promise<void> {
         copied = fallbackCopy(projectUrl());
         button.focus({ preventScroll: true });
     }
-
     if (copied) markSupportActionTaken();
-    button.textContent = t(copied ? "supportPrompt.copied" : "supportPrompt.copyFailed");
+    const key = copied ? "supportPrompt.copied" : "supportPrompt.copyFailed";
+    button.dataset.i18n = key;
+    button.textContent = t(key);
     window.setTimeout(() => {
-        if (copied) {
-            hideBanner();
-            return;
-        }
+        if (copied) hideBanner();
+        button.dataset.i18n = "supportPrompt.copy";
         button.textContent = t("supportPrompt.copy");
     }, COPY_FEEDBACK_MS);
 }
@@ -251,17 +245,25 @@ export function initSupportPrompt(): void {
     document.addEventListener("playerexpansionchange", schedulePromptRetry);
     document.addEventListener("click", schedulePromptRetry);
     document.addEventListener("keydown", schedulePromptRetry, true);
+    onActivePlayerEvent("pause", schedulePromptRetry);
+    onActivePlayerEvent("seeked", schedulePromptRetry);
+    onActivePlayerEvent("ended", schedulePromptRetry);
 
-    const github = document.getElementById("support-banner-github") as HTMLAnchorElement | null;
-    if (github) {
+    for (const github of document.querySelectorAll<HTMLAnchorElement>(".support-github")) {
         github.href = REPO_URL;
         github.addEventListener("click", () => {
             markSupportActionTaken();
             hideBanner();
         });
     }
-    document.getElementById("support-banner-later")?.addEventListener("click", hideBanner);
-    getCopyButton()?.addEventListener("click", () => {
-        void copyProjectLink();
+    document.getElementById("support-banner-close")?.addEventListener("click", hideBanner);
+    getBanner()?.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        event.stopPropagation();
+        hideBanner();
     });
+    for (const button of document.querySelectorAll<HTMLButtonElement>(".support-copy")) {
+        button.addEventListener("click", () => void copyProjectLink(button));
+    }
 }

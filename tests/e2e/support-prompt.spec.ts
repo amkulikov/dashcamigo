@@ -1,7 +1,5 @@
-// Project-support surfaces: the post-use prompt counts meaningful recording
-// loads, stays behind onboarding, and observes its monthly cooldown. Copy/FAQ
-// wording is covered by dictionary + JSON-LD parity tests; this file locks the
-// live timing.
+// The author’s note waits for returning use, yields to recording work, and
+// remains available in About after automatic reminders stop.
 
 import type { Page } from "@playwright/test";
 
@@ -10,16 +8,17 @@ import {
     MOBILE,
     SAMPLE_70MAI,
     SAMPLE_GOPRO,
-    SAMPLE_MKV,
     SAMPLE_NOGPS,
     clearOnboarding,
     expect,
     gotoApp,
     presetLocalStorage,
+    pausePlayback,
+    shot,
     test,
 } from "./_fixtures.js";
 
-const SUCCESSFUL_LOADS = "dashcamigo:support:successful-loads";
+const FIRST_USE_AT = "dashcamigo:support:first-use-at";
 const LAST_SHOWN_AT = "dashcamigo:support:last-shown-at";
 const ACTION_TAKEN = "dashcamigo:support:action-taken";
 const MONTH_AND_A_DAY_MS = 31 * 24 * 60 * 60 * 1000;
@@ -34,19 +33,15 @@ async function armIngestCounter(page: Page): Promise<void> {
     });
 }
 
-async function resetSupportState(page: Page, successfulLoads = 0): Promise<void> {
+async function resetSupportState(page: Page, isReturning = false): Promise<void> {
     await page.evaluate(
-        ({ successfulLoadsKey, lastShownAtKey, actionTakenKey, successfulLoads }) => {
-            localStorage.setItem(successfulLoadsKey, String(successfulLoads));
+        ({ firstUseKey, lastShownAtKey, actionTakenKey, isReturning }) => {
+            localStorage.removeItem(firstUseKey);
+            if (isReturning) localStorage.setItem(firstUseKey, String(Date.now() - 2 * 24 * 60 * 60 * 1000));
             localStorage.removeItem(lastShownAtKey);
             localStorage.removeItem(actionTakenKey);
         },
-        {
-            successfulLoadsKey: SUCCESSFUL_LOADS,
-            lastShownAtKey: LAST_SHOWN_AT,
-            actionTakenKey: ACTION_TAKEN,
-            successfulLoads,
-        },
+        { firstUseKey: FIRST_USE_AT, lastShownAtKey: LAST_SHOWN_AT, actionTakenKey: ACTION_TAKEN, isReturning },
     );
 }
 
@@ -73,62 +68,73 @@ test.describe("project support prompt", () => {
         await page.setViewportSize(DESKTOP);
     });
 
-    test("counts only new recordings, defers for a month, then offers again", async ({ page }) => {
+    test("waits for returning use and repeats only after a month and another useful load", async ({ page }) => {
         await gotoApp(page, "en");
         await resetSupportState(page);
         await armIngestCounter(page);
-
-        await loadAndWait(page, SAMPLE_70MAI);
-        await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), SUCCESSFUL_LOADS)).toBe("1");
-        await expect(page.locator("#support-banner")).toBeHidden();
-
-        // Selecting the same card again is a duplicate-only pass. It completes
-        // normally but must not move the support threshold.
-        await loadAndWait(page, SAMPLE_70MAI);
-        expect(await page.evaluate((key) => localStorage.getItem(key), SUCCESSFUL_LOADS)).toBe("1");
-        await expect(page.locator("#support-banner")).toBeHidden();
-
-        await loadAndWait(page, SAMPLE_GOPRO);
         const banner = page.locator("#support-banner");
+
+        await loadAndWait(page, SAMPLE_70MAI);
+        const firstUseAt = Number(await page.evaluate((key) => localStorage.getItem(key), FIRST_USE_AT));
+        expect(firstUseAt).toBeGreaterThan(Date.now() - 10_000);
+        await loadAndWait(page, SAMPLE_70MAI);
+        await loadAndWait(page, SAMPLE_GOPRO);
+        expect(Number(await page.evaluate((key) => localStorage.getItem(key), FIRST_USE_AT))).toBe(firstUseAt);
+        await expect(banner).toBeHidden();
+
+        // A reload and more recordings on the same day are still too early.
+        await gotoApp(page, "en");
+        await page.evaluate((key) => localStorage.removeItem(key), ACTION_TAKEN);
+        await armIngestCounter(page);
+        await loadAndWait(page, SAMPLE_70MAI);
+        await expect(banner).toBeHidden();
+
+        await gotoApp(page, "en");
+        await resetSupportState(page, true);
+        await armIngestCounter(page);
+        await expect(banner).toBeHidden();
+        await loadAndWait(page, SAMPLE_70MAI);
         await expect(banner).toBeVisible();
-        await expect(page.locator("#support-banner-title")).toHaveText("Did dashcamigo help?");
-        await expect(page.locator("#support-banner-body")).toContainText("We don't need donations");
+        await expect(page.locator("#support-banner-title")).toHaveText("From the author");
+        await expect(page.locator("#support-banner-body")).toContainText("wherever it fits");
         await expect(page.locator("#support-banner-github")).toHaveAttribute(
             "href",
             "https://github.com/amkulikov/dashcamigo",
         );
         await expect(page.locator("#support-banner-copy")).toHaveText("Copy link");
-        await expect(page.locator("#support-banner-later")).toHaveText("Maybe later");
+        await expect(page.locator("#support-banner-close")).toHaveText("Close");
         const firstShownAt = Number(await page.evaluate((key) => localStorage.getItem(key), LAST_SHOWN_AT));
         expect(firstShownAt).toBeGreaterThan(Date.now() - 10_000);
         expect(await page.evaluate((key) => localStorage.getItem(key), ACTION_TAKEN)).toBeNull();
+        await shot(page, "support-note-en-desktop");
 
-        await page.locator("#support-banner-later").click();
+        await page.locator("#support-banner-close").click();
+        await loadAndWait(page, SAMPLE_GOPRO);
         await expect(banner).toBeHidden();
 
-        // Another useful load during the cooldown does not immediately nag.
-        await loadAndWait(page, SAMPLE_NOGPS);
-        await expect(banner).toBeHidden();
-
-        // Once the cooldown has elapsed, a later successful load may surface
-        // the prompt again. It never appears merely because the page was open.
         await page.evaluate(({ key, elapsed }) => localStorage.setItem(key, String(Date.now() - elapsed)), {
             key: LAST_SHOWN_AT,
             elapsed: MONTH_AND_A_DAY_MS,
         });
-        await loadAndWait(page, SAMPLE_MKV);
+        // Duplicates and unrelated interactions cannot trigger a reminder.
+        await loadAndWait(page, SAMPLE_GOPRO);
+        await page.locator("#settings-btn").click();
+        await page.locator("#settings-modal-header-close").click();
+        await expect(banner).toBeHidden();
+        await loadAndWait(page, SAMPLE_NOGPS);
         await expect(banner).toBeVisible();
-        const secondShownAt = Number(await page.evaluate((key) => localStorage.getItem(key), LAST_SHOWN_AT));
-        expect(secondShownAt).toBeGreaterThan(firstShownAt);
+        expect(Number(await page.evaluate((key) => localStorage.getItem(key), LAST_SHOWN_AT))).toBeGreaterThan(
+            firstShownAt,
+        );
     });
 
-    test("survives clean-session onboarding without requiring a third load", async ({ page }) => {
+    test("waits for onboarding and playback without requiring another load", async ({ page }) => {
         // The loaded card is multi-camera, but its conditional tour has not yet
         // been offered. It must not become a permanent gate behind the player
         // tour that wins this first trip-open seam.
         await clearOnboarding(page);
         await gotoApp(page, "en");
-        await resetSupportState(page);
+        await resetSupportState(page, true);
         await armIngestCounter(page);
 
         await loadAndWait(page, SAMPLE_70MAI);
@@ -137,7 +143,6 @@ test.describe("project support prompt", () => {
         await expect(page.locator(".dc-onb")).toHaveCount(0);
 
         await loadAndWait(page, SAMPLE_GOPRO);
-        expect(await page.evaluate((key) => localStorage.getItem(key), SUCCESSFUL_LOADS)).toBe("2");
         await expect(page.locator("#support-banner")).toBeHidden();
 
         // Once the core tour has reached the user, the already-earned prompt
@@ -146,6 +151,9 @@ test.describe("project support prompt", () => {
         await expect(page.locator(".dc-onb")).toBeVisible({ timeout: 5_000 });
         await page.locator(".dc-onb__x").click();
         await expect(page.locator(".dc-onb")).toHaveCount(0);
+        await expect(page.locator("#player-play")).toHaveAttribute("data-paused", "false");
+        await expect(page.locator("#support-banner")).toBeHidden();
+        await pausePlayback(page);
         await expect(page.locator("#support-banner")).toBeVisible();
         expect(await page.evaluate(() => localStorage.getItem("dashcamigo:onboarding:player"))).toBeNull();
         expect(
@@ -157,7 +165,7 @@ test.describe("project support prompt", () => {
 
     test("keeps an earned prompt pending until a competing banner leaves", async ({ page }) => {
         await gotoApp(page, "en");
-        await resetSupportState(page, 1);
+        await resetSupportState(page, true);
         await armIngestCounter(page);
 
         await page.evaluate(() => {
@@ -174,6 +182,91 @@ test.describe("project support prompt", () => {
             if (installBanner) installBanner.hidden = true;
         });
         await expect(page.locator("#support-banner")).toBeVisible();
+    });
+
+    test("preserves earlier cooldowns and stops reminders after a GitHub visit", async ({ page }) => {
+        await gotoApp(page, "en");
+        await resetSupportState(page);
+        await page.evaluate((key) => localStorage.setItem(key, String(Date.now())), LAST_SHOWN_AT);
+        await armIngestCounter(page);
+        await loadAndWait(page, SAMPLE_70MAI);
+        const banner = page.locator("#support-banner");
+        await expect(banner).toBeHidden();
+        await page.evaluate(({ key, elapsed }) => localStorage.setItem(key, String(Date.now() - elapsed)), {
+            key: LAST_SHOWN_AT,
+            elapsed: MONTH_AND_A_DAY_MS,
+        });
+        await loadAndWait(page, SAMPLE_GOPRO);
+        await expect(banner).toBeVisible();
+        await page.context().route("https://github.com/**", (route) => route.fulfill({ status: 200, body: "" }));
+        const popupPromise = page.waitForEvent("popup");
+        await page.locator("#support-banner-github").click();
+        const popup = await popupPromise;
+        await popup.close();
+        await expect(banner).toBeHidden();
+        expect(await page.evaluate((key) => localStorage.getItem(key), ACTION_TAKEN)).toBe("1");
+        await page.evaluate(({ key, elapsed }) => localStorage.setItem(key, String(Date.now() - elapsed)), {
+            key: LAST_SHOWN_AT,
+            elapsed: MONTH_AND_A_DAY_MS,
+        });
+        await loadAndWait(page, SAMPLE_NOGPS);
+        await expect(banner).toBeHidden();
+    });
+
+    test("keeps the note in About after a support action and recovers from a failed copy", async ({ page }) => {
+        await gotoApp(page, "en");
+        // The default fixture represents someone who already supported the project.
+        await page.locator("#settings-btn").click();
+        const note = page.locator("#settings-support-note");
+        await note.locator("summary").click();
+        await expect(note).toContainText("Recommendations like these mean a lot to me");
+        await expect(note.locator(".support-github")).toHaveAttribute(
+            "href",
+            "https://github.com/amkulikov/dashcamigo",
+        );
+        await page.evaluate((key) => {
+            localStorage.removeItem(key);
+            Object.defineProperty(navigator, "clipboard", {
+                configurable: true,
+                value: { writeText: () => Promise.reject(new Error("clipboard blocked")) },
+            });
+            document.execCommand = () => false;
+        }, ACTION_TAKEN);
+        const copy = note.locator(".support-copy");
+        await copy.click();
+        await expect(copy).toHaveText("Couldn't copy the link");
+        expect(await page.evaluate((key) => localStorage.getItem(key), ACTION_TAKEN)).toBeNull();
+        await expect(copy).toHaveText("Copy link");
+        await page.locator("#settings-modal-header-close").click();
+        await resetSupportState(page, true);
+        await armIngestCounter(page);
+        await loadAndWait(page, SAMPLE_70MAI);
+        await expect(page.locator("#support-banner")).toBeVisible();
+        await page.locator("#settings-btn").click();
+        await page.evaluate(() => {
+            const target = window as typeof window & { __supportCopiedUrl?: string };
+            Object.defineProperty(navigator, "clipboard", {
+                configurable: true,
+                value: {
+                    writeText: (url: string) => {
+                        target.__supportCopiedUrl = url;
+                        return Promise.resolve();
+                    },
+                },
+            });
+        });
+        await copy.click();
+        await expect(copy).toHaveText("Link copied");
+        expect(
+            await page.evaluate(() => (window as typeof window & { __supportCopiedUrl?: string }).__supportCopiedUrl),
+        ).toBe("https://dashcamigo.app/en/");
+        expect(await page.evaluate((key) => localStorage.getItem(key), ACTION_TAKEN)).toBe("1");
+        await expect(copy).toHaveText("Copy link");
+        await expect(page.locator("#settings-modal")).toBeVisible();
+        await expect(note).toHaveAttribute("open", "");
+        await shot(page, "support-note-about-en");
+        await page.locator("#settings-modal-header-close").click();
+        await expect(page.locator("#support-banner")).toBeHidden();
     });
 
     test("feedback opens with a thank-you before asking for recordings", async ({ page }) => {
@@ -193,7 +286,7 @@ test.describe("project support prompt", () => {
     test("fits the Russian actions on a light-theme mobile viewport", async ({ page }) => {
         await page.setViewportSize(MOBILE);
         await gotoApp(page, "ru");
-        await resetSupportState(page, 1);
+        await resetSupportState(page, true);
         // The test browser speaks English, so /ru/ correctly surfaces the
         // language suggestion. It has priority over this nudge; dismiss it
         // before exercising the support banner itself.
@@ -217,16 +310,16 @@ test.describe("project support prompt", () => {
         const banner = page.locator("#support-banner");
         await expect(banner).toBeVisible();
         await expect(page.locator("html")).toHaveClass(/dc-light/);
-        await expect(page.locator("#support-banner-title")).toHaveText("dashcamigo пригодился?");
-        await expect(page.locator("#support-banner-github")).toHaveText("Звезда на GitHub");
+        await expect(page.locator("#support-banner-title")).toHaveText("От автора");
+        await expect(page.locator("#support-banner-github")).toHaveText("Звезде на GitHub тоже буду рад.");
         await expect(page.locator("#support-banner-copy")).toHaveText("Скопировать ссылку");
-        await expect(page.locator("#support-banner-later")).toHaveText("В другой раз");
+        await expect(page.locator("#support-banner-close")).toHaveText("Закрыть");
 
         // The entrance translation can temporarily put the banner below the viewport.
         await expect(banner).toHaveCSS("transform", "none");
         const layout = await banner.evaluate((element) => {
             const rect = element.getBoundingClientRect();
-            const actions = Array.from(element.querySelectorAll<HTMLElement>(".support-banner-actions .dc-btn")).map(
+            const actions = Array.from(element.querySelectorAll<HTMLElement>(".support-note-actions .dc-btn")).map(
                 (button) => {
                     const box = button.getBoundingClientRect();
                     return { left: box.left, right: box.right, top: box.top, bottom: box.bottom };
@@ -244,7 +337,7 @@ test.describe("project support prompt", () => {
         expect(layout.banner.top).toBeGreaterThanOrEqual(0);
         expect(layout.banner.bottom).toBeLessThanOrEqual(layout.viewport.height);
         expect(layout.overflowsHorizontally).toBe(false);
-        expect(layout.actions).toHaveLength(3);
+        expect(layout.actions).toHaveLength(2);
         for (const action of layout.actions) {
             expect(action.left).toBeGreaterThanOrEqual(layout.banner.left);
             expect(action.right).toBeLessThanOrEqual(layout.banner.right);
@@ -266,6 +359,14 @@ test.describe("project support prompt", () => {
             }
         }
 
+        await page.setViewportSize({ width: 320, height: 568 });
+        const compactBounds = await banner.boundingBox();
+        expect(compactBounds).not.toBeNull();
+        expect(compactBounds!.x + compactBounds!.width).toBeLessThanOrEqual(320);
+        expect(compactBounds!.y).toBeGreaterThanOrEqual(0);
+        expect(compactBounds!.y + compactBounds!.height).toBeLessThanOrEqual(568);
+        expect(await banner.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(false);
+        await shot(page, "support-note-ru-mobile");
         await page.locator("#support-banner-copy").click();
         await expect(page.locator("#support-banner-copy")).toHaveText("Ссылка скопирована");
         expect(
