@@ -35,7 +35,7 @@
 /sw.js
   Cache-Control: public, max-age=0, must-revalidate
 
-# Recovery must not receive Cloudflare's automatically injected analytics.
+# Keep intermediary transforms off. Recovery's own CSP blocks Pages analytics.
 /migrate/*
   Cache-Control: public, max-age=0, must-revalidate, no-transform
   X-Robots-Tag: noindex, nofollow

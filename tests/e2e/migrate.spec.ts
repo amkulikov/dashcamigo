@@ -299,6 +299,59 @@ test.describe("standalone notes recovery", () => {
     });
 });
 
+test.describe("recovery with hosting-injected analytics", () => {
+    test("blocks the Pages beacon while keeping notes export available", async ({ browser, baseURL }) => {
+        if (!baseURL) throw new Error("missing test base url");
+        const context = await browser.newContext({ baseURL, serviceWorkers: "block" });
+        try {
+            const page = await context.newPage();
+            const errors: string[] = [];
+            page.on("pageerror", (error) => errors.push(error.message));
+            page.on("console", (message) => {
+                if (message.type() !== "error") return;
+                if (
+                    /Loading the script 'https:\/\/static\.cloudflareinsights\.com\/beacon\.min\.js' violates/.test(
+                        message.text(),
+                    )
+                )
+                    return;
+                errors.push(message.text());
+            });
+            const externalRequests: string[] = [];
+            await context.route(/^https?:\/\//, (route) => {
+                if (new URL(route.request().url()).origin === new URL(baseURL).origin) return route.continue();
+                externalRequests.push(route.request().url());
+                return route.abort();
+            });
+            await seedDatabase(page, RECORDS);
+            const before = await databaseSnapshot(page);
+            await page.route("**/migrate/", async (route) => {
+                const response = await route.fetch();
+                const html = await response.text();
+                const beacon = `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token":"migration-regression"}'></script>`;
+                await route.fulfill({ response, body: html.replace("</body>", `${beacon}</body>`) });
+            });
+            await page.addInitScript(() => {
+                document.addEventListener("securitypolicyviolation", (event) => {
+                    document.documentElement.dataset.blockedScript = event.blockedURI;
+                });
+            });
+            await page.goto("/migrate/");
+            await expect(page.locator("html")).toHaveAttribute(
+                "data-blocked-script",
+                "https://static.cloudflareinsights.com/beacon.min.js",
+            );
+            expect(parseSidecarPayload(await exportNotes(page))?.records).toHaveLength(RECORDS.length);
+            expect(await databaseSnapshot(page)).toEqual(before);
+            // Chromium reports CSP-blocked request events, but never sends them to the network route.
+            expect(externalRequests).toEqual([]);
+            expect(errors).toEqual([]);
+        } finally {
+            await context.close();
+        }
+    });
+});
+
 test.describe("recovery through an installed pre-migration worker", () => {
     test.use({ serviceWorkers: "allow" });
 

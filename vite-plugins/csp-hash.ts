@@ -152,6 +152,29 @@ export function cspHashPlugin(options: CspHashPluginOptions = {}): Plugin {
             const metaPolicy = metaCspFromHeaderPolicy(headerLine[1], options);
             for (const file of findHtmlFiles(distDir)) {
                 const pageHtml = readFileSync(file, "utf-8");
+                if (file === resolve(distDir, "migrate/index.html")) {
+                    const recoveryPolicy = /<meta http-equiv="Content-Security-Policy" content="([^"]+)">/.exec(
+                        pageHtml,
+                    )?.[1];
+                    const expected = [
+                        "default-src 'none'",
+                        "script-src 'self'",
+                        "style-src 'self' 'unsafe-inline'",
+                        "connect-src 'none'",
+                        "base-uri 'none'",
+                        "form-action 'none'",
+                    ];
+                    const directives = recoveryPolicy?.split(/;\s*/);
+                    if (
+                        !directives ||
+                        directives.length !== expected.length ||
+                        !expected.every((directive) => directives.includes(directive))
+                    ) {
+                        throw new Error("csp-hash: recovery page must keep its isolated content policy");
+                    }
+                    // Recovery must not inherit the viewer's external allowlists.
+                    continue;
+                }
                 if (pageHtml.includes('http-equiv="Content-Security-Policy"')) {
                     throw new Error(`csp-hash: ${file} already carries a CSP meta - double injection`);
                 }
