@@ -140,7 +140,7 @@ The published image supports amd64 and arm64 and needs no volumes or environment
 variables:
 
 ```sh
-docker run -d --name dashcamigo -p 8080:80 ghcr.io/amkulikov/dashcamigo
+docker run -d --name dashcamigo -p 8080:80 ghcr.io/everydashcam/everydashcam
 ```
 
 Open [localhost:8080](http://localhost:8080).
@@ -151,7 +151,7 @@ With Docker Compose:
 # docker-compose.yml
 services:
   dashcamigo:
-    image: ghcr.io/amkulikov/dashcamigo
+    image: ghcr.io/everydashcam/everydashcam
     ports:
       - "8080:80"
     restart: unless-stopped

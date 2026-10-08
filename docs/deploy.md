@@ -227,7 +227,7 @@ pipeline"), fast-forwards the `release` branch to the tagged commit, and
 publishes one build of `dist/` in
 three forms: a versioned zip + a fixed-name `dashcamigo.tar.gz`
 (plus `SHA256SUMS`) on a GitHub Release, and a container image at
-`ghcr.io/amkulikov/dashcamigo` (`latest` + the tag; packaged from the same
+`ghcr.io/everydashcam/everydashcam` (`latest` + the tag; packaged from the same
 already-built `dist/` via `docker/Dockerfile.prebuilt`, not an in-Docker
 rebuild). The fixed asset name is load-bearing: the install one-liner in
 `docs/self-hosting.md` relies on `releases/latest/download/`. The
