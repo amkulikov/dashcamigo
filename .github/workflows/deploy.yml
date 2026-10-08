@@ -130,6 +130,16 @@ jobs:
         if: always() && steps.gate.outputs.deploy == 'true'
         run: find dist -type f -name '*.map' -delete
 
+      - name: Save the final hosted dist for recovery
+        if: steps.gate.outputs.deploy == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: hosted-dist-beta-${{ github.sha }}-${{ github.run_attempt }}
+          path: dist/
+          include-hidden-files: true
+          retention-days: 90
+          if-no-files-found: error
+
       - name: Deploy to Cloudflare Pages (branch alias main)
         if: steps.gate.outputs.deploy == 'true'
         env:

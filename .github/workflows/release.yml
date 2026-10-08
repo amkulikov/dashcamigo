@@ -235,6 +235,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/retain-portable-downloads.mjs
 
+      - name: Save the final hosted dist for recovery
+        if: steps.gate.outputs.deploy == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: hosted-dist-primary-${{ github.ref_name }}-${{ github.run_attempt }}
+          path: dist/
+          include-hidden-files: true
+          retention-days: 90
+          if-no-files-found: error
+
       - name: Deploy to Cloudflare Pages (production branch release)
         id: publish
         if: steps.gate.outputs.deploy == 'true'
