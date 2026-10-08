@@ -107,16 +107,30 @@ tile service.
 
 Every release includes `SHA256SUMS` and signed build provenance. With the
 [GitHub CLI](https://cli.github.com) installed and signed in, replace `<tag>`
-with the release tag and run:
+with the release tag in the commands below.
+
+For releases through `v2026.10.09`, verify build provenance with the original
+owner and signing workflow:
 
 ```sh
-gh release verify-asset <tag> dashcamigo.tar.gz -R amkulikov/dashcamigo
-gh attestation verify dashcamigo.tar.gz -R amkulikov/dashcamigo \
+gh attestation verify dashcamigo.tar.gz --owner amkulikov \
   --signer-workflow amkulikov/dashcamigo/.github/workflows/release.yml
 ```
 
-The first command checks that the archive matches the immutable GitHub release.
-The second confirms that this repository's release workflow built it from the
+These attestations are available under the original owner's account. Repository
+lookup returns 404 after the transfer, which also prevents
+`gh release verify-asset` from checking these historical releases.
+
+For later releases, use the new repository and signing workflow:
+
+```sh
+gh release verify-asset <tag> dashcamigo.tar.gz -R everydashcam/everydashcam
+gh attestation verify dashcamigo.tar.gz -R everydashcam/everydashcam \
+  --signer-workflow everydashcam/everydashcam/.github/workflows/release.yml
+```
+
+The release check confirms that the archive matches the immutable GitHub release.
+The attestation check confirms that the named release workflow built it from the
 recorded commit. The same commands work for the zip archive and portable HTML
 when you substitute the downloaded filename.
 
