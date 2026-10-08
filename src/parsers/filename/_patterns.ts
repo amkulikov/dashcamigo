@@ -113,6 +113,7 @@ export const RX_SSTAR_CHN = /^CH([1-4])-\d{8}-\d{6}\.ts$/i;
 // INSIDE the MP4. The
 // ddpai-normal source hint sets probeIfNoRecords for exactly that reason -
 // widening the counter here must never turn into a hard embedded-probe skip.
+export const RX_DDPAI_GPS_DIR = /(?:^|\/)(?:103|203)gps\//i;
 export const RX_DDPAI_NORMAL = /^(\d{14})_(\d{2,7})(?:_([A-Z]))?\.mp4$/i;
 export const RX_DDPAI_TIMELAPSE = /^([SQ])_(\d{14})_(\d{3,5})_(\d{2,4})\.mp4$/i;
 export const RX_DDPAI_EVENT = /^G_(\d{14})_(\d{2,5})_([LX])\.mp4$/i;

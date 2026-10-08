@@ -587,6 +587,7 @@ export const jaDict = {
     "recognition.cameras.help": "カメラが足りませんか？",
     "recognition.cameras.hint": "すべてのカメラの録画を含めるには、メモリーカードのフォルダー全体を開いてください。それでもカメラが足りない場合は、お知らせください。",
     "recognition.gps.hint": "メモリーカードのフォルダー全体を開いてください。GPSデータは動画と一緒に保存されている場合があります。それでもGPSが表示されない場合は、お知らせください。",
+    "recognition.ddpai.gpsFolder": "GPSデータが見つかりません。203gpsフォルダーを200videoと同じフォルダーに置き、その親フォルダーを開いてください。DDPAI Z60 Proの場合は、本体をUSBで接続し、内蔵メモリーからDCIM/203gpsをコピーしてください。SDカードだけではGPSデータが含まれていないことがあります。",
     "recognition.files.body": "{n, plural, other {#件の録画}}を読み取れませんでした。他のアプリで再生できる場合は、お知らせください。",
     "feedback.step1.preset.gps": "GPSが表示されない",
     "feedback.step1.preset.cameras": "カメラが足りない",

@@ -576,6 +576,7 @@ export const zhDict = {
     "recognition.cameras.help": "少了一个摄像头？",
     "recognition.cameras.hint": "打开存储卡的完整文件夹，以包含所有摄像头的录像。如果仍然缺少摄像头，请告诉我们。",
     "recognition.gps.hint": "打开存储卡的完整文件夹 — GPS 数据可能与视频保存在一起。如果仍然没有 GPS，请告诉我们。",
+    "recognition.ddpai.gpsFolder": "未找到 GPS 数据。请将 203gps 文件夹放在 200video 旁边，然后打开它们的上级文件夹。如果你使用 DDPAI Z60 Pro，请通过 USB 连接记录仪本体，从内置存储中复制 DCIM/203gps；单独的 SD 卡上可能没有 GPS 数据。",
     "recognition.files.body": "无法读取{n, plural, other { # 段录像}}。如果它们能在其他应用中播放，请告诉我们。",
     "feedback.step1.preset.gps": "缺少 GPS",
     "feedback.step1.preset.cameras": "缺少摄像头",

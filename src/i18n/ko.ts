@@ -586,6 +586,7 @@ export const koDict = {
     "recognition.cameras.help": "카메라가 빠졌나요?",
     "recognition.cameras.hint": "모든 카메라의 녹화를 포함하려면 메모리 카드 폴더 전체를 열어보세요. 그래도 카메라가 빠져 있다면 알려주세요.",
     "recognition.gps.hint": "메모리 카드 폴더 전체를 열어보세요 — GPS 데이터가 영상 옆에 저장되어 있을 수 있어요. 그래도 GPS가 없다면 알려주세요.",
+    "recognition.ddpai.gpsFolder": "GPS 데이터를 찾지 못했어요. 203gps 폴더를 200video 옆에 놓고 두 폴더가 들어 있는 상위 폴더를 열어 주세요. DDPAI Z60 Pro라면 블랙박스 본체를 USB로 연결하고 내장 메모리에서 DCIM/203gps를 복사해 주세요. SD 카드에만 GPS 데이터가 없을 수 있어요.",
     "recognition.files.body": "{n, plural, other {녹화 #개}}를 읽지 못했어요. 다른 앱에서 재생된다면 알려주세요.",
     "feedback.step1.preset.gps": "GPS가 없어요",
     "feedback.step1.preset.cameras": "카메라가 빠졌어요",

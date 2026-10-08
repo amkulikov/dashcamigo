@@ -19,7 +19,7 @@
 //   3. **`.gpx` in DDPai folders** - despite the `.gpx` extension the content is
 //      plain NMEA with optional DDPai `$GPSCAMTIME`/`$GPSENDTIME` headers (no
 //      `*` checksum). Path must be `103gps/` (M-series) or `203gps/` (N-series);
-//      basename matches the MP4 after stripping optional `_D` from the .gpx and
+//      basename matches the MP4 after stripping optional `_D` / `_T` from the .gpx and
 //      `_A` from the MP4 (one .gpx covers both channels on 2-channel models).
 //      Must be registered BEFORE `gpxSidecar` in SIDECARS so it intercepts these
 //      files before the XML-only parser tries to read them.
@@ -31,9 +31,10 @@
 //     GPS on those is embedded in the MP4 and needs a separate in-MP4 scanner.
 
 import type { GpsRecord, SidecarHandler, VendorFile } from "../types.js";
-import { WrongFormatError } from "../types.js";
+import { RX_DDPAI_GPS_DIR } from "../filename/_patterns.js";
 import { parseNmeaText, dedupByUnixSeconds } from "../internal/nmea.js";
-import { basenameLower, matchBlackvueSidecarBasename, matchByBasename } from "./_basename.js";
+import { matchDdpaiVideo, parseDdpaiNmea } from "../internal/ddpai-nmea.js";
+import { matchBlackvueSidecarBasename, matchByBasename } from "./_basename.js";
 import { readSidecarText } from "./_read.js";
 
 // BlackVue prefix: exactly 13-digit unix-ms in square brackets. 13 digits covers
@@ -43,10 +44,6 @@ const BLACKVUE_PREFIX_RX = /^\[(\d{13})\]/;
 const RX_GPS = /\.gps$/i;
 const RX_NMEA = /\.nmea$/i;
 const RX_GPX = /\.gpx$/i;
-// DDPai SD layouts: `DCIM/100video/` + `DCIM/103gps/` (M-series); `DCIM/200video/`
-// + `DCIM/203gps/` (N-series). Lowercased because firmware writes uppercase but
-// the user may have renamed.
-const RX_DDPAI_GPS_DIR = /(?:^|\/)(?:103|203)gps\//i;
 
 /**
  * BlackVue legacy `.gps` sidecar. The `[unix_ms]` prefix is expected on every
@@ -95,12 +92,11 @@ export const nmeaSidecar: SidecarHandler = {
  * DDPai `.gpx` sidecar. Matches only inside `103gps/` / `203gps/` directories
  * so non-DDPai .gpx files reach the real XML gpxSidecar.
  *
- * Basename pairing: optional `_D` on the sidecar, optional `_A` on the MP4 -
+ * Basename pairing: optional `_D` / `_T` on the sidecar, optional `_A` on the MP4 -
  * one .gpx may cover both channels of a 2-channel model.
  *
  * Despite the extension, content is plain NMEA (with optional
- * `$GPSCAMTIME ...` / `$GPSENDTIME ...` lines which `parseNmeaText` silently
- * ignores as unknown sentences). Real XML payloads are rejected with
+ * `$GPSCAMTIME ...` / `$GPSENDTIME ...` section markers). Real XML payloads are rejected with
  * WrongFormatError so the dispatcher can fall through to `gpxSidecar`.
  */
 export const ddpaiGpxSidecar: SidecarHandler = {
@@ -108,30 +104,10 @@ export const ddpaiGpxSidecar: SidecarHandler = {
     matches(file: VendorFile, knownVideos: Set<string>): string | null {
         if (!RX_GPX.test(file.file.name)) return null;
         if (!RX_DDPAI_GPS_DIR.test(file.relativePath)) return null;
-        // Sidecar basename without ".gpx", strip optional `_d` suffix.
-        let base = basenameLower(file.file.name);
-        if (base.endsWith("_d")) base = base.slice(0, -2);
-        // Deterministic pick when the sidecar covers both channels: the exact
-        // basename (front, no `_a`) wins over the `_a`-suffixed rear - not the
-        // Set's insertion order, which follows the ingest file order. Mirrors
-        // matchBlackvueSidecarBasename's front-first rule.
-        let rear: string | null = null;
-        for (const videoName of knownVideos) {
-            // MP4 basename, strip optional `_a` suffix (rear channel marker).
-            const videoBase = basenameLower(videoName);
-            if (videoBase === base) return videoName;
-            if (videoBase.endsWith("_a") && videoBase.slice(0, -2) === base) rear = videoName;
-        }
-        return rear;
+        return matchDdpaiVideo(file.file.name, knownVideos);
     },
     async parse(file: VendorFile, mp4Filename: string, signal?: AbortSignal): Promise<GpsRecord[]> {
         const text = await readSidecarText(file, signal);
-        // First non-blank char `<` means real XML GPX; bail so gpxSidecar can try.
-        const trimmed = text.trimStart();
-        if (trimmed.startsWith("<")) {
-            throw new WrongFormatError("ddpai-gpx: content is XML, not NMEA");
-        }
-        const result = parseNmeaText(text, mp4Filename);
-        return dedupByUnixSeconds(result.records);
+        return parseDdpaiNmea(text, file.file.name, mp4Filename);
     },
 };

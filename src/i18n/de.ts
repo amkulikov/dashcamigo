@@ -575,6 +575,7 @@ export const deDict = {
     "recognition.cameras.help": "Fehlt eine Kamera?",
     "recognition.cameras.hint": "Öffne den gesamten Ordner der Speicherkarte, um die Aufnahmen aller Kameras einzubeziehen. Fehlt immer noch eine Kamera, schreib uns.",
     "recognition.gps.hint": "Öffne den gesamten Ordner der Speicherkarte — GPS-Daten können neben den Videos gespeichert sein. Fehlt GPS weiterhin, schreib uns.",
+    "recognition.ddpai.gpsFolder": "Keine GPS-Daten gefunden. Lege den Ordner 203gps neben 200video und öffne den übergeordneten Ordner. Bei einer DDPAI Z60 Pro verbinde die Dashcam selbst per USB und kopiere DCIM/203gps aus ihrem internen Speicher — auf der SD-Karte allein fehlen die GPS-Daten möglicherweise.",
     "recognition.files.body": "{n, plural, one {# Aufnahme konnte} other {# Aufnahmen konnten}} nicht gelesen werden. Schreib uns, wenn sie anderswo abspielbar sind.",
     "feedback.step1.preset.gps": "GPS fehlt",
     "feedback.step1.preset.cameras": "Kameras fehlen",

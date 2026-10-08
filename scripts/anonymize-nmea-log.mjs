@@ -21,7 +21,10 @@
 //     preserved).
 //
 // Run:
-//   node scripts/anonymize-nmea-log.mjs <input.nmea> <output.nmea>
+//   node scripts/anonymize-nmea-log.mjs <input.nmea> <output.nmea> [--ddpai]
+// --ddpai keeps GPS section boundaries, stale GPS tails and the separate
+// sensor block (axis values and a camera clock, not a position), drops binary
+// padding and write-boundary fragments, and limits each section separately.
 //
 // The script is idempotent w.r.t. its input.
 
@@ -32,7 +35,7 @@ import { argv, exit } from "node:process";
 const MAX_LINES = 60;
 
 function usage() {
-    console.error("usage: node scripts/anonymize-nmea-log.mjs <input> <output>");
+    console.error("usage: node scripts/anonymize-nmea-log.mjs <input> <output> [--ddpai]");
     exit(1);
 }
 
@@ -122,15 +125,29 @@ function main() {
 
     const input = resolve(args[0]);
     const output = resolve(args[1]);
+    const isDdpai = args.includes("--ddpai");
 
     const text = readFileSync(input, "utf8");
     const lines = text.split(/\r?\n/);
     const out = [];
 
     let kept = 0;
+    let sectionLines = 0;
     for (const line of lines) {
         if (line === "") continue;
-        if (kept >= MAX_LINES) break;
+        if (isDdpai) {
+            if (/^\$(?:GPSCAMTIME|GPSENDTIME|GSENSORSTARTTIME|GSENSORENDTIME) \d{14}$/.test(line)) {
+                out.push(line);
+                sectionLines = 0;
+                continue;
+            }
+            if (
+                !/^\$(?:[A-Z]{2}(?:RMC|GGA),|GSENSOR(?:DATAFREQUENCY |,))[^\x00]*$/.test(line) ||
+                sectionLines >= MAX_LINES
+            )
+                continue;
+            sectionLines++;
+        } else if (kept >= MAX_LINES) break;
 
         const m = line.match(RX_PREFIX);
         const prefix = m?.[1] ?? "";

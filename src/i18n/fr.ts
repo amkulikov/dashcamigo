@@ -578,6 +578,7 @@ export const frDict = {
     "recognition.cameras.help": "Il manque une caméra ?",
     "recognition.cameras.hint": "Ouvre le dossier entier de la carte mémoire pour inclure les enregistrements de toutes les caméras. S’il en manque encore une, écris-nous.",
     "recognition.gps.hint": "Ouvre le dossier entier de la carte mémoire — les données GPS peuvent être enregistrées à côté des vidéos. Si le GPS manque encore, écris-nous.",
+    "recognition.ddpai.gpsFolder": "Aucune donnée GPS trouvée. Place le dossier 203gps à côté de 200video et ouvre leur dossier parent. Si tu as une DDPAI Z60 Pro, branche la caméra elle-même en USB et copie DCIM/203gps depuis sa mémoire interne — la carte SD seule peut ne pas contenir les données GPS.",
     "recognition.files.body": "Impossible de lire {n, plural, one {# enregistrement} other {# enregistrements}}. Écris-nous si tu peux les lire ailleurs.",
     "feedback.step1.preset.gps": "GPS manquant",
     "feedback.step1.preset.cameras": "Caméras manquantes",

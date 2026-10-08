@@ -578,6 +578,7 @@ export const enDict = {
     "recognition.cameras.help": "Missing a camera?",
     "recognition.cameras.hint": "Open the whole memory card folder to include recordings from every camera. If a camera is still missing, tell us.",
     "recognition.gps.hint": "Open the whole memory card folder — GPS data may be stored beside your videos. If GPS is still missing, tell us.",
+    "recognition.ddpai.gpsFolder": "GPS data was not found. Put the 203gps folder beside 200video and open their parent folder. If you have a DDPAI Z60 Pro, connect the dashcam itself by USB and copy DCIM/203gps from its internal storage — the SD card alone may not contain GPS data.",
     "recognition.files.body": "Couldn't read {n, plural, one {# recording} other {# recordings}}. Tell us if they play elsewhere.",
     "feedback.step1.preset.gps": "Missing GPS",
     "feedback.step1.preset.cameras": "Missing cameras",

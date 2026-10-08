@@ -577,6 +577,7 @@ export const plDict = {
     "recognition.cameras.help": "Brakuje kamery?",
     "recognition.cameras.hint": "Otwórz cały folder karty pamięci, aby uwzględnić nagrania ze wszystkich kamer. Jeśli nadal brakuje kamery, napisz do nas.",
     "recognition.gps.hint": "Otwórz cały folder karty pamięci — dane GPS mogą być zapisane obok filmów. Jeśli nadal brakuje GPS, napisz do nas.",
+    "recognition.ddpai.gpsFolder": "Nie znaleziono danych GPS. Umieść folder 203gps obok 200video i otwórz ich folder nadrzędny. Jeśli masz DDPAI Z60 Pro, podłącz samą kamerę przez USB i skopiuj DCIM/203gps z jej pamięci wewnętrznej — na samej karcie SD może nie być danych GPS.",
     "recognition.files.body": "Nie udało się odczytać {n, plural, one {# nagrania} few {# nagrań} many {# nagrań} other {# nagrania}}. Napisz do nas, jeśli odtwarzają się w innych programach.",
     "feedback.step1.preset.gps": "Brak GPS",
     "feedback.step1.preset.cameras": "Brakujące kamery",

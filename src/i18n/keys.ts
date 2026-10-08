@@ -788,6 +788,7 @@ export type I18nKey =
     | "recognition.cameras.help"
     | "recognition.cameras.hint"
     | "recognition.gps.hint"
+    | "recognition.ddpai.gpsFolder"
     | "recognition.files.body"
     | "feedback.step1.preset.gps"
     | "feedback.step1.preset.cameras"

@@ -1,4 +1,5 @@
 import { t } from "../i18n/index.js";
+import { needsDdpaiGpsFolder } from "../ddpai-gps-help.js";
 import { recordsHaveGps } from "../parser.js";
 import { failedGpsFilesForTrip, hasUnfinishedRecognition } from "../recognition-gps.js";
 import { findUnpairedCameraIssue } from "../recognition-issues.js";
@@ -9,6 +10,7 @@ import { isAnyModalOpen } from "./modal-helper.js";
 import { isOnboardingSettledForSupportPrompt } from "./onboarding.js";
 import { observePromptSurfaces } from "./prompt-surfaces.js";
 import { activeTrip, state } from "./state.js";
+import { notify } from "./notifications.js";
 
 interface RecognitionInvitation {
     reason: "gps" | "cameras";
@@ -94,6 +96,22 @@ function syncRecognitionHelp(): void {
     if (!trip || !isSettled || isBlocked()) {
         setVisible(banner, false);
         return;
+    }
+    if (!recordsHaveGps(trip.records) && state.recordingAnalysisProgress === null) {
+        const candidates = tripAllCandidates(trip);
+        const all = state.trips.flatMap(tripAllCandidates);
+        for (const candidate of candidates) {
+            const scope = JSON.stringify(["ddpai-storage", candidate.sourceKey ?? candidate.fingerprint]);
+            if (offeredScopes.has(scope) || !needsDdpaiGpsFolder(candidate, state.lastIngestFiles ?? [])) continue;
+            const related = all.filter(
+                (file) => file.sourceKey === candidate.sourceKey && file.fingerprint === candidate.fingerprint,
+            );
+            if (hasUnfinishedRecognition(related, state) || related.some((file) => recordsHaveGps(file.records)))
+                continue;
+            offeredScopes.add(scope);
+            notify({ severity: "info", messageKey: "recognition.ddpai.gpsFolder" });
+            break;
+        }
     }
     const invitations = invitationsForActiveTrip().filter((invitation) =>
         invitation.scopes.some((scope) => !offeredScopes.has(scope) || currentScopes.includes(scope)),

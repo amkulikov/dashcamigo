@@ -2,7 +2,33 @@
 
 DDPAI `.gpx` files can contain plain NMEA sentences instead of XML GPX.
 For parsing and video association, see `ddpaiGpxSidecar` in
-`src/parsers/sidecars/nmea-sidecar.ts`.
+`src/parsers/sidecars/nmea-sidecar.ts` and `nmeaTarPrimitive` in
+`src/parsers/primitives/nmea-tar.ts`.
+
+## USB telemetry files
+
+The `.git` extension does not imply a Git repository or gzip compression.
+Z60 Pro USB samples contain ordinary uncompressed TAR archives with named
+NMEA `.gpx` members. The same packaging is documented by the
+[Mini5 GPS exporter](https://github.com/lixingcong/ddpai-mini5-gps-parser).
+
+These are preallocated, reused files: the current recording overwrites the
+start and the previous content survives after it. The GPS section ends at
+`$GSENSORSTARTTIME`, `$GPSENDTIME` or NUL padding; a recording cut short
+leaves none of those, and because the firmware writes whole lines the
+recycled bytes then begin mid-line, so a line without `$` is a boundary too.
+Fixes past any boundary look valid but belong to an older recording, as does
+a fix that runs backwards in time. A temporary file can retain a different
+clip's entire payload: `$GPSCAMTIME` must agree with the filename. A section
+can also replay fixes from another date, and such a section is stale as a
+whole - no section mixes replayed and current fixes, so the checks cut
+rather than reconcile. The shared checks live in `internal/ddpai-nmea.ts`.
+
+`$GPSCAMTIME` is the camera's local clock; active RMC sentences carry UTC.
+The clocks can differ by a timezone plus a seconds-level offset. Do not
+hard-code a timezone or rewrite satellite time from the filename. Sensor
+samples occupy a separate block and cannot be attached to the last RMC
+using an interleaved-NMEA assumption.
 
 ## Z60 Pro: inspect the internal storage
 
@@ -23,13 +49,19 @@ omitting their coordinate logs.
 
 To acquire the logs, connect the **camera itself** to a computer with a USB
 data cable and inspect `DCIM/203gps` in its internal storage. Copy that directory
-with its subdirectories and preserve filenames. Keep the matching original
-MP4s from the SD card. The [Z60 Pro manual](https://www.ddpai.com/manuals/z60pro/)
+with its subdirectories and preserve filenames. Place `203gps` beside the
+SD-card copy's `200video` directory and open their common parent in dashcamigo.
+Keep the matching original MP4s. The [Z60 Pro manual](https://www.ddpai.com/manuals/z60pro/)
 describes USB access to eMMC under “View/Export eMMC Data”.
 
-These findings apply to the identified firmware. A real Z60 Pro GPS sidecar is
-still required to validate decoding and video association; this is not an
-end-to-end support claim for every Z60 Pro hardware or firmware variant.
+Storage findings apply to the identified firmware. Real USB telemetry validates
+decoding and filename association, but matching video bytes are still needed
+to verify frame-level synchronization. This is not a support claim for every
+Z60 Pro hardware or firmware variant.
+
+Filenames and `200video` / `203gps` directories identify a DDPAI family, not
+Z60 Pro specifically. Keep model-specific acquisition advice conditional;
+see `src/ddpai-gps-help.ts` and `src/ui/recognition-help.ts`.
 
 ## Reproducible firmware evidence
 
