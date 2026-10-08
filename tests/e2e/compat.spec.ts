@@ -89,7 +89,7 @@ test.describe("browser compatibility", () => {
 
         const gate = page.locator("#capability-gate");
         await expect(gate, "blocking gate must appear when Web Workers are missing").toBeVisible({ timeout: 15_000 });
-        await expect(page.locator("#capability-gate-title")).toContainText(/can.?t run dashcamigo/i);
+        await expect(page.locator("#capability-gate-title")).toContainText(/can.?t run everydashcam/i);
         // The advice line names a concrete way out (update / switch browser).
         await expect(page.locator(".capability-gate-advice")).toContainText(/Chrome|Edge|Firefox|Safari/);
         // Technical details list the missing capability for bug reports.

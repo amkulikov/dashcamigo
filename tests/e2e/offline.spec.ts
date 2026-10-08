@@ -146,7 +146,7 @@ test.describe("offline", () => {
         expect(response?.status()).toBe(200);
         expect(response?.fromServiceWorker()).toBe(true);
         await expect(page.locator("#folder-input")).toBeAttached();
-        await expect(page).toHaveTitle(/dashcamigo/i);
+        await expect(page).toHaveTitle(/everydashcam/i);
     });
 
     test("offline reload serves the cached app shell, not the browser offline page", async ({ page, context }) => {
@@ -160,7 +160,7 @@ test.describe("offline", () => {
         // these two assertions distinguish "served from cache" from "you're
         // offline". (JS does not fully boot here only because of the Playwright
         // subresource artifact described in the file header.)
-        await expect(page).toHaveTitle(/dashcamigo/i);
+        await expect(page).toHaveTitle(/everydashcam/i);
         await expect(page.locator("#folder-input")).toBeAttached();
     });
 
