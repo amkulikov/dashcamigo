@@ -162,7 +162,8 @@ test("a medium-quality probe detects a default encoder that ignores bitrate incr
     await restrictDefaultEncoder(page, { softwareBitrate: 14_000_000 });
     await presetLocalStorage(page);
     await gotoApp(page, "en");
-    const bitrate = 26_000_000;
+    // Native rate control varies by platform; keep both trials clear of the bitrate gates.
+    const bitrate = 29_000_000;
     const result = await runProbe(page, { width: 3840, height: 2160, frameRate: 25, bitrate });
     await info.attach("measurement", { body: JSON.stringify(result), contentType: "application/json" });
     expect(result.standard?.frames).toBe(50);
@@ -173,17 +174,17 @@ test("a medium-quality probe detects a default encoder that ignores bitrate incr
     expect(gain).toBeLessThan(2);
     expect(result.response?.bitrate).toBe(bitrate * 2);
     expect(result.response?.measurement.frames).toBe(50);
-    expect(result.response?.measurement.bitrate).toBeCloseTo(result.standard!.bitrate, -3);
-    expect(result.response?.measurement.psnr).toBeCloseTo(result.standard!.psnr!, 1);
+    expect(Math.abs(result.response!.measurement.bitrate / result.standard!.bitrate - 1)).toBeLessThanOrEqual(0.05);
+    expect(Math.abs(result.response!.measurement.psnr! - result.standard!.psnr!)).toBeLessThanOrEqual(0.25);
     expect(result.reason).toBe("unresponsive");
     expect(result.hardwareAcceleration).toBe("prefer-software");
 });
 
 test("a probe keeps the default when software exceeds the requested size", async ({ page }, info) => {
-    await restrictDefaultEncoder(page, { softwareBitrate: 50_000_000 });
+    await restrictDefaultEncoder(page, { softwareBitrate: 64_000_000 });
     await presetLocalStorage(page);
     await gotoApp(page, "en");
-    const bitrate = 26_000_000;
+    const bitrate = 32_000_000;
     const result = await runProbe(page, { width: 3840, height: 2160, frameRate: 25, bitrate });
     await info.attach("measurement", { body: JSON.stringify(result), contentType: "application/json" });
     expect(result.standard?.frames).toBe(50);
@@ -199,7 +200,7 @@ test("a probe retains a default encoder that responds to a higher bitrate", asyn
     await restrictDefaultEncoder(page, { higherTarget: "responsive", softwareBitrate: 14_000_000 });
     await presetLocalStorage(page);
     await gotoApp(page, "en");
-    const bitrate = 26_000_000;
+    const bitrate = 29_000_000;
     const result = await runProbe(page, { width: 3840, height: 2160, frameRate: 25, bitrate });
     await info.attach("measurement", { body: JSON.stringify(result), contentType: "application/json" });
     expect(result.response?.bitrate).toBe(bitrate * 2);
@@ -213,10 +214,18 @@ test("an unsupported higher bitrate preserves the original probe measurements", 
     await restrictDefaultEncoder(page, { higherTarget: "unsupported", softwareBitrate: 14_000_000 });
     await presetLocalStorage(page);
     await gotoApp(page, "en");
-    const result = await runProbe(page, { width: 3840, height: 2160, frameRate: 25, bitrate: 26_000_000 });
+    const bitrate = 29_000_000;
+    const result = await runProbe(page, { width: 3840, height: 2160, frameRate: 25, bitrate });
     await info.attach("measurement", { body: JSON.stringify(result), contentType: "application/json" });
     expect(result.standard?.frames).toBe(50);
     expect(result.software?.frames).toBe(50);
+    expect(result.standard?.bitrate).toBeLessThan(bitrate * 0.35);
+    expect(result.standard?.psnr).toBeLessThan(30);
+    expect(result.software?.bitrate).toBeGreaterThanOrEqual(bitrate * 0.65);
+    expect(result.software?.bitrate).toBeLessThanOrEqual(bitrate * 1.5);
+    const gain = result.software!.psnr! - result.standard!.psnr!;
+    expect(gain).toBeGreaterThanOrEqual(0.5);
+    expect(gain).toBeLessThan(2);
     expect(result.response).toBeNull();
     expect(result.reason).toBe("inconclusive");
     expect(result.hardwareAcceleration).toBe("no-preference");
