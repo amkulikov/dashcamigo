@@ -911,6 +911,7 @@ export const jaDict = {
 
     "settings.privacy.crash.label": "クラッシュレポート",
     "settings.privacy.crash.description": "アプリが落ちたとき、匿名のレポートが修正に役立ちます。動画もGPSもファイル名も送りません — 何が、どのブラウザで起きたかだけ。既定でオン。ここでオフにできます。",
+    "settings.privacy.crash.optInDescription": "アプリに問題が起きたとき、匿名化したレポートが修正に役立ちます。動画、GPS、ファイル名は含まず、エラーの内容とブラウザの種類だけです。ここでオンにするまで送信しません。いつでもオフにできます。",
     "settings.playback.section": "再生",
     "settings.playback.units.label": "単位",
     "settings.playback.units.metric": "メートル法 (km/h, km)",
@@ -983,6 +984,12 @@ export const jaDict = {
     "settings.ingest.gap.never": "分割しない — すべてを 1 本の走行にまとめる",
 
     "settings.cache.section": "保存済みの録画情報",
+    "settings.migration.section": "新しいアドレスへの移行",
+    "settings.migration.announcement": "dashcamigo は everydashcam.app に移行します。移行前に、ここでドライブのメモを保存してください。",
+    "settings.migration.export": "移行に備えてメモを保存",
+    "settings.migration.restore": "メモを保存した旧アドレスを選んでください。同じブラウザと同じプロファイルで開き、ダウンロードしたファイルを下のボタンから復元してください。",
+    "settings.migration.installed": "インストールしたアプリを使っている場合は、削除する前にそのアプリ内でメモを保存してください。",
+    "settings.migration.setup": "新しいアドレスでは、フォルダと設定を選び直してください。インストール版を使う場合は、アプリも再インストールしてください。",
     "settings.notes.section": "走行メモ",
     "settings.notes.description": "すべての走行名、メモ、お気に入り、マーカーをダウンロードしたり、以前のバックアップから復元したりできます。録画は含まれません。",
     "settings.notes.export": "メモのバックアップをダウンロード",

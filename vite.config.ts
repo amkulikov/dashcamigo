@@ -15,6 +15,7 @@ import { editionMarkupPlugin } from "./vite-plugins/edition-markup.js";
 import { indexnowKeyPlugin } from "./vite-plugins/indexnow-key.js";
 import { llmsTxtPlugin } from "./vite-plugins/llms-txt.js";
 import { lazyBoundariesPlugin } from "./vite-plugins/lazy-boundaries.js";
+import { migrationPagePlugin } from "./vite-plugins/migration-page.js";
 import { redirectsPlugin } from "./vite-plugins/redirects.js";
 import { rootStubPlugin } from "./vite-plugins/root-stub.js";
 import { portableDownloadsPlugin } from "./vite-plugins/portable-downloads.js";
@@ -174,6 +175,7 @@ export default defineConfig(({ command }) => {
         __SENTRY_TRACING__: JSON.stringify(false),
     },
     plugins: [
+        migrationPagePlugin(),
         editionMarkupPlugin(),
         // Dev-only: serve public/<slug>.html for its extension-less clean URL
         // (/add-my-camera, /privacy, ...). Cloudflare Pages (prod) and `vite

@@ -88,6 +88,10 @@ export function mergeAnnotationLists(a: AnnotationRecord[], b: AnnotationRecord[
 const SIDECAR_FORMAT = "annotations";
 const SIDECAR_VERSION = 2;
 
+export function notesBackupFilename(date = new Date()): string {
+    return `dashcamigo-notes-${date.toISOString().slice(0, 10)}.dashcamigo`;
+}
+
 /**
  * The exact object written into the portable notes file. `folderId` is browser
  * bookkeeping and never leaves the profile; clip anchors carry the portable

@@ -5,7 +5,7 @@
 //
 // Lifecycle:
 //  - settings-btn icon is always shown (Danger zone is universal).
-//  - Crash-reports toggle.checked mirrors the stored opt-out state - synced
+//  - Crash-reports toggle.checked mirrors the stored choice - synced
 //    on open. Flipping it spins Sentry up / tears it down at runtime.
 //  - Modal closes on the "Close" button, backdrop click, or Escape.
 //  - "Reset everything" opens #reset-confirm-modal; confirmation triggers
@@ -21,7 +21,12 @@ import {
 import { t } from "../i18n/index.js";
 import { getEncoderPreference, isEncoderPreference, setEncoderPreference } from "../encoder-pref.js";
 import { createLogger, downloadLogBuffer } from "../log.js";
-import { crashReportingEnabled, isCrashReportingBuilt, setCrashReportingEnabled } from "../sentry.js";
+import {
+    crashReportingEnabled,
+    isCrashReportingBuilt,
+    isCrashReportingOptIn,
+    setCrashReportingEnabled,
+} from "../sentry.js";
 import { setTripGapSec, tripAllCandidates, getTripGapSec, projectEventsOntoTimeline } from "../trips.js";
 import {
     DEFAULT_INDEX_CACHE_LIMIT_BYTES,
@@ -87,16 +92,23 @@ function crashToggleEl(): HTMLInputElement | null {
     return document.getElementById("settings-crash-toggle") as HTMLInputElement | null;
 }
 
-/**
- * Sync the crash-reporting checkbox with the stored opt-out state. Crash
- * reporting is opt-OUT: checked by default, unchecked only when the user
- * explicitly turned it off. Absence of the flag = enabled, so this is a
- * simple synchronous read.
- */
+/** Sync the checkbox with the stored choice and this site's default. */
 function syncCrashToggleFromState(): void {
     const toggle = crashToggleEl();
     if (!toggle) return;
     toggle.checked = crashReportingEnabled();
+}
+
+function initMigrationSection(): void {
+    const section = document.getElementById("settings-migration-section");
+    if (!section) return;
+    const isNewAddress = isCrashReportingOptIn();
+    const isOldAddress = /^(?:(?:www|ru|beta)\.)?dashcamigo\.app$/.test(window.location.hostname);
+    section.hidden = !isOldAddress && !isNewAddress;
+    const oldAddress = document.getElementById("settings-migration-old");
+    const newAddress = document.getElementById("settings-migration-new");
+    if (oldAddress) oldAddress.hidden = !isOldAddress;
+    if (newAddress) newAddress.hidden = !isNewAddress;
 }
 
 function isOpen(el: HTMLElement | null): boolean {
@@ -364,8 +376,10 @@ export function initSettingsModal(): void {
         return;
     }
 
-    // Privacy section holds the crash-reports toggle (opt-OUT, Sentry build
-    // flag). Hidden entirely when crash reporting is not built into this
+    if (!__PORTABLE__) initMigrationSection();
+
+    // Privacy section holds the crash-reports toggle (Sentry build flag).
+    // Hidden entirely when crash reporting is not built into this
     // bundle, so a fork without a Sentry DSN sees no dangling Privacy header.
     const crashBuilt = !__PORTABLE__ && isCrashReportingBuilt();
     if (!crashBuilt) {
@@ -374,6 +388,13 @@ export function initSettingsModal(): void {
         const privacySection = document.getElementById("settings-privacy-section");
         if (privacySection) privacySection.hidden = true;
         log.debug("privacy section hidden (no crash reporting)");
+    }
+    if (!__PORTABLE__ && isCrashReportingOptIn()) {
+        const description = document.getElementById("settings-crash-description");
+        if (description) {
+            description.dataset.i18n = "settings.privacy.crash.optInDescription";
+            description.textContent = t("settings.privacy.crash.optInDescription");
+        }
     }
 
     settingsBtn?.addEventListener("click", () => {
@@ -392,7 +413,7 @@ export function initSettingsModal(): void {
     // settings first and its onClose reopens them, so Escape walks back one
     // step instead of dropping out of the flow.
 
-    // Crash reporting toggle (opt-OUT). Flipping it persists the choice and
+    // Crash reporting toggle. Flipping it persists the choice and
     // spins up / tears down Sentry at runtime - no reload needed.
     if (!__PORTABLE__)
         crashToggleEl()?.addEventListener("change", (ev) => {

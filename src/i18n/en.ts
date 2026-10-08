@@ -900,6 +900,7 @@ export const enDict = {
 
     "settings.privacy.crash.label": "Crash reports",
     "settings.privacy.crash.description": "If the app breaks, an anonymized report helps us fix it — no video, no GPS, no file names, just what went wrong and on which browser. On by default; switch it off here.",
+    "settings.privacy.crash.optInDescription": "If the app breaks, an anonymized report helps us fix it. No video, no GPS, no file names — just what went wrong and on which browser. Off until you turn it on here. You can turn it off at any time.",
     "settings.playback.section": "Playback",
     "settings.playback.units.label": "Units of measurement",
     "settings.playback.units.metric": "Metric (km/h, km)",
@@ -972,6 +973,12 @@ export const enDict = {
     "settings.ingest.gap.never": "Never split — one trip from all files",
 
     "settings.cache.section": "Saved recording info",
+    "settings.migration.section": "Moving to a new address",
+    "settings.migration.announcement": "dashcamigo will move to everydashcam.app. Save your trip notes here before the move.",
+    "settings.migration.export": "Save notes for the move",
+    "settings.migration.restore": "Choose the old address where you saved your notes. Use the same browser and profile, then restore the downloaded file below.",
+    "settings.migration.installed": "If you use an installed app, save your notes from that app before removing it.",
+    "settings.migration.setup": "At the new address, choose your folders and settings again and reinstall the app if you use it.",
     "settings.notes.section": "Trip notes",
     "settings.notes.description": "Download a copy of every trip name, note, favorite and marker, or restore one you saved earlier. Recordings aren't included.",
     "settings.notes.export": "Download notes backup",

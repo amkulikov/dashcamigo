@@ -897,6 +897,7 @@ export const deDict = {
 
     "settings.privacy.crash.label": "Absturzberichte",
     "settings.privacy.crash.description": "Wenn die App abstürzt, hilft uns ein anonymer Bericht beim Beheben — kein Video, kein GPS, keine Dateinamen, nur was schiefging und in welchem Browser. Standardmäßig an; hier abschaltbar.",
+    "settings.privacy.crash.optInDescription": "Wenn die App abstürzt, hilft uns ein anonymisierter Bericht bei der Fehlerbehebung. Kein Video, kein GPS, keine Dateinamen — nur der Fehler und dein Browser. Aus, bis du es hier einschaltest. Du kannst es jederzeit wieder ausschalten.",
     "settings.playback.section": "Wiedergabe",
     "settings.playback.units.label": "Maßeinheiten",
     "settings.playback.units.metric": "Metrisch (km/h, km)",
@@ -969,6 +970,12 @@ export const deDict = {
     "settings.ingest.gap.never": "Nicht aufteilen — alles als eine Fahrt",
 
     "settings.cache.section": "Gespeicherte Aufnahmeinfos",
+    "settings.migration.section": "Umzug zu einer neuen Adresse",
+    "settings.migration.announcement": "dashcamigo zieht zu everydashcam.app um. Sichere deine Fahrtnotizen hier vor dem Umzug.",
+    "settings.migration.export": "Notizen für den Umzug sichern",
+    "settings.migration.restore": "Wähle die alte Adresse, unter der du deine Notizen gespeichert hast. Nutze denselben Browser und dasselbe Profil und stelle die heruntergeladene Datei anschließend unten wieder her.",
+    "settings.migration.installed": "Wenn du die installierte App nutzt, sichere deine Notizen darin, bevor du sie entfernst.",
+    "settings.migration.setup": "Wähle unter der neuen Adresse deine Ordner und Einstellungen erneut. Installiere die App dort neu, wenn du sie nutzt.",
     "settings.notes.section": "Fahrtnotizen",
     "settings.notes.description": "Lade eine Kopie aller Fahrtnamen, Notizen, Favoriten und Marker herunter oder stelle eine frühere wieder her. Aufnahmen sind nicht enthalten.",
     "settings.notes.export": "Notizen-Sicherung herunterladen",

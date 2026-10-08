@@ -15,7 +15,7 @@
 //    everything is run through sentry-scrub.ts before send (beforeSend /
 //    beforeBreadcrumb). No coordinates, no file basenames, no user free text,
 //    no video - ever.
-//  - Opt-OUT, default ON. Stored under its own key; absence means enabled.
+//  - New hosted origins require explicit consent. Existing origins stay opt-out.
 //    The toggle lives in settings (see settings-modal.ts).
 //  - Build-time gate. Empty VITE_SENTRY_DSN => the SDK is never imported (the
 //    dynamic import is behind the DSN check), so self-hosted forks and dev/CI
@@ -50,8 +50,7 @@ export function resolveOriginTag(): DeploymentOriginTag {
     return typeof __DEPLOYMENT_PROFILE__ !== "undefined" && __DEPLOYMENT_PROFILE__ === "mirror" ? "mirror" : "primary";
 }
 
-// Opt-out flag. ABSENT means enabled (default ON). Only "off" disables. Wiped
-// by resetAllAppState() via localStorage.clear() (see ui/reset.ts).
+// Wiped by resetAllAppState() via localStorage.clear() (see ui/reset.ts).
 export const CRASH_REPORTING_STORAGE_KEY = "dashcamigo:crash-reporting";
 
 // Per-session hard cap on events sent, so one bad deploy in a loop cannot burn
@@ -65,6 +64,8 @@ const SESSION_EVENT_CAP = 50;
 let sentryApi: SentryClient | null = null;
 let loading = false;
 let sentThisSession = 0;
+let runtimeEnabled: boolean | null = null;
+let consentWindow: Window | null = null;
 
 // Captures requested before the SDK finished loading (the capability gate fires
 // very early, possibly before import() resolves). Replayed on init, capped so a
@@ -90,18 +91,26 @@ export function isCrashReportingBuilt(): boolean {
     return getSentryDsn() !== "";
 }
 
-/**
- * Effective enabled state: built into this bundle AND not opted out. Read
- * synchronously (localStorage) so it can gate before any async work. Absence of
- * the key = enabled (default ON); a blocked localStorage also reads as enabled.
- */
+/** Origins that require a fresh, explicit choice before collecting reports. */
+export function isCrashReportingOptIn(host = typeof window === "undefined" ? "" : window.location.hostname): boolean {
+    return (
+        host === "everydashcam.app" ||
+        host === "www.everydashcam.app" ||
+        host === "beta.everydashcam.app" ||
+        host === "ru.everydashcam.app"
+    );
+}
+
+/** Effective consent, checked synchronously before collecting any telemetry. */
 export function crashReportingEnabled(): boolean {
     if (!isCrashReportingBuilt()) return false;
+    if (runtimeEnabled !== null) return runtimeEnabled;
+    const requiresOptIn = isCrashReportingOptIn();
     try {
-        return localStorage.getItem(CRASH_REPORTING_STORAGE_KEY) !== "off";
+        const stored = localStorage.getItem(CRASH_REPORTING_STORAGE_KEY);
+        return requiresOptIn ? stored === "on" : stored !== "off";
     } catch {
-        // localStorage blocked (private mode) - default ON, matching absence.
-        return true;
+        return !requiresOptIn;
     }
 }
 
@@ -117,18 +126,46 @@ export function resolveEnvironment(
     deploymentProfile: DeploymentOriginTag = resolveOriginTag(),
 ): SentryEnvironment {
     if (host === "localhost" || host === "127.0.0.1" || host === "::1" || /^192\.168\./.test(host)) return "local";
-    if (host === "dashcamigo.app" || host === "www.dashcamigo.app") return "production";
+    if (
+        host === "dashcamigo.app" ||
+        host === "www.dashcamigo.app" ||
+        host === "everydashcam.app" ||
+        host === "www.everydashcam.app" ||
+        host === "ru.everydashcam.app"
+    )
+        return "production";
+    if (host === "beta.everydashcam.app") return "staging";
     if (deploymentProfile === "mirror") return "production";
     return "staging";
 }
 
-function persistEnabled(on: boolean): void {
+function persistEnabled(on: boolean): boolean {
     try {
-        if (on) localStorage.removeItem(CRASH_REPORTING_STORAGE_KEY);
-        else localStorage.setItem(CRASH_REPORTING_STORAGE_KEY, "off");
+        if (on && !isCrashReportingOptIn()) localStorage.removeItem(CRASH_REPORTING_STORAGE_KEY);
+        else localStorage.setItem(CRASH_REPORTING_STORAGE_KEY, on ? "on" : "off");
+        return true;
     } catch (err) {
         log.warn("could not persist crash-reporting choice", err);
+        return false;
     }
+}
+
+function listenForConsentChanges(): void {
+    if (consentWindow || !isCrashReportingBuilt() || typeof window === "undefined") return;
+    consentWindow = window;
+    consentWindow.addEventListener("storage", onConsentStorageChange);
+}
+
+function onConsentStorageChange(event: StorageEvent): void {
+    if (event.key !== null && event.key !== CRASH_REPORTING_STORAGE_KEY) return;
+    try {
+        if (event.storageArea !== localStorage) return;
+    } catch {
+        return;
+    }
+    // Read the current value: a queued event may precede a newer choice.
+    runtimeEnabled = null;
+    syncClientWithConsent();
 }
 
 /**
@@ -137,6 +174,7 @@ function persistEnabled(on: boolean): void {
  * import / init failure is swallowed (the app must not depend on Sentry).
  */
 export function initSentry(): void {
+    listenForConsentChanges();
     void loadAndInit();
 }
 
@@ -168,6 +206,7 @@ async function loadAndInit(): Promise<void> {
             release: APP_VERSION,
             environment,
             beforeSend: (event) => {
+                if (!crashReportingEnabled()) return null;
                 if (sentThisSession >= SESSION_EVENT_CAP) return null;
                 sentThisSession++;
                 // scrubEvent mutates in place; the Sentry event type is a
@@ -176,6 +215,7 @@ async function loadAndInit(): Promise<void> {
                 return event;
             },
             beforeBreadcrumb: (breadcrumb) => {
+                if (!crashReportingEnabled()) return null;
                 scrubBreadcrumb(breadcrumb as unknown as Parameters<typeof scrubBreadcrumb>[0]);
                 return breadcrumb;
             },
@@ -214,26 +254,33 @@ async function loadAndInit(): Promise<void> {
 
 /**
  * Enable/disable crash reporting at runtime (the settings toggle). Persists the
- * choice and either spins up the SDK or tears it down. Default-ON semantics:
- * `on=true` removes the opt-out key.
+ * choice and either spins up the SDK or tears it down. A session-local choice
+ * still takes effect when browser storage is blocked.
  */
 export function setCrashReportingEnabled(on: boolean): void {
-    persistEnabled(on);
-    if (on) {
+    listenForConsentChanges();
+    runtimeEnabled = on;
+    // A session override is needed only when storage rejected the choice.
+    // Otherwise later choices from another tab must remain authoritative.
+    if (persistEnabled(on)) runtimeEnabled = null;
+    syncClientWithConsent();
+}
+
+function syncClientWithConsent(): void {
+    if (crashReportingEnabled()) {
         void loadAndInit();
     } else {
         // Stop forwarding logs, drop the pre-load queue (incl. tags/contexts
-        // requested before load), and close the client so in-flight events
-        // flush and no new ones are sent.
+        // requested before load), and immediately stop the client's transport.
         setLogSink(null);
         pending.length = 0;
         pendingTags = null;
         pendingContexts.length = 0;
         if (sentryApi) {
             try {
-                void sentryApi.close();
-            } catch {
-                // close() can reject if no transport is set up - ignore.
+                void sentryApi.close().catch((err: unknown) => log.warn("crash reporting shutdown failed", err));
+            } catch (err) {
+                log.warn("crash reporting shutdown failed", err);
             }
             sentryApi = null;
         }
@@ -309,7 +356,7 @@ function sendException(error: unknown, ctx: CaptureContext): void {
  * browser engine/os and capability signature). Queued until the SDK loads.
  */
 export function setSentryTags(tags: Record<string, string>): void {
-    if (!isCrashReportingBuilt()) return;
+    if (!crashReportingEnabled()) return;
     if (sentryApi) {
         for (const [k, v] of Object.entries(tags)) sentryApi.setTag(k, v);
     } else {
@@ -322,7 +369,7 @@ export function setSentryTags(tags: Record<string, string>): void {
  * subsequent event. Queued until the SDK loads. Scrubbed defensively.
  */
 export function setSentryContext(name: string, context: Record<string, unknown>): void {
-    if (!isCrashReportingBuilt()) return;
+    if (!crashReportingEnabled()) return;
     const safe = scrubValue(context) as Record<string, unknown>;
     if (sentryApi) sentryApi.setContext(name, safe);
     else pendingContexts.push({ name, context: safe });
@@ -331,7 +378,7 @@ export function setSentryContext(name: string, context: Record<string, unknown>)
 // Breadcrumb sink wired into the central logger. Message + data are scrubbed in
 // beforeBreadcrumb (one scrub point). Never throws into the logger.
 function forwardLogToSentry(entry: LogSinkEntry): void {
-    if (!sentryApi) return;
+    if (!sentryApi || !crashReportingEnabled()) return;
     const level: BreadcrumbLevel = entry.level === "warn" ? "warning" : entry.level;
     const data: Record<string, unknown> = {};
     if (entry.ctx) Object.assign(data, entry.ctx);
@@ -357,9 +404,13 @@ function forwardLogToSentry(entry: LogSinkEntry): void {
 
 // Test-only reset. Never called in production.
 export function _resetForTests(): void {
+    consentWindow?.removeEventListener("storage", onConsentStorageChange);
+    consentWindow = null;
+    if (sentryApi) void sentryApi.close().catch(() => {});
     sentryApi = null;
     loading = false;
     sentThisSession = 0;
+    runtimeEnabled = null;
     pending.length = 0;
     pendingTags = null;
     pendingContexts.length = 0;

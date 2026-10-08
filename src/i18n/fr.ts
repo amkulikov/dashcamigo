@@ -900,6 +900,7 @@ export const frDict = {
 
     "settings.privacy.crash.label": "Rapports de plantage",
     "settings.privacy.crash.description": "Si l'appli plante, un rapport anonyme nous aide à corriger — aucune vidéo, aucun GPS, aucun nom de fichier, juste ce qui a échoué et sur quel navigateur. Activé par défaut ; tu peux le désactiver ici.",
+    "settings.privacy.crash.optInDescription": "Si l’appli plante, un rapport anonymisé nous aide à la réparer. Aucune vidéo, aucun GPS, aucun nom de fichier — seulement l’erreur et ton navigateur. Désactivé tant que tu ne l’actives pas ici. Tu peux le désactiver à tout moment.",
     "settings.playback.section": "Lecture",
     "settings.playback.units.label": "Unités de mesure",
     "settings.playback.units.metric": "Métriques (km/h, km)",
@@ -972,6 +973,12 @@ export const frDict = {
     "settings.ingest.gap.never": "Ne pas diviser — tout en un seul trajet",
 
     "settings.cache.section": "Infos mémorisées sur les enregistrements",
+    "settings.migration.section": "Une nouvelle adresse",
+    "settings.migration.announcement": "dashcamigo va déménager sur everydashcam.app. Sauvegarde ici tes notes de trajet avant le déménagement.",
+    "settings.migration.export": "Sauvegarder les notes avant le déménagement",
+    "settings.migration.restore": "Choisis l’ancienne adresse où tu as enregistré tes notes. Utilise le même navigateur et le même profil, puis restaure le fichier téléchargé avec le bouton ci-dessous.",
+    "settings.migration.installed": "Si tu utilises l’appli installée, sauvegarde tes notes depuis celle-ci avant de la désinstaller.",
+    "settings.migration.setup": "À la nouvelle adresse, choisis à nouveau tes dossiers et tes réglages, puis réinstalle l’appli si tu l’utilises.",
     "settings.notes.section": "Notes de trajets",
     "settings.notes.description": "Télécharge une copie de tous les noms de trajets, notes, favoris et marqueurs, ou restaure une copie précédente. Les enregistrements ne sont pas inclus.",
     "settings.notes.export": "Télécharger la sauvegarde des notes",

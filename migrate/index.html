@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Save your dashcamigo notes</title>
+    <script type="module" src="../src/migrate/page.ts"></script>
+  </head>
+  <body>
+    <header>
+      <a href="/">dashcamigo</a>
+      <label>
+        <span data-migrate-copy="language">Language</span>
+        <select id="migration-language">
+          <option value="de" lang="de">Deutsch</option>
+          <option value="en" lang="en">English</option>
+          <option value="es" lang="es">Español</option>
+          <option value="fr" lang="fr">Français</option>
+          <option value="ja" lang="ja">日本語</option>
+          <option value="ko" lang="ko">한국어</option>
+          <option value="pl" lang="pl">Polski</option>
+          <option value="pt" lang="pt-BR">Português</option>
+          <option value="ru" lang="ru">Русский</option>
+          <option value="zh" lang="zh-Hans">简体中文</option>
+        </select>
+      </label>
+    </header>
+    <main>
+      <h1 data-migrate-copy="title">Save your dashcamigo notes</h1>
+      <p data-migrate-copy="intro"></p>
+      <section class="migration-source">
+        <p><span data-migrate-copy="source"></span> <strong id="migration-origin"></strong></p>
+        <p data-migrate-copy="scope"></p>
+        <p id="migration-status" role="status" aria-live="polite"></p>
+        <button id="migration-download" type="button" data-migrate-copy="download" hidden></button>
+        <button id="migration-retry" type="button" data-migrate-copy="retry" hidden></button>
+      </section>
+      <section>
+        <h2 data-migrate-copy="next"></h2>
+        <ol>
+          <li data-migrate-copy="restore"></li>
+          <li data-migrate-copy="folders"></li>
+          <li data-migrate-copy="installed"></li>
+        </ol>
+      </section>
+    </main>
+    <footer data-migrate-copy="privacy"></footer>
+  </body>
+</html>

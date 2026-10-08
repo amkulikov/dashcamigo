@@ -147,6 +147,14 @@ function check() {
         const doc = parseDocument(file, "text/html");
         const head = elements(doc, "head")[0];
         requireCondition(head, `${route}: missing head`);
+        if (route === "/migrate/") {
+            requireCondition(isNoIndex(doc), "migration recovery page must stay noindex");
+            requireCondition(
+                ![...entries.values()].some((entry) => entry.url.pathname === route),
+                "migration recovery page must not appear in the sitemap",
+            );
+            continue;
+        }
         const links = elements(head, "link");
         const canonicals = links.filter((node) => node.getAttribute("rel") === "canonical");
         requireCondition(canonicals.length === 1, `${route}: expected exactly one canonical`);

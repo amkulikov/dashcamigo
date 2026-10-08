@@ -8,7 +8,12 @@ import { t } from "../i18n/index.js";
 import type { I18nKey } from "../i18n/keys.js";
 import { createLogger } from "../log.js";
 import type { VendorFile } from "../parsers/types.js";
-import { buildSidecarPayload, compareAnnotationVersions, parseSidecarPayload } from "../persist/annotations.js";
+import {
+    buildSidecarPayload,
+    compareAnnotationVersions,
+    notesBackupFilename,
+    parseSidecarPayload,
+} from "../persist/annotations.js";
 import { ensureFileReadwritePermission, listFolders } from "../persist/folders.js";
 import { getNotesFileState, setNotesFileHandle, setNotesStorage } from "../persist/notes-file.js";
 import type { AnnotationRecord, NotesFileRecord, RememberedFolder } from "../persist/types.js";
@@ -16,6 +21,7 @@ import {
     annotationStoreAvailable,
     allAnnotationRecords,
     applyMergedRecords,
+    persistImportedRecords,
     rebindFolderAnnotations,
     registerAnnotationPersistenceStatusHook,
     registerAnnotationsChangedHook,
@@ -211,7 +217,7 @@ export async function downloadPortableNotesBackup(): Promise<void> {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `dashcamigo-notes-${new Date().toISOString().slice(0, 10)}${SIDECAR_EXTENSION}`;
+    link.download = notesBackupFilename();
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
     notify({ severity: "info", messageKey: "sidecar.exported" });
@@ -232,6 +238,10 @@ export async function importPortableNotesBackup(file: File): Promise<void> {
         return;
     }
     const changed = await mergePortableRecords(parsed.records);
+    if (!(await persistImportedRecords(parsed.records))) {
+        notify({ severity: "error", messageKey: "annotations.browserSaveFailed" });
+        return;
+    }
     notify({ severity: "info", messageKey: "sidecar.imported", messageParams: { n: parsed.records.length } });
     if (parsed.rejectedEntries > 0) {
         notify({

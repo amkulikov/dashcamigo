@@ -898,6 +898,7 @@ export const zhDict = {
 
     "settings.privacy.crash.label": "崩溃报告",
     "settings.privacy.crash.description": "如果应用出错，匿名报告能帮我们修复——不含视频、不含 GPS、不含文件名，只有出了什么问题、在哪个浏览器。默认开启；可在此关闭。",
+    "settings.privacy.crash.optInDescription": "应用出错时，匿名诊断报告能帮助我们修复问题。不含视频、GPS 或文件名，只包含错误信息和浏览器类型。默认关闭，只有在这里开启后才会发送。你可以随时关闭。",
     "settings.playback.section": "播放",
     "settings.playback.units.label": "度量单位",
     "settings.playback.units.metric": "公制（公里/小时、公里）",
@@ -970,6 +971,12 @@ export const zhDict = {
     "settings.ingest.gap.never": "不拆分，所有文件作为同一行程",
 
     "settings.cache.section": "已保存的录像信息",
+    "settings.migration.section": "迁移到新地址",
+    "settings.migration.announcement": "dashcamigo 将迁移到 everydashcam.app。迁移前，请在这里保存行程笔记。",
+    "settings.migration.export": "保存笔记以便迁移",
+    "settings.migration.restore": "选择之前保存笔记的旧地址。请使用同一浏览器和同一用户配置，然后通过下方按钮恢复下载的文件。",
+    "settings.migration.installed": "如果你使用已安装的应用，请先在该应用中保存笔记，再卸载它。",
+    "settings.migration.setup": "在新地址重新选择文件夹和设置。如果你使用已安装的应用，请重新安装。",
     "settings.notes.section": "行程备注",
     "settings.notes.description": "下载所有行程名称、备注、收藏和标记的副本，或恢复之前保存的副本。备份不包含录像。",
     "settings.notes.export": "下载备注备份",

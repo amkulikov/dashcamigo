@@ -2723,9 +2723,28 @@
                         <span class="settings-toggle-slider" aria-hidden="true"></span>
                         <span class="settings-toggle-label" data-i18n="settings.privacy.crash.label">Crash reports</span>
                     </label>
-                    <p class="settings-toggle-desc" data-i18n="settings.privacy.crash.description">If the app breaks, an anonymized report helps us fix it. No video, no GPS, no file names - just what went wrong and on which browser. On by default; switch it off here.</p>
+                    <p id="settings-crash-description" class="settings-toggle-desc" data-i18n="settings.privacy.crash.description">If the app breaks, an anonymized report helps us fix it. No video, no GPS, no file names - just what went wrong and on which browser. On by default; switch it off here.</p>
                     <a href="/privacy" target="_blank" rel="noopener" class="settings-policy-link"
                        data-i18n="settings.privacy.policyLink">Privacy policy</a>
+                </div>
+            </div>
+            <div class="export-modal-section" id="settings-migration-section" hidden>
+                <h3 class="settings-section-title" data-i18n="settings.migration.section">Moving to a new address</h3>
+                <div class="settings-row" id="settings-migration-old" hidden>
+                    <p class="settings-toggle-desc" data-i18n="settings.migration.announcement">dashcamigo will move to everydashcam.app. Save your trip notes here before the move.</p>
+                    <a href="/migrate/" class="dc-btn dc-btn--secondary" data-i18n="settings.migration.export">Save notes for the move</a>
+                </div>
+                <div class="settings-row" id="settings-migration-new" hidden>
+                    <p class="settings-toggle-desc" data-i18n="settings.migration.restore">Choose the old address where you saved your notes. Use the same browser and profile, then restore the downloaded file below.</p>
+                    <p class="settings-toggle-desc">
+                        <a href="https://dashcamigo.app/migrate/">dashcamigo.app</a> ·
+                        <a href="https://ru.dashcamigo.app/migrate/">ru.dashcamigo.app</a> ·
+                        <a href="https://beta.dashcamigo.app/migrate/">beta.dashcamigo.app</a>
+                    </p>
+                </div>
+                <div class="settings-row">
+                    <p class="settings-toggle-desc" data-i18n="settings.migration.installed">If you use an installed app, save your notes from that app before removing it.</p>
+                    <p class="settings-toggle-desc" data-i18n="settings.migration.setup">At the new address, choose your folders and settings again and reinstall the app if you use it.</p>
                 </div>
             </div>
             <!-- web-only:end -->

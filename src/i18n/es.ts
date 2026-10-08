@@ -899,6 +899,7 @@ export const esDict = {
 
     "settings.privacy.crash.label": "Informes de fallos",
     "settings.privacy.crash.description": "Si la app falla, un informe anónimo nos ayuda a arreglarlo — sin vídeo, sin GPS, sin nombres de archivo, solo qué salió mal y en qué navegador. Activado por defecto; puedes desactivarlo aquí.",
+    "settings.privacy.crash.optInDescription": "Si la app falla, un informe anonimizado nos ayuda a arreglarla. Sin vídeo, GPS ni nombres de archivo — solo qué falló y en qué navegador. Desactivado hasta que lo actives aquí. Puedes desactivarlo cuando quieras.",
     "settings.playback.section": "Reproducción",
     "settings.playback.units.label": "Unidades de medida",
     "settings.playback.units.metric": "Métricas (km/h, km)",
@@ -971,6 +972,12 @@ export const esDict = {
     "settings.ingest.gap.never": "No dividir — todo como un trayecto",
 
     "settings.cache.section": "Datos guardados de las grabaciones",
+    "settings.migration.section": "Nos mudamos a una nueva dirección",
+    "settings.migration.announcement": "dashcamigo se mudará a everydashcam.app. Guarda aquí las notas de tus viajes antes de la mudanza.",
+    "settings.migration.export": "Guardar notas para la mudanza",
+    "settings.migration.restore": "Elige la dirección anterior donde guardaste tus notas. Usa el mismo navegador y perfil y luego restaura el archivo descargado con el botón de abajo.",
+    "settings.migration.installed": "Si usas la app instalada, guarda tus notas desde ella antes de desinstalarla.",
+    "settings.migration.setup": "En la nueva dirección, vuelve a elegir tus carpetas y ajustes e instala la app de nuevo si la usas.",
     "settings.notes.section": "Notas de trayectos",
     "settings.notes.description": "Descarga una copia de todos los nombres de trayectos, notas, favoritos y marcadores, o restaura una anterior. Las grabaciones no se incluyen.",
     "settings.notes.export": "Descargar copia de notas",

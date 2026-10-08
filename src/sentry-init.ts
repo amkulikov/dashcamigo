@@ -19,7 +19,6 @@ import {
     browserSessionIntegration,
     captureException,
     captureMessage,
-    close,
     dedupeIntegration,
     functionToStringIntegration,
     globalHandlersIntegration,
@@ -47,7 +46,7 @@ export interface SentryClient {
     addBreadcrumb: typeof addBreadcrumb;
     setTag: typeof setTag;
     setContext: typeof setContext;
-    close: typeof close;
+    close: () => Promise<boolean>;
 }
 
 /**
@@ -61,11 +60,13 @@ export interface SentryClient {
  * filters mirror app.ts's ring-buffer isNoise.
  */
 export function initSentryClient(opts: SentryClientOptions): SentryClient {
-    init({
+    const requests = new AbortController();
+    const client = init({
         dsn: opts.dsn,
         release: opts.release,
         environment: opts.environment,
         sendDefaultPii: false,
+        transportOptions: { fetchOptions: { signal: requests.signal } },
         defaultIntegrations: false,
         integrations: [
             globalHandlersIntegration(),
@@ -97,5 +98,18 @@ export function initSentryClient(opts: SentryClientOptions): SentryClient {
         beforeSend: opts.beforeSend,
         beforeBreadcrumb: opts.beforeBreadcrumb,
     });
-    return { captureException, captureMessage, addBreadcrumb, setTag, setContext, close };
+    return {
+        captureException,
+        captureMessage,
+        addBreadcrumb,
+        setTag,
+        setContext,
+        close: async () => {
+            // SDK close() flushes before disabling. Revoke consent before that
+            // async window, and abort requests already handed to the transport.
+            if (client) client.getOptions().enabled = false;
+            requests.abort();
+            return client?.close() ?? true;
+        },
+    };
 }

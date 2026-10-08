@@ -88,6 +88,10 @@
     margin-top: var(--dc-space-2);
 }
 
+.settings-row[hidden] {
+    display: none;
+}
+
 /* Reset-confirm modal: note paragraph (about PWA shortcut / browser
    permissions surviving the reset) is muted to keep visual weight on
    the main body copy and the action buttons. */

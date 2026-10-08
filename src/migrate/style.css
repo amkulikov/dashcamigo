@@ -1,0 +1,117 @@
+html {
+    color-scheme: dark light;
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px / 1.6 var(--dc-font-body);
+}
+
+body {
+    max-width: 42rem;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 4rem;
+}
+
+header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 3rem;
+}
+
+header > a {
+    color: var(--fg);
+    font-weight: 750;
+    text-decoration: none;
+}
+
+label {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+}
+
+h1 {
+    margin: 0 0 1.25rem;
+    font-size: clamp(1.75rem, 5vw, 2.5rem);
+    line-height: 1.2;
+}
+
+h2 {
+    font-size: 1.25rem;
+}
+
+section {
+    margin: 2rem 0;
+}
+
+.migration-source {
+    padding: 1.25rem;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-elev);
+}
+
+.migration-source p:first-child {
+    margin-top: 0;
+}
+
+.migration-source p:last-child {
+    margin-bottom: 0;
+}
+
+#migration-origin {
+    display: block;
+    overflow-wrap: anywhere;
+}
+
+button,
+select {
+    min-height: 44px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--dc-radius-md);
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-elev);
+    color: var(--fg);
+    font: inherit;
+}
+
+button {
+    cursor: pointer;
+}
+
+button:hover {
+    background: var(--bg-hover);
+}
+
+#migration-download {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--accent-contrast);
+    font-weight: 650;
+}
+
+#migration-download:hover {
+    background: var(--accent-hot);
+}
+
+:focus-visible {
+    outline: 2px solid var(--accent-ink);
+    outline-offset: 4px;
+}
+
+li + li {
+    margin-top: 1rem;
+}
+
+ol {
+    padding-left: 1.5rem;
+}
+
+footer {
+    border-top: 1px solid var(--border-strong);
+    margin-top: 2.5rem;
+    padding-top: 1.5rem;
+    font-size: 0.875rem;
+}

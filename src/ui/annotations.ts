@@ -923,6 +923,24 @@ export function applyMergedRecords(
     return changed;
 }
 
+/** An import is durable only after the current versions commit, including retries. */
+export async function persistImportedRecords(records: readonly AnnotationRecord[]): Promise<boolean> {
+    const current = records.flatMap(({ id }) => {
+        const record = recordsById.get(id);
+        return record ? [record] : [];
+    });
+    if (current.length === 0) return true;
+    try {
+        await saveAnnotations(current);
+        markPersistenceSuccess();
+        return true;
+    } catch (err) {
+        log.warn("imported annotation save failed", { err: err instanceof Error ? err.message : String(err) });
+        markPersistenceFailure();
+        return false;
+    }
+}
+
 /**
  * Re-keys records onto `folderId` when they clearly belong to that folder
  * but are stranded on "" (created before the folder was remembered) or on a

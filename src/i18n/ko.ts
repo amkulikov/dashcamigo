@@ -909,6 +909,7 @@ export const koDict = {
 
     "settings.privacy.crash.label": "오류 보고",
     "settings.privacy.crash.description": "앱이 멈추면 익명 보고서가 문제 해결에 도움이 돼요 — 영상도 GPS도 파일 이름도 보내지 않고, 무엇이 어떤 브라우저에서 잘못됐는지만. 기본으로 켜져 있으며 여기서 끌 수 있어요.",
+    "settings.privacy.crash.optInDescription": "앱에 문제가 생기면 익명화된 보고서가 해결에 도움이 돼요. 영상, GPS, 파일 이름 없이 오류 내용과 브라우저 종류만 담아요. 여기서 켜기 전에는 보내지 않아요. 언제든 끌 수 있어요.",
     "settings.playback.section": "재생",
     "settings.playback.units.label": "측정 단위",
     "settings.playback.units.metric": "미터법 (km/h, km)",
@@ -981,6 +982,12 @@ export const koDict = {
     "settings.ingest.gap.never": "분할 안 함 — 모든 파일을 하나의 주행으로",
 
     "settings.cache.section": "저장된 녹화 정보",
+    "settings.migration.section": "새 주소로 이전",
+    "settings.migration.announcement": "dashcamigo가 everydashcam.app으로 이전할 예정이에요. 이전하기 전에 여기서 주행 메모를 저장해 주세요.",
+    "settings.migration.export": "이전에 대비해 메모 저장",
+    "settings.migration.restore": "메모를 저장했던 이전 주소를 선택하세요. 같은 브라우저와 프로필로 연 다음 아래 버튼으로 다운로드한 파일을 복원하세요.",
+    "settings.migration.installed": "설치된 앱을 사용한다면 삭제하기 전에 그 앱에서 메모를 저장하세요.",
+    "settings.migration.setup": "새 주소에서 폴더와 설정을 다시 선택하세요. 설치된 앱을 사용한다면 앱도 다시 설치하세요.",
     "settings.notes.section": "주행 메모",
     "settings.notes.description": "모든 주행 이름, 메모, 즐겨찾기, 마커의 사본을 다운로드하거나 이전 백업에서 복원해 보세요. 녹화 파일은 포함되지 않아요.",
     "settings.notes.export": "메모 백업 다운로드",

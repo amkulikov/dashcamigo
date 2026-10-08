@@ -899,6 +899,7 @@ export const plDict = {
 
     "settings.privacy.crash.label": "Raporty awarii",
     "settings.privacy.crash.description": "Gdy aplikacja się zawiesi, anonimowy raport pomaga nam to naprawić — bez wideo, bez GPS, bez nazw plików, tylko co i w której przeglądarce poszło nie tak. Domyślnie włączone; tutaj możesz wyłączyć.",
+    "settings.privacy.crash.optInDescription": "Gdy aplikacja ulegnie awarii, zanonimizowany raport pomaga nam ją naprawić. Bez wideo, GPS i nazw plików — tylko opis błędu i przeglądarka. Wyłączone, dopóki nie włączysz tutaj. Możesz wyłączyć w dowolnej chwili.",
     "settings.playback.section": "Odtwarzanie",
     "settings.playback.units.label": "Jednostki miary",
     "settings.playback.units.metric": "Metryczne (km/h, km)",
@@ -971,6 +972,12 @@ export const plDict = {
     "settings.ingest.gap.never": "Nie dziel — wszystko jako jeden przejazd",
 
     "settings.cache.section": "Zapisane informacje o nagraniach",
+    "settings.migration.section": "Przeprowadzka pod nowy adres",
+    "settings.migration.announcement": "dashcamigo przeniesie się pod adres everydashcam.app. Zapisz tutaj notatki z przejazdów przed przeprowadzką.",
+    "settings.migration.export": "Zapisz notatki przed przeprowadzką",
+    "settings.migration.restore": "Wybierz stary adres, pod którym zapisano notatki. Użyj tej samej przeglądarki i tego samego profilu, a następnie przywróć pobrany plik przyciskiem poniżej.",
+    "settings.migration.installed": "Jeśli używasz zainstalowanej aplikacji, zapisz w niej swoje notatki przed jej odinstalowaniem.",
+    "settings.migration.setup": "Pod nowym adresem ponownie wybierz foldery i ustawienia. Jeśli używasz zainstalowanej aplikacji, zainstaluj ją ponownie.",
     "settings.notes.section": "Notatki z przejazdów",
     "settings.notes.description": "Pobierz kopię wszystkich nazw przejazdów, notatek, ulubionych i znaczników albo przywróć wcześniejszą. Nagrania nie są dołączone.",
     "settings.notes.export": "Pobierz kopię notatek",

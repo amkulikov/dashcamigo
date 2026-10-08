@@ -899,6 +899,7 @@ export const ptDict = {
 
     "settings.privacy.crash.label": "Relatórios de falhas",
     "settings.privacy.crash.description": "Se o app falhar, um relatório anônimo nos ajuda a corrigir — sem vídeo, sem GPS, sem nomes de arquivo, só o que deu errado e em qual navegador. Ativado por padrão; desative aqui.",
+    "settings.privacy.crash.optInDescription": "Se o app falhar, um relatório anonimizado nos ajuda a corrigir o problema. Sem vídeo, GPS ou nomes de arquivo — apenas o que deu errado e em qual navegador. Desativado até você ativar aqui. Você pode desativar a qualquer momento.",
     "settings.playback.section": "Reprodução",
     "settings.playback.units.label": "Unidades de medida",
     "settings.playback.units.metric": "Métricas (km/h, km)",
@@ -971,6 +972,12 @@ export const ptDict = {
     "settings.ingest.gap.never": "Não dividir — tudo em uma só viagem",
 
     "settings.cache.section": "Informações salvas das gravações",
+    "settings.migration.section": "Mudança para um novo endereço",
+    "settings.migration.announcement": "O dashcamigo vai mudar para everydashcam.app. Salve suas anotações de viagens aqui antes da mudança.",
+    "settings.migration.export": "Salvar anotações para a mudança",
+    "settings.migration.restore": "Escolha o endereço antigo onde salvou suas anotações. Use o mesmo navegador e perfil e depois restaure o arquivo baixado com o botão abaixo.",
+    "settings.migration.installed": "Se usa o app instalado, salve suas anotações nele antes de desinstalá-lo.",
+    "settings.migration.setup": "No novo endereço, escolha suas pastas e configurações novamente e reinstale o app se você o usa.",
     "settings.notes.section": "Anotações de viagens",
     "settings.notes.description": "Baixe uma cópia de todos os nomes de viagens, anotações, favoritos e marcadores ou restaure uma cópia anterior. As gravações não são incluídas.",
     "settings.notes.export": "Baixar backup das anotações",

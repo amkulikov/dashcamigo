@@ -10,6 +10,7 @@ import {
     captureSentryMessage,
     crashReportingEnabled,
     isCrashReportingBuilt,
+    isCrashReportingOptIn,
     resolveEnvironment,
     setCrashReportingEnabled,
     _resetForTests,
@@ -40,7 +41,9 @@ beforeEach(() => {
     vi.stubEnv("VITE_SENTRY_DSN", DSN);
 });
 
-afterEach(() => {
+afterEach(async () => {
+    setCrashReportingEnabled(false);
+    await vi.dynamicImportSettled();
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
     _resetForTests();
@@ -53,10 +56,88 @@ describe("resolveEnvironment", () => {
         expect(resolveEnvironment("192.168.1.5", "primary")).toBe("local");
         expect(resolveEnvironment("dashcamigo.app", "primary")).toBe("production");
         expect(resolveEnvironment("www.dashcamigo.app", "primary")).toBe("production");
+        expect(resolveEnvironment("everydashcam.app", "primary")).toBe("production");
+        expect(resolveEnvironment("www.everydashcam.app", "primary")).toBe("production");
+        expect(resolveEnvironment("ru.everydashcam.app", "primary")).toBe("production");
+        expect(resolveEnvironment("beta.everydashcam.app", "primary")).toBe("staging");
+        expect(resolveEnvironment("beta.everydashcam.app", "mirror")).toBe("staging");
         expect(resolveEnvironment("beta.dashcamigo.app", "primary")).toBe("staging");
         expect(resolveEnvironment("deploy-preview.pages.dev", "primary")).toBe("staging");
         expect(resolveEnvironment("mirror.example.test", "mirror")).toBe("production");
         expect(resolveEnvironment("localhost", "mirror")).toBe("local");
+    });
+});
+
+describe("hosted consent", () => {
+    it.each(["everydashcam.app", "www.everydashcam.app", "beta.everydashcam.app", "ru.everydashcam.app"])(
+        "requires explicit consent on %s",
+        (hostname) => {
+            vi.stubGlobal("window", Object.assign(new EventTarget(), { location: { hostname } }));
+            expect(isCrashReportingOptIn()).toBe(true);
+            expect(crashReportingEnabled()).toBe(false);
+            for (const choice of ["off", "yes", "true", ""]) {
+                fakeStorage.setItem(CRASH_REPORTING_STORAGE_KEY, choice);
+                expect(crashReportingEnabled()).toBe(false);
+            }
+            fakeStorage.setItem(CRASH_REPORTING_STORAGE_KEY, "on");
+            expect(crashReportingEnabled()).toBe(true);
+        },
+    );
+
+    it.each(["dashcamigo.app", "beta.dashcamigo.app", "ru.dashcamigo.app", "gh.dashcamigo.app", "self-host.test"])(
+        "preserves the existing default on %s",
+        (hostname) => {
+            vi.stubGlobal("window", Object.assign(new EventTarget(), { location: { hostname } }));
+            expect(isCrashReportingOptIn()).toBe(false);
+            expect(crashReportingEnabled()).toBe(true);
+        },
+    );
+
+    it("persists an explicit opt-in across a fresh session", () => {
+        vi.stubGlobal("window", Object.assign(new EventTarget(), { location: { hostname: "everydashcam.app" } }));
+        setCrashReportingEnabled(true);
+        expect(fakeStorage.getItem(CRASH_REPORTING_STORAGE_KEY)).toBe("on");
+        _resetForTests();
+        expect(crashReportingEnabled()).toBe(true);
+        setCrashReportingEnabled(false);
+        _resetForTests();
+        expect(crashReportingEnabled()).toBe(false);
+    });
+
+    it("defaults off with blocked storage and honors the current session's choice", () => {
+        vi.stubGlobal("window", Object.assign(new EventTarget(), { location: { hostname: "everydashcam.app" } }));
+        vi.stubGlobal("localStorage", {
+            getItem: () => {
+                throw new Error("blocked");
+            },
+            setItem: () => {
+                throw new Error("blocked");
+            },
+        });
+        expect(crashReportingEnabled()).toBe(false);
+        setCrashReportingEnabled(true);
+        expect(crashReportingEnabled()).toBe(true);
+        setCrashReportingEnabled(false);
+        expect(crashReportingEnabled()).toBe(false);
+        _resetForTests();
+        expect(crashReportingEnabled()).toBe(false);
+    });
+
+    it("honors opt-out immediately when storage fails on an existing origin", () => {
+        vi.stubGlobal("localStorage", {
+            getItem: () => null,
+            setItem: () => {
+                throw new Error("blocked");
+            },
+        });
+        setCrashReportingEnabled(false);
+        expect(crashReportingEnabled()).toBe(false);
+    });
+
+    it("reads a later persisted opt-out before the cross-tab event arrives", () => {
+        setCrashReportingEnabled(true);
+        fakeStorage.setItem(CRASH_REPORTING_STORAGE_KEY, "off");
+        expect(crashReportingEnabled()).toBe(false);
     });
 });
 

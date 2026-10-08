@@ -1154,9 +1154,10 @@ export type I18nKey =
     | "settings.modal.close"
     | "settings.privacy.section"
     | "settings.privacy.policyLink"
-    // Crash reports (Sentry, errors-only) - opt-OUT, default ON.
+    // Crash reports (Sentry, errors-only).
     | "settings.privacy.crash.label"
     | "settings.privacy.crash.description"
+    | "settings.privacy.crash.optInDescription"
 
     // Settings -> Playback: unit preference (km/h + km vs mph + mi). Affects
     // chart speed axis, map popup speed, trip distance display, feedback report.
@@ -1254,6 +1255,12 @@ export type I18nKey =
     | "settings.ingest.gap.description"
     | "settings.ingest.gap.unit"
     | "settings.ingest.gap.never"
+    | "settings.migration.section"
+    | "settings.migration.announcement"
+    | "settings.migration.export"
+    | "settings.migration.restore"
+    | "settings.migration.installed"
+    | "settings.migration.setup"
 
     // Settings -> portable trip-notes backup.
     | "settings.notes.section"
