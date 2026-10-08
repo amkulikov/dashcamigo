@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-10-09.2",
+        category: "improvement",
+        text: {
+            en: "dashcamigo has moved to everydashcam.app; restore your notes in Settings.",
+            ru: "dashcamigo переехал на everydashcam.app — перенеси старые пометки через настройки.",
+            de: "dashcamigo ist zu everydashcam.app umgezogen; stelle deine Notizen in den Einstellungen wieder her.",
+            es: "dashcamigo se ha trasladado a everydashcam.app; restaura tus notas en Ajustes.",
+            fr: "dashcamigo a déménagé sur everydashcam.app ; restaure tes notes dans les paramètres.",
+            pl: "dashcamigo przeniosło się na everydashcam.app; przywróć swoje notatki w ustawieniach.",
+            pt: "dashcamigo mudou para everydashcam.app; restaure suas notas nas configurações.",
+            zh: "dashcamigo 已迁移至 everydashcam.app；请在设置中恢复你的笔记。",
+            ja: "dashcamigo は everydashcam.app に移転しました。設定からメモを復元できます。",
+            ko: "dashcamigo가 everydashcam.app으로 옮겼어요. 설정에서 메모를 복원하세요.",
+        },
+    },
+    {
         id: "2026-10-09.1",
         category: "feature",
         text: {
