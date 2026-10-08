@@ -237,7 +237,8 @@ test("automatic selection reaches the export encoder and the standard notificati
     page.on("worker", (worker) => {
         if (PROBE_WORKER.test(worker.url())) probes++;
     });
-    await restrictDefaultEncoder(page, { softwareBitrate: 20_000_000 });
+    // Preserve the moderate-gain probe's software budget per frame for this 30 fps source.
+    await restrictDefaultEncoder(page, { softwareBitrate: 16_800_000 });
     await prepareExport(page);
     await page.locator("#export-panel-output").selectOption("custom");
     const dimensions = page.locator('.export-panel__output-custom input[type="number"]');
@@ -246,7 +247,7 @@ test("automatic selection reaches the export encoder and the standard notificati
     await dimensions.nth(1).fill("2160");
     await dimensions.nth(1).blur();
     await page.locator(".export-panel__manual-bitrate > summary").click();
-    await page.locator("#export-panel-bitrate").fill("32");
+    await page.locator("#export-panel-bitrate").fill("35");
     await page.locator("#export-panel-bitrate").blur();
     await saveExport(page);
     const config = await page.evaluate(
@@ -262,10 +263,12 @@ test("automatic selection reaches the export encoder and the standard notificati
     await info.attach("selection", { body: JSON.stringify(diagnostics), contentType: "application/json" });
     expect(config, JSON.stringify(diagnostics)).toMatchObject({
         hardwareAcceleration: "prefer-software",
-        bitrate: 32_000_000,
+        bitrate: 35_000_000,
     });
     expect(diagnostics.find((entry) => entry.msg === "encoder trial measured")?.ctx).toMatchObject({
+        frameRate: 30,
         reason: "unresponsive",
+        response: { bitrate: 70_000_000 },
     });
     await page.locator("#notif-bell").click();
     await expect(page.locator("#notif-drawer-list")).toContainText("Automatically switched to software encoding");
