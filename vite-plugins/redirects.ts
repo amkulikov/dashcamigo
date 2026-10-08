@@ -34,7 +34,7 @@ import { VENDOR_LIST } from "./vendor-list.js";
 
 export function redirectsPlugin(): Plugin {
     return {
-        name: "dashcamigo-redirects",
+        name: "everydashcam-redirects",
         apply: "build",
         closeBundle() {
             const distDir = resolve(process.cwd(), "dist");

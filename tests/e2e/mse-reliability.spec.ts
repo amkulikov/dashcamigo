@@ -54,7 +54,7 @@ function readQuotaFault(page: Page): Promise<QuotaFault> {
 }
 
 test.beforeAll(async () => {
-    fixtureDirectory = await mkdtemp(join(tmpdir(), "dashcamigo-mse-browser-"));
+    fixtureDirectory = await mkdtemp(join(tmpdir(), "everydashcam-mse-browser-"));
     for (const [name, options] of [
         ["long-gop", { gopDurationSec: 10, gopCount: 3 }],
         ["short-audio", { audioDurationSec: 0.4 }],

@@ -82,8 +82,8 @@ The product calls its own parts by consistent names. Code names and user-facing 
 are not always the same — the table fixes the **user-facing** word. English is
 canonical; the note flags where the choice of word (not just the translation) matters.
 
-The product name is always **`dashcamigo`**, lowercase — even at the start of a
-sentence. Never "Dashcamigo", "DashCamigo", or "DASHCAMIGO".
+The product name is always **`everydashcam`**, lowercase — even at the start of a
+sentence. Use uppercase only in the visual logo; write the name lowercase in prose.
 
 | Concept                                   | Use (English)   | Note                                                            |
 | ----------------------------------------- | --------------- | -------------------------------------------------------------- |
@@ -195,7 +195,7 @@ and the content in `vite-plugins/*`) play by adjacent rules:
 
 ---
 
-## Never talk the user out of dashcamigo
+## Never talk the user out of everydashcam
 
 An honest competitor comparison is fine — it builds trust. But never close on a flat
 concession.
@@ -203,8 +203,8 @@ concession.
 Frame a coverage gap — an unsupported camera, an unread GPS format — as an
 **invitation**, not a dead end:
 
-> "If dashcamigo doesn't read your camera yet, send a sample to
-> feedback@dashcamigo.app — we add formats from real recordings."
+> "If everydashcam doesn't read your camera yet, send a sample to
+> feedback@everydashcam.app — we add formats from real recordings."
 
 This is true (formats genuinely are added from real samples) and on-voice. A coverage
 gap is a reason to get in touch, not a reason to leave.

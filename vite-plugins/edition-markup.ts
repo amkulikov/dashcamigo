@@ -2,7 +2,7 @@ import type { Plugin } from "vite";
 
 export function editionMarkupPlugin(): Plugin {
     return {
-        name: "dashcamigo-edition-markup",
+        name: "everydashcam-edition-markup",
         transformIndexHtml: {
             order: "pre",
             handler: (html) =>

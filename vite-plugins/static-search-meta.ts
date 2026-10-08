@@ -40,7 +40,7 @@ export function staticSearchMetaPlugin(options: {
     deployment: SeoDeploymentContext;
 }): Plugin {
     return {
-        name: "dashcamigo-static-search-meta",
+        name: "everydashcam-static-search-meta",
         apply: "build",
         closeBundle() {
             applyStaticSearchMeta(resolve(process.cwd(), "dist"), options);

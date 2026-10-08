@@ -91,8 +91,10 @@ a:hover {
 /* ----- Header ----- */
 .vp-header {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
+    gap: 12px 24px;
     padding: 16px 32px;
     border-bottom: 1px solid var(--border);
     background: var(--bg-elev);
@@ -101,22 +103,15 @@ a:hover {
 .vp-brand {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    flex-shrink: 0;
     color: var(--fg);
-    font-weight: 600;
-    font-size: 18px;
-    letter-spacing: -0.01em;
 }
 .vp-brand:hover {
     color: var(--fg);
     text-decoration: none;
 }
-.vp-brand-icon {
-    width: 22px;
-    height: 22px;
-}
-
 .vp-back {
+    margin-left: auto;
     font-size: 14px;
     color: var(--fg-dim);
 }
@@ -491,7 +486,7 @@ a:hover {
 
 /* ===== Alternative / comparison pages (/alternatives/<slug>/) =====
  * These pages reuse the vp-* chrome (header, sections, FAQ, footer, vendor
- * grid) and add three extra primitives: a comparison table (dashcamigo vs the
+ * grid) and add three extra primitives: a comparison table (everydashcam vs the
  * competitor), an honest "when to stick with X" callout, and a compact
  * feature-cell vocabulary (yes / no / partial). Kept in this shared stylesheet
  * because both page types load /vendor-page.css and never the app bundle. */
@@ -537,7 +532,7 @@ a:hover {
     color: var(--fg);
     width: 34%;
 }
-/* dashcamigo column - highlighted so the eye lands on our side. */
+/* everydashcam column - highlighted so the eye lands on our side. */
 .alt-compare .alt-col-us {
     background: color-mix(in srgb, var(--accent) 10%, transparent);
     color: var(--fg);

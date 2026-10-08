@@ -25,7 +25,7 @@ let fixtureDirectory: string;
 test.use({ serviceWorkers: "block" });
 
 test.beforeAll(async () => {
-    fixtureDirectory = await mkdtemp(join(tmpdir(), "dashcamigo-playback-recovery-"));
+    fixtureDirectory = await mkdtemp(join(tmpdir(), "everydashcam-playback-recovery-"));
     await mkdir(join(fixtureDirectory, "single"));
     await writeFile(
         join(fixtureDirectory, "single", "clip.mkv"),

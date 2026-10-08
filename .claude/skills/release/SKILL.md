@@ -13,7 +13,7 @@ CI remain required.
 
 - `git status` clean, `git branch --show-current` = main, `git fetch origin` then
   local main == `origin/main`. Diverged or dirty - stop and surface it.
-- The commit to tag is the one staging (https://beta.dashcamigo.app) has
+- The commit to tag is the one staging (https://beta.everydashcam.app) has
   validated. The user's ask to release IS the confirmation staging looks good -
   do not re-ask; but if main moved since the last staging deploy you were part
   of, say so.

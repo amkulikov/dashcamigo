@@ -7,7 +7,7 @@
 // per plugin.
 //
 // These are NOT competitor pages, so they do not live under /alternatives/ and
-// carry no comparison table. They describe a capability dashcamigo genuinely
+// carry no comparison table. They describe a capability everydashcam genuinely
 // has (verified in src/transcode/compose.ts, text-overlay.ts, map-overlay.ts)
 // and are honest about its limits (the overlay needs embedded GPS - speed,
 // coords, map, time, heading, distance and the G-force read are all derived
@@ -44,7 +44,7 @@ import { renderBreadcrumbs, renderSeoLanguageLinks } from "./seo-navigation.js";
 // Shared page chrome - reused from vendor-pages.ts rather than duplicated
 // (CLAUDE.md: abstractions against duplicates), exactly like alternative-pages.
 import {
-    BRAND_ICON_SVG,
+    BRAND_MARK_HTML,
     buildHreflangLinksHtml,
     buildOgLocaleAlternatesHtml,
     pathPrefixFor,
@@ -113,20 +113,20 @@ const FEATURE_PAGES: FeaturePage[] = [
         slug: "combine-dashcam-cameras-into-one-video",
         locales: {
             en: {
-                title: "Combine Dashcam Cameras Into One Video — Free, In Your Browser | dashcamigo",
+                title: "Combine Dashcam Cameras Into One Video — Free, In Your Browser | everydashcam",
                 metaDescription:
                     "Combine front, rear and cabin dashcam cameras into one video — side by side, grid or picture-in-picture. Free, in your browser, nothing uploaded. Works with 70mai, BlackVue, Viofo and more.",
                 ogTitle: "Combine dashcam cameras into one video — free",
                 ogDescription:
                     "Lay front, rear and cabin into one video — side by side, grid or picture-in-picture. Free, in your browser, nothing uploaded.",
                 h1: "Combine your dashcam cameras into one video",
-                lead: "Most dashcams save each camera as its own file — front in one, rear in another, the cabin in a third. dashcamigo lays them into a single video: side by side, in a grid, or one large with the rest as picture-in-picture. It runs in your browser, so nothing is uploaded, and it reads 70mai, BlackVue, Viofo, Garmin, Vantrue and dozens more — not just one brand.",
+                lead: "Most dashcams save each camera as its own file — front in one, rear in another, the cabin in a third. everydashcam lays them into a single video: side by side, in a grid, or one large with the rest as picture-in-picture. It runs in your browser, so nothing is uploaded, and it reads 70mai, BlackVue, Viofo, Garmin, Vantrue and dozens more — not just one brand.",
                 breadcrumbName: "Combine cameras into one video",
                 introHeading: "One file instead of three",
                 introBody:
                     "Watching a front clip and a rear clip for the same minute means juggling windows. Combined into one video, they become a single file you can share, submit as evidence, or keep — every camera in the same frame, in sync.",
                 introBody2:
-                    "dashcamigo does this without uploading your recordings. Your recordings are read and combined locally, in the browser tab, and the finished video is saved straight to your computer.",
+                    "everydashcam does this without uploading your recordings. Your recordings are read and combined locally, in the browser tab, and the finished video is saved straight to your computer.",
                 optionsHeading: "Layouts",
                 options: [
                     {
@@ -146,14 +146,14 @@ const FEATURE_PAGES: FeaturePage[] = [
                 ],
                 howHeading: "How to combine your cameras",
                 howSteps: [
-                    "Plug the SD card into your computer and drop the whole folder onto dashcamigo.app.",
+                    "Plug the SD card into your computer and drop the whole folder onto everydashcam.app.",
                     "Open the trip — front, rear and cabin line up automatically on one timeline.",
                     "Open export, pick a layout (side by side, grid or picture-in-picture), and choose the range to save.",
                     "Save — the combined video is written straight to your computer, with the GPS track inside.",
                 ],
                 brandsHeading: "Front and rear in one file — even when the camera app won't",
                 brandsBody:
-                    "Manufacturer apps usually stop short here: they play front and rear together but export each camera as its own file, not one combined clip. dashcamigo is a free dashcam player that reads BlackVue, Viofo, 70mai, Vantrue, Thinkware, Garmin and more — and writes the combined video their apps leave out. Same drive, every camera, one file.",
+                    "Manufacturer apps usually stop short here: they play front and rear together but export each camera as its own file, not one combined clip. everydashcam is a free dashcam player that reads BlackVue, Viofo, 70mai, Vantrue, Thinkware, Garmin and more — and writes the combined video their apps leave out. Same drive, every camera, one file.",
                 noteHeading: "Good to know",
                 noteBody:
                     "Combining re-encodes the video, so it isn't instant — a long range takes a little time. For the smoothest export, use Chrome, Edge or another Chromium browser on a computer. This stitches cameras into one frame; joining a drive's short clips end to end into one continuous file happens automatically when you pick a range.",
@@ -173,7 +173,7 @@ const FEATURE_PAGES: FeaturePage[] = [
                     },
                     {
                         q: "Which dashcams does it support?",
-                        a: "70mai, BlackVue, Viofo, Garmin, Vantrue, Thinkware, GoPro and many more — anything that writes standard .mp4, .mov or .ts files. If your camera isn't read yet, send a sample to feedback@dashcamigo.app and we'll add it.",
+                        a: "70mai, BlackVue, Viofo, Garmin, Vantrue, Thinkware, GoPro and many more — anything that writes standard .mp4, .mov or .ts files. If your camera isn't read yet, send a sample to feedback@everydashcam.app and we'll add it.",
                     },
                     {
                         q: "Is it free?",
@@ -183,20 +183,20 @@ const FEATURE_PAGES: FeaturePage[] = [
                 ctaPrimary: "Open your recordings",
             },
             ru: {
-                title: "Склеить камеры регистратора в одно видео — бесплатно, в браузере | dashcamigo",
+                title: "Склеить камеры регистратора в одно видео — бесплатно, в браузере | everydashcam",
                 metaDescription:
                     "Склей переднюю, заднюю и салонную камеры регистратора в одно видео — рядом, сеткой или в режиме «картинка в картинке». Бесплатно, в браузере, ничего не загружается. 70mai, BlackVue, Viofo и другие.",
                 ogTitle: "Склеить камеры регистратора в одно видео — бесплатно",
                 ogDescription:
                     "Объедини видео с передней, задней и салонной камер — рядом, сеткой или в режиме «картинка в картинке». Бесплатно, в браузере, ничего не загружается.",
                 h1: "Склей камеры регистратора в одно видео",
-                lead: "Большинство регистраторов пишут каждую камеру в свой файл — передняя в одном, задняя в другом, салонная в третьем. dashcamigo складывает их в одно видео: рядом, сеткой или одну крупно, а остальные в режиме «картинка в картинке». Всё работает в браузере, без загрузки записей на сервер. Поддерживаются 70mai, BlackVue, Viofo, Garmin, Vantrue и десятки других — не один бренд.",
+                lead: "Большинство регистраторов пишут каждую камеру в свой файл — передняя в одном, задняя в другом, салонная в третьем. everydashcam складывает их в одно видео: рядом, сеткой или одну крупно, а остальные в режиме «картинка в картинке». Всё работает в браузере, без загрузки записей на сервер. Поддерживаются 70mai, BlackVue, Viofo, Garmin, Vantrue и десятки других — не один бренд.",
                 breadcrumbName: "Склейка камер в одно видео",
                 introHeading: "Один файл вместо трёх",
                 introBody:
                     "Смотреть ролик с передней и ролик с задней за одну и ту же минуту — жонглировать окнами. Склеенные в одно видео, они становятся единым файлом, который можно отправить, приложить как доказательство или сохранить — все камеры в одном кадре и синхронно.",
                 introBody2:
-                    "dashcamigo объединяет видео без загрузки записей на сервер. Записи читаются и склеиваются локально, прямо во вкладке браузера, а готовое видео сохраняется сразу на твой компьютер.",
+                    "everydashcam объединяет видео без загрузки записей на сервер. Записи читаются и склеиваются локально, прямо во вкладке браузера, а готовое видео сохраняется сразу на твой компьютер.",
                 optionsHeading: "Раскладки",
                 options: [
                     {
@@ -216,14 +216,14 @@ const FEATURE_PAGES: FeaturePage[] = [
                 ],
                 howHeading: "Как склеить камеры",
                 howSteps: [
-                    "Вставь SD-карту в компьютер и перетащи всю папку на dashcamigo.app.",
+                    "Вставь SD-карту в компьютер и перетащи всю папку на everydashcam.app.",
                     "Открой поездку — передняя, задняя и салонная камеры автоматически синхронизируются на одной шкале времени.",
                     "Открой экспорт, выбери раскладку (рядом, сеткой или в режиме «картинка в картинке») и отметь диапазон для сохранения.",
                     "Сохрани — склеенное видео запишется сразу на компьютер, с GPS-треком внутри.",
                 ],
                 brandsHeading: "Передняя и задняя в одном файле — даже когда родное приложение не умеет",
                 brandsBody:
-                    "Родные приложения обычно на этом останавливаются: показывают переднюю и заднюю вместе, но экспортируют каждую камеру своим файлом, а не одним склеенным роликом. dashcamigo — бесплатный плеер регистратора: читает BlackVue, Viofo, 70mai, Vantrue, Thinkware, Garmin и другие и пишет то склеенное видео, которого в их приложениях нет. Та же поездка, все камеры, один файл.",
+                    "Родные приложения обычно на этом останавливаются: показывают переднюю и заднюю вместе, но экспортируют каждую камеру своим файлом, а не одним склеенным роликом. everydashcam — бесплатный плеер регистратора: читает BlackVue, Viofo, 70mai, Vantrue, Thinkware, Garmin и другие и пишет то склеенное видео, которого в их приложениях нет. Та же поездка, все камеры, один файл.",
                 noteHeading: "Полезно знать",
                 noteBody:
                     "Склейка перекодирует видео, так что это не мгновенно — длинный диапазон займёт время. Для экспорта удобнее всего использовать Chrome, Edge или другой браузер на Chromium на компьютере. Это склейка камер в один кадр; а соединение коротких роликов поездки встык в один непрерывный файл происходит само, когда ты выбираешь диапазон.",
@@ -243,7 +243,7 @@ const FEATURE_PAGES: FeaturePage[] = [
                     },
                     {
                         q: "Какие регистраторы поддерживаются?",
-                        a: "70mai, BlackVue, Viofo, Garmin, Vantrue, Thinkware, GoPro и многие другие — всё, что пишет стандартные .mp4, .mov или .ts. Если записи твоей камеры пока не открываются, пришли пример на feedback@dashcamigo.app — он поможет добавить поддержку.",
+                        a: "70mai, BlackVue, Viofo, Garmin, Vantrue, Thinkware, GoPro и многие другие — всё, что пишет стандартные .mp4, .mov или .ts. Если записи твоей камеры пока не открываются, пришли пример на feedback@everydashcam.app — он поможет добавить поддержку.",
                     },
                     {
                         q: "Это бесплатно?",
@@ -258,18 +258,18 @@ const FEATURE_PAGES: FeaturePage[] = [
         slug: "add-data-overlay-to-dashcam-video",
         locales: {
             en: {
-                title: "Add a Data Overlay to Dashcam Video — Speed, GPS & Map | dashcamigo",
+                title: "Add a Data Overlay to Dashcam Video — Speed, GPS & Map | everydashcam",
                 metaDescription:
                     "Burn speed, GPS coordinates and a moving map onto your dashcam video — free, in your browser, nothing uploaded. Works when your footage has GPS. 70mai, BlackVue, Viofo and more.",
                 ogTitle: "Add speed, GPS & map overlay to dashcam video",
                 ogDescription:
                     "Burn speed, coordinates and a moving map onto the exported video — free, in your browser, nothing uploaded.",
                 h1: "Add a speed, GPS and map overlay to your dashcam video",
-                lead: "dashcamigo can burn your speed, GPS coordinates and a moving mini-map straight onto the exported video — clean readouts baked into the picture, not a separate app. It runs in your browser, nothing is uploaded, and it works with the GPS your dashcam already recorded.",
+                lead: "everydashcam can burn your speed, GPS coordinates and a moving mini-map straight onto the exported video — clean readouts baked into the picture, not a separate app. It runs in your browser, nothing is uploaded, and it works with the GPS your dashcam already recorded.",
                 breadcrumbName: "Add a data overlay",
                 introHeading: "Speed and location, baked into the picture",
                 introBody:
-                    "A dashcam clip on its own doesn't show how fast you were going or where you were. dashcamigo reads the GPS your camera saved and draws it onto the exported video: a speed readout, your coordinates, and a small map that moves with the route. The data is part of the picture, so it stays visible wherever the file is played — no special player needed.",
+                    "A dashcam clip on its own doesn't show how fast you were going or where you were. everydashcam reads the GPS your camera saved and draws it onto the exported video: a speed readout, your coordinates, and a small map that moves with the route. The data is part of the picture, so it stays visible wherever the file is played — no special player needed.",
                 introBody2:
                     "Everything happens in your browser. Your recordings are read locally and the overlay is rendered on your device; the finished video is saved straight to your computer.",
                 optionsHeading: "What you can overlay",
@@ -284,14 +284,14 @@ const FEATURE_PAGES: FeaturePage[] = [
                 ],
                 howHeading: "How to add the overlay",
                 howSteps: [
-                    "Drop the SD-card folder onto dashcamigo.app and open the trip.",
+                    "Drop the SD-card folder onto everydashcam.app and open the trip.",
                     "Open export and turn on the overlays you want — speed, coordinates, the moving map.",
                     "Drag each one where it should sit and pick the range to save.",
                     "Save — the overlay is rendered onto the video and written straight to your computer.",
                 ],
                 brandsHeading: "Free, in the browser, for dashcam footage",
                 brandsBody:
-                    "Burning speed and a map onto video is usually the job of paid desktop tools built for action cameras. dashcamigo does the dashcam version for free, in a browser tab: it reads the GPS from 70mai, BlackVue, Viofo, Garmin, Vantrue and more, and draws speed, coordinates and a moving map onto the export — no install, no account, nothing uploaded.",
+                    "Burning speed and a map onto video is usually the job of paid desktop tools built for action cameras. everydashcam does the dashcam version for free, in a browser tab: it reads the GPS from 70mai, BlackVue, Viofo, Garmin, Vantrue and more, and draws speed, coordinates and a moving map onto the export — no install, no account, nothing uploaded.",
                 noteHeading: "Good to know",
                 noteBody:
                     "The overlay needs GPS in your footage — if a recording has no GPS track, there's nothing to draw. Beyond speed, coordinates and the moving map, it can also show the time, your heading, distance travelled and a G-force read — all worked out from the same GPS, not a separate sensor. Rendering re-encodes the video, so a long range takes a little time; Chrome, Edge or another Chromium browser on a computer is smoothest.",
@@ -299,7 +299,7 @@ const FEATURE_PAGES: FeaturePage[] = [
                 faq: [
                     {
                         q: "How do I add a speed overlay to a dashcam video?",
-                        a: "Open the trip, go to export, and turn on the speed overlay. dashcamigo reads the GPS your camera recorded and burns a speed readout (km/h or mph) onto the exported video. You can place it in any corner.",
+                        a: "Open the trip, go to export, and turn on the speed overlay. everydashcam reads the GPS your camera recorded and burns a speed readout (km/h or mph) onto the exported video. You can place it in any corner.",
                     },
                     {
                         q: "Can I show GPS coordinates and a map on the video?",
@@ -321,18 +321,18 @@ const FEATURE_PAGES: FeaturePage[] = [
                 ctaPrimary: "Open your recordings",
             },
             ru: {
-                title: "Наложить данные на видео регистратора — скорость, GPS и карта | dashcamigo",
+                title: "Наложить данные на видео регистратора — скорость, GPS и карта | everydashcam",
                 metaDescription:
                     "Наложи скорость, GPS-координаты и движущуюся карту на видео с регистратора — бесплатно, в браузере, ничего не загружается. Работает, если в записи есть GPS. 70mai, BlackVue, Viofo и другие.",
                 ogTitle: "Наложить скорость, GPS и карту на видео регистратора",
                 ogDescription:
                     "Впиши скорость, координаты и движущуюся карту прямо в экспортируемое видео — бесплатно, в браузере, ничего не загружается.",
                 h1: "Наложи скорость, GPS и карту на видео с регистратора",
-                lead: "dashcamigo может вписать скорость, GPS-координаты и движущуюся мини-карту прямо в экспортируемое видео — аккуратные значения в самой картинке, без отдельной программы. Всё работает в браузере, без загрузки записей на сервер, с GPS-данными, которые сохранил регистратор.",
+                lead: "everydashcam может вписать скорость, GPS-координаты и движущуюся мини-карту прямо в экспортируемое видео — аккуратные значения в самой картинке, без отдельной программы. Всё работает в браузере, без загрузки записей на сервер, с GPS-данными, которые сохранил регистратор.",
                 breadcrumbName: "Наложить данные на видео",
                 introHeading: "Скорость и место — прямо в картинке",
                 introBody:
-                    "Сам по себе ролик с регистратора не показывает, как быстро ты ехал и где был. dashcamigo читает GPS, который сохранила камера, и рисует его на экспортируемом видео: показ скорости, твои координаты и маленькую карту, которая движется по маршруту. Данные становятся частью картинки и остаются видны где угодно — особый плеер не нужен.",
+                    "Сам по себе ролик с регистратора не показывает, как быстро ты ехал и где был. everydashcam читает GPS, который сохранила камера, и рисует его на экспортируемом видео: показ скорости, твои координаты и маленькую карту, которая движется по маршруту. Данные становятся частью картинки и остаются видны где угодно — особый плеер не нужен.",
                 introBody2:
                     "Всё происходит в браузере. Записи читаются локально, оверлей рисуется на твоём устройстве, а готовое видео сохраняется сразу на компьютер.",
                 optionsHeading: "Что можно наложить",
@@ -347,14 +347,14 @@ const FEATURE_PAGES: FeaturePage[] = [
                 ],
                 howHeading: "Как наложить данные",
                 howSteps: [
-                    "Перетащи папку с SD-карты на dashcamigo.app и открой поездку.",
+                    "Перетащи папку с SD-карты на everydashcam.app и открой поездку.",
                     "Открой экспорт и включи нужные оверлеи — скорость, координаты, движущуюся карту.",
                     "Перетащи каждый туда, где он должен быть, и отметь диапазон для сохранения.",
                     "Сохрани — оверлей впишется в видео и запишется сразу на компьютер.",
                 ],
                 brandsHeading: "Бесплатно, в браузере, для записей регистратора",
                 brandsBody:
-                    "Вписать скорость и карту в видео обычно умеют платные десктопные программы для экшен-камер. dashcamigo делает версию для регистратора бесплатно, прямо во вкладке браузера: читает GPS из 70mai, BlackVue, Viofo, Garmin, Vantrue и других и рисует скорость, координаты и движущуюся карту на экспорте — без установки, без аккаунта, ничего не загружается.",
+                    "Вписать скорость и карту в видео обычно умеют платные десктопные программы для экшен-камер. everydashcam делает версию для регистратора бесплатно, прямо во вкладке браузера: читает GPS из 70mai, BlackVue, Viofo, Garmin, Vantrue и других и рисует скорость, координаты и движущуюся карту на экспорте — без установки, без аккаунта, ничего не загружается.",
                 noteHeading: "Полезно знать",
                 noteBody:
                     "Оверлею нужен GPS в записи — если у ролика нет GPS-трека, рисовать нечего. Кроме скорости, координат и движущейся карты он умеет показывать время, направление, пройденную дистанцию и перегрузку (G) — всё это считается из того же GPS, а не с отдельного датчика. Рендер перекодирует видео, так что длинный диапазон займёт время; для экспорта удобнее всего использовать Chrome, Edge или другой браузер на Chromium на компьютере.",
@@ -362,7 +362,7 @@ const FEATURE_PAGES: FeaturePage[] = [
                 faq: [
                     {
                         q: "Как наложить скорость на видео с регистратора?",
-                        a: "Открой поездку, зайди в экспорт и включи оверлей скорости. dashcamigo читает GPS, записанный камерой, и впишет показ скорости (км/ч или mph) в экспортируемое видео. Разместить показания можно в любом углу.",
+                        a: "Открой поездку, зайди в экспорт и включи оверлей скорости. everydashcam читает GPS, записанный камерой, и впишет показ скорости (км/ч или mph) в экспортируемое видео. Разместить показания можно в любом углу.",
                     },
                     {
                         q: "Можно показать координаты и карту на видео?",
@@ -389,20 +389,20 @@ const FEATURE_PAGES: FeaturePage[] = [
         slug: "blur-license-plate-in-dashcam-video",
         locales: {
             en: {
-                title: "Blur License Plates & Faces in Dashcam Video — Free, In Your Browser | dashcamigo",
+                title: "Blur License Plates & Faces in Dashcam Video — Free, In Your Browser | everydashcam",
                 metaDescription:
                     "Blur or pixelate license plates and faces in dashcam video before sharing — free, in your browser, nothing uploaded. The cover follows the object automatically and is burned into the saved file.",
                 ogTitle: "Blur plates & faces in dashcam video — free",
                 ogDescription:
                     "Pixelate a plate or a face, let the cover follow it automatically, save the clip — free, in your browser, nothing uploaded.",
                 h1: "Blur license plates and faces in your dashcam video",
-                lead: "Posting dashcam footage usually means showing someone's license plate — or a passer-by's face — to the whole internet. dashcamigo covers them before you share: draw a box over the plate or face, let it follow the object as it moves, and save the clip with the cover burned into the picture. It runs in your browser, so the video never leaves your device.",
+                lead: "Posting dashcam footage usually means showing someone's license plate — or a passer-by's face — to the whole internet. everydashcam covers them before you share: draw a box over the plate or face, let it follow the object as it moves, and save the clip with the cover burned into the picture. It runs in your browser, so the video never leaves your device.",
                 breadcrumbName: "Blur plates & faces",
                 introHeading: "Share the incident, not the bystanders",
                 introBody:
                     "An insurance claim, a police report, a clip for a forum — the incident matters, the identities around it don't. A burned-in cover keeps other drivers' plates and pedestrians' faces out of it: the pixels themselves are replaced, so there is no hidden layer to peel back in the saved file.",
                 introBody2:
-                    "dashcamigo processes your video locally, so the original recording stays on your device. The covering happens right in the browser tab, and the finished video is saved straight to your computer.",
+                    "everydashcam processes your video locally, so the original recording stays on your device. The covering happens right in the browser tab, and the finished video is saved straight to your computer.",
                 optionsHeading: "What you can do",
                 options: [
                     {
@@ -425,14 +425,14 @@ const FEATURE_PAGES: FeaturePage[] = [
                 ],
                 howHeading: "How to blur a plate or a face",
                 howSteps: [
-                    "Plug the SD card into your computer and drop the whole folder onto dashcamigo.app.",
+                    "Plug the SD card into your computer and drop the whole folder onto everydashcam.app.",
                     "Open the trip, open export, and pick the range you want to save.",
                     "Add a blur zone over the plate or face — let it follow the object, or pin it in place and set its time range by hand.",
                     "Save — the cover is rendered into the video and the file is written straight to your computer.",
                 ],
                 brandsHeading: "Works with footage from any dashcam",
                 brandsBody:
-                    "Blurring a plate is usually the job of a video editor with a tracking plugin — a heavyweight tool for a 30-second clip. dashcamigo does it on the same page you watch your trips: it reads recordings from 70mai, BlackVue, Viofo, Garmin, Vantrue, Nextbase and dozens more, and the cover is drawn over the picture itself — so it works the same no matter which camera wrote the file.",
+                    "Blurring a plate is usually the job of a video editor with a tracking plugin — a heavyweight tool for a 30-second clip. everydashcam does it on the same page you watch your trips: it reads recordings from 70mai, BlackVue, Viofo, Garmin, Vantrue, Nextbase and dozens more, and the cover is drawn over the picture itself — so it works the same no matter which camera wrote the file.",
                 noteHeading: "Good to know",
                 noteBody:
                     "Automatic follow downloads a small helper the first time you use it (it asks first) and works offline after that. It tracks one object per zone and can lose it in hard cases — glare, darkness, fast motion — so give the result a quick look before sharing; you can always move the box by hand. Saving re-encodes the video, and the editor is fullest in Chrome, Edge or another Chromium browser on a computer. For real privacy prefer pixelate or the solid cover — the soft blur is the weakest of the three.",
@@ -462,20 +462,20 @@ const FEATURE_PAGES: FeaturePage[] = [
                 ctaPrimary: "Open your recordings",
             },
             ru: {
-                title: "Замазать номер машины на видео с регистратора — онлайн, бесплатно | dashcamigo",
+                title: "Замазать номер машины на видео с регистратора — онлайн, бесплатно | everydashcam",
                 metaDescription:
                     "Замажь или запиксели номера машин и лица на видео с регистратора онлайн, перед отправкой — бесплатно, в браузере, ничего не загружается. Плашка сама следит за объектом в движении и впечатывается в файл.",
                 ogTitle: "Замазать номер машины на видео — онлайн, бесплатно",
                 ogDescription:
                     "Запиксели номер или лицо, плашка сама проследит за ним, сохрани ролик — бесплатно, в браузере, ничего не загружается.",
                 h1: "Замажь номера машин и лица на видео с регистратора",
-                lead: "Выложить запись с регистратора обычно значит показать чей-то номер — или лицо прохожего — всему интернету. dashcamigo закрывает их до отправки: нарисуй рамку поверх номера или лица, дай ей проследить за объектом в движении и сохрани ролик — плашка впечатана в картинку. Всё в браузере, так что видео не покидает твоё устройство.",
+                lead: "Выложить запись с регистратора обычно значит показать чей-то номер — или лицо прохожего — всему интернету. everydashcam закрывает их до отправки: нарисуй рамку поверх номера или лица, дай ей проследить за объектом в движении и сохрани ролик — плашка впечатана в картинку. Всё в браузере, так что видео не покидает твоё устройство.",
                 breadcrumbName: "Замазать номера и лица",
                 introHeading: "Покажи происшествие, а не случайных людей",
                 introBody:
                     "Страховая, заявление в полицию, ролик на форум — важно происшествие, а не личности вокруг. Впечатанная плашка убирает из кадра чужие номера и лица пешеходов: заменяются сами пиксели, так что в сохранённом файле нет скрытого слоя, который можно снять.",
                 introBody2:
-                    "dashcamigo обрабатывает видео локально, поэтому исходная запись остаётся на твоём устройстве. Замазывание происходит прямо во вкладке браузера, а готовое видео сохраняется сразу на компьютер.",
+                    "everydashcam обрабатывает видео локально, поэтому исходная запись остаётся на твоём устройстве. Замазывание происходит прямо во вкладке браузера, а готовое видео сохраняется сразу на компьютер.",
                 optionsHeading: "Что можно сделать",
                 options: [
                     {
@@ -498,14 +498,14 @@ const FEATURE_PAGES: FeaturePage[] = [
                 ],
                 howHeading: "Как замазать номер или лицо",
                 howSteps: [
-                    "Вставь SD-карту в компьютер и перетащи всю папку на dashcamigo.app.",
+                    "Вставь SD-карту в компьютер и перетащи всю папку на everydashcam.app.",
                     "Открой поездку, открой экспорт и отметь диапазон для сохранения.",
                     "Добавь зону поверх номера или лица — дай ей проследить за объектом или закрепи на месте и задай время руками.",
                     "Сохрани — плашка впишется в видео, и файл запишется сразу на компьютер.",
                 ],
                 brandsHeading: "Работает с записями любого регистратора",
                 brandsBody:
-                    "Замазать номер — обычно задача видеоредактора с плагином трекинга, тяжёлая артиллерия ради 30-секундного ролика. dashcamigo делает это на той же странице, где ты смотришь поездки: читает записи 70mai, BlackVue, Viofo, Garmin, Vantrue, Nextbase и десятков других, а плашка рисуется поверх самой картинки — так что ей всё равно, какая камера писала файл.",
+                    "Замазать номер — обычно задача видеоредактора с плагином трекинга, тяжёлая артиллерия ради 30-секундного ролика. everydashcam делает это на той же странице, где ты смотришь поездки: читает записи 70mai, BlackVue, Viofo, Garmin, Vantrue, Nextbase и десятков других, а плашка рисуется поверх самой картинки — так что ей всё равно, какая камера писала файл.",
                 noteHeading: "Полезно знать",
                 noteBody:
                     "Автослежение при первом использовании скачивает небольшой вспомогательный файл (спросив разрешения) и дальше работает офлайн. Оно ведёт один объект на зону и может потерять его в сложных случаях — блики, темнота, быстрое движение, — так что перед отправкой быстро проверь результат; рамку всегда можно подвинуть руками. Сохранение перекодирует видео, а полнее всего редактор работает в Chrome, Edge или другом браузере на Chromium на компьютере. Для настоящей приватности выбирай пиксели или заливку — лёгкое размытие слабее всех.",
@@ -562,7 +562,7 @@ const SHARED_LABELS: Partial<Record<Lang, FeatureSharedLabels>> = {
         alternativesLink: "Compare with other tools",
         footerPrivacy: "Privacy policy",
         footerTerms: "Terms of use",
-        footerHome: "dashcamigo.app",
+        footerHome: "everydashcam.app",
     },
     ru: {
         backToPlayer: "← К плееру",
@@ -573,7 +573,7 @@ const SHARED_LABELS: Partial<Record<Lang, FeatureSharedLabels>> = {
         alternativesLink: "Сравнение с другими программами",
         footerPrivacy: "Политика конфиденциальности",
         footerTerms: "Условия использования",
-        footerHome: "dashcamigo.app",
+        footerHome: "everydashcam.app",
     },
 };
 
@@ -582,16 +582,16 @@ const SHARED_LABELS: Partial<Record<Lang, FeatureSharedLabels>> = {
 // alternative-pages.ts (kept inline, all 10 locales, must never silently
 // fall back). NOT legal advice; wording is conservative.
 const FEATURE_DISCLAIMER: Record<Lang, string> = {
-    en: "All product names are trademarks of their respective owners. dashcamigo is independent and not affiliated with, endorsed by or sponsored by them.",
-    ru: "Все названия продуктов — товарные знаки их владельцев. dashcamigo независим, не связан с ними, не одобрен и не спонсируется ими.",
-    de: "Alle Produktnamen sind Marken ihrer jeweiligen Inhaber. dashcamigo ist unabhängig und steht in keiner Verbindung zu ihnen, wird von ihnen weder unterstützt noch gesponsert.",
-    es: "Todos los nombres de productos son marcas comerciales de sus respectivos propietarios. dashcamigo es independiente y no está afiliado a ellos ni cuenta con su respaldo o patrocinio.",
-    fr: "Tous les noms de produits sont des marques de leurs propriétaires respectifs. dashcamigo est indépendant et n'est ni affilié à eux, ni approuvé ou sponsorisé par eux.",
-    ja: "すべての製品名は各所有者の商標です。dashcamigo は独立したサービスであり、これらと提携しておらず、推奨やスポンサーを受けてもいません。",
-    ko: "모든 제품 이름은 해당 소유자의 상표입니다. dashcamigo는 독립적인 서비스이며 이들과 제휴하거나 보증·후원을 받지 않습니다.",
-    pl: "Wszystkie nazwy produktów są znakami towarowymi ich właścicieli. dashcamigo jest niezależny i nie jest z nimi powiązany ani przez nich wspierany czy sponsorowany.",
-    pt: "Todos os nomes de produtos são marcas registradas de seus respectivos proprietários. O dashcamigo é independente e não é afiliado a eles nem possui seu endosso ou patrocínio.",
-    zh: "所有产品名称均为其各自所有者的商标。dashcamigo 是独立服务，与它们无关联，也未获得其认可或赞助。",
+    en: "All product names are trademarks of their respective owners. everydashcam is independent and not affiliated with, endorsed by or sponsored by them.",
+    ru: "Все названия продуктов — товарные знаки их владельцев. everydashcam независим, не связан с ними, не одобрен и не спонсируется ими.",
+    de: "Alle Produktnamen sind Marken ihrer jeweiligen Inhaber. everydashcam ist unabhängig und steht in keiner Verbindung zu ihnen, wird von ihnen weder unterstützt noch gesponsert.",
+    es: "Todos los nombres de productos son marcas comerciales de sus respectivos propietarios. everydashcam es independiente y no está afiliado a ellos ni cuenta con su respaldo o patrocinio.",
+    fr: "Tous les noms de produits sont des marques de leurs propriétaires respectifs. everydashcam est indépendant et n'est ni affilié à eux, ni approuvé ou sponsorisé par eux.",
+    ja: "すべての製品名は各所有者の商標です。everydashcam は独立したサービスであり、これらと提携しておらず、推奨やスポンサーを受けてもいません。",
+    ko: "모든 제품 이름은 해당 소유자의 상표입니다. everydashcam는 독립적인 서비스이며 이들과 제휴하거나 보증·후원을 받지 않습니다.",
+    pl: "Wszystkie nazwy produktów są znakami towarowymi ich właścicieli. everydashcam jest niezależny i nie jest z nimi powiązany ani przez nich wspierany czy sponsorowany.",
+    pt: "Todos os nomes de produtos são marcas registradas de seus respectivos proprietários. O everydashcam é independente e não é afiliado a eles nem possui seu endosso ou patrocínio.",
+    zh: "所有产品名称均为其各自所有者的商标。everydashcam 是独立服务，与它们无关联，也未获得其认可或赞助。",
 };
 
 // ----- resolution helpers (hand-written en/ru, community fallback, then en) -----
@@ -697,7 +697,7 @@ ${searchIndexingMeta(seoLocale, Boolean(options.noIndex))}
 ${hreflangBlock}
 <meta property="og:type" content="website">
 <meta property="og:url" content="${url}">
-<meta property="og:site_name" content="dashcamigo">
+<meta property="og:site_name" content="everydashcam">
 <meta property="og:title" content="${escapeAttr(content.ogTitle)}">
 <meta property="og:description" content="${escapeAttr(content.ogDescription)}">
 <meta property="og:image" content="${ogImageUrl}">
@@ -712,18 +712,18 @@ ${ogLocaleAlternatesBlock}
 <meta name="twitter:image" content="${ogImageUrl}">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="alternate icon" href="/favicon.ico" sizes="any">
-<link rel="apple-touch-icon" href="/favicon-192.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="stylesheet" href="/vendor-page.css">
+<link rel="stylesheet" href="/brand-mark.css">
 <script type="application/ld+json">${breadcrumb.jsonLd}</script>
 <script type="application/ld+json">${stringifyJsonLd(howTo)}</script>
 ${faqJsonLd}
 </head>
 <body>
 <header class="vp-header">
-<a href="${localHome}" class="vp-brand" aria-label="dashcamigo">
-<span class="vp-brand-text">dashcamigo</span>
-${BRAND_ICON_SVG}
+<a href="${localHome}" class="vp-brand" aria-label="everydashcam">
+${BRAND_MARK_HTML}
 </a>
 <a href="${localHome}" class="vp-back">${escapeText(labels.backToPlayer)}</a>
 </header>
@@ -919,7 +919,7 @@ export function getFeatureListings(): Array<{ slug: FeatureSlug; name: string }>
 export function featurePagesPlugin(options: SeoBuildOptions = {}): Plugin {
     let isBuild = false;
     return {
-        name: "dashcamigo-feature-pages",
+        name: "everydashcam-feature-pages",
         configResolved(config) {
             isBuild = config.command === "build";
         },

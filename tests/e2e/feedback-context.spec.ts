@@ -44,15 +44,15 @@ test.describe("contextual feedback", () => {
         await expect(page.locator("#feedback-step-report")).toBeVisible();
         await expect(page.locator("#feedback-context-hint")).toContainText("GPS data may be stored beside your videos");
         await expect(page.locator("#feedback-primary")).toBeFocused();
-        await expect(page.locator("#feedback-context-email")).toHaveText("feedback@dashcamigo.app");
+        await expect(page.locator("#feedback-context-email")).toHaveText("feedback@everydashcam.app");
         await expect(page.locator("#feedback-context-email")).toHaveAttribute(
             "href",
-            /^mailto:feedback@dashcamigo.app\?subject=/,
+            /^mailto:feedback@everydashcam.app\?subject=/,
         );
         await page.locator("#feedback-report-mail").click();
         const mailto = await page.evaluate(() => (window as unknown as { __mailto: string }).__mailto);
         const decoded = decodeURIComponent(mailto);
-        expect(decoded).toContain("[dashcamigo] Missing GPS");
+        expect(decoded).toContain("[everydashcam] Missing GPS");
         expect(decoded).toContain("Dashcam model:");
         expect(decoded).toContain("Expected number of cameras:");
         expect(decoded).toContain("What I expected to see (GPS, cameras):");
@@ -87,7 +87,7 @@ test.describe("contextual feedback", () => {
         await shot(page, "feedback-cameras-report-ru-mobile");
         await page.locator("#feedback-context-email").click();
         const mailto = await page.evaluate(() => (window as unknown as { __mailto: string }).__mailto);
-        expect(decodeURIComponent(mailto)).toContain("[dashcamigo] Не хватает камер");
+        expect(decodeURIComponent(mailto)).toContain("[everydashcam] Не хватает камер");
         expect(decodeURIComponent(mailto)).toContain("Ожидаемое количество камер:");
     });
 
@@ -152,7 +152,7 @@ test.describe("contextual feedback", () => {
         expect(report).toContain("== recognition issue ==\nembedded GPS reader failed for the open trip");
         expect(report).toContain(`File: ${original.file}`);
         expect(report).toContain(`active: trip ${original.trip} / frame ${original.frame}`);
-        expect(report).toContain("dashcamigo camera report");
+        expect(report).toContain("everydashcam camera report");
         await page.locator("#feedback-post-download-mail").click();
         const mailto = await page.evaluate(() => (window as unknown as { __mailto: string }).__mailto);
         expect(decodeURIComponent(mailto)).toContain(`File: ${original.file}`);

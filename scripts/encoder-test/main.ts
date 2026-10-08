@@ -145,7 +145,7 @@ async function start(): Promise<void> {
     progress.max = tests.length;
     progress.value = 0;
     report = {
-        tool: "dashcamigo encoder diagnostic",
+        tool: "everydashcam encoder diagnostic",
         version: TOOL_VERSION,
         mediabunnyVersion: document.querySelector<HTMLMetaElement>('meta[name="mediabunny-version"]')!.content,
         createdAt: new Date().toISOString(),

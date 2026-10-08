@@ -34,7 +34,7 @@ export function lazyBoundariesPlugin(): Plugin {
     let root: string;
     let logger: ResolvedConfig["logger"];
     return {
-        name: "dashcamigo-lazy-boundaries",
+        name: "everydashcam-lazy-boundaries",
         apply: "build",
         enforce: "post",
         configResolved(config) {

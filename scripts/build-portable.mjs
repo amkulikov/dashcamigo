@@ -49,7 +49,7 @@ const manifest = {
 };
 for (const { code: locale } of locales) {
     const filename = portableFilename(version, locale);
-    const fullVersionUrl = new URL(values["full-version-url"] ?? `https://dashcamigo.app/${locale}/`);
+    const fullVersionUrl = new URL(values["full-version-url"] ?? `https://everydashcam.app/${locale}/`);
     if (
         fullVersionUrl.protocol !== "https:" ||
         fullVersionUrl.username ||

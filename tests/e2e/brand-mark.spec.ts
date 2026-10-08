@@ -1,0 +1,183 @@
+import type { Locator, Page } from "@playwright/test";
+import { expect, gotoApp, loadTrip, presetLocalStorage, test } from "./_fixtures.js";
+
+test.use({ viewerMap: "route-only" });
+
+const positions = (columns: Locator) =>
+    columns.evaluateAll((elements) =>
+        elements.map((column) => Number((column as HTMLElement).style.getPropertyValue("--edc-letter-index"))),
+    );
+const visibleWord = (columns: Locator) =>
+    columns.evaluateAll((elements) =>
+        elements
+            .map((column) => {
+                const drum = column.parentElement!.getBoundingClientRect();
+                return Array.from(column.children).find((letter) => {
+                    const rect = letter.getBoundingClientRect();
+                    return rect.top + rect.height / 2 > drum.top && rect.top + rect.height / 2 < drum.bottom;
+                })?.textContent;
+            })
+            .join("")
+            .trimEnd(),
+    );
+async function prepare(page: Page, random: number): Promise<void> {
+    await presetLocalStorage(page);
+    await page.addInitScript((value) => {
+        Math.random = () => value;
+    }, random);
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await gotoApp(page);
+    await expect(page.locator(".topbar .edc-mark")).not.toHaveClass(/edc-mark--animated/);
+}
+
+test("brand odometer rolls forward, starts and stops on the right, and respects reduced motion", async ({ page }) => {
+    await prepare(page, 0); // first 70MAI, then VIOFO: no consecutive repeat
+    const mark = page.locator(".topbar .edc-mark");
+    const columns = mark.locator(".edc-mark__column");
+    await expect(mark).toHaveAccessibleName("everydashcam");
+    await expect(mark).toHaveRole("img");
+    await expect(columns).toHaveCount(9);
+    await expect.poll(() => visibleWord(columns)).toBe("EVERY");
+    await page.clock.install();
+    await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
+    const initial = await positions(columns);
+    await mark.hover();
+
+    await page.clock.runFor(200); // DASHCAM exits first; the right drum then starts.
+    await expect(mark.locator(".edc-mark__word")).toHaveCSS("opacity", "0");
+    const first = await positions(columns);
+    expect(first.slice(0, 4)).toEqual(initial.slice(0, 4));
+    expect(first[4]).not.toBe(initial[4]);
+    await page.clock.runFor(40);
+    const second = await positions(columns);
+    expect(second.slice(0, 3)).toEqual(initial.slice(0, 3));
+    expect(second[3]).not.toBe(initial[3]);
+
+    // Actual travel per frame: every drum moves upward through the 37-character
+    // wheel, and every right drum moves farther in the same elapsed time.
+    await page.clock.runFor(200);
+    const before = await positions(columns);
+    await page.clock.runFor(16);
+    const after = await positions(columns);
+    const travel = after.slice(0, 5).map((position, index) => (position - before[index]! + 37) % 37);
+    for (const distance of travel) {
+        expect(distance).toBeGreaterThan(0);
+        expect(distance).toBeLessThan(8);
+    }
+    for (let index = 1; index < travel.length; index++) {
+        expect(travel[index]!).toBeGreaterThan(travel[index - 1]! * 1.05);
+    }
+
+    await page.clock.runFor(500); // after the word exit, the left drum stops first
+    expect((await positions(columns))[0]).toBe(34); // 7
+    await expect(mark).toHaveClass(/edc-mark--animated/);
+    await page.clock.runFor(180);
+    expect((await positions(columns)).slice(0, 3)).toEqual([34, 27, 13]); // 70M
+    await page.clock.runFor(80);
+    expect((await positions(columns)).slice(0, 4)).toEqual([34, 27, 13, 1]); // 70MA
+    await expect(mark).toHaveClass(/edc-mark--animated/); // rightmost still rolls
+    await page.clock.runFor(112);
+    expect(await visibleWord(columns)).toBe("70MAI");
+    await expect(mark).not.toHaveClass(/edc-mark--animated/);
+    await page.clock.runFor(200);
+    expect(await visibleWord(columns)).toBe("70MAI"); // hold starts after all stops
+    await page.clock.runFor(180);
+    await expect(mark).toHaveClass(/edc-mark--animated/);
+    await page.clock.runFor(1300);
+    expect(await visibleWord(columns)).toBe("EVERY");
+    // Five drums need no retract phase before DASHCAM returns.
+    await expect(mark.locator(".edc-mark__word")).toHaveCSS("opacity", "1");
+    await expect(mark).not.toHaveClass(/edc-mark--animated/);
+    await page.clock.runFor(10_000);
+    expect(await positions(columns)).toEqual(initial);
+
+    await page.mouse.move(0, 200);
+    await mark.hover();
+    await page.clock.runFor(1400);
+    expect(await visibleWord(columns)).toBe("VIOFO");
+    // Media-query changes are delivered by the browser's rendering cycle,
+    // independently of Playwright's mocked animation-frame clock.
+    await page.clock.resume();
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await expect.poll(() => visibleWord(columns)).toBe("EVERY");
+    await expect(mark).not.toHaveClass(/edc-mark--animated/);
+    await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 100);
+    await page.mouse.move(0, 200);
+    await mark.hover();
+    await page.clock.runFor(4000);
+    expect(await positions(columns)).toEqual(initial);
+    await page.clock.resume();
+    await page.reload();
+    await expect.poll(() => visibleWord(columns)).toBe("EVERY");
+    await expect(mark).not.toHaveClass(/edc-mark--animated/);
+
+    await loadTrip(page);
+    await page.locator("#notif-bell").evaluate((element) => {
+        (element as HTMLButtonElement).hidden = false;
+    });
+    await page.setViewportSize({ width: 320, height: 720 });
+    await expect(mark.locator(".dc-mark__compact")).toBeVisible();
+    await expect(mark.locator(".edc-mark__word")).toBeHidden();
+    for (const selector of [".topbar-burger", "#notif-bell", "#lang-toggle", "#topbar-overflow"]) {
+        const button = page.locator(selector);
+        await expect(button).toBeVisible();
+        await expect(button).toBeInViewport({ ratio: 1 });
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
+});
+
+for (const width of [601, 768]) {
+    test(`long brand drums use the word's space without moving toolbar controls at ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await prepare(page, 0.999); // THINKWARE is the longest allowed name.
+        await loadTrip(page);
+        await page.locator("#notif-bell").evaluate((element) => {
+            (element as HTMLButtonElement).hidden = false;
+        });
+        const mark = page.locator(".topbar .edc-mark");
+        const columns = mark.locator(".edc-mark__column");
+        await page.clock.install();
+        await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
+        const geometry = () =>
+            page.evaluate(() => {
+                const mark = document.querySelector(".topbar .edc-mark")!.getBoundingClientRect();
+                return {
+                    mark: { x: mark.x, width: mark.width },
+                    controls: Array.from(document.querySelectorAll<HTMLElement>(".topbar button"))
+                        .map((button) => ({ id: button.id, rect: button.getBoundingClientRect() }))
+                        .filter(({ rect }) => rect.width > 0 && rect.height > 0)
+                        .map(({ id, rect }) => ({ id, x: rect.x, right: rect.right })),
+                    scrollWidth: document.documentElement.scrollWidth,
+                };
+            });
+        const initial = await geometry();
+        for (const control of initial.controls) {
+            expect(control.x).toBeGreaterThanOrEqual(0);
+            expect(control.right).toBeLessThanOrEqual(width);
+        }
+        await mark.hover();
+        for (const elapsed of [64, 160, 560, 616]) {
+            await page.clock.runFor(elapsed);
+            expect(await geometry()).toEqual(initial);
+        }
+        expect(await visibleWord(columns)).toBe("THINKWARE");
+        await expect(mark.locator(".edc-mark__word")).toHaveCSS("opacity", "0");
+        await expect(mark).toHaveAccessibleName("everydashcam");
+        expect(await mark.locator(".edc-mark__word").evaluate((word) => getComputedStyle(word).clipPath)).not.toBe(
+            "inset(0px)",
+        );
+        const ninth = await mark.locator(".edc-mark__drum").last().boundingBox();
+        expect(ninth!.x + ninth!.width).toBeLessThanOrEqual(initial.mark.x + initial.mark.width);
+        for (const elapsed of [250, 800, 400, 350]) {
+            await page.clock.runFor(elapsed);
+            expect(await geometry()).toEqual(initial);
+        }
+        expect(await visibleWord(columns)).toBe("EVERY");
+        await expect(mark.locator(".edc-mark__word")).toHaveCSS("opacity", "1");
+        expect(await mark.locator(".edc-mark__word").evaluate((word) => getComputedStyle(word).clipPath)).toBe(
+            "inset(0px)",
+        );
+        await expect(mark).not.toHaveClass(/edc-mark--animated/);
+        await page.clock.resume();
+    });
+}

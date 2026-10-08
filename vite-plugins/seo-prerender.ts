@@ -1,4 +1,4 @@
-// SEO build pipeline for dashcamigo. Two plugins:
+// SEO build pipeline for everydashcam. Two plugins:
 //
 //  - i18nPrerenderPlugin: takes dist/index.html (already minified by
 //    minifyHtmlPlugin) and emits a per-locale static version. For "en" it
@@ -127,7 +127,7 @@ const DICTS: Record<Lang, Record<I18nKey, string>> = {
 // when a locale is not listed - keeps the prerender working for 10
 // community locales without dictating extra translation keys.
 //
-// Reason for the override: dict["page.title"] ends with " | dashcamigo"
+// Reason for the override: dict["page.title"] ends with " | everydashcam"
 // for SERP recognition, which wastes space in a 60-char OG title.
 // dict["meta.description"] is ~200 chars - fine for SERP but Twitter
 // cards crop at ~125. Where we have hand-written shorter copies we use
@@ -160,7 +160,7 @@ const OG_OVERRIDES: Partial<Record<Lang, OgOverride>> = {
 export interface SeoBuildOptions {
     // When true, every prerendered HTML gets a <meta name="robots"
     // content="noindex, nofollow"> in <head>, an `X-Robots-Tag: noindex`
-    // rule is appended to dist/_headers (covers non-HTML responses:
+    // header joins the global rule in dist/_headers (covers non-HTML responses:
     // og-cover.png, sitemap.xml), and robots.txt is rewritten to ALLOW
     // crawling. Wired to VITE_NO_INDEX in vite.config.ts - staging Pages
     // env sets it, production does not.
@@ -172,6 +172,14 @@ export interface SeoBuildOptions {
     // Letting the crawler fetch the page and meet the noindex is the
     // reliable way to stay out of the index.
     noIndex?: boolean;
+}
+
+/** Pages keys rules by path, so a second global rule replaces the security headers. */
+export function addNoIndexHeader(headers: string): string {
+    if ([...headers.matchAll(/^\/\*\r?$/gm)].length !== 1) {
+        throw new Error("seo-prerender: expected exactly one global headers rule");
+    }
+    return headers.replace(/^\/\*(\r?\n)/m, "/*$1  X-Robots-Tag: noindex$1");
 }
 
 // Full per-locale config the plugin uses to render one HTML. Built from
@@ -219,7 +227,7 @@ export function getSeoLocales(): LocalePrerenderConfig[] {
     return getPrerenderLocales();
 }
 
-// Strip the "... | dashcamigo" tail and similar separators from a SERP-tuned
+// Strip the "... | everydashcam" tail and similar separators from a SERP-tuned
 // page title to get a tighter OG title. Conservative: only cuts at the last
 // " | ", which is the convention we use across all dictionaries.
 function derivePageTitle(dict: Record<I18nKey, string>): string {
@@ -236,7 +244,7 @@ export function i18nPrerenderPlugin(locales: LocalePrerenderConfig[], options: S
     // server would silently (re)write dist/<lang>/index.html from a stale baseline.
     let isBuild = false;
     return {
-        name: "dashcamigo-i18n-prerender",
+        name: "everydashcam-i18n-prerender",
         configResolved(config) {
             isBuild = config.command === "build";
         },
@@ -320,7 +328,7 @@ export function i18nPrerenderPlugin(locales: LocalePrerenderConfig[], options: S
 
 export function sitemapPlugin(options: SeoBuildOptions = {}): Plugin {
     return {
-        name: "dashcamigo-sitemap",
+        name: "everydashcam-sitemap",
         apply: "build",
         closeBundle() {
             const distDir = resolve(process.cwd(), "dist");
@@ -442,18 +450,9 @@ export function sitemapPlugin(options: SeoBuildOptions = {}): Plugin {
                         "",
                     ].join("\n"),
                 );
-                // dist/_headers exists by closeBundle time (Vite copies
-                // public/ during the bundle write). cspHashPlugin runs later
-                // and edits the CSP line in place, so this appended block
-                // survives. A second `/*` rule is fine for CF Pages - rules
-                // for the same path combine, and X-Robots-Tag appears in no
-                // other rule.
                 const headersPath = resolve(distDir, "_headers");
                 const existing = readFileSync(headersPath, "utf-8");
-                writeFileSync(
-                    headersPath,
-                    `${existing.replace(/\n*$/, "\n\n")}# Staging / preview deploy (VITE_NO_INDEX): keep every response out of search indexes.\n/*\n  X-Robots-Tag: noindex\n`,
-                );
+                writeFileSync(headersPath, addNoIndexHeader(existing));
             } else {
                 const origin = currentSiteOrigin();
                 writeFileSync(
@@ -732,7 +731,7 @@ export function applyLocale(html: string, locale: LocalePrerenderConfig, options
         out = out.replace(new RegExp(`href="/${slug}/`, "g"), `href="/${locale.seo.urlSegment}/${slug}/`);
     }
 
-    // noscript "Continue to dashcamigo" link points at /en/ in the baseline
+    // noscript "Continue to everydashcam" link points at /en/ in the baseline
     // (so the source HTML view looks sensible and matches the data-i18n
     // English fallback). Per locale we rewrite it to /<segment>/ so a
     // JS-disabled visitor on /ru/ continues to /ru/, not back to /en/.

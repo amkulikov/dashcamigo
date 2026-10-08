@@ -177,7 +177,7 @@ but framed as a codec gap that does not exist.
 Do (1) now - it fixes an actively wrong message and turns the next n=1 into
 classified data, with no guessing. Defer (2) and (3) until the diagnostics
 confirm the defect distribution, or until a user sends a real file to
-`feedback@dashcamigo.app` that we can reproduce. (2) is the better structural bet
+`feedback@everydashcam.app` that we can reproduce. (2) is the better structural bet
 of the two if we decide to recover playback, because it covers the whole class
 safely; (3) is narrow and expensive.
 

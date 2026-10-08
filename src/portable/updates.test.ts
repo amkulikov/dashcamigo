@@ -77,7 +77,7 @@ describe("portable update checks", () => {
         expect(onUpdate).toHaveBeenCalledWith(
             expect.objectContaining({
                 version: "v2026.09.25.10",
-                href: `https://dashcamigo.app${manifest().files.en?.path}`,
+                href: `https://everydashcam.app${manifest().files.en?.path}`,
             }),
         );
         check.dispose();
@@ -94,7 +94,7 @@ describe("portable update checks", () => {
         });
         check.start();
         await settle();
-        expect(onUpdate).toHaveBeenCalledWith({ version: "v2026.09.25.10", href: "https://dashcamigo.app/ru/" });
+        expect(onUpdate).toHaveBeenCalledWith({ version: "v2026.09.25.10", href: "https://everydashcam.app/ru/" });
         check.dispose();
     });
 

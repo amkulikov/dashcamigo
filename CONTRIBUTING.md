@@ -1,12 +1,12 @@
-# Contributing to dashcamigo
+# Contributing to everydashcam
 
-Thanks for helping make dashcamigo better. You do not need to write code to
+Thanks for helping make everydashcam better. You do not need to write code to
 make a useful contribution:
 
 - **Found a bug or have an idea?** Open a GitHub issue and tell us what you
   expected to happen.
 - **Want to add a camera?** Start at
-  [dashcamigo.app/add-my-camera](https://dashcamigo.app/add-my-camera) or open a
+  [everydashcam.app/add-my-camera](https://everydashcam.app/add-my-camera) or open a
   camera-support issue. Reliable support needs a real recording from the
   camera.
 - **Spotted an awkward translation?** Open an issue with the current wording

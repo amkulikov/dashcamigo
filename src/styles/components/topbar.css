@@ -28,9 +28,7 @@
        outside the header. Overflow-bar uses getBoundingClientRect, so
        overflow:visible doesn't confuse it. */
     flex-wrap: nowrap;
-    /* min-width: 0 is needed so the flex-item dc-mark with the long
-       "dashcamigo" wordmark can shrink in the header - otherwise it holds
-       its min-content width and prevents the rest of the flex row from shrinking. */
+    /* Allow the flexible spacer to yield to the primary controls. */
     min-width: 0;
     color: var(--fg);
 }
@@ -77,30 +75,23 @@ body.no-trips:not(.landing-scrolled) .topbar {
     height: 20px;
 }
 
-/* Brand mark - lowercase wordmark + camera SVG.
-   The camera body inherits currentColor from .topbar (--fg, switches
-   with the theme); the lens is always orange (hardcoded in the SVG). */
+/* The shared logo fits the existing toolbar without changing its height. */
 .dc-mark {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.22em;
-    font-family: var(--dc-font-brand);
-    font-weight: 700;
-    font-size: var(--dc-text-2xl);
-    line-height: 1;
-    /* Literal, not var(--dc-tracking-tight): the wordmark owns its tracking so a
-       later change to the shared token cannot loosen the mark. Space Grotesk is
-       set tight (-0.02em) to match the heavy, tight hero and mono accents. */
-    letter-spacing: -0.02em;
-    user-select: none;
-    text-transform: lowercase;
+    --edc-drum-height: 24px;
+    --edc-drum-width: 20px;
+    --edc-letter-size: 19px;
+    --edc-word-size: 21px;
+    --edc-word-gap: 7px;
+    flex-shrink: 0;
     color: inherit;
-    flex-shrink: 0;
 }
-.dc-mark__icon {
-    width: 1.1em;
-    height: 1.1em;
-    flex-shrink: 0;
+.dc-mark__compact {
+    display: none;
+    color: var(--fg-dim);
+}
+.dc-mark__compact-accent {
+    fill: var(--accent);
+    stroke: var(--accent);
 }
 /* Pushes the topbar buttons to the right side of the bar. Messages live
    in toasts and the bell drawer (see src/ui/notifications.ts). */
@@ -337,9 +328,6 @@ body.no-trips .topbar-iconbtn {
         padding-left: max(12px, env(safe-area-inset-left));
         gap: var(--dc-space-2);
     }
-    .dc-mark {
-        font-size: var(--dc-text-xl);
-    }
 }
 
 body.no-trips .topbar-burger {
@@ -389,4 +377,18 @@ body.no-trips .topbar-burger {
     text-decoration: underline;
     text-decoration-color: var(--accent-ink);
     text-underline-offset: 3px;
+}
+
+/* Keep room for the trips, notifications, language and overflow controls. */
+@media (width <= 600px) {
+    .topbar .dc-mark {
+        gap: 0;
+    }
+    .topbar .edc-mark__drums,
+    .topbar .edc-mark__word {
+        display: none;
+    }
+    .topbar .dc-mark__compact {
+        display: block;
+    }
 }

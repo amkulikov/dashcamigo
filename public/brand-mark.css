@@ -1,0 +1,106 @@
+@font-face {
+    font-family: "Chakra Petch";
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url("/fonts/chakra-petch-700-latin.woff2") format("woff2");
+}
+
+.edc-mark {
+    --edc-drum-height: 28px;
+    --edc-drum-width: 24px;
+    --edc-letter-size: 22px;
+    --edc-word-size: 25px;
+    --edc-drum-gap: 2px;
+    --edc-word-gap: 8px;
+    --edc-drum-bg: #2a2621;
+    --edc-word-color: currentColor;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--edc-word-gap);
+    font-family: "Chakra Petch", sans-serif;
+    font-weight: 700;
+    font-style: normal;
+    line-height: 1;
+    text-decoration: none;
+    user-select: none;
+    white-space: nowrap;
+}
+
+@media (prefers-color-scheme: light) {
+    .edc-mark {
+        --edc-drum-bg: #14120f;
+    }
+}
+.dc-light .edc-mark,
+.dc-light.edc-mark {
+    --edc-drum-bg: #14120f;
+}
+.dc-dark .edc-mark,
+.dc-dark.edc-mark {
+    --edc-drum-bg: #2a2621;
+}
+
+.edc-mark__drums {
+    display: flex;
+    gap: var(--edc-drum-gap);
+}
+.edc-mark__drum {
+    width: var(--edc-drum-width);
+    height: var(--edc-drum-height);
+    overflow: hidden;
+    border-radius: calc(var(--edc-drum-width) * 0.1);
+    background: var(--edc-drum-bg);
+    color: #f4f1ea;
+    font-size: var(--edc-letter-size);
+    line-height: var(--edc-drum-height);
+    letter-spacing: 0.02em;
+    text-align: center;
+}
+.edc-mark__drum:last-child {
+    background: #ff9000;
+    color: #14120f;
+}
+.edc-mark__column {
+    display: flex;
+    flex-direction: column;
+    transform: translateY(calc(var(--edc-letter-index, 0) * var(--edc-drum-height) * -1));
+}
+.edc-mark__letter {
+    flex: 0 0 var(--edc-drum-height);
+    height: var(--edc-drum-height);
+}
+.edc-mark__word {
+    color: var(--edc-word-color);
+    font-size: var(--edc-word-size);
+    letter-spacing: -0.01em;
+}
+
+/* The app can reveal more drums over the word without changing this lockup's
+   footprint. Static headers and generated artwork keep their five drums. */
+.edc-mark--interactive {
+    --edc-drum-count: 5;
+    --edc-base-width: calc(5 * var(--edc-drum-width) + 4 * var(--edc-drum-gap));
+    --edc-deck-width: calc(var(--edc-drum-count) * var(--edc-drum-width) + (var(--edc-drum-count) - 1) * var(--edc-drum-gap));
+}
+.edc-mark--interactive .edc-mark__drums {
+    position: relative;
+    z-index: 1;
+    flex: 0 0 var(--edc-base-width);
+    width: var(--edc-base-width);
+    clip-path: inset(0 calc(var(--edc-base-width) - var(--edc-deck-width)) 0 0);
+}
+.edc-mark--interactive .edc-mark__drum {
+    flex-shrink: 0;
+    background: var(--edc-drum-bg);
+    color: #f4f1ea;
+}
+.edc-mark--interactive .edc-mark__drum--last {
+    background: #ff9000;
+    color: #14120f;
+}
+.edc-mark--interactive .edc-mark__word {
+    opacity: var(--edc-word-opacity, 1);
+    transform: translateX(calc((1 - var(--edc-word-opacity, 1)) * -16px));
+    clip-path: inset(0 0 0 max(0px, calc(var(--edc-deck-width) - var(--edc-base-width) - var(--edc-word-gap))));
+}

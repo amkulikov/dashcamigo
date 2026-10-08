@@ -6,7 +6,7 @@ import { SAMPLE_NOGPS } from "./_fixtures.js";
 const fixtureRoot = path.resolve("src/parsers/__fixtures__/ddpai-gps");
 
 export function ddpaiFixtureFolder(withGps: boolean, hasLayout = true): string {
-    const root = mkdtempSync(path.join(tmpdir(), "dashcamigo-ddpai-"));
+    const root = mkdtempSync(path.join(tmpdir(), "everydashcam-ddpai-"));
     const videoDir = hasLayout ? path.join(root, "DCIM/200video/front") : root;
     mkdirSync(videoDir, { recursive: true });
     const sample = readdirSync(SAMPLE_NOGPS).find((name) => /\.mp4$/i.test(name));

@@ -33,7 +33,7 @@ describe("buildStructureReport", () => {
             vf("Front/FILE0002.MP4", { size: 3_100_000 }),
             vf("info.txt", { size: 40 }),
         ]);
-        expect(report).toContain("dashcamigo camera report");
+        expect(report).toContain("everydashcam camera report");
         expect(report).toContain("files: 3");
         // Extension histogram, .mp4 twice.
         expect(report).toMatch(/\.mp4\s+2/);

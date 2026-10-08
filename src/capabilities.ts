@@ -1,5 +1,5 @@
 // Browser capability detection. Single source of truth for "can this browser
-// run dashcamigo, and which features will work".
+// run everydashcam, and which features will work".
 //
 // Why this exists: we advertise "opens anywhere with a browser", but the app
 // leans on a handful of modern Web APIs (Web Workers, WebCodecs, WebGL2,

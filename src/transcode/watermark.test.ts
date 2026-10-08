@@ -2,11 +2,8 @@
 // correct corner for each anchor, geometry scales with frame size, and the
 // font-size clamp holds on tiny frames.
 //
-// Deliberately NOT asserted: how the logo is painted (arc count, fillStyle
-// order, exact font family/px, shadow internals). Those are implementation
-// details - re-drawing the mark with a different glyph or font must not fail
-// this test. Pixel-level correctness of the watermark is a visual concern,
-// covered in the e2e/visual suite, not here.
+// Pixel-level correctness belongs to the visual suite; these tests cover
+// placement, bounds, and the three-drum composition of the compact mark.
 //
 // Approach: a mock CanvasRenderingContext2D-like object that records all calls
 // as a trace. Node has no real canvas, but drawWatermark only uses a fixed set
@@ -129,12 +126,44 @@ describe("drawWatermark", () => {
         expect(fontSet!.args[0]).toMatch(/\b10px\b/);
     });
 
-    it("draws the text 'dashcamigo.app'", () => {
+    it("draws the text 'everydashcam.app'", () => {
         const { ctx, calls } = makeCtx();
         drawWatermark(ctx, 1920, 1080);
         const fillTextCall = calls.find((c) => c.op === "fillText");
         expect(fillTextCall).toBeDefined();
-        expect(fillTextCall!.args[0]).toBe("dashcamigo.app");
+        expect(fillTextCall!.args[0]).toBe("everydashcam.app");
+    });
+
+    it("keeps three equal drums inside the compact mark with an orange final drum", () => {
+        const { ctx, calls } = makeCtx();
+        drawWatermark(ctx, 1920, 1080);
+        const paths: number[][] = [];
+        for (const call of calls) {
+            if (call.op === "beginPath") paths.push([]);
+            if (call.op === "moveTo") paths.at(-1)!.push(...(call.args as number[]));
+            if (call.op === "arcTo") paths.at(-1)!.push(...(call.args.slice(0, 4) as number[]));
+        }
+        const bounds = paths.map((points) => {
+            const xs = points.filter((_, index) => index % 2 === 0);
+            const ys = points.filter((_, index) => index % 2 === 1);
+            return { left: Math.min(...xs), right: Math.max(...xs), top: Math.min(...ys), bottom: Math.max(...ys) };
+        });
+        expect(bounds).toHaveLength(4);
+        const [background, ...drums] = bounds;
+        const first = drums[0]!;
+        for (const drum of drums) {
+            expect(drum.left).toBeGreaterThan(background!.left);
+            expect(drum.right).toBeLessThan(background!.right);
+            expect(drum.top).toBeGreaterThan(background!.top);
+            expect(drum.bottom).toBeLessThan(background!.bottom);
+            expect(drum.right - drum.left).toBeCloseTo(first.right - first.left);
+            expect(drum.bottom - drum.top).toBeCloseTo(first.bottom - first.top);
+        }
+        expect(drums[1]!.left).toBeGreaterThan(drums[0]!.right);
+        expect(drums[2]!.left).toBeGreaterThan(drums[1]!.right);
+        expect(calls.filter((call) => call.op === "set:fillStyle").at(-1)!.args[0]).toBe("#FF9000");
+        expect(background!.right).toBeLessThan(1920);
+        expect(background!.bottom).toBeLessThan(1080);
     });
 
     it("draws semi-transparent (globalAlpha < 1)", () => {

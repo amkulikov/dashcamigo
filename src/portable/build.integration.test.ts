@@ -72,7 +72,7 @@ it("produces identical public bytes with unrelated hosted configuration present"
     expect(artifacts[1]).toEqual(artifacts[0]);
     const outer = artifacts[0]!.toString();
     const html = decodePortableHtml(outer);
-    expect(html).toContain('href="https://dashcamigo.app/ru/"');
+    expect(html).toContain('href="https://everydashcam.app/ru/"');
     for (const content of [outer, html]) {
         expect(content).not.toContain("example.invalid");
         expect(content).not.toContain("synthetic-private-key");

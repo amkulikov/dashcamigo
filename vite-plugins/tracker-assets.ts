@@ -142,7 +142,7 @@ const SW_PLACEHOLDER = /const TRACKER_ASSET_URLS = \[\];\s*\/\/ __DC_TRACKER_ASS
  */
 export function trackerAssetsPlugin(assets: TrackerAssets): Plugin {
     return {
-        name: "dashcamigo-tracker-assets",
+        name: "everydashcam-tracker-assets",
         configureServer(server) {
             // Dev serves /ort/ from node_modules verbatim (unbusted URLs match
             // computeTrackerAssets("serve")); models are served by Vite from

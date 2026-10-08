@@ -32,7 +32,7 @@ const replacements = {
     __MEDIABUNNY_VERSION__: JSON.parse(manifest).version,
     __WORKER_BASE64__: Buffer.from(worker).toString("base64"),
     __MAIN_SCRIPT__: main.replace(/<\/script/gi, "<\\/script"),
-    __LICENSES__: escapeHtml(`dashcamigo\n\n${license}\n\nMediabunny\n\n${libraryLicense}`),
+    __LICENSES__: escapeHtml(`everydashcam\n\n${license}\n\nMediabunny\n\n${libraryLicense}`),
 };
 const html = template.replace(
     /__MEDIABUNNY_VERSION__|__WORKER_BASE64__|__MAIN_SCRIPT__|__LICENSES__/g,

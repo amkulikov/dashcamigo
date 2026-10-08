@@ -34,7 +34,7 @@ let priorityFirst: string;
 let prioritySecond: string;
 
 test.beforeAll(async () => {
-    tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "dashcamigo-notes-e2e-"));
+    tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "everydashcam-notes-e2e-"));
     sampleCopy = path.join(tempRoot, "gopro-notes");
     syncCopy = path.join(tempRoot, "gopro-notes-sync");
     liveCopy = path.join(tempRoot, "gopro-notes-live");

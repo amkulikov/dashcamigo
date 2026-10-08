@@ -31,7 +31,7 @@ if (KEY.length === 0) {
     console.error("indexnow: INDEXNOW_KEY env is not set - see docs/seo.md, IndexNow");
     process.exit(1);
 }
-const ORIGIN = (process.env.INDEXNOW_ORIGIN ?? "https://dashcamigo.app").replace(/\/+$/, "");
+const ORIGIN = (process.env.INDEXNOW_ORIGIN ?? "https://everydashcam.app").replace(/\/+$/, "");
 let originUrl;
 try {
     originUrl = new URL(ORIGIN);

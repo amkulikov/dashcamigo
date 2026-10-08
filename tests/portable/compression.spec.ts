@@ -31,7 +31,7 @@ async function expectStartupFailure(page: Page, message: string): Promise<void> 
     await expect(page.locator("html")).not.toHaveClass(/is-loading/);
     await expect(page.locator("#dc-portable-startup")).toBeVisible();
     await expect(page.locator("#dc-portable-status")).toHaveText(message);
-    await expect(page.locator("#dc-portable-full-version")).toHaveAttribute("href", "https://dashcamigo.app/en/");
+    await expect(page.locator("#dc-portable-full-version")).toHaveAttribute("href", "https://everydashcam.app/en/");
     await expect(page.locator("#dc-portable-full-version")).toBeVisible();
     await expect(page.locator("#landing-cta")).toHaveCount(0);
     expect(page.workers()).toHaveLength(0);
@@ -91,7 +91,7 @@ test("reports a damaged gzip checksum without restoring a partial application", 
         });
     });
     await page.goto(url);
-    await expectStartupFailure(page, "Couldn’t open dashcamigo. Download the file again or open the full version.");
+    await expectStartupFailure(page, "Couldn’t open everydashcam. Download the file again or open the full version.");
     expect(page.url()).toBe(url);
     expect(requests).toEqual([]);
 });
@@ -105,7 +105,7 @@ test.describe("without JavaScript", () => {
         await expect(page.locator("noscript p")).toBeVisible();
         await expect(page.locator("noscript p")).not.toHaveText("");
         await expect(page.locator("#dc-portable-full-version")).toBeVisible();
-        await expect(page.locator("#dc-portable-full-version")).toHaveAttribute("href", "https://dashcamigo.app/en/");
+        await expect(page.locator("#dc-portable-full-version")).toHaveAttribute("href", "https://everydashcam.app/en/");
         expect(requests).toEqual([]);
     });
 });
@@ -179,7 +179,10 @@ for (const fault of ["blocked script", "startup exception"]) {
             return fault === "startup exception" ? modified.replaceAll(oldHash, newHash) : modified;
         });
         await page.goto(url);
-        await expectStartupFailure(page, "Couldn’t open dashcamigo. Download the file again or open the full version.");
+        await expectStartupFailure(
+            page,
+            "Couldn’t open everydashcam. Download the file again or open the full version.",
+        );
         expect(page.url()).toBe(url);
         expect(expectedErrors.length).toBeGreaterThanOrEqual(1);
         expect(errors).toEqual([]);

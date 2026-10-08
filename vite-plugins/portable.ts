@@ -44,7 +44,7 @@ export function portableMapAssets(): Record<string, string> {
 export function portablePlugin(options: PortableOptions): Plugin {
     let isWorker = false;
     return {
-        name: "dashcamigo-portable",
+        name: "everydashcam-portable",
         enforce: "pre",
         configResolved(config) {
             isWorker = config.isWorker;
@@ -115,7 +115,11 @@ export function portablePlugin(options: PortableOptions): Plugin {
                 for (const item of Object.values(bundle)) {
                     if (item.type !== "asset") continue;
                     if (item.fileName.endsWith(".css")) {
-                        css += String(item.source);
+                        // PostCSS resolves shared public CSS imports without a TS transform.
+                        css += String(item.source).replace(
+                            /url\((["']?)(\/fonts\/[^"')\s]+\.woff2)\1\)/g,
+                            (_match, _quote, path: string) => `url("${publicDataUrl(path)}")`,
+                        );
                     } else if (/maplibre.*worker.*\.js$/.test(item.fileName)) {
                         const bytes = Buffer.from(item.source);
                         // MapLibre selects classic workers by the .cjs suffix. The
@@ -148,7 +152,7 @@ export function portablePlugin(options: PortableOptions): Plugin {
                 html = html
                     .replace(
                         /<head>[\s\S]*?<\/head>/,
-                        `<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="color-scheme" content="light dark"><meta name="robots" content="noindex,nofollow"><title>dashcamigo</title><link rel="icon" href="${faviconDataUrl}">${loaderStyle}<script>${bootstrap}</script><style>${css.replace(/<\/style/gi, "<\\/style")}</style></head>`,
+                        `<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="color-scheme" content="light dark"><meta name="robots" content="noindex,nofollow"><title>everydashcam</title><link rel="icon" href="${faviconDataUrl}">${loaderStyle}<script>${bootstrap}</script><style>${css.replace(/<\/style/gi, "<\\/style")}</style></head>`,
                     )
                     .replace(/<html lang="[^"]*"/, `<html lang="${locale}" data-edition="portable"`)
                     .replace(/(<script\b[^>]*\bid="dc-i18n"[^>]*>)[\s\S]*?(<\/script>)/, `$1${stringifyJsonLd(dict)}$2`)
@@ -201,7 +205,7 @@ export function portablePlugin(options: PortableOptions): Plugin {
                     "font-src data:",
                     `img-src data: blob: ${mapOrigins.join(" ")}`,
                     "media-src blob: data:",
-                    `connect-src data: blob: https://dashcamigo.app/downloads/portable/latest.json ${mapOrigins.join(" ")}`,
+                    `connect-src data: blob: https://everydashcam.app/downloads/portable/latest.json ${mapOrigins.join(" ")}`,
                     "base-uri 'none'",
                     "object-src 'none'",
                     "form-action 'none'",

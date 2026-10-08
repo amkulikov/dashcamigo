@@ -117,7 +117,7 @@ export interface RootStubOptions {
 
 export function rootStubPlugin(options: RootStubOptions = {}): Plugin {
     return {
-        name: "dashcamigo-root-stub",
+        name: "everydashcam-root-stub",
         apply: "build",
         // Higher enforce + later position in vite.config.ts plugins array
         // is how we sequence after i18nPrerender. Vite docs: closeBundle
@@ -151,12 +151,12 @@ export function rootStubPlugin(options: RootStubOptions = {}): Plugin {
                 "@context": "https://schema.org",
                 "@type": "WebSite",
                 "@id": `${siteOrigin}/#website`,
-                name: "dashcamigo",
+                name: "everydashcam",
                 url: `${siteOrigin}/`,
             });
 
             // OG title slightly shorter than dict["page.title"] for unfurl
-            // cards - strip the " | dashcamigo" tail used for SERP.
+            // cards - strip the " | everydashcam" tail used for SERP.
             const ogTitle = rootLocale.ogTitle;
 
             const stub = `<!doctype html>
@@ -171,7 +171,7 @@ ${options.noIndex ? `${NOINDEX_META}\n` : ""}<meta charset="utf-8">
 <meta http-equiv="refresh" content="0; url=${defaultHomeRelative}">
 <meta property="og:type" content="website">
 <meta property="og:url" content="${defaultHomeAbsolute}">
-<meta property="og:site_name" content="dashcamigo">
+<meta property="og:site_name" content="everydashcam">
 <meta property="og:title" content="${escapeAttr(ogTitle)}">
 <meta property="og:description" content="${escapeAttr(description)}">
 <meta property="og:image" content="${siteOrigin}/${defaultLocale.ogImage}">
@@ -185,7 +185,7 @@ ${options.noIndex ? `${NOINDEX_META}\n` : ""}<meta charset="utf-8">
 <meta name="twitter:image" content="${siteOrigin}/${defaultLocale.ogImage}">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="alternate icon" href="/favicon.ico" sizes="any">
-<link rel="apple-touch-icon" href="/favicon-192.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#ff9000">
 <script id="website-jsonld" type="application/ld+json">${websiteJsonLd}</script>
@@ -194,7 +194,7 @@ ${bootstrapScript}
 </head>
 <body>
 <div id="dc-loader" role="status" aria-label="loading"></div>
-<noscript><p style="color:#fff;background:#000;font:14px system-ui;padding:1em;margin:0"><a href="${defaultHomeRelative}" style="color:#ff9000">dashcamigo</a></p></noscript>
+<noscript><p style="color:#fff;background:#000;font:14px system-ui;padding:1em;margin:0"><a href="${defaultHomeRelative}" style="color:#ff9000">everydashcam</a></p></noscript>
 </body>
 </html>
 `;

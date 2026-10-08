@@ -1,10 +1,10 @@
-// Generates the OG / social-share covers (public/og-cover.png, og-cover-ru.png).
+// Generates the website OG covers and .github/social-preview.png.
 // Manual run (when the brand, the hero copy or the app screenshots change):
 //   node scripts/generate-og-cover.mjs
 //
-// The cover is a self-contained HTML document rendered by headless Chrome at
-// exactly 1200x630 (the OG-image canonical size). Everything is inlined -
-// fonts and the app screenshot as base64 data: URIs, the mark as inline SVG -
+// Each cover is a self-contained HTML document rendered by headless Chrome.
+// Everything is inlined -
+// fonts and the app screenshots as base64 data: URIs, the mark as HTML/CSS -
 // so the render has no network or file subresources and is deterministic.
 // Non-English locales other than ru fall back to the English cover (see
 // src/i18n/seo-config.ts).
@@ -40,17 +40,22 @@ function assetB64(rel) {
     return readFileSync(path).toString("base64");
 }
 
-// Brand fonts, inlined. Space Grotesk carries only the wordmark (latin is
-// enough - "dashcamigo" never localizes). Inter carries display text and
-// JetBrains Mono the technical chrome; both need their cyrillic subsets for
-// the ru cover.
+// Brand fonts, inlined. Chakra Petch carries the Latin wordmark.
+// Inter carries display text and JetBrains Mono the technical chrome; both
+// need their cyrillic subsets for the ru cover.
 const FONTS = {
-    grotesk: assetB64("public/fonts/space-grotesk-700-latin.woff2"),
+    brand: assetB64("public/fonts/chakra-petch-700-latin.woff2"),
     interLatin: assetB64("public/fonts/inter-var-latin.woff2"),
     interCyr: assetB64("public/fonts/inter-var-cyrillic.woff2"),
     monoLatin: assetB64("public/fonts/jetbrains-mono-var-latin.woff2"),
     monoCyr: assetB64("public/fonts/jetbrains-mono-var-cyrillic.woff2"),
 };
+
+const BRAND_CSS = readFileSync(resolve(ROOT, "public/brand-mark.css"), "utf8").replace(
+    "/fonts/chakra-petch-700-latin.woff2",
+    `data:font/woff2;base64,${FONTS.brand}`,
+);
+const BRAND_MARK_HTML = `<span class="edc-mark" role="img" aria-label="everydashcam"><span class="edc-mark__drums" aria-hidden="true"><span class="edc-mark__drum"><span class="edc-mark__column"><span class="edc-mark__letter">E</span></span></span><span class="edc-mark__drum"><span class="edc-mark__column"><span class="edc-mark__letter">V</span></span></span><span class="edc-mark__drum"><span class="edc-mark__column"><span class="edc-mark__letter">E</span></span></span><span class="edc-mark__drum"><span class="edc-mark__column"><span class="edc-mark__letter">R</span></span></span><span class="edc-mark__drum"><span class="edc-mark__column"><span class="edc-mark__letter">Y</span></span></span></span><span class="edc-mark__word" aria-hidden="true">DASHCAM</span></span>`;
 
 const SHOT = assetB64("docs/screenshots/app-desktop.png");
 const PHONE = assetB64("docs/screenshots/app-mobile-player.png");
@@ -92,7 +97,6 @@ const phoneTop = MOCK_TOP + mockHeight + PHONE_HANG - phoneViewHeight;
 const C = {
     bg: "#0a0a0a",
     card: "#101010",
-    tile: "#161616",
     fg: "#f5f4f1",
     accent: "#ff9000",
 };
@@ -118,16 +122,26 @@ const LOCALES = [
     },
 ];
 
+const COVERS = [
+    ...LOCALES.map((locale) => ({ ...locale, width: 1200, height: 630 })),
+    {
+        ...LOCALES[0],
+        out: ".github/social-preview.png",
+        width: 1280,
+        height: 640,
+        h1Before: "Player for multiple ",
+        h1Hl: "dashcam brands",
+        h1After: ".",
+    },
+];
+
 function coverHtml(loc) {
     return `<!doctype html>
 <html lang="${loc.lang}">
 <head>
 <meta charset="utf-8">
 <style>
-  @font-face {
-    font-family: "Space Grotesk"; font-weight: 700; font-display: block;
-    src: url(data:font/woff2;base64,${FONTS.grotesk}) format("woff2");
-  }
+  ${BRAND_CSS}
   @font-face {
     font-family: "Inter"; font-weight: 100 900; font-display: block;
     src: url(data:font/woff2;base64,${FONTS.interLatin}) format("woff2");
@@ -149,7 +163,7 @@ function coverHtml(loc) {
     unicode-range: U+0400-045F;
   }
   * { box-sizing: border-box; margin: 0; }
-  html, body { width: 1200px; height: 630px; overflow: hidden; }
+  html, body { width: ${loc.width}px; height: ${loc.height}px; overflow: hidden; }
   body {
     position: relative;
     background:
@@ -166,17 +180,19 @@ function coverHtml(loc) {
     position: absolute; left: 60px; top: 120px; width: 560px;
     display: flex; flex-direction: column; align-items: flex-start;
   }
-  .lockup { display: flex; align-items: center; gap: 18px; }
-  .tile {
-    width: 66px; height: 66px; border-radius: 23%;
-    background: ${C.tile}; border: 1px solid rgba(255,255,255,0.08);
-    box-shadow: 0 12px 36px rgba(0,0,0,0.55);
-    display: flex; align-items: center; justify-content: center;
+  .lockup {
+    height: 66px;
+    display: flex; align-items: center;
   }
-  .tile svg { width: 62%; height: 62%; }
-  .wordmark {
-    font-family: "Space Grotesk", sans-serif; font-weight: 700;
-    font-size: 54px; letter-spacing: -0.02em; text-transform: lowercase;
+  .lockup .edc-mark {
+    --edc-drum-height: 56px;
+    --edc-drum-width: 49px;
+    --edc-letter-size: 44px;
+    --edc-word-size: 44px;
+    --edc-drum-gap: 4px;
+    --edc-word-gap: 17px;
+    --edc-drum-bg: #2a2621;
+    --edc-word-color: #f4f1ea;
   }
   h1 {
     margin-top: 30px; font-size: ${loc.h1Size}px; font-weight: 800;
@@ -232,18 +248,7 @@ function coverHtml(loc) {
 </head>
 <body>
   <div class="left">
-    <div class="lockup">
-      <div class="tile">
-        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <rect x="3" y="7" width="26" height="20" rx="3" fill="${C.fg}"/>
-          <rect x="14" y="4" width="4" height="3" rx="0.6" fill="${C.fg}"/>
-          <circle cx="16" cy="17" r="7" fill="${C.accent}"/>
-          <circle cx="16" cy="17" r="4" fill="#0e0e0e"/>
-          <circle cx="14" cy="15" r="1.4" fill="rgba(255,255,255,0.5)"/>
-        </svg>
-      </div>
-      <div class="wordmark">dashcamigo</div>
-    </div>
+    <div class="lockup">${BRAND_MARK_HTML}</div>
     <h1>${loc.h1Before}<span class="hl">${loc.h1Hl}</span>${loc.h1After}</h1>
     <div class="oss">
       <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -263,22 +268,22 @@ function coverHtml(loc) {
   </div>
   <img class="phone" src="data:image/png;base64,${PHONE}" alt="">
 
-  <div class="app-pill"><span class="tri"></span>dashcamigo.app</div>
+  <div class="app-pill"><span class="tri"></span>everydashcam.app</div>
 </body>
 </html>
 `;
 }
 
-for (const loc of LOCALES) {
+for (const loc of COVERS) {
     const outPath = resolve(ROOT, loc.out);
     console.log(`rendering ${loc.lang} -> ${outPath}`);
     renderHtmlToPng({
         chrome: CHROME,
         html: coverHtml(loc),
-        width: 1200,
-        height: 630,
+        width: loc.width,
+        height: loc.height,
         outPath,
-        tmpName: `dashcamigo-og-cover-${loc.lang}.html`,
+        tmpName: `everydashcam-og-cover-${loc.lang}-${loc.width}.html`,
     });
 }
 console.log("done");

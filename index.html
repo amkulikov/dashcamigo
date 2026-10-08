@@ -139,8 +139,8 @@
          og:image / twitter:image to /og-cover-ru.png. twitter:card =
          summary_large_image - for our 1200x630 banner. -->
     <meta property="og:type" content="website">
-    <meta property="og:url" content="https://dashcamigo.app/">
-    <meta property="og:site_name" content="dashcamigo">
+    <meta property="og:url" content="https://everydashcam.app/">
+    <meta property="og:site_name" content="everydashcam">
     <meta property="og:title" content="Free Dashcam Player & Editor — GPS map, trim & export">
     <!-- og:description carries NO data-i18n-attr on purpose. seo-prerender
          overrides it per locale from OG_OVERRIDES (snappier social-card copy,
@@ -151,7 +151,7 @@
          data-i18n-attr; only the social cards intentionally diverge. -->
     <meta property="og:description"
           content="Free, open-source dashcam player. Open recordings from 70mai, Viofo, BlackVue, GoPro and more in your browser. Synchronized GPS map and speed chart. No upload, no install, no ads.">
-    <meta property="og:image" content="https://dashcamigo.app/og-cover.png">
+    <meta property="og:image" content="https://everydashcam.app/og-cover.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
     <meta property="og:image:type" content="image/png">
@@ -170,7 +170,7 @@
          above - seo-prerender sets it per locale (twitterDescription override). -->
     <meta name="twitter:description"
           content="Free, open-source dashcam player. Open recordings from 70mai, Viofo, BlackVue, GoPro and more in your browser.">
-    <meta name="twitter:image" content="https://dashcamigo.app/og-cover.png">
+    <meta name="twitter:image" content="https://everydashcam.app/og-cover.png">
 
     <!-- Preconnect to OpenFreeMap: the handshake to the tile CDN starts in
          parallel with HTML parsing, speeds up first map render by ~50-200ms. -->
@@ -191,7 +191,7 @@
          scripts/generate-favicons.mjs for regeneration from mark.svg. -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="alternate icon" href="/favicon.ico" sizes="any">
-    <link rel="apple-touch-icon" href="/favicon-192.png">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
     <link rel="manifest" href="/manifest.webmanifest">
     <!-- theme-color is mandatory for PWA: tints the browser address bar and
          the standalone-window titlebar on desktop/Android. Matches
@@ -203,9 +203,9 @@
     <meta name="theme-color" content="#ff9000">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="dashcamigo">
+    <meta name="apple-mobile-web-app-title" content="everydashcam">
     <meta name="mobile-web-app-capable" content="yes">
-    <link rel="canonical" href="https://dashcamigo.app/">
+    <link rel="canonical" href="https://everydashcam.app/">
     <!-- Content-Language: HTTP-form locale (hyphen). Yandex, Baidu, Naver and
          older Bing use this when hreflang is absent or as a redundancy signal -
          hreflang is a Google-centric mechanism that Baidu / Naver ignore
@@ -224,11 +224,11 @@
     {
         "@context": "https://schema.org",
         "@type": "WebApplication",
-        "@id": "https://dashcamigo.app/#webapp",
-        "name": "dashcamigo",
-        "url": "https://dashcamigo.app/",
-        "isPartOf": { "@id": "https://dashcamigo.app/#website" },
-        "publisher": { "@id": "https://dashcamigo.app/#organization" },
+        "@id": "https://everydashcam.app/#webapp",
+        "name": "everydashcam",
+        "url": "https://everydashcam.app/",
+        "isPartOf": { "@id": "https://everydashcam.app/#website" },
+        "publisher": { "@id": "https://everydashcam.app/#organization" },
         "description": "Free, open-source online dashcam player & editor. Combine multiple cameras into one video, overlay speed, GPS and a moving map, then export — right in your browser. No upload, no install, no ads.",
         "applicationCategory": "MultimediaApplication",
         "operatingSystem": "Web",
@@ -270,10 +270,10 @@
     {
         "@context": "https://schema.org",
         "@type": "WebSite",
-        "@id": "https://dashcamigo.app/#website",
-        "name": "dashcamigo",
-        "url": "https://dashcamigo.app/",
-        "publisher": { "@id": "https://dashcamigo.app/#organization" }
+        "@id": "https://everydashcam.app/#website",
+        "name": "everydashcam",
+        "url": "https://everydashcam.app/",
+        "publisher": { "@id": "https://everydashcam.app/#organization" }
     }
     </script>
     <!-- Publisher identity stays the same across locale pages and mirrors. -->
@@ -281,10 +281,10 @@
     {
         "@context": "https://schema.org",
         "@type": "Organization",
-        "@id": "https://dashcamigo.app/#organization",
-        "name": "dashcamigo",
-        "url": "https://dashcamigo.app/",
-        "logo": "https://dashcamigo.app/favicon-512.png"
+        "@id": "https://everydashcam.app/#organization",
+        "name": "everydashcam",
+        "url": "https://everydashcam.app/",
+        "logo": "https://everydashcam.app/favicon-512.png"
     }
     </script>
     <!-- FAQPage JSON-LD. baseline = en.ts literals so the no-JS HTML matches
@@ -315,7 +315,7 @@
                 "name": "Which devices and browsers does it work on?",
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "On Windows, macOS, Linux, Android and iOS, right in your browser. Chrome or Edge is best for editing; Firefox and Safari support playback, the map and saving the original video. You can also install dashcamigo from a supported browser and use it offline."
+                    "text": "On Windows, macOS, Linux, Android and iOS, right in your browser. Chrome or Edge is best for editing; Firefox and Safari support playback, the map and saving the original video. You can also install everydashcam from a supported browser and use it offline."
                 }
             },
             {
@@ -323,7 +323,7 @@
                 "name": "Are my recordings uploaded anywhere?",
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "No. dashcamigo opens your recordings right on your device — they are never uploaded anywhere."
+                    "text": "No. everydashcam opens your recordings right on your device — they are never uploaded anywhere."
                 }
             },
             {
@@ -355,7 +355,7 @@
                 "name": "Is it free? How can I help?",
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "Free, with no ads, sign-up or subscriptions. If dashcamigo has been useful, share a link and a few words about your experience — it helps others find the project. A GitHub star is welcome too."
+                    "text": "Free, with no ads, sign-up or subscriptions. If everydashcam has been useful, share a link and a few words about your experience — it helps others find the project. A GitHub star is welcome too."
                 }
             }
         ]
@@ -366,7 +366,7 @@
          unfurl bots (they don't execute JS). For Russian-speaking users
          applyStaticI18n() swaps to Russian after first paint - the English
          flash before that runs is accepted as a trade-off in favor of SEO. -->
-    <title data-i18n="page.title">Free Dashcam Player & Editor Online — GPS map, trim & export | dashcamigo</title>
+    <title data-i18n="page.title">Free Dashcam Player & Editor Online — GPS map, trim & export | everydashcam</title>
     <!-- Stylesheets are also imported from src/app.ts (for the prod bundle
          and for dev HMR), but are ADDITIONALLY linked here SYNCHRONOUSLY so
          first paint already has layout rules applied. Without an explicit
@@ -410,7 +410,7 @@
     <!-- web-only:start -->
     <noscript>
         <div>
-            <h2 data-i18n="page.title">Dashcam Player & Editor Online — GPS map, trim & export | dashcamigo</h2>
+            <h2 data-i18n="page.title">Dashcam Player & Editor Online — GPS map, trim & export | everydashcam</h2>
             <p data-i18n="meta.description">Free online dashcam player and editor. View, trim and export 70mai, Viofo, BlackVue, GoPro recordings in your browser — GPS map, speed chart, overlay. No upload, no install, no ads.</p>
             <p>
                 <a href="/cameras/70mai/">70mai</a> ·
@@ -419,7 +419,7 @@
                 <a href="/cameras/gopro/">GoPro</a> ·
                 <a href="/cameras/garmin/">Garmin</a>
             </p>
-            <p><a href="/en/" data-i18n="noscript.continue">Continue to dashcamigo</a></p>
+            <p><a href="/en/" data-i18n="noscript.continue">Continue to everydashcam</a></p>
         </div>
     </noscript>
     <!-- web-only:end -->
@@ -461,17 +461,22 @@
             </svg>
         </button>
 
-        <!-- BrandMark: lowercase wordmark + camera SVG.
-             The camera body uses currentColor (inherits .topbar color = white),
-             the lens is always orange (hardcoded in SVG). The wordmark itself
-             "dashcamigo" is the product name, not translated. -->
-        <span class="dc-mark" aria-label="dashcamigo">dashcamigo<svg class="dc-mark__icon" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-            <rect x="3" y="7" width="26" height="20" rx="3" fill="currentColor"/>
-            <rect x="14" y="4" width="4" height="3" rx="0.6" fill="currentColor"/>
-            <circle cx="16" cy="17" r="7" fill="#FF9000"/>
-            <circle cx="16" cy="17" r="4" fill="#000"/>
-            <circle cx="14" cy="15" r="1.4" fill="rgba(255,255,255,0.5)"/>
-        </svg></span>
+        <span class="dc-mark edc-mark" role="img" aria-label="everydashcam">
+            <span class="edc-mark__drums" aria-hidden="true">
+                <span class="edc-mark__drum"><span class="edc-mark__column"><span class="edc-mark__letter">E</span></span></span>
+                <span class="edc-mark__drum"><span class="edc-mark__column"><span class="edc-mark__letter">V</span></span></span>
+                <span class="edc-mark__drum"><span class="edc-mark__column"><span class="edc-mark__letter">E</span></span></span>
+                <span class="edc-mark__drum"><span class="edc-mark__column"><span class="edc-mark__letter">R</span></span></span>
+                <span class="edc-mark__drum"><span class="edc-mark__column"><span class="edc-mark__letter">Y</span></span></span>
+            </span>
+            <span class="edc-mark__word" aria-hidden="true">DASHCAM</span>
+            <svg class="dc-mark__compact" viewBox="0 0 32 28" width="28" height="24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                <rect x="1" y="5" width="8" height="18" rx="2"></rect>
+                <rect x="12" y="5" width="8" height="18" rx="2"></rect>
+                <rect class="dc-mark__compact-accent" x="23" y="5" width="8" height="18" rx="2"></rect>
+                <path d="M1 14h8M12 14h8" opacity=".5"></path>
+            </svg>
+        </span>
 
         <!-- Spacer pushes the rest of the topbar to the right.
              Replaces the old #status text element (now via notifications). -->
@@ -482,7 +487,7 @@
                 <summary data-i18n="portable.beta">Beta</summary>
                 <div class="portable-beta-popover">
                     <p data-i18n="portable.beta.description">This version is experimental and may have issues. Tell us what went wrong by email.</p>
-                    <a href="mailto:feedback@dashcamigo.app">feedback@dashcamigo.app</a>
+                    <a href="mailto:feedback@everydashcam.app">feedback@everydashcam.app</a>
                 </div>
             </details>
         </div>
@@ -490,7 +495,7 @@
         <div class="topbar-spacer"></div>
         <!-- portable-only:start -->
         <a id="portable-full-version" class="portable-header-link" href="__PORTABLE_FULL_VERSION_URL__" target="_blank" rel="noopener noreferrer" data-i18n="portable.fullVersion">Full version</a>
-        <a id="portable-github" class="portable-header-link" href="https://github.com/amkulikov/dashcamigo" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a id="portable-github" class="portable-header-link" href="https://github.com/everydashcam/everydashcam" target="_blank" rel="noopener noreferrer">GitHub</a>
         <a id="portable-update" class="portable-header-link portable-update" target="_blank" rel="noopener noreferrer" data-i18n="portable.update" hidden>A newer version is available</a>
         <!-- portable-only:end -->
         <!-- web-only:start -->
@@ -949,7 +954,7 @@
                                          srcset="/landing/app-desktop-1240.webp 1240w, /landing/app-desktop-2480.webp 2480w"
                                          sizes="(max-width: 880px) 88vw, (max-width: 1440px) 50vw, 700px"
                                          width="1240" height="689" fetchpriority="high" decoding="async"
-                                         alt="Inside dashcamigo: two cameras side by side, the speed chart with event marks and the route on the map"
+                                         alt="Inside everydashcam: two cameras side by side, the speed chart with event marks and the route on the map"
                                          data-i18n-attr="alt:landing.hero.shot.alt">
                                 </button>
                                 <button type="button" class="landing-hero-shot-phone-btn" id="landing-shot-open-phone" aria-haspopup="dialog">
@@ -958,7 +963,7 @@
                                          srcset="/landing/app-phone-300.webp 300w, /landing/app-phone-600.webp 600w"
                                          sizes="(max-width: 560px) 84px, 150px"
                                          width="300" height="649" decoding="async"
-                                         alt="dashcamigo on a phone: the player with the route map"
+                                         alt="everydashcam on a phone: the player with the route map"
                                          data-i18n-attr="alt:landing.hero.shot.altPhone">
                                 </button>
                             </div>
@@ -1036,7 +1041,7 @@
                             </li>
                             <li>
                                 <span class="landing-guarantee-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.7 5.1a10.7 10.7 0 0 1 11.2 6.6 1 1 0 0 1 0 .7 10.7 10.7 0 0 1-1.4 2.5"/><path d="M14.1 14.2a3 3 0 0 1-4.2-4.3"/><path d="M17.5 17.5a10.8 10.8 0 0 1-15.4-5.2 1 1 0 0 1 0-.7 10.8 10.8 0 0 1 4.4-5.1"/><path d="m2 2 20 20"/></svg></span>
-                                <div><b data-i18n="landing.safety.tracking.title">Trips aren’t tracked.</b> <span data-i18n="landing.safety.tracking.body">dashcamigo doesn’t collect where you drove.</span></div>
+                                <div><b data-i18n="landing.safety.tracking.title">Trips aren’t tracked.</b> <span data-i18n="landing.safety.tracking.body">everydashcam doesn’t collect where you drove.</span></div>
                             </li>
                             <li>
                                 <span class="landing-guarantee-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01"/><path d="M8.5 16.4a5 5 0 0 1 7 0"/><path d="M5 12.9a10 10 0 0 1 5.2-2.7"/><path d="M19 12.9a10 10 0 0 0-2-1.5"/><path d="M2 8.8a15 15 0 0 1 4.2-2.6"/><path d="M22 8.8a15 15 0 0 0-11.6-3.8"/><path d="m2 2 20 20"/></svg></span>
@@ -1047,7 +1052,7 @@
                         <p class="landing-oss">
                             <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
                             <span data-i18n="landing.oss.line">Open source.</span>
-                            <a class="landing-oss-link" href="https://github.com/amkulikov/dashcamigo" target="_blank" rel="noopener" data-i18n="landing.oss.cta">Source on GitHub →</a>
+                            <a class="landing-oss-link" href="https://github.com/everydashcam/everydashcam" target="_blank" rel="noopener" data-i18n="landing.oss.cta">Source on GitHub →</a>
                         </p>
                     </aside>
                     <!-- web-only:end -->
@@ -1121,11 +1126,11 @@
                             </details>
                             <details class="landing-faq-item">
                                 <summary><span data-i18n="landing.faq.q4">Which devices and browsers does it work on?</span><svg class="landing-faq-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
-                                <div class="landing-faq-body" data-i18n="landing.faq.a4">On Windows, macOS, Linux, Android and iOS, right in your browser. Chrome or Edge is best for editing; Firefox and Safari support playback, the map and saving the original video. You can also install dashcamigo from a supported browser and use it offline.</div>
+                                <div class="landing-faq-body" data-i18n="landing.faq.a4">On Windows, macOS, Linux, Android and iOS, right in your browser. Chrome or Edge is best for editing; Firefox and Safari support playback, the map and saving the original video. You can also install everydashcam from a supported browser and use it offline.</div>
                             </details>
                             <details class="landing-faq-item">
                                 <summary><span data-i18n="landing.faq.q3">Are my recordings uploaded anywhere?</span><svg class="landing-faq-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
-                                <div class="landing-faq-body" data-i18n="landing.faq.a3">No. dashcamigo opens your recordings right on your device — they are never uploaded anywhere.</div>
+                                <div class="landing-faq-body" data-i18n="landing.faq.a3">No. everydashcam opens your recordings right on your device — they are never uploaded anywhere.</div>
                             </details>
                             <details class="landing-faq-item">
                                 <summary><span data-i18n="landing.faq.q9">Can I watch separate clips as one trip?</span><svg class="landing-faq-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
@@ -1141,7 +1146,7 @@
                             </details>
                             <details class="landing-faq-item">
                                 <summary><span data-i18n="landing.faq.q12">Is it free? How can I help?</span><svg class="landing-faq-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
-                                <div class="landing-faq-body"><span data-i18n="landing.faq.a12.before">Free, with no ads, sign-up or subscriptions. If dashcamigo has been useful, share a link and a few words about your experience — it helps others find the project. A </span><a class="landing-brand-link" href="https://github.com/amkulikov/dashcamigo" target="_blank" rel="noopener noreferrer" data-i18n="landing.faq.a12.link">GitHub star</a><span data-i18n="landing.faq.a12.after"> is welcome too.</span></div>
+                                <div class="landing-faq-body"><span data-i18n="landing.faq.a12.before">Free, with no ads, sign-up or subscriptions. If everydashcam has been useful, share a link and a few words about your experience — it helps others find the project. A </span><a class="landing-brand-link" href="https://github.com/everydashcam/everydashcam" target="_blank" rel="noopener noreferrer" data-i18n="landing.faq.a12.link">GitHub star</a><span data-i18n="landing.faq.a12.after"> is welcome too.</span></div>
                             </details>
                         </div>
                     </section>
@@ -1163,7 +1168,7 @@
                 <footer class="site-footer">
                     <div id="seo-language-links"></div>
                     <div class="site-footer-links">
-                        <a href="mailto:feedback@dashcamigo.app" class="site-footer-link">feedback@dashcamigo.app</a>
+                        <a href="mailto:feedback@everydashcam.app" class="site-footer-link">feedback@everydashcam.app</a>
                         <a href="/add-my-camera" class="site-footer-link" data-i18n="footer.addCamera"
                            target="_blank" rel="noopener">Add your dashcam</a>
                         <a href="/alternatives/" class="site-footer-link" data-i18n="footer.compare">Compare apps</a>
@@ -1177,9 +1182,9 @@
                              `vite dev` - that is expected. -->
                         <a href="/third-party-notices.txt" class="site-footer-link" data-i18n="footer.licenses"
                            target="_blank" rel="noopener">Third-party licenses</a>
-                        <!-- The only link in the row that leaves dashcamigo; the mark
+                        <!-- The only link in the row that leaves everydashcam; the mark
                              says where it goes without spending a word on it. -->
-                        <a href="https://github.com/amkulikov/dashcamigo" class="site-footer-link site-footer-link--repo"
+                        <a href="https://github.com/everydashcam/everydashcam" class="site-footer-link site-footer-link--repo"
                            target="_blank" rel="noopener">
                             <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
                             <span data-i18n="footer.source">Source</span>
@@ -1423,7 +1428,7 @@
                         <canvas id="player-telemetry-canvas" class="player-telemetry-canvas" hidden aria-hidden="true"></canvas>
                         <div id="player-watermark" class="player-watermark" hidden aria-hidden="true" role="button" tabindex="-1"
                              data-i18n-attr="title:export.overlays.watermarkDragHint"
-                             title="Drag to reposition">dashcamigo.app<svg class="dc-mark__icon" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="3" y="7" width="26" height="20" rx="3" fill="currentColor"/><rect x="14" y="4" width="4" height="3" rx="0.6" fill="currentColor"/><circle cx="16" cy="17" r="7" fill="#FF9000"/><circle cx="16" cy="17" r="4" fill="#000"/><circle cx="14" cy="15" r="1.4" fill="rgba(255,255,255,0.5)"/></svg></div>
+                             title="Drag to reposition">everydashcam.app<img class="player-watermark__icon" src="/assets/mark-small.svg" alt="" aria-hidden="true"></div>
                         <div id="player-speed-overlay" class="player-overlay player-speed-overlay" hidden></div>
                         <div id="player-coords-overlay" class="player-overlay player-coords-overlay" hidden></div>
                         <!-- Map mini-overlay: WYSIWYG preview of the burned-in
@@ -2210,7 +2215,7 @@
         <div class="export-modal-card modal-card">
             <div class="export-modal-title" id="upload-warning-modal-title" data-i18n="uploadWarning.title">Files stay on your device</div>
             <div class="export-modal-section">
-                <p class="export-modal-body" data-i18n="uploadWarning.body">Your browser may ask something like "Upload files to this site?" — this gives dashcamigo access to the folder. Your recordings stay on your device and play right here in the browser.</p>
+                <p class="export-modal-body" data-i18n="uploadWarning.body">Your browser may ask something like "Upload files to this site?" — this gives everydashcam access to the folder. Your recordings stay on your device and play right here in the browser.</p>
                 <div class="export-modal-actions">
                     <button id="upload-warning-modal-cancel" class="dc-btn dc-btn--ghost" type="button" data-i18n="uploadWarning.cancel">Cancel</button>
                     <button id="upload-warning-modal-continue" class="dc-btn dc-btn--primary" type="button" data-i18n="uploadWarning.continue">Open folder</button>
@@ -2369,7 +2374,7 @@
 
                 <!-- Step 1: share real recordings via a link (optional). -->
                 <div class="feedback-step" id="feedback-step-recordings">
-                    <p class="feedback-thanks" data-i18n="feedback.thanks">Thanks for taking the time to write — it really helps make dashcamigo better.</p>
+                    <p class="feedback-thanks" data-i18n="feedback.thanks">Thanks for taking the time to write — it really helps make everydashcam better.</p>
                     <h3 class="feedback-step-title" data-i18n="feedback.recordings.title">Have your recordings ready?</h3>
 
                     <!-- Callout shown only when no card was ever loaded - the report
@@ -2412,7 +2417,7 @@
                     </div>
                     <div class="feedback-contact-direct" id="feedback-context-contact" hidden>
                         <span class="feedback-contact-direct-label" data-i18n="feedback.contactDirect">Or write to us at</span>
-                        <a class="feedback-contact-direct-link" id="feedback-context-email" href="mailto:feedback@dashcamigo.app">feedback@dashcamigo.app</a>
+                        <a class="feedback-contact-direct-link" id="feedback-context-email" href="mailto:feedback@everydashcam.app">feedback@everydashcam.app</a>
                     </div>
                     <details class="feedback-disclosure" id="feedback-context-recordings" hidden>
                         <summary tabindex="0" data-i18n="feedback.recognition.samples.title">Recordings help most</summary>
@@ -2432,7 +2437,7 @@
                     </div>
                     <div class="feedback-contact-direct">
                         <span class="feedback-contact-direct-label" data-i18n="feedback.contactDirect">Or write to us at</span>
-                        <a class="feedback-contact-direct-link" href="mailto:feedback@dashcamigo.app">feedback@dashcamigo.app</a>
+                        <a class="feedback-contact-direct-link" href="mailto:feedback@everydashcam.app">feedback@everydashcam.app</a>
                     </div>
                 </div>
             </div>
@@ -2729,13 +2734,13 @@
                 </div>
             </div>
             <div class="export-modal-section" id="settings-migration-section" hidden>
-                <h3 class="settings-section-title" data-i18n="settings.migration.section">Moving to a new address</h3>
+                <h3 class="settings-section-title" data-i18n="settings.migration.section">Notes from dashcamigo</h3>
                 <div class="settings-row" id="settings-migration-old" hidden>
                     <p class="settings-toggle-desc" data-i18n="settings.migration.announcement">dashcamigo will move to everydashcam.app. Save your trip notes here before the move.</p>
                     <a href="/migrate/" class="dc-btn dc-btn--secondary" data-i18n="settings.migration.export">Save notes for the move</a>
                 </div>
                 <div class="settings-row" id="settings-migration-new" hidden>
-                    <p class="settings-toggle-desc" data-i18n="settings.migration.restore">Choose the old address where you saved your notes. Use the same browser and profile, then restore the downloaded file below.</p>
+                    <p class="settings-toggle-desc" data-i18n="settings.migration.restore">dashcamigo is now everydashcam. Choose the old address where you saved your notes. Use the same browser and profile, then restore the downloaded file below.</p>
                     <p class="settings-toggle-desc">
                         <a href="https://dashcamigo.app/migrate/">dashcamigo.app</a> ·
                         <a href="https://ru.dashcamigo.app/migrate/">ru.dashcamigo.app</a> ·
@@ -2768,7 +2773,7 @@
             <div class="export-modal-section">
                 <h3 class="settings-section-title" data-i18n="settings.cache.section">Saved recording info</h3>
                 <div class="settings-row">
-                    <p class="settings-toggle-desc" data-i18n="settings.cache.description">Remembers details dashcamigo has already read, so folders open faster next time. The videos themselves are never stored.</p>
+                    <p class="settings-toggle-desc" data-i18n="settings.cache.description">Remembers details everydashcam has already read, so folders open faster next time. The videos themselves are never stored.</p>
                     <div class="settings-info-row">
                         <span class="settings-info-label" data-i18n="settings.cache.usage.label">Space used</span>
                         <span id="settings-cache-usage-value" class="settings-info-value">—</span>
@@ -2786,7 +2791,7 @@
                 <div class="settings-row">
                     <button id="settings-cache-clear-btn" class="dc-btn dc-btn--secondary" type="button"
                             data-i18n="settings.cache.clear.label">Clear saved recording info</button>
-                    <p class="settings-toggle-desc" data-i18n="settings.cache.clear.description">dashcamigo will read each folder from scratch the next time you open it. Trip names, notes and markers are kept.</p>
+                    <p class="settings-toggle-desc" data-i18n="settings.cache.clear.description">everydashcam will read each folder from scratch the next time you open it. Trip names, notes and markers are kept.</p>
                 </div>
             </div>
             <!-- About & diagnostics: read-only info (version, storage) and
@@ -2798,9 +2803,9 @@
                 <details id="settings-support-note" class="settings-support-note">
                     <summary data-i18n="supportPrompt.title">From the author</summary>
                     <div class="support-note-body">
-                        <p class="support-note-text" data-i18n="supportPrompt.body">If dashcamigo has been useful, tell people about it on a forum, in a chat or among friends — wherever it fits. A link and a few words about your experience are enough.</p>
+                        <p class="support-note-text" data-i18n="supportPrompt.body">If everydashcam has been useful, tell people about it on a forum, in a chat or among friends — wherever it fits. A link and a few words about your experience are enough.</p>
                         <p class="support-note-text" data-i18n="supportPrompt.reason">Recommendations like these mean a lot to me. They let me know the project is useful and help others find it.</p>
-                        <a class="support-github" href="https://github.com/amkulikov/dashcamigo" target="_blank" rel="noopener noreferrer"
+                        <a class="support-github" href="https://github.com/everydashcam/everydashcam" target="_blank" rel="noopener noreferrer"
                            data-i18n="supportPrompt.github">A GitHub star is welcome too.</a>
                         <div class="support-note-actions">
                             <button type="button" class="dc-btn dc-btn--secondary support-copy"
@@ -2845,7 +2850,7 @@
                             data-i18n="settings.danger.onboarding.cta">Replay tips</button>
                 </div>
                 <div class="settings-row">
-                    <p class="settings-toggle-desc" data-i18n="settings.danger.description" data-portable-i18n="portable.reset.description">Erases dashcamigo data saved in this browser: settings, language, theme, privacy choices, offline data, trip names, notes, favorites, markers and remembered folders. Your recording files stay unchanged.</p>
+                    <p class="settings-toggle-desc" data-i18n="settings.danger.description" data-portable-i18n="portable.reset.description">Erases everydashcam data saved in this browser: settings, language, theme, privacy choices, offline data, trip names, notes, favorites, markers and remembered folders. Your recording files stay unchanged.</p>
                     <button id="settings-reset-btn" class="dc-btn dc-btn--danger" type="button"
                             data-i18n="settings.danger.cta">Reset everything</button>
                 </div>
@@ -2885,7 +2890,7 @@
     <div data-nosnippet id="install-banner" class="sticky-banner install-banner" hidden role="dialog" aria-modal="false"
          aria-labelledby="install-banner-title">
         <div class="sticky-banner-body">
-            <div class="sticky-banner-title" id="install-banner-title" data-i18n="pwa.toast.title">Install dashcamigo</div>
+            <div class="sticky-banner-title" id="install-banner-title" data-i18n="pwa.toast.title">Install everydashcam</div>
             <p class="sticky-banner-lead" data-i18n="pwa.toast.body">
                 Pin it to your dock and open recordings in one click. Files still stay on your device.
             </p>
@@ -2922,9 +2927,9 @@
         aria-labelledby="support-banner-title" aria-describedby="support-banner-body">
         <div class="sticky-banner-title" id="support-banner-title" data-i18n="supportPrompt.title">From the author</div>
         <div class="support-note-body" id="support-banner-body">
-            <p class="support-note-text" data-i18n="supportPrompt.body">If dashcamigo has been useful, tell people about it on a forum, in a chat or among friends — wherever it fits. A link and a few words about your experience are enough.</p>
+            <p class="support-note-text" data-i18n="supportPrompt.body">If everydashcam has been useful, tell people about it on a forum, in a chat or among friends — wherever it fits. A link and a few words about your experience are enough.</p>
             <p class="support-note-text" data-i18n="supportPrompt.reason">Recommendations like these mean a lot to me. They let me know the project is useful and help others find it.</p>
-            <a id="support-banner-github" class="support-github" href="https://github.com/amkulikov/dashcamigo" target="_blank" rel="noopener noreferrer"
+            <a id="support-banner-github" class="support-github" href="https://github.com/everydashcam/everydashcam" target="_blank" rel="noopener noreferrer"
                data-i18n="supportPrompt.github">A GitHub star is welcome too.</a>
         </div>
         <div class="support-note-actions">
@@ -2941,7 +2946,7 @@
          aria-modal="true" aria-labelledby="offline-use-title">
         <div class="export-modal-card modal-card offline-use-card">
             <div class="offline-use-heading">
-                <h2 id="offline-use-title" data-i18n="offlineUse.title">Keep dashcamigo with you</h2>
+                <h2 id="offline-use-title" data-i18n="offlineUse.title">Keep everydashcam with you</h2>
                 <button id="offline-use-close" class="topbar-iconbtn" type="button"
                         data-i18n-attr="aria-label:pwa.guide.close" aria-label="Close">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -3054,7 +3059,7 @@
     <!-- web-only:start -->
     <div data-nosnippet class="landing-shot-lightbox" id="landing-shot-lightbox" role="dialog" aria-modal="true" tabindex="-1"
          data-i18n-attr="aria-label:landing.hero.shot.alt"
-         aria-label="Inside dashcamigo: two cameras side by side, the speed chart with event marks and the route on the map" hidden>
+         aria-label="Inside everydashcam: two cameras side by side, the speed chart with event marks and the route on the map" hidden>
         <img class="landing-shot-lightbox-desktop" src="/landing/app-desktop-2480.webp"
              width="2480" height="1378" loading="lazy" decoding="async" alt="">
         <img class="landing-shot-lightbox-phone" src="/landing/app-phone-600.webp"

@@ -14,7 +14,7 @@ for (const locale of Object.keys(manifest.files)) {
         await expect(page.locator("html")).toHaveAttribute("lang", locale);
         await expect(page.locator("#portable-full-version")).toHaveAttribute(
             "href",
-            `https://dashcamigo.app/${locale}/`,
+            `https://everydashcam.app/${locale}/`,
         );
         await expect(page.locator("#portable-github")).toBeVisible();
         await expect(
@@ -27,7 +27,7 @@ for (const locale of Object.keys(manifest.files)) {
         expect(page.workers(), "the landing page does not start embedded workers").toHaveLength(0);
         await expect(page.locator(".portable-beta summary")).toBeVisible();
         await page.locator(".portable-beta summary").click();
-        await expect(page.locator('.portable-beta a[href="mailto:feedback@dashcamigo.app"]')).toBeVisible();
+        await expect(page.locator('.portable-beta a[href="mailto:feedback@everydashcam.app"]')).toBeVisible();
         await page.reload();
         await expect(page.locator("html")).not.toHaveClass(/is-loading/);
         await expect(page.locator("html")).toHaveAttribute("lang", locale);
@@ -41,7 +41,7 @@ for (const locale of Object.keys(manifest.files)) {
         await page.keyboard.press("Enter");
         const popover = page.locator(".portable-beta-popover");
         await expect(popover).toBeVisible();
-        await expect(popover.locator('a[href="mailto:feedback@dashcamigo.app"]')).toBeVisible();
+        await expect(popover.locator('a[href="mailto:feedback@everydashcam.app"]')).toBeVisible();
         const bounds = await popover.boundingBox();
         expect(bounds, "beta explanation has visible bounds").not.toBeNull();
         expect(bounds!.x).toBeGreaterThanOrEqual(0);
@@ -55,7 +55,7 @@ for (const locale of Object.keys(manifest.files)) {
             shortBounds.y + shortBounds.height,
             "beta explanation stays inside a short viewport",
         ).toBeLessThanOrEqual(180);
-        const contact = popover.locator('a[href="mailto:feedback@dashcamigo.app"]');
+        const contact = popover.locator('a[href="mailto:feedback@everydashcam.app"]');
         await contact.focus();
         await expect(contact).toBeInViewport({ ratio: 1 });
         await page.setViewportSize({ width: 320, height: 740 });

@@ -19,7 +19,7 @@ const filenames = [
 ];
 
 async function addRecordings(page: Page, names: string[]): Promise<void> {
-    const directory = mkdtempSync(path.join(tmpdir(), "dashcamigo-trip-filters-"));
+    const directory = mkdtempSync(path.join(tmpdir(), "everydashcam-trip-filters-"));
     fixtureDirectories.push(directory);
     for (const name of names) {
         const filename = path.join(directory, name);

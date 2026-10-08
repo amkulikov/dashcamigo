@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "dashcamigo",
-  "short_name": "dashcamigo",
+  "name": "everydashcam",
+  "short_name": "everydashcam",
   "description": "View dashcam recordings with synchronized GPS and speed graphs. Local in your browser.",
   "lang": "en",
   "dir": "ltr",
@@ -45,14 +45,14 @@
       "sizes": "1280x800",
       "type": "image/png",
       "form_factor": "wide",
-      "label": "dashcamigo — online dashcam player"
+      "label": "everydashcam — online dashcam player"
     },
     {
       "src": "/pwa-install-card-narrow.png",
       "sizes": "824x1464",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "dashcamigo — online dashcam player"
+      "label": "everydashcam — online dashcam player"
     }
   ]
 }

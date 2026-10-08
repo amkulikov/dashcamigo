@@ -103,6 +103,7 @@ import { initViewMenu } from "./ui/view-menu.js";
 import { initFeedbackModal } from "./ui/feedback.js";
 import { initRecognitionHelp } from "./ui/recognition-help.js";
 import { initLangSwitcher } from "./ui/lang-switcher.js";
+import { initBrandMark } from "./ui/brand-mark.js";
 import { initTopbarOverflow } from "./ui/topbar-overflow.js";
 import { prewarmIndexer } from "./indexer.js";
 import { loadChart } from "./ui/chart.js";
@@ -432,6 +433,7 @@ if (footerVersion && APP_VERSION !== "unknown") {
     footerVersion.textContent = APP_VERSION;
     footerVersion.hidden = false;
 }
+initBrandMark();
 // Topbar overflow-bar: when the header shrinks, low-priority buttons
 // (theme/feedback/install) move into the kebab menu. Must run after
 // initThemeToggle/initLangSwitcher - they bind handlers to the original
@@ -735,7 +737,7 @@ syncEmptyState();
 // offline cache.
 //
 // BASE_URL ensures correct registration when deployed to a subdirectory
-// (e.g. example.com/dashcamigo/); a hardcoded "/sw.js" would 404.
+// (e.g. example.com/everydashcam/); a hardcoded "/sw.js" would 404.
 if (!__PORTABLE__ && "serviceWorker" in navigator) {
     const swUrl = `${import.meta.env.BASE_URL || "/"}sw.js`;
     const swLog = createLogger("sw");

@@ -121,7 +121,7 @@ export interface CspHashPluginOptions extends MetaCspOptions {
 
 export function cspHashPlugin(options: CspHashPluginOptions = {}): Plugin {
     return {
-        name: "dashcamigo-csp-hash",
+        name: "everydashcam-csp-hash",
         apply: "build",
         closeBundle() {
             const distDir = resolve(process.cwd(), "dist");

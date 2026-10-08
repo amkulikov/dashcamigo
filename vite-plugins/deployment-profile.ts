@@ -7,7 +7,7 @@
 
 import { getIndexableSeoLocales, type SeoLocale } from "../src/i18n/seo-config.js";
 
-export const PRIMARY_SITE_ORIGIN = "https://dashcamigo.app";
+export const PRIMARY_SITE_ORIGIN = "https://everydashcam.app";
 export const LARGE_IMAGE_PREVIEW_META = '<meta name="robots" content="max-image-preview:large">';
 
 export type DeploymentProfile = "primary" | "mirror";

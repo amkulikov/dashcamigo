@@ -237,31 +237,6 @@ html[data-edition="portable"] .landing-drop-foot {
     }
 }
 
-/* Keep room for the trip drawer, notifications and overflow touch controls. */
-@media (max-width: 420px) {
-    body:not(.no-trips) .topbar .dc-mark {
-        font-size: 0;
-        gap: 0;
-    }
-
-    body:not(.no-trips) .topbar .dc-mark__icon {
-        width: var(--dc-iconbtn-sm);
-        height: var(--dc-iconbtn-sm);
-    }
-}
-
-@media (width < 360px) {
-    .topbar .dc-mark {
-        font-size: 0;
-        gap: 0;
-    }
-
-    .topbar .dc-mark__icon {
-        width: var(--dc-iconbtn-sm);
-        height: var(--dc-iconbtn-sm);
-    }
-}
-
 @media (max-width: 600px) {
     .portable-identity {
         flex-direction: column;

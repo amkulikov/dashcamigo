@@ -1,65 +1,39 @@
 # Official deployment runbook
 
-This document operates the official dashcamigo.app and beta.dashcamigo.app
-deployments. It is a maintainer runbook for dashcamigo's own
+This document operates the official everydashcam.app and beta.everydashcam.app
+deployments. It is a maintainer runbook for everydashcam's own
 infrastructure, not a recipe for launching another public instance. For a
 personal or internal installation, use [the self-hosting guide](self-hosting.md).
 
-## Build settings
+## Pages project and build
+
+The `everydashcam` Pages project uses
+[Direct Upload](https://developers.cloudflare.com/pages/get-started/direct-upload/).
+GitHub Actions builds the site and Wrangler uploads the resulting `dist/`.
 
 | Setting | Value |
 |---------|-------|
-| Framework preset | None |
-| Build command | `npm run build` |
-| Build output directory | `dist` |
-| Root directory | (empty) |
+| Pages project | `everydashcam` |
+| Production branch | `release` |
+| Preview branch | `main` |
+| Build command in Actions | `npm run build` |
+| Upload directory | `dist` |
 | Node.js version | `.nvmrc` |
 
-## First-time setup via the dashboard
+Build variables and secrets belong in GitHub Actions. The workflow `env:`
+blocks and `.env.example` define the current contract:
 
-1. https://dash.cloudflare.com -> Workers & Pages -> Create application -> Pages
-   -> Connect to Git.
-2. Select `amkulikov/dashcamigo`, branch `main`.
-3. Build settings: use the values from the table above.
-4. Environment variables (Production + Preview): all are optional. Set
-   `VITE_SENTRY_DSN` to enable crash reporting (opt-out in Settings); leave it
-   unset and the Sentry SDK tree-shakes out entirely. (Cloudflare Web Analytics
-   is enabled in the Pages dashboard under Settings -> Web Analytics, not via an
-   env var.) For readable crash stacks in
-   Sentry, set the three build secrets `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` /
-   `SENTRY_PROJECT` (Production only, unless you also want maps for a preview
-   branch) - the workflow then uploads hidden source maps to Sentry in a bounded,
-   non-fatal step and removes them from `dist` before deploy. Without them the
-   build still works, stacks just stay minified. See `.env.example` for the full
-   contract and the other optional variables.
-   `INDEXNOW_KEY` (Production only, type **Secret**) makes the build emit the
-   IndexNow proof-of-ownership file; unset, IndexNow is simply off. Why it is a
-   secret and how to rotate it: `docs/seo.md`,
-   "IndexNow".
-5. Save and Deploy.
+- `VITE_SENTRY_DSN` enables opt-in crash reporting in production;
+  `VITE_SENTRY_DSN_STAGING` does the same for staging. An absent DSN compiles
+  crash reporting out.
+- `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT` enable production
+  source-map upload; staging uses `SENTRY_PROJECT_STAGING`. Upload is bounded
+  and non-fatal, and hidden maps are removed before deployment.
+- `INDEXNOW_KEY` enables the production ownership file and post-deploy ping.
+  Its storage and rotation rules live in [the SEO guide](seo.md#indexnow).
 
-### Moving to another repository
-
-A Pages project cannot be repointed at a different repository - Cloudflare
-offers no repo swap, and a re-created repository (even under the same name) is
-a different repository to the GitHub App. Two ways out:
-
-- Re-create the Pages project against the new repo and move the custom domains
-  over: remove each from the old project first, then add to the new one -
-  there is no atomic move, so this is a downtime window. `beta` must also be
-  re-added as a custom domain before its CNAME can point at the new project's
-  branch alias (a bare CNAME to `*.pages.dev` without the dashboard
-  association 522s).
-- Keep the project and retire git integration: Cloudflare supports manual
-  deployments into a git-integrated project, and wrangler deploys by project
-  name over the API - no git binding involved. The reference deployment does
-  this (see "Deployment pipeline"); the dead git link in the dashboard is
-  cosmetic. Already-published deployments keep serving either way.
-
-After the first deploy, the project is reachable at
-`https://dashcamigo.pages.dev`. The official deployment does not rely on the
-dashboard's automatic Git builds; GitHub Actions owns staging and production as
-described next.
+The production Pages alias is `https://everydashcam.pages.dev`. Publishing
+uses the workflows below; dashboard build settings do not build this project.
 
 ## Deployment pipeline (who does what)
 
@@ -68,7 +42,7 @@ The official deployment is two-tier, with one working branch:
 - **`main`** is the only branch anyone commits to. Every push deploys
   staging: `deploy.yml` builds with the staging env and uploads `dist/` as a
   `main` branch deployment, reachable via the branch alias
-  `main.dashcamigo.pages.dev` - the staging domain (beta.dashcamigo.app) is a
+  `main.everydashcam.pages.dev` - the staging domain (beta.everydashcam.app) is a
   CNAME to that alias (see "Staging domain" below).
 - **`release`** is machine-managed: only the `promote` job of `release.yml`
   moves it, fast-forwarding to the commit a `v*` tag points at, so the repo
@@ -87,9 +61,7 @@ uploaded:
   promote, the self-host artifacts, and the chained IndexNow ping.
 - `indexnow.yml` - the manual re-ping button.
 
-The Pages project's git integration is unused - Pages cannot re-link a
-project to another repository (see "Moving to another repository"); every
-deployment is a direct upload. Wrangler deploys by project name with
+Wrangler deploys to the Direct Upload project by name with
 `CLOUDFLARE_API_TOKEN` (custom token, permission "Cloudflare Pages: Edit") +
 `CLOUDFLARE_ACCOUNT_ID` - both GH Actions secrets; without them the deploy
 jobs self-skip. Build env vars live in the workflow files, not the CF dashboard
@@ -118,58 +90,44 @@ Deployment constraints:
   the previous build); the IndexNow preflight retries through the same
   window. Do not debug a just-deployed 404 before waiting it out.
 
-## Custom domain
+## Custom domains
 
-Pages -> Custom domains -> Set up a custom domain -> enter `dashcamigo.app`.
-Because the domain is in the same Cloudflare account, Pages writes the
-CNAME-flattened apex record and issues Universal SSL.
+Keep `everydashcam.app` and `www.everydashcam.app` attached to the
+`everydashcam` Pages project, with active certificates and proxied CNAMEs to
+`everydashcam.pages.dev`. Cloudflare flattens the apex CNAME. The apex serves
+the production deployment; `www` redirects to it at the edge.
 
 ### Staging domain
 
-Custom domains attached via the Pages UI always serve the *production*
-deployment. A staging domain instead rides a branch alias: create a CNAME
-record `beta.dashcamigo.app` -> `main.dashcamigo.pages.dev` (Proxied) in the
-zone's DNS. Requirements: the branch must be a non-production branch with
-preview deployments enabled, and the zone must live in the same CF account
-(otherwise the alias TLS certificate does not cover the vanity name).
+After a successful `main` deployment, attach `beta.everydashcam.app` under
+Pages -> Custom domains. Once active, set its proxied CNAME target to
+`main.everydashcam.pages.dev`. Both the Pages association and the proxied
+branch-alias record are required; an unproxied record serves production.
+See Cloudflare's [custom branch domain guide](https://developers.cloudflare.com/pages/how-to/custom-branch-aliases/).
 
 ### www -> apex redirect
 
-The canonical method per Cloudflare's own docs for Pages sites:
-https://developers.cloudflare.com/pages/how-to/www-redirect/. **Not** via
-`_redirects` (it cannot match on host), **not** via Page Rules (legacy), **not**
-via a Single Redirect Rule - use a Bulk Redirect, because it intercepts the
-request at the edge before Pages.
+Use a [Single Redirect](https://developers.cloudflare.com/rules/url-forwarding/single-redirects/settings/)
+in the `everydashcam.app` zone:
 
-1. **DNS.** Zone `dashcamigo.app` -> DNS -> Records. Remove the `www` CNAME to
-   `dashcamigo.pages.dev`. Create a `www` **A** record pointing at `192.0.2.1`
-   (RFC 5737 TEST-NET-1, a non-routable range), Proxy status: **Proxied** (orange
-   cloud). The idea: the edge needs a Proxied DNS record to intercept the request;
-   no real origin is needed because the Bulk Redirect returns a 301 before proxying.
-2. **Pages Custom Domains.** Pages -> project -> Custom domains -> remove
-   `www.dashcamigo.app`. After step 1 the www SSL cert cannot renew (DNS validation
-   fails), so it is cleaner to detach it explicitly. Keep `dashcamigo.app`.
-3. **Bulk Redirect.** Zone `dashcamigo.app` -> Rules -> Bulk Redirects -> Create a
-   list (type URL Redirect, e.g. name `www-to-apex`) -> Add URL redirect:
-    - Source URL: `www.dashcamigo.app`
-    - Target URL: `https://dashcamigo.app`
-    - Status: `301`
-    - Parameters (all four): **Preserve query string, Subpath matching, Preserve
-      path suffix, Include subdomains**
+| Setting | Value |
+|---------|-------|
+| Match expression | `http.host eq "www.everydashcam.app"` |
+| Target URL expression | `concat("https://everydashcam.app", http.request.uri.path)` |
+| Status | `301` |
+| Preserve query string | Enabled |
 
-   Save list -> Create rule (if CF did not offer it automatically) -> attach the
-   list -> Deploy.
-4. **Check.**
-    ```sh
-    curl -sI "https://www.dashcamigo.app/en/cameras/70mai/?ref=test"
-    # expect: HTTP/2 301
-    #         location: https://dashcamigo.app/en/cameras/70mai/?ref=test
-    ```
+Keep `www` proxied and retain its Pages custom-domain association. The rule
+preserves every path and query string while changing the hostname to the
+canonical apex. Check a nested URL after changing the rule:
 
-Bulk Redirects are available on all Cloudflare plans (including Free), with ample
-quota for a single rule.
+```sh
+curl -sI "https://www.everydashcam.app/en/cameras/70mai/?ref=test"
+# expect: HTTP/2 301
+#         location: https://everydashcam.app/en/cameras/70mai/?ref=test
+```
 
-## Handling `dashcamigo.pages.dev`
+## Handling `everydashcam.pages.dev`
 
 Cloudflare hands every project a `pages.dev` subdomain and it cannot be removed.
 Options:
@@ -177,11 +135,11 @@ Options:
 ### Option A - ignore (default)
 
 Just do not advertise it. The HTML already carries
-`<link rel="canonical" href="https://dashcamigo.app/">`, so search engines follow
+`<link rel="canonical" href="https://everydashcam.app/">`, so search engines follow
 the canonical and do not surface `pages.dev` duplicates.
 
 - **Pro:** nothing to do.
-- **Con:** anyone who learns the `dashcamigo.pages.dev` URL can open the app there.
+- **Con:** anyone who learns the `everydashcam.pages.dev` URL can open the app there.
   Same content.
 
 ### Option B - 301 redirect via a Pages Function
@@ -196,8 +154,8 @@ export const onRequest = async ({ request, next }) => {
     // The production pages.dev URL has exactly one subdomain segment before
     // pages.dev. Preview deploys (for PR/branch) carry a commit-hash prefix -
     // do not redirect those, so they stay reviewable.
-    if (url.hostname === "dashcamigo.pages.dev") {
-        url.hostname = "dashcamigo.app";
+    if (url.hostname === "everydashcam.pages.dev") {
+        url.hostname = "everydashcam.app";
         return Response.redirect(url.toString(), 301);
     }
     return next();
@@ -300,7 +258,7 @@ Consequences the workflow is built around:
   by a post-build hook (Oxc).
 - `public/manifest.webmanifest` - PWA-installable.
 - `public/fonts/` - self-hosted woff2 fonts (generated by `node scripts/fetch-fonts.mjs`).
-- `.nvmrc` - the Node version CF Pages builds with (see the build-settings table).
+- `.nvmrc` - the Node version used by the GitHub Actions builds.
 
 ## What is not needed
 

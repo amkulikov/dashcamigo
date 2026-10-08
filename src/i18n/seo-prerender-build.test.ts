@@ -2,17 +2,39 @@
 // by directly invoking the helpers exported from seo-prerender.ts on a
 // representative source HTML fragment.
 
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { dynamicBaselinePlugin } from "../../vite-plugins/dynamic-baseline.js";
 import { stringifyJsonLd } from "../../vite-plugins/html-utils.js";
-import { applyLocale, getPrerenderLocales, getSeoLocales } from "../../vite-plugins/seo-prerender.js";
+import { addNoIndexHeader, applyLocale, getPrerenderLocales, getSeoLocales } from "../../vite-plugins/seo-prerender.js";
 import { SUPPORTED_BRANDS, getAllBrandsCommaSeparated, getLandingBrands } from "../../vite-plugins/supported-brands.js";
 import { getVendorSitemapEntries, matchVendorRoute } from "../../vite-plugins/vendor-pages.js";
 import { SEO_LOCALES, getHreflangCodes, getIndexableSeoLocales } from "./seo-config.js";
 
 afterEach(() => {
     vi.unstubAllEnvs();
+});
+
+describe("addNoIndexHeader", () => {
+    it("keeps security headers and noindex together in the single global Pages rule", () => {
+        const source = readFileSync(new URL("../../public/_headers", import.meta.url), "utf8");
+        const output = addNoIndexHeader(source);
+        expect([...output.matchAll(/^\/\*$/gm)]).toHaveLength(1);
+        const global = output.split(/^\/\*$/m)[1]!.split(/^\/\S/m)[0]!;
+        expect(global).toContain("  X-Robots-Tag: noindex\n");
+        for (const header of ["Content-Security-Policy", "Strict-Transport-Security", "X-Frame-Options", "Cross-Origin-Opener-Policy"]) {
+            const original = source.split("\n").find((line) => line.startsWith(`  ${header}:`));
+            expect(original, `${header} exists in the source policy`).toBeDefined();
+            expect(global).toContain(original!);
+        }
+        expect(output.split(/^\/\*$/m)[0]).toBe(source.split(/^\/\*$/m)[0]);
+    });
+
+    it("rejects missing or duplicate global rules instead of shadowing the policy", () => {
+        expect(() => addNoIndexHeader("/assets/*\n  Cache-Control: immutable\n")).toThrow("exactly one global headers rule");
+        expect(() => addNoIndexHeader("/*\n  X-Frame-Options: DENY\n/*\n  X-Robots-Tag: noindex\n")).toThrow("exactly one global headers rule");
+    });
 });
 
 describe("getPrerenderLocales", () => {
@@ -35,11 +57,11 @@ describe("getPrerenderLocales", () => {
 
     it("derived og title strips the site-name tail when present", () => {
         // For locales without hand-written overrides, og title should be
-        // page.title minus the " | dashcamigo" SERP tail. Check at least one
+        // page.title minus the " | everydashcam" SERP tail. Check at least one
         // locale where derivation kicks in (de has no OG_OVERRIDES entry).
         const de = getPrerenderLocales().find((l) => l.seo.lang === "de");
         expect(de).toBeDefined();
-        expect(de?.ogTitle.includes(" | dashcamigo"), "OG title must not carry the SERP site-name tail").toBe(false);
+        expect(de?.ogTitle.includes(" | everydashcam"), "OG title must not carry the SERP site-name tail").toBe(false);
     });
 });
 
@@ -105,20 +127,20 @@ describe("vendor sitemap entries", () => {
 
     it("omits retired low-signal locale pages", () => {
         const urls = new Set(entries.map((entry) => entry.loc));
-        expect(urls.has("https://dashcamigo.app/pt/cameras/blackvue/")).toBe(false);
-        expect(urls.has("https://dashcamigo.app/ko/cameras/garmin/")).toBe(false);
-        expect(urls.has("https://dashcamigo.app/pt/cameras/vantrue/")).toBe(false);
-        expect(urls.has("https://dashcamigo.app/pt/cameras/thinkware/")).toBe(false);
+        expect(urls.has("https://everydashcam.app/pt/cameras/blackvue/")).toBe(false);
+        expect(urls.has("https://everydashcam.app/ko/cameras/garmin/")).toBe(false);
+        expect(urls.has("https://everydashcam.app/pt/cameras/vantrue/")).toBe(false);
+        expect(urls.has("https://everydashcam.app/pt/cameras/thinkware/")).toBe(false);
     });
 
     it("alternates for vendor pages target the SAME vendor across locales (not site root)", () => {
         // Pick the 70mai entry from the EN locale; its de alternate must be
         // /de/cameras/70mai/, not /de/. English now lives under /en/ like
         // every other locale, not at /.
-        const enVendor = entries.find((e) => e.loc === "https://dashcamigo.app/en/cameras/70mai/");
+        const enVendor = entries.find((e) => e.loc === "https://everydashcam.app/en/cameras/70mai/");
         expect(enVendor).toBeDefined();
         expect(enVendor?.alternates.de).toMatch(/\/de\/cameras\/70mai\/$/);
-        expect(enVendor?.alternates.ja).toBe("https://dashcamigo.app/ja/cameras/70mai/");
+        expect(enVendor?.alternates.ja).toBe("https://everydashcam.app/ja/cameras/70mai/");
     });
 });
 
@@ -147,28 +169,28 @@ describe("hreflang graph completeness", () => {
 function buildMinimalBaseline(jsonLdTags = { open: "script", close: "script" }): string {
     return [
         '<!doctype html><html lang="en"><head>',
-        '<link href="https://dashcamigo.app/" rel="canonical">',
+        '<link href="https://everydashcam.app/" rel="canonical">',
         '<meta content="en-US" http-equiv="content-language">',
         // hreflang block - matches the attribute order html-minifier-terser
         // produces (href, rel, hreflang) in the real dist/ output.
-        '<link href="https://dashcamigo.app/de/" rel="alternate" hreflang="de">',
-        '<link href="https://dashcamigo.app/" rel="alternate" hreflang="en">',
-        '<link href="https://dashcamigo.app/ru/" rel="alternate" hreflang="ru">',
-        '<link href="https://dashcamigo.app/" rel="alternate" hreflang="x-default">',
+        '<link href="https://everydashcam.app/de/" rel="alternate" hreflang="de">',
+        '<link href="https://everydashcam.app/" rel="alternate" hreflang="en">',
+        '<link href="https://everydashcam.app/ru/" rel="alternate" hreflang="ru">',
+        '<link href="https://everydashcam.app/" rel="alternate" hreflang="x-default">',
         // og + twitter
-        '<meta content="https://dashcamigo.app/" property="og:url">',
+        '<meta content="https://everydashcam.app/" property="og:url">',
         '<meta content="Old EN title" property="og:title">',
         '<meta content="Old EN description" property="og:description">',
-        '<meta content="https://dashcamigo.app/og-cover.png" property="og:image">',
+        '<meta content="https://everydashcam.app/og-cover.png" property="og:image">',
         '<meta content="en_US" property="og:locale">',
         '<meta content="ru_RU" property="og:locale:alternate">',
         '<meta content="de_DE" property="og:locale:alternate">',
         '<meta name="twitter:title" content="Old EN title">',
         '<meta name="twitter:description" content="Old EN twitter">',
-        '<meta name="twitter:image" content="https://dashcamigo.app/og-cover.png">',
+        '<meta name="twitter:image" content="https://everydashcam.app/og-cover.png">',
         // WebApplication JSON-LD with explicit id
-        `<${jsonLdTags.open} id="webapp-jsonld" type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","description":"OLD EN","url":"https://dashcamigo.app/","inLanguage":["en","ru"],"featureList":["x"]}</${jsonLdTags.close}>`,
-        `<${jsonLdTags.open} id="website-jsonld" type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","@id":"https://dashcamigo.app/#website","name":"dashcamigo","url":"https://dashcamigo.app/"}</${jsonLdTags.close}>`,
+        `<${jsonLdTags.open} id="webapp-jsonld" type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","description":"OLD EN","url":"https://everydashcam.app/","inLanguage":["en","ru"],"featureList":["x"]}</${jsonLdTags.close}>`,
+        `<${jsonLdTags.open} id="website-jsonld" type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","@id":"https://everydashcam.app/#website","name":"everydashcam","url":"https://everydashcam.app/"}</${jsonLdTags.close}>`,
         // FAQ JSON-LD (different id, should not be confused with WebApp)
         '<script id="faq-jsonld" type="application/ld+json">{"@type":"FAQPage","mainEntity":[]}</script>',
         "</head><body>",
@@ -194,11 +216,11 @@ describe("applyLocale", () => {
     });
 
     it("rewrites canonical to the self-referencing locale URL", () => {
-        expect(out).toMatch(/<link[^>]*href="https:\/\/dashcamigo\.app\/ru\/"[^>]*rel="canonical"/);
+        expect(out).toMatch(/<link[^>]*href="https:\/\/everydashcam\.app\/ru\/"[^>]*rel="canonical"/);
     });
 
     it("rewrites og:url to the self-referencing locale URL", () => {
-        expect(out).toMatch(/<meta[^>]*content="https:\/\/dashcamigo\.app\/ru\/"[^>]*property="og:url"/);
+        expect(out).toMatch(/<meta[^>]*content="https:\/\/everydashcam\.app\/ru\/"[^>]*property="og:url"/);
     });
 
     it("rewrites content-language to BCP47 hyphen form", () => {
@@ -246,9 +268,9 @@ describe("applyLocale", () => {
         expect(match).not.toBeNull();
         const payload = JSON.parse(match![1]!);
         expect(payload.description).toBe(ru.dict["meta.description"]);
-        expect(payload.url).toBe("https://dashcamigo.app/ru/");
-        expect(payload["@id"]).toBe("https://dashcamigo.app/#webapp");
-        expect(payload.isPartOf).toEqual({ "@id": "https://dashcamigo.app/#website" });
+        expect(payload.url).toBe("https://everydashcam.app/ru/");
+        expect(payload["@id"]).toBe("https://everydashcam.app/#webapp");
+        expect(payload.isPartOf).toEqual({ "@id": "https://everydashcam.app/#website" });
         expect(payload.inLanguage).toEqual(getIndexableSeoLocales().map((l) => l.hreflang));
         // featureList: existing capability entries are preserved verbatim, a
         // single "vendor support" entry is appended/rewritten from SUPPORTED_BRANDS.
@@ -263,8 +285,8 @@ describe("applyLocale", () => {
         const match = /<script[^>]*id="website-jsonld"[^>]*>([\s\S]*?)<\/script>/.exec(out);
         expect(match).not.toBeNull();
         const payload = JSON.parse(match![1]!);
-        expect(payload["@id"]).toBe("https://dashcamigo.app/#website");
-        expect(payload.url).toBe("https://dashcamigo.app/");
+        expect(payload["@id"]).toBe("https://everydashcam.app/#website");
+        expect(payload.url).toBe("https://everydashcam.app/");
     });
 
     it("does not touch FAQ JSON-LD's @type (only id=webapp-jsonld is rewritten)", () => {
@@ -341,7 +363,7 @@ describe("applyLocale on default (en) locale", () => {
 
     it("canonical points at /en/, the English locale's home", () => {
         const out = applyLocale(buildMinimalBaseline(), en, {});
-        expect(out).toMatch(/<link[^>]*href="https:\/\/dashcamigo\.app\/en\/"[^>]*rel="canonical"/);
+        expect(out).toMatch(/<link[^>]*href="https:\/\/everydashcam\.app\/en\/"[^>]*rel="canonical"/);
     });
 
     it("hreflang x-default points at the default locale's home (/en/), not at the root stub", () => {
@@ -351,7 +373,7 @@ describe("applyLocale on default (en) locale", () => {
         // /en/cameras/<slug>/. Earlier policy pointed homepage x-default
         // at "/", which is a content-less redirect stub and a poor
         // fallback target for crawlers that follow x-default.
-        expect(out).toMatch(/<link[^>]*hreflang="x-default"[^>]*href="https:\/\/dashcamigo\.app\/en\/"/);
+        expect(out).toMatch(/<link[^>]*hreflang="x-default"[^>]*href="https:\/\/everydashcam\.app\/en\/"/);
     });
 });
 
@@ -480,7 +502,7 @@ describe("WebApplication featureList rewriting", () => {
             "@context": "https://schema.org",
             "@type": "WebApplication",
             description: "OLD",
-            url: "https://dashcamigo.app/",
+            url: "https://everydashcam.app/",
             inLanguage: ["en"],
             featureList,
         };
@@ -747,7 +769,7 @@ describe("SUPPORTED_BRANDS landing brands match VENDORS", () => {
         const entries = getVendorSitemapEntries();
         for (const brand of SUPPORTED_BRANDS) {
             if (!brand.hasLandingPage) continue;
-            const expectedUrl = `https://dashcamigo.app/en/cameras/${brand.slug}/`;
+            const expectedUrl = `https://everydashcam.app/en/cameras/${brand.slug}/`;
             expect(entries.some((e) => e.loc === expectedUrl)).toBe(true);
         }
     });

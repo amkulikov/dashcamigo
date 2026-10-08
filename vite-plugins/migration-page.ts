@@ -6,7 +6,7 @@ import { build, normalizePath, type Plugin } from "vite";
 export function migrationPagePlugin(): Plugin {
     let root: string;
     return {
-        name: "dashcamigo-migration-page",
+        name: "everydashcam-migration-page",
         configResolved(config) {
             root = config.root;
         },

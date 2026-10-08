@@ -1,4 +1,4 @@
-// Generates favicons from public/assets/mark.svg into the public/ root.
+// Generates app icons and favicons from the marks in public/assets/.
 // Run (one-off, when the brand mark changes):
 //   node scripts/generate-favicons.mjs
 //
@@ -9,7 +9,7 @@
 //    doesn't show an icon in SERP.
 //  - Root-level /favicon.svg + /favicon.ico + /favicon-192.png cover all
 //    cases: SVG for modern browsers and Google, ICO for legacy crawlers,
-//    PNG-192 for apple-touch-icon and schema.org.
+//    PNG-192 for the manifest and PNG-180 for apple-touch-icon.
 //
 // ImageMagick (`magick`) - the only dependency, installed via brew. We
 // avoided sharp/png-to-ico as npm deps - they have no place in the project's
@@ -23,47 +23,49 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
 const SOURCE = resolve(ROOT, "public/assets/mark.svg");
+const SMALL_SOURCE = resolve(ROOT, "public/assets/mark-small.svg");
 const MASKABLE_SOURCE = resolve(ROOT, "public/assets/mark-maskable.svg");
 const OUT_SVG = resolve(ROOT, "public/favicon.svg");
+const OUT_PNG_16 = resolve(ROOT, "public/favicon-16.png");
 const OUT_PNG_32 = resolve(ROOT, "public/favicon-32.png");
 const OUT_PNG_192 = resolve(ROOT, "public/favicon-192.png");
 const OUT_PNG_512 = resolve(ROOT, "public/favicon-512.png");
+const OUT_APPLE = resolve(ROOT, "public/apple-touch-icon.png");
 const OUT_PNG_MASKABLE = resolve(ROOT, "public/icon-maskable-512.png");
 const OUT_ICO = resolve(ROOT, "public/favicon.ico");
 
-if (!existsSync(SOURCE)) {
-    console.error(`source not found: ${SOURCE}`);
-    process.exit(1);
+for (const source of [SOURCE, SMALL_SOURCE, MASKABLE_SOURCE]) {
+    if (!existsSync(source)) {
+        console.error(`source not found: ${source}`);
+        process.exit(1);
+    }
 }
 
-// SVG at the root - just a copy of mark.svg. Modern browsers use it
-// directly, no rasterization needed.
-copyFileSync(SOURCE, OUT_SVG);
+// More rounded drums keep the mark legible at favicon sizes.
+copyFileSync(SMALL_SOURCE, OUT_SVG);
 console.log(`wrote ${OUT_SVG}`);
 
-// Density via -density: ImageMagick uses this to rasterize the SVG.
-// 384 = 128px virtual width × 3 for a square 384x384 canvas,
-// then resized to the target size.
 function rasterize(source, outPath, size) {
     const args = ["-background", "none", "-density", "384", source, "-resize", `${size}x${size}`, outPath];
     execFileSync("magick", args, { stdio: "inherit" });
     console.log(`wrote ${outPath} (${size}x${size})`);
 }
 
-rasterize(SOURCE, OUT_PNG_32, 32);
+rasterize(SMALL_SOURCE, OUT_PNG_16, 16);
+rasterize(SMALL_SOURCE, OUT_PNG_32, 32);
 rasterize(SOURCE, OUT_PNG_192, 192);
 rasterize(SOURCE, OUT_PNG_512, 512);
+rasterize(SOURCE, OUT_APPLE, 180);
 
 // Maskable icon. Per W3C App Manifest spec the OS may apply any shape mask
 // (circle, squircle, rounded square); significant content must sit inside the
 // inner circle of radius 0.4 * canvas. The companion SVG has that geometry
-// baked in - solid black fills the full quad and the glyph is pre-positioned
+// baked in - solid ink fills the full quad and the glyph is pre-positioned
 // in the safe zone - so we just rasterize it straight without compositing.
 rasterize(MASKABLE_SOURCE, OUT_PNG_MASKABLE, 512);
 
-// ICO - multi-resolution container 16/32/48. Enough for Google; modern
-// browsers will use the SVG anyway. ImageMagick assembles the ICO from
-// several sizes in one command.
-const icoArgs = ["-background", "none", "-density", "384", SOURCE, "-define", "icon:auto-resize=16,32,48", OUT_ICO];
+// ICO - multi-resolution container 16/32. Modern browsers use the SVG.
+// Reuse the small PNG variants so browser-tab geometry stays identical.
+const icoArgs = [OUT_PNG_16, OUT_PNG_32, OUT_ICO];
 execFileSync("magick", icoArgs, { stdio: "inherit" });
-console.log(`wrote ${OUT_ICO} (multi-res 16/32/48)`);
+console.log(`wrote ${OUT_ICO} (multi-res 16/32)`);

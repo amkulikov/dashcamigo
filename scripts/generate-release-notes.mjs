@@ -63,7 +63,7 @@ if (previousTag && repo) {
     );
 } else {
     lines.push(
-        `**Full changelog:** [CHANGELOG.md](https://github.com/${repo || "amkulikov/dashcamigo"}/blob/${tag}/CHANGELOG.md)`,
+        `**Full changelog:** [CHANGELOG.md](https://github.com/${repo || "everydashcam/everydashcam"}/blob/${tag}/CHANGELOG.md)`,
     );
 }
 

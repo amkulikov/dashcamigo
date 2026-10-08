@@ -1,18 +1,18 @@
 {
-  "name": "dashcamigo",
+  "name": "everydashcam",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "No-backend, in-browser dashcam recording viewer: multi-channel playback, GPS track on a map, speed/G-force chart, and re-encode-free clip export - all local, nothing uploaded.",
   "license": "AGPL-3.0-only",
   "author": "Alexander Kulikov",
-  "homepage": "https://dashcamigo.app",
+  "homepage": "https://everydashcam.app",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/amkulikov/dashcamigo.git"
+    "url": "git+https://github.com/everydashcam/everydashcam.git"
   },
   "bugs": {
-    "url": "https://github.com/amkulikov/dashcamigo/issues"
+    "url": "https://github.com/everydashcam/everydashcam/issues"
   },
   "keywords": [
     "dashcam",

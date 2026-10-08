@@ -255,7 +255,7 @@ jobs:
           # HEAD is the peeled commit even for an annotated tag - GITHUB_SHA
           # would be the tag object.
           npx wrangler@4.114.0 pages deploy dist \
-            --project-name=dashcamigo \
+            --project-name=everydashcam \
             --branch=release \
             --commit-hash="$(git rev-parse HEAD)" \
             --commit-dirty=false
@@ -473,7 +473,7 @@ jobs:
           fi
           mapfile -t portable_assets < portable-assets.txt
           gh release create "$TAG" "$ZIP" "$TGZ" SHA256SUMS "${portable_assets[@]}" portable-manifest.json \
-            --draft --verify-tag --notes-file RELEASE_NOTES.md --title "dashcamigo $TAG"
+            --draft --verify-tag --notes-file RELEASE_NOTES.md --title "everydashcam $TAG"
           gh release edit "$TAG" --draft=false
 
       - name: Upload dry-run artifact (manual run only)

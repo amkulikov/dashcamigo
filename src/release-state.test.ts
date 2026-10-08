@@ -57,7 +57,7 @@ function check(releases: Release[][] = [], run: Record<string, unknown> | null =
 }
 
 beforeEach(() => {
-    directory = mkdtempSync(join(tmpdir(), "dashcamigo-release-state-"));
+    directory = mkdtempSync(join(tmpdir(), "everydashcam-release-state-"));
     git("init", "-b", "main");
     git("config", "user.name", "Test");
     git("config", "user.email", "test@example.invalid");

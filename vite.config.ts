@@ -187,7 +187,7 @@ export default defineConfig(({ command }) => {
         // existence gate means this never shadows the app's locale routes
         // (/en/, /ru/, ...) or hashed assets. Build/preview unaffected.
         {
-            name: "dashcamigo-dev-clean-html",
+            name: "everydashcam-dev-clean-html",
             apply: "serve",
             configureServer(server) {
                 server.middlewares.use((req, res, next) => {
@@ -426,7 +426,7 @@ export default defineConfig(({ command }) => {
         // harness can only see main-thread JS heap - tests for tracking memory
         // regressions in transcode/preview/gps-extract workers are blind.
         //
-        // Gated by PERF_TEST=1 so production preview (and dashcamigo.app
+        // Gated by PERF_TEST=1 so production preview (and everydashcam.app
         // itself) stay unchanged. COEP=require-corp can break third-party
         // assets that lack CORP headers (map tiles, analytics scripts) -
         // perf-tests run on an offline-ish localhost and don't depend on them.

@@ -132,9 +132,9 @@ export function generateThirdPartyNotices(root = process.cwd()) {
     }
 
     const header = [
-        "Third-party notices for dashcamigo (https://dashcamigo.app)",
+        "Third-party notices for everydashcam (https://everydashcam.app)",
         "",
-        "dashcamigo itself is licensed under AGPL-3.0-only; its source code lives at",
+        "everydashcam itself is licensed under AGPL-3.0-only; its source code lives at",
         "the repository linked from the site. This file reproduces the license texts",
         "of third-party packages and assets used by the application. The package list",
         "is generated from package-lock.json at build time and may include packages",

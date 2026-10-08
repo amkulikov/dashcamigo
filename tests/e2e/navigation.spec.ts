@@ -195,7 +195,9 @@ test.describe("navigation & shell", () => {
         expect(download.suggestedFilename()).toMatch(/^dashcamigo-report-.+\.txt$/);
         const reportPath = await download.path();
         const report = readFileSync(reportPath, "utf8");
-        expect(report.startsWith("dashcamigo — technical details"), "report leads with the send-to header").toBe(true);
+        expect(report.startsWith("everydashcam — technical details"), "report leads with the send-to header").toBe(
+            true,
+        );
         expect(report).toContain("== environment ==");
 
         await expect(page.locator("#feedback-post-download"), "hand-off must be shown").toBeVisible();
@@ -206,9 +208,9 @@ test.describe("navigation & shell", () => {
         await page.locator("#feedback-post-download-mail").click();
         const mailto = await page.evaluate(() => (window as unknown as { __mailto?: string }).__mailto);
         expect(mailto, "a mailto: must have been opened").toBeTruthy();
-        expect(mailto).toContain("mailto:feedback@dashcamigo.app");
+        expect(mailto).toContain("mailto:feedback@everydashcam.app");
         const decoded = decodeURIComponent(mailto ?? "");
-        expect(decoded).toContain("[dashcamigo]");
+        expect(decoded).toContain("[everydashcam]");
         // The "I've got a link" path drops a recordings-link placeholder into the body.
         expect(decoded).toContain("Recordings link");
     });

@@ -16,7 +16,7 @@ safer than selecting an entire SD-card folder. The map requires WebGL2 and may
 be unavailable when hardware acceleration is disabled or the graphics hardware
 is too old.
 
-dashcamigo checks these capabilities when it opens. If something important is
+everydashcam checks these capabilities when it opens. If something important is
 missing, the app explains which feature is affected and what you can do. The
 rest of this document records the exact boundary for maintainers and technical
 troubleshooting.

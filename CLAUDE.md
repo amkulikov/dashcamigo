@@ -22,8 +22,8 @@ task seems to require crossing one, stop and ask - never work around it silently
 
 ## Branches and deployment
 
-- One working branch: `main` -> staging (https://beta.dashcamigo.app) on every
-  push (`deploy.yml`). Production (https://dashcamigo.app) deploys on a `v*`
+- One working branch: `main` -> staging (https://beta.everydashcam.app) on every
+  push (`deploy.yml`). Production (https://everydashcam.app) deploys on a `v*`
   tag push: `release.yml` builds and uploads via wrangler; the machine-managed
   `release` branch only records what production runs and only `release.yml`
   moves it - never touch `release` by hand. Never rebase `main`; on conflict,

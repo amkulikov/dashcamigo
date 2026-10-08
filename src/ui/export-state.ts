@@ -196,7 +196,7 @@ export interface ExportPanelState extends OverlayPreferences {
     /** What to fill letterbox bars with: black or blurred source. */
     letterboxFill: "black" | "blur";
     watermarkAnchor: WatermarkAnchor;
-    /** true = burn the dashcamigo mark into the output. Off means the pipelines
+    /** true = burn the everydashcam mark into the output. Off means the pipelines
      *  get a null anchor - the preview drops the mark too, so what the user sees
      *  is still what they get. */
     withWatermark: boolean;

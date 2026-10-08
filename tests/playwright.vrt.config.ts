@@ -47,6 +47,7 @@ export default defineConfig({
         // Browser selection follows playwright.e2e.config.ts.
         channel: process.env.PW_CHANNEL || "chromium",
         headless: true,
+        reducedMotion: "reduce",
         baseURL: "http://localhost:4173",
         launchOptions: { args: ["--autoplay-policy=no-user-gesture-required"] },
     },

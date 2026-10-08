@@ -1,6 +1,6 @@
 # Staging deploy: every push to `main` builds with the staging env and uploads
 # dist/ to the Cloudflare Pages project as a deployment of the `main` branch.
-# beta.dashcamigo.app is a CNAME to that branch alias
+# beta.everydashcam.app is a CNAME to that branch alias
 # (main.<project>.pages.dev; docs/deploy.md, "Staging domain").
 #
 # The build runs here, not in Cloudflare: the Pages project's git integration
@@ -147,7 +147,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           npx wrangler@4.114.0 pages deploy dist \
-            --project-name=dashcamigo \
+            --project-name=everydashcam \
             --branch=main \
             --commit-hash="${GITHUB_SHA}" \
             --commit-dirty=false
@@ -156,5 +156,5 @@ jobs:
         if: steps.gate.outputs.deploy == 'true'
         env:
           PORTABLE_ALLOW_DEV: "1"
-          PORTABLE_SMOKE_ORIGIN: https://beta.dashcamigo.app
+          PORTABLE_SMOKE_ORIGIN: https://beta.everydashcam.app
         run: node scripts/smoke-portable-downloads.mjs

@@ -61,7 +61,7 @@ export function portableDownloadsPlugin(options: { allowCustom?: boolean } = {})
     let isBuild = false;
     let developmentManifest: PortableManifest | null = null;
     return {
-        name: "dashcamigo-portable-downloads",
+        name: "everydashcam-portable-downloads",
         configResolved(config) {
             isBuild = config.command === "build";
         },

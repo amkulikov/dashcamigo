@@ -27,7 +27,7 @@ const KEY_FORMAT = /^[a-zA-Z0-9-]{8,128}$/;
 
 export function indexnowKeyPlugin(): Plugin {
     return {
-        name: "dashcamigo-indexnow-key",
+        name: "everydashcam-indexnow-key",
         apply: "build",
         generateBundle() {
             // Real env only (GitHub Actions secret / shell export) - same

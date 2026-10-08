@@ -238,7 +238,7 @@ export function serializeDiagnosticsText(p: DiagPayload): string {
     const push = (s = "") => out.push(s);
 
     push("== environment ==");
-    push(`dashcamigo: ${p.appVersion} (${p.edition})`);
+    push(`everydashcam: ${p.appVersion} (${p.edition})`);
     push(`browser: ${p.userAgent}`);
     push(`languages: ${p.languages.join(", ")}`);
     push(`timezone: ${p.timezone}`);

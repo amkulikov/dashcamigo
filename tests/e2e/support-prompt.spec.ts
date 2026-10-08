@@ -99,7 +99,7 @@ test.describe("project support prompt", () => {
         await expect(page.locator("#support-banner-body")).toContainText("wherever it fits");
         await expect(page.locator("#support-banner-github")).toHaveAttribute(
             "href",
-            "https://github.com/amkulikov/dashcamigo",
+            "https://github.com/everydashcam/everydashcam",
         );
         await expect(page.locator("#support-banner-copy")).toHaveText("Copy link");
         await expect(page.locator("#support-banner-close")).toHaveText("Close");
@@ -222,7 +222,7 @@ test.describe("project support prompt", () => {
         await expect(note).toContainText("Recommendations like these mean a lot to me");
         await expect(note.locator(".support-github")).toHaveAttribute(
             "href",
-            "https://github.com/amkulikov/dashcamigo",
+            "https://github.com/everydashcam/everydashcam",
         );
         await page.evaluate((key) => {
             localStorage.removeItem(key);
@@ -259,7 +259,7 @@ test.describe("project support prompt", () => {
         await expect(copy).toHaveText("Link copied");
         expect(
             await page.evaluate(() => (window as typeof window & { __supportCopiedUrl?: string }).__supportCopiedUrl),
-        ).toBe("https://dashcamigo.app/en/");
+        ).toBe("https://everydashcam.app/en/");
         expect(await page.evaluate((key) => localStorage.getItem(key), ACTION_TAKEN)).toBe("1");
         await expect(copy).toHaveText("Copy link");
         await expect(page.locator("#settings-modal")).toBeVisible();
@@ -275,7 +275,7 @@ test.describe("project support prompt", () => {
 
         await expect(page.locator("#feedback-modal")).toBeVisible();
         await expect(page.locator(".feedback-thanks")).toHaveText(
-            "Thanks for taking the time to write — it really helps make dashcamigo better.",
+            "Thanks for taking the time to write — it really helps make everydashcam better.",
         );
         const order = await page
             .locator("#feedback-step-recordings")
@@ -373,7 +373,7 @@ test.describe("project support prompt", () => {
             await page.evaluate(
                 () => (window as typeof window & { __supportCopiedUrl?: string }).__supportCopiedUrl ?? null,
             ),
-        ).toBe("https://dashcamigo.app/ru/");
+        ).toBe("https://everydashcam.app/ru/");
         expect(await page.evaluate((key) => localStorage.getItem(key), ACTION_TAKEN)).toBe("1");
         await expect(banner).toBeHidden({ timeout: 3_000 });
 

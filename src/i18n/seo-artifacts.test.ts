@@ -52,7 +52,7 @@ ${htmlAlternates}${robots}
 }
 
 function validate(files: Record<string, string>): { status: number | null; output: string } {
-    const directory = mkdtempSync(join(tmpdir(), "dashcamigo-seo-artifacts-"));
+    const directory = mkdtempSync(join(tmpdir(), "everydashcam-seo-artifacts-"));
     directories.push(directory);
     for (const [path, contents] of Object.entries(files)) {
         const file = join(directory, path);

@@ -17,7 +17,7 @@ let tempDirectory: string;
 const workers: Worker[] = [];
 
 beforeAll(async () => {
-    tempDirectory = await mkdtemp(join(tmpdir(), "dashcamigo-mse-test-"));
+    tempDirectory = await mkdtemp(join(tmpdir(), "everydashcam-mse-test-"));
     const bundle = await rolldown({
         input: fileURLToPath(new URL("./per-file-mse-worker.ts", import.meta.url)),
         platform: "node",

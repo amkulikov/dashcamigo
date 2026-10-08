@@ -3,11 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>404 · dashcamigo</title>
+<title>404 · everydashcam</title>
 <meta name="robots" content="noindex, follow">
 <meta name="theme-color" content="#000000">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="alternate icon" href="/favicon.ico" sizes="any">
+<link rel="stylesheet" href="/brand-mark.css">
 <style>
 /* Standalone page - the prod CSS bundle is hashed (assets/index-*.css), so we
    cannot link to it from a long-lived static file. Inline the minimum the
@@ -18,14 +19,6 @@
     font-weight: 400 900;
     font-display: swap;
     src: url("/fonts/inter-var-latin.woff2") format("woff2");
-    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-    font-family: "Space Grotesk";
-    font-style: normal;
-    font-weight: 700;
-    font-display: swap;
-    src: url("/fonts/space-grotesk-700-latin.woff2") format("woff2");
     unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
@@ -40,7 +33,6 @@
     --dc-ash-5: #5c5c5c;
     --dc-yellow: #f5c518;
     --dc-radius-sm: 4px;
-    --dc-font-brand: "Space Grotesk", "Inter", system-ui, sans-serif;
     --dc-font-display: "Inter", system-ui, sans-serif;
     --dc-font-heavy: "Inter", system-ui, sans-serif;
     --dc-font-mono: ui-monospace, "SF Mono", Menlo, monospace;
@@ -67,27 +59,7 @@ body {
     align-items: center;
 }
 .topbar a { text-decoration: none; color: inherit; }
-
-/* Brand wordmark - same shape and tokens as src/styles/components/topbar.css.
-   Standalone copy, the production .dc-mark class is not reachable from here. */
-.dc-mark {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.22em;
-    font-family: var(--dc-font-brand);
-    font-weight: 700;
-    font-size: 18px;
-    line-height: 1;
-    letter-spacing: -0.02em;
-    text-transform: lowercase;
-    color: var(--dc-white);
-    user-select: none;
-}
-.dc-mark__icon {
-    width: 1.1em;
-    height: 1.1em;
-    flex-shrink: 0;
-}
+.topbar .edc-mark { --edc-drum-bg: #2a2621; }
 
 main {
     display: grid;
@@ -208,14 +180,8 @@ main {
 <body>
 
 <header class="topbar">
-    <a href="/en/" data-locale-home aria-label="dashcamigo">
-        <span class="dc-mark">dashcamigo<svg class="dc-mark__icon" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-            <rect x="3" y="7" width="26" height="20" rx="3" fill="currentColor"/>
-            <rect x="14" y="4" width="4" height="3" rx="0.6" fill="currentColor"/>
-            <circle cx="16" cy="17" r="7" fill="#FF9000"/>
-            <circle cx="16" cy="17" r="4" fill="#000"/>
-            <circle cx="14" cy="15" r="1.4" fill="rgba(255,255,255,0.5)"/>
-        </svg></span>
+    <a href="/en/" data-locale-home aria-label="everydashcam">
+        <span class="edc-mark" role="img" aria-label="everydashcam"><span class="edc-mark__drums" aria-hidden="true"><span class="edc-mark__drum"><span class="edc-mark__column"><span class="edc-mark__letter">E</span></span></span><span class="edc-mark__drum"><span class="edc-mark__column"><span class="edc-mark__letter">V</span></span></span><span class="edc-mark__drum"><span class="edc-mark__column"><span class="edc-mark__letter">E</span></span></span><span class="edc-mark__drum"><span class="edc-mark__column"><span class="edc-mark__letter">R</span></span></span><span class="edc-mark__drum"><span class="edc-mark__column"><span class="edc-mark__letter">Y</span></span></span></span><span class="edc-mark__word" aria-hidden="true">DASHCAM</span></span>
     </a>
 </header>
 

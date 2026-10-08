@@ -50,7 +50,7 @@ omitting their coordinate logs.
 To acquire the logs, connect the **camera itself** to a computer with a USB
 data cable and inspect `DCIM/203gps` in its internal storage. Copy that directory
 with its subdirectories and preserve filenames. Place `203gps` beside the
-SD-card copy's `200video` directory and open their common parent in dashcamigo.
+SD-card copy's `200video` directory and open their common parent in everydashcam.
 Keep the matching original MP4s. The [Z60 Pro manual](https://www.ddpai.com/manuals/z60pro/)
 describes USB access to eMMC under “View/Export eMMC Data”.
 

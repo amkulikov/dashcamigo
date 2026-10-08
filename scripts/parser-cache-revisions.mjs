@@ -18,7 +18,7 @@ const LOG_FILE = resolve(ROOT, "src/log.ts");
 const GENERATED_FILE = resolve(ROOT, "src/parsers/primitives/cache-revisions.generated.ts");
 const METADATA_GENERATED_FILE = resolve(ROOT, "src/persist/cache-revisions.generated.ts");
 const REGISTRY_NAME = "VIDEO_EMBEDDED_PRIMITIVES";
-const VIRTUAL_ENTRY = "virtual:dashcamigo-cache-revision";
+const VIRTUAL_ENTRY = "virtual:everydashcam-cache-revision";
 
 // Rolldown renders external specifiers relative to process.cwd(). Pin it so
 // generated revisions are identical in npm hooks, IDE tasks, and CI wrappers
@@ -116,7 +116,7 @@ async function semanticRevision(path, exportName, extraExternal = []) {
         external: (id) => external.has(id),
         plugins: [
             {
-                name: "dashcamigo-cache-revision-entry",
+                name: "everydashcam-cache-revision-entry",
                 resolveId(id) {
                     if (id === VIRTUAL_ENTRY) return id;
                 },

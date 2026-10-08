@@ -1,18 +1,18 @@
-# Run dashcamigo privately
+# Run everydashcam privately
 
 This guide is for personal and internal installations: a local computer, a home
-network or an organization's private server. dashcamigo is a static web app, so
+network or an organization's private server. everydashcam is a static web app, so
 you can open a portable HTML, run a prebuilt release, use the Docker image,
 copy the files to an internal web server or build the project yourself. Recordings stay in the
 browser whichever route you choose.
 
 The project is not distributed as a white-label product. These instructions do
-not grant permission to publish a separate service under the dashcamigo name,
+not grant permission to publish a separate service under the everydashcam name,
 logo or brand mark. The exact code-license and branding boundary is summarized
 at the end of this guide.
 
-If you only want dashcamigo to work offline, you may not need to host it.
-[dashcamigo.app](https://dashcamigo.app) can be installed from the browser and
+If you only want everydashcam to work offline, you may not need to host it.
+[everydashcam.app](https://everydashcam.app) can be installed from the browser and
 keeps working without a connection after the first visit. Continue below when
 you need a private installation you control.
 
@@ -31,7 +31,7 @@ you need a private installation you control.
 The portable edition is a beta distribution.
 
 Choose **Use offline → Download file** on the website, or download the dated HTML
-for your language from the [latest release](https://github.com/amkulikov/dashcamigo/releases/latest).
+for your language from the [latest release](https://github.com/everydashcam/everydashcam/releases/latest).
 Each HTML is a complete application. No server, installation, companion files
 or first online visit is needed.
 
@@ -53,7 +53,7 @@ The map tries online backgrounds automatically. If no provider is reachable,
 the route and markers remain visible on a local background; the app retries
 when connectivity returns. Select **Route only** to keep the map local.
 After startup the app also makes a small, credential-free request to the primary
-dashcamigo website to check for a
+everydashcam website to check for a
 newer portable release. It sends no recording information or local notes.
 An unavailable endpoint does not block playback or export and does not mean
 your copy is current. The check never downloads a new HTML automatically.
@@ -81,20 +81,20 @@ and start a local server.
 macOS or Linux:
 
 ```sh
-curl -fsSL https://github.com/amkulikov/dashcamigo/releases/latest/download/dashcamigo.tar.gz | tar -xz && npx serve dashcamigo
+curl -fsSL https://github.com/everydashcam/everydashcam/releases/latest/download/dashcamigo.tar.gz | tar -xz && npx serve dashcamigo
 ```
 
 Windows PowerShell (`curl.exe` and `tar` are included with current Windows
 versions):
 
 ```powershell
-curl.exe -fsSL https://github.com/amkulikov/dashcamigo/releases/latest/download/dashcamigo.tar.gz -o dashcamigo.tar.gz; tar -xzf dashcamigo.tar.gz; npx serve dashcamigo
+curl.exe -fsSL https://github.com/everydashcam/everydashcam/releases/latest/download/dashcamigo.tar.gz -o dashcamigo.tar.gz; tar -xzf dashcamigo.tar.gz; npx serve dashcamigo
 ```
 
 Open the local address printed by `npx serve`.
 
 Prefer a regular download? Get `dashcamigo-<version>.zip` from the
-[latest release](https://github.com/amkulikov/dashcamigo/releases/latest),
+[latest release](https://github.com/everydashcam/everydashcam/releases/latest),
 unzip it and run `npx serve dashcamigo`. Extract an update into a fresh folder
 so files left over from an older release cannot remain in the installation.
 
@@ -143,6 +143,9 @@ variables:
 docker run -d --name dashcamigo -p 8080:80 ghcr.io/everydashcam/everydashcam
 ```
 
+For an existing installation, replace the old `ghcr.io/amkulikov/dashcamigo`
+image with the image above. The old image remains available without updates.
+
 Open [localhost:8080](http://localhost:8080).
 
 With Docker Compose:
@@ -159,7 +162,7 @@ services:
 
 The image is stateless, so there is nothing to back up. `latest` follows the
 newest release; versioned `v*` tags match
-[GitHub Releases](https://github.com/amkulikov/dashcamigo/releases).
+[GitHub Releases](https://github.com/everydashcam/everydashcam/releases).
 
 To build the image from your checkout instead:
 
@@ -176,8 +179,8 @@ If other devices will open the app through a NAS or home server, read
 You need Git and the Node.js version required by `package.json`:
 
 ```sh
-git clone https://github.com/amkulikov/dashcamigo.git
-cd dashcamigo
+git clone https://github.com/everydashcam/everydashcam.git
+cd everydashcam
 npm ci
 npm run build
 npx serve dist
@@ -209,7 +212,7 @@ access to install npm packages; fonts and map styles are already in the
 repository. A source archive without Git history also builds successfully, but
 omits version and page-modification metadata.
 
-`npx serve` is recommended because it handles dashcamigo's extension-less URLs.
+`npx serve` is recommended because it handles everydashcam's extension-less URLs.
 `npm run preview` and `python3 -m http.server -d dist` can serve the app itself,
 but links such as `/privacy` return 404 without an additional rewrite rule.
 
@@ -257,7 +260,7 @@ Rebuild and replace the served files or image whenever you change the key.
 ## Serve it on an internal web server
 
 Copy the contents of the release folder or `dist/` to the root of the site.
-Subpath deployments such as `https://example.com/dashcamigo/` are not supported.
+Subpath deployments such as `https://example.com/everydashcam/` are not supported.
 
 Your server needs these rules:
 
@@ -285,12 +288,12 @@ Some editing and export features require a secure browser context:
   options and offline caching are unavailable.
 
 Use HTTPS through your web server or reverse proxy when other devices connect
-to dashcamigo over the network. The app also explains this limitation when it
+to everydashcam over the network. The app also explains this limitation when it
 detects an insecure address.
 
 ## Network access for server installations
 
-See the [privacy policy](https://dashcamigo.app/privacy) for map-service requests.
+See the [privacy policy](https://everydashcam.app/privacy) for map-service requests.
 
 Without an internet connection, the basemap is blank, but the route, markers,
 chart and video continue to work. Nothing else is contacted unless you enable
@@ -298,12 +301,12 @@ an optional integration from `.env.example`.
 
 ## License and branding
 
-Exports that include overlays carry the dashcamigo.app watermark. Original
+Exports that include overlays carry the everydashcam.app watermark. Original
 quality exports are left untouched.
 
 The source code is available under the AGPL-3.0-only license. If a modified
 version is made available to other people over a network, the license requires
-its complete source to be offered under the same terms. The **dashcamigo** name,
+its complete source to be offered under the same terms. The **everydashcam** name,
 logo and brand mark are not included in that license and may not identify a
 fork, mirror, rehosted copy or separate hosted service. See
 [README.md](../README.md#license) and [LICENSE](../LICENSE) for the binding

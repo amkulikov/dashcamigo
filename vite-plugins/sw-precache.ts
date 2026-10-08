@@ -142,7 +142,7 @@ const PLACEHOLDER = /const PRECACHE_MANIFEST = \[\];\s*\/\/ __DC_PRECACHE_MANIFE
 
 export function swPrecachePlugin(): Plugin {
     return {
-        name: "dashcamigo-sw-precache",
+        name: "everydashcam-sw-precache",
         apply: "build",
         closeBundle() {
             const distDir = resolve(process.cwd(), "dist");

@@ -21,11 +21,12 @@
 //  - Space Grotesk is used at exactly one weight (brand mark, 700), so we
 //    keep the static version - a variable conversion wouldn't gain anything.
 //
-// All font subsets are downloaded as-is. Thanks to `unicode-range` in
+// Text font subsets are downloaded as-is. Thanks to `unicode-range` in
 // @font-face, the browser picks the subset whose characters appear on the
 // current page - so the user only downloads the subsets their language
 // actually needs. So there's no such thing as "extra" subsets in the repo -
-// they only take up space in the commit, not on the client.
+// they only take up space in the commit, not on the client. The Chakra Petch
+// logo uses only Latin capitals; public/brand-mark.css owns its font face.
 
 import { mkdir, readdir, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
@@ -39,12 +40,13 @@ const CSS_OUT_PATH = resolve(ROOT, "src", "styles", "fonts.css");
 // Range syntax wght@MIN..MAX triggers a variable response from Google Fonts;
 // a single wght@N (like Space Grotesk) yields the static version.
 const GOOGLE_FONTS_URL =
-    "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&family=Inter:wght@400..900&family=JetBrains+Mono:wght@400..700&display=swap";
+    "https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@700&family=Space+Grotesk:wght@700&family=Inter:wght@400..900&family=JetBrains+Mono:wght@400..700&display=swap";
 
 // A modern Chrome UA - needed so Google Fonts serves woff2 instead of legacy
 // woff/eot/ttf for old browsers. Same UA for variable fonts - Google decides
 // static/variable by URL syntax, not by UA.
-const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+const UA =
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
 async function cleanFontsDir() {
     // Delete all old woff2 files before the new fetch - otherwise, after
@@ -86,9 +88,14 @@ async function main() {
         const unicodeRange = block.match(/unicode-range:\s*([^;]+);/)?.[1]?.trim();
 
         if (!family || !weight || !url) {
-            console.warn(`skipped block (incomplete): family=${family} weight=${weight} url=${url ? "present" : "missing"}`);
+            console.warn(
+                `skipped block (incomplete): family=${family} weight=${weight} url=${url ? "present" : "missing"}`,
+            );
             continue;
         }
+
+        // The logo uses Latin capitals only; its shared stylesheet owns the font face.
+        if (family === "Chakra Petch" && subset !== "latin") continue;
 
         const slug = family.toLowerCase().replace(/\s+/g, "-");
         // Variable: "400 900" -> "var" in the filename. Without this the
@@ -103,6 +110,8 @@ async function main() {
         if (!woffRes.ok) throw new Error(`woff2 fetch failed for ${filename}: ${woffRes.status}`);
         const buf = Buffer.from(await woffRes.arrayBuffer());
         await writeFile(localPath, buf);
+
+        if (family === "Chakra Petch") continue;
 
         localCssBlocks.push(
             `/* ${subset} */

@@ -1,20 +1,19 @@
-# dashcamigo — dashcam recordings in your browser
+# everydashcam (ex-dashcamigo)
 
 <p align="center">
-  <a href="https://dashcamigo.app">
-    <img src="docs/screenshots/readme-hero.webp" alt="dashcamigo on desktop (dark theme) and on a phone (light theme): a two-camera trip with front and rear video side by side, a speed and G-force chart, and the speed-colored route on a map">
+  <a href="https://everydashcam.app">
+    <img src="docs/screenshots/readme-hero.webp" alt="everydashcam on desktop (dark theme) and on a phone (light theme): a two-camera trip with front and rear video side by side, a speed and G-force chart, and the speed-colored route on a map">
   </a>
 </p>
 
-dashcamigo is a browser player and editor for recordings from many dashcam
-brands. It has no backend: your files stay on your device while the app joins
-clips into trips and keeps cameras in sync. Watch the video alongside the route,
-speed and G-force, then trim and save the part you need as an MP4.
+everydashcam is a browser player and editor for recordings from multiple dashcam
+brands. It shows synchronized camera views, GPS tracks, speed and G-force data,
+and exports clips. Files are processed on your device.
 
 ## Getting started
 
-- [**dashcamigo.app**](https://dashcamigo.app) — the latest stable release.
-- [**beta.dashcamigo.app**](https://beta.dashcamigo.app) — upcoming changes.
+- [**everydashcam.app**](https://everydashcam.app) — the latest stable release.
+- [**beta.everydashcam.app**](https://beta.everydashcam.app) — upcoming changes.
 - **Install it** — open any version and install it from your browser. After the
   first visit, it can open without a network connection.
 
@@ -40,7 +39,7 @@ real recordings and formats implemented from open-source references.
 Don't see your camera yet? You can help us add it:
 
 - In the app, turn the card's file list into a report you can send us — see
-  [dashcamigo.app/add-my-camera](https://dashcamigo.app/add-my-camera).
+  [everydashcam.app/add-my-camera](https://everydashcam.app/add-my-camera).
 - On GitHub, open a camera-support issue.
 
 For other ways to help, see [Contributing](CONTRIBUTING.md).
@@ -67,5 +66,5 @@ The code is licensed under [AGPL-3.0-only](LICENSE). If you make a modified
 version available to others over a network, the license requires you to offer
 its complete source under the same terms.
 
-The code license does not grant permission to use the **dashcamigo** name or
+The code license does not grant permission to use the **everydashcam** name or
 branding for another project or service.

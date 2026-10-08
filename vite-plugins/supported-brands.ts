@@ -2,7 +2,7 @@ import type { Lang } from "../src/i18n/index.js";
 
 // SEO-facing list of supported dashcam brands. Pure SEO surface - this is
 // what we want crawlers, AI agents, and SERP rich snippets to see when they
-// ask "which dashcams does dashcamigo support?".
+// ask "which dashcams does everydashcam support?".
 //
 // Why a separate list from the parser registry:
 //  - Parser code (src/parsers/) is the technical reality - which byte formats
@@ -140,7 +140,7 @@ export function getLandingBrands(): ReadonlyArray<SupportedBrand & { hasLandingP
 
 // Comma-separated list of all brand display names. Used in JSON-LD
 // featureList - "X, Y, Z vendor support" - so Google's rich snippet for
-// dashcamigo lists every brand the SEO surface promises to support.
+// everydashcam lists every brand the SEO surface promises to support.
 export function getAllBrandsCommaSeparated(): string {
     return SUPPORTED_BRANDS.map((b) => b.displayName).join(", ");
 }

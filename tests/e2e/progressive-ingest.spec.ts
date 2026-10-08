@@ -324,7 +324,7 @@ test.describe("progressive ingest", () => {
     });
 
     test("loads playable videos when an auxiliary classifier worker crashes", async ({ page }) => {
-        const directory = makeTemporaryDirectory("dashcamigo-classifier-crash-");
+        const directory = makeTemporaryDirectory("everydashcam-classifier-crash-");
         copyFileSync(path.join(SAMPLE_NOGPS, "clip-no-gps.mp4"), path.join(directory, "clip-no-gps.mp4"));
         writeFileSync(
             path.join(directory, "GPSData.txt"),
@@ -356,7 +356,7 @@ test.describe("progressive ingest", () => {
     });
 
     test("waits for the selected trip GPS before starting playback", async ({ page }) => {
-        const dir = makeTemporaryDirectory("dashcamigo-gps-open-");
+        const dir = makeTemporaryDirectory("everydashcam-gps-open-");
         copyFileSync(path.join(SAMPLE_GOPRO, "hero5-trimmed.mp4"), path.join(dir, "hero5-trimmed.mp4"));
         await armImmediateTripClick(page);
         await page.locator("#folder-input").setInputFiles(dir);
@@ -445,7 +445,7 @@ test.describe("progressive ingest", () => {
     });
 
     test("recording-scoped NMEA log binds after MP4 metadata becomes ready", async ({ page }) => {
-        const dir = makeTemporaryDirectory("dashcamigo-sectioned-nmea-");
+        const dir = makeTemporaryDirectory("everydashcam-sectioned-nmea-");
         const videoDir = path.join(dir, "MP_ROOT/100ANV01");
         const gpsDir = path.join(dir, "PRIVATE/SONY/GPS");
         mkdirSync(videoDir, { recursive: true });
@@ -504,7 +504,7 @@ test.describe("progressive ingest", () => {
     });
 
     test("shows the newest trips before a slow storage probe finishes", async ({ page }) => {
-        const dir = makeTemporaryDirectory("dashcamigo-slow-probe-");
+        const dir = makeTemporaryDirectory("everydashcam-slow-probe-");
         const source = path.join(SAMPLE_70MAI, "Normal/Front/NO20260101-120000-000001F.MP4");
         for (let i = 0; i < 30; i++) {
             const day = String(i + 1).padStart(2, "0");
@@ -652,7 +652,7 @@ test.describe("progressive ingest", () => {
         // A .mp4 with a valid ftyp but no moov: classified as video by extension,
         // grouped into a trip from its (70mai-style) filename, but the moov read
         // fails. The terminal failure must not wedge the closing regroup.
-        const dir = makeTemporaryDirectory("dashcamigo-broken-");
+        const dir = makeTemporaryDirectory("everydashcam-broken-");
         writeBrokenMp4(dir, "NO20260101-120000-000001F.MP4");
 
         // Click the provisional card in its first render. Even though the clip
@@ -692,7 +692,7 @@ test.describe("progressive ingest", () => {
     });
 
     test("trip header skips a damaged leading clip and opens the first playable one", async ({ page }) => {
-        const dir = makeTemporaryDirectory("dashcamigo-leading-broken-");
+        const dir = makeTemporaryDirectory("everydashcam-leading-broken-");
         writeBrokenMp4(dir, "NO20260101-115958-000001F.MP4");
         copyFileSync(
             path.join(SAMPLE_70MAI, "Normal/Front/NO20260101-120000-000001F.MP4"),
@@ -770,7 +770,7 @@ test.describe("progressive ingest", () => {
     });
 
     test("an ignored-only drop resumes previews after recording metadata is ready", async ({ page }) => {
-        const directory = makeTemporaryDirectory("dashcamigo-preview-resume-");
+        const directory = makeTemporaryDirectory("everydashcam-preview-resume-");
         const source = path.join(SAMPLE_NOGPS, "clip-no-gps.mp4");
         for (let i = 0; i < 4; i++) {
             writeFileSync(
@@ -778,7 +778,7 @@ test.describe("progressive ingest", () => {
                 withMvhdCreationTime(source, `2026-01-15T${String(i + 10).padStart(2, "0")}:00:00Z`),
             );
         }
-        const ignoredDirectory = makeTemporaryDirectory("dashcamigo-preview-ignored-");
+        const ignoredDirectory = makeTemporaryDirectory("everydashcam-preview-ignored-");
         writeFileSync(path.join(ignoredDirectory, ".DS_Store"), "ignored");
 
         await page.evaluate(() => {
@@ -835,7 +835,7 @@ test.describe("progressive ingest", () => {
     });
 
     test("regrouping from settings preserves the active ingest lifecycle", async ({ page }) => {
-        const dir = makeTemporaryDirectory("dashcamigo-regroup-");
+        const dir = makeTemporaryDirectory("everydashcam-regroup-");
         const source = path.join(SAMPLE_70MAI, "Normal/Front/NO20260101-120000-000001F.MP4");
         for (let i = 0; i < 12; i++) {
             const day = String(i + 1).padStart(2, "0");
@@ -897,7 +897,7 @@ test.describe("progressive ingest", () => {
     });
 
     test("a second drop preserves unmerged accelerometer sidecars", async ({ page }) => {
-        const directory = makeTemporaryDirectory("dashcamigo-accel-restart-");
+        const directory = makeTemporaryDirectory("everydashcam-accel-restart-");
         const name = "20260718_060329_NF.mp4";
         const fixtureRoot = path.resolve("src/parsers/__fixtures__/blackvue");
         writeFileSync(

@@ -7,7 +7,7 @@ import { DESKTOP, SAMPLE_70MAI, expect, gotoApp, loadTrip, presetLocalStorage, s
 const temporaryDirectories: string[] = [];
 
 function cameraFolder(frontOffsetSec: number, hasRecognizedNames = true): string {
-    const directory = mkdtempSync(path.join(tmpdir(), "dashcamigo-recognition-cameras-"));
+    const directory = mkdtempSync(path.join(tmpdir(), "everydashcam-recognition-cameras-"));
     temporaryDirectories.push(directory);
     // Keep real playable streams while reproducing disagreement between the
     // recording names and container clocks. No application state is injected.

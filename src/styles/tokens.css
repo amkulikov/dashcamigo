@@ -1,5 +1,5 @@
 /* =========================================================================
-   dashcamigo Design System - Colors & Type
+   everydashcam Design System - Colors & Type
    --------------------------------------------------------------------------
    This file is the source of truth for the design tokens. Raw --dc-* tokens
    plus semantic aliases; component styles use the semantics, never the raw
@@ -65,10 +65,7 @@
     --dc-track-halo: var(--dc-white);
 
     /* ----- TYPE ----- */
-    /* BrandMark "dashcamigo" - Space Grotesk, a tight grotesque derived from
-       Space Mono. Used only in the .dc-mark wordmark; the rest of the display
-       and heavy UI is Inter (neutral grotesque, one character with body). */
-    --dc-font-brand: "Space Grotesk", "Inter", system-ui, sans-serif;
+    --dc-font-brand: "Chakra Petch", "Inter", system-ui, sans-serif;
     --dc-font-display: "Inter", system-ui, sans-serif;
     --dc-font-heavy: "Inter", system-ui, sans-serif;
     --dc-font-body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;

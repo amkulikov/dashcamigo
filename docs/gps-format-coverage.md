@@ -10,11 +10,11 @@ supported:
   files produced by the camera.
 - **Implemented from an open-source reference** means support is available but
   still needs confirmation from the first real sample.
-- **Not supported** explains known formats that dashcamigo deliberately does not
+- **Not supported** explains known formats that everydashcam deliberately does not
   claim.
 
 If your camera is not listed, create a file-name report at
-[dashcamigo.app/add-my-camera](https://dashcamigo.app/add-my-camera). New formats
+[everydashcam.app/add-my-camera](https://everydashcam.app/add-my-camera). New formats
 are added from real recordings, and the report is the easiest place to start.
 
 ## What this document records

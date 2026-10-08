@@ -25,7 +25,7 @@ const lines = [
     "     Do not edit by hand - edit the entries and regenerate: npm run generate:changelog -->",
     "",
     "User-facing changes, newest first. Dates are when the change landed on",
-    "[beta](https://beta.dashcamigo.app); production picks it up with the next",
+    "[beta](https://beta.everydashcam.app); production picks it up with the next",
     'release tag. Localized texts ship inside the app (the "What\'s new" panel).',
     "",
 ];

@@ -1,4 +1,4 @@
-# dashcamigo.app robots.txt
+# everydashcam.app robots.txt
 #
 # Public web app, no backend, no private routes. We want everyone to index.
 # AI crawlers (GPTBot, ClaudeBot, CCBot, etc.) are intentionally NOT blocked
@@ -8,4 +8,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://dashcamigo.app/sitemap.xml
+Sitemap: https://everydashcam.app/sitemap.xml

@@ -296,7 +296,7 @@ interface SerializeGpxArgs {
  *
  * Source boundaries are preserved so re-import cannot infer motion across gaps.
  */
-export function serializeGpx({ records, trackName, creator = "dashcamigo" }: SerializeGpxArgs): string {
+export function serializeGpx({ records, trackName, creator = "everydashcam" }: SerializeGpxArgs): string {
     let points = "";
     let previous: GpsRecord | null = null;
     for (const record of records) {

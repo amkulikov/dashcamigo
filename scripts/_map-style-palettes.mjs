@@ -88,7 +88,7 @@ function usesSdfIcon(value) {
 export function createMapStyleVariant(light, theme) {
     const palette = theme === "dark" ? DARK : NEON;
     const style = structuredClone(light);
-    style.name = theme === "dark" ? "Dashcamigo Classic Dark" : "Dashcamigo Neon";
+    style.name = theme === "dark" ? "everydashcam Classic Dark" : "everydashcam Neon";
     style.sprite = "/styles/sprite/sprite";
     style.metadata = { ...style.metadata, "dashcamigo:theme": theme };
     for (const layer of style.layers) {

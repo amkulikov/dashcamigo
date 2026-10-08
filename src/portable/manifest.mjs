@@ -1,6 +1,6 @@
 import { isReleaseTag, portableFilename } from "./release-tags.mjs";
 
-export const PORTABLE_PRIMARY_ORIGIN = "https://dashcamigo.app";
+export const PORTABLE_PRIMARY_ORIGIN = "https://everydashcam.app";
 export const PORTABLE_UPDATE_URL = `${PORTABLE_PRIMARY_ORIGIN}/downloads/portable/latest.json`;
 export const PORTABLE_MAX_BYTES = 25 * 1024 * 1024;
 

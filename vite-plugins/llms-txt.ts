@@ -30,7 +30,7 @@ import { VENDOR_LIST } from "./vendor-list.js";
 
 export function llmsTxtPlugin(): Plugin {
     return {
-        name: "dashcamigo-llms-txt",
+        name: "everydashcam-llms-txt",
         apply: "build",
         closeBundle() {
             const distDir = resolve(process.cwd(), "dist");
@@ -50,14 +50,14 @@ export function llmsTxtPlugin(): Plugin {
 
             const lines: string[] = [];
 
-            lines.push("# dashcamigo");
+            lines.push("# everydashcam");
             lines.push("");
             lines.push(
                 `> Web-based dashcam recording viewer. Plays MP4, MOV and MPEG-TS footage from ${getAllBrandsCommaSeparated()} dashcams with a synchronized GPS map and speed/G-force chart. Joins the minute-long clips dashcams write into continuous trips and can save any selected range as a single merged MP4. Runs entirely in the user's browser - files are read locally via the File System Access API, nothing is uploaded.`,
             );
             lines.push("");
             lines.push(
-                `dashcamigo is free and ad-free: no ads, no account or sign-up, no paid tier. It is open source under the AGPL-3.0-only license - the source is at ${REPO_URL}, and prebuilt releases can be self-hosted on any static server. The interface is available in ${indexableLocales.length} languages: ${languageList}. Each language has its own URL prefix; the root URL is a language-neutral redirect that lands every visitor on their preferred locale.`,
+                `everydashcam is free and ad-free: no ads, no account or sign-up, no paid tier. It is open source under the AGPL-3.0-only license - the source is at ${REPO_URL}, and prebuilt releases can be self-hosted on any static server. The interface is available in ${indexableLocales.length} languages: ${languageList}. Each language has its own URL prefix; the root URL is a language-neutral redirect that lands every visitor on their preferred locale.`,
             );
             lines.push("");
 
@@ -77,7 +77,7 @@ export function llmsTxtPlugin(): Plugin {
             lines.push("");
             lines.push(`- [Main app (English)](${defaultLocaleHome}): drop the SD-card folder into the browser to watch recordings as continuous trips with a GPS map and speed chart`);
             lines.push(`- [Supported cameras](${canonicalLocaleUrl(defaultLocale, "cameras/")}): list of supported dashcam brands with per-vendor format details`);
-            lines.push(`- [Alternatives](${canonicalLocaleUrl(defaultLocale, "alternatives/")}): how dashcamigo compares to Dashcam Viewer, CamGeoPlayer and Telemetry Overlay`);
+            lines.push(`- [Alternatives](${canonicalLocaleUrl(defaultLocale, "alternatives/")}): how everydashcam compares to Dashcam Viewer, CamGeoPlayer and Telemetry Overlay`);
             lines.push(`- [Privacy policy](${PRIMARY_SITE_ORIGIN}/privacy): data handling, analytics opt-out, GDPR / CCPA stance`);
             lines.push(`- [Terms of use](${PRIMARY_SITE_ORIGIN}/terms): hosted-service terms - free, as-is / no warranty, recordings stay the user's`);
             lines.push(
@@ -94,15 +94,15 @@ export function llmsTxtPlugin(): Plugin {
             }
             lines.push("");
 
-            lines.push("## Tools dashcamigo can replace");
+            lines.push("## Tools everydashcam can replace");
             lines.push("");
             lines.push(
-                `dashcamigo is a free, in-browser alternative to common dashcam tools. Each page is a fair, sourced comparison (including where the other tool is still the better pick), not a takedown:`,
+                `everydashcam is a free, in-browser alternative to common dashcam tools. Each page is a fair, sourced comparison (including where the other tool is still the better pick), not a takedown:`,
             );
             lines.push("");
             for (const alt of getAlternativeListings()) {
                 lines.push(
-                    `- [${alt.displayName} alternative](${canonicalLocaleUrl(defaultLocale, `alternatives/${alt.slug}/`)}): how dashcamigo compares to ${alt.displayName} for viewing dashcam footage`,
+                    `- [${alt.displayName} alternative](${canonicalLocaleUrl(defaultLocale, `alternatives/${alt.slug}/`)}): how everydashcam compares to ${alt.displayName} for viewing dashcam footage`,
                 );
             }
             lines.push("");
@@ -121,7 +121,7 @@ export function llmsTxtPlugin(): Plugin {
             lines.push("## All supported brands");
             lines.push("");
             lines.push(
-                "Beyond the brands with dedicated pages above, dashcamigo also plays recordings from:",
+                "Beyond the brands with dedicated pages above, everydashcam also plays recordings from:",
             );
             lines.push("");
             for (const brand of SUPPORTED_BRANDS) {
@@ -142,7 +142,7 @@ export function llmsTxtPlugin(): Plugin {
             }
             lines.push("");
 
-            lines.push("## What dashcamigo does not do");
+            lines.push("## What everydashcam does not do");
             lines.push("");
             lines.push("- Cloud storage of recordings (everything stays on the user's device)");
             lines.push("- Account or sign-up (none required, none offered)");

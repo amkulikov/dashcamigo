@@ -1,6 +1,6 @@
 # Security policy
 
-dashcamigo reads recordings and GPS data locally in the browser. It has no
+everydashcam reads recordings and GPS data locally in the browser. It has no
 backend that receives those files, so security reports usually concern the
 shipped web app or one of its client-side dependencies.
 
@@ -11,7 +11,7 @@ issue. You can:
 
 - open a private [GitHub Security Advisory](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability),
   or
-- email **feedback@dashcamigo.app**.
+- email **feedback@everydashcam.app**.
 
 Include a description, steps to reproduce the problem, and the affected version
 or commit. You should receive a response within a few days.

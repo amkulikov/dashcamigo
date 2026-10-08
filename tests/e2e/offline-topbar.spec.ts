@@ -33,7 +33,7 @@ test("offline status keeps a narrow phone within its viewport and preserves prim
     await page.evaluate(() => window.dispatchEvent(new Event("offline")));
     await expect(page.locator("body")).toHaveClass(/has-offline-banner/);
     await expectPhoneWidth(page, 320);
-    await expect(page.locator(".topbar .dc-mark")).toHaveAttribute("aria-label", "dashcamigo");
+    await expect(page.locator(".topbar .dc-mark")).toHaveAttribute("aria-label", "everydashcam");
     await page.evaluate(() => window.dispatchEvent(new Event("online")));
     await expect(page.locator("#offline-banner")).toBeHidden();
     await loadTrip(page);

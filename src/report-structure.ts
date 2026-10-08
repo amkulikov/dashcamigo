@@ -141,7 +141,7 @@ export function buildStructureReport(files: readonly VendorFile[]): string {
     const totalBytes = files.reduce((s, f) => s + f.file.size, 0);
     const lines: string[] = [];
 
-    lines.push("dashcamigo camera report");
+    lines.push("everydashcam camera report");
     lines.push(`app ${APP_VERSION}  ·  generated ${now.toISOString()}`);
     lines.push(`files: ${files.length}  ·  total: ${humanSize(totalBytes)}`);
     lines.push("");

@@ -19,12 +19,12 @@ import { activeCandidate, activeFrame, isFocusLayout, mainChannel, state } from 
 
 const log = createLogger("feedback");
 
-const FEEDBACK_EMAIL = "feedback@dashcamigo.app";
+const FEEDBACK_EMAIL = "feedback@everydashcam.app";
 
 /** First lines of the report .txt: what it is and where to send it. English by
  *  design - the whole report body is technical/English (voice.md exception). */
 const REPORT_HEADER = [
-    "dashcamigo — technical details for diagnosis",
+    "everydashcam — technical details for diagnosis",
     `Please email this file to ${FEEDBACK_EMAIL} — attach it to your message. It has no video and no location, just technical details that help us reproduce the problem or add your camera.`,
 ].join("\n");
 

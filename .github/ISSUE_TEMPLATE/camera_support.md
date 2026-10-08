@@ -1,6 +1,6 @@
 ---
 name: Camera / GPS support
-about: Help dashcamigo read the route and driving data from your camera
+about: Help everydashcam read the route and driving data from your camera
 title: "Support: <make> <model>"
 labels: format-support
 ---
@@ -17,7 +17,7 @@ labels: format-support
 
 ## Card report
 
-Use [dashcamigo.app/add-my-camera](https://dashcamigo.app/add-my-camera) to
+Use [everydashcam.app/add-my-camera](https://everydashcam.app/add-my-camera) to
 create a report from the card, then attach it here. The report contains file and
 folder names, not your recordings.
 
@@ -32,7 +32,7 @@ between models and firmware versions.
 **Please do not attach a recording publicly unless you are comfortable sharing
 where and when it was made. GitHub attachments may remain accessible even after
 an issue is edited or deleted.** To share it privately, email the files or a
-download link to **feedback@dashcamigo.app** and include a link to this issue.
+download link to **feedback@everydashcam.app** and include a link to this issue.
 
 A useful sample contains:
 

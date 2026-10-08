@@ -37,7 +37,7 @@ import type { Lang } from "./index.js";
 
 // Source repository for generated pages, llms.txt and footers. Static copies
 // in index.html cannot import this module.
-export const REPO_URL = "https://github.com/amkulikov/dashcamigo";
+export const REPO_URL = "https://github.com/everydashcam/everydashcam";
 
 export interface SeoLocale {
     // ISO 639-1 code, matches Lang in i18n/index.ts. Used for <html lang>,

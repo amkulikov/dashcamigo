@@ -74,7 +74,7 @@ function buildLangsLiteral(): string {
 
 export function dynamicBaselinePlugin(): Plugin {
     return {
-        name: "dashcamigo-dynamic-baseline",
+        name: "everydashcam-dynamic-baseline",
         // Run on both dev and build so the served index.html in dev is also
         // consistent with SEO_LOCALES (otherwise a developer testing a 13th
         // locale would see stale 12-locale baseline in the browser).

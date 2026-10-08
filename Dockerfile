@@ -2,7 +2,7 @@
 # (docs/self-hosting.md):
 #   docker build -t dashcamigo .
 #   docker run -d -p 8080:80 dashcamigo
-# The prebuilt image at ghcr.io/amkulikov/dashcamigo is NOT built from this
+# The prebuilt image at ghcr.io/everydashcam/everydashcam is NOT built from this
 # file: the release workflow packages its already-built (and attested) dist/
 # via docker/Dockerfile.prebuilt, so the image and the release archives are
 # one artifact.

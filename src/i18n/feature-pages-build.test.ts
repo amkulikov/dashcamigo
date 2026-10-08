@@ -45,11 +45,11 @@ describe("feature sitemap entries", () => {
     });
 
     it("alternates for a feature page target the SAME slug across locales", () => {
-        const enCombine = entries.find((e) => e.loc === "https://dashcamigo.app/en/combine-dashcam-cameras-into-one-video/");
+        const enCombine = entries.find((e) => e.loc === "https://everydashcam.app/en/combine-dashcam-cameras-into-one-video/");
         expect(enCombine).toBeDefined();
         expect(enCombine?.alternates.de).toMatch(/\/de\/combine-dashcam-cameras-into-one-video\/$/);
-        expect(enCombine?.alternates.ja).toBe("https://dashcamigo.app/ja/combine-dashcam-cameras-into-one-video/");
-        expect(enCombine?.xDefaultUrl).toBe("https://dashcamigo.app/en/combine-dashcam-cameras-into-one-video/");
+        expect(enCombine?.alternates.ja).toBe("https://everydashcam.app/ja/combine-dashcam-cameras-into-one-video/");
+        expect(enCombine?.xDefaultUrl).toBe("https://everydashcam.app/en/combine-dashcam-cameras-into-one-video/");
     });
 });
 

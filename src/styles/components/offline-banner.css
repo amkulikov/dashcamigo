@@ -197,16 +197,3 @@ body:not(.has-offline-banner) .topbar-whats-slot:has(#whats-new-btn[data-overflo
         height: var(--dc-iconbtn-touch);
     }
 }
-
-/* The offline slot remains visible after optional controls move to overflow.
-   Compact the brand on small phones so primary touch targets still fit. */
-@media (width < 360px) {
-    body.has-offline-banner .topbar .dc-mark {
-        font-size: 0;
-        gap: 0;
-    }
-    body.has-offline-banner .topbar .dc-mark__icon {
-        width: var(--dc-iconbtn-sm);
-        height: var(--dc-iconbtn-sm);
-    }
-}

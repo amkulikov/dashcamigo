@@ -24,7 +24,7 @@ for (const release of pages.flat()) {
     if (compareReleaseTags(release.tag_name, current.version) > 0)
         throw new Error("a newer portable release already exists; refusing to roll back latest metadata");
     if (release.tag_name === current.version) continue;
-    const directory = mkdtempSync(join(tmpdir(), "dashcamigo-portable-history-"));
+    const directory = mkdtempSync(join(tmpdir(), "everydashcam-portable-history-"));
     try {
         execFileSync(
             "gh",

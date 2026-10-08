@@ -52,11 +52,11 @@ describe("alternative sitemap entries", () => {
     });
 
     it("alternates for a competitor page target the SAME competitor across locales", () => {
-        const enTelemetry = entries.find((e) => e.loc === "https://dashcamigo.app/en/alternatives/telemetry-overlay/");
+        const enTelemetry = entries.find((e) => e.loc === "https://everydashcam.app/en/alternatives/telemetry-overlay/");
         expect(enTelemetry).toBeDefined();
         expect(enTelemetry?.alternates.de).toMatch(/\/de\/alternatives\/telemetry-overlay\/$/);
-        expect(enTelemetry?.alternates.ja).toBe("https://dashcamigo.app/ja/alternatives/telemetry-overlay/");
-        expect(enTelemetry?.xDefaultUrl).toBe("https://dashcamigo.app/en/alternatives/telemetry-overlay/");
+        expect(enTelemetry?.alternates.ja).toBe("https://everydashcam.app/ja/alternatives/telemetry-overlay/");
+        expect(enTelemetry?.xDefaultUrl).toBe("https://everydashcam.app/en/alternatives/telemetry-overlay/");
     });
 });
 

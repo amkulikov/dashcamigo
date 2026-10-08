@@ -714,21 +714,16 @@ body.letterbox-blur .video-tile > video:not(.tile-blur-bg) {
     user-select: none;
 }
 
-/* Watermark preview mirrors the burned-in mark from src/transcode/watermark.ts
-   (wordmark + camera icon, 50% alpha). Same composition as the header .dc-mark
-   - inline-flex, brand font, 0.22em gap, 1.1em icon, lowercase - but WITHOUT
-   the .dc-mark class, whose env-indicator override would tint it red on
-   localhost. font-size is set from JS (3.3% of grid height) to match the
-   pipeline's HEIGHT_RATIO. Draggable to reposition (snaps to a corner). */
+/* Watermark preview mirrors src/transcode/watermark.ts. Font size follows
+   the output height; dragging snaps the mark to one of the four corners. */
 .player-watermark {
     display: inline-flex;
     align-items: center;
     gap: 0.22em;
-    font-family: var(--dc-font-brand);
+    font-family: "Chakra Petch", "Inter", system-ui, sans-serif;
     font-weight: 700;
     line-height: 1;
-    /* Literal -0.02em mirrors the header .dc-mark (and the burned-in mark in
-       src/transcode/watermark.ts) so preview == export. */
+    /* Keep tracking in sync with the burned-in mark. */
     letter-spacing: -0.02em;
     text-transform: lowercase;
     opacity: 0.5;
@@ -793,7 +788,7 @@ body.letterbox-blur .video-tile > video:not(.tile-blur-bg) {
     background: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
-.player-watermark .dc-mark__icon {
+.player-watermark__icon {
     width: 1.1em;
     height: 1.1em;
     flex-shrink: 0;

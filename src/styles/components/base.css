@@ -1,5 +1,5 @@
 /* =========================================================================
-   dashcamigo - component styles built on tokens from styles/tokens.css.
+   everydashcam - component styles built on tokens from styles/tokens.css.
    Default is dark, light comes via @media (prefers-color-scheme: light)
    (the --bg/--fg/--accent/--border overrides live in tokens.css).
 

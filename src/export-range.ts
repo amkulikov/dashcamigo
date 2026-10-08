@@ -240,7 +240,7 @@ export function clipRecordsForRange(trip: Trip, startContentSec: number, endCont
 export function buildClipGpx(trip: Trip, startContentSec: number, endContentSec: number): string {
     const inRange = clipRecordsForRange(trip, startContentSec, endContentSec);
     const startUtc = contentToWallUtc(trip.timeline, startContentSec);
-    const trackName = `dashcamigo clip ${formatClockForGpxTrackName(startUtc, trip.cameraTzSec)}`;
+    const trackName = `everydashcam clip ${formatClockForGpxTrackName(startUtc, trip.cameraTzSec)}`;
     return serializeGpx({ records: inRange, trackName });
 }
 

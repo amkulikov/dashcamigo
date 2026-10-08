@@ -14,7 +14,7 @@ let fileUrl: string;
 const version = "v2026.01.01.2";
 
 test.beforeAll(() => {
-    directory = mkdtempSync(join(tmpdir(), "dashcamigo update "));
+    directory = mkdtempSync(join(tmpdir(), "everydashcam update "));
     execFileSync(
         process.execPath,
         [
@@ -80,7 +80,7 @@ test("checks only public metadata from a renamed file and offers the newer local
     await expect(anchor).toHaveAttribute("download", "dashcamigo-2026-01-01.10-en.html");
     await expect(anchor).toHaveAttribute(
         "href",
-        "https://dashcamigo.app/downloads/portable/v2026.01.01.10/dashcamigo-2026-01-01.10-en",
+        "https://everydashcam.app/downloads/portable/v2026.01.01.10/dashcamigo-2026-01-01.10-en",
     );
     await page.evaluate(() => {
         dispatchEvent(new Event("online"));
@@ -132,7 +132,7 @@ test("retries once after reconnection and falls back to the primary locale page"
         performance.getEntriesByType("resource").some((entry) => entry.name.endsWith("latest.json")),
     );
     await page.evaluate(() => dispatchEvent(new Event("online")));
-    await expect(page.locator("#portable-update")).toHaveAttribute("href", "https://dashcamigo.app/en/");
+    await expect(page.locator("#portable-update")).toHaveAttribute("href", "https://everydashcam.app/en/");
     await page.evaluate(() => {
         dispatchEvent(new Event("online"));
         dispatchEvent(new Event("online"));

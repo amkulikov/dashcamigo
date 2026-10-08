@@ -114,7 +114,7 @@ describe("SEO surface navigation", () => {
 
     it("keeps the breadcrumb hierarchy on the visitor's mirror and escapes visible names", () => {
         const { html, jsonLd } = renderBreadcrumbs("en", [
-            { name: 'Home & "player"', url: "https://dashcamigo.app/en/" },
+            { name: 'Home & "player"', url: "https://everydashcam.app/en/" },
             { name: "<Camera>", url: "https://mirror.example/en/cameras/" },
         ]);
         expect(html).toContain('href="/en/"');
