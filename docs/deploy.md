@@ -23,7 +23,7 @@ GitHub Actions builds the site and Wrangler uploads the resulting `dist/`.
 Build variables and secrets belong in GitHub Actions. The workflow `env:`
 blocks and `.env.example` define the current contract:
 
-- `VITE_SENTRY_DSN` enables opt-in crash reporting in production;
+- `VITE_SENTRY_DSN` enables crash reporting in production;
   `VITE_SENTRY_DSN_STAGING` does the same for staging. An absent DSN compiles
   crash reporting out.
 - `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT` enable production

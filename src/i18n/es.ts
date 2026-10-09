@@ -900,7 +900,7 @@ export const esDict = {
     "settings.privacy.policyLink": "Política de privacidad",
 
     "settings.privacy.crash.label": "Informes de fallos",
-    "settings.privacy.crash.optInDescription": "Si la app falla, un informe anonimizado nos ayuda a arreglarla. Sin vídeo, GPS ni nombres de archivo — solo qué falló y en qué navegador. Desactivado hasta que lo actives aquí. Puedes desactivarlo cuando quieras.",
+    "settings.privacy.crash.description": "Si la app falla, un informe anónimo nos ayuda a arreglarlo — sin vídeo, sin GPS, sin nombres de archivo, solo qué salió mal y en qué navegador. Activado por defecto; puedes desactivarlo aquí.",
     "settings.playback.section": "Reproducción",
     "settings.playback.units.label": "Unidades de medida",
     "settings.playback.units.metric": "Métricas (km/h, km)",

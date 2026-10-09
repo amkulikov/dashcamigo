@@ -899,7 +899,7 @@ export const zhDict = {
     "settings.privacy.policyLink": "隐私政策",
 
     "settings.privacy.crash.label": "崩溃报告",
-    "settings.privacy.crash.optInDescription": "应用出错时，匿名诊断报告能帮助我们修复问题。不含视频、GPS 或文件名，只包含错误信息和浏览器类型。默认关闭，只有在这里开启后才会发送。你可以随时关闭。",
+    "settings.privacy.crash.description": "如果应用出错，匿名报告能帮我们修复——不含视频、不含 GPS、不含文件名，只有出了什么问题、在哪个浏览器。默认开启；可在此关闭。",
     "settings.playback.section": "播放",
     "settings.playback.units.label": "度量单位",
     "settings.playback.units.metric": "公制（公里/小时、公里）",

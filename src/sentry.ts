@@ -15,7 +15,7 @@
 //    everything is run through sentry-scrub.ts before send (beforeSend /
 //    beforeBreadcrumb). No coordinates, no file basenames, no user free text,
 //    no video - ever.
-//  - Reports require explicit consent on every origin.
+//  - Reports are enabled by default and can be disabled in settings.
 //    The toggle lives in settings (see settings-modal.ts).
 //  - Build-time gate. Empty VITE_SENTRY_DSN => the SDK is never imported (the
 //    dynamic import is behind the DSN check), so self-hosted forks and dev/CI
@@ -91,14 +91,14 @@ export function isCrashReportingBuilt(): boolean {
     return getSentryDsn() !== "";
 }
 
-/** Effective consent, checked synchronously before collecting any telemetry. */
+/** Effective preference, checked synchronously before collecting any telemetry. */
 export function crashReportingEnabled(): boolean {
     if (!isCrashReportingBuilt()) return false;
     if (runtimeEnabled !== null) return runtimeEnabled;
     try {
-        return localStorage.getItem(CRASH_REPORTING_STORAGE_KEY) === "on";
+        return localStorage.getItem(CRASH_REPORTING_STORAGE_KEY) !== "off";
     } catch {
-        return false;
+        return true;
     }
 }
 
@@ -157,7 +157,7 @@ function onConsentStorageChange(event: StorageEvent): void {
 
 /**
  * Kicks off crash reporting. Idempotent and safe to call early - it dynamically
- * imports the SDK only when a DSN is built and the user has opted in. Any
+ * imports the SDK only when a DSN is built and the user has not opted out. Any
  * import / init failure is swallowed (the app must not depend on Sentry).
  */
 export function initSentry(): void {
@@ -286,8 +286,8 @@ export interface CaptureContext {
 
 /**
  * Curated message capture (a deliberate, non-exception signal: capability gap,
- * "nothing loaded", a format that failed to parse). No-op unless built + opted
- * in. Caller passes allowlisted tags/extra; we scrub anyway as a second line.
+ * "nothing loaded", a format that failed to parse). No-op unless built and
+ * enabled. Caller passes allowlisted tags/extra; we scrub as a second line.
  */
 export function captureSentryMessage(message: string, ctx: CaptureContext = {}): void {
     if (!crashReportingEnabled()) return;
@@ -297,7 +297,7 @@ export function captureSentryMessage(message: string, ctx: CaptureContext = {}):
 
 /**
  * Curated exception capture (a real thrown failure with a stack). No-op unless
- * built + opted in. Skip AbortError at the call site (user cancel is not a bug).
+ * built and enabled. Skip AbortError at the call site (user cancel is not a bug).
  */
 export function captureSentryException(error: unknown, ctx: CaptureContext = {}): void {
     if (!crashReportingEnabled()) return;

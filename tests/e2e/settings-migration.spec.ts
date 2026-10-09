@@ -31,7 +31,7 @@ test.describe("migration from the old address", () => {
             );
             await expect(page.locator("#settings-crash-description")).toHaveAttribute(
                 "data-i18n",
-                "settings.privacy.crash.optInDescription",
+                "settings.privacy.crash.description",
             );
         });
     }
@@ -64,9 +64,9 @@ test.describe("migration at the new address", () => {
         ).toBe(true);
         await expect(page.locator("#settings-crash-description")).toHaveAttribute(
             "data-i18n",
-            "settings.privacy.crash.optInDescription",
+            "settings.privacy.crash.description",
         );
-        await expect(page.locator("#settings-crash-description")).toContainText("Off until you turn it on here");
+        await expect(page.locator("#settings-crash-description")).toContainText("On by default; switch it off here");
     });
 });
 

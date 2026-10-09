@@ -1157,7 +1157,7 @@ export type I18nKey =
     | "settings.privacy.policyLink"
     // Crash reports (Sentry, errors-only).
     | "settings.privacy.crash.label"
-    | "settings.privacy.crash.optInDescription"
+    | "settings.privacy.crash.description"
 
     // Settings -> Playback: unit preference (km/h + km vs mph + mi). Affects
     // chart speed axis, map popup speed, trip distance display, feedback report.

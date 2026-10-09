@@ -9,7 +9,7 @@
 //    ring buffer.
 //  - Ring buffer (500 entries) in memory - the user exports it via
 //    __everydashcam.downloadLog() for a bug report. No backend; this is the
-//    primary local diagnostic channel. An optional, opt-in Sentry sink
+//    primary local diagnostic channel. An optional Sentry sink
 //    (setLogSink) mirrors scrubbed records as breadcrumbs - see src/sentry.ts.
 //  - Override via __everydashcam.setLogRules("ingest=debug,vendor:*=info,*=warn");
 //    pass null to restore defaults. Wildcard only at the end of the

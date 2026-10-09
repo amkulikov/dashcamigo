@@ -206,7 +206,7 @@ if (typeof window !== "undefined" && window.matchMedia) {
 // DevTools convenience handle. Not used in application code.
 // dumpLog/downloadLog are the primary local diagnostic channel for bug
 // reports: no backend - the ~500-entry ring buffer is the local way to get
-// logs out of a user's session (optional opt-in Sentry augments it). See
+// logs out of a user's session (optional Sentry augments it). See
 // src/log.ts + src/sentry.ts.
 declare global {
     interface Window {

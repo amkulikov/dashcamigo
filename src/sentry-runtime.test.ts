@@ -66,7 +66,7 @@ afterEach(async () => {
 });
 
 describe("crash reporting consent lifecycle", () => {
-    it.each(["off", "clear"])("stops the active transport after another tab chooses %s", async (choice) => {
+    it("stops the active transport after another tab opts out", async () => {
         setCrashReportingEnabled(true);
         await vi.dynamicImportSettled();
         const client = getClient();
@@ -76,10 +76,9 @@ describe("crash reporting consent lifecycle", () => {
         const signal = requests[0]?.signal;
         expect(signal?.aborted).toBe(false);
 
-        if (choice === "clear") storedChoices.clear();
-        else storedChoices.set(CRASH_REPORTING_STORAGE_KEY, "off");
+        storedChoices.set(CRASH_REPORTING_STORAGE_KEY, "off");
         expect(crashReportingEnabled()).toBe(false);
-        sendStorageEvent(choice === "clear" ? null : CRASH_REPORTING_STORAGE_KEY);
+        sendStorageEvent();
         expect(signal?.aborted).toBe(true);
         expect(client?.getOptions().enabled).toBe(false);
         client?.captureException(new Error("uncaught after cross-tab opt-out"));
@@ -115,11 +114,40 @@ describe("crash reporting consent lifecycle", () => {
         expect(payload).not.toContain("pending before cross-tab opt-out");
     });
 
-    it.each(["everydashcam.app", "self-host.test", "deploy-preview.pages.dev", "localhost"])(
-        "discards startup errors and old preferences until explicit consent on %s",
+    it.each(["everydashcam.app", "beta.everydashcam.app", "ru.everydashcam.app", "deploy-preview.pages.dev"])(
+        "sends startup errors without a saved preference on %s",
         async (hostname) => {
             Object.assign(browserWindow, { location: { hostname } });
-            storedChoices.set("dashcamigo:crash-reporting", "off");
+            initSentry();
+            captureSentryException(new Error("startup error before SDK load"));
+            setSentryTags({ startup: "startup-tag" });
+            await vi.dynamicImportSettled();
+            expect(await getClient()?.flush(1000)).toBe(true);
+            const payload = requests.map((request) => request.body).join("\n");
+            expect(payload).toContain("startup error before SDK load");
+            expect(payload).toContain("startup-tag");
+            expect(storedChoices.has(CRASH_REPORTING_STORAGE_KEY)).toBe(false);
+        },
+    );
+
+    it("restores default reporting when another tab clears the saved opt-out", async () => {
+        storedChoices.set(CRASH_REPORTING_STORAGE_KEY, "off");
+        initSentry();
+        await vi.dynamicImportSettled();
+        expect(requests).toHaveLength(0);
+        storedChoices.clear();
+        sendStorageEvent(null);
+        await vi.dynamicImportSettled();
+        captureSentryMessage("report after settings reset");
+        expect(await getClient()?.flush(1000)).toBe(true);
+        expect(requests.map((request) => request.body).join("\n")).toContain("report after settings reset");
+    });
+
+    it.each(["everydashcam.app", "self-host.test", "deploy-preview.pages.dev", "localhost"])(
+        "discards startup errors while opted out on %s",
+        async (hostname) => {
+            Object.assign(browserWindow, { location: { hostname } });
+            storedChoices.set(CRASH_REPORTING_STORAGE_KEY, "off");
             initSentry();
             captureSentryMessage("before consent message");
             captureSentryException(new Error("before consent exception"));
