@@ -2,13 +2,10 @@
 //   - .player-col-resize (vertical) between video and map - controls --map-width,
 //     the video-vs-map width ratio (expanded mode only).
 //
-// Chart panel height used to be user-resizable (--chart-height), but inferred
-// strip + chart + ruler + overview have specific designed proportions. A
+// The event strip, chart, ruler and overview have fixed proportions. A
 // resizable handle would let users squish the chart canvas under the strip,
 // breaking legibility. We freeze the panel at a sensible default in CSS
-// instead (see --chart-height in viewer.css). Legacy localStorage key
-// "dashcamigo:chart-height" is no longer read - migration is trivial since
-// the value just stops applying; nothing to clean up.
+// instead (see --chart-height in viewer.css).
 
 import { dom } from "./dom.js";
 import { isMobileLayout } from "./media-queries.js";

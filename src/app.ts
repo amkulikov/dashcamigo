@@ -219,8 +219,6 @@ declare global {
             setMapProvider: (provider: MapProvider) => MapProvider;
             mapTileCacheStats: () => SharedTileCacheStats;
         };
-        /** Compatibility alias for integrations using the released DevTools handle. */
-        __dashcamigo: Window["__everydashcam"];
         /** Shows the "updating the app" line over the splash/landing. Defined
          *  by the dc-bootstrap inline script in index.html; the asset-retry
          *  reload path below reuses it so both retry layers announce
@@ -237,7 +235,6 @@ window.__everydashcam = {
     setMapProvider: forceMapProvider,
     mapTileCacheStats: getSharedMapTileCacheStats,
 };
-window.__dashcamigo = window.__everydashcam;
 
 // Global uncaught-error hooks. Regular try/catch misses sync throws from
 // event listeners and unhandled promise rejections. We route both through

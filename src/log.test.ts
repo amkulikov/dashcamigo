@@ -322,20 +322,22 @@ describe("downloadLogBuffer()", () => {
 });
 
 describe("worker log bridge", () => {
-    it("keeps current and legacy worker records in order without duplicating sink entries", () => {
+    it("keeps worker records in order without duplicating sink entries", () => {
         const worker = new EventTarget();
         const sink = vi.fn();
         setLogSink(sink);
         installWorkerLogBridge(worker as Worker);
         const records = [
             { ts: 100, nsec: 1, level: "warn", ns: "gps", msg: "current", ctx: { count: 2 } },
-            { ts: 101, nsec: 2, level: "info", ns: "preview", msg: "legacy" },
+            { ts: 101, nsec: 2, level: "info", ns: "preview", msg: "next" },
         ];
         worker.dispatchEvent(new MessageEvent("message", { data: { __type: "other:log", record: records[0] } }));
         worker.dispatchEvent(
             new MessageEvent("message", { data: { __type: "__everydashcam:log", record: records[0] } }),
         );
-        worker.dispatchEvent(new MessageEvent("message", { data: { __type: "__dashcamigo:log", record: records[1] } }));
+        worker.dispatchEvent(
+            new MessageEvent("message", { data: { __type: "__everydashcam:log", record: records[1] } }),
+        );
         const expected = records.map((record) => ({ ...record, scope: "worker" }));
         expect(getLogBuffer()).toEqual(expected);
         expect(sink.mock.calls).toEqual(expected.map((entry) => [entry]));

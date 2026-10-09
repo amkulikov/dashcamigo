@@ -41,8 +41,6 @@ export type LifecycleEvent =
     | "chart-rendered";
 
 const LIFECYCLE_PREFIX = "everydashcam:";
-// Keep external observers working while released clients use the old namespace.
-const LEGACY_LIFECYCLE_PREFIX = "dashcamigo:";
 
 /**
  * Wraps an async stage in performance.mark+measure. Returns the value of fn().
@@ -82,11 +80,9 @@ export async function markStage<T>(name: string, fn: () => Promise<T>): Promise<
  */
 export function emitLifecycle(event: LifecycleEvent, detail?: Record<string, unknown>): void {
     if (typeof window === "undefined" || typeof window.dispatchEvent !== "function") return;
-    for (const prefix of [LIFECYCLE_PREFIX, LEGACY_LIFECYCLE_PREFIX]) {
-        try {
-            window.dispatchEvent(new CustomEvent(`${prefix}${event}`, { detail }));
-        } catch {
-            // Observability must never interrupt the operation being observed.
-        }
+    try {
+        window.dispatchEvent(new CustomEvent(`${LIFECYCLE_PREFIX}${event}`, { detail }));
+    } catch {
+        // Observability must never interrupt the operation being observed.
     }
 }

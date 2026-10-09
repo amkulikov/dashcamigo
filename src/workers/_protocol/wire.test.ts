@@ -34,7 +34,6 @@ describe("isWireMessage", () => {
         // log-bridge forwarded entries land in the same message listener;
         // isWireMessage must not claim them as wire messages.
         expect(isWireMessage({ __type: "__everydashcam:log", record: {} })).toBe(false);
-        expect(isWireMessage({ __type: "__dashcamigo:log", record: {} })).toBe(false);
         expect(isWireMessage(null)).toBe(false);
         expect(isWireMessage(undefined)).toBe(false);
         expect(isWireMessage("string")).toBe(false);

@@ -78,7 +78,6 @@ test.describe("player", () => {
     });
 
     test("play/pause control toggles the playing state", async ({ page }) => {
-        expect(await page.evaluate(() => window.__everydashcam === window.__dashcamigo)).toBe(true);
         const play = page.locator("#player-play");
         // The four-second fixture can finish while a busy full-suite worker is
         // still settling setup. A click at that point exercises the asynchronous

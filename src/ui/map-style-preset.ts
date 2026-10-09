@@ -11,7 +11,7 @@ function layerRole(layer: LayerSpecification): string | undefined {
     if ("everydashcam:role" in metadata && typeof metadata["everydashcam:role"] === "string") {
         return metadata["everydashcam:role"];
     }
-    // Cached styles may still carry the legacy metadata namespace.
+    // A controlling released worker can still serve cached styles.
     if ("dashcamigo:role" in metadata && typeof metadata["dashcamigo:role"] === "string") {
         return metadata["dashcamigo:role"];
     }

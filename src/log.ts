@@ -137,11 +137,9 @@ const IS_WORKER_SCOPE =
 // installWorkerLogBridge. The "__everydashcam:" prefix avoids collisions with
 // regular worker messages.
 const FORWARD_MESSAGE_TYPE = "__everydashcam:log";
-// A restored tab can still receive messages from a released worker bundle.
-const LEGACY_FORWARD_MESSAGE_TYPE = "__dashcamigo:log";
 
 interface ForwardedLogMessage {
-    __type: typeof FORWARD_MESSAGE_TYPE | typeof LEGACY_FORWARD_MESSAGE_TYPE;
+    __type: typeof FORWARD_MESSAGE_TYPE;
     record: LogRecord;
 }
 
@@ -377,13 +375,13 @@ export function getLogBuffer(): LogRecord[] {
  * EXACTLY ONCE right after `new Worker(...)`.
  *
  * Unknown/third-party messages are silently ignored - filter is on
- * the current or legacy log envelope marker.
+ * the log envelope marker.
  */
 export function installWorkerLogBridge(worker: Worker): void {
     worker.addEventListener("message", (ev) => {
         const data = ev.data as Partial<ForwardedLogMessage> | null | undefined;
         if (!data || typeof data !== "object") return;
-        if (data.__type !== FORWARD_MESSAGE_TYPE && data.__type !== LEGACY_FORWARD_MESSAGE_TYPE) return;
+        if (data.__type !== FORWARD_MESSAGE_TYPE) return;
         const rec = data.record;
         if (!rec || typeof rec !== "object") return;
         // Tag as worker-originated so a reader of the downloaded buffer knows
