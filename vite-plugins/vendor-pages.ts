@@ -46,6 +46,7 @@ import {
 } from "./deployment-profile.js";
 import { escapeAttr, escapeText, stringifyJsonLd } from "./html-utils.js";
 import { renderHubCta } from "./hub-cta.js";
+import { cameraCatalogAnchor, renderCameraBrandCard } from "./camera-catalog.js";
 import type { SeoBuildOptions } from "./seo-prerender.js";
 import { renderBreadcrumbs, renderSeoLanguageLinks } from "./seo-navigation.js";
 
@@ -55,7 +56,7 @@ export const BRAND_MARK_HTML = `<span class="edc-mark" role="img" aria-label="ev
 // SEO inventory. We use the slug type here as the discriminator on
 // VendorContent and the getLandingBrands() list to cross-check that every
 // landing brand has a matching VendorContent block (assertVendorListsAligned).
-import { getLandingBrands, type VendorSlug } from "./supported-brands.js";
+import { getLandingBrands, SUPPORTED_BRANDS, type VendorSlug } from "./supported-brands.js";
 
 import { renderFeatureLinksHtml } from "./feature-links.js";
 
@@ -1721,7 +1722,6 @@ ${otherVendors
     .join("\n")}
 </ul>
 <p class="vp-not-listed">${escapeText(labels.notListedText)} <a href="/add-my-camera">${escapeText(labels.notListedCta)}</a></p>
-<p class="vp-note">${escapeText(BRAND_DISCLAIMER[lang])} <a href="/terms">${escapeText(labels.footerTerms)}</a></p>
 </aside>
 </main>
 
@@ -1756,6 +1756,7 @@ export function renderCamerasIndexPage(lang: Lang, options: SeoBuildOptions): st
     const homeUrl = canonicalLocaleUrl(seoLocale);
     const ogImageUrl = `${canonicalOriginForLocale(seoLocale)}/${seoLocale.ogImage}`;
     const localeVendors = getVendorsForLang(lang);
+    const linkedVendors = new Map(localeVendors.map((vendor) => [vendor.displayName, vendor]));
 
     const hreflangBlock = buildHreflangLinksHtml((loc) => {
         return canonicalLocaleUrl(loc, "cameras/");
@@ -1777,13 +1778,16 @@ export function renderCamerasIndexPage(lang: Lang, options: SeoBuildOptions): st
         inLanguage: seoLocale.contentLanguage,
         mainEntity: {
             "@type": "ItemList",
-            numberOfItems: localeVendors.length,
-            itemListElement: localeVendors.map((v, idx) => ({
-                "@type": "ListItem",
-                position: idx + 1,
-                url: canonicalLocaleUrl(seoLocale, `cameras/${v.slug}/`),
-                name: v.displayName,
-            })),
+            numberOfItems: SUPPORTED_BRANDS.length,
+            itemListElement: SUPPORTED_BRANDS.map((brand, idx) => {
+                const vendor = linkedVendors.get(brand.displayName);
+                return {
+                    "@type": "ListItem",
+                    position: idx + 1,
+                    url: vendor ? canonicalLocaleUrl(seoLocale, `cameras/${vendor.slug}/`) : `${url}#${cameraCatalogAnchor(brand)}`,
+                    name: brand.displayName,
+                };
+            }),
         },
     };
 
@@ -1836,15 +1840,21 @@ ${breadcrumb.html}
 <h1 class="vp-h1">${escapeText(content.h1)}</h1>
 <p class="vp-lead">${escapeText(content.lead)}</p>
 <ul class="vp-vendor-grid">
-${localeVendors.map(
-    (v) => `<li><a class="vp-vendor-card" href="${pathPrefix}/cameras/${v.slug}/">
-<span class="vp-vendor-card-name">${escapeText(v.displayName)}</span>
-<span class="vp-vendor-card-hint">${v.models.slice(0, 2).map(escapeText).join(" · ")}</span>
-<span class="vp-vendor-card-hint">${escapeText(content.cardHintPrefix)} ${escapeText(v.format.container)}</span>
-</a></li>`,
-).join("\n")}
+${SUPPORTED_BRANDS.map((brand) => {
+    const vendor = linkedVendors.get(brand.displayName);
+    if (!vendor) {
+        const models = VENDORS.find((candidate) => candidate.displayName === brand.displayName)?.models.slice(0, 2);
+        return renderCameraBrandCard(brand, lang, models);
+    }
+    return `<li><a class="vp-vendor-card" href="${pathPrefix}/cameras/${vendor.slug}/">
+<span class="vp-vendor-card-name">${escapeText(vendor.displayName)}</span>
+<span class="vp-vendor-card-hint">${vendor.models.slice(0, 2).map(escapeText).join(" · ")}</span>
+<span class="vp-vendor-card-hint">${escapeText(content.cardHintPrefix)} ${escapeText(vendor.format.container)}</span>
+</a></li>`;
+}).join("\n")}
 </ul>
 <p class="vp-not-listed">${escapeText(labels.notListedText)} <a href="/add-my-camera">${escapeText(labels.notListedCta)}</a></p>
+<p class="vp-note">${escapeText(BRAND_DISCLAIMER[lang])} <a href="/terms">${escapeText(labels.footerTerms)}</a></p>
 ${renderHubCta(lang, pathPrefix)}
 </article>
 </main>

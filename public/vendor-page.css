@@ -409,7 +409,7 @@ a:hover {
     text-decoration: none;
     transition: border-color 120ms, transform 120ms;
 }
-.vp-vendor-card:hover {
+a.vp-vendor-card:hover {
     border-color: var(--accent);
     color: var(--fg);
     text-decoration: none;

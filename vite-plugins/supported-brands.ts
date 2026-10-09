@@ -34,9 +34,19 @@ import type { Lang } from "../src/i18n/index.js";
 // allowed { hasLandingPage: true } without a slug to compile - that entry then
 // got silently filtered out by getLandingBrands(), and no landing page was
 // rendered for it. The union below makes the invariant typechecked.
-export type SupportedBrand =
-    | { displayName: string; hasLandingPage: true; slug: VendorSlug; locales: readonly Lang[] }
-    | { displayName: string; hasLandingPage: false; slug?: never };
+export type RecordingCaveat = "optionalGps" | "exportedRecording";
+
+export type SupportedBrand = {
+    displayName: string;
+    // Real-recording evidence: docs/gps-format-coverage.md. Not a promise for
+    // every model or firmware, including within the same product family.
+    gpsSamples?: readonly string[];
+    recordingCaveat?: RecordingCaveat;
+    videoSamples?: readonly string[];
+} & (
+    | { hasLandingPage: true; slug: VendorSlug; locales: readonly Lang[] }
+    | { hasLandingPage: false; slug?: never }
+);
 
 // VendorSlug enumerates the brands that have a dedicated landing page. Used
 // as a type narrowing in vendor-pages.ts where the VendorContent records are
@@ -111,22 +121,25 @@ export const SUPPORTED_BRANDS: ReadonlyArray<SupportedBrand> = [
         hasLandingPage: true,
         locales: ["en", "ru", "de", "pl"],
     },
-    { displayName: "Vueroid", hasLandingPage: false },
-    { displayName: "Botslab", hasLandingPage: false },
-    { displayName: "Neoline", hasLandingPage: false },
-    { displayName: "Juscar", hasLandingPage: false },
-    { displayName: "Escort", hasLandingPage: false },
-    { displayName: "Carcam", hasLandingPage: false },
-    { displayName: "Beferich", hasLandingPage: false },
-    { displayName: "DATAKAM", hasLandingPage: false },
-    { displayName: "2E Drive", hasLandingPage: false },
+    { displayName: "Avylet", hasLandingPage: false, gpsSamples: ["A1"], recordingCaveat: "optionalGps" },
+    { displayName: "iZEEKER", hasLandingPage: false, gpsSamples: ["iD300"] },
+    { displayName: "Compartir", hasLandingPage: false, gpsSamples: ["2"] },
+    { displayName: "Vueroid", hasLandingPage: false, gpsSamples: ["S1 4K Infinite"] },
+    { displayName: "Botslab", hasLandingPage: false, gpsSamples: ["G300H 2K"] },
+    { displayName: "Neoline", hasLandingPage: false, gpsSamples: ["Spectrum"] },
+    { displayName: "Juscar", hasLandingPage: false, gpsSamples: [] },
+    { displayName: "Escort", hasLandingPage: false, gpsSamples: ["M2"] },
+    { displayName: "Carcam", hasLandingPage: false, gpsSamples: ["4CH"] },
+    { displayName: "Beferich", hasLandingPage: false, gpsSamples: ["J18"] },
+    { displayName: "DATAKAM", hasLandingPage: false, gpsSamples: ["G5P"], recordingCaveat: "exportedRecording" },
+    { displayName: "2E Drive", hasLandingPage: false, gpsSamples: ["730"] },
     { displayName: "Aspiring", hasLandingPage: false },
-    { displayName: "Sony", hasLandingPage: false },
+    { displayName: "Sony", hasLandingPage: false, gpsSamples: ["HDR-AS30V"] },
     { displayName: "JOOYFACT", hasLandingPage: false },
-    { displayName: "HP", hasLandingPage: false },
-    { displayName: "SilverStone F1", hasLandingPage: false },
-    { displayName: "Roadgid", hasLandingPage: false },
-    { displayName: "iBOX", hasLandingPage: false },
+    { displayName: "HP", hasLandingPage: false, videoSamples: ["f969x"] },
+    { displayName: "SilverStone F1", hasLandingPage: false, gpsSamples: ["A80"] },
+    { displayName: "Roadgid", hasLandingPage: false, gpsSamples: ["Tube"] },
+    { displayName: "iBOX", hasLandingPage: false, gpsSamples: ["iCON"] },
 ];
 
 // Brands with a dedicated landing page.
