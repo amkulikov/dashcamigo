@@ -67,6 +67,9 @@ describe("packGpmfSamples - structure", () => {
         expect(tokens).toHaveLength(1);
         expect(tokens[0]!.fourCC).toBe("DEVC");
         expect(tokens[0]!.type).toBe(0); // nested
+        const deviceName = [...iterTokens(tokens[0]!.payload)].find((token) => token.fourCC === "DVNM");
+        expect(deviceName).toBeDefined();
+        expect(decodeString(deviceName!)).toBe("everydashcam");
     });
 
     it.each([2040, 13_136, 13_137, 65_535])("preserves %i GPS and accel records in a dense second", (count) => {

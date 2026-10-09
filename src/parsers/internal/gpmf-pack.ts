@@ -10,7 +10,7 @@
 //
 //   DEVC (nested)
 //     DVID (uint32 = 1)            "device id"
-//     DVNM (string = "dashcamigo") "device name"
+//     DVNM (string = "everydashcam") "device name"
 //     STRM (nested)                "GPS stream"
 //       STNM (string)              stream name (read by UI players)
 //       SCAL (5×i32)               scale divisors for GPS5
@@ -167,7 +167,7 @@ function packDeviceSample(inSecond: GpsRecord[], secondStartUtc: number, writeAc
 
     const devcChildren = concat([
         packKlv("DVID", "L", 4, 1, u32be(1)),
-        packStringKlv("DVNM", "dashcamigo"),
+        packStringKlv("DVNM", "everydashcam"),
         ...streams,
     ]);
     return packNestedKlv("DEVC", devcChildren);

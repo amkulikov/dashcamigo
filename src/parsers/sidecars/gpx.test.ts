@@ -102,6 +102,36 @@ describe("gpxSidecar.parse", () => {
         expect(records[0]!.bearingDeg).toBeCloseTo(90, 6);
     });
 
+    it.each(["https://dashcamigo.app/xmlschemas/gpx/1", "https://everydashcam.app/xmlschemas/gpx/1"])(
+        "preserves speed provenance from %s exports",
+        async (namespace) => {
+            const text = gpxDoc(`
+                <trk><trkseg xmlns:dc="${namespace}">
+                    <trkpt lat="55" lon="37">
+                        <time>2024-01-15T12:34:56Z</time>
+                        <extensions><dc:speed source="estimated">10</dc:speed></extensions>
+                    </trkpt>
+                    <trkpt lat="55" lon="37.0001">
+                        <time>2024-01-15T12:34:57Z</time>
+                        <extensions><dc:speed source="unavailable"/></extensions>
+                    </trkpt>
+                    <trkpt lat="55" lon="37.0002">
+                        <time>2024-01-15T12:34:58Z</time>
+                        <extensions><dc:speed source="unavailable"/></extensions>
+                    </trkpt>
+                </trkseg></trk>
+            `);
+            const records = await gpxSidecar.parse!(makeVendorFile("export.gpx", text), "export.mp4");
+            expect(records.map((record) => [record.speedSource, record.speedMs])).toEqual([
+                ["estimated", 10],
+                ["unavailable", 0],
+                ["unavailable", 0],
+            ]);
+            expect(records[2]!.lon).toBeCloseTo(37.0002, 6);
+            expect(records[2]!.unixSeconds - records[0]!.unixSeconds).toBe(2);
+        },
+    );
+
     it("marks a missing singleton speed unavailable", async () => {
         const text = gpxDoc(
             `<trk><trkseg><trkpt lat="55" lon="37"><time>2024-01-15T12:34:56Z</time></trkpt></trkseg></trk>`,
@@ -359,6 +389,9 @@ describe("serializeGpx", () => {
         expect(out).toContain('<?xml version="1.0" encoding="UTF-8"?>');
         expect(out).toContain('<gpx version="1.1"');
         expect(out).toContain('xmlns="http://www.topografix.com/GPX/1/1"');
+        expect(out).toContain('xmlns:dc="https://everydashcam.app/xmlschemas/gpx/1"');
+        expect(out).toContain('creator="everydashcam"');
+        expect(out).not.toContain("dashcamigo");
     });
 
     it("escapes XML in trackName and creator", () => {
@@ -415,6 +448,20 @@ describe("serializeGpx", () => {
         expect(parsed[0]!.unixSeconds).toBe(1700000000);
         expect(parsed[0]!.speedMs).toBeCloseTo(5, 2);
         expect(parsed[0]!.bearingDeg).toBeCloseTo(90, 2);
+    });
+
+    it("round-trips speed provenance and segment boundaries", async () => {
+        const original = [
+            rec(1700000000, 55, 37, { speedMs: 5, speedSource: "measured", trackSegment: 0 }),
+            rec(1700000001, 55, 37.0001, { speedMs: 6, speedSource: "estimated", trackSegment: 0 }),
+            rec(1700000002, 55, 37.0002, { speedSource: "unavailable", trackSegment: 1 }),
+            rec(1700000003, 55, 37.0003, { speedSource: "unavailable", trackSegment: 1 }),
+        ];
+        const xml = serializeGpx({ records: original, trackName: "source boundaries" });
+        const parsed = await gpxSidecar.parse!(makeVendorFile("x.gpx", xml), "x.mp4");
+        expect(
+            parsed.map(({ speedMs, speedSource, trackSegment }) => ({ speedMs, speedSource, trackSegment })),
+        ).toEqual(original.map(({ speedMs, speedSource, trackSegment }) => ({ speedMs, speedSource, trackSegment })));
     });
 
     it("empty records list still produces valid GPX", () => {

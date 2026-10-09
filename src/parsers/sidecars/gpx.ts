@@ -20,7 +20,8 @@ import { readSidecarText } from "./_read.js";
 import { type SpeedEstimationPoint, estimateSpeedSegments } from "../internal/position-speed.js";
 
 const RX_GPX = /\.gpx$/i;
-const GPX_EXTENSION_NS = "https://dashcamigo.app/xmlschemas/gpx/1";
+const GPX_EXTENSION_NS = "https://everydashcam.app/xmlschemas/gpx/1";
+const LEGACY_GPX_EXTENSION_NS = "https://dashcamigo.app/xmlschemas/gpx/1";
 const RX_GPX_TIME = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$/i;
 // A source segment can still contain a device-off gap. Do not treat an
 // unobserved span longer than this as evidence that the GPX overlaps a trip.
@@ -244,7 +245,9 @@ function trkptToRecord(
     if (parsedTime === null) return null;
 
     // Empty, negative and non-finite speeds are missing evidence, never a stop.
-    const ownSpeed = el.getElementsByTagNameNS(GPX_EXTENSION_NS, "speed")[0];
+    const ownSpeed =
+        el.getElementsByTagNameNS(GPX_EXTENSION_NS, "speed")[0] ??
+        el.getElementsByTagNameNS(LEGACY_GPX_EXTENSION_NS, "speed")[0];
     const speedEl = ownSpeed ?? elementsByLocalName(el, "speed")[0];
     const courseEl = elementsByLocalName(el, "course")[0];
     const speedText = speedEl?.textContent?.trim() ?? "";

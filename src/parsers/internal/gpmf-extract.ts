@@ -109,9 +109,8 @@ export function dropGps5WhenGps9Present(records: GpsRecord[], streamKinds: GpmfG
 // ===== Internal GPMF parsing functions (unchanged from gopro.ts) =====
 
 /**
- * Marker to distinguish our own DEVC blocks from third-party ones (GoPro Hero,
- * Insta360, etc.). Compared against the DVNM field of DEVC - packGpmfSamples
- * always writes exactly this string.
+ * Markers to distinguish current and legacy exports from third-party DEVC blocks
+ * (GoPro Hero, Insta360, etc.), compared against the DVNM field.
  *
  * Why: accelerometer semantics differ across vendors. Our GpsRecord.accelXg/Yg/Zg
  * is gravity-removed dynamic acceleration (zero at rest). GoPro GPMF-ACCL writes
@@ -123,7 +122,7 @@ export function dropGps5WhenGps9Present(records: GpsRecord[], streamKinds: GpmfG
  * is in the backlog (requires computing a gravity vector, non-trivial without
  * knowing the installation orientation).
  */
-const OWN_DEVICE_NAME = "dashcamigo";
+const OWN_DEVICE_NAMES = ["everydashcam", "dashcamigo"];
 
 // Exported for tests: parses one gpmd sample (DEVC -> STRM -> GPS5/GPS9) into
 // GpsRecord[]. Production callers go through extractFromGpmdTrack.
@@ -141,11 +140,11 @@ export function extractGpsFromSample(
         if (top.fourCC !== "DEVC" || top.type !== 0) continue;
 
         // Check the DVNM of this DEVC block to decide whether to merge ACCL
-        // (see OWN_DEVICE_NAME).
+        // (see OWN_DEVICE_NAMES).
         let isOwnDevice = false;
         for (const tag of iterTokens(top.payload)) {
             if (tag.fourCC === "DVNM") {
-                isOwnDevice = decodeString(tag) === OWN_DEVICE_NAME;
+                isOwnDevice = OWN_DEVICE_NAMES.includes(decodeString(tag));
                 break;
             }
         }
@@ -159,7 +158,7 @@ export function extractGpsFromSample(
             if (tags.gps5 || tags.gps9) {
                 extractGpsFromStreamTags(tags, mp4Filename, sampleDurationSec, out, kindsOut, isOwnDevice);
             } else if (tags.accl && isOwnDevice) {
-                // Only for our own DEVC blocks - see OWN_DEVICE_NAME.
+                // Only for our own DEVC blocks - see OWN_DEVICE_NAMES.
                 const samples = decodeAcclSamples(tags.accl, tags.scal);
                 if (samples) extendArray(acclSamplesCollected, samples);
             }

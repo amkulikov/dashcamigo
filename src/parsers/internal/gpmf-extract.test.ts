@@ -258,6 +258,76 @@ const GPS9_POINT: Gps9Sample = {
     fix: 3,
 };
 
+describe("own export metadata", () => {
+    function int32Values(values: number[]): Uint8Array {
+        const bytes = new Uint8Array(values.length * 4);
+        const view = new DataView(bytes.buffer);
+        values.forEach((value, index) => {
+            view.setInt32(index * 4, value, false);
+        });
+        return bytes;
+    }
+
+    function exportedSample(deviceName: string): DataView {
+        const nameBytes = new TextEncoder().encode(deviceName);
+        const gps = nested(
+            "STRM",
+            concat(
+                scal5Block(),
+                gpsuBlock("240101120000.000"),
+                gpsfBlock(3),
+                klv("dcsp", 0x42, 1, 3, Uint8Array.of(0, 1, 2)),
+                klv("dcsg", 0x6c, 4, 3, int32Values([4, 4, 5])),
+                gps5Block([
+                    GPS5_POINT,
+                    { ...GPS5_POINT, lonDeg: 2.351, speed2dMs: 6 },
+                    { ...GPS5_POINT, lonDeg: 2.352, speed2dMs: -1 },
+                ]),
+            ),
+        );
+        const acceleration = nested(
+            "STRM",
+            concat(
+                klv("SCAL", 0x6c, 4, 1, int32Values([1000])),
+                klv("ACCL", 0x6c, 12, 3, int32Values([4903, -2452, 981, 0, 0, 0, -4903, 2452, -981])),
+            ),
+        );
+        const bytes = nested("DEVC", concat(klv("DVNM", 0x63, 1, nameBytes.length, nameBytes), gps, acceleration));
+        return new DataView(bytes.buffer);
+    }
+
+    it.each(["dashcamigo", "everydashcam"])(
+        "reads positions, dynamic acceleration and speed provenance from %s exports",
+        (deviceName) => {
+            const records: GpsRecord[] = [];
+            extractGpsFromSample(exportedSample(deviceName), "export.mp4", 3, records);
+            expect(records).toHaveLength(3);
+            expect(records.map((record) => record.speedMs)).toEqual([8, 6, 0]);
+            expect(records.map((record) => record.speedSource)).toEqual([undefined, "estimated", "unavailable"]);
+            expect(records.map((record) => record.trackSegment)).toEqual([4, 4, 5]);
+            expect(records[2]!.lat).toBeCloseTo(48.85, 6);
+            expect(records[2]!.lon).toBeCloseTo(2.352, 6);
+            expect(records[2]!.unixSeconds - records[0]!.unixSeconds).toBe(2);
+            for (const [index, sign] of [1, 0, -1].entries()) {
+                expect(records[index]!.accelXg).toBeCloseTo(sign * 0.5, 3);
+                expect(records[index]!.accelYg).toBeCloseTo(sign * -0.25, 3);
+                expect(records[index]!.accelZg).toBeCloseTo(sign * 0.1, 3);
+            }
+        },
+    );
+
+    it("does not apply own acceleration or provenance semantics to a foreign device", () => {
+        const records: GpsRecord[] = [];
+        extractGpsFromSample(exportedSample("GoPro"), "export.mp4", 3, records);
+        expect(records).toHaveLength(3);
+        for (const record of records) {
+            expect([record.accelXg, record.accelYg, record.accelZg]).toEqual([0, 0, 0]);
+            expect(record.speedSource).toBeUndefined();
+            expect(record.trackSegment).toBeUndefined();
+        }
+    });
+});
+
 describe("GPS9-over-GPS5 preference (HERO11 dual-stream)", () => {
     // HERO11 writes BOTH streams over the same fixes (gpmf-parser README
     // HERO11 table: GPS5 "deprecated" + GPS9; corroborated by gopro2gpx

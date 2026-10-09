@@ -17,7 +17,7 @@ export const VIDEO_EMBEDDED_PRIMITIVE_CACHE_REVISIONS = [
     { id: "ligogps-trailer", revision: "f4f185c9f1f07a56" },
     { id: "gpslog-atom", revision: "988afddb265571e7" },
     { id: "nextbase-gdat", revision: "af08f1dbc6442eaf" },
-    { id: "gpmf", revision: "cb25ea2b75c91ea5" },
+    { id: "gpmf", revision: "68b3745c14a1b048" },
     { id: "wolfbox-gpmd", revision: "fa7ff57da6299fbd" },
     { id: "vantrue-fmas", revision: "9678e0bab470abd6" },
     { id: "rove-gpmd", revision: "78267283625a2321" },
