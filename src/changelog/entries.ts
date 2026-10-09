@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-10-09.3",
+        category: "improvement",
+        text: {
+            en: "Migration from dashcamigo to everydashcam.",
+            ru: "Улучшен процесс миграции с dashcamigo на everydashcam.",
+            de: "Umzug von dashcamigo zu everydashcam.",
+            es: "Migración de dashcamigo a everydashcam.",
+            fr: "Migration de dashcamigo vers everydashcam.",
+            pl: "Przenoszenie z dashcamigo do everydashcam.",
+            pt: "Migração de dashcamigo para everydashcam.",
+            zh: "从 dashcamigo 迁移至 everydashcam 的流程。",
+            ja: "dashcamigo から everydashcam への移行。",
+            ko: "dashcamigo에서 everydashcam으로의 이전 과정.",
+        },
+    },
+    {
         id: "2026-10-09.2",
         category: "improvement",
         text: {

@@ -843,6 +843,18 @@
              removing body.no-trips reveals that geometry without laying it out again.
              Literals in HTML are the English baseline for crawlers and unfurl
              bots; data-i18n swaps them for the active locale. -->
+        <!-- web-only:start -->
+        <aside class="sticky-banner" id="migration-banner" aria-labelledby="migration-banner-title" hidden>
+            <div class="sticky-banner-body">
+                <div class="sticky-banner-title" id="migration-banner-title" data-i18n="migration.title">dashcamigo is now everydashcam</div>
+                <p class="sticky-banner-lead" data-i18n="migration.body">You're at our new address — you can use the site as before. If you added notes and haven't saved them to a file, you can bring them here from the old address.</p>
+            </div>
+            <div class="sticky-banner-actions">
+                <button class="dc-btn dc-btn--primary" id="migration-banner-transfer" type="button" data-i18n="migration.transfer">Bring my notes</button>
+                <button class="dc-btn dc-btn--ghost" id="migration-banner-dismiss" type="button" data-i18n="migration.dismiss">Got it</button>
+            </div>
+        </aside>
+        <!-- web-only:end -->
         <div class="landing" id="landing">
                 <div class="landing-inner">
                     <!-- The primary action precedes the product preview on narrow screens. -->
@@ -2735,18 +2747,14 @@
                 </div>
             </div>
             <div class="export-modal-section" id="settings-migration-section" hidden>
-                <h3 class="settings-section-title" data-i18n="settings.migration.section">Notes from dashcamigo</h3>
+                <h3 class="settings-section-title" id="settings-migration-heading" tabindex="-1" data-i18n="settings.migration.section">Notes from dashcamigo</h3>
                 <div class="settings-row" id="settings-migration-old" hidden>
                     <p class="settings-toggle-desc" data-i18n="settings.migration.announcement">dashcamigo will move to everydashcam.app. Save your trip notes here before the move.</p>
                     <a href="/migrate/" class="dc-btn dc-btn--secondary" data-i18n="settings.migration.export">Save notes for the move</a>
                 </div>
                 <div class="settings-row" id="settings-migration-new" hidden>
-                    <p class="settings-toggle-desc" data-i18n="settings.migration.restore">dashcamigo is now everydashcam. Choose the old address where you saved your notes. Use the same browser and profile, then restore the downloaded file below.</p>
-                    <p class="settings-toggle-desc">
-                        <a href="https://dashcamigo.app/migrate/">dashcamigo.app</a> ·
-                        <a href="https://ru.dashcamigo.app/migrate/">ru.dashcamigo.app</a> ·
-                        <a href="https://beta.dashcamigo.app/migrate/">beta.dashcamigo.app</a>
-                    </p>
+                    <p class="settings-toggle-desc" data-i18n="settings.migration.restore">dashcamigo is now everydashcam. Open the old site in the same browser and profile to save your notes, then restore the downloaded file below.</p>
+                    <a id="settings-migration-recover" href="https://dashcamigo.app/migrate/" class="dc-btn dc-btn--secondary" data-i18n="settings.migration.recover">Save notes from the old site</a>
                 </div>
                 <div class="settings-row">
                     <p class="settings-toggle-desc" data-i18n="settings.migration.installed">If you use an installed app, save your notes from that app before removing it.</p>

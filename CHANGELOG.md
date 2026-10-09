@@ -9,6 +9,7 @@ release tag. Localized texts ship inside the app (the "What's new" panel).
 
 ## 2026-10-09
 
+- **Improved:** Migration from dashcamigo to everydashcam.
 - **Improved:** dashcamigo has moved to everydashcam.app; restore your notes in Settings.
 - **New:** Prepare your notes for the move to everydashcam.app in Settings.
 

@@ -57,6 +57,7 @@ import { MAP_PROVIDER_REGISTRY } from "./map-provider-registry.js";
 import { initMapViewControls } from "./map-view-controls.js";
 import { activateModal, deactivateModal, wireBackdropDismiss } from "./modal-helper.js";
 import { notify } from "./notifications.js";
+import { initMigrationBanner, migrationAddress, migrationRecoveryUrl } from "./migration-banner.js";
 import { resetOnboarding } from "./onboarding.js";
 import { clearServiceWorkerAndCaches, resetAllAppState } from "./reset.js";
 import {
@@ -97,13 +98,15 @@ function syncCrashToggleFromState(): void {
 function initMigrationSection(): void {
     const section = document.getElementById("settings-migration-section");
     if (!section) return;
-    const isNewAddress = /^(?:(?:www|ru|beta)\.)?everydashcam\.app$/.test(window.location.hostname);
-    const isOldAddress = /^(?:(?:www|ru|beta)\.)?dashcamigo\.app$/.test(window.location.hostname);
+    const address = migrationAddress(window.location.hostname);
+    const isNewAddress = address === "new";
+    const isOldAddress = address === "old";
     section.hidden = !isOldAddress && !isNewAddress;
     const oldAddress = document.getElementById("settings-migration-old");
     const newAddress = document.getElementById("settings-migration-new");
     if (oldAddress) oldAddress.hidden = !isOldAddress;
     if (newAddress) newAddress.hidden = !isNewAddress;
+    document.getElementById("settings-migration-recover")?.setAttribute("href", migrationRecoveryUrl());
 }
 
 function isOpen(el: HTMLElement | null): boolean {
@@ -371,7 +374,15 @@ export function initSettingsModal(): void {
         return;
     }
 
-    if (!__PORTABLE__) initMigrationSection();
+    if (!__PORTABLE__) {
+        initMigrationSection();
+        initMigrationBanner(() => {
+            openSettings();
+            const heading = document.getElementById("settings-migration-heading");
+            heading?.focus({ preventScroll: true });
+            heading?.scrollIntoView({ block: "start" });
+        });
+    }
 
     // Privacy section holds the crash-reports toggle (Sentry build flag).
     // Hidden entirely when crash reporting is not built into this
