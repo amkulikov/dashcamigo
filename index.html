@@ -185,12 +185,11 @@
          font-display: swap - until they load, the UI renders with the system fallback
          (acceptable flash, ~100ms faster first paint than preloading everything). -->
     <link rel="preload" href="/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
-    <!-- A root-level favicon is mandatory: Google's legacy crawler first tries
-         /favicon.ico, and without the file CF Pages serves the SPA-fallback HTML
-         (broken signal -> no icon shown in SERP). See
-         scripts/generate-favicons.mjs for regeneration from mark.svg. -->
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <link rel="alternate icon" href="/favicon.ico" sizes="any">
+    <!-- Search crawlers need an explicit raster icon without reading the app
+         manifest. Regenerate assets with scripts/generate-favicons.mjs. -->
+    <link rel="icon" type="image/vnd.microsoft.icon" href="/favicon.ico" sizes="16x16 32x32">
+    <link rel="icon" type="image/png" href="/favicon-192.png" sizes="192x192">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" sizes="any">
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
     <link rel="manifest" href="/manifest.webmanifest">
     <!-- theme-color is mandatory for PWA: tints the browser address bar and
