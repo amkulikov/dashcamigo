@@ -28,6 +28,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Plugin } from "vite";
+import { BRAND_DISCLAIMER } from "../src/i18n/brand-disclaimer.js";
 import type { Lang } from "../src/i18n/index.js";
 import {
     REPO_URL,
@@ -1684,6 +1685,7 @@ ${breadcrumb.html}
 ${vendor.models.map((m) => `<li>${escapeText(m)}</li>`).join("\n")}
 </ul>
 <p class="vp-note">${escapeText(content.modelsCompat)}</p>
+<p class="vp-note">${escapeText(BRAND_DISCLAIMER[lang])} <a href="/terms">${escapeText(labels.footerTerms)}</a></p>
 </section>
 
 <section class="vp-section">
@@ -1719,6 +1721,7 @@ ${otherVendors
     .join("\n")}
 </ul>
 <p class="vp-not-listed">${escapeText(labels.notListedText)} <a href="/add-my-camera">${escapeText(labels.notListedCta)}</a></p>
+<p class="vp-note">${escapeText(BRAND_DISCLAIMER[lang])} <a href="/terms">${escapeText(labels.footerTerms)}</a></p>
 </aside>
 </main>
 

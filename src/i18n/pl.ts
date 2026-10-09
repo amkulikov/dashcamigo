@@ -4,6 +4,7 @@
 // CLDR (one/few/many/other) - są używane wszędzie tam, gdzie szablon
 // zawiera plural.
 
+import { BRAND_DISCLAIMER } from "./brand-disclaimer.js";
 import type { I18nKey } from "./keys.js";
 
 export const plDict = {
@@ -45,6 +46,7 @@ export const plDict = {
     "landing.hero.lead.brandsTail": " i innych.",
     "landing.hero.lead.after": " GPS i zdarzenia — apka czyta je wprost z wideo i z plików obok, bez konfiguracji.",
     "landing.hero.allBrands": "Wszystkie obsługiwane marki →",
+    "landing.brands.disclaimer": BRAND_DISCLAIMER.pl,
     "landing.hero.shot.alt": "everydashcam od środka: dwie kamery obok siebie, wykres prędkości ze znacznikami zdarzeń i trasa na mapie",
     "landing.hero.shot.altPhone": "everydashcam na telefonie: odtwarzacz z mapą trasy",
     "landing.dock.hint": "Upuść folder karty SD w dowolnym miejscu — albo",

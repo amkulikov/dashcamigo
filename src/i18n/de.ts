@@ -2,6 +2,7 @@
 // kurze Sätze, direkt und freundlich, ohne Floskeln, Emojis nur dort,
 // wo sie schon im RU/EN Bedeutung trugen (Warnung, Häkchen).
 
+import { BRAND_DISCLAIMER } from "./brand-disclaimer.js";
 import type { I18nKey } from "./keys.js";
 
 export const deDict = {
@@ -43,6 +44,7 @@ export const deDict = {
     "landing.hero.lead.brandsTail": " und mehr.",
     "landing.hero.lead.after": " GPS und Ereignisse — die App liest sie direkt aus dem Video und den Dateien daneben, ohne Einrichtung.",
     "landing.hero.allBrands": "Alle unterstützten Marken →",
+    "landing.brands.disclaimer": BRAND_DISCLAIMER.de,
     "landing.hero.shot.alt": "everydashcam von innen: zwei Kameras nebeneinander, das Geschwindigkeitsdiagramm mit Ereignismarkern und die Route auf der Karte",
     "landing.hero.shot.altPhone": "everydashcam auf dem Handy: der Player mit der Routenkarte",
     "landing.dock.hint": "Den SD-Karten-Ordner irgendwo ablegen — oder",

@@ -6,6 +6,7 @@
 //   {n, plural, one {} few {} other {}} - Russian plural (CLDR)
 //   {n, number}                    - localized number (not needed here)
 
+import { BRAND_DISCLAIMER } from "./brand-disclaimer.js";
 import type { I18nKey } from "./keys.js";
 
 // satisfies checks the object holds exactly the I18nKey key set (no
@@ -50,6 +51,7 @@ export const ruDict = {
     "landing.hero.lead.brandsTail": " и другие.",
     "landing.hero.lead.after": " GPS и события приложение читает прямо из видео и соседних файлов — без настройки.",
     "landing.hero.allBrands": "Все поддерживаемые бренды →",
+    "landing.brands.disclaimer": BRAND_DISCLAIMER.ru,
     "landing.hero.shot.alt": "everydashcam изнутри: две камеры рядом, график скорости с отметками событий и маршрут на карте",
     "landing.hero.shot.altPhone": "everydashcam на телефоне: плеер с картой маршрута",
     "landing.dock.hint": "Папку с SD-карты можно бросить в любое место — или",

@@ -3,6 +3,7 @@
 // 没有复数形式（only "other"），因此带 plural 的模板里只用 other 分支
 // 即可。
 
+import { BRAND_DISCLAIMER } from "./brand-disclaimer.js";
 import type { I18nKey } from "./keys.js";
 
 export const zhDict = {
@@ -44,6 +45,7 @@ export const zhDict = {
     "landing.hero.lead.brandsTail": " 等。",
     "landing.hero.lead.after": " GPS 数据和事件 — 应用直接从视频和旁边的文件中读取，无需任何配置。",
     "landing.hero.allBrands": "查看所有支持的品牌 →",
+    "landing.brands.disclaimer": BRAND_DISCLAIMER.zh,
     "landing.hero.shot.alt": "everydashcam 界面：两路摄像头并排显示、带事件标记的速度图表、地图上的路线",
     "landing.hero.shot.altPhone": "手机上的 everydashcam：带路线地图的播放器",
     "landing.dock.hint": "把 SD 卡文件夹拖到页面任意位置 — 或者",

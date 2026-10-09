@@ -125,6 +125,13 @@ body.no-trips .viewer {
     max-width: 82ch;
     margin: 0;
 }
+.landing-brand-disclaimer {
+    max-width: 100ch;
+    margin: 0;
+    font-size: var(--dc-text-sm);
+    line-height: 1.5;
+    color: var(--fg-dim);
+}
 /* Inline links stay recognizable in running text. */
 .landing-brand-link {
     color: var(--fg);

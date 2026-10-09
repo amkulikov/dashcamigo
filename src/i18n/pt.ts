@@ -4,6 +4,7 @@
 // para o Brasil ("vídeo", "tela", "celular"); funciona razoavelmente
 // também em PT-PT.
 
+import { BRAND_DISCLAIMER } from "./brand-disclaimer.js";
 import type { I18nKey } from "./keys.js";
 
 export const ptDict = {
@@ -45,6 +46,7 @@ export const ptDict = {
     "landing.hero.lead.brandsTail": " e outras.",
     "landing.hero.lead.after": " GPS e eventos — o app lê direto do vídeo e dos arquivos que vêm com ele, sem configurar nada.",
     "landing.hero.allBrands": "Todas as marcas compatíveis →",
+    "landing.brands.disclaimer": BRAND_DISCLAIMER.pt,
     "landing.hero.shot.alt": "everydashcam por dentro: duas câmeras lado a lado, o gráfico de velocidade com marcas de eventos e a rota no mapa",
     "landing.hero.shot.altPhone": "everydashcam no celular: o player com o mapa da rota",
     "landing.dock.hint": "Solte a pasta do cartão SD em qualquer lugar — ou",

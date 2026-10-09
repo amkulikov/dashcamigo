@@ -13,6 +13,7 @@
 // "{n} 개" 형태로 충분하며 plural 래퍼를 굳이 쓸 필요가 없어요 -
 // zh.ts / ja.ts 와 같은 방침입니다.
 
+import { BRAND_DISCLAIMER } from "./brand-disclaimer.js";
 import type { I18nKey } from "./keys.js";
 
 export const koDict = {
@@ -54,6 +55,7 @@ export const koDict = {
     "landing.hero.lead.brandsTail": " 등.",
     "landing.hero.lead.after": " GPS와 이벤트는 영상이나 함께 저장된 파일에서 바로 읽어 와요. 따로 설정할 필요 없어요.",
     "landing.hero.allBrands": "지원되는 모든 브랜드 →",
+    "landing.brands.disclaimer": BRAND_DISCLAIMER.ko,
     "landing.hero.shot.alt": "everydashcam 화면: 두 카메라 나란히, 이벤트 표시가 있는 속도 그래프, 지도 위의 경로",
     "landing.hero.shot.altPhone": "휴대폰의 everydashcam: 경로 지도가 있는 플레이어",
     "landing.dock.hint": "SD 카드 폴더는 아무 데나 놓아도 돼요 — 또는",

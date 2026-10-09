@@ -14,6 +14,7 @@
 // では `{n} 件` の形で十分で、わざわざ plural ラッパーを書かなくても
 // 同じ結果になる - zh.ts と同じ方針。
 
+import { BRAND_DISCLAIMER } from "./brand-disclaimer.js";
 import type { I18nKey } from "./keys.js";
 
 export const jaDict = {
@@ -55,6 +56,7 @@ export const jaDict = {
     "landing.hero.lead.brandsTail": "など。",
     "landing.hero.lead.after": " GPS とイベントは、動画や一緒に保存されているファイルから直接読み取ります。設定は不要です。",
     "landing.hero.allBrands": "対応ブランド一覧 →",
+    "landing.brands.disclaimer": BRAND_DISCLAIMER.ja,
     "landing.hero.shot.alt": "everydashcam の画面：2 台のカメラを並べて表示、イベント付きの速度グラフ、地図上のルート",
     "landing.hero.shot.altPhone": "スマホの everydashcam：ルート地図付きのプレーヤー",
     "landing.dock.hint": "SD カードのフォルダーはどこへドロップしても OK — または",

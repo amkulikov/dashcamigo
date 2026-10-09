@@ -4,6 +4,7 @@
 // retenu pour rester proche du ton original (le projet n'est pas un
 // produit corporate).
 
+import { BRAND_DISCLAIMER } from "./brand-disclaimer.js";
 import type { I18nKey } from "./keys.js";
 
 export const frDict = {
@@ -45,6 +46,7 @@ export const frDict = {
     "landing.hero.lead.brandsTail": " et bien d'autres.",
     "landing.hero.lead.after": " GPS et événements — l’appli les lit directement dans la vidéo et les fichiers qui l’accompagnent, sans configuration.",
     "landing.hero.allBrands": "Toutes les marques compatibles →",
+    "landing.brands.disclaimer": BRAND_DISCLAIMER.fr,
     "landing.hero.shot.alt": "everydashcam de l'intérieur : deux caméras côte à côte, le graphique de vitesse avec les repères d'événements et l'itinéraire sur la carte",
     "landing.hero.shot.altPhone": "everydashcam sur un téléphone : le lecteur avec la carte du trajet",
     "landing.dock.hint": "Dépose le dossier de la carte SD n'importe où — ou",

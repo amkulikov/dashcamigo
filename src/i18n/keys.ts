@@ -102,6 +102,7 @@ export type I18nKey =
     | "landing.hero.lead.brandsTail"
     | "landing.hero.lead.after"
     | "landing.hero.allBrands"
+    | "landing.brands.disclaimer"
     // alts of the hero-column product composite (.landing-hero-shot in
     // index.html): the desktop shot + the phone shot overlapping its corner
     | "landing.hero.shot.alt"

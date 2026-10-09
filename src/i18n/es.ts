@@ -4,6 +4,7 @@
 // que también funciona en LatAm (sin "vosotros", sin coloquialismos
 // regionales).
 
+import { BRAND_DISCLAIMER } from "./brand-disclaimer.js";
 import type { I18nKey } from "./keys.js";
 
 export const esDict = {
@@ -45,6 +46,7 @@ export const esDict = {
     "landing.hero.lead.brandsTail": " y más.",
     "landing.hero.lead.after": " GPS y eventos — la app los lee directamente del vídeo y de los archivos que lo acompañan, sin configurar nada.",
     "landing.hero.allBrands": "Todas las marcas compatibles →",
+    "landing.brands.disclaimer": BRAND_DISCLAIMER.es,
     "landing.hero.shot.alt": "everydashcam por dentro: dos cámaras lado a lado, el gráfico de velocidad con marcas de eventos y la ruta en el mapa",
     "landing.hero.shot.altPhone": "everydashcam en un móvil: el reproductor con el mapa de la ruta",
     "landing.dock.hint": "Suelta la carpeta de la tarjeta SD en cualquier parte — o",
