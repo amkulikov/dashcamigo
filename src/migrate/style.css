@@ -39,10 +39,6 @@ h1 {
     line-height: 1.2;
 }
 
-h2 {
-    font-size: 1.25rem;
-}
-
 section {
     margin: 2rem 0;
 }
@@ -67,6 +63,7 @@ section {
 }
 
 button,
+.migration-button,
 select {
     min-height: 44px;
     border: 1px solid var(--border-strong);
@@ -79,6 +76,15 @@ select {
 
 button {
     cursor: pointer;
+}
+
+.migration-button {
+    display: inline-block;
+    text-decoration: none;
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--accent-contrast);
+    font-weight: 650;
 }
 
 button:hover {
@@ -96,17 +102,15 @@ button:hover {
     background: var(--accent-hot);
 }
 
+#migration-download.is-saved {
+    border-color: var(--border-strong);
+    background: var(--bg-elev);
+    color: var(--fg);
+}
+
 :focus-visible {
     outline: 2px solid var(--accent-ink);
     outline-offset: 4px;
-}
-
-li + li {
-    margin-top: 1rem;
-}
-
-ol {
-    padding-left: 1.5rem;
 }
 
 footer {

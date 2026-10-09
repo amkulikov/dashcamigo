@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { expect, gotoApp, presetLocalStorage, test } from "./_fixtures.js";
 
 async function serveLocalBuildAt(page: Page, origin: string): Promise<void> {
-    await page.route(`${origin}/**`, async (route) => {
+    await page.context().route(`${origin}/**`, async (route) => {
         const url = new URL(route.request().url());
         const path = resolve("dist", `.${url.pathname}${url.pathname.endsWith("/") ? "index.html" : ""}`);
         if (!existsSync(path)) throw new Error(`missing local fixture: ${url.pathname}`);
@@ -50,10 +50,10 @@ test.describe("migration at the new address", () => {
         await expect(page.locator("#settings-migration-section")).toBeVisible();
         await expect(page.locator("#settings-migration-old")).toBeHidden();
         const sources = page.locator("#settings-migration-new");
-        await expect(sources).toContainText("same browser and profile");
+        await expect(page.locator("#settings-migration-import")).toBeVisible();
         expect(
             await sources.locator("a").evaluateAll((links) => links.map((link) => link.getAttribute("href"))),
-        ).toEqual(["https://dashcamigo.app/migrate/"]);
+        ).toEqual(["https://dashcamigo.app/migrate/?lang=en"]);
         await expect(sources).not.toContainText("ru.dashcamigo.app");
         await expect(sources).not.toContainText("beta");
         await expect(page.locator("#settings-notes-import-btn")).toBeVisible();
@@ -78,14 +78,13 @@ for (const host of ["everydashcam.app", "ru.everydashcam.app"]) {
             test(`chooses one recovery link for ${source ?? "a direct visit"}`, async ({ page }) => {
                 await serveLocalBuildAt(page, `https://${host}`);
                 await page.goto(`/en/${source ? `?dc_from=${source}` : ""}`);
-                if (source) await page.locator("#migration-banner-transfer").click();
-                else await page.locator("#settings-btn").click();
+                await page.locator("#settings-btn").click();
                 const section = page.locator("#settings-migration-new");
                 const isRu = source === "ru" || (source === null && host === "ru.everydashcam.app");
                 await expect(section.locator("a")).toHaveCount(1);
                 await expect(section.locator("a")).toHaveAttribute(
                     "href",
-                    `https://${isRu ? "ru." : ""}dashcamigo.app/migrate/`,
+                    `https://${isRu ? "ru." : ""}dashcamigo.app/migrate/?lang=en`,
                 );
                 await expect(section).not.toContainText("ru.dashcamigo.app");
                 await expect(section).not.toContainText("beta");
@@ -115,7 +114,7 @@ test.describe("migration arrival notice", () => {
     });
 
     for (const locale of ["en", "ru"]) {
-        test(`explains a marked arrival and opens the ${locale} recovery instructions`, async ({ page }, info) => {
+        test(`opens the old ${locale} recovery page in a new tab`, async ({ page }, info) => {
             await page.goto(`/${locale}/?keep=a%20b&keep=2&dc_from=apex#test-anchor`);
             const banner = page.locator("#migration-banner");
             await expect(banner).toBeVisible();
@@ -126,11 +125,17 @@ test.describe("migration arrival notice", () => {
             await expect(page.locator("#migration-banner-transfer")).toBeInViewport();
             await expect(page.locator("#migration-banner-dismiss")).toBeInViewport();
             await page.screenshot({ path: info.outputPath(`migration-${locale}-mobile.png`) });
+            await serveLocalBuildAt(page, "https://dashcamigo.app");
+            const popupPending = page.waitForEvent("popup");
             await page.locator("#migration-banner-transfer").click();
+            const popup = await popupPending;
+            await expect(popup).toHaveURL(`https://dashcamigo.app/migrate/?lang=${locale}`);
+            await expect(popup.locator("#migration-status")).toHaveAttribute("data-state", "empty");
+            await expect(popup.locator("html")).toHaveAttribute("lang", locale);
+            expect(await popup.evaluate(() => window.opener)).toBeNull();
             await expect(banner).toBeHidden();
-            await expect(page.locator("#settings-migration-heading")).toBeFocused();
-            await expect(page.locator("#settings-migration-heading")).toBeInViewport();
-            await expect(page.locator("#settings-migration-new")).toBeVisible();
+            await expect(page.locator("#settings-modal")).toBeHidden();
+            await popup.close();
         });
     }
 
@@ -179,4 +184,91 @@ test.describe("migration arrival notice", () => {
         await expect(page.locator("#settings-btn")).toBeVisible();
         await expect(page.locator("#migration-banner")).toBeHidden();
     });
+});
+
+for (const host of ["dashcamigo.app", "ru.dashcamigo.app"]) {
+    test.describe(`recovery return from ${host}`, () => {
+        test.use({ baseURL: `https://${host}` });
+        test(`returns from ${host} to its matching new site`, async ({ page }) => {
+            await serveLocalBuildAt(page, `https://${host}`);
+            await page.goto(`https://${host}/migrate/?lang=ru`);
+            await expect(page.locator("#migration-status")).toHaveAttribute("data-state", "empty");
+            await expect(page.locator("#migration-continue")).toBeVisible();
+            await expect(page.locator("#migration-continue")).toHaveAttribute(
+                "href",
+                `https://${host.replace("dashcamigo", "everydashcam")}/ru/`,
+            );
+            await expect(page.locator("#migration-next-hint")).toBeHidden();
+        });
+    });
+}
+
+test("keeps the restore picker available after an invalid backup", async ({ page }) => {
+    await presetLocalStorage(page, { lang: "en" });
+    await page.goto("/en/#restore-notes");
+    await expect(page.locator("#migration-restore-modal")).toBeVisible();
+    await page.locator("#migration-restore-input").setInputFiles({
+        name: "invalid.everydashcam",
+        mimeType: "application/json",
+        buffer: Buffer.from("{}"),
+    });
+    await expect(page.locator("#migration-restore-choose")).toBeEnabled();
+    await expect(page.locator("#migration-restore-modal")).toBeVisible();
+    await page.locator("#migration-restore-close").click();
+    await expect(page.locator("#migration-restore-modal")).toBeHidden();
+});
+
+test.describe("direct arrivals on the ru site", () => {
+    test.use({ baseURL: "https://ru.everydashcam.app" });
+    test("shows the notice once without a redirect marker", async ({ page }) => {
+        await serveLocalBuildAt(page, "https://ru.everydashcam.app");
+        await page.goto("/ru/");
+        await expect(page.locator("#migration-banner")).toBeVisible();
+        await expect(page.locator("#migration-banner-transfer")).toHaveAttribute(
+            "href",
+            "https://ru.dashcamigo.app/migrate/?lang=ru",
+        );
+        await page.locator("#migration-banner-dismiss").click();
+        await page.reload();
+        await expect(page.locator("#settings-btn")).toBeVisible();
+        await expect(page.locator("#migration-banner")).toBeHidden();
+        await page.locator("#settings-btn").click();
+        await expect(page.locator("#settings-modal .export-modal-section").first()).toHaveAttribute(
+            "id",
+            "settings-migration-section",
+        );
+        await expect(page.locator("#settings-migration-recover")).toBeVisible();
+        await page.locator("#settings-migration-import").click();
+        await expect(page.locator("#settings-modal")).toBeHidden();
+        await expect(page.locator("#migration-restore-modal")).toBeVisible();
+    });
+});
+
+test.describe("acknowledging migration while restoring on the ru site", () => {
+    test.use({ baseURL: "https://ru.everydashcam.app" });
+    for (const entry of ["return", "settings"] as const) {
+        test(`remembers the ${entry} restore action without showing the notice again`, async ({ page }) => {
+            await serveLocalBuildAt(page, "https://ru.everydashcam.app");
+            await page.goto(`/ru/${entry === "return" ? "#restore-notes" : ""}`);
+            if (entry === "settings") {
+                await expect(page.locator("#migration-banner")).toBeVisible();
+                await page.locator("#settings-btn").click();
+                await expect(page.locator("#migration-banner")).toBeHidden();
+                expect(
+                    await page.locator("#migration-banner").evaluate((banner) => {
+                        const box = banner.getBoundingClientRect();
+                        const top = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+                        return top !== null && document.getElementById("settings-modal")!.contains(top);
+                    }),
+                ).toBe(true);
+                await page.locator("#settings-migration-import").click();
+            }
+            await expect(page.locator("#migration-restore-modal")).toBeVisible();
+            await expect(page.locator("#migration-banner")).toBeHidden();
+            await page.locator("#migration-restore-close").click();
+            await page.reload();
+            await expect(page.locator("#settings-btn")).toBeVisible();
+            await expect(page.locator("#migration-banner")).toBeHidden();
+        });
+    }
 });

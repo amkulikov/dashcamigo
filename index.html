@@ -849,7 +849,7 @@
                 <p class="sticky-banner-lead" data-i18n="migration.body">You're at our new address — you can use the site as before. If you added notes and haven't saved them to a file, you can bring them here from the old address.</p>
             </div>
             <div class="sticky-banner-actions">
-                <button class="dc-btn dc-btn--primary" id="migration-banner-transfer" type="button" data-i18n="migration.transfer">Bring my notes</button>
+                <a class="dc-btn dc-btn--primary" id="migration-banner-transfer" target="_blank" rel="noopener" data-i18n="migration.transfer">Bring my notes</a>
                 <button class="dc-btn dc-btn--ghost" id="migration-banner-dismiss" type="button" data-i18n="migration.dismiss">Got it</button>
             </div>
         </aside>
@@ -2592,6 +2592,19 @@
          section); initially it only contains a Privacy tab with the anonymous-
          analytics toggle - other preferences will move here later. JS lazily
          manages the hidden flag via openSettings()/closeSettings(). -->
+    <!-- web-only:start -->
+    <div data-nosnippet id="migration-restore-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="migration-restore-title">
+        <div class="export-modal-card modal-card">
+            <div class="export-modal-title" id="migration-restore-title" data-i18n="settings.migration.section">Notes from dashcamigo</div>
+            <p class="export-modal-body" data-i18n="migration.restoreFile">Choose the notes file you saved from dashcamigo.</p>
+            <div class="export-modal-actions">
+                <button id="migration-restore-choose" class="dc-btn dc-btn--primary" type="button" data-i18n="settings.notes.import">Restore notes backup…</button>
+                <button id="migration-restore-close" class="dc-btn dc-btn--secondary" type="button" data-i18n="export.close">Close</button>
+            </div>
+            <input id="migration-restore-input" type="file" accept=".everydashcam,.dashcamigo,application/json" hidden>
+        </div>
+    </div>
+    <!-- web-only:end -->
     <div data-nosnippet id="settings-modal" class="export-modal modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
         <div class="export-modal-card modal-card">
             <header class="settings-modal-header">
@@ -2600,6 +2613,23 @@
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
                 </button>
             </header>
+            <!-- web-only:start -->
+            <div class="export-modal-section" id="settings-migration-section" hidden>
+                <h3 class="settings-section-title" id="settings-migration-heading" tabindex="-1" data-i18n="settings.migration.section">Notes from dashcamigo</h3>
+                <div class="settings-row" id="settings-migration-old" hidden>
+                    <p class="settings-toggle-desc" data-i18n="settings.migration.announcement">dashcamigo will move to everydashcam.app. Save your trip notes here before the move.</p>
+                    <a href="/migrate/" class="dc-btn dc-btn--secondary" data-i18n="settings.migration.export">Save notes for the move</a>
+                </div>
+                <div class="settings-row" id="settings-migration-new" hidden>
+                    <p class="settings-toggle-desc" data-i18n="settings.migration.restore">Open the old site to save your notes. If you already have the file, choose it here.</p>
+                    <a id="settings-migration-recover" href="https://dashcamigo.app/migrate/" target="_blank" rel="noopener" class="dc-btn dc-btn--secondary" data-i18n="settings.migration.recover">Save notes from the old site</a>
+                    <button id="settings-migration-import" class="dc-btn dc-btn--secondary" type="button" data-i18n="settings.notes.import">Restore notes backup…</button>
+                </div>
+                <div class="settings-row">
+                    <p class="settings-toggle-desc" data-i18n="settings.migration.installed">If you use an installed app, save your notes from that app before removing it.</p>
+                </div>
+            </div>
+            <!-- web-only:end -->
             <!-- Playback: unit preference + arrow-key seek step.
                  Units drive chart axis label, map popup speed, trip distance display
                  (see src/units-pref.ts).
@@ -2743,21 +2773,6 @@
                     <p id="settings-crash-description" class="settings-toggle-desc" data-i18n="settings.privacy.crash.description">If the app breaks, an anonymized report helps us fix it — no video, no GPS, no file names, just what went wrong and on which browser. On by default; switch it off here.</p>
                     <a href="/privacy" target="_blank" rel="noopener" class="settings-policy-link"
                        data-i18n="settings.privacy.policyLink">Privacy policy</a>
-                </div>
-            </div>
-            <div class="export-modal-section" id="settings-migration-section" hidden>
-                <h3 class="settings-section-title" id="settings-migration-heading" tabindex="-1" data-i18n="settings.migration.section">Notes from dashcamigo</h3>
-                <div class="settings-row" id="settings-migration-old" hidden>
-                    <p class="settings-toggle-desc" data-i18n="settings.migration.announcement">dashcamigo will move to everydashcam.app. Save your trip notes here before the move.</p>
-                    <a href="/migrate/" class="dc-btn dc-btn--secondary" data-i18n="settings.migration.export">Save notes for the move</a>
-                </div>
-                <div class="settings-row" id="settings-migration-new" hidden>
-                    <p class="settings-toggle-desc" data-i18n="settings.migration.restore">dashcamigo is now everydashcam. Open the old site in the same browser and profile to save your notes, then restore the downloaded file below.</p>
-                    <a id="settings-migration-recover" href="https://dashcamigo.app/migrate/" class="dc-btn dc-btn--secondary" data-i18n="settings.migration.recover">Save notes from the old site</a>
-                </div>
-                <div class="settings-row">
-                    <p class="settings-toggle-desc" data-i18n="settings.migration.installed">If you use an installed app, save your notes from that app before removing it.</p>
-                    <p class="settings-toggle-desc" data-i18n="settings.migration.setup">At the new address, choose your folders and settings again and reinstall the app if you use it.</p>
                 </div>
             </div>
             <!-- web-only:end -->

@@ -113,7 +113,13 @@ test.describe("standalone notes recovery", () => {
             const requests: string[] = [];
             page.on("request", (request) => requests.push(new URL(request.url()).pathname));
             await page.reload();
+            await expect(page.locator("#migration-continue")).toBeHidden();
             const text = await exportNotes(page);
+            await expect(page.locator("#migration-continue")).toBeVisible();
+            await expect(page.locator("#migration-continue")).toHaveAttribute(
+                "href",
+                "https://everydashcam.app/en/#restore-notes",
+            );
             const payload = JSON.parse(text);
             expect(payload).toMatchObject({ app: "everydashcam", format: "annotations", version: 3 });
             expect(payload.annotations).toEqual(
@@ -140,7 +146,7 @@ test.describe("standalone notes recovery", () => {
         expect(await page.evaluate(() => indexedDB.databases())).toEqual([]);
         await page.locator("#migration-language").selectOption("ru");
         await expect(page.locator("html")).toHaveAttribute("lang", "ru");
-        await expect(page.locator("#migration-status")).toContainText("нет сохранённых заметок");
+        await expect(page.locator("#migration-status")).toContainText("нет сохранённых пометок");
         expect(await page.evaluate(() => localStorage.getItem("dashcamigo:lang"))).toBeNull();
     });
 
@@ -278,9 +284,18 @@ test.describe("standalone notes recovery", () => {
                 buffer: Buffer.from(text),
             };
             for (let attempt = 0; attempt < 2; attempt++) {
-                await restored.goto(`${origin}/en/`);
-                await restored.locator("#settings-btn").click();
-                await restored.locator("#settings-notes-import-input").setInputFiles(file);
+                await restored.goto(`${origin}/en/${attempt === 0 ? "#restore-notes" : ""}`);
+                if (attempt === 0) {
+                    await expect(restored.locator("#migration-restore-modal")).toBeVisible();
+                    await expect(restored.locator("#migration-restore-choose")).toBeFocused();
+                    await expect(restored.locator("#settings-modal")).toBeHidden();
+                    await expect(restored).toHaveURL(`${origin}/en/`);
+                    await restored.locator("#migration-restore-input").setInputFiles(file);
+                    await expect(restored.locator("#migration-restore-modal")).toBeHidden();
+                } else {
+                    await restored.locator("#settings-btn").click();
+                    await restored.locator("#settings-notes-import-input").setInputFiles(file);
+                }
                 await expect(
                     restored.locator("#toast-container").getByText("Restored 3 saved entries from the notes backup."),
                 ).toBeVisible();

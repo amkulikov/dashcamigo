@@ -32,18 +32,14 @@
       <p data-migrate-copy="intro"></p>
       <section class="migration-source">
         <p><span data-migrate-copy="source"></span> <strong id="migration-origin"></strong></p>
-        <p data-migrate-copy="scope"></p>
+        <p id="migration-scope" data-migrate-copy="scope" hidden></p>
         <p id="migration-status" role="status" aria-live="polite"></p>
         <button id="migration-download" type="button" data-migrate-copy="download" hidden></button>
         <button id="migration-retry" type="button" data-migrate-copy="retry" hidden></button>
       </section>
-      <section>
-        <h2 data-migrate-copy="next"></h2>
-        <ol>
-          <li data-migrate-copy="restore"></li>
-          <li data-migrate-copy="folders"></li>
-          <li data-migrate-copy="installed"></li>
-        </ol>
+      <section id="migration-next" hidden>
+        <p id="migration-next-hint" data-migrate-copy="restore"></p>
+        <a id="migration-continue" class="migration-button" data-migrate-copy="continue"></a>
       </section>
     </main>
     <footer data-migrate-copy="privacy"></footer>

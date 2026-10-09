@@ -58,6 +58,7 @@ import { initMapViewControls } from "./map-view-controls.js";
 import { activateModal, deactivateModal, wireBackdropDismiss } from "./modal-helper.js";
 import { notify } from "./notifications.js";
 import { initMigrationBanner, migrationAddress, migrationRecoveryUrl } from "./migration-banner.js";
+import { initMigrationRestore } from "./migration-restore.js";
 import { resetOnboarding } from "./onboarding.js";
 import { clearServiceWorkerAndCaches, resetAllAppState } from "./reset.js";
 import {
@@ -376,11 +377,11 @@ export function initSettingsModal(): void {
 
     if (!__PORTABLE__) {
         initMigrationSection();
-        initMigrationBanner(() => {
-            openSettings();
-            const heading = document.getElementById("settings-migration-heading");
-            heading?.focus({ preventScroll: true });
-            heading?.scrollIntoView({ block: "start" });
+        initMigrationBanner();
+        initMigrationRestore();
+        document.getElementById("settings-migration-import")?.addEventListener("click", () => {
+            closeSettings();
+            location.hash = "restore-notes";
         });
     }
 

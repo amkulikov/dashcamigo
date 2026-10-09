@@ -232,7 +232,7 @@ export async function downloadPortableNotesBackup(): Promise<void> {
     notify({ severity: "info", messageKey: "sidecar.exported" });
 }
 
-export async function importPortableNotesBackup(file: File): Promise<void> {
+export async function importPortableNotesBackup(file: File): Promise<boolean> {
     await waitForAnnotationsReady();
     let parsed: ReturnType<typeof parseSidecarPayload>;
     try {
@@ -240,16 +240,16 @@ export async function importPortableNotesBackup(file: File): Promise<void> {
     } catch (err) {
         log.warn("portable notes backup read failed", { err: err instanceof Error ? err.message : String(err) });
         notify({ severity: "error", messageKey: "sidecar.importFailed" });
-        return;
+        return false;
     }
     if (!parsed) {
         notify({ severity: "error", messageKey: "sidecar.notOurFile" });
-        return;
+        return false;
     }
     const changed = await mergePortableRecords(parsed.records);
     if (!(await persistImportedRecords(parsed.records))) {
         notify({ severity: "error", messageKey: "annotations.browserSaveFailed" });
-        return;
+        return false;
     }
     notify({ severity: "info", messageKey: "sidecar.imported", messageParams: { n: parsed.records.length } });
     if (parsed.rejectedEntries > 0) {
@@ -261,6 +261,7 @@ export async function importPortableNotesBackup(file: File): Promise<void> {
     } else if (changed && activeHandle && activeAccess === "file" && (await hasFileReadwritePermission(activeHandle))) {
         scheduleWrite(0);
     }
+    return parsed.rejectedEntries === 0;
 }
 
 export interface AnnotationStorageState {

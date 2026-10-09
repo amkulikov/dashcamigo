@@ -34,6 +34,10 @@
 .sticky-banner[hidden] {
     display: none;
 }
+
+body:has(.modal-overlay:not([hidden])) #migration-banner {
+    visibility: hidden;
+}
 @keyframes sticky-banner-in {
     from {
         transform: translateY(12px);

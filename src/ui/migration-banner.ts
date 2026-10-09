@@ -1,3 +1,5 @@
+import { getCurrentLang } from "../i18n/index.js";
+
 type MigrationSource = "apex" | "ru";
 
 const SOURCE_KEY = "everydashcam:migration:source";
@@ -39,16 +41,16 @@ function readSource(params = new URLSearchParams(location.search)): MigrationSou
 export function migrationRecoveryUrl(): string {
     const source = readSource();
     const isRu = source === "ru" || (source === null && location.hostname === "ru.everydashcam.app");
-    return isRu ? "https://ru.dashcamigo.app/migrate/" : "https://dashcamigo.app/migrate/";
+    return `https://${isRu ? "ru." : ""}dashcamigo.app/migrate/?lang=${getCurrentLang()}`;
 }
 
-export function initMigrationBanner(onTransfer: () => void): void {
+export function initMigrationBanner(): void {
     if (migrationAddress(location.hostname) !== "new") return;
     const banner = document.getElementById("migration-banner");
     if (!banner) return;
 
     const params = new URLSearchParams(location.search);
-    const source = readSource(params);
+    const source = readSource(params) ?? (location.hostname === "ru.everydashcam.app" ? "ru" : null);
     if (source) writeSession(SOURCE_KEY, source);
     if (params.has("dc_from")) {
         // Keep unrelated query bytes intact, including repeated keys and encoding.
@@ -80,10 +82,17 @@ export function initMigrationBanner(onTransfer: () => void): void {
         }
     };
 
-    document.getElementById("migration-banner-dismiss")?.addEventListener("click", dismiss);
-    document.getElementById("migration-banner-transfer")?.addEventListener("click", () => {
+    if (location.hash === "#restore-notes") {
         dismiss();
-        onTransfer();
+        return;
+    }
+    window.addEventListener("hashchange", () => {
+        if (location.hash === "#restore-notes") dismiss();
     });
+
+    document.getElementById("migration-banner-dismiss")?.addEventListener("click", dismiss);
+    const transfer = document.getElementById("migration-banner-transfer");
+    transfer?.setAttribute("href", migrationRecoveryUrl());
+    transfer?.addEventListener("click", dismiss);
     banner.hidden = false;
 }

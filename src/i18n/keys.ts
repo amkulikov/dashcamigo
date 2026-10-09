@@ -1258,6 +1258,7 @@ export type I18nKey =
     | "migration.title"
     | "migration.body"
     | "migration.transfer"
+    | "migration.restoreFile"
     | "migration.dismiss"
     | "settings.migration.section"
     | "settings.migration.announcement"
@@ -1265,7 +1266,6 @@ export type I18nKey =
     | "settings.migration.restore"
     | "settings.migration.recover"
     | "settings.migration.installed"
-    | "settings.migration.setup"
 
     // Settings -> portable trip-notes backup.
     | "settings.notes.section"
