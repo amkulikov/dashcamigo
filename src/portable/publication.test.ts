@@ -11,7 +11,7 @@ import { portableFilename } from "./release-tags.mjs";
 const directories: string[] = [];
 const shell = '<!doctype html><a id="portable-download" hidden download>Download</a><p>Viewer</p>';
 
-function fixture(version = "v2026.09.25") {
+function fixture(version = "v2026.09.25", historical = false) {
     const root = mkdtempSync(join(tmpdir(), "portable-publication-"));
     directories.push(root);
     const dist = join(root, "dist");
@@ -26,7 +26,10 @@ function fixture(version = "v2026.09.25") {
     writeFileSync(join(dist, "index.html"), shell);
     writeFileSync(join(dist, "assets/app.js"), "export {};");
     writeFileSync(join(dist, "_headers"), "/*\n  X-Content-Type-Options: nosniff\n");
-    const filename = portableFilename(version, "en");
+    const filename = portableFilename(version, "en").replace(
+        /^everydashcam-/,
+        historical ? "dashcamigo-" : "everydashcam-",
+    );
     const bytes = Buffer.from('<!doctype html><html lang="en"><script>window.portable=true</script></html>');
     const file = {
         filename,
@@ -51,6 +54,7 @@ describe("portable website publication", () => {
         const staleName = "dashcamigo-2026-09-24-en.html";
         writeFileSync(join(artifacts, staleName), "stale artifact");
         const destination = join(root, "release");
+        expect(file.filename).toBe("everydashcam-2026-09-25-en.html");
         expect(stagePortableRelease(manifestPath, destination)).toEqual([file.filename]);
         expect(existsSync(join(destination, staleName))).toBe(false);
         expect(readFileSync(join(destination, file.filename))).toEqual(bytes);
@@ -119,7 +123,7 @@ describe("portable website publication", () => {
 
     it("keeps historical downloads without advancing the current pointer", () => {
         const current = fixture();
-        const older = fixture("v2026.09.24");
+        const older = fixture("v2026.09.24", true);
         publishPortableDownloads(current.dist, current.manifestPath);
         stagePortableArtifacts(older.manifestPath, current.dist, false);
         expect(readFileSync(join(current.dist, older.file.path.slice(1)))).toEqual(older.bytes);

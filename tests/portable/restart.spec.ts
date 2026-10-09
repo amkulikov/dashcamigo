@@ -25,7 +25,7 @@ test("retains browser notes and theme after a browser restart and a newly dated 
                 page,
                 info.outputPath(restart ? "new-card" : "old-card"),
                 "en",
-                restart ? "dashcamigo-2026-09-25-en.html" : "dashcamigo-2026-09-24-en.html",
+                restart ? "everydashcam-2026-09-25-en.html" : "everydashcam-2026-09-24-en.html",
             );
             await loadTrip(page, SAMPLE_70MAI);
             await pausePlayback(page);

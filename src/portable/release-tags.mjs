@@ -28,8 +28,13 @@ export function portableFilename(version, locale) {
     if (!/^[a-z]{2}$/.test(locale)) throw new Error("invalid portable locale");
     if (isReleaseTag(version)) {
         const date = version.slice(1).replace(/^(\d{4})\.(\d{2})\.(\d{2})/, "$1-$2-$3");
-        return `dashcamigo-${date}-${locale}.html`;
+        return `everydashcam-${date}-${locale}.html`;
     }
     if (!/^dev-[a-f0-9]{7,40}(?:-dirty)?$/.test(version)) throw new Error("invalid portable version");
-    return `dashcamigo-${version}-${locale}.html`;
+    return `everydashcam-${version}-${locale}.html`;
+}
+
+/** Original filename retained for immutable historical release artifacts. */
+export function legacyPortableFilename(version, locale) {
+    return portableFilename(version, locale).replace(/^everydashcam-/, "dashcamigo-");
 }

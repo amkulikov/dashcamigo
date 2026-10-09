@@ -75,27 +75,27 @@ embedded in the HTML.
 
 ## Run a release with Node.js
 
-The following commands download the latest release into a `dashcamigo` folder
+The following commands download the latest release into a `everydashcam` folder
 and start a local server.
 
 macOS or Linux:
 
 ```sh
-curl -fsSL https://github.com/everydashcam/everydashcam/releases/latest/download/dashcamigo.tar.gz | tar -xz && npx serve dashcamigo
+curl -fsSL https://github.com/everydashcam/everydashcam/releases/latest/download/everydashcam.tar.gz | tar -xz && npx serve everydashcam
 ```
 
 Windows PowerShell (`curl.exe` and `tar` are included with current Windows
 versions):
 
 ```powershell
-curl.exe -fsSL https://github.com/everydashcam/everydashcam/releases/latest/download/dashcamigo.tar.gz -o dashcamigo.tar.gz; tar -xzf dashcamigo.tar.gz; npx serve dashcamigo
+curl.exe -fsSL https://github.com/everydashcam/everydashcam/releases/latest/download/everydashcam.tar.gz -o everydashcam.tar.gz; tar -xzf everydashcam.tar.gz; npx serve everydashcam
 ```
 
 Open the local address printed by `npx serve`.
 
-Prefer a regular download? Get `dashcamigo-<version>.zip` from the
+Prefer a regular download? Get `everydashcam-<version>.zip` from the
 [latest release](https://github.com/everydashcam/everydashcam/releases/latest),
-unzip it and run `npx serve dashcamigo`. Extract an update into a fresh folder
+unzip it and run `npx serve everydashcam`. Extract an update into a fresh folder
 so files left over from an older release cannot remain in the installation.
 
 The release archives are built from the same tagged commit as the official
@@ -107,7 +107,7 @@ tile service.
 
 Every release includes `SHA256SUMS` and signed build provenance. With the
 [GitHub CLI](https://cli.github.com) installed and signed in, replace `<tag>`
-with the release tag in the commands below.
+with the release tag and `<archive>` with the downloaded filename.
 
 For releases through `v2026.10.09`, verify build provenance with the original
 owner and signing workflow:
@@ -124,8 +124,8 @@ lookup returns 404 after the transfer, which also prevents
 For later releases, use the new repository and signing workflow:
 
 ```sh
-gh release verify-asset <tag> dashcamigo.tar.gz -R everydashcam/everydashcam
-gh attestation verify dashcamigo.tar.gz -R everydashcam/everydashcam \
+gh release verify-asset <tag> <archive> -R everydashcam/everydashcam
+gh attestation verify <archive> -R everydashcam/everydashcam \
   --signer-workflow everydashcam/everydashcam/.github/workflows/release.yml
 ```
 

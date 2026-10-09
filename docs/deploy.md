@@ -183,7 +183,7 @@ A `v*` tag is the single promotion ritual: `.github/workflows/release.yml`
 builds and uploads the production site (the `deploy` job - see "Deployment
 pipeline"), fast-forwards the `release` branch to the tagged commit, and
 publishes one build of `dist/` in
-three forms: a versioned zip + a fixed-name `dashcamigo.tar.gz`
+three forms: a versioned zip + a fixed-name `everydashcam.tar.gz`
 (plus `SHA256SUMS`) on a GitHub Release, and a container image at
 `ghcr.io/everydashcam/everydashcam` (`latest` + the tag; packaged from the same
 already-built `dist/` via `docker/Dockerfile.prebuilt`, not an in-Docker

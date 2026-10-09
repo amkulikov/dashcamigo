@@ -4,7 +4,7 @@ import { verifyPublishedPortableDownloads } from "../../scripts/smoke-portable-d
 import type { PortableManifest } from "./manifest.mjs";
 
 const bytes = Buffer.from("<!doctype html><title>Portable viewer</title>");
-const filename = "dashcamigo-2026-09-25-en.html";
+const filename = "everydashcam-2026-09-25-en.html";
 const path = `/downloads/portable/v2026.09.25/${filename.slice(0, -5)}`;
 const manifest: PortableManifest = {
     schemaVersion: 1,

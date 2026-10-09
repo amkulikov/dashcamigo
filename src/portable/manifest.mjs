@@ -1,4 +1,4 @@
-import { isReleaseTag, portableFilename } from "./release-tags.mjs";
+import { isReleaseTag, legacyPortableFilename, portableFilename } from "./release-tags.mjs";
 
 export const PORTABLE_PRIMARY_ORIGIN = "https://everydashcam.app";
 export const PORTABLE_UPDATE_URL = `${PORTABLE_PRIMARY_ORIGIN}/downloads/portable/latest.json`;
@@ -22,10 +22,11 @@ export function parsePortableManifest(value, allowDevelopment = false, allowCust
     const files = {};
     for (const [locale, file] of entries) {
         if (!/^[a-z]{2}$/.test(locale) || !isRecord(file)) return null;
-        const filename = portableFilename(version, locale);
+        const filename = file.filename;
+        if (filename !== portableFilename(version, locale) && filename !== legacyPortableFilename(version, locale))
+            return null;
         const path = `/downloads/portable/${version}/${filename.replace(/\.html$/, "")}`;
         if (
-            file.filename !== filename ||
             file.path !== path ||
             !Number.isSafeInteger(file.bytes) ||
             file.bytes <= 0 ||

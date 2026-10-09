@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parsePortableManifest, PORTABLE_UPDATE_URL } from "./manifest.mjs";
-import { compareReleaseTags, isReleaseTag, portableFilename } from "./release-tags.mjs";
+import { compareReleaseTags, isReleaseTag, legacyPortableFilename, portableFilename } from "./release-tags.mjs";
 import { createPortableUpdateCheck } from "./updates.js";
 
 function manifest(version = "v2026.09.25.10", locale = "en") {
@@ -34,7 +34,35 @@ describe("portable release metadata", () => {
         expect(isReleaseTag("dev-1234567")).toBe(false);
         expect(compareReleaseTags("v2026.09.25.10", "v2026.09.25.2")).toBeGreaterThan(0);
         expect(compareReleaseTags("v2026.09.25", "v2026.09.25.1")).toBeLessThan(0);
-        expect(portableFilename("v2026.09.25.1", "ru")).toBe("dashcamigo-2026-09-25.1-ru.html");
+        expect(portableFilename("v2026.09.25.1", "ru")).toBe("everydashcam-2026-09-25.1-ru.html");
+    });
+
+    it("accepts exact historical names but rejects mixed old and new paths", () => {
+        const current = manifest();
+        const filename = legacyPortableFilename(current.version, "en");
+        const legacy = {
+            ...current,
+            files: {
+                en: {
+                    ...current.files.en!,
+                    filename,
+                    path: `/downloads/portable/${current.version}/${filename.slice(0, -5)}`,
+                },
+            },
+        };
+        expect(parsePortableManifest(legacy)).toEqual(legacy);
+        expect(
+            parsePortableManifest({
+                ...current,
+                files: {
+                    en: {
+                        ...current.files.en,
+                        path: legacy.files.en!.path,
+                    },
+                },
+            }),
+        ).toBeNull();
+        expect(PORTABLE_UPDATE_URL).toBe("https://everydashcam.app/downloads/portable/latest.json");
     });
 
     it("rejects malformed metadata and paths outside the exact published artifact", () => {

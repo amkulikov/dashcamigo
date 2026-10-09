@@ -368,14 +368,14 @@ jobs:
           #   - fixed-name tar.gz - the target of the copy-paste one-liner in
           #     docs/self-hosting.md. releases/latest/download/<asset>
           #     only resolves an asset whose name is stable across releases.
-          # The top-level folder is a fixed "dashcamigo" (not versioned) so the
-          # one-liner can `npx serve dashcamigo` without knowing the version;
+          # The top-level folder is a fixed "everydashcam" (not versioned) so the
+          # one-liner can `npx serve everydashcam` without knowing the version;
           # the version lives in the tag and in the app's baked build id. A
           # single top-level folder, because a CLI `unzip` / `tar x` must not
           # spray 40 entries into the user's cwd.
-          ZIP="dashcamigo-${VERSION}.zip"
-          TGZ="dashcamigo.tar.gz"
-          STAGE="dashcamigo"
+          ZIP="everydashcam-${VERSION}.zip"
+          TGZ="everydashcam.tar.gz"
+          STAGE="everydashcam"
           cp -R dist "${STAGE}"
           cp LICENSE "${STAGE}/"
           zip -qr9 "${ZIP}" "${STAGE}"

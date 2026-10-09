@@ -77,10 +77,10 @@ test("checks only public metadata from a renamed file and offers the newer local
     await expect(page.locator("html")).not.toHaveClass(/is-loading/);
     const anchor = page.locator("#portable-update");
     await expect(anchor).toBeVisible();
-    await expect(anchor).toHaveAttribute("download", "dashcamigo-2026-01-01.10-en.html");
+    await expect(anchor).toHaveAttribute("download", "everydashcam-2026-01-01.10-en.html");
     await expect(anchor).toHaveAttribute(
         "href",
-        "https://everydashcam.app/downloads/portable/v2026.01.01.10/dashcamigo-2026-01-01.10-en",
+        "https://everydashcam.app/downloads/portable/v2026.01.01.10/everydashcam-2026-01-01.10-en",
     );
     await page.evaluate(() => {
         dispatchEvent(new Event("online"));

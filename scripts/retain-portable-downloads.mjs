@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { parsePortableManifest } from "../src/portable/manifest.mjs";
 import { compareReleaseTags, isReleaseTag } from "../src/portable/release-tags.mjs";
 import { readPortableArtifacts, stagePortableArtifacts } from "./_portable-artifacts.mjs";
 
@@ -36,16 +37,19 @@ for (const release of pages.flat()) {
                 repository,
                 "--pattern",
                 "portable-manifest.json",
-                "--pattern",
-                "dashcamigo-*.html",
                 "--dir",
                 directory,
             ],
             { stdio: "inherit" },
         );
         const manifestPath = join(directory, "portable-manifest.json");
-        const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-        if (manifest.version !== release.tag_name) throw new Error("historical portable release version mismatch");
+        const manifest = parsePortableManifest(JSON.parse(readFileSync(manifestPath, "utf8")));
+        if (!manifest || manifest.version !== release.tag_name) throw new Error("historical portable release version mismatch");
+        execFileSync("gh", [
+            "release", "download", release.tag_name, "--repo", repository,
+            ...Object.values(manifest.files).flatMap((file) => ["--pattern", file.filename]),
+            "--dir", directory,
+        ], { stdio: "inherit" });
         stagePortableArtifacts(manifestPath, dist, false);
         retained++;
     } finally {
