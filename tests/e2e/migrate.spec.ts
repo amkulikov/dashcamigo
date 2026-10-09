@@ -101,7 +101,7 @@ async function exportNotes(page: Page): Promise<string> {
     const pending = page.waitForEvent("download");
     await page.locator("#migration-download").click();
     const download = await pending;
-    expect(download.suggestedFilename()).toMatch(/^everydashcam-notes-\d{4}-\d{2}-\d{2}\.dashcamigo$/);
+    expect(download.suggestedFilename()).toMatch(/^everydashcam-notes-\d{4}-\d{2}-\d{2}\.everydashcam$/);
     return downloadText(download);
 }
 
@@ -115,7 +115,7 @@ test.describe("standalone notes recovery", () => {
             await page.reload();
             const text = await exportNotes(page);
             const payload = JSON.parse(text);
-            expect(payload).toMatchObject({ app: "dashcamigo", format: "annotations", version: 2 });
+            expect(payload).toMatchObject({ app: "everydashcam", format: "annotations", version: 3 });
             expect(payload.annotations).toEqual(
                 expect.arrayContaining(RECORDS.map(({ folderId: _folder, ...record }) => record)),
             );
@@ -273,7 +273,7 @@ test.describe("standalone notes recovery", () => {
                 new URL(route.request().url()).origin === origin ? route.continue() : route.abort(),
             );
             const file = {
-                name: "dashcamigo-notes.dashcamigo",
+                name: "everydashcam-notes.everydashcam",
                 mimeType: "application/json",
                 buffer: Buffer.from(text),
             };

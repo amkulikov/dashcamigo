@@ -856,7 +856,7 @@ export async function mockDirectoryPicker(page: Page, folders: MockFolder[]): Pr
                 roots[index] ??= buildRoot(index);
                 return roots[index];
             };
-        let lastSavedNotesName = "notes.dashcamigo";
+        let lastSavedNotesName = "notes.everydashcam";
         const globalNotesHandle = async (name: string, create: boolean): Promise<FileSystemFileHandle> => {
             const storageRoot = await navigator.storage.getDirectory();
             const notesRoot = await storageRoot.getDirectoryHandle("global-notes", { create: true });
@@ -904,8 +904,8 @@ export async function mockDirectoryPicker(page: Page, folders: MockFolder[]): Pr
             const notesFromFolder = async (folder: FileSystemDirectoryHandle): Promise<FileSystemFileHandle | null> => {
                 let only: FileSystemFileHandle | null = null;
                 for await (const child of folder.values()) {
-                    if (child.kind !== "file" || !child.name.toLowerCase().endsWith(".dashcamigo")) continue;
-                    if (child.name.toLowerCase() === "notes.dashcamigo") return child;
+                    if (child.kind !== "file" || !/\.(everydashcam|dashcamigo)$/i.test(child.name)) continue;
+                    if (/^notes\.(everydashcam|dashcamigo)$/i.test(child.name)) return child;
                     if (only) return null;
                     only = child;
                 }

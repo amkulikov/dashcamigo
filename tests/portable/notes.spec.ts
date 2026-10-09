@@ -35,11 +35,11 @@ async function downloadNotes(page: Page, target: string): Promise<unknown> {
         page.waitForEvent("download"),
         page.locator("#settings-notes-export-btn").click(),
     ]);
-    expect(download.suggestedFilename()).toMatch(/^everydashcam-notes-\d{4}-\d{2}-\d{2}\.dashcamigo$/);
+    expect(download.suggestedFilename()).toMatch(/^everydashcam-notes-\d{4}-\d{2}-\d{2}\.everydashcam$/);
     await download.saveAs(target);
     await page.locator("#settings-modal-close").click();
     const data: unknown = JSON.parse(await readFile(target, "utf8"));
-    expect(data).toMatchObject({ app: "dashcamigo", format: "annotations", version: 2 });
+    expect(data).toMatchObject({ app: "everydashcam", format: "annotations", version: 3 });
     return data;
 }
 
@@ -66,14 +66,14 @@ test("transfers notes to a moved dated HTML in a fresh profile and preserves new
 }, info) => {
     void requests;
     await presetLocalStorage(page);
-    await openPortable(page, info.outputPath("old-card"), "en", "dashcamigo-2026-09-24-en.html");
+    await openPortable(page, info.outputPath("old-card"), "en", "everydashcam-2026-09-24-en.html");
     await loadTrip(page, SAMPLE_70MAI);
     await pausePlayback(page);
     await editTrip(page, "Card journey", "Roadworks by the bridge");
     await chooseBrowserNotes(page);
     await tripCard(page).locator(".trip-fav").click();
     await addMarker(page, "Bridge checkpoint");
-    const backup = info.outputPath("saved-notes.dashcamigo");
+    const backup = info.outputPath("saved-notes.everydashcam");
     expect(await downloadNotes(page, backup)).toMatchObject({
         annotations: expect.arrayContaining([
             expect.objectContaining({
@@ -90,7 +90,7 @@ test("transfers notes to a moved dated HTML in a fresh profile and preserves new
     await expect(page.locator("html")).not.toHaveClass(/is-loading/);
     await loadTrip(page, SAMPLE_70MAI);
     await expectTripNotes(page, "Card journey", "Roadworks by the bridge");
-    await openPortable(page, info.outputPath("moved-card"), "en", "dashcamigo-2026-09-25-en.html");
+    await openPortable(page, info.outputPath("moved-card"), "en", "everydashcam-2026-09-25-en.html");
     await loadTrip(page, SAMPLE_70MAI);
     await expectTripNotes(page, "Card journey", "Roadworks by the bridge");
     await page.close();
@@ -114,7 +114,7 @@ test("transfers notes to a moved dated HTML in a fresh profile and preserves new
         });
         await restored.route(/^https?:/, (route) => route.abort());
         await presetLocalStorage(restored);
-        await openPortable(restored, info.outputPath("another-computer"), "en", "dashcamigo-2026-09-25-en.html");
+        await openPortable(restored, info.outputPath("another-computer"), "en", "everydashcam-2026-09-25-en.html");
         await loadTrip(restored, SAMPLE_70MAI);
         await pausePlayback(restored);
         await expect(tripCard(restored)).not.toContainText("Card journey");
@@ -129,7 +129,7 @@ test("transfers notes to a moved dated HTML in a fresh profile and preserves new
         await importNotes(restored, backup);
         await expectTripNotes(restored, "Updated journey", "A newer note on this computer");
         await expect(restored.locator(".timeline-marker-hit")).toHaveCount(2);
-        const merged = await downloadNotes(restored, info.outputPath("merged-notes.dashcamigo"));
+        const merged = await downloadNotes(restored, info.outputPath("merged-notes.everydashcam"));
         expect(merged).toMatchObject({
             annotations: expect.arrayContaining([
                 expect.objectContaining({
@@ -174,7 +174,7 @@ test("starts with denied browser storage and downloads session-only notes", asyn
     await expect(page.locator("#player")).toBeVisible();
     await editTrip(page, "Session-only journey", "Keep this note in the downloaded backup");
     await chooseBrowserNotes(page, "Only for this tab");
-    const backup = await downloadNotes(page, info.outputPath("session-notes.dashcamigo"));
+    const backup = await downloadNotes(page, info.outputPath("session-notes.everydashcam"));
     expect(backup).toMatchObject({
         annotations: expect.arrayContaining([
             expect.objectContaining({

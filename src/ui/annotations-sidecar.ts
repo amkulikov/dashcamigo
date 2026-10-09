@@ -13,6 +13,7 @@ import {
     compareAnnotationVersions,
     notesBackupFilename,
     parseSidecarPayload,
+    type SidecarParseResult,
 } from "../persist/annotations.js";
 import { ensureFileReadwritePermission, listFolders } from "../persist/folders.js";
 import { getNotesFileState, setNotesFileHandle, setNotesStorage } from "../persist/notes-file.js";
@@ -43,8 +44,8 @@ import { refreshTimelineMarkers } from "./timeline-markers.js";
 import type { IngestOrigin } from "./state.js";
 
 const log = createLogger("annotations-sidecar");
-const SIDECAR_SUGGESTED_NAME = "notes.dashcamigo";
-const SIDECAR_EXTENSION = ".dashcamigo";
+const SIDECAR_SUGGESTED_NAME = "notes.everydashcam";
+const SIDECAR_EXTENSIONS = [".everydashcam", ".dashcamigo"];
 const WRITE_DEBOUNCE_MS = 1500;
 // Released clients must share this lock to serialize writes to the same notes file.
 const WRITE_LOCK_NAME = "dashcamigo:active-notes-file";
@@ -67,7 +68,7 @@ let writeAttentionHook: (() => void) | null = null;
 function sidecarFileType(): FilePickerAcceptType {
     return {
         description: t("sidecar.fileDescription"),
-        accept: { "application/json": [SIDECAR_EXTENSION] },
+        accept: { "application/json": SIDECAR_EXTENSIONS },
     };
 }
 
@@ -178,8 +179,8 @@ export async function mergeNotesFilesFromBatch(files: VendorFile[], origin: Inge
     }
 }
 
-/** The conventional notes.dashcamigo wins when present. Otherwise exactly one
- * *.dashcamigo file in the folder root is unambiguous. Nested backups are not
+/** Exactly one conventional notes file wins over other backups. Otherwise one
+ * supported notes file in the folder root is unambiguous. Nested backups are not
  * candidates: opening a recordings folder must not make an unrelated archive
  * writable. */
 async function discoverFolderNotesFile(
@@ -191,7 +192,9 @@ async function discoverFolderNotesFile(
         for await (const child of folder.values()) {
             if (child.kind !== "file" || !isNotesBackupName(child.name)) continue;
             candidates.push(child);
-            if (child.name.toLowerCase() === SIDECAR_SUGGESTED_NAME) conventional.push(child);
+            if (SIDECAR_EXTENSIONS.some((extension) => child.name.toLowerCase() === `notes${extension}`)) {
+                conventional.push(child);
+            }
         }
     } catch (err) {
         log.warn("notes-file discovery failed", { err: err instanceof Error ? err.message : String(err) });
@@ -204,7 +207,12 @@ async function discoverFolderNotesFile(
 }
 
 export function isNotesBackupName(name: string): boolean {
-    return name.toLowerCase().endsWith(SIDECAR_EXTENSION);
+    return SIDECAR_EXTENSIONS.some((extension) => name.toLowerCase().endsWith(extension));
+}
+
+async function readSidecarFile(handle: FileSystemFileHandle): Promise<SidecarParseResult | null> {
+    const emptyApp = handle.name.toLowerCase().endsWith(".dashcamigo") ? "dashcamigo" : "everydashcam";
+    return parseSidecarPayload(await (await handle.getFile()).text(), emptyApp);
 }
 
 export async function downloadPortableNotesBackup(): Promise<void> {
@@ -414,7 +422,7 @@ async function attachSidecar(
     const generation = ++connectionGeneration;
     let parsed: ReturnType<typeof parseSidecarPayload>;
     try {
-        parsed = parseSidecarPayload(await (await handle.getFile()).text());
+        parsed = await readSidecarFile(handle);
     } catch (err) {
         log.warn("notes file read failed at attach", { err: err instanceof Error ? err.message : String(err) });
         notify({ severity: "error", messageKey: "sidecar.importFailed" });
@@ -501,36 +509,36 @@ async function prepareSidecarWrite(force = false): Promise<NotesWriteAction | nu
     return permission === "prompt" ? "authorize" : "connect";
 }
 
-async function mergeFromActiveFile(): Promise<boolean> {
+async function mergeFromActiveFile(): Promise<SidecarParseResult | null> {
     const handle = activeHandle;
-    if (!handle) return false;
+    if (!handle) return null;
     let parsed: ReturnType<typeof parseSidecarPayload>;
     try {
-        parsed = parseSidecarPayload(await (await handle.getFile()).text());
+        parsed = await readSidecarFile(handle);
     } catch (err) {
         readFailed = true;
         refreshFolderSources();
         log.warn("notes file read failed", { err: err instanceof Error ? err.message : String(err) });
-        return false;
+        return null;
     }
     if (!parsed) {
         readFailed = true;
         refreshFolderSources();
         notifyOnceForReadFailure("sidecar.notOurFile");
-        return false;
+        return null;
     }
     if (parsed.rejectedEntries > 0) {
         partialFile = true;
         await mergePortableRecords(parsed.records);
         refreshFolderSources();
         notifyOnceForReadFailure("sidecar.partialReadOnly", { n: parsed.rejectedEntries });
-        return false;
+        return null;
     }
     await mergePortableRecords(parsed.records);
     readFailed = false;
     partialFile = false;
     readFailureNotified = false;
-    return true;
+    return parsed;
 }
 
 function notifyOnceForReadFailure(
@@ -645,13 +653,14 @@ async function writeSidecar(): Promise<boolean> {
         // parsed successfully. Some implementations lock reads once a writer
         // exists, and there is no reason to touch an invalid/partial file.
         writable = await handle.createWritable({ mode: "exclusive" });
-        await writable.write(JSON.stringify(buildSidecarPayload(records, Date.now())));
+        await writable.write(JSON.stringify(buildSidecarPayload(records, Date.now(), readable.app)));
         await writable.close();
         writable = null;
-        const verified = parseSidecarPayload(await (await handle.getFile()).text());
+        const verified = await readSidecarFile(handle);
         const verifiedById = new Map(verified?.records.map((record) => [record.id, record]) ?? []);
         if (
-            verified?.version !== 2 ||
+            verified?.app !== readable.app ||
+            verified.version !== (readable.app === "dashcamigo" ? 2 : 3) ||
             verified.rejectedEntries > 0 ||
             records.some((record) => {
                 const saved = verifiedById.get(record.id);

@@ -86,22 +86,28 @@ export function mergeAnnotationLists(a: AnnotationRecord[], b: AnnotationRecord[
 /** Wire format marker of the notes file. Read by parseSidecarPayload, written
  * by buildSidecarPayload - the two must agree, which is why they live here. */
 const SIDECAR_FORMAT = "annotations";
-const SIDECAR_VERSION = 2;
+const SIDECAR_VERSION = 3;
+
+export type SidecarApp = "everydashcam" | "dashcamigo";
 
 export function notesBackupFilename(date = new Date()): string {
-    return `everydashcam-notes-${date.toISOString().slice(0, 10)}.dashcamigo`;
+    return `everydashcam-notes-${date.toISOString().slice(0, 10)}.everydashcam`;
 }
 
 /**
  * The exact object written into the portable notes file. `folderId` is browser
  * bookkeeping and never leaves the profile; clip anchors carry the portable
- * recording identity instead. v1 readers remain supported below.
+ * recording identity instead. Attached legacy files retain their v2 dialect.
  */
-export function buildSidecarPayload(records: AnnotationRecord[], savedAt: number): object {
+export function buildSidecarPayload(
+    records: AnnotationRecord[],
+    savedAt: number,
+    app: SidecarApp = "everydashcam",
+): object {
     return {
-        app: "dashcamigo",
+        app,
         format: SIDECAR_FORMAT,
-        version: SIDECAR_VERSION,
+        version: app === "dashcamigo" ? 2 : SIDECAR_VERSION,
         savedAt,
         annotations: records.map(({ folderId: _folderId, ...record }) => record),
     };
@@ -138,21 +144,29 @@ const MARKER_ANCHOR_KEYS = new Set(["fileIdentityKey", "startUtc", "offsetSec"])
 const SIDECAR_KEYS = new Set(["app", "format", "version", "savedAt", "annotations"]);
 
 export interface SidecarParseResult {
+    app: SidecarApp;
     records: AnnotationRecord[];
-    version: 1 | 2;
+    version: 1 | 2 | 3;
     /** Entries that could not be understood. A reader may recover the valid
      * records, but a writer must not replace the file and erase these entries. */
     rejectedEntries: number;
 }
 
 /**
- * Parses v1 folder backups and v2 portable notes files, or null when the whole
+ * Parses legacy v1/v2 and current v3 notes files, or null when the whole
  * file is foreign, corrupt, or from an unsupported version. Validation stays
  * per entry so readable records can still be recovered, while
  * rejectedEntries makes that recovery explicitly read-only.
  */
-export function parseSidecarPayload(text: string): SidecarParseResult | null {
-    if (text.trim() === "") return { records: [], rejectedEntries: 0, version: SIDECAR_VERSION };
+export function parseSidecarPayload(text: string, emptyApp: SidecarApp = "everydashcam"): SidecarParseResult | null {
+    if (text.trim() === "") {
+        return {
+            app: emptyApp,
+            records: [],
+            rejectedEntries: 0,
+            version: emptyApp === "dashcamigo" ? 2 : SIDECAR_VERSION,
+        };
+    }
     let parsed: unknown;
     try {
         parsed = JSON.parse(text);
@@ -161,15 +175,16 @@ export function parseSidecarPayload(text: string): SidecarParseResult | null {
     }
     if (typeof parsed !== "object" || parsed === null) return null;
     const obj = parsed as Record<string, unknown>;
-    if (
-        obj.app !== "dashcamigo" ||
-        obj.format !== SIDECAR_FORMAT ||
-        (obj.version !== 1 && obj.version !== SIDECAR_VERSION) ||
-        !Array.isArray(obj.annotations)
-    ) {
+    const version =
+        obj.app === "dashcamigo" && (obj.version === 1 || obj.version === 2)
+            ? obj.version
+            : obj.app === "everydashcam" && obj.version === SIDECAR_VERSION
+              ? SIDECAR_VERSION
+              : null;
+    if (version === null || obj.format !== SIDECAR_FORMAT || !Array.isArray(obj.annotations)) {
         return null;
     }
-    const version = obj.version;
+    const app = version === SIDECAR_VERSION ? "everydashcam" : "dashcamigo";
     const out: AnnotationRecord[] = [];
     let rejectedEntries = hasOnlyKeys(obj, SIDECAR_KEYS) ? 0 : 1;
     if (obj.savedAt !== undefined && !isSafeTimestamp(obj.savedAt)) rejectedEntries++;
@@ -267,5 +282,5 @@ export function parseSidecarPayload(text: string): SidecarParseResult | null {
             rejectedEntries++;
         }
     }
-    return { records: out, rejectedEntries, version };
+    return { app, records: out, rejectedEntries, version };
 }

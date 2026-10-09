@@ -134,7 +134,7 @@ test.describe("folder sources, file-system picker", () => {
         await decision.getByRole("button", { name: "Save to a file" }).click();
         await expect(decision).toBeHidden();
 
-        await expect(page.locator("#notes-file-status")).toContainText("Saving to notes.dashcamigo");
+        await expect(page.locator("#notes-file-status")).toContainText("Saving to notes.everydashcam");
         await expect
             .poll(
                 () =>

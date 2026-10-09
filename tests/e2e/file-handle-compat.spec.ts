@@ -40,7 +40,7 @@ test("keeps notes writable and annotations persistent without storing file handl
     await expect(storageModal).toBeVisible();
     await storageModal.getByRole("button", { name: "Save to a file" }).click();
     await expect(storageModal).toBeHidden();
-    await expect(page.locator(".notes-file-status__label")).toHaveText(["Saving to notes.dashcamigo."]);
+    await expect(page.locator(".notes-file-status__label")).toHaveText(["Saving to notes.everydashcam."]);
     await captureHints(page, testInfo, "en");
     await expect
         .poll(
@@ -75,7 +75,7 @@ test("keeps notes writable and annotations persistent without storing file handl
     await page.locator(".notes-file > summary").click();
     const status = page.locator("#notes-file-status");
     await status.getByRole("button", { name: "Choose existing…" }).click();
-    await expect(status).toContainText("notes.dashcamigo is connected");
+    await expect(status).toContainText("notes.everydashcam is connected");
     await expect.poll(() => readPersistedState(page)).toEqual({ folders: 0, notesFiles: 0, favorites: 1 });
 });
 

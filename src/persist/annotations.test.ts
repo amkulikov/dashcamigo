@@ -3,6 +3,7 @@ import {
     buildSidecarPayload,
     compareAnnotationVersions,
     mergeAnnotationLists,
+    notesBackupFilename,
     parseSidecarPayload,
 } from "./annotations.js";
 import type { AnnotationRecord, TripMetaAnnotation } from "./types.js";
@@ -66,8 +67,13 @@ describe("parseSidecarPayload", () => {
         JSON.stringify({ app: "dashcamigo", format: "annotations", version: 1, annotations });
 
     it("returns an empty list for an empty file", () => {
-        expect(parseSidecarPayload("")).toEqual({ records: [], rejectedEntries: 0, version: 2 });
-        expect(parseSidecarPayload("   \n")).toEqual({ records: [], rejectedEntries: 0, version: 2 });
+        expect(parseSidecarPayload("")).toEqual({ app: "everydashcam", records: [], rejectedEntries: 0, version: 3 });
+        expect(parseSidecarPayload("   \n")).toEqual({
+            app: "everydashcam",
+            records: [],
+            rejectedEntries: 0,
+            version: 3,
+        });
     });
 
     it("returns null for a foreign or broken file", () => {
@@ -80,8 +86,45 @@ describe("parseSidecarPayload", () => {
         ).toBeNull();
         expect(
             parseSidecarPayload('{"app":"dashcamigo","format":"annotations","version":3,"annotations":[]}'),
-            "unsupported future version",
+            "unsupported app/version combination",
         ).toBeNull();
+    });
+
+    it.each([
+        ["dashcamigo", 1],
+        ["dashcamigo", 2],
+        ["everydashcam", 3],
+    ])("accepts the supported %s v%s dialect", (app, version) => {
+        expect(parseSidecarPayload(JSON.stringify({ app, format: "annotations", version, annotations: [] }))).toEqual({
+            app,
+            version,
+            records: [],
+            rejectedEntries: 0,
+        });
+    });
+
+    it.each([
+        ["everydashcam", 1],
+        ["everydashcam", 2],
+        ["everydashcam", 4],
+        ["dashcamigo", 3],
+    ])("rejects the mismatched %s v%s dialect", (app, version) => {
+        expect(
+            parseSidecarPayload(JSON.stringify({ app, format: "annotations", version, annotations: [] })),
+        ).toBeNull();
+    });
+
+    it("uses the selected file dialect only when the file is empty", () => {
+        expect(parseSidecarPayload("", "dashcamigo")).toEqual({
+            app: "dashcamigo",
+            version: 2,
+            records: [],
+            rejectedEntries: 0,
+        });
+        expect(parseSidecarPayload(JSON.stringify(buildSidecarPayload([], 10)), "dashcamigo")?.app).toBe(
+            "everydashcam",
+        );
+        expect(parseSidecarPayload(wrap([]), "everydashcam")?.app).toBe("dashcamigo");
     });
 
     it("round-trips valid tripMeta and marker records", () => {
@@ -107,7 +150,7 @@ describe("parseSidecarPayload", () => {
 
     it("skips a tripMeta without an anchor instead of throwing later", () => {
         const parsed = parseSidecarPayload(wrap([{ id: "x", updatedAt: 1, deleted: false, kind: "tripMeta" }]));
-        expect(parsed).toEqual({ records: [], rejectedEntries: 1, version: 1 });
+        expect(parsed).toEqual({ app: "dashcamigo", records: [], rejectedEntries: 1, version: 1 });
     });
 
     it("skips non-finite timestamps that would pin LWW forever", () => {
@@ -116,7 +159,7 @@ describe("parseSidecarPayload", () => {
         // JSON has no Infinity/NaN literal - emulate a hand-edited file.
         const text = wrap([infinite, nan]).replace(/null/g, "1e999");
         const parsed = parseSidecarPayload(text);
-        expect(parsed).toEqual({ records: [], rejectedEntries: 2, version: 1 });
+        expect(parsed).toEqual({ app: "dashcamigo", records: [], rejectedEntries: 2, version: 1 });
     });
 
     it("skips unsafe, fractional, and negative timestamps", () => {
@@ -127,7 +170,7 @@ describe("parseSidecarPayload", () => {
                 tripMeta({ id: "negative", updatedAt: -1 }),
             ]),
         );
-        expect(parsed).toEqual({ records: [], rejectedEntries: 3, version: 1 });
+        expect(parsed).toEqual({ app: "dashcamigo", records: [], rejectedEntries: 3, version: 1 });
     });
 
     it("skips a marker with a non-string text and non-number utc", () => {
@@ -137,7 +180,7 @@ describe("parseSidecarPayload", () => {
                 { id: "m2", updatedAt: 1, deleted: false, kind: "marker", utc: 5, text: { nested: true } },
             ]),
         );
-        expect(parsed).toEqual({ records: [], rejectedEntries: 2, version: 1 });
+        expect(parsed).toEqual({ app: "dashcamigo", records: [], rejectedEntries: 2, version: 1 });
     });
 
     it("recovers known fields but flags unknown fields so a writer preserves the file", () => {
@@ -156,15 +199,32 @@ describe("parseSidecarPayload", () => {
         const parsed = parseSidecarPayload(
             JSON.stringify({ app: "dashcamigo", format: "annotations", version: 1, annotations: [], future: true }),
         );
-        expect(parsed).toEqual({ records: [], rejectedEntries: 1, version: 1 });
+        expect(parsed).toEqual({ app: "dashcamigo", records: [], rejectedEntries: 1, version: 1 });
     });
 });
 
 describe("buildSidecarPayload", () => {
+    it("keeps attached legacy files writable by released clients", () => {
+        const record = tripMeta({ deleted: true });
+        const saved = buildSidecarPayload([record], 200, "dashcamigo");
+        expect(saved).toMatchObject({ app: "dashcamigo", version: 2, savedAt: 200 });
+        expect(parseSidecarPayload(JSON.stringify(saved))).toEqual({
+            app: "dashcamigo",
+            version: 2,
+            rejectedEntries: 0,
+            records: [{ ...record, folderId: "" }],
+        });
+    });
+
+    it("names new downloads with the current notes extension", () => {
+        expect(notesBackupFilename(new Date("2026-10-09T00:00:00Z"))).toBe(
+            "everydashcam-notes-2026-10-09.everydashcam",
+        );
+    });
     // The notes file is the only copy that survives a browser data wipe, so the
     // writer and the reader agreeing is not a detail: a payload the parser
-    // rejects reads as "not a dashcamigo file" and gets silently replaced.
-    it("round-trips every record kind as global v2 without local folder ids", () => {
+    // rejects cannot be safely reopened.
+    it("round-trips every record kind as current v3 without local folder ids", () => {
         const records: AnnotationRecord[] = [
             tripMeta({ id: "a1", name: "Morning drive", note: "roadworks on the bridge", isFavorite: true }),
             tripMeta({ id: "a2", deleted: true, name: undefined }),
@@ -184,7 +244,8 @@ describe("buildSidecarPayload", () => {
         expect(parsed).toEqual({
             records: records.map((record) => ({ ...record, folderId: "" })),
             rejectedEntries: 0,
-            version: 2,
+            app: "everydashcam",
+            version: 3,
         });
     });
 });

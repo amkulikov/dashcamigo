@@ -89,6 +89,7 @@ import {
     annotationStorageState,
     flushPendingSidecarWrites,
     initAnnotationsSidecar,
+    isNotesBackupName,
     mergeNotesFilesFromBatch,
     registerNotesWriteAttentionHook,
 } from "./annotations-sidecar.js";
@@ -105,14 +106,20 @@ function tripMeta(id: string, folderId = "folder-1", updatedAt = 100): TripMetaA
     };
 }
 
-function payload(records: unknown[], version: 1 | 2 = 1): string {
-    return JSON.stringify({ app: "dashcamigo", format: "annotations", version, annotations: records });
+function payload(records: unknown[], version: 1 | 2 | 3 = 1): string {
+    return JSON.stringify({
+        app: version === 3 ? "everydashcam" : "dashcamigo",
+        format: "annotations",
+        version,
+        annotations: records,
+    });
 }
 
 interface FakeNotesFile {
     handle: FileSystemFileHandle;
     read(): string;
     writes(): number;
+    replace(text: string): void;
     setReadFailure(fails: boolean): void;
     setWritePermission(state: PermissionState): void;
 }
@@ -158,6 +165,9 @@ function fakeNotesFile(
         handle,
         read: () => contents,
         writes: () => writeCount,
+        replace: (text) => {
+            contents = text;
+        },
         setReadFailure: (fails) => {
             readFails = fails;
         },
@@ -206,6 +216,97 @@ afterEach(() => {
 });
 
 describe("active notes file", () => {
+    it.each(["notes.everydashcam", "notes.dashcamigo", "BACKUP.EVERYDASHCAM", "BACKUP.DASHCAMIGO"])(
+        "recognizes the supported notes filename %s",
+        (name) => expect(isNotesBackupName(name)).toBe(true),
+    );
+
+    it("does not recognize an unrelated file or a suffixed backup", () => {
+        expect(isNotesBackupName("notes.json")).toBe(false);
+        expect(isNotesBackupName("notes.everydashcam.old")).toBe(false);
+    });
+
+    it("creates current v3 notes with the new suggested filename", async () => {
+        const notes = fakeNotesFile("", "granted", "notes.everydashcam");
+        mocks.records.set("local", tripMeta("local"));
+        mocks.savePicker.mockResolvedValue(notes.handle);
+        initAnnotationsSidecar();
+
+        await expect(mocks.connector!.create()).resolves.toBe("connected");
+
+        expect(mocks.savePicker).toHaveBeenCalledWith(
+            expect.objectContaining({
+                suggestedName: "notes.everydashcam",
+                types: [expect.objectContaining({ accept: { "application/json": [".everydashcam", ".dashcamigo"] } })],
+            }),
+        );
+        expect(JSON.parse(notes.read())).toMatchObject({
+            app: "everydashcam",
+            version: 3,
+            annotations: [{ id: "local" }],
+        });
+    });
+
+    it("preserves the legacy dialect when the chosen empty file has the old extension", async () => {
+        const notes = fakeNotesFile("");
+        mocks.savePicker.mockResolvedValue(notes.handle);
+        initAnnotationsSidecar();
+        await expect(mocks.connector!.create()).resolves.toBe("connected");
+        expect(JSON.parse(notes.read())).toMatchObject({ app: "dashcamigo", version: 2 });
+    });
+
+    it("discovers the new conventional filename without writing or renaming it", async () => {
+        const notes = fakeNotesFile(
+            payload([{ ...tripMeta("local"), folderId: undefined }], 3),
+            "prompt",
+            "notes.everydashcam",
+        );
+        initAnnotationsSidecar();
+        await mergeNotesFilesFromBatch([], { handle: folderHandle("card", [notes.handle]), folderId: "folder-1" });
+        expect(mocks.records.has("local")).toBe(true);
+        expect(mocks.setNotesFileHandle).toHaveBeenCalledWith(notes.handle, "derived");
+        expect(notes.writes()).toBe(0);
+    });
+
+    it("does not choose between old and new conventional files in the same folder", async () => {
+        const old = fakeNotesFile(payload([], 2));
+        const current = fakeNotesFile(payload([], 3), "granted", "notes.everydashcam");
+        initAnnotationsSidecar();
+        await mergeNotesFilesFromBatch([], {
+            handle: folderHandle("card", [old.handle, current.handle]),
+            folderId: "folder-1",
+        });
+        expect(mocks.setNotesFileHandle).not.toHaveBeenCalled();
+        expect(mocks.notify).toHaveBeenCalledWith(expect.objectContaining({ messageKey: "sidecar.multipleFound" }));
+        expect(old.writes() + current.writes()).toBe(0);
+    });
+
+    it("uses the dialect reread under the shared write lock, preserving concurrent records", async () => {
+        const notes = fakeNotesFile(payload([], 3), "granted", "notes.everydashcam");
+        mocks.openPicker.mockResolvedValue([notes.handle]);
+        initAnnotationsSidecar();
+        await expect(mocks.connector!.useExisting()).resolves.toBe("connected");
+        const remote = { ...tripMeta("remote", "", 300), deleted: true, folderId: undefined };
+        const lock = vi.fn(async (_name: string, write: () => Promise<unknown>) => {
+            notes.replace(payload([remote], 2));
+            return write();
+        });
+        vi.stubGlobal("navigator", { locks: { request: lock } });
+        mocks.records.set("local", tripMeta("local"));
+        mocks.annotationHook?.();
+        await flushPendingSidecarWrites();
+
+        expect(lock).toHaveBeenCalledOnce();
+        const saved = JSON.parse(notes.read());
+        expect(saved).toMatchObject({ app: "dashcamigo", version: 2 });
+        expect(saved.annotations).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ id: "local", updatedAt: 100 }),
+                expect.objectContaining({ id: "remote", updatedAt: 300, deleted: true }),
+            ]),
+        );
+    });
+
     it("prefers a notes file discovered in the opened folder without requesting write access", async () => {
         const notes = fakeNotesFile(payload([tripMeta("local")], 1), "prompt");
         initAnnotationsSidecar();

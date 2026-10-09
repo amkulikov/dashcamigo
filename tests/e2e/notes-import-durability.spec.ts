@@ -89,7 +89,7 @@ async function expectBackupAfterReload(page: Page): Promise<void> {
     const path = await downloaded.path();
     expect(path).not.toBeNull();
     const saved = JSON.parse(readFileSync(path!, "utf8"));
-    expect(saved).toMatchObject({ app: "dashcamigo", format: "annotations", version: 2 });
+    expect(saved).toMatchObject({ app: "everydashcam", format: "annotations", version: 3 });
     expect(saved.annotations).toHaveLength(BACKUP.annotations.length);
     expect(saved.annotations).toEqual(expect.arrayContaining(BACKUP.annotations));
 }
