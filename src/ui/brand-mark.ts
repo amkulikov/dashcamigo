@@ -5,7 +5,7 @@ const BRAND_WORD = "EVERY";
 const cameraBrands = SUPPORTED_BRANDS.map((brand) => brand.displayName.toUpperCase());
 const maxDrums = Math.max(BRAND_WORD.length, ...cameraBrands.map((word) => word.length));
 const ROLL_MS = 1100;
-const EXPAND_MS = 180;
+const RESIZE_MS = 180;
 const HOLD_MS = 350;
 const WORD_EXIT_MS = 140;
 const WORD_ENTER_MS = 180;
@@ -86,7 +86,8 @@ export function initBrandMark(): void {
         root.style.setProperty("--edc-drum-count", String(count));
         const width = count * drumWidth + (count - 1) * drumGap;
         root.style.setProperty("--edc-deck-scale", String(compact.matches ? 1 : Math.min(1, availableWidth / width)));
-        const last = Math.ceil(count) - 1;
+        // Switch near the midpoint so the accent never moves onto a clipped-away drum.
+        const last = Math.round(count) - 1;
         if (last === orangeDrum) return;
         drums[orangeDrum]?.classList.remove("edc-mark__drum--last");
         drums[last]!.classList.add("edc-mark__drum--last");
@@ -125,13 +126,13 @@ export function initBrandMark(): void {
     const ease = (progress: number): number => progress * progress * (3 - 2 * progress);
     const rollTo = (word: string, done: () => void): void => {
         measureDeck();
-        const count = Math.max(Math.ceil(drumCount), word.length);
+        const count = word.length;
         const fromCount = drumCount;
         let previousSpeed = 0;
-        const rolls = positions.slice(0, count).map((start, index) => {
+        const rolls = positions.slice(0, Math.max(Math.ceil(fromCount), count)).map((start, index) => {
             const target = ALPHABET.indexOf(word[index] ?? " ");
             const delta = (target - start + ALPHABET.length) % ALPHABET.length;
-            const across = index / (count - 1);
+            const across = Math.min(index, count - 1) / (count - 1);
             // Right starts first and stops last. Only add complete turns when
             // needed to keep every right drum faster than its left neighbor.
             const delay = ROLL_MS * 0.175 * (1 - across);
@@ -147,7 +148,7 @@ export function initBrandMark(): void {
         animate(
             ROLL_MS,
             (elapsed) => {
-                setDrumCount(fromCount + (count - fromCount) * ease(Math.min(1, elapsed / EXPAND_MS)));
+                setDrumCount(fromCount + (count - fromCount) * ease(Math.min(1, elapsed / RESIZE_MS)));
                 for (const roll of rolls) {
                     const progress = Math.min(1, Math.max(0, elapsed - roll.delay) / roll.duration);
                     const position =
@@ -157,15 +158,8 @@ export function initBrandMark(): void {
             },
             () => {
                 setWord(word);
-                if (count === word.length) {
-                    done();
-                    return;
-                }
-                animate(
-                    EXPAND_MS,
-                    (elapsed) => setDrumCount(count + (word.length - count) * ease(elapsed / EXPAND_MS)),
-                    done,
-                );
+                setDrumCount(count);
+                done();
             },
         );
     };

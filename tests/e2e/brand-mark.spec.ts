@@ -102,7 +102,6 @@ test("brand odometer rolls forward, starts and stops on the right, and respects 
     await mark.dispatchEvent("mouseleave");
     await page.clock.runFor(1400);
     expect(await visibleWord(columns)).toBe("EVERY");
-    // Five drums need no retract phase before DASHCAM returns.
     await expect(mark.locator(".edc-mark__word")).toHaveCSS("opacity", "1");
     await expect(mark).not.toHaveClass(/edc-mark--animated/);
     await page.clock.runFor(10_000);
@@ -175,6 +174,77 @@ test("leaving and reentering the logo redirects the moving drums without stale t
         await page.clock.runFor(5000);
         expect(await positions(columns)).toEqual(resting);
     }
+    await page.clock.resume();
+});
+
+test("the drum count settles before the new letters in both directions", async ({ page }) => {
+    await prepare(page);
+    const mark = page.locator(".topbar .edc-mark");
+    const columns = mark.locator(".edc-mark__column");
+    const visibleDrums = () =>
+        mark.evaluate(
+            (element) =>
+                Array.from(element.querySelectorAll(".edc-mark__drum")).filter((drum) => {
+                    const rect = drum.getBoundingClientRect();
+                    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+                    return hit && drum.contains(hit);
+                }).length,
+        );
+    await page.clock.install();
+    await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
+    const longest = SUPPORTED_BRANDS.reduce((a, b) => (a.displayName.length > b.displayName.length ? a : b));
+    await hoverBrand(mark, (SUPPORTED_BRANDS.indexOf(longest) + 0.5) / SUPPORTED_BRANDS.length);
+    await page.clock.runFor(400);
+    expect(await visibleDrums()).toBe(longest.displayName.length);
+    expect(await visibleWord(columns)).not.toBe(longest.displayName.toUpperCase());
+    await page.clock.runFor(900);
+    expect(await visibleWord(columns)).toBe(longest.displayName.toUpperCase());
+    await mark.dispatchEvent("mouseleave");
+    await page.clock.runFor(240);
+    expect(await visibleDrums()).toBe(5);
+    expect(await visibleWord(columns)).not.toBe("EVERY");
+    await page.clock.runFor(1100);
+    expect(await visibleWord(columns)).toBe("EVERY");
+    expect(await visibleDrums()).toBe(5);
+    await page.clock.resume();
+});
+
+test("the orange drum stays visible while brand names expand, retract and reverse", async ({ page }) => {
+    await prepare(page);
+    const mark = page.locator(".topbar .edc-mark");
+    await page.clock.install();
+    await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
+    await mark.evaluate((element) => {
+        const misses: number[] = [];
+        element.setAttribute("data-accent-misses", "[]");
+        const sample = () => {
+            const orange = element.querySelector(".edc-mark__drum--last")!;
+            const rect = orange.getBoundingClientRect();
+            let visibleWidth = 0;
+            for (let x = rect.left + 0.25; x < rect.right; x += 0.5) {
+                const hit = document.elementFromPoint(x, rect.top + rect.height / 2);
+                if (hit && orange.contains(hit)) visibleWidth += 0.5;
+            }
+            if (getComputedStyle(orange).backgroundColor !== "rgb(255, 144, 0)" || visibleWidth < rect.width * 0.4) {
+                misses.push(visibleWidth);
+                element.setAttribute("data-accent-misses", JSON.stringify(misses));
+            }
+            requestAnimationFrame(sample);
+        };
+        requestAnimationFrame(sample);
+    });
+    const longest = SUPPORTED_BRANDS.reduce((a, b) => (a.displayName.length > b.displayName.length ? a : b));
+    await hoverBrand(mark, (SUPPORTED_BRANDS.indexOf(longest) + 0.5) / SUPPORTED_BRANDS.length);
+    await page.clock.runFor(1400);
+    await mark.dispatchEvent("mouseleave");
+    await page.clock.runFor(1700);
+    await hoverBrand(mark, 0);
+    await page.clock.runFor(220);
+    await mark.dispatchEvent("mouseleave");
+    await page.clock.runFor(60);
+    await hoverBrand(mark, 0);
+    await page.clock.runFor(5000);
+    await expect(mark).toHaveAttribute("data-accent-misses", "[]");
     await page.clock.resume();
 });
 
