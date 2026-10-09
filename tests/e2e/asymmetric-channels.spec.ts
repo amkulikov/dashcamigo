@@ -118,7 +118,7 @@ test.beforeEach(async ({ page }) => {
     await expect
         .poll(() =>
             page.evaluate(() => {
-                const { trips } = window.__dashcamigo.state;
+                const { trips } = window.__everydashcam.state;
                 if (trips.length !== 1) return null;
                 const trip = trips[0]!;
                 const files = new Set(trip.frames.flatMap((frame) => Object.values(frame.channels)));

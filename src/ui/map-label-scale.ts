@@ -16,7 +16,7 @@ export const MAP_LABEL_SCALE_VALUES = [1, 1.25, 1.5, 2] as const;
 
 export type MapLabelScale = (typeof MAP_LABEL_SCALE_VALUES)[number];
 
-const STORAGE_KEY = "dashcamigo:mapLabelScale";
+const STORAGE_KEY = "everydashcam:mapLabelScale";
 let sessionLabelScale: MapLabelScale | null = null;
 
 function isMapLabelScale(value: number): value is MapLabelScale {
@@ -55,7 +55,7 @@ export const STREET_LABEL_DENSITY_VALUES = ["standard", "more", "max"] as const;
 
 export type StreetLabelDensity = (typeof STREET_LABEL_DENSITY_VALUES)[number];
 
-const DENSITY_STORAGE_KEY = "dashcamigo:streetLabelDensity";
+const DENSITY_STORAGE_KEY = "everydashcam:streetLabelDensity";
 let sessionStreetLabelDensity: StreetLabelDensity | null = null;
 
 // Per level: how much denser a road name repeats along its line (spacing

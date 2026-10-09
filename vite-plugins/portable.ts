@@ -174,7 +174,7 @@ export function portablePlugin(options: PortableOptions): Plugin {
                 const noticeUrl = `data:text/plain;charset=utf-8;base64,${Buffer.from(notices).toString("base64")}`;
                 html = html.replace(
                     /href="[^"]*third-party-notices\.txt"/g,
-                    `href="${noticeUrl}" download="dashcamigo-notices.txt"`,
+                    `href="${noticeUrl}" download="everydashcam-notices.txt"`,
                 );
                 if (!html.includes("<!-- portable-notices -->"))
                     throw new Error("portable notices placeholder is missing");

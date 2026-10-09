@@ -46,6 +46,7 @@ const log = createLogger("annotations-sidecar");
 const SIDECAR_SUGGESTED_NAME = "notes.dashcamigo";
 const SIDECAR_EXTENSION = ".dashcamigo";
 const WRITE_DEBOUNCE_MS = 1500;
+// Released clients must share this lock to serialize writes to the same notes file.
 const WRITE_LOCK_NAME = "dashcamigo:active-notes-file";
 
 let activeHandle: FileSystemFileHandle | null = null;

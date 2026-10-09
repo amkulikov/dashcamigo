@@ -10,7 +10,7 @@ for (const locale of ["en", "ru"]) {
         // Public samples have no detected impacts; use the event seam shared
         // with the timeline popup and mobile event-list tests.
         await page.evaluate(() => {
-            const state = window.__dashcamigo.state;
+            const state = window.__everydashcam.state;
             const trip = state.trips[state.active!.trip]!;
             trip.events = [1, 2, 3].map((relSec) => ({
                 kind: "brake",

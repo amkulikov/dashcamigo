@@ -22,11 +22,13 @@ test("reset preserves storage belonging to another local HTML application", asyn
     await expect(page.locator("html")).not.toHaveClass(/is-loading/);
 
     await page.evaluate(async () => {
+        localStorage.setItem("everydashcam:reset-probe", "owned");
         localStorage.setItem("dashcamigo:reset-probe", "owned");
         localStorage.setItem("dc-theme", "dark");
         localStorage.setItem("dc.viewer.panels", "owned");
         localStorage.setItem("unrelated-local-app", "keep");
         localStorage.setItem("dc-other-app-key", "keep");
+        sessionStorage.setItem("everydashcam:reset-probe", "owned");
         sessionStorage.setItem("dashcamigo:reset-probe", "owned");
         sessionStorage.setItem("unrelated-local-app", "keep");
         for (const [name, store] of [
@@ -74,12 +76,14 @@ test("reset preserves storage belonging to another local HTML application", asyn
                 };
             });
         return {
-            ownedPreference: localStorage.getItem("dashcamigo:reset-probe"),
+            ownedPreference: localStorage.getItem("everydashcam:reset-probe"),
+            legacyPreference: localStorage.getItem("dashcamigo:reset-probe"),
             ownedTheme: localStorage.getItem("dc-theme"),
             ownedPanels: localStorage.getItem("dc.viewer.panels"),
             otherPreference: localStorage.getItem("unrelated-local-app"),
             otherLegacyPreference: localStorage.getItem("dc-other-app-key"),
-            ownedSession: sessionStorage.getItem("dashcamigo:reset-probe"),
+            ownedSession: sessionStorage.getItem("everydashcam:reset-probe"),
+            legacySession: sessionStorage.getItem("dashcamigo:reset-probe"),
             otherSession: sessionStorage.getItem("unrelated-local-app"),
             ownedDatabase: await read("dashcamigo", "meta"),
             otherDatabase: await read("unrelated-local-app", "records"),
@@ -87,11 +91,13 @@ test("reset preserves storage belonging to another local HTML application", asyn
     });
     expect(after).toEqual({
         ownedPreference: null,
+        legacyPreference: null,
         ownedTheme: "auto",
         ownedPanels: null,
         otherPreference: "keep",
         otherLegacyPreference: "keep",
         ownedSession: null,
+        legacySession: null,
         otherSession: "keep",
         ownedDatabase: undefined,
         otherDatabase: "keep",

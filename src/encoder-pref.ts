@@ -1,6 +1,6 @@
 export type EncoderPreference = "auto" | "hardware" | "software";
 
-const STORAGE_KEY = "dashcamigo:encoder";
+const STORAGE_KEY = "everydashcam:encoder";
 let cached: EncoderPreference | null = null;
 const listeners = new Set<() => void>();
 

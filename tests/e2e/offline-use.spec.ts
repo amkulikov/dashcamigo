@@ -123,7 +123,7 @@ test("opens the installation guide while the OS installation query is pending", 
 
 test("preserves an installed signal when the OS installation query fails", async ({ page }) => {
     await page.addInitScript(() => {
-        localStorage.setItem("dashcamigo:pwa:installed", "1");
+        localStorage.setItem("everydashcam:pwa:installed", "1");
         const probe = window as unknown as RelatedAppsProbeWindow;
         probe.__offlineUseRelatedApps = () => Promise.reject(new Error("installation service is unavailable"));
     });
@@ -132,12 +132,12 @@ test("preserves an installed signal when the OS installation query fails", async
     const modal = page.locator("#offline-use-modal");
     await expect(modal).toHaveAttribute("data-install-state", "installed");
     await expect(modal.locator("#install-btn")).toBeHidden();
-    expect(await page.evaluate(() => localStorage.getItem("dashcamigo:pwa:installed"))).toBe("1");
+    expect(await page.evaluate(() => localStorage.getItem("everydashcam:pwa:installed"))).toBe("1");
 });
 
 test("clears an installed signal when the OS confirms the app is absent", async ({ page }) => {
     await page.addInitScript(() => {
-        localStorage.setItem("dashcamigo:pwa:installed", "1");
+        localStorage.setItem("everydashcam:pwa:installed", "1");
         const probe = window as unknown as RelatedAppsProbeWindow;
         probe.__offlineUseRelatedApps = async () => [];
     });
@@ -146,7 +146,7 @@ test("clears an installed signal when the OS confirms the app is absent", async 
     const modal = page.locator("#offline-use-modal");
     await expect(modal).toHaveAttribute("data-install-state", "guide");
     await expect(modal.locator("#install-btn")).toBeVisible();
-    expect(await page.evaluate(() => localStorage.getItem("dashcamigo:pwa:installed"))).toBeNull();
+    expect(await page.evaluate(() => localStorage.getItem("everydashcam:pwa:installed"))).toBeNull();
 });
 
 test("consumes a dismissed native prompt once and offers the guide on the next visit", async ({ page }) => {
@@ -180,7 +180,7 @@ test("offers installation guidance after InvalidStateError without recording an 
     await expect(page.locator("#install-modal")).toBeVisible();
     await expect(page.locator("#install-modal-title")).toHaveText("Install as a desktop app");
     expect(await promptCount(page)).toBe(1);
-    expect(await page.evaluate(() => localStorage.getItem("dashcamigo:pwa:installed"))).toBeNull();
+    expect(await page.evaluate(() => localStorage.getItem("everydashcam:pwa:installed"))).toBeNull();
 
     await page.locator("#install-modal-close").click();
     await expect(entry).toBeFocused();
@@ -291,7 +291,7 @@ test("preserves a confirmed installation when an earlier OS query returns no ins
     await expect(modal).toHaveAttribute("data-install-state", "installed");
     await expect(modal.locator("#install-btn")).toBeHidden();
     await expect(modal.locator("#offline-use-app-status")).toBeVisible();
-    expect(await page.evaluate(() => localStorage.getItem("dashcamigo:pwa:installed"))).toBe("1");
+    expect(await page.evaluate(() => localStorage.getItem("everydashcam:pwa:installed"))).toBe("1");
 });
 
 test("keeps the offline chooser available inside an installed standalone app", async ({ page }) => {

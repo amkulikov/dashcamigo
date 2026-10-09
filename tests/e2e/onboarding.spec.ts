@@ -23,7 +23,7 @@ import {
     test,
 } from "./_fixtures.js";
 
-const FLAG = (id: string) => `dashcamigo:onboarding:${id}`;
+const FLAG = (id: string) => `everydashcam:onboarding:${id}`;
 
 async function flag(page: import("@playwright/test").Page, id: string): Promise<string | null> {
     return page.evaluate((k) => localStorage.getItem(k), FLAG(id));

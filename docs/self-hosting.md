@@ -140,7 +140,7 @@ The published image supports amd64 and arm64 and needs no volumes or environment
 variables:
 
 ```sh
-docker run -d --name dashcamigo -p 8080:80 ghcr.io/everydashcam/everydashcam
+docker run -d --name everydashcam -p 8080:80 ghcr.io/everydashcam/everydashcam
 ```
 
 For an existing installation, replace the old `ghcr.io/amkulikov/dashcamigo`
@@ -153,7 +153,7 @@ With Docker Compose:
 ```yaml
 # docker-compose.yml
 services:
-  dashcamigo:
+  everydashcam:
     image: ghcr.io/everydashcam/everydashcam
     ports:
       - "8080:80"
@@ -167,8 +167,8 @@ newest release; versioned `v*` tags match
 To build the image from your checkout instead:
 
 ```sh
-docker build -t dashcamigo .
-docker run -d --name dashcamigo -p 8080:80 dashcamigo
+docker build -t everydashcam .
+docker run -d --name everydashcam -p 8080:80 everydashcam
 ```
 
 If other devices will open the app through a NAS or home server, read
@@ -250,7 +250,7 @@ Run `npm run build` and serve the resulting `dist/` as described above.
 For a Docker build from your checkout, pass the key as a build argument:
 
 ```sh
-docker build --build-arg VITE_YANDEX_TILES_API_KEY=YOUR_TILES_API_KEY -t dashcamigo .
+docker build --build-arg VITE_YANDEX_TILES_API_KEY=YOUR_TILES_API_KEY -t everydashcam .
 ```
 
 Run this image using the [Docker instructions](#run-with-docker). Docker builds

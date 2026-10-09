@@ -254,7 +254,7 @@ describe("GPS synchronization", () => {
         const getItemSpy = vi.spyOn(localStorage, "getItem");
         applyStoredGpsSyncToTrips([first, second]);
 
-        const syncReads = getItemSpy.mock.calls.filter(([key]) => key === "dashcamigo:trips:gpsSync");
+        const syncReads = getItemSpy.mock.calls.filter(([key]) => key === "everydashcam:trips:gpsSync");
         expect(syncReads).toHaveLength(1);
         expect(first.gpsOffsetSec).toBe(4);
         expect(second.gpsOffsetSec).toBe(9);

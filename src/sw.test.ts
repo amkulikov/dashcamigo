@@ -8,7 +8,7 @@ import { setImmediate } from "node:timers/promises";
 import vm from "node:vm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const ORIGIN = "https://dashcamigo.app";
+const ORIGIN = "https://everydashcam.app";
 const SOURCE = readFileSync(resolve(__dirname, "../public/sw.js"), "utf-8");
 const NAV_TIMEOUT_MS = Number(SOURCE.match(/NAV_NETWORK_TIMEOUT_MS = (\d+)/)?.[1]);
 const PRECACHE_TIMEOUT_MS = Number(SOURCE.match(/PRECACHE_FETCH_TIMEOUT_MS = (\d+)/)?.[1]);
@@ -131,6 +131,10 @@ function loadSw(options: LoadOptions = {}) {
                 if (options.storageError) throw new Error("storage disabled");
                 return cache(name);
             },
+            async match(input: string | { url: string }, query: { cacheName: string; ignoreSearch?: boolean }) {
+                if (options.storageError) throw new Error("storage disabled");
+                return storage.get(query.cacheName)?.match(input, query);
+            },
             async keys() {
                 return [...storage.keys()];
             },
@@ -178,9 +182,9 @@ function loadSw(options: LoadOptions = {}) {
         context,
     );
     const precacheKey = context.precacheKey as (entry: Entry) => string;
-    const pre = cache("dashcamigo-precache-v4");
-    const rt = cache("dashcamigo-runtime-v3");
-    const tr = cache("dashcamigo-tracker-v3");
+    const pre = cache("everydashcam-precache-v4");
+    const rt = cache("everydashcam-runtime-v3");
+    const tr = cache("everydashcam-tracker-v3");
     for (const [url, response] of Object.entries(options.pre ?? {})) {
         const current = manifest.find((item) => item.url === url);
         void pre.put(current ? precacheKey(current) : url, response);
@@ -727,14 +731,19 @@ describe("service worker activation", () => {
         expect((await sw.rt.match("/en/"))?._tag).toBe("fresh-network-shell");
     });
 
-    it("migrates old schema chunks before deleting their cache", async () => {
+    it("reads old schema chunks without deleting rollback caches", async () => {
         const sw = loadSw();
         const old = makeCache();
         await old.put("/assets/legacy.js", res("legacy"));
         sw.storage.set("dashcamigo-precache-v3", old);
         await sw.fire("activate");
+        const result = await sw.dispatchFetch("/assets/legacy.js");
+        await result.settled();
+        expect(result.response?._tag).toBe("legacy");
         expect((await sw.rt.match("/assets/legacy.js"))?._tag).toBe("legacy");
-        expect(sw.storage.has("dashcamigo-precache-v3")).toBe(false);
+        expect((await old.match("/assets/legacy.js"))?._tag).toBe("legacy");
+        expect(sw.storage.has("dashcamigo-precache-v3")).toBe(true);
+        expect(sw.fetchSpy).not.toHaveBeenCalled();
     });
 
     it("activates a complete worker when retiring old code exceeds storage quota", async () => {
@@ -759,5 +768,175 @@ describe("service worker activation", () => {
         const sw = loadSw({ tr: { "/ort/dev.wasm": res("cached") } });
         await sw.fire("activate");
         expect((await sw.tr.match("/ort/dev.wasm"))?._tag).toBe("cached");
+    });
+});
+
+describe("service worker cache namespace bridge", () => {
+    async function legacyCache(sw: ReturnType<typeof loadSw>, name: string, values: Record<string, string>) {
+        const cache = makeCache();
+        sw.storage.set(name, cache);
+        for (const [url, body] of Object.entries(values)) await cache.put(url, res(body));
+        return cache;
+    }
+
+    const offline = async () => {
+        throw new Error("offline");
+    };
+
+    it("copies the complete matching offline graph before activation and promotes downloads on use", async () => {
+        const graph = {
+            "/": "root redirect",
+            "/en/": "English shell",
+            "/ru/": "Russian shell",
+            "/assets/app-A.js": "entry code",
+            "/assets/app-A.css": "application styles",
+            "/assets/export-A.js": "lazy export code",
+            "/assets/worker-A.js": "lazy worker code",
+            "/styles/light.json": "map style",
+            "/styles/sprite@2x.png": "map sprite",
+        };
+        const manifest = Object.entries(graph).map(([url, body]) => entry(url, body));
+        const sw = loadSw({ manifest, trackerUrls: ["/models/model-A.onnx"], onLine: false, fetch: offline });
+        const legacyPre = await legacyCache(
+            sw,
+            "dashcamigo-precache-v4",
+            Object.fromEntries(Object.entries(graph).map(([url, body]) => [sw.precacheKey(entry(url, body)), body])),
+        );
+        const legacyRuntime = await legacyCache(sw, "dashcamigo-runtime-v3", { "/fonts/map.pbf": "font bytes" });
+        const legacyTracker = await legacyCache(sw, "dashcamigo-tracker-v3", { "/models/model-A.onnx": "model bytes" });
+        const legacyKeys = await legacyPre.keys();
+
+        await sw.fire("install");
+        for (const [url, body] of Object.entries(graph)) expect((await sw.cached(url))?._tag).toBe(body);
+        await sw.fire("activate");
+        expect(await sw.rt.keys()).toEqual([]);
+        expect(await sw.tr.keys()).toEqual([]);
+
+        expect((await sw.navigate("/ru/?source=pwa")).response._tag).toBe(graph["/ru/"]);
+        for (const [url, body] of Object.entries({
+            ...graph,
+            "/fonts/map.pbf": "font bytes",
+            "/models/model-A.onnx": "model bytes",
+        })) {
+            const result = await sw.dispatchFetch(url);
+            await result.settled();
+            expect(result.response?._tag, url).toBe(body);
+        }
+        expect(sw.fetchSpy).not.toHaveBeenCalled();
+        expect((await sw.rt.match("/fonts/map.pbf"))?._tag).toBe("font bytes");
+        expect((await sw.tr.match("/models/model-A.onnx"))?._tag).toBe("model bytes");
+        expect(await legacyPre.keys()).toEqual(legacyKeys);
+        expect((await legacyRuntime.match("/fonts/map.pbf"))?._tag).toBe("font bytes");
+        expect((await legacyTracker.match("/models/model-A.onnx"))?._tag).toBe("model bytes");
+    });
+
+    it("requires a changed shell even when the legacy cache has the same route", async () => {
+        const sw = loadSw({ manifest: [entry("/en/", "new shell")], fetch: async () => res("new shell") });
+        const legacy = await legacyCache(sw, "dashcamigo-precache-v4", {
+            [sw.precacheKey(entry("/en/", "old shell"))]: "old shell",
+        });
+        await sw.fire("install");
+        expect((await sw.cached("/en/"))?._tag).toBe("new shell");
+        expect(sw.fetchSpy).toHaveBeenCalledTimes(1);
+        expect((await legacy.match(sw.precacheKey(entry("/en/", "old shell"))))?._tag).toBe("old shell");
+    });
+
+    it("rejects an incomplete namespace copy and retries without changing the rollback graph", async () => {
+        const manifest = [entry("/en/", "shell"), entry("/assets/app-A.js", "code")];
+        const sw = loadSw({ manifest, fetch: offline });
+        const legacy = await legacyCache(sw, "dashcamigo-precache-v4", {
+            [sw.precacheKey(manifest[0]!)]: "shell",
+            [sw.precacheKey(manifest[1]!)]: "code",
+        });
+        const keys = await legacy.keys();
+        const failedWrite = vi.spyOn(sw.pre, "put").mockRejectedValueOnce(new Error("quota exceeded"));
+        await expect(sw.fire("install")).rejects.toThrow("precache incomplete");
+        expect(await legacy.keys()).toEqual(keys);
+        failedWrite.mockRestore();
+        await sw.fire("install");
+        expect((await sw.cached("/en/"))?._tag).toBe("shell");
+        expect((await sw.cached("/assets/app-A.js"))?._tag).toBe("code");
+        expect(sw.fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        { name: "dashcamigo-runtime-v3", url: "/fonts/map.pbf", target: "rt" as const },
+        { name: "dashcamigo-tracker-v3", url: "/models/model-A.onnx", target: "tr" as const },
+        { name: "dashcamigo-precache-v3", url: "/assets/restored-tab-A.js", target: "rt" as const },
+    ])("serves $url despite copy failure and retries the promotion", async ({ name, url, target }) => {
+        const sw = loadSw({ trackerUrls: [url], onLine: false, fetch: offline });
+        const legacy = await legacyCache(sw, name, { [url]: "downloaded bytes" });
+        const failedWrite = vi.spyOn(sw[target], "put").mockRejectedValue(new Error("quota exceeded"));
+        const first = await sw.dispatchFetch(url);
+        await first.settled();
+        expect(first.response?._tag).toBe("downloaded bytes");
+        expect(await sw[target].match(url)).toBeUndefined();
+        expect((await legacy.match(url))?._tag).toBe("downloaded bytes");
+        failedWrite.mockRestore();
+        const second = await sw.dispatchFetch(url);
+        await second.settled();
+        expect(second.response?._tag).toBe("downloaded bytes");
+        expect((await sw[target].match(url))?._tag).toBe("downloaded bytes");
+        expect(sw.fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("keeps the full legacy immutable graph available beyond the runtime eviction limit", async () => {
+        const sw = loadSw({ onLine: false, fetch: offline });
+        const chunks = Object.fromEntries(Array.from({ length: 80 }, (_, i) => [`/assets/old-${i}.js`, `code ${i}`]));
+        const legacy = await legacyCache(sw, "dashcamigo-precache-v4", chunks);
+        await sw.fire("activate");
+        for (const [url, body] of Object.entries(chunks)) {
+            const result = await sw.dispatchFetch(url);
+            await result.settled();
+            expect(result.response?._tag).toBe(body);
+        }
+        expect(await sw.rt.match("/assets/old-0.js")).toBeUndefined();
+        const restored = await sw.dispatchFetch("/assets/old-0.js");
+        await restored.settled();
+        expect(restored.response?._tag).toBe("code 0");
+        expect(await legacy.keys()).toHaveLength(80);
+        expect(sw.fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("keeps new runtime values ahead of legacy values without rewriting rollback data", async () => {
+        const sw = loadSw({ rt: { "/fonts/map.pbf": res("new bytes") } });
+        const legacy = await legacyCache(sw, "dashcamigo-runtime-v3", { "/fonts/map.pbf": "old bytes" });
+        const result = await sw.dispatchFetch("/fonts/map.pbf");
+        await result.settled();
+        expect(result.response?._tag).toBe("new bytes");
+        expect((await legacy.match("/fonts/map.pbf"))?._tag).toBe("old bytes");
+    });
+
+    it.each([
+        { name: "dashcamigo-runtime-v3", url: "/assets/poisoned.js" },
+        { name: "dashcamigo-tracker-v3", url: "/models/model-A.onnx" },
+    ])("does not promote an HTML fallback from $name", async ({ name, url }) => {
+        const sw = loadSw({ trackerUrls: [url] });
+        const legacy = makeCache();
+        sw.storage.set(name, legacy);
+        await legacy.put(url, res("fallback", { headers: new Headers({ "content-type": "text/html" }) }));
+        const result = await sw.dispatchFetch(url);
+        await result.settled();
+        expect(result.response?._tag).toBe("network");
+        expect((await legacy.match(url))?._tag).toBe("fallback");
+    });
+
+    it("never reads or deletes caches outside the explicit legacy contracts", async () => {
+        const sw = loadSw();
+        for (const name of [
+            "other-app",
+            "dashcamigo-unrelated",
+            "dashcamigo-precache-custom",
+            "everydashcam-unrelated",
+        ]) {
+            await legacyCache(sw, name, { "/assets/unrelated.js": "foreign bytes" });
+        }
+        const names = [...sw.storage.keys()];
+        await sw.fire("activate");
+        expect([...sw.storage.keys()]).toEqual(names);
+        const result = await sw.dispatchFetch("/assets/unrelated.js");
+        await result.settled();
+        expect(result.response?._tag).toBe("network");
+        expect([...sw.storage.keys()]).toEqual(names);
     });
 });

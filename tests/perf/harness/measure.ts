@@ -5,7 +5,7 @@
 //      performance.getEntriesByType('measure') with prior clear so each
 //      scenario sees only its own marks.
 //
-//   2. logger ring-buffer entries via window.__dashcamigo.dumpLog(). The
+//   2. logger ring-buffer entries via window.__everydashcam.dumpLog(). The
 //      ingest pipeline already logs structured durationMs / stageMs for
 //      ingest stages; we lift those into the metrics as a secondary channel
 //      next to performance.measure (both come from the same mark() helper).
@@ -53,7 +53,7 @@ export interface CdpMetricSnapshot {
 
 export const RESET_INIT_SCRIPT = `
 (() => {
-    const perf = (window.__dashcamigoPerf ||= {});
+    const perf = (window.__everydashcamPerf ||= {});
     perf.reset = () => {
         try { performance.clearMarks(); performance.clearMeasures(); } catch (_) {}
         perf.bytesRead = 0;
@@ -73,7 +73,7 @@ export const RESET_INIT_SCRIPT = `
         perf.lifecycleEvents = [];
         const LIFECYCLE_CAP = 1000;
         const onEvent = (e) => {
-            if (typeof e.type !== 'string' || !e.type.startsWith('dashcamigo:')) return;
+            if (typeof e.type !== 'string' || !e.type.startsWith('everydashcam:')) return;
             if (perf.lifecycleEvents.length >= LIFECYCLE_CAP) {
                 perf.lifecycleEvents.shift();
             }
@@ -84,7 +84,7 @@ export const RESET_INIT_SCRIPT = `
             });
         };
         for (const ev of ['ingest-list-ready', 'ingest-done', 'trip-activated', 'player-first-frame', 'player-failed', 'map-tracks-rendered', 'chart-rendered']) {
-            window.addEventListener('dashcamigo:' + ev, onEvent);
+            window.addEventListener('everydashcam:' + ev, onEvent);
         }
     }
 })();
@@ -92,8 +92,8 @@ export const RESET_INIT_SCRIPT = `
 
 export async function resetPerfState(page: Page): Promise<void> {
     await page.evaluate(() => {
-        const w = window as unknown as { __dashcamigoPerf?: { reset?: () => void } };
-        w.__dashcamigoPerf?.reset?.();
+        const w = window as unknown as { __everydashcamPerf?: { reset?: () => void } };
+        w.__everydashcamPerf?.reset?.();
     });
 }
 
@@ -112,9 +112,9 @@ export async function readLifecycleEvents(
 ): Promise<Array<{ type: string; t: number; detail: Record<string, unknown> | undefined }>> {
     return await page.evaluate(() => {
         const w = window as unknown as {
-            __dashcamigoPerf?: { lifecycleEvents?: Array<{ type: string; t: number; detail: unknown }> };
+            __everydashcamPerf?: { lifecycleEvents?: Array<{ type: string; t: number; detail: unknown }> };
         };
-        return (w.__dashcamigoPerf?.lifecycleEvents ?? []).map((e) => ({
+        return (w.__everydashcamPerf?.lifecycleEvents ?? []).map((e) => ({
             type: e.type,
             t: e.t,
             detail: e.detail as Record<string, unknown> | undefined,
@@ -125,10 +125,10 @@ export async function readLifecycleEvents(
 export async function readLogEntries(page: Page): Promise<LogEntrySnippet[]> {
     return await page.evaluate(() => {
         const w = window as unknown as {
-            __dashcamigo?: { dumpLog: () => Array<{ ts: number; ns: string; msg: string; ctx?: unknown }> };
+            __everydashcam?: { dumpLog: () => Array<{ ts: number; ns: string; msg: string; ctx?: unknown }> };
         };
-        if (!w.__dashcamigo) return [];
-        return w.__dashcamigo.dumpLog().map((r) => ({
+        if (!w.__everydashcam) return [];
+        return w.__everydashcam.dumpLog().map((r) => ({
             ts: r.ts,
             ns: r.ns,
             msg: r.msg,

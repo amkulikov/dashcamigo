@@ -11,7 +11,7 @@ export const DEFAULT_INDEX_CACHE_LIMIT_BYTES = 128 * 1024 * 1024;
 export const INDEX_CACHE_LIMIT_MIN_BYTES = 64 * 1024 * 1024;
 export const INDEX_CACHE_LIMIT_MAX_BYTES = 4 * 1024 * 1024 * 1024;
 
-const STORAGE_KEY = "dashcamigo:indexCache:limitBytes";
+const STORAGE_KEY = "everydashcam:indexCache:limitBytes";
 
 /** Current cache size limit in bytes, clamped; the default when unset,
  *  unparsable, or localStorage is unavailable (private mode). */

@@ -17,6 +17,7 @@ import {
     installExportCapture,
     loadTrip,
     openExport,
+    pausePlayback,
     presetLocalStorage,
     shot,
     test,
@@ -82,6 +83,7 @@ test.describe("blur regions", () => {
         await page.setViewportSize(DESKTOP);
         await gotoApp(page, "en");
         await loadTrip(page, SAMPLE_70MAI);
+        await pausePlayback(page);
         await openExport(page);
         // Single channel -> the stream-copy path is reachable, so the gate
         // assertion below is meaningful.
@@ -116,7 +118,7 @@ test.describe("blur regions", () => {
         await page.locator('.top-panel__channel-chip[data-channel="front"] input').uncheck();
         await expect(page.locator('.video-tile[data-channel="rear"]')).toBeVisible();
         await page.evaluate(async () => {
-            const { state, dom } = window.__dashcamigo;
+            const { state, dom } = window.__everydashcam;
             const trip = state.active && state.trips[state.active.trip];
             if (!trip) throw new Error("trip unavailable");
             // A measured lead on a long recording is metadata, independent of
@@ -135,10 +137,10 @@ test.describe("blur regions", () => {
         await expect(range).toHaveText("0:03-0:04");
         await expect(page.locator('.video-tile[data-channel="rear"] .blur-box:not([hidden])')).toBeVisible();
         await range.click();
-        await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.active?.frame)).toBe(0);
-        await expect.poll(() => page.evaluate(() => window.__dashcamigo.dom.player.currentTime)).toBeCloseTo(1, 1);
+        await expect.poll(() => page.evaluate(() => window.__everydashcam.state.active?.frame)).toBe(0);
+        await expect.poll(() => page.evaluate(() => window.__everydashcam.dom.player.currentTime)).toBeCloseTo(1, 1);
         await page.evaluate(async () => {
-            const video = window.__dashcamigo.dom.player;
+            const video = window.__everydashcam.dom.player;
             const shown = new Promise<void>((resolve) => video.requestVideoFrameCallback(() => resolve()));
             video.currentTime = 0.75;
             await shown;
@@ -157,7 +159,7 @@ test.describe("blur regions", () => {
         await page.mouse.down();
         await page.mouse.move(b.x + b.width * 0.65, b.y + b.height * 0.65);
         await page.evaluate(async () => {
-            const video = window.__dashcamigo.dom.player;
+            const video = window.__everydashcam.dom.player;
             const shown = new Promise<void>((resolve) => video.requestVideoFrameCallback(() => resolve()));
             video.currentTime = 1.25;
             await shown;
@@ -173,7 +175,7 @@ test.describe("blur regions", () => {
         await openExport(page);
         expect(
             await page.evaluate(() => {
-                const { state } = window.__dashcamigo;
+                const { state } = window.__everydashcam;
                 return (
                     state.active && state.trips[state.active.trip]?.frames[state.active.frame]?.channels.front?.channel
                 );
@@ -385,7 +387,7 @@ test.describe("blur regions", () => {
         const work = await page
             .locator('.video-tile[data-channel="front"] .blur-preview-canvas')
             .evaluate(async (canvas: HTMLCanvasElement) => {
-                const video = window.__dashcamigo.dom.player;
+                const video = window.__everydashcam.dom.player;
                 const ctx = canvas.getContext("2d");
                 if (!ctx) throw new Error("preview unavailable");
                 video.pause();
@@ -482,7 +484,7 @@ test.describe("blur regions", () => {
             await expect(page.locator(".export-panel__blur-row")).toHaveCount(1);
             await page.locator("#export-panel-close").click();
             await page.evaluate(() => {
-                const { state } = window.__dashcamigo;
+                const { state } = window.__everydashcam;
                 const candidate = state.active && state.trips[state.active.trip]?.frames[0]?.channels.front;
                 if (!candidate) throw new Error("source unavailable");
                 // Metadata can finish after the user creates a zone. The next
@@ -669,7 +671,7 @@ test.describe("blur regions", () => {
         await page.locator("#export-panel-output").selectOption("1080_9x16");
         await page.locator("#export-panel-blur").check();
         const sourceLuma = await page.evaluate(() => {
-            const video = window.__dashcamigo.dom.player;
+            const video = window.__everydashcam.dom.player;
             const canvas = document.createElement("canvas");
             canvas.width = canvas.height = 32;
             const ctx = canvas.getContext("2d");

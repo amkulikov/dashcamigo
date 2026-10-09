@@ -50,7 +50,7 @@ function check(releases: Release[][] = [], run: Record<string, unknown> | null =
             ...process.env,
             PATH: `${directory}:${process.env.PATH}`,
             GITHUB_REF_NAME: tag,
-            GITHUB_REPOSITORY: "example/dashcamigo",
+            GITHUB_REPOSITORY: "example/everydashcam",
             GITHUB_OUTPUT: join(directory, "output"),
         },
     });
@@ -167,7 +167,7 @@ describe("published changelog baseline", () => {
         git("-c", "tag.gpgsign=false", "tag", "-f", tag);
         return spawnSync(
             process.execPath,
-            [notesScript, "--tag", tag, "--previous-tag", previousTag, "--repo", "example/dashcamigo"],
+            [notesScript, "--tag", tag, "--previous-tag", previousTag, "--repo", "example/everydashcam"],
             {
                 cwd: directory,
                 encoding: "utf8",
@@ -187,7 +187,7 @@ describe("published changelog baseline", () => {
         const result = generateNotes();
         expect(result.status, result.stderr).toBe(0);
         expect(result.stdout).toContain("No changelog entries for this release.");
-        expect(result.stdout).toContain(`https://github.com/example/dashcamigo/compare/${previousTag}...${tag}`);
+        expect(result.stdout).toContain(`https://github.com/example/everydashcam/compare/${previousTag}...${tag}`);
         expect(result.stdout).not.toContain("no user-facing changes");
     });
 

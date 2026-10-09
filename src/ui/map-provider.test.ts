@@ -112,7 +112,7 @@ describe("map provider fallback", () => {
 
         setMapProviderPreference("osm-vector");
         expect(getMapProvider()).toBe("osm-vector");
-        expect(values.get("dashcamigo:mapProvider")).toBe("osm-vector");
+        expect(values.get("everydashcam:mapProvider")).toBe("osm-vector");
 
         _resetForTests();
         expect(getMapProviderPreference()).toBe("osm-vector");
@@ -436,7 +436,7 @@ describe("portable map provider fallback and recovery", () => {
 
     it.each(["openfreemap", "osm-vector", "route-only"] as const)("restores the saved %s choice", (provider) => {
         setMapProviderPreference(provider);
-        expect(localStorage.getItem("dashcamigo:mapProvider")).toBe(provider);
+        expect(localStorage.getItem("everydashcam:mapProvider")).toBe(provider);
         _resetForTests();
         expect(getMapProviderPreference()).toBe(provider);
         expect(getMapProvider()).toBe(provider);
@@ -450,7 +450,7 @@ describe("portable map provider fallback and recovery", () => {
         await reportMapProviderTileError(OFM_TILEJSON);
         expect(getMapProvider()).toBe("route-only");
         expect(getMapProviderPreference()).toBe("openfreemap");
-        expect(localStorage.getItem("dashcamigo:mapProvider")).toBeNull();
+        expect(localStorage.getItem("everydashcam:mapProvider")).toBeNull();
         expect(probe.mock.calls.map(([provider]) => provider)).toEqual(["osm-vector", "osm-raster"]);
         expect(seen).toEqual(["openfreemap", "route-only"]);
     });

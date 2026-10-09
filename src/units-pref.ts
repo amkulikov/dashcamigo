@@ -2,7 +2,7 @@
 // One source of truth for unit formatting across chart, map popup, sidebar,
 // trip meta, feedback report.
 //
-// Storage: localStorage["dashcamigo:units"]. Default is autodetect by
+// Storage: localStorage["everydashcam:units"]. Default is autodetect by
 // navigator.language - countries that use mph on road signs map to imperial,
 // everything else stays metric.
 //
@@ -13,7 +13,7 @@ import type { I18nKey } from "./i18n/keys.js";
 
 export type Units = "metric" | "imperial";
 
-const STORAGE_KEY = "dashcamigo:units";
+const STORAGE_KEY = "everydashcam:units";
 const UNITS_CHANGE_EVENT = "dc:units-change";
 const eventTarget: EventTarget = new EventTarget();
 

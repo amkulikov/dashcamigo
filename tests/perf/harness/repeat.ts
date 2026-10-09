@@ -77,9 +77,9 @@ export async function runWithReplays<T>(browser: Browser, opts: ReplayOptions): 
             try {
                 await page.evaluate(() => {
                     const w = window as unknown as {
-                        __dashcamigoPerf?: { peakMemory?: { intervalId?: number } };
+                        __everydashcamPerf?: { peakMemory?: { intervalId?: number } };
                     };
-                    const id = w.__dashcamigoPerf?.peakMemory?.intervalId;
+                    const id = w.__everydashcamPerf?.peakMemory?.intervalId;
                     if (typeof id === "number") clearInterval(id);
                 });
             } catch {

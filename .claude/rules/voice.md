@@ -218,8 +218,7 @@ gap is a reason to get in touch, not a reason to leave.
   the same baseline rule.
 - **English carries the same tone as Russian.** They are two expressions of one voice,
   not a source and a watered-down copy.
-- **Verify both languages before merging a UI feature** — toggle the language, or set
-  `localStorage["dashcamigo:lang"] = "en"` and reload, and read the actual screens.
+- **Verify both languages before merging a UI feature** — open `/en/` and `/ru/`, and read the actual screens.
 - An unfinished translation is **deferred work**, not "routine". Typecheck catches a
   *missing* key; it does not catch a value copied verbatim from `en.ts`. Every such
   placeholder must sit under a `// TODO i18n:` next to the key so grep can find it

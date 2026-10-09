@@ -908,7 +908,6 @@ export const koDict = {
     "settings.privacy.policyLink": "개인정보 처리방침",
 
     "settings.privacy.crash.label": "오류 보고",
-    "settings.privacy.crash.description": "앱이 멈추면 익명 보고서가 문제 해결에 도움이 돼요 — 영상도 GPS도 파일 이름도 보내지 않고, 무엇이 어떤 브라우저에서 잘못됐는지만. 기본으로 켜져 있으며 여기서 끌 수 있어요.",
     "settings.privacy.crash.optInDescription": "앱에 문제가 생기면 익명화된 보고서가 해결에 도움이 돼요. 영상, GPS, 파일 이름 없이 오류 내용과 브라우저 종류만 담아요. 여기서 켜기 전에는 보내지 않아요. 언제든 끌 수 있어요.",
     "settings.playback.section": "재생",
     "settings.playback.units.label": "측정 단위",

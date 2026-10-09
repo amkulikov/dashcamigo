@@ -105,7 +105,7 @@ test.describe("no-GPS export gate", () => {
         await expect
             .poll(() =>
                 page.evaluate(() => {
-                    const stored = JSON.parse(localStorage.getItem("dashcamigo:export:overlays") ?? "null") as {
+                    const stored = JSON.parse(localStorage.getItem("everydashcam:export:overlays") ?? "null") as {
                         overlayMap?: { enabled?: boolean };
                     } | null;
                     return stored?.overlayMap?.enabled;

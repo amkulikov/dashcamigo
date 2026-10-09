@@ -1,5 +1,5 @@
 // Bytes-read counter: wraps Blob.prototype.arrayBuffer/stream/text in the
-// page context to count how many bytes the dashcamigo pipeline pulled off
+// page context to count how many bytes the everydashcam pipeline pulled off
 // disk on the main thread. The key signal for IO-bound regressions on the
 // main thread - parsers were designed to read 16 MB header + sparse seek
 // instead of the full file.
@@ -24,7 +24,7 @@ import type { Page } from "@playwright/test";
 
 export const BYTES_READ_INIT_SCRIPT = `
 (() => {
-    const perf = (window.__dashcamigoPerf ||= {});
+    const perf = (window.__everydashcamPerf ||= {});
     perf.bytesRead = 0;
 
     // Instrument materializing methods on Blob (which File extends): only
@@ -68,8 +68,8 @@ export const BYTES_READ_INIT_SCRIPT = `
  */
 export async function resetBytesRead(page: Page): Promise<void> {
     await page.evaluate(() => {
-        const w = window as unknown as { __dashcamigoPerf?: { bytesRead?: number } };
-        if (w.__dashcamigoPerf) w.__dashcamigoPerf.bytesRead = 0;
+        const w = window as unknown as { __everydashcamPerf?: { bytesRead?: number } };
+        if (w.__everydashcamPerf) w.__everydashcamPerf.bytesRead = 0;
     });
 }
 
@@ -79,7 +79,7 @@ export async function resetBytesRead(page: Page): Promise<void> {
  */
 export async function readBytesRead(page: Page): Promise<number> {
     return await page.evaluate(() => {
-        const w = window as unknown as { __dashcamigoPerf?: { bytesRead?: number } };
-        return w.__dashcamigoPerf?.bytesRead ?? 0;
+        const w = window as unknown as { __everydashcamPerf?: { bytesRead?: number } };
+        return w.__everydashcamPerf?.bytesRead ?? 0;
     });
 }

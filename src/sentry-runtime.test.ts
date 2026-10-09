@@ -115,29 +115,34 @@ describe("crash reporting consent lifecycle", () => {
         expect(payload).not.toContain("pending before cross-tab opt-out");
     });
 
-    it("discards startup errors and context collected before consent", async () => {
-        initSentry();
-        captureSentryMessage("before consent message");
-        captureSentryException(new Error("before consent exception"));
-        setSentryTags({ startup: "before-consent-tag" });
-        setSentryContext("startup", { status: "before-consent-context" });
-        await vi.dynamicImportSettled();
-        expect(requests).toHaveLength(0);
+    it.each(["everydashcam.app", "self-host.test", "deploy-preview.pages.dev", "localhost"])(
+        "discards startup errors and old preferences until explicit consent on %s",
+        async (hostname) => {
+            Object.assign(browserWindow, { location: { hostname } });
+            storedChoices.set("dashcamigo:crash-reporting", "off");
+            initSentry();
+            captureSentryMessage("before consent message");
+            captureSentryException(new Error("before consent exception"));
+            setSentryTags({ startup: "before-consent-tag" });
+            setSentryContext("startup", { status: "before-consent-context" });
+            await vi.dynamicImportSettled();
+            expect(requests).toHaveLength(0);
 
-        setCrashReportingEnabled(true);
-        captureSentryMessage("after consent message");
-        setSentryTags({ optedIn: "after-consent-tag" });
-        setSentryContext("enabled", { status: "after-consent-context" });
-        await vi.dynamicImportSettled();
-        expect(await getClient()?.flush(1000)).toBe(true);
+            setCrashReportingEnabled(true);
+            captureSentryMessage("after consent message");
+            setSentryTags({ optedIn: "after-consent-tag" });
+            setSentryContext("enabled", { status: "after-consent-context" });
+            await vi.dynamicImportSettled();
+            expect(await getClient()?.flush(1000)).toBe(true);
 
-        const payload = requests.map((request) => request.body).join("\n");
-        expect(payload).toContain("after consent message");
-        expect(payload).toContain("after-consent-tag");
-        expect(payload).toContain("after-consent-context");
-        expect(payload).not.toContain("before consent");
-        expect(payload).not.toContain("before-consent");
-    });
+            const payload = requests.map((request) => request.body).join("\n");
+            expect(payload).toContain("after consent message");
+            expect(payload).toContain("after-consent-tag");
+            expect(payload).toContain("after-consent-context");
+            expect(payload).not.toContain("before consent");
+            expect(payload).not.toContain("before-consent");
+        },
+    );
 
     it("cancels initialization and drops its pending queue when consent is withdrawn", async () => {
         setCrashReportingEnabled(true);

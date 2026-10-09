@@ -14,35 +14,30 @@ import {
     gotoApp,
     presetLocalStorage,
     pausePlayback,
+    setStoredPreference,
     shot,
     test,
 } from "./_fixtures.js";
 
-const FIRST_USE_AT = "dashcamigo:support:first-use-at";
-const LAST_SHOWN_AT = "dashcamigo:support:last-shown-at";
-const ACTION_TAKEN = "dashcamigo:support:action-taken";
+const FIRST_USE_AT = "everydashcam:support:first-use-at";
+const LAST_SHOWN_AT = "everydashcam:support:last-shown-at";
+const ACTION_TAKEN = "everydashcam:support:action-taken";
 const MONTH_AND_A_DAY_MS = 31 * 24 * 60 * 60 * 1000;
 
 async function armIngestCounter(page: Page): Promise<void> {
     await page.evaluate(() => {
         const target = window as typeof window & { __supportIngestDoneCount?: number };
         target.__supportIngestDoneCount = 0;
-        addEventListener("dashcamigo:ingest-done", () => {
+        addEventListener("everydashcam:ingest-done", () => {
             target.__supportIngestDoneCount = (target.__supportIngestDoneCount ?? 0) + 1;
         });
     });
 }
 
 async function resetSupportState(page: Page, isReturning = false): Promise<void> {
-    await page.evaluate(
-        ({ firstUseKey, lastShownAtKey, actionTakenKey, isReturning }) => {
-            localStorage.removeItem(firstUseKey);
-            if (isReturning) localStorage.setItem(firstUseKey, String(Date.now() - 2 * 24 * 60 * 60 * 1000));
-            localStorage.removeItem(lastShownAtKey);
-            localStorage.removeItem(actionTakenKey);
-        },
-        { firstUseKey: FIRST_USE_AT, lastShownAtKey: LAST_SHOWN_AT, actionTakenKey: ACTION_TAKEN, isReturning },
-    );
+    await setStoredPreference(page, FIRST_USE_AT, isReturning ? String(Date.now() - 2 * 24 * 60 * 60 * 1000) : null);
+    await setStoredPreference(page, LAST_SHOWN_AT, null);
+    await setStoredPreference(page, ACTION_TAKEN, null);
 }
 
 async function loadAndWait(page: Page, directory: string): Promise<void> {
@@ -84,7 +79,7 @@ test.describe("project support prompt", () => {
 
         // A reload and more recordings on the same day are still too early.
         await gotoApp(page, "en");
-        await page.evaluate((key) => localStorage.removeItem(key), ACTION_TAKEN);
+        await setStoredPreference(page, ACTION_TAKEN, null);
         await armIngestCounter(page);
         await loadAndWait(page, SAMPLE_70MAI);
         await expect(banner).toBeHidden();
@@ -112,10 +107,7 @@ test.describe("project support prompt", () => {
         await loadAndWait(page, SAMPLE_GOPRO);
         await expect(banner).toBeHidden();
 
-        await page.evaluate(({ key, elapsed }) => localStorage.setItem(key, String(Date.now() - elapsed)), {
-            key: LAST_SHOWN_AT,
-            elapsed: MONTH_AND_A_DAY_MS,
-        });
+        await setStoredPreference(page, LAST_SHOWN_AT, String(Date.now() - MONTH_AND_A_DAY_MS));
         // Duplicates and unrelated interactions cannot trigger a reminder.
         await loadAndWait(page, SAMPLE_GOPRO);
         await page.locator("#settings-btn").click();
@@ -155,7 +147,7 @@ test.describe("project support prompt", () => {
         await expect(page.locator("#support-banner")).toBeHidden();
         await pausePlayback(page);
         await expect(page.locator("#support-banner")).toBeVisible();
-        expect(await page.evaluate(() => localStorage.getItem("dashcamigo:onboarding:player"))).toBeNull();
+        expect(await page.evaluate(() => localStorage.getItem("everydashcam:onboarding:player"))).toBeNull();
         expect(
             await page.evaluate(
                 () => (window as typeof window & { __supportIngestDoneCount?: number }).__supportIngestDoneCount,
@@ -187,15 +179,12 @@ test.describe("project support prompt", () => {
     test("preserves earlier cooldowns and stops reminders after a GitHub visit", async ({ page }) => {
         await gotoApp(page, "en");
         await resetSupportState(page);
-        await page.evaluate((key) => localStorage.setItem(key, String(Date.now())), LAST_SHOWN_AT);
+        await setStoredPreference(page, LAST_SHOWN_AT, String(Date.now()));
         await armIngestCounter(page);
         await loadAndWait(page, SAMPLE_70MAI);
         const banner = page.locator("#support-banner");
         await expect(banner).toBeHidden();
-        await page.evaluate(({ key, elapsed }) => localStorage.setItem(key, String(Date.now() - elapsed)), {
-            key: LAST_SHOWN_AT,
-            elapsed: MONTH_AND_A_DAY_MS,
-        });
+        await setStoredPreference(page, LAST_SHOWN_AT, String(Date.now() - MONTH_AND_A_DAY_MS));
         await loadAndWait(page, SAMPLE_GOPRO);
         await expect(banner).toBeVisible();
         await page.context().route("https://github.com/**", (route) => route.fulfill({ status: 200, body: "" }));
@@ -205,10 +194,7 @@ test.describe("project support prompt", () => {
         await popup.close();
         await expect(banner).toBeHidden();
         expect(await page.evaluate((key) => localStorage.getItem(key), ACTION_TAKEN)).toBe("1");
-        await page.evaluate(({ key, elapsed }) => localStorage.setItem(key, String(Date.now() - elapsed)), {
-            key: LAST_SHOWN_AT,
-            elapsed: MONTH_AND_A_DAY_MS,
-        });
+        await setStoredPreference(page, LAST_SHOWN_AT, String(Date.now() - MONTH_AND_A_DAY_MS));
         await loadAndWait(page, SAMPLE_NOGPS);
         await expect(banner).toBeHidden();
     });
@@ -224,14 +210,14 @@ test.describe("project support prompt", () => {
             "href",
             "https://github.com/everydashcam/everydashcam",
         );
-        await page.evaluate((key) => {
-            localStorage.removeItem(key);
+        await setStoredPreference(page, ACTION_TAKEN, null);
+        await page.evaluate(() => {
             Object.defineProperty(navigator, "clipboard", {
                 configurable: true,
                 value: { writeText: () => Promise.reject(new Error("clipboard blocked")) },
             });
             document.execCommand = () => false;
-        }, ACTION_TAKEN);
+        });
         const copy = note.locator(".support-copy");
         await copy.click();
         await expect(copy).toHaveText("Couldn't copy the link");
@@ -379,10 +365,7 @@ test.describe("project support prompt", () => {
 
         // Sharing is a completed action: even an expired display timestamp and
         // another useful load must not revive the prompt.
-        await page.evaluate(({ key, elapsed }) => localStorage.setItem(key, String(Date.now() - elapsed)), {
-            key: LAST_SHOWN_AT,
-            elapsed: MONTH_AND_A_DAY_MS,
-        });
+        await setStoredPreference(page, LAST_SHOWN_AT, String(Date.now() - MONTH_AND_A_DAY_MS));
         await loadAndWait(page, SAMPLE_NOGPS);
         await expect(banner).toBeHidden();
     });

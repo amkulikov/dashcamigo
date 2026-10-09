@@ -41,7 +41,7 @@ async function expectViewerSource(page: Page, source: string): Promise<void> {
     await expect
         .poll(() =>
             page.evaluate((source) => {
-                const { map, miniMap } = window.__dashcamigo.state;
+                const { map, miniMap } = window.__everydashcam.state;
                 return Boolean(map?.getSource(source)) && Boolean(miniMap?.getSource(source));
             }, source),
         )
@@ -133,8 +133,8 @@ test("Yandex selection syncs map settings and limits the camera to north-up", as
     await expectViewerSource(page, "yandex");
     await expect(page.locator('.map-follow-seg[data-follow-mode="chase"]')).toBeDisabled();
     await expect(page.locator('.map-follow-seg[data-follow-mode="rotate"]')).toBeDisabled();
-    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map!.getBearing())).toBe(0);
-    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map!.getPitch())).toBe(0);
+    await expect.poll(() => page.evaluate(() => window.__everydashcam.state.map!.getBearing())).toBe(0);
+    await expect.poll(() => page.evaluate(() => window.__everydashcam.state.map!.getPitch())).toBe(0);
     const quickAppearance = page.locator(
         "#map-style-select, #map-theme-select, #map-buildings3d-toggle, #map-label-scale-segment button, #map-street-names-segment button",
     );
@@ -231,7 +231,7 @@ test.describe("Retina maps", () => {
         await expect
             .poll(() =>
                 page.evaluate((mainRatio) => {
-                    const { map, miniMap } = window.__dashcamigo.state;
+                    const { map, miniMap } = window.__everydashcam.state;
                     return [map, miniMap].map((map, index) => {
                         if (!map) return false;
                         const canvas = map.getCanvas();
@@ -252,7 +252,7 @@ test.describe("Retina maps", () => {
 
     async function playSlowly(page: Page): Promise<void> {
         await page.evaluate(async () => {
-            const { player } = window.__dashcamigo.dom;
+            const { player } = window.__everydashcam.dom;
             player.playbackRate = 0.25;
             player.muted = true;
             await player.play();
@@ -276,7 +276,7 @@ test.describe("Retina maps", () => {
         await expect.poll(() => requests.length).toBeGreaterThan(0);
         for (const url of requests) expect(url.searchParams.get("scale")).toBe("2");
         const sources = await page.evaluate(() => {
-            const { map, miniMap } = window.__dashcamigo.state;
+            const { map, miniMap } = window.__everydashcam.state;
             return [map, miniMap].map((map) => {
                 const source = map!.getStyle().sources.yandex!;
                 if (source.type !== "raster") throw new Error("yandex source is not raster");
@@ -419,7 +419,7 @@ test("Yandex network failure falls back to OpenFreeMap while retaining the chose
     await expect(page.locator("#mini-map .dc-map-logo")).toHaveCount(0);
     await expect(page.locator("#mini-map").getByRole("link", { name: /OpenStreetMap/ })).toBeVisible();
     await expect
-        .poll(() => page.evaluate(() => Boolean(window.__dashcamigo.state.map?.getLayer("trip-line"))))
+        .poll(() => page.evaluate(() => Boolean(window.__everydashcam.state.map?.getLayer("trip-line"))))
         .toBe(true);
     await expect(page.locator("#player")).toHaveJSProperty("paused", true);
 });

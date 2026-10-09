@@ -5,7 +5,7 @@
 //
 // Envelope shape:
 //  - __k discriminates the message kind: req | res | ntf | abort.
-//  - The `__` prefix mirrors the `__type: "__dashcamigo:log"` marker used by
+//  - The `__` prefix mirrors the `__type: "__everydashcam:log"` marker used by
 //    installWorkerLogBridge (log.ts). Anything starting with `__` on the wire
 //    is reserved for the framework, never for user payloads.
 //  - User payloads sit under `data` (req/ntf) or `result` (res) so they never

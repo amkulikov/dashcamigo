@@ -15,7 +15,7 @@ import { isMobileLayout } from "./media-queries.js";
 import { attachPointerDrag } from "./pointer-drag.js";
 import { state } from "./state.js";
 
-const MAP_PCT_KEY = "dashcamigo:map-pct";
+const MAP_PCT_KEY = "everydashcam:map-pct";
 // Map width as a percentage of player width. fr units with calc on CSS variables
 // break in Chrome (track sizing does not work), so percentage is used.
 const MAP_PCT_MIN = 15;

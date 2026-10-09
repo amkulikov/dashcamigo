@@ -910,7 +910,6 @@ export const jaDict = {
     "settings.privacy.policyLink": "プライバシーポリシー",
 
     "settings.privacy.crash.label": "クラッシュレポート",
-    "settings.privacy.crash.description": "アプリが落ちたとき、匿名のレポートが修正に役立ちます。動画もGPSもファイル名も送りません — 何が、どのブラウザで起きたかだけ。既定でオン。ここでオフにできます。",
     "settings.privacy.crash.optInDescription": "アプリに問題が起きたとき、匿名化したレポートが修正に役立ちます。動画、GPS、ファイル名は含まず、エラーの内容とブラウザの種類だけです。ここでオンにするまで送信しません。いつでもオフにできます。",
     "settings.playback.section": "再生",
     "settings.playback.units.label": "単位",

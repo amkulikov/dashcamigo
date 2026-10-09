@@ -6,10 +6,10 @@ import { openPortable, test } from "./_fixtures.js";
 test("file playback keeps its context and remembers panels below the video after reload", async ({ page }, info) => {
     await presetLocalStorage(page);
     await page.addInitScript(() => {
-        localStorage.setItem("dashcamigo:hotkeys:seekStepSec", "0.5");
+        localStorage.setItem("everydashcam:hotkeys:seekStepSec", "0.5");
         Object.defineProperty(Element.prototype, "requestFullscreen", { configurable: true, value: undefined });
         Object.defineProperty(Document.prototype, "fullscreenEnabled", { configurable: true, get: () => false });
-        window.addEventListener("dc:ready", () => window.__dashcamigo.setMapProvider("route-only"), { once: true });
+        window.addEventListener("dc:ready", () => window.__everydashcam.setMapProvider("route-only"), { once: true });
     });
     const url = await openPortable(page, info.outputPath("fullscreen"));
     expect(url).toMatch(/^file:/);
@@ -22,7 +22,7 @@ test("file playback keeps its context and remembers panels below the video after
     await page.keyboard.press("ArrowRight");
     await expect.poll(() => masterVideoTime(page)).toBeCloseTo(0.5, 1);
     const time = await masterVideoTime(page);
-    const composition = await page.evaluate(() => window.__dashcamigo.state.composition);
+    const composition = await page.evaluate(() => window.__everydashcam.state.composition);
     const player = page.locator("#player-wrap");
     await page.locator("#player-fullscreen").click();
     await expect(player).toHaveClass(/player-expanded/);
@@ -40,7 +40,7 @@ test("file playback keeps its context and remembers panels below the video after
     await expect(page.locator("#player-controls-pin")).toBeHidden();
     await expect(page.locator("#player-play")).toHaveAttribute("data-paused", "true");
     expect(await masterVideoTime(page)).toBeCloseTo(time, 2);
-    expect(await page.evaluate(() => window.__dashcamigo.state.composition)).toEqual(composition);
+    expect(await page.evaluate(() => window.__everydashcam.state.composition)).toEqual(composition);
     await page.keyboard.press("Escape");
     await expect(player).not.toHaveClass(/player-expanded|player-panels-below/);
     await expect(page.locator("#player-fullscreen")).toBeFocused();
@@ -49,7 +49,7 @@ test("file playback keeps its context and remembers panels below the video after
     await expect(player).toHaveClass(/player-panels-below/);
     await page.locator("#player-fullscreen-exit").click();
     await expect(player).not.toHaveClass(/player-expanded/);
-    expect(await page.evaluate(() => window.__dashcamigo.state.composition)).toEqual(composition);
+    expect(await page.evaluate(() => window.__everydashcam.state.composition)).toEqual(composition);
     await page.reload();
     await expect(page).toHaveURL(url);
     await loadTrip(page, SAMPLE_70MAI);

@@ -9,7 +9,7 @@ for (const locale of Object.keys(manifest.files)) {
     }, info) => {
         void requests;
         await presetLocalStorage(page, { lang: locale === "en" ? "ru" : "en" });
-        await page.addInitScript(() => localStorage.setItem("dashcamigo:mapProvider", "osm-vector"));
+        await page.addInitScript(() => localStorage.setItem("everydashcam:mapProvider", "osm-vector"));
         await openPortable(page, info.outputPath("locales"), locale, "Переименованный просмотрщик.html");
         await expect(page.locator("html")).toHaveAttribute("lang", locale);
         await expect(page.locator("#portable-full-version")).toHaveAttribute(

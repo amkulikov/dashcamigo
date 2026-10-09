@@ -18,18 +18,18 @@ for (const { restoreOrder, changeTheme } of [
         await expect
             .poll(() =>
                 page.evaluate(() => {
-                    const { map, miniMap } = window.__dashcamigo.state;
+                    const { map, miniMap } = window.__everydashcam.state;
                     return Boolean(map?.getLayer("trip-line") && miniMap?.getLayer("trip-line"));
                 }),
             )
             .toBe(true);
         await page.locator("#settings-btn").click();
         const contexts = await page.evaluateHandle(async (surfaces) => {
-            window.__dashcamigo.dom.player.pause();
+            window.__everydashcam.dom.player.pause();
             const contexts = new Map<string, WEBGL_lose_context>();
             await Promise.all(
                 surfaces.map(async (surface) => {
-                    const map = window.__dashcamigo.state[surface]!;
+                    const map = window.__everydashcam.state[surface]!;
                     const extension = map.getCanvas().getContext("webgl2")?.getExtension("WEBGL_lose_context");
                     if (!extension) throw new Error("context loss extension is missing");
                     contexts.set(surface, extension);
@@ -53,7 +53,7 @@ for (const { restoreOrder, changeTheme } of [
             await page.evaluate(
                 (surfaces) =>
                     surfaces.every((surface) => {
-                        const state = window.__dashcamigo.state;
+                        const state = window.__everydashcam.state;
                         return !state[surface === "map" ? "mapReady" : "miniMapReady"] && !state[surface]?.getStyle();
                     }),
                 restoreOrder,
@@ -62,7 +62,7 @@ for (const { restoreOrder, changeTheme } of [
 
         for (const surface of restoreOrder) {
             await contexts.evaluate(async (contexts, surface) => {
-                const map = window.__dashcamigo.state[surface]!;
+                const map = window.__everydashcam.state[surface]!;
                 const loaded = map.once("style.load");
                 contexts.get(surface)!.restoreContext();
                 await loaded;
@@ -73,7 +73,7 @@ for (const { restoreOrder, changeTheme } of [
             await expect
                 .poll(() =>
                     page.evaluate(() => {
-                        const { map, miniMap } = window.__dashcamigo.state;
+                        const { map, miniMap } = window.__everydashcam.state;
                         return [map, miniMap].every(
                             (map) => map?.getPaintProperty("background", "background-color") === "#f5f4ef",
                         );
@@ -84,7 +84,7 @@ for (const { restoreOrder, changeTheme } of [
         await expect
             .poll(() =>
                 page.evaluate(() => {
-                    const { map, miniMap, mapReady, miniMapReady } = window.__dashcamigo.state;
+                    const { map, miniMap, mapReady, miniMapReady } = window.__everydashcam.state;
                     return (
                         mapReady &&
                         miniMapReady &&
@@ -106,7 +106,7 @@ for (const { restoreOrder, changeTheme } of [
         await expect(page.locator("#settings-trip-gap-never")).not.toBeChecked();
         expect(
             await page.evaluate(() => {
-                const { map, miniMap } = window.__dashcamigo.state;
+                const { map, miniMap } = window.__everydashcam.state;
                 return Boolean(map?.getLayer("trip-line") && miniMap?.getLayer("trip-line"));
             }),
         ).toBe(true);
@@ -119,12 +119,12 @@ test("completes the saved chase tilt when the basemap interrupts initial entry",
         localStorage.setItem("dc.viewer.panels", JSON.stringify({ map: true, mapMode: "large" })),
     );
     await page.route("**/styles/dark.json", async (route) => {
-        await page.waitForFunction(() => (window.__dashcamigo.state.map?.getPitch() ?? 0) > 5);
+        await page.waitForFunction(() => (window.__everydashcam.state.map?.getPitch() ?? 0) > 5);
         await route.fallback();
     });
     await gotoApp(page);
     await loadTrip(page);
-    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map?.getPitch() ?? 0)).toBeCloseTo(58, 1);
+    await expect.poll(() => page.evaluate(() => window.__everydashcam.state.map?.getPitch() ?? 0)).toBeCloseTo(58, 1);
 });
 
 test("starts and responds to theme controls when storage access is denied", async ({ page }) => {
@@ -137,7 +137,7 @@ test("starts and responds to theme controls when storage access is denied", asyn
         });
     });
     await gotoApp(page);
-    await expect.poll(() => page.evaluate(() => Boolean(window.__dashcamigo))).toBe(true);
+    await expect.poll(() => page.evaluate(() => Boolean(window.__everydashcam))).toBe(true);
     await page.locator('.theme-toggle-btn[data-theme="light"]').click();
     await expect(page.locator("html")).toHaveClass(/dc-light/);
 });
@@ -149,9 +149,9 @@ test("keeps a paused inspection view when map preferences change during chase", 
     await loadTrip(page);
     await page.locator("#mini-map").click();
     await expect(page.locator("body")).not.toHaveClass(/map-morphing/);
-    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map?.getPitch() ?? 0)).toBeCloseTo(58, 1);
+    await expect.poll(() => page.evaluate(() => window.__everydashcam.state.map?.getPitch() ?? 0)).toBeCloseTo(58, 1);
     await page.evaluate(() => {
-        const { state, dom } = window.__dashcamigo;
+        const { state, dom } = window.__everydashcam;
         dom.player.pause();
         const map = state.map!;
         map.fire("dragstart", { originalEvent: new MouseEvent("mousedown") });
@@ -165,7 +165,7 @@ test("keeps a paused inspection view when map preferences change during chase", 
     await expect
         .poll(() =>
             page.evaluate(() => {
-                const map = window.__dashcamigo.state.map!;
+                const map = window.__everydashcam.state.map!;
                 return (
                     Boolean(map.getLayer("trip-line")) &&
                     map.getPaintProperty("background", "background-color") === "#f5f4ef" &&
@@ -175,7 +175,7 @@ test("keeps a paused inspection view when map preferences change during chase", 
         )
         .toBe(true);
     const view = await page.evaluate(() => {
-        const { state, dom } = window.__dashcamigo;
+        const { state, dom } = window.__everydashcam;
         const map = state.map!;
         return {
             lng: map.getCenter().lng,
@@ -203,9 +203,9 @@ test("raster providers keep the viewer flat and north-up", async ({ page }) => {
     await loadTrip(page);
     await page.locator("#mini-map").click();
     await expect(page.locator("body")).not.toHaveClass(/map-morphing/);
-    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map?.getPitch() ?? 0)).toBeGreaterThan(20);
+    await expect.poll(() => page.evaluate(() => window.__everydashcam.state.map?.getPitch() ?? 0)).toBeGreaterThan(20);
 
-    await page.evaluate(() => window.__dashcamigo.setMapProvider("osm-raster"));
+    await page.evaluate(() => window.__everydashcam.setMapProvider("osm-raster"));
     const rotate = page.locator('.map-follow-seg[data-follow-mode="rotate"]');
     const chase = page.locator('.map-follow-seg[data-follow-mode="chase"]');
     await expect(rotate).toBeDisabled();
@@ -214,7 +214,7 @@ test("raster providers keep the viewer flat and north-up", async ({ page }) => {
     await expect
         .poll(() =>
             page.evaluate(() => {
-                const { state } = window.__dashcamigo;
+                const { state } = window.__everydashcam;
                 return {
                     mode: state.followMode,
                     bearing: state.map?.getBearing(),
@@ -236,20 +236,20 @@ test("raster providers keep the viewer flat and north-up", async ({ page }) => {
     await page.locator("#map .maplibregl-canvas").focus();
     await page.keyboard.press("Shift+ArrowRight");
     await page.keyboard.press("Shift+ArrowUp");
-    expect(await page.evaluate(() => window.__dashcamigo.state.map!.getBearing())).toBe(0);
-    expect(await page.evaluate(() => window.__dashcamigo.state.map!.getPitch())).toBe(0);
-    await page.evaluate(() => window.__dashcamigo.state.map!.jumpTo({ bearing: 90, pitch: 40 }));
-    expect(await page.evaluate(() => window.__dashcamigo.state.map!.getBearing())).toBe(0);
-    expect(await page.evaluate(() => window.__dashcamigo.state.map!.getPitch())).toBe(0);
+    expect(await page.evaluate(() => window.__everydashcam.state.map!.getBearing())).toBe(0);
+    expect(await page.evaluate(() => window.__everydashcam.state.map!.getPitch())).toBe(0);
+    await page.evaluate(() => window.__everydashcam.state.map!.jumpTo({ bearing: 90, pitch: 40 }));
+    expect(await page.evaluate(() => window.__everydashcam.state.map!.getBearing())).toBe(0);
+    expect(await page.evaluate(() => window.__everydashcam.state.map!.getPitch())).toBe(0);
     await expect(page.locator("#settings-map-label-scale-select")).toBeDisabled();
     await expect(page.locator("#map-buildings3d-toggle")).toBeDisabled();
 
-    await page.evaluate(() => window.__dashcamigo.setMapProvider("osm-vector"));
+    await page.evaluate(() => window.__everydashcam.setMapProvider("osm-vector"));
     await expect(rotate).toBeEnabled();
     await expect(chase).toBeEnabled();
     await expect(page.locator("#settings-map-label-scale-select")).toBeEnabled();
     await chase.click();
-    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map?.getPitch() ?? 0)).toBeGreaterThan(20);
+    await expect.poll(() => page.evaluate(() => window.__everydashcam.state.map?.getPitch() ?? 0)).toBeGreaterThan(20);
 });
 
 test("keeps a crossing route and follow camera near the antimeridian", async ({ page }) => {
@@ -261,7 +261,7 @@ test("keeps a crossing route and follow camera near the antimeridian", async ({ 
     await expect(page.locator("body")).not.toHaveClass(/map-morphing/);
     await page.locator('.map-follow-seg[data-follow-mode="off"]').click();
     await page.evaluate(() => {
-        const { state, dom, setMapProvider } = window.__dashcamigo;
+        const { state, dom, setMapProvider } = window.__everydashcam;
         dom.player.pause();
         const trip = state.trips[state.active!.trip]!;
         const startUtc = trip.frames[state.active!.frame]!.startUtc;
@@ -277,7 +277,7 @@ test("keeps a crossing route and follow camera near the antimeridian", async ({ 
     await expect
         .poll(async () =>
             page.evaluate(async () => {
-                const source = window.__dashcamigo.state.map?.getSource("trip-line") as GeoJSONSource | undefined;
+                const source = window.__everydashcam.state.map?.getSource("trip-line") as GeoJSONSource | undefined;
                 if (!source) return false;
                 const data = await source.getData();
                 return (
@@ -288,19 +288,19 @@ test("keeps a crossing route and follow camera near the antimeridian", async ({ 
             }),
         )
         .toBe(true);
-    expect(Math.abs(await page.evaluate(() => window.__dashcamigo.state.map!.getCenter().lng))).toBeGreaterThan(179);
+    expect(Math.abs(await page.evaluate(() => window.__everydashcam.state.map!.getCenter().lng))).toBeGreaterThan(179);
     await page.locator('.map-follow-seg[data-follow-mode="follow"]').click();
     for (const [time, expectedLon] of [
         [0.5, 180],
         [1.5, 180.015],
     ] as const) {
         await page.evaluate((time) => {
-            window.__dashcamigo.dom.player.currentTime = time;
+            window.__everydashcam.dom.player.currentTime = time;
         }, time);
         await expect
             .poll(() =>
                 page.evaluate((lon) => {
-                    const actual = window.__dashcamigo.state.marker!.getLngLat().lng;
+                    const actual = window.__everydashcam.state.marker!.getLngLat().lng;
                     return ((actual - lon + 540) % 360) - 180;
                 }, expectedLon),
             )
@@ -308,7 +308,7 @@ test("keeps a crossing route and follow camera near the antimeridian", async ({ 
         await expect
             .poll(() =>
                 page.evaluate((lon) => {
-                    const actual = window.__dashcamigo.state.map!.getCenter().lng;
+                    const actual = window.__everydashcam.state.map!.getCenter().lng;
                     return ((actual - lon + 540) % 360) - 180;
                 }, expectedLon),
             )

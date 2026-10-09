@@ -15,7 +15,7 @@ import { setExpandedViewPanels } from "./view-menu.js";
 
 const log = createLogger("player");
 const HIDE_DELAY_MS = 1000;
-const PANELS_BELOW_STORAGE_KEY = "dashcamigo:player:panelsBelow";
+const PANELS_BELOW_STORAGE_KEY = "everydashcam:player:panelsBelow";
 const CONTROL_SELECTOR = ".player-bar, .player-chart, .player-readout, .player-fullscreen-actions";
 const OPEN_MENU_SELECTOR =
     ".player-speed-menu:not([hidden]), .view-menu-popover:not([hidden]), .overflow-menu:not([hidden]), .player-volume-popover:not([hidden])";

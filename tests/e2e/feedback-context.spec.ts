@@ -119,7 +119,7 @@ test.describe("contextual feedback", () => {
         await gotoApp(page, "en");
         await loadTrip(page);
         const original = await page.evaluate(() => {
-            const { state, dom } = window.__dashcamigo;
+            const { state, dom } = window.__everydashcam;
             dom.player.pause();
             const active = state.active!;
             const frame = state.trips[active.trip]!.frames[active.frame]!;
@@ -131,7 +131,7 @@ test.describe("contextual feedback", () => {
         });
         await openContextFeedback(page, "gps", "embedded GPS reader failed for the open trip");
         await page.evaluate(() => {
-            const { state } = window.__dashcamigo;
+            const { state } = window.__everydashcam;
             state.active = null;
             state.lastIngestFiles = [];
         });

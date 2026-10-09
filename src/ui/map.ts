@@ -2212,7 +2212,7 @@ function closeMiniMapToViewMenu(): void {
 // Mini-map position persisted as proportions of drag-range (frame - mini -
 // 2*padding) so the relative position survives viewport size changes between
 // sessions. Single JSON key for atomic read/write.
-const MINIMAP_POS_STORAGE_KEY = "dashcamigo:minimap-pos";
+const MINIMAP_POS_STORAGE_KEY = "everydashcam:minimap-pos";
 const MINIMAP_PADDING_PX = 16;
 
 interface MiniMapStoredPos {
@@ -2999,8 +2999,8 @@ const BUILDINGS_3D_LAYER_ID = "dc-buildings-3d";
 const VECTOR_SOURCE_ID = "openmaptiles";
 const BUILDING_SOURCE_LAYER = "building";
 
-const CHASE_PITCH_STORAGE_KEY = "dashcamigo:chase-pitch";
-const CHASE_ADAPTIVE_STORAGE_KEY = "dashcamigo:chase-adaptive-zoom";
+const CHASE_PITCH_STORAGE_KEY = "everydashcam:chase-pitch";
+const CHASE_ADAPTIVE_STORAGE_KEY = "everydashcam:chase-adaptive-zoom";
 
 // User-tunable chase state, hydrated from localStorage in initMap. Kept module-
 // level so the follow loop and the controls share one source of truth.

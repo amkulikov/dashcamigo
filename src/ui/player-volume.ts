@@ -11,8 +11,8 @@ import { state } from "./state.js";
 // Volume and mute are persisted under separate keys so each can be read
 // independently without JSON parsing a tiny two-field blob. Volume: 0..1
 // numeric string. Muted: "1"/"0" - avoid parsing arbitrary "true"/"false".
-const VOLUME_STORAGE_KEY = "dashcamigo:volume";
-const MUTED_STORAGE_KEY = "dashcamigo:muted";
+const VOLUME_STORAGE_KEY = "everydashcam:volume";
+const MUTED_STORAGE_KEY = "everydashcam:muted";
 
 function loadStoredVolume(): number | null {
     try {

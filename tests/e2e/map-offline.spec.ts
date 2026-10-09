@@ -8,7 +8,7 @@ async function expectLocalTrack(page: Page, hasPendingBasemap = false): Promise<
     await expect
         .poll(() =>
             page.evaluate((pending) => {
-                const { map, miniMap } = window.__dashcamigo.state;
+                const { map, miniMap } = window.__everydashcam.state;
                 return Boolean(
                     map?.getSource("openmaptiles") &&
                         map.getLayer("trip-line") &&
@@ -36,7 +36,7 @@ test("draws the local track while remote map bootstrap remains pending, includin
     await expect
         .poll(() =>
             page.evaluate(() => {
-                const layer = window.__dashcamigo.state.map
+                const layer = window.__everydashcam.state.map
                     ?.getStyle()
                     ?.layers.find((layer) => layer.type === "background");
                 return layer?.paint?.["background-color"];
@@ -99,7 +99,7 @@ for (const hasOnlineEvent of [true, false]) {
         await expect
             .poll(() =>
                 page.evaluate(() =>
-                    window.__dashcamigo.dumpLog().some((entry) => entry.msg === "recording metadata complete"),
+                    window.__everydashcam.dumpLog().some((entry) => entry.msg === "recording metadata complete"),
                 ),
             )
             .toBe(true);
@@ -107,8 +107,8 @@ for (const hasOnlineEvent of [true, false]) {
         const requestsBeforeRecovery = bootstrapRequests;
         expect(requestsBeforeRecovery, "the map bootstrap failed before recovery").toBeGreaterThan(0);
         await page.evaluate(() => {
-            window.__dashcamigo.state.followMode = "off";
-            window.__dashcamigo.state.map?.jumpTo({ center: [65, 45], zoom: 9, bearing: 20 });
+            window.__everydashcam.state.followMode = "off";
+            window.__everydashcam.state.map?.jumpTo({ center: [65, 45], zoom: 9, bearing: 20 });
         });
 
         if (hasOnlineEvent) await context.setOffline(true);
@@ -120,8 +120,8 @@ for (const hasOnlineEvent of [true, false]) {
         await expect.poll(() => bootstrapRequests).toBeGreaterThan(requestsBeforeRecovery);
         await expect(page.locator("#offline-banner")).toBeHidden();
         await expectLocalTrack(page);
-        await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map?.getCenter().lng)).toBeCloseTo(65);
-        await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map?.getCenter().lat)).toBeCloseTo(45);
+        await expect.poll(() => page.evaluate(() => window.__everydashcam.state.map?.getCenter().lng)).toBeCloseTo(65);
+        await expect.poll(() => page.evaluate(() => window.__everydashcam.state.map?.getCenter().lat)).toBeCloseTo(45);
         expect(await page.evaluate(() => navigator.onLine)).toBe(true);
     });
 }
@@ -156,7 +156,7 @@ test.describe("map style failures", () => {
         await expect(page.locator("#map-style-error")).toHaveJSProperty("hidden", false);
         const failureSource = await page.evaluate(
             () =>
-                window.__dashcamigo
+                window.__everydashcam
                     .dumpLog()
                     .find((entry) => entry.msg === "map style fetch failed" && entry.ctx?.theme === "light")?.ctx
                     ?.source,
@@ -179,7 +179,7 @@ test.describe("map style failures", () => {
                 await page.locator("#settings-map-provider-select").selectOption("osm-vector");
                 await expect
                     .poll(() =>
-                        page.evaluate(() => Boolean(window.__dashcamigo.state.map?.getSource("osm-shortbread"))),
+                        page.evaluate(() => Boolean(window.__everydashcam.state.map?.getSource("osm-shortbread"))),
                     )
                     .toBe(true);
             } else {
@@ -191,13 +191,13 @@ test.describe("map style failures", () => {
             await expect
                 .poll(() =>
                     page.evaluate(() =>
-                        window.__dashcamigo.dumpLog().some((entry) => entry.msg === "map style fetch failed"),
+                        window.__everydashcam.dumpLog().some((entry) => entry.msg === "map style fetch failed"),
                     ),
                 )
                 .toBe(true);
             await expect(page.locator("#map-style-error")).toHaveJSProperty("hidden", true);
             await expect
-                .poll(() => page.evaluate(() => Boolean(window.__dashcamigo.state.map?.getLayer("trip-line"))))
+                .poll(() => page.evaluate(() => Boolean(window.__everydashcam.state.map?.getLayer("trip-line"))))
                 .toBe(true);
         });
     }
@@ -221,7 +221,7 @@ test.describe("map style failures", () => {
         await expect
             .poll(() =>
                 page.evaluate(() =>
-                    window.__dashcamigo
+                    window.__everydashcam
                         .dumpLog()
                         .some((entry) => entry.msg === "map style loaded" && entry.ctx?.theme === "dark"),
                 ),
@@ -245,7 +245,7 @@ test.describe("map style failures", () => {
         await loadTrip(page);
         await expect(page.locator("#map-style-error")).toHaveJSProperty("hidden", false);
         await expect
-            .poll(() => page.evaluate(() => Boolean(window.__dashcamigo.state.map?.getLayer("trip-line"))))
+            .poll(() => page.evaluate(() => Boolean(window.__everydashcam.state.map?.getLayer("trip-line"))))
             .toBe(true);
         expect(bootstrapRequests).toBe(0);
 

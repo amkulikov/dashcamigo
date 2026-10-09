@@ -6,7 +6,7 @@ import { LANGS } from "./languages.js";
 const script = readFileSync("public/doc-lang.js", "utf-8");
 const languages = LANGS.map(({ code }) => code);
 
-function openPage(pathname: string, search: string, stored: Record<string, string> = {}) {
+function openPage(pathname: string, search: string, stored: Record<string, string> = {}, failWrite?: (key: string) => boolean) {
     const articles = languages.map((lang) => ({
         hidden: lang !== "en",
         getAttribute: () => lang,
@@ -22,6 +22,7 @@ function openPage(pathname: string, search: string, stored: Record<string, strin
         localStorage: {
             getItem: (key: string) => stored[key] ?? null,
             setItem: (key: string, value: string) => {
+                if (failWrite?.(key)) throw new Error("storage full");
                 stored[key] = value;
             },
         },
@@ -33,20 +34,38 @@ function openPage(pathname: string, search: string, stored: Record<string, strin
 describe("standalone page language", () => {
     it("keeps a missing page in the requested URL language", () => {
         for (const lang of languages) {
-            expect(openPage(`/${lang}/missing`, "", { "dashcamigo:doc-lang": "en" })).toEqual({ lang, visible: [lang] });
+            expect(openPage(`/${lang}/missing`, "", { "everydashcam:doc-lang": "en" })).toEqual({ lang, visible: [lang] });
         }
     });
 
     it("lets explicit language links override a saved preference", () => {
-        expect(openPage("/privacy", "?lang=fr", { "dashcamigo:doc-lang": "ru" })).toEqual({ lang: "fr", visible: ["fr"] });
+        expect(openPage("/privacy", "?lang=fr", { "everydashcam:doc-lang": "ru" })).toEqual({ lang: "fr", visible: ["fr"] });
     });
 
     it("uses the app language when no document preference exists", () => {
-        expect(openPage("/404", "", { "dashcamigo:lang": "ja" })).toEqual({ lang: "ja", visible: ["ja"] });
+        expect(openPage("/404", "", { "everydashcam:lang": "ja" })).toEqual({ lang: "ja", visible: ["ja"] });
+    });
+
+    it("reads and writes only the current preference names", () => {
+        const stored: Record<string, string> = { "dashcamigo:doc-lang": "ru", "dashcamigo:lang": "ja" };
+        expect(openPage("/terms", "", stored)).toEqual({ lang: "en", visible: ["en"] });
+        expect(stored).toEqual({
+            "dashcamigo:doc-lang": "ru",
+            "dashcamigo:lang": "ja",
+            "everydashcam:doc-lang": "en",
+        });
+        stored["everydashcam:doc-lang"] = "fr";
+        expect(openPage("/terms", "", stored)).toEqual({ lang: "fr", visible: ["fr"] });
+    });
+
+    it("shows the requested language when saving it fails", () => {
+        const stored = { "everydashcam:doc-lang": "ru" };
+        expect(openPage("/terms", "?lang=de", stored, () => true)).toEqual({ lang: "de", visible: ["de"] });
+        expect(stored["everydashcam:doc-lang"]).toBe("ru");
     });
 
     it("falls back to English for unsupported languages", () => {
-        expect(openPage("/missing", "?lang=xx", { "dashcamigo:doc-lang": "xx" })).toEqual({ lang: "en", visible: ["en"] });
+        expect(openPage("/missing", "?lang=xx", { "everydashcam:doc-lang": "xx" })).toEqual({ lang: "en", visible: ["en"] });
     });
 
     it("provides a translated error and a locale home link for every language", () => {

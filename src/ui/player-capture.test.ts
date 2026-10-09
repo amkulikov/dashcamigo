@@ -124,6 +124,10 @@ describe("captureCurrentFrame privacy blur", () => {
             { horizontal: false, vertical: false },
         );
         expect(mocks.downloadBlob).toHaveBeenCalledOnce();
+        expect(mocks.downloadBlob).toHaveBeenCalledWith(
+            expect.any(Blob),
+            expect.stringMatching(/^everydashcam_\d{8}_\d{6}_frame\.jpg$/),
+        );
     });
 
     it("refuses a JPG while the requested seek still displays older pixels", async () => {

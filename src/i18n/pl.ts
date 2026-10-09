@@ -898,7 +898,6 @@ export const plDict = {
     "settings.privacy.policyLink": "Polityka prywatności",
 
     "settings.privacy.crash.label": "Raporty awarii",
-    "settings.privacy.crash.description": "Gdy aplikacja się zawiesi, anonimowy raport pomaga nam to naprawić — bez wideo, bez GPS, bez nazw plików, tylko co i w której przeglądarce poszło nie tak. Domyślnie włączone; tutaj możesz wyłączyć.",
     "settings.privacy.crash.optInDescription": "Gdy aplikacja ulegnie awarii, zanonimizowany raport pomaga nam ją naprawić. Bez wideo, GPS i nazw plików — tylko opis błędu i przeglądarka. Wyłączone, dopóki nie włączysz tutaj. Możesz wyłączyć w dowolnej chwili.",
     "settings.playback.section": "Odtwarzanie",
     "settings.playback.units.label": "Jednostki miary",

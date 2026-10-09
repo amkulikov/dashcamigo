@@ -5,7 +5,7 @@ async function waitForMapIdle(page: Page): Promise<void> {
     await page.evaluate(
         () =>
             new Promise<void>((resolve, reject) => {
-                const map = window.__dashcamigo.state.map;
+                const map = window.__everydashcam.state.map;
                 if (!map) throw new Error("map unavailable");
                 const timeout = setTimeout(() => {
                     map.off("idle", onIdle);
@@ -24,7 +24,7 @@ async function waitForMapIdle(page: Page): Promise<void> {
 
 async function seekPaused(page: Page, time: number): Promise<void> {
     await page.evaluate(async (target) => {
-        const player = window.__dashcamigo.dom.player;
+        const player = window.__everydashcam.dom.player;
         player.pause();
         if (Math.abs(player.currentTime - target) < 0.0001) return;
         await new Promise<void>((resolve, reject) => {
@@ -44,7 +44,7 @@ async function seekPaused(page: Page, time: number): Promise<void> {
     await expect
         .poll(() =>
             page.evaluate(() => {
-                const player = window.__dashcamigo.dom.player;
+                const player = window.__everydashcam.dom.player;
                 return player.paused && !player.seeking && player.readyState >= 2;
             }),
         )
@@ -64,13 +64,13 @@ async function openChase(page: Page, withoutFrameCallbacks = false): Promise<voi
     await seekPaused(page, 0);
     await page.locator("#mini-map").click();
     await expect(page.locator("body")).not.toHaveClass(/map-morphing/);
-    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map?.getPitch() ?? 0)).toBeCloseTo(58, 1);
+    await expect.poll(() => page.evaluate(() => window.__everydashcam.state.map?.getPitch() ?? 0)).toBeCloseTo(58, 1);
     await waitForMapIdle(page);
 }
 
 async function measureChase(page: Page) {
     return page.evaluate(async () => {
-        const { state, dom } = window.__dashcamigo;
+        const { state, dom } = window.__everydashcam;
         const map = state.map;
         if (!map || !state.active) throw new Error("Chase playback unavailable");
         const player = dom.player;
@@ -220,12 +220,12 @@ test("Chase paints at the presented video cadence while playback and following a
 
 test("a paused seek updates the Chase camera and returns to idle without new video frames", async ({ page }) => {
     await openChase(page);
-    const before = await page.evaluate(() => window.__dashcamigo.state.map!.getCenter().toArray());
+    const before = await page.evaluate(() => window.__everydashcam.state.map!.getCenter().toArray());
     await seekPaused(page, 1.4);
     await expect
         .poll(() =>
             page.evaluate(() => {
-                const { map, marker } = window.__dashcamigo.state;
+                const { map, marker } = window.__everydashcam.state;
                 if (!map || !marker) return Number.POSITIVE_INFINITY;
                 const center = map.getCenter();
                 const position = marker.getLngLat();
@@ -238,7 +238,7 @@ test("a paused seek updates the Chase camera and returns to idle without new vid
     // quiet window after the follow filter converges, within a bounded deadline.
     await expect(async () => {
         const result = await page.evaluate(async () => {
-            const { state, dom } = window.__dashcamigo;
+            const { state, dom } = window.__everydashcam;
             const map = state.map!;
             let renders = 0;
             const onRender = (): void => {
@@ -267,7 +267,7 @@ test("a paused seek updates the Chase camera and returns to idle without new vid
 test("zoom, drag and recenter remain responsive during frame-paced Chase", async ({ page }) => {
     await openChase(page);
     const start = await page.evaluate(async () => {
-        const { state, dom } = window.__dashcamigo;
+        const { state, dom } = window.__everydashcam;
         dom.player.playbackRate = 0.25;
         dom.player.muted = true;
         await dom.player.play();
@@ -275,10 +275,10 @@ test("zoom, drag and recenter remain responsive during frame-paced Chase", async
     });
     await page.locator("#map .maplibregl-ctrl-zoom-in").click();
     await expect
-        .poll(() => page.evaluate(() => window.__dashcamigo.state.map!.getZoom()))
+        .poll(() => page.evaluate(() => window.__everydashcam.state.map!.getZoom()))
         .toBeGreaterThan(start.zoom + 0.6);
-    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map!.isMoving())).toBe(false);
-    const beforeDrag = await page.evaluate(() => window.__dashcamigo.state.map!.getCenter().toArray());
+    await expect.poll(() => page.evaluate(() => window.__everydashcam.state.map!.isMoving())).toBe(false);
+    const beforeDrag = await page.evaluate(() => window.__everydashcam.state.map!.getCenter().toArray());
     const canvas = await page.locator("#map canvas.maplibregl-canvas").boundingBox();
     if (!canvas) throw new Error("map canvas unavailable");
     const x = canvas.x + canvas.width * 0.5;
@@ -290,7 +290,7 @@ test("zoom, drag and recenter remain responsive during frame-paced Chase", async
     await expect
         .poll(() =>
             page.evaluate((before) => {
-                const center = window.__dashcamigo.state.map!.getCenter();
+                const center = window.__everydashcam.state.map!.getCenter();
                 return Math.hypot(center.lng - before[0], center.lat - before[1]);
             }, beforeDrag),
         )
@@ -299,7 +299,7 @@ test("zoom, drag and recenter remain responsive during frame-paced Chase", async
     await expect
         .poll(() =>
             page.evaluate(() => {
-                const { map, marker } = window.__dashcamigo.state;
+                const { map, marker } = window.__everydashcam.state;
                 if (!map || !marker) return Number.POSITIVE_INFINITY;
                 const car = map.project(marker.getLngLat());
                 const center = map.project(map.getCenter());
@@ -308,9 +308,9 @@ test("zoom, drag and recenter remain responsive during frame-paced Chase", async
         )
         .toBeLessThan(20);
     const after = await page.evaluate(() => ({
-        mode: window.__dashcamigo.state.followMode,
-        paused: window.__dashcamigo.dom.player.paused,
-        time: window.__dashcamigo.dom.player.currentTime,
+        mode: window.__everydashcam.state.followMode,
+        paused: window.__everydashcam.dom.player.paused,
+        time: window.__everydashcam.dom.player.currentTime,
     }));
     expect(after.mode).toBe("chase");
     expect(after.paused).toBe(false);
@@ -319,10 +319,10 @@ test("zoom, drag and recenter remain responsive during frame-paced Chase", async
 
 test("Chase follows a different physical master after channel reordering", async ({ page }, testInfo) => {
     await openChase(page);
-    const previous = await page.evaluateHandle(() => window.__dashcamigo.dom.player);
+    const previous = await page.evaluateHandle(() => window.__everydashcam.dom.player);
     try {
         await page.evaluate(async () => {
-            const player = window.__dashcamigo.dom.player;
+            const player = window.__everydashcam.dom.player;
             player.playbackRate = 0.25;
             player.muted = true;
             await player.play();
@@ -335,7 +335,7 @@ test("Chase follows a different physical master after channel reordering", async
         await page.mouse.move(front.x + front.width / 2, front.y + front.height / 2, { steps: 8 });
         await page.mouse.up();
         await expect(page.locator(".top-panel__channel-chip").first()).toHaveAttribute("data-channel", "rear");
-        expect(await page.evaluate((old) => window.__dashcamigo.dom.player !== old, previous)).toBe(true);
+        expect(await page.evaluate((old) => window.__everydashcam.dom.player !== old, previous)).toBe(true);
         const result = await measureChase(page);
         await testInfo.attach("master-swap-cadence", { body: JSON.stringify(result), contentType: "application/json" });
         expectVideoCadence(result);

@@ -238,7 +238,7 @@ downloadButton.addEventListener("click", () => {
     const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }));
     const link = document.createElement("a");
     link.href = url;
-    link.download = `dashcamigo-encoder-report-${report.createdAt.replaceAll(":", "-").replace(/\.\d+Z$/, "Z")}.json`;
+    link.download = `everydashcam-encoder-report-${report.createdAt.replaceAll(":", "-").replace(/\.\d+Z$/, "Z")}.json`;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 30_000);
 });

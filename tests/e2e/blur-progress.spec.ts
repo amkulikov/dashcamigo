@@ -28,7 +28,7 @@ async function openBlurProgress(page: Page): Promise<void> {
             value: { requestAdapter: async () => ({}) },
             configurable: true,
         });
-        for (const url of urls) localStorage.setItem(`dashcamigo:blurAssetDownloaded:${url}`, "1");
+        for (const url of urls) localStorage.setItem(`everydashcam:blurAssetDownloaded:${url}`, "1");
         const nativeFetch = window.fetch.bind(window);
         window.fetch = (input, init) => {
             const url = new URL(input instanceof Request ? input.url : String(input), location.href).pathname;
@@ -233,7 +233,7 @@ test("an empty detection result preserves the manual bitrate captured at Save", 
     expect(
         await page.evaluate(
             () =>
-                window.__dashcamigo
+                window.__everydashcam
                     .dumpLog()
                     .reverse()
                     .find((record) => record.msg === "export settings")?.ctx,

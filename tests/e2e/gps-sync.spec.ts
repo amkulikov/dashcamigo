@@ -50,10 +50,10 @@ test.describe("GPS synchronization", () => {
 
         // Calibration must not lock the surface it is calibrating. A real user
         // click seeks the video while the panel stays open.
-        const beforeSeek = await page.evaluate(() => window.__dashcamigo.dom.player.currentTime);
+        const beforeSeek = await page.evaluate(() => window.__everydashcam.dom.player.currentTime);
         await page.locator("#player-step-fwd").click();
         await expect
-            .poll(() => page.evaluate(() => window.__dashcamigo.dom.player.currentTime))
+            .poll(() => page.evaluate(() => window.__everydashcam.dom.player.currentTime))
             .toBeGreaterThan(beforeSeek);
         await expect(panel).toBeVisible();
 
@@ -82,7 +82,7 @@ test.describe("GPS synchronization", () => {
         await expect(page.locator("#gps-sync-pill")).toBeHidden();
 
         const videoStart = await page.evaluate(() => {
-            const state = window.__dashcamigo.state;
+            const state = window.__everydashcam.state;
             return state.trips[state.active!.trip]!.timeline.segments[0]!.wallStart;
         });
         const routeStart = videoStart + 14 * 24 * 60 * 60;
@@ -113,7 +113,7 @@ test.describe("GPS synchronization", () => {
         await expect(page.locator("#notif-drawer-list")).toContainText("GPX track attached");
 
         const initial = await page.evaluate(() => {
-            const state = window.__dashcamigo.state;
+            const state = window.__everydashcam.state;
             const trip = state.trips[state.active!.trip]!;
             const candidate = trip.frames[0]!.channels.front!;
             return {
@@ -136,7 +136,7 @@ test.describe("GPS synchronization", () => {
         await expect
             .poll(() =>
                 page.evaluate(() => {
-                    const state = window.__dashcamigo.state;
+                    const state = window.__everydashcam.state;
                     return state.trips[state.active!.trip]!.records.length;
                 }),
             )
@@ -147,7 +147,7 @@ test.describe("GPS synchronization", () => {
         await expect
             .poll(() =>
                 page.evaluate(() => {
-                    const state = window.__dashcamigo.state;
+                    const state = window.__everydashcam.state;
                     return state.trips[state.active!.trip]!.records.length;
                 }),
             )
@@ -159,7 +159,7 @@ test.describe("GPS synchronization", () => {
         const explicitOffset = Number(await offsetInput.inputValue());
         expect(explicitOffset).toBeCloseTo(alignedOffset + 1, 3);
         const shiftedTrackStart = await page.evaluate(() => {
-            const state = window.__dashcamigo.state;
+            const state = window.__everydashcam.state;
             const trip = state.trips[state.active!.trip]!;
             return trip.records[0]!.unixSeconds;
         });
@@ -262,7 +262,7 @@ test.describe("GPS synchronization", () => {
         await expect(page.locator("#gps-sync-pill")).toBeVisible({ timeout: 30_000 });
         await expect(page.locator("#notif-drawer-list")).toContainText("GPX track attached");
         const records = await page.evaluate(() => {
-            const state = window.__dashcamigo.state;
+            const state = window.__everydashcam.state;
             return state.trips[state.active!.trip]!.frames[0]!.channels.front!.records.map((record) => ({
                 lat: record.lat,
                 external: record.externalTrack,
@@ -296,7 +296,7 @@ test.describe("GPS synchronization", () => {
         await expect(page.locator("#gps-sync-pill")).toBeHidden();
         expect(
             await page.evaluate(() => {
-                const state = window.__dashcamigo.state;
+                const state = window.__everydashcam.state;
                 return state.trips[0]!.frames[0]!.channels.front!.records.length;
             }),
         ).toBe(0);
@@ -306,7 +306,7 @@ test.describe("GPS synchronization", () => {
         await loadTrip(page, SAMPLE_GOPRO);
         const findGpsTrip = () =>
             page.evaluate(() =>
-                window.__dashcamigo.state.trips.findIndex((trip) =>
+                window.__everydashcam.state.trips.findIndex((trip) =>
                     trip.frames.some((frame) =>
                         Object.values(frame.channels).some((candidate) =>
                             candidate?.records.some(
@@ -365,7 +365,7 @@ test.describe("GPS synchronization", () => {
 
         await expect(page.locator("#gps-sync-pill")).toBeVisible();
         const latitudes = await page.evaluate(() => {
-            const state = window.__dashcamigo.state;
+            const state = window.__everydashcam.state;
             return state.trips[state.active!.trip]!.frames[0]!.channels.front!.records.map((record) => record.lat);
         });
         expect(latitudes).toEqual([43.1]);

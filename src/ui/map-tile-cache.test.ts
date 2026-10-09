@@ -41,7 +41,7 @@ describe("shared map tile cache", () => {
         const tile = "https://tile.openstreetmap.org/12/2200/1400.png";
         const transformed = transformMapTileRequest(tile, "Tile");
 
-        expect(transformed?.url).toContain(encodeURIComponent(tile));
+        expect(transformed?.url).toBe(`everydashcam-tile://${encodeURIComponent(tile)}`);
         expect(
             transformMapTileRequest("https://tiles.openfreemap.org/sprites/ofm/sprite.png", "SpriteImage")?.url,
         ).toContain(encodeURIComponent("https://tiles.openfreemap.org/sprites/ofm/sprite.png"));
@@ -246,7 +246,8 @@ describe("shared map tile cache", () => {
 
     it("registers a protocol handler that unwraps the original tile URL", async () => {
         let loader: AddProtocolAction = async () => ({ data: new ArrayBuffer(0) });
-        registerSharedMapTileCache((_protocol, registered) => {
+        registerSharedMapTileCache((protocol, registered) => {
+            expect(protocol).toBe("everydashcam-tile");
             loader = registered;
         });
         const tile = "https://tile.openstreetmap.org/0/0/0.png";

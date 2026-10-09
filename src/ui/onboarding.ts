@@ -77,11 +77,11 @@ interface OnboardTour {
 const MOBILE_MEDIA = "(max-width: 767px), (max-height: 500px) and (orientation: landscape)";
 
 function storageKey(id: OnboardTourId): string {
-    return `dashcamigo:onboarding:${id}`;
+    return `everydashcam:onboarding:${id}`;
 }
 
 function offeredStorageKey(id: OnboardTourId): string {
-    return `dashcamigo:onboarding:${id}:offered`;
+    return `everydashcam:onboarding:${id}:offered`;
 }
 
 /** True if the user already completed or explicitly skipped this tour. */

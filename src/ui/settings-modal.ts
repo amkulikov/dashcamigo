@@ -21,12 +21,7 @@ import {
 import { t } from "../i18n/index.js";
 import { getEncoderPreference, isEncoderPreference, setEncoderPreference } from "../encoder-pref.js";
 import { createLogger, downloadLogBuffer } from "../log.js";
-import {
-    crashReportingEnabled,
-    isCrashReportingBuilt,
-    isCrashReportingOptIn,
-    setCrashReportingEnabled,
-} from "../sentry.js";
+import { crashReportingEnabled, isCrashReportingBuilt, setCrashReportingEnabled } from "../sentry.js";
 import { setTripGapSec, tripAllCandidates, getTripGapSec, projectEventsOntoTimeline } from "../trips.js";
 import {
     DEFAULT_INDEX_CACHE_LIMIT_BYTES,
@@ -102,7 +97,7 @@ function syncCrashToggleFromState(): void {
 function initMigrationSection(): void {
     const section = document.getElementById("settings-migration-section");
     if (!section) return;
-    const isNewAddress = isCrashReportingOptIn();
+    const isNewAddress = /^(?:(?:www|ru|beta)\.)?everydashcam\.app$/.test(window.location.hostname);
     const isOldAddress = /^(?:(?:www|ru|beta)\.)?dashcamigo\.app$/.test(window.location.hostname);
     section.hidden = !isOldAddress && !isNewAddress;
     const oldAddress = document.getElementById("settings-migration-old");
@@ -388,13 +383,6 @@ export function initSettingsModal(): void {
         const privacySection = document.getElementById("settings-privacy-section");
         if (privacySection) privacySection.hidden = true;
         log.debug("privacy section hidden (no crash reporting)");
-    }
-    if (!__PORTABLE__ && isCrashReportingOptIn()) {
-        const description = document.getElementById("settings-crash-description");
-        if (description) {
-            description.dataset.i18n = "settings.privacy.crash.optInDescription";
-            description.textContent = t("settings.privacy.crash.optInDescription");
-        }
     }
 
     settingsBtn?.addEventListener("click", () => {

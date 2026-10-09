@@ -9,7 +9,7 @@ import type { AddProtocolAction, RequestParameters, RequestTransformFunction } f
 import { reportMapTileNetworkError, reportMapTilesOk } from "./connectivity.js";
 import { getMapProvider, MAP_PROVIDER_REQUEST_TIMEOUT_MS, mapProviderForTileUrl } from "./map-provider.js";
 
-const TILE_PROTOCOL = "dashcamigo-tile";
+const TILE_PROTOCOL = "everydashcam-tile";
 const TILE_PROTOCOL_PREFIX = `${TILE_PROTOCOL}://`;
 
 // Raw response bytes only. MapLibre still owns its per-map decoded/GPU caches,

@@ -510,18 +510,17 @@ async function presetLocalStorage(context, theme = "dark", marker = null) {
             try {
                 const now = String(Date.now());
                 localStorage.setItem("dc-theme", chosenTheme);
-                localStorage.setItem("dashcamigo:upload-warning-shown-at", now);
-                localStorage.setItem("dashcamigo:pwa:toast:shown", "1");
-                localStorage.setItem("dashcamigo:pwa:toast:dismissedAt", now);
-                localStorage.setItem("dashcamigo:lang-banner-dismissed", "1");
+                localStorage.setItem("everydashcam:upload-warning-shown-at", now);
+                localStorage.setItem("everydashcam:pwa:toast:shown", "1");
+                localStorage.setItem("everydashcam:pwa:toast:dismissedAt", now);
                 for (const id of ["ingest", "player", "export", "multichannel"]) {
-                    localStorage.setItem(`dashcamigo:onboarding:${id}`, "1");
+                    localStorage.setItem(`everydashcam:onboarding:${id}`, "1");
                 }
-                localStorage.setItem("dashcamigo:lang", "en");
+                localStorage.setItem("everydashcam:lang", "en");
                 // Metric units: the synthetic track is a German forest road - km/h
                 // readouts keep the shot internally consistent (en-US defaults to mph).
-                localStorage.setItem("dashcamigo:units", "metric");
-                if (mapMarker) localStorage.setItem("dashcamigo:mapMarker", JSON.stringify(mapMarker));
+                localStorage.setItem("everydashcam:units", "metric");
+                if (mapMarker) localStorage.setItem("everydashcam:mapMarker", JSON.stringify(mapMarker));
             } catch {
                 /* private mode - ignore */
             }
@@ -535,7 +534,7 @@ async function presetLocalStorage(context, theme = "dark", marker = null) {
 async function waitForMapIdle(page) {
     await page.waitForFunction(
         () => {
-            const map = window.__dashcamigo?.state?.map;
+            const map = window.__everydashcam?.state?.map;
             if (!map?.getSource("trip-line")) return false;
             const hasBasemap = Object.values(map.getStyle()?.sources ?? {}).some(
                 (source) => source.type === "vector" || source.type === "raster",
@@ -584,7 +583,7 @@ async function selectTopTrip(page) {
     await page.waitForFunction(
         () => {
             const button = document.getElementById("player-map");
-            return window.__dashcamigo?.state?.hasTrack && button instanceof HTMLButtonElement && !button.disabled;
+            return window.__everydashcam?.state?.hasTrack && button instanceof HTMLButtonElement && !button.disabled;
         },
         undefined,
         { timeout: 15_000 },
@@ -678,7 +677,7 @@ async function shotDesktop(browser, fixtureRoot) {
     // active trip's whole track so the speed-colored winding line fills the map.
     await page.locator('.map-follow-seg[data-follow-mode="off"]').click();
     await page.evaluate(() => {
-        const st = window.__dashcamigo.state;
+        const st = window.__everydashcam.state;
         const map = st.map;
         const coords = st.miniMapData?.coords;
         if (!map || !coords?.length) return;

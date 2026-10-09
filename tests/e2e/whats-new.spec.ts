@@ -6,7 +6,7 @@
 import { LATEST_CHANGELOG_ID } from "../../src/changelog/latest.js";
 import { DESKTOP, expect, gotoApp, presetLocalStorage, test } from "./_fixtures.js";
 
-const SEEN_KEY = "dashcamigo:changelog:lastSeenId";
+const SEEN_KEY = "everydashcam:changelog:lastSeenId";
 
 test.describe("what's new panel", () => {
     // The sparkles button is the first topbar item to collapse into the kebab,

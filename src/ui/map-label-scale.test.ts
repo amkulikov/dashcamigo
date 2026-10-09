@@ -52,8 +52,12 @@ describe("map label preferences", () => {
     });
 
     it("restores stored preferences before a session choice", () => {
+        const stored = new Map([
+            ["everydashcam:mapLabelScale", "1.5"],
+            ["everydashcam:streetLabelDensity", "more"],
+        ]);
         vi.stubGlobal("localStorage", {
-            getItem: (key: string) => (key === "dashcamigo:mapLabelScale" ? "1.5" : "more"),
+            getItem: (key: string) => stored.get(key) ?? null,
         });
 
         expect(getMapLabelScale()).toBe(1.5);

@@ -9,7 +9,7 @@ import { usableCandidateRecords } from "./stale-gps.js";
 import { fileIdentityKey } from "./persist/identity.js";
 import { applyGpsSyncToTrip, rawTripGpsRecords, type Trip, tripAllCandidates } from "./trips.js";
 
-const TRIP_SYNC_STORAGE_KEY = "dashcamigo:trips:gpsSync";
+const TRIP_SYNC_STORAGE_KEY = "everydashcam:trips:gpsSync";
 const MAX_STORED_TRIPS = 200;
 
 // A camera reset to 1970 needs decades of correction. Two centuries cover

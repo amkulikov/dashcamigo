@@ -39,7 +39,7 @@ import "./styles/tokens.css";
 import "./styles/index.css";
 
 import { applyStaticI18n, getCurrentLang } from "./i18n/index.js";
-import { createLogger, downloadLogBuffer, getLogBuffer } from "./log.js";
+import { createLogger, downloadLogBuffer, getLogBuffer, setLogRules } from "./log.js";
 import { initSentry } from "./sentry.js";
 import { APP_VERSION } from "./version.js";
 import { initPortableUpdates } from "./portable/updates.js";
@@ -206,18 +206,21 @@ if (typeof window !== "undefined" && window.matchMedia) {
 // DevTools convenience handle. Not used in application code.
 // dumpLog/downloadLog are the primary local diagnostic channel for bug
 // reports: no backend - the ~500-entry ring buffer is the local way to get
-// logs out of a user's session (optional opt-out Sentry augments it). See
+// logs out of a user's session (optional opt-in Sentry augments it). See
 // src/log.ts + src/sentry.ts.
 declare global {
     interface Window {
-        __dashcamigo: {
+        __everydashcam: {
             state: AppState;
             dom: typeof dom;
             dumpLog: typeof getLogBuffer;
             downloadLog: typeof downloadLogBuffer;
+            setLogRules: typeof setLogRules;
             setMapProvider: (provider: MapProvider) => MapProvider;
             mapTileCacheStats: () => SharedTileCacheStats;
         };
+        /** Compatibility alias for integrations using the released DevTools handle. */
+        __dashcamigo: Window["__everydashcam"];
         /** Shows the "updating the app" line over the splash/landing. Defined
          *  by the dc-bootstrap inline script in index.html; the asset-retry
          *  reload path below reuses it so both retry layers announce
@@ -225,14 +228,16 @@ declare global {
         __dcRetryNote?: () => void;
     }
 }
-window.__dashcamigo = {
+window.__everydashcam = {
     state,
     dom,
     dumpLog: getLogBuffer,
     downloadLog: downloadLogBuffer,
+    setLogRules,
     setMapProvider: forceMapProvider,
     mapTileCacheStats: getSharedMapTileCacheStats,
 };
+window.__dashcamigo = window.__everydashcam;
 
 // Global uncaught-error hooks. Regular try/catch misses sync throws from
 // event listeners and unhandled promise rejections. We route both through
@@ -366,11 +371,11 @@ window.addEventListener("beforeunload", (ev) => {
 // for this user" investigations stall immediately.
 //
 // Level=info; prod default min=warn, so it doesn't appear in the console
-// but is always captured in the buffer. Visible via __dashcamigo.downloadLog().
+// but is always captured in the buffer. Visible via __everydashcam.downloadLog().
 {
     let localStorageWorks = false;
     try {
-        const k = "__dashcamigo:probe";
+        const k = "__everydashcam:probe";
         localStorage.setItem(k, "1");
         localStorage.removeItem(k);
         localStorageWorks = true;

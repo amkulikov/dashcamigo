@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url";
 import { expect, type Page, test } from "@playwright/test";
 import { makeTests, TEST_TIMEOUT_MS, type TestResult } from "../../scripts/encoder-test/shared.js";
 
-const file = pathToFileURL(resolve("dist-diagnostics/dashcamigo-encoder-test.html")).href;
+const file = pathToFileURL(resolve("dist-diagnostics/everydashcam-encoder-test.html")).href;
 
 interface DownloadedReport {
     status: string;
@@ -17,7 +17,7 @@ async function downloadReport(page: Page): Promise<DownloadedReport> {
     const download = page.waitForEvent("download");
     await page.getByRole("button", { name: "Download report" }).click();
     const saved = await download;
-    expect(saved.suggestedFilename()).toMatch(/^dashcamigo-encoder-report-.*\.json$/);
+    expect(saved.suggestedFilename()).toMatch(/^everydashcam-encoder-report-.*\.json$/);
     await saved.saveAs(test.info().outputPath("report.json"));
     const text = await readFile((await saved.path())!, "utf8");
     expect(text).not.toContain("file:///");

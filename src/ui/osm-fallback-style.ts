@@ -188,7 +188,7 @@ function shortbreadLayers(theme: MapStyleId): LayerSpecification[] {
             type: "fill",
             source,
             "source-layer": "land",
-            metadata: { "dashcamigo:role": "park" },
+            metadata: { "everydashcam:role": "park" },
             filter: [
                 "in",
                 ["get", "kind"],
@@ -365,7 +365,7 @@ function shortbreadLayers(theme: MapStyleId): LayerSpecification[] {
                 source,
                 "source-layer": sourceLayer,
                 minzoom: 17,
-                metadata: { "dashcamigo:role": "address" },
+                metadata: { "everydashcam:role": "address" },
                 filter: ["has", "housenumber"],
                 layout: {
                     "text-field": ["to-string", ["get", "housenumber"]],
@@ -382,7 +382,7 @@ function shortbreadLayers(theme: MapStyleId): LayerSpecification[] {
             source,
             "source-layer": "pois",
             minzoom: 14,
-            metadata: { "dashcamigo:role": "poi" },
+            metadata: { "everydashcam:role": "poi" },
             filter: [
                 "all",
                 ["has", "name"],
@@ -403,7 +403,7 @@ function shortbreadLayers(theme: MapStyleId): LayerSpecification[] {
             source,
             "source-layer": "pois",
             minzoom: 14,
-            metadata: { "dashcamigo:role": "poi-driver" },
+            metadata: { "everydashcam:role": "poi-driver" },
             filter: [
                 "all",
                 ["has", "name"],
@@ -554,7 +554,7 @@ function shortbreadLayers(theme: MapStyleId): LayerSpecification[] {
     for (const layer of layers) {
         if (layer.metadata) continue;
         const role = "source-layer" in layer ? roles[layer["source-layer"] ?? ""] : "background";
-        layer.metadata = { "dashcamigo:role": role };
+        layer.metadata = { "everydashcam:role": role };
     }
     return layers;
 }

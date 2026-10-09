@@ -14,7 +14,7 @@ import { type Trip, tripAllCandidates } from "../trips.js";
 import { CANONICAL_CHANNEL_ORDER, defaultLayoutForCount, type Layout, layoutSlotCount, state } from "./state.js";
 
 const log = createLogger("player");
-const STORAGE_KEY = "dashcamigo:player:layoutByCameraSet";
+const STORAGE_KEY = "everydashcam:player:layoutByCameraSet";
 // Keep the map bounded - a heavy user could otherwise accrete an entry per rig
 // forever. LRU by recency (most-recently-saved first).
 const MAX_ENTRIES = 40;

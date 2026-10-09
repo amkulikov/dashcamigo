@@ -5,7 +5,7 @@
 
 import { dom } from "./dom.js";
 
-const SIDEBAR_WIDTH_KEY = "dashcamigo:sidebar-width";
+const SIDEBAR_WIDTH_KEY = "everydashcam:sidebar-width";
 const SIDEBAR_MIN = 200;
 const SIDEBAR_MAX = 600;
 

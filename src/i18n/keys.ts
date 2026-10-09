@@ -1156,19 +1156,18 @@ export type I18nKey =
     | "settings.privacy.policyLink"
     // Crash reports (Sentry, errors-only).
     | "settings.privacy.crash.label"
-    | "settings.privacy.crash.description"
     | "settings.privacy.crash.optInDescription"
 
     // Settings -> Playback: unit preference (km/h + km vs mph + mi). Affects
     // chart speed axis, map popup speed, trip distance display, feedback report.
-    // Stored in localStorage["dashcamigo:units"]; default autodetected from
+    // Stored in localStorage["everydashcam:units"]; default autodetected from
     // navigator.language (US/UK/Liberia/Myanmar/Belize -> imperial).
     | "settings.playback.section"
     | "settings.playback.units.label"
     | "settings.playback.units.metric"
     | "settings.playback.units.imperial"
     // Arrow-key seek step. Two separate inputs - plain Arrow and Shift+Arrow.
-    // Defaults 5s / 30s. Stored in localStorage["dashcamigo:hotkeys:seekStepSec"]
+    // Defaults 5s / 30s. Stored in localStorage["everydashcam:hotkeys:seekStepSec"]
     // and "...seekStepShiftSec".
     | "settings.playback.seekStep.label"
     | "settings.playback.seekStep.description"
@@ -1178,7 +1177,7 @@ export type I18nKey =
 
     // Settings -> Map: label-size multiplier for street/place names on the live
     // maps. Presets in src/ui/map-label-scale.ts (stored in
-    // localStorage["dashcamigo:mapLabelScale"]); the export overlay map has its
+    // localStorage["everydashcam:mapLabelScale"]); the export overlay map has its
     // own per-export control (export.overlays.mapLabelSize).
     | "settings.map.section"
     | "settings.map.provider.label"
@@ -1237,7 +1236,7 @@ export type I18nKey =
     // Below this value, accel-spikes don't get a marker on the chart/map/strip.
     // Default 0.5g (tuned for 70mai x800). User can raise it on rough roads
     // (suspension noise) or lower it for a more sensitive trip review.
-    // Stored in localStorage["dashcamigo:events:brakeThresholdG"]; "off"
+    // Stored in localStorage["everydashcam:events:brakeThresholdG"]; "off"
     // disables detection entirely.
     | "settings.events.section"
     | "settings.events.threshold.label"
@@ -1249,7 +1248,7 @@ export type I18nKey =
     // consecutive clips before they get split into separate trips. Default 30s;
     // presets cover stopover-friendly long hauls (5m/15m/60m) and "treat
     // everything as one trip" (off). Stored as seconds (or "off") in
-    // localStorage["dashcamigo:trips:gapSec"].
+    // localStorage["everydashcam:trips:gapSec"].
     | "settings.ingest.section"
     | "settings.ingest.gap.label"
     | "settings.ingest.gap.description"

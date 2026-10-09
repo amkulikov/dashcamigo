@@ -42,7 +42,7 @@ describe("clipBasename", () => {
         const start = new Date(2026, 3, 29, 19, 27, 47).getTime() / 1000;
         const trip = makeTrip(start);
         const name = clipBasename(trip, 0, 28);
-        expect(name).toBe("dashcamigo_20260429_192747-192815");
+        expect(name).toBe("everydashcam_20260429_192747-192815");
     });
 
     it("zero-length range still produces both timestamps", () => {
@@ -50,7 +50,7 @@ describe("clipBasename", () => {
         const start = new Date(2026, 3, 29, 19, 27, 47).getTime() / 1000;
         const trip = makeTrip(start);
         const name = clipBasename(trip, 0, 0);
-        expect(name).toBe("dashcamigo_20260429_192747-192747");
+        expect(name).toBe("everydashcam_20260429_192747-192747");
     });
 
     it("clip across midnight uses full date for end timestamp", () => {
@@ -58,7 +58,7 @@ describe("clipBasename", () => {
         const start = new Date(2026, 3, 29, 23, 50, 0).getTime() / 1000;
         const trip = makeTrip(start);
         const name = clipBasename(trip, 0, 905);
-        expect(name).toBe("dashcamigo_20260429_235000-20260430_000505");
+        expect(name).toBe("everydashcam_20260429_235000-20260430_000505");
     });
 
     it("clip across month boundary also uses full end timestamp", () => {
@@ -66,7 +66,7 @@ describe("clipBasename", () => {
         const start = new Date(2026, 3, 30, 23, 59, 30).getTime() / 1000;
         const trip = makeTrip(start);
         const name = clipBasename(trip, 0, 60);
-        expect(name).toBe("dashcamigo_20260430_235930-20260501_000030");
+        expect(name).toBe("everydashcam_20260430_235930-20260501_000030");
     });
 
     it("ignores fractional seconds (whole-second granularity in filename)", () => {
@@ -74,7 +74,7 @@ describe("clipBasename", () => {
         const trip = makeTrip(start);
         const name = clipBasename(trip, 0.4, 28.7);
         // 28.7 s added as 28700 ms to unix*1000 → new Date truncates to whole seconds → 19:28:15
-        expect(name).toMatch(/^dashcamigo_20260429_192747-1928\d{2}$/);
+        expect(name).toMatch(/^everydashcam_20260429_192747-1928\d{2}$/);
     });
 });
 
@@ -156,7 +156,7 @@ describe("display clock (camera clock when the trip carries a zone estimate)", (
         const start = Date.UTC(2026, 3, 29, 19, 27, 47) / 1000;
         const trip = makeTrip(start);
         (trip as { cameraTzSec: number | null }).cameraTzSec = 3 * 3600;
-        expect(clipBasename(trip, 0, 28)).toBe("dashcamigo_20260429_222747-222815");
+        expect(clipBasename(trip, 0, 28)).toBe("everydashcam_20260429_222747-222815");
     });
 
     it("dateBucketLabel buckets by the camera-clock calendar day", () => {

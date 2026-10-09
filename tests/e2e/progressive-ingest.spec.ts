@@ -16,6 +16,7 @@ import {
     expect,
     gotoApp,
     presetLocalStorage,
+    setStoredPreference,
     shot,
     test,
 } from "./_fixtures.js";
@@ -206,7 +207,7 @@ test.describe("progressive ingest", () => {
                     }
                 };
                 setInterval(() => {
-                    if (window.__dashcamigo?.state.active && !target.__gpsResponseReleased) {
+                    if (window.__everydashcam?.state.active && !target.__gpsResponseReleased) {
                         target.__playbackStartedBeforeGps = true;
                     }
                 }, 0);
@@ -253,7 +254,7 @@ test.describe("progressive ingest", () => {
         // The override wins over the probe and minimum batch size.
         await page.addInitScript(() => {
             try {
-                localStorage.setItem("dashcamigo:ingest-policy", "responsive");
+                localStorage.setItem("everydashcam:ingest-policy", "responsive");
             } catch {
                 /* private mode - ignore */
             }
@@ -314,8 +315,8 @@ test.describe("progressive ingest", () => {
         await expect(page.locator("#player-total")).toHaveText("0:04");
         expect(
             await page.evaluate(() => {
-                const active = window.__dashcamigo.state.active;
-                return active ? window.__dashcamigo.state.trips[active.trip]?.timeline.contentDurationSec : null;
+                const active = window.__everydashcam.state.active;
+                return active ? window.__everydashcam.state.trips[active.trip]?.timeline.contentDurationSec : null;
             }),
             "active state and the visible player use the same post-regroup timeline",
         ).toBe(4);
@@ -351,8 +352,8 @@ test.describe("progressive ingest", () => {
         await expect
             .poll(() => master.evaluate((video: HTMLVideoElement) => video.readyState))
             .toBeGreaterThanOrEqual(2);
-        expect(await page.evaluate(() => window.__dashcamigo.state.unindexed.size)).toBe(0);
-        expect(await page.evaluate(() => window.__dashcamigo.state.trips[0]?.records.length)).toBe(0);
+        expect(await page.evaluate(() => window.__everydashcam.state.unindexed.size)).toBe(0);
+        expect(await page.evaluate(() => window.__everydashcam.state.trips[0]?.records.length)).toBe(0);
     });
 
     test("waits for the selected trip GPS before starting playback", async ({ page }) => {
@@ -397,7 +398,7 @@ test.describe("progressive ingest", () => {
         await expect(page.locator("#trip-preparation-cancel")).toBeVisible();
         await shot(page, "progressive-trip-preparation-mobile");
         expect(
-            await page.evaluate(() => window.__dashcamigo.state.active),
+            await page.evaluate(() => window.__everydashcam.state.active),
             "the player must stay inactive while selected-trip GPS is unresolved",
         ).toBeNull();
 
@@ -426,7 +427,7 @@ test.describe("progressive ingest", () => {
             .not.toBe("0:00");
 
         const result = await page.evaluate(() => {
-            const state = window.__dashcamigo.state;
+            const state = window.__everydashcam.state;
             const active = state.active;
             const trip = active ? state.trips[active.trip] : null;
             return {
@@ -473,7 +474,7 @@ test.describe("progressive ingest", () => {
         await expect
             .poll(() =>
                 page.evaluate(() => {
-                    const trip = window.__dashcamigo.state.trips[0];
+                    const trip = window.__everydashcam.state.trips[0];
                     const candidate = trip?.frames.flatMap((frame) => Object.values(frame.channels))[0];
                     return candidate?.records.length ?? 0;
                 }),
@@ -481,7 +482,7 @@ test.describe("progressive ingest", () => {
             .toBe(3);
 
         const result = await page.evaluate(() => {
-            const state = window.__dashcamigo.state;
+            const state = window.__everydashcam.state;
             const candidate = state.trips[0]?.frames.flatMap((frame) => Object.values(frame.channels))[0];
             const records = candidate?.records ?? [];
             return {
@@ -511,8 +512,8 @@ test.describe("progressive ingest", () => {
             copyFileSync(source, path.join(dir, `NO202601${day}-120000-${String(i).padStart(6, "0")}F.MP4`));
         }
 
+        await setStoredPreference(page, "everydashcam:ingest-policy", null);
         await page.evaluate(() => {
-            localStorage.removeItem("dashcamigo:ingest-policy");
             const original = Blob.prototype.arrayBuffer;
             let releaseFirstProbeRead = (): void => {};
             const firstProbeReadGate = new Promise<void>((resolve) => {
@@ -819,7 +820,7 @@ test.describe("progressive ingest", () => {
         await expect(page.locator("#trip-list")).toHaveAttribute("aria-busy", "false", { timeout: 20_000 });
         await expect(page.locator("#trip-analysis-status")).toBeHidden();
         expect(
-            await page.evaluate(() => window.__dashcamigo.state.trips.filter((trip) => trip.previewDataUrl).length),
+            await page.evaluate(() => window.__everydashcam.state.trips.filter((trip) => trip.previewDataUrl).length),
         ).toBe(0);
 
         await page.locator("#folder-input").setInputFiles(ignoredDirectory);
@@ -829,7 +830,7 @@ test.describe("progressive ingest", () => {
         });
         await expect
             .poll(() =>
-                page.evaluate(() => window.__dashcamigo.state.trips.filter((trip) => trip.previewDataUrl).length),
+                page.evaluate(() => window.__everydashcam.state.trips.filter((trip) => trip.previewDataUrl).length),
             )
             .toBe(4);
     });
@@ -844,7 +845,7 @@ test.describe("progressive ingest", () => {
         await page.evaluate(() => {
             const target = window as typeof window & { __ingestDoneCount?: number };
             target.__ingestDoneCount = 0;
-            addEventListener("dashcamigo:ingest-done", () => {
+            addEventListener("everydashcam:ingest-done", () => {
                 target.__ingestDoneCount = (target.__ingestDoneCount ?? 0) + 1;
             });
         });
@@ -853,7 +854,7 @@ test.describe("progressive ingest", () => {
         await expect(page.locator("li.trip:not(.unindexed-note)").first()).toBeVisible({ timeout: 10_000 });
         expect(
             await page.evaluate(() =>
-                window.__dashcamigo.state.trips.some((trip) =>
+                window.__everydashcam.state.trips.some((trip) =>
                     trip.frames.some((frame) =>
                         Object.values(frame.channels).some((candidate) => candidate.metadataReady === false),
                     ),
@@ -926,22 +927,22 @@ test.describe("progressive ingest", () => {
         });
         await page.locator("#folder-input").setInputFiles(directory);
         await expect(page.locator("#ingest-overlay")).toBeHidden();
-        await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.trips.length)).toBe(1);
+        await expect.poll(() => page.evaluate(() => window.__everydashcam.state.trips.length)).toBe(1);
         const before = await page.evaluate((filename) => {
-            const records = window.__dashcamigo.state.gpsLog?.byFilename.get(filename) ?? [];
+            const records = window.__everydashcam.state.gpsLog?.byFilename.get(filename) ?? [];
             return { count: records.length, hasAccel: records.some((r) => r.accelXg !== 0 || r.accelYg !== 0) };
         }, name);
         expect(before.count).toBeGreaterThan(0);
         expect(before.hasAccel).toBe(false);
 
         await page.locator("#folder-input").setInputFiles(SAMPLE_NOGPS);
-        await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.trips.length)).toBe(2);
+        await expect.poll(() => page.evaluate(() => window.__everydashcam.state.trips.length)).toBe(2);
         await page.evaluate(() => {
             (window as typeof window & { __releaseRecordingWork?: () => void }).__releaseRecordingWork?.();
         });
         await expect(page.locator("#trip-analysis-status")).toBeHidden({ timeout: 30_000 });
         const after = await page.evaluate((filename) => {
-            const records = window.__dashcamigo.state.gpsLog?.byFilename.get(filename) ?? [];
+            const records = window.__everydashcam.state.gpsLog?.byFilename.get(filename) ?? [];
             return { count: records.length, hasAccel: records.some((r) => Math.hypot(r.accelXg, r.accelYg) > 0.01) };
         }, name);
         expect(after.count).toBe(before.count);

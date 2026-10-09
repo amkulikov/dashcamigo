@@ -15,7 +15,7 @@
 //    everything is run through sentry-scrub.ts before send (beforeSend /
 //    beforeBreadcrumb). No coordinates, no file basenames, no user free text,
 //    no video - ever.
-//  - New hosted origins require explicit consent. Existing origins stay opt-out.
+//  - Reports require explicit consent on every origin.
 //    The toggle lives in settings (see settings-modal.ts).
 //  - Build-time gate. Empty VITE_SENTRY_DSN => the SDK is never imported (the
 //    dynamic import is behind the DSN check), so self-hosted forks and dev/CI
@@ -51,7 +51,7 @@ export function resolveOriginTag(): DeploymentOriginTag {
 }
 
 // Wiped by resetAllAppState() via localStorage.clear() (see ui/reset.ts).
-export const CRASH_REPORTING_STORAGE_KEY = "dashcamigo:crash-reporting";
+export const CRASH_REPORTING_STORAGE_KEY = "everydashcam:crash-reporting";
 
 // Per-session hard cap on events sent, so one bad deploy in a loop cannot burn
 // the 5k/month free quota in minutes. Server-side Spike Protection is the real
@@ -91,26 +91,14 @@ export function isCrashReportingBuilt(): boolean {
     return getSentryDsn() !== "";
 }
 
-/** Origins that require a fresh, explicit choice before collecting reports. */
-export function isCrashReportingOptIn(host = typeof window === "undefined" ? "" : window.location.hostname): boolean {
-    return (
-        host === "everydashcam.app" ||
-        host === "www.everydashcam.app" ||
-        host === "beta.everydashcam.app" ||
-        host === "ru.everydashcam.app"
-    );
-}
-
 /** Effective consent, checked synchronously before collecting any telemetry. */
 export function crashReportingEnabled(): boolean {
     if (!isCrashReportingBuilt()) return false;
     if (runtimeEnabled !== null) return runtimeEnabled;
-    const requiresOptIn = isCrashReportingOptIn();
     try {
-        const stored = localStorage.getItem(CRASH_REPORTING_STORAGE_KEY);
-        return requiresOptIn ? stored === "on" : stored !== "off";
+        return localStorage.getItem(CRASH_REPORTING_STORAGE_KEY) === "on";
     } catch {
-        return !requiresOptIn;
+        return false;
     }
 }
 
@@ -141,8 +129,7 @@ export function resolveEnvironment(
 
 function persistEnabled(on: boolean): boolean {
     try {
-        if (on && !isCrashReportingOptIn()) localStorage.removeItem(CRASH_REPORTING_STORAGE_KEY);
-        else localStorage.setItem(CRASH_REPORTING_STORAGE_KEY, on ? "on" : "off");
+        localStorage.setItem(CRASH_REPORTING_STORAGE_KEY, on ? "on" : "off");
         return true;
     } catch (err) {
         log.warn("could not persist crash-reporting choice", err);
@@ -170,7 +157,7 @@ function onConsentStorageChange(event: StorageEvent): void {
 
 /**
  * Kicks off crash reporting. Idempotent and safe to call early - it dynamically
- * imports the SDK only when a DSN is built and the user has not opted out. Any
+ * imports the SDK only when a DSN is built and the user has opted in. Any
  * import / init failure is swallowed (the app must not depend on Sentry).
  */
 export function initSentry(): void {

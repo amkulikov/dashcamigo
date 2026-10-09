@@ -15,7 +15,7 @@ function loadStyle(theme: string): StyleSpecification {
 }
 
 function role(layer: LayerSpecification): string | undefined {
-    return (layer.metadata as Record<string, string> | undefined)?.["dashcamigo:role"];
+    return (layer.metadata as Record<string, string> | undefined)?.["everydashcam:role"];
 }
 
 function matchingRoads(
@@ -36,6 +36,20 @@ function matchingRoads(
 }
 
 describe("map style presets", () => {
+    it.each(["light", "dark", "neon"])("applies presets to a cached %s style with legacy metadata", (theme) => {
+        const original = loadStyle(theme);
+        const cached = structuredClone(original);
+        for (const layer of cached.layers) {
+            layer.metadata = { "dashcamigo:role": role(layer) };
+        }
+        const content = (style: StyleSpecification) => style.layers.map(({ metadata: _metadata, ...layer }) => layer);
+        for (const preset of ["classic", "road", "minimal"] satisfies MapStylePreset[]) {
+            expect(content(applyMapStylePreset(cached, preset)), preset).toEqual(
+                content(applyMapStylePreset(original, preset)),
+            );
+        }
+    });
+
     for (const theme of ["light", "dark", "neon"] as const) {
         for (const provider of ["openfreemap", "osm-vector"] as const) {
             const original = provider === "openfreemap" ? loadStyle(theme) : createFallbackMapStyle(provider, theme);

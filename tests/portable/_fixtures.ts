@@ -86,7 +86,7 @@ export async function expectLocalRoute(page: Page): Promise<void> {
     await expect
         .poll(() =>
             page.evaluate(() => {
-                const { map, miniMap } = window.__dashcamigo.state;
+                const { map, miniMap } = window.__everydashcam.state;
                 return [map, miniMap].every(
                     (view) =>
                         view?.isStyleLoaded() &&

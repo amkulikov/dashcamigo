@@ -97,7 +97,7 @@ test("repaints a paused map preview after its provider fails without rebuilding 
     await expect(page.locator('button[data-maptheme="dark"]')).toBeDisabled();
     await expect(page.locator("#export-map-appearance-unavailable")).toBeVisible();
     const savedMode = await page.evaluate(() => {
-        const prefs = JSON.parse(localStorage.getItem("dashcamigo:export:overlays") ?? "null");
+        const prefs = JSON.parse(localStorage.getItem("everydashcam:export:overlays") ?? "null");
         return prefs?.overlayMap?.mode;
     });
     expect(savedMode, "a fallback does not replace the preferred camera mode").toBe("chase");

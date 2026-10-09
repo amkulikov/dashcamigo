@@ -24,7 +24,7 @@ test("opens INNOVV N2 front and rear together with GPS", async ({ page }) => {
     await expect
         .poll(() =>
             page.evaluate(() => {
-                const state = window.__dashcamigo.state;
+                const state = window.__everydashcam.state;
                 const records = state.trips[state.active!.trip]!.records;
                 return (
                     records.length > 0 &&

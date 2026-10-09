@@ -50,7 +50,7 @@ const GATE_ID = "capability-gate";
 // localStorage flag so the proactive degraded notice does not nag every session.
 // Keyed by the gap set: if the set changes (e.g. the user updated and only the
 // map gap remains) the notice fires again for the new situation.
-const DEGRADED_DISMISS_KEY = "dashcamigo:caps-degraded-ack";
+const DEGRADED_DISMISS_KEY = "everydashcam:caps-degraded-ack";
 
 /**
  * Detects capabilities and - if a fatal gap exists - renders a blocking gate
@@ -211,7 +211,7 @@ export function surfaceDegradedCapabilities(): void {
 // session (sessionStorage, not localStorage): it should remind again in a fresh
 // session, just not nag on every reload within one. The in-panel re-entry link is
 // revealed every time instead, so the help is never lost.
-const WEBGL_SURFACE_KEY = "dashcamigo:webgl-surfaced";
+const WEBGL_SURFACE_KEY = "everydashcam:webgl-surfaced";
 
 // Run the surface logic at most once per page load (the trigger fires on every
 // trip-open; the in-panel reveal persists, so re-running on later opens is just

@@ -38,7 +38,7 @@ const html = template.replace(
     /__MEDIABUNNY_VERSION__|__WORKER_BASE64__|__MAIN_SCRIPT__|__LICENSES__/g,
     (key) => replacements[key],
 );
-const destination = resolve(root, "dist-diagnostics/dashcamigo-encoder-test.html");
+const destination = resolve(root, "dist-diagnostics/everydashcam-encoder-test.html");
 await mkdir(dirname(destination), { recursive: true });
 await writeFile(destination, html);
 process.stdout.write(

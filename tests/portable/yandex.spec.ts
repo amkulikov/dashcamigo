@@ -56,7 +56,7 @@ async function expectYandexMap(page: Page): Promise<void> {
     await expect
         .poll(() =>
             page.evaluate(() => {
-                const map = window.__dashcamigo.state.miniMap;
+                const map = window.__everydashcam.state.miniMap;
                 return Boolean(
                     map?.getSource("yandex") &&
                         map.isStyleLoaded() &&
@@ -125,7 +125,7 @@ test("preserves the selected Yandex preference through local fallback and reconn
         ).toBe(true);
     }
     await expect(page.locator("#settings-map-provider-select")).toHaveValue("yandex");
-    expect(await page.evaluate(() => localStorage.getItem("dashcamigo:mapProvider"))).toBe("yandex");
+    expect(await page.evaluate(() => localStorage.getItem("everydashcam:mapProvider"))).toBe("yandex");
     await expect(page.locator("#player-chart-canvas")).toBeVisible();
     canLoadTiles = true;
     await page.evaluate(() => dispatchEvent(new Event("online")));

@@ -64,7 +64,7 @@ const NEON = {
 };
 
 function lineColor(layer, palette) {
-    const kind = layer.metadata?.["dashcamigo:road-kind"];
+    const kind = layer.metadata?.["everydashcam:road-kind"];
     if (kind) return roadColorExpression(palette, kind);
     const id = layer.id;
     if (layer["source-layer"] === "waterway" || id === "road_ferry") return palette.waterLine;
@@ -90,19 +90,19 @@ export function createMapStyleVariant(light, theme) {
     const style = structuredClone(light);
     style.name = theme === "dark" ? "everydashcam Classic Dark" : "everydashcam Neon";
     style.sprite = "/styles/sprite/sprite";
-    style.metadata = { ...style.metadata, "dashcamigo:theme": theme };
+    style.metadata = { ...style.metadata, "everydashcam:theme": theme };
     for (const layer of style.layers) {
         layer.paint ??= {};
         const p = layer.paint;
-        const role = layer.metadata?.["dashcamigo:role"];
+        const role = layer.metadata?.["everydashcam:role"];
         if (layer.type === "background") p["background-color"] = palette.background;
         if (layer.type === "line") {
             p["line-color"] = lineColor(layer, palette);
             if (
                 theme === "neon" &&
-                layer.metadata?.["dashcamigo:road-kind"] === "casing" &&
-                layer.metadata?.["dashcamigo:road-level"] === 0 &&
-                layer.metadata?.["dashcamigo:road-crossing"] === "surface"
+                layer.metadata?.["everydashcam:road-kind"] === "casing" &&
+                layer.metadata?.["everydashcam:road-level"] === 0 &&
+                layer.metadata?.["everydashcam:road-crossing"] === "surface"
             ) {
                 p["line-color"] = "#ff9000";
                 p["line-blur"] = 2;
@@ -154,7 +154,7 @@ export function createMapStyleVariant(light, theme) {
         // The export overlay needs transparency and a quiet background; road
         // geometry, one-way arrows and road/place labels remain shared.
         const hiddenRoles = new Set(["landuse", "landcover", "park", "boundary", "poi", "address", "context-label"]);
-        style.layers = style.layers.filter((layer) => !hiddenRoles.has(layer.metadata?.["dashcamigo:role"]));
+        style.layers = style.layers.filter((layer) => !hiddenRoles.has(layer.metadata?.["everydashcam:role"]));
     }
     return style;
 }

@@ -27,9 +27,9 @@ test(`_diag-trip: ${vendor?.name}`, async ({ browser }) => {
     await page.waitForFunction(
         () => {
             const w = window as unknown as {
-                __dashcamigoPerf?: { lifecycleEvents?: Array<{ type: string }> };
+                __everydashcamPerf?: { lifecycleEvents?: Array<{ type: string }> };
             };
-            return !!w.__dashcamigoPerf?.lifecycleEvents?.some((e) => e.type === "dashcamigo:ingest-done");
+            return !!w.__everydashcamPerf?.lifecycleEvents?.some((e) => e.type === "everydashcam:ingest-done");
         },
         { timeout: 15_000, polling: 100 },
     );
@@ -37,8 +37,8 @@ test(`_diag-trip: ${vendor?.name}`, async ({ browser }) => {
 
     // Reset lifecycle events
     await page.evaluate(() => {
-        const w = window as unknown as { __dashcamigoPerf?: { lifecycleEvents: unknown[] } };
-        if (w.__dashcamigoPerf) w.__dashcamigoPerf.lifecycleEvents = [];
+        const w = window as unknown as { __everydashcamPerf?: { lifecycleEvents: unknown[] } };
+        if (w.__everydashcamPerf) w.__everydashcamPerf.lifecycleEvents = [];
     });
 
     const t0 = Date.now();
@@ -49,16 +49,16 @@ test(`_diag-trip: ${vendor?.name}`, async ({ browser }) => {
         await new Promise((r) => setTimeout(r, 2000));
         const snap = await page.evaluate(() => {
             const w = window as unknown as {
-                __dashcamigoPerf?: { lifecycleEvents?: Array<{ type: string }> };
-                __dashcamigo?: {
+                __everydashcamPerf?: { lifecycleEvents?: Array<{ type: string }> };
+                __everydashcam?: {
                     state: { active: unknown; trips: unknown[] };
                     dumpLog: () => Array<{ ns: string; msg: string; ts: number; ctx?: unknown }>;
                 };
             };
             const video = document.querySelector("video.is-active") as HTMLVideoElement | null;
             return {
-                events: (w.__dashcamigoPerf?.lifecycleEvents ?? []).map((e) => e.type),
-                active: w.__dashcamigo?.state.active,
+                events: (w.__everydashcamPerf?.lifecycleEvents ?? []).map((e) => e.type),
+                active: w.__everydashcam?.state.active,
                 videoState: video
                     ? {
                           readyState: video.readyState,
@@ -72,7 +72,7 @@ test(`_diag-trip: ${vendor?.name}`, async ({ browser }) => {
                           rVFCSupported: typeof video.requestVideoFrameCallback === "function",
                       }
                     : "no video.is-active",
-                tail: (w.__dashcamigo?.dumpLog() ?? []).slice(-5).map((l) => ({
+                tail: (w.__everydashcam?.dumpLog() ?? []).slice(-5).map((l) => ({
                     ns: l.ns,
                     msg: l.msg,
                     age: `${Math.round((Date.now() - l.ts) / 1000)}s`,
@@ -81,9 +81,9 @@ test(`_diag-trip: ${vendor?.name}`, async ({ browser }) => {
         });
         console.log(`t=${(i + 1) * 2}s:`, JSON.stringify(snap, null, 2));
         if (
-            snap.events.includes("dashcamigo:player-first-frame") &&
-            snap.events.includes("dashcamigo:map-tracks-rendered") &&
-            snap.events.includes("dashcamigo:chart-rendered")
+            snap.events.includes("everydashcam:player-first-frame") &&
+            snap.events.includes("everydashcam:map-tracks-rendered") &&
+            snap.events.includes("everydashcam:chart-rendered")
         ) {
             console.log(`>>> all events at t=${(i + 1) * 2}s`);
             break;

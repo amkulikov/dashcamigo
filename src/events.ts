@@ -56,7 +56,7 @@ export const BRAKE_G_THRESHOLD_MAX = 2;
  * localStorage key for the user-configured brake threshold in g.
  * Special value "off" disables event detection entirely (no markers anywhere).
  */
-const STORAGE_KEY_BRAKE_THRESHOLD = "dashcamigo:events:brakeThresholdG";
+const STORAGE_KEY_BRAKE_THRESHOLD = "everydashcam:events:brakeThresholdG";
 
 /** Current brake threshold in g, or +Infinity when detection is disabled. */
 export function getBrakeThresholdG(): number {

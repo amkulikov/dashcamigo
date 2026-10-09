@@ -1,6 +1,6 @@
 // Capture current video frame as a JPG via canvas (not an OS screenshot -
 // player UI is excluded). The button + the S hotkey both call captureCurrentFrame.
-// Filename: dashcamigo_YYYYMMDD_HHMMSS_frame.jpg on the display clock (camera
+// Filename: everydashcam_YYYYMMDD_HHMMSS_frame.jpg on the display clock (camera
 // clock when known - matches the trip headers in the sidebar).
 
 import { applyCanvasFlip, hasCameraFlip } from "../camera-flip.js";
@@ -246,7 +246,7 @@ function makeFrameFilename(tripStartUtcSec: number | null, tripCurrentSec: numbe
     const hh = d.getUTCHours().toString().padStart(2, "0");
     const mi = d.getUTCMinutes().toString().padStart(2, "0");
     const ss = d.getUTCSeconds().toString().padStart(2, "0");
-    return `dashcamigo_${yy}${mo}${dd}_${hh}${mi}${ss}_frame.jpg`;
+    return `everydashcam_${yy}${mo}${dd}_${hh}${mi}${ss}_frame.jpg`;
 }
 
 /**

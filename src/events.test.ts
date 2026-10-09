@@ -266,7 +266,7 @@ describe("detectEvents - user-configurable threshold via localStorage", () => {
     });
 
     it("ignores stored garbage and returns default", () => {
-        memory.set("dashcamigo:events:brakeThresholdG", "not-a-number");
+        memory.set("everydashcam:events:brakeThresholdG", "not-a-number");
         expect(getBrakeThresholdG()).toBeCloseTo(0.5, 9);
     });
 });

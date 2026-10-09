@@ -31,7 +31,7 @@ test.describe("migration from the old address", () => {
             );
             await expect(page.locator("#settings-crash-description")).toHaveAttribute(
                 "data-i18n",
-                "settings.privacy.crash.description",
+                "settings.privacy.crash.optInDescription",
             );
         });
     }

@@ -148,7 +148,7 @@ export function createWorkerClient(endpoint: WorkerEndpoint, opts: WorkerClientO
     const handleMessage = (ev: MessageEvent): void => {
         const data = ev.data;
         if (!isWireMessage(data)) {
-            // log-bridge messages (__type: __dashcamigo:log) and any unknown
+            // log-bridge messages (__type: __everydashcam:log) and any unknown
             // shape land here. The log bridge handles its own messages on a
             // separate listener; everything else is foreign noise we ignore
             // silently (would-be-warnings would flood with one entry per log).

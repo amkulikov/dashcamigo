@@ -60,7 +60,7 @@ function injectedValues(): { manifest: unknown; trackerUrls: unknown } {
         `${readFileSync(SW, "utf-8")}\n;({ manifest: PRECACHE_MANIFEST, trackerUrls: TRACKER_ASSET_URLS });`,
         {
             URL,
-            self: { location: { origin: "https://dashcamigo.test" }, addEventListener() {} },
+            self: { location: { origin: "https://everydashcam.app" }, addEventListener() {} },
         },
     );
 }

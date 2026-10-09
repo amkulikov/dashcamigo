@@ -35,7 +35,7 @@ describe("scrubMessage", () => {
     });
 
     it("redacts blob URLs and long digit runs", () => {
-        expect(scrubMessage("load blob:https://dashcamigo.app/9f1c-2e7a failed")).toBe("load blob:[redacted] failed");
+        expect(scrubMessage("load blob:https://everydashcam.app/9f1c-2e7a failed")).toBe("load blob:[redacted] failed");
         expect(scrubMessage("serial 1234567890 mismatch")).toBe("serial # mismatch");
     });
 
@@ -123,13 +123,13 @@ describe("scrubEvent", () => {
     it("strips request query/headers/cookies", () => {
         const ev = {
             request: {
-                url: "https://dashcamigo.app/ru/?ref=secret#frag",
+                url: "https://everydashcam.app/ru/?ref=secret#frag",
                 headers: { "User-Agent": "x", Referer: "y" },
                 cookies: "a=b",
             },
         };
         scrubEvent(ev);
-        expect(ev.request.url).toBe("https://dashcamigo.app/ru/");
+        expect(ev.request.url).toBe("https://everydashcam.app/ru/");
         expect(ev.request.headers).toBeUndefined();
         expect(ev.request.cookies).toBeUndefined();
     });

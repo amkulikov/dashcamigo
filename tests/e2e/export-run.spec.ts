@@ -165,7 +165,7 @@ test.describe("export run", () => {
         expect(
             await page.evaluate(
                 () =>
-                    window.__dashcamigo
+                    window.__everydashcam
                         .dumpLog()
                         .reverse()
                         .find((record) => record.msg === "export settings")?.ctx,
@@ -185,7 +185,7 @@ test.describe("export run", () => {
             const handle = (window as unknown as { __lastExportHandle: { _buf: Uint8Array } }).__lastExportHandle;
             return {
                 bytes: Array.from(handle._buf),
-                settings: window.__dashcamigo
+                settings: window.__everydashcam
                     .dumpLog()
                     .reverse()
                     .find((record) => record.msg === "export settings")?.ctx,
@@ -293,7 +293,7 @@ test.describe("export run", () => {
 
 async function expectEncoderDiagnostics(page: Page, doneMessage: string): Promise<void> {
     const { bytes, config, summary } = await page.evaluate((doneMessage) => {
-        const logs = window.__dashcamigo.dumpLog().reverse();
+        const logs = window.__everydashcam.dumpLog().reverse();
         const handle = (window as unknown as { __lastExportHandle: { _buf: Uint8Array } }).__lastExportHandle;
         return {
             bytes: Array.from(handle._buf),

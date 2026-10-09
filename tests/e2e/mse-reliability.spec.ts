@@ -123,7 +123,7 @@ test.afterEach(async ({ page }, testInfo) => {
     if (testInfo.status === testInfo.expectedStatus) return;
     const diagnosis = await page.evaluate(() => ({
         events: (window as Window & { mseEvents?: unknown[] }).mseEvents,
-        logs: window.__dashcamigo.dumpLog(),
+        logs: window.__everydashcam.dumpLog(),
         videos: Array.from(document.querySelectorAll("video"), (video) => ({
             id: video.id,
             time: video.currentTime,
@@ -263,7 +263,7 @@ test("keeps video playing when MSE rejects the copied audio codec", async ({ pag
     await expect(page.locator(".viewer")).not.toHaveClass(/playback-failed|codec-unsupported/);
     expect(
         await page.evaluate(() =>
-            window.__dashcamigo.dumpLog().filter((entry) => entry.msg.startsWith("backend fail")),
+            window.__everydashcam.dumpLog().filter((entry) => entry.msg.startsWith("backend fail")),
         ),
     ).toEqual([]);
 });
@@ -286,7 +286,7 @@ test("plays MPEG-TS video with AAC sound before and after a seek", async ({ page
     expect(audioTracks).toBe(1);
     expect(
         await page.evaluate(() =>
-            window.__dashcamigo.dumpLog().filter((entry) => entry.msg.startsWith("backend fail")),
+            window.__everydashcam.dumpLog().filter((entry) => entry.msg.startsWith("backend fail")),
         ),
     ).toEqual([]);
 });

@@ -116,7 +116,7 @@ const WARM_STALL_TIMEOUT_MS = 30_000;
 // or a re-exported model changes the URL, so the flag key moves with it - a
 // device never keys a stale flag to fresh bytes, and the SW drops the old
 // TRACKER entries on activate.
-const ASSET_DOWNLOADED_KEY_PREFIX = "dashcamigo:blurAssetDownloaded:";
+const ASSET_DOWNLOADED_KEY_PREFIX = "everydashcam:blurAssetDownloaded:";
 
 export type BlurAssetsPhase =
     | "idle" // no download in flight, nothing failed

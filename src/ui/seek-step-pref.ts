@@ -4,8 +4,8 @@
 // Read by src/ui/player-hotkeys.ts on every keydown, written by the settings
 // modal. Toolbar labels subscribe to updates; hotkeys read on every keypress.
 
-const STORAGE_KEY_ARROW = "dashcamigo:hotkeys:seekStepSec";
-const STORAGE_KEY_SHIFT_ARROW = "dashcamigo:hotkeys:seekStepShiftSec";
+const STORAGE_KEY_ARROW = "everydashcam:hotkeys:seekStepSec";
+const STORAGE_KEY_SHIFT_ARROW = "everydashcam:hotkeys:seekStepShiftSec";
 
 /** Defaults match the original hardcoded values in player-hotkeys.ts. */
 export const DEFAULT_SEEK_STEP_SEC = 5;

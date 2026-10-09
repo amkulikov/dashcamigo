@@ -31,8 +31,8 @@ type RelatedApp = { platform: string; id?: string; url?: string; version?: strin
 type NavWithRelatedApps = Navigator & { getInstalledRelatedApps?: () => Promise<RelatedApp[]> };
 
 // Single source of truth for this module's localStorage keys.
-const STORAGE_TOAST_SHOWN = "dashcamigo:pwa:toast:shown";
-const STORAGE_TOAST_DISMISSED_AT = "dashcamigo:pwa:toast:dismissedAt";
+const STORAGE_TOAST_SHOWN = "everydashcam:pwa:toast:shown";
+const STORAGE_TOAST_DISMISSED_AT = "everydashcam:pwa:toast:dismissedAt";
 // Cross-window installed signal. Set when ANY of:
 //   - the current load is itself in standalone display-mode,
 //   - the appinstalled event fires,
@@ -53,7 +53,7 @@ const STORAGE_TOAST_DISMISSED_AT = "dashcamigo:pwa:toast:dismissedAt";
 // negative on browsers that have the API. Without that, an install->uninstall
 // cycle leaves the install action unavailable until the user wipes site data. See
 // clearInstalledSignal() and its callers.
-const STORAGE_INSTALLED_SIGNAL = "dashcamigo:pwa:installed";
+const STORAGE_INSTALLED_SIGNAL = "everydashcam:pwa:installed";
 
 // After an explicit dismiss, suppress the toast for 30 days. The offline-use
 // chooser stays available, so the toast is just a one-shot reminder.

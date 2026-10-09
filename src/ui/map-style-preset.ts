@@ -7,9 +7,15 @@ const MINIMAL_HIDDEN = new Set([...ROAD_HIDDEN, "poi-driver", "park", "landcover
 
 function layerRole(layer: LayerSpecification): string | undefined {
     const metadata: unknown = layer.metadata;
-    if (!metadata || typeof metadata !== "object" || !("dashcamigo:role" in metadata)) return undefined;
-    const role = metadata["dashcamigo:role"];
-    return typeof role === "string" ? role : undefined;
+    if (!metadata || typeof metadata !== "object") return undefined;
+    if ("everydashcam:role" in metadata && typeof metadata["everydashcam:role"] === "string") {
+        return metadata["everydashcam:role"];
+    }
+    // Cached styles may still carry the legacy metadata namespace.
+    if ("dashcamigo:role" in metadata && typeof metadata["dashcamigo:role"] === "string") {
+        return metadata["dashcamigo:role"];
+    }
+    return undefined;
 }
 
 /** Keep transport geometry and labels identical while reducing the surrounding

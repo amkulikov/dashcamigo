@@ -8,7 +8,7 @@
 import { compareChangelogIds } from "../changelog/id.js";
 import { LATEST_CHANGELOG_ID } from "../changelog/latest.js";
 
-const STORAGE_KEY = "dashcamigo:changelog:lastSeenId";
+const STORAGE_KEY = "everydashcam:changelog:lastSeenId";
 
 /**
  * Whether entries newer than the last acknowledged one exist - drives the

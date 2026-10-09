@@ -254,7 +254,8 @@ export function migrationLanguage(): MigrationLang {
     const explicit = new URLSearchParams(location.search).get("lang");
     if (isMigrationLanguage(explicit)) return explicit;
     try {
-        const stored = localStorage.getItem("dashcamigo:lang");
+        // Recovery reads legacy preferences without changing the old origin.
+        const stored = localStorage.getItem("dashcamigo:lang") ?? localStorage.getItem("everydashcam:lang");
         if (isMigrationLanguage(stored)) return stored;
     } catch {
         // Reading notes must still work when preferences are unavailable.

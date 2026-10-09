@@ -31,7 +31,7 @@ export interface PeakMemoryResult {
 
 export const PEAK_MEMORY_INIT_SCRIPT = `
 (() => {
-    const perf = (window.__dashcamigoPerf ||= {});
+    const perf = (window.__everydashcamPerf ||= {});
     perf.peakMemory = null;
 })();
 `;
@@ -39,7 +39,7 @@ export const PEAK_MEMORY_INIT_SCRIPT = `
 export async function startPeakMemoryPoller(page: Page, intervalMs = 100): Promise<void> {
     await page.evaluate((iv) => {
         const w = window as unknown as {
-            __dashcamigoPerf?: {
+            __everydashcamPerf?: {
                 peakMemory?: {
                     samples: PeakMemorySample[];
                     peakUsedJSHeapSize: number;
@@ -50,8 +50,8 @@ export async function startPeakMemoryPoller(page: Page, intervalMs = 100): Promi
             };
         };
         type PeakMemorySample = { t: number; usedJSHeapSize: number; totalJSHeapSize: number };
-        w.__dashcamigoPerf ||= {};
-        const perf = w.__dashcamigoPerf;
+        w.__everydashcamPerf ||= {};
+        const perf = w.__everydashcamPerf;
         // Tear down any prior sampler to avoid leaks across replays.
         if (perf.peakMemory?.intervalId) {
             clearInterval(perf.peakMemory.intervalId);
@@ -88,7 +88,7 @@ export async function startPeakMemoryPoller(page: Page, intervalMs = 100): Promi
 export async function stopAndReadPeakMemory(page: Page): Promise<PeakMemoryResult> {
     return await page.evaluate(() => {
         const w = window as unknown as {
-            __dashcamigoPerf?: {
+            __everydashcamPerf?: {
                 peakMemory?: {
                     samples: { t: number; usedJSHeapSize: number; totalJSHeapSize: number }[];
                     peakUsedJSHeapSize: number;
@@ -98,7 +98,7 @@ export async function stopAndReadPeakMemory(page: Page): Promise<PeakMemoryResul
             };
             crossOriginIsolated?: boolean;
         };
-        const state = w.__dashcamigoPerf?.peakMemory;
+        const state = w.__everydashcamPerf?.peakMemory;
         if (!state) {
             return {
                 peakUsedJSHeapSize: 0,

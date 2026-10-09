@@ -96,7 +96,7 @@ test("map preview rebuilds a replaced track while the playhead stays still", asy
         (el as HTMLElement).dataset.oldTrack = "true";
     });
     await page.evaluate(() => {
-        const { state, dom } = window.__dashcamigo;
+        const { state, dom } = window.__everydashcam;
         const trip = state.trips[state.active!.trip]!;
         trip.records = trip.records.slice();
         dom.player.dispatchEvent(new Event("timeupdate"));

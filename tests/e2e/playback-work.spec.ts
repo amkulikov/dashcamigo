@@ -46,7 +46,7 @@ test("unchanged playback samples preserve readout and progress text", async ({ p
 
 test("in-place GPS corrections refresh readouts and then stay idle", async ({ page }) => {
     const result = await page.evaluate(async () => {
-        const { state, dom } = window.__dashcamigo;
+        const { state, dom } = window.__everydashcam;
         const video = dom.player;
         const trip = state.active && state.trips[state.active.trip];
         const record = trip?.records[0];
@@ -161,9 +161,9 @@ test("paused map checks the playhead at idle cadence", async ({ page }, testInfo
 });
 
 test("mini-map playback reuses its width and refreshes zoom after a paused resize", async ({ page }) => {
-    await page.waitForFunction(() => window.__dashcamigo.state.miniMapReady);
+    await page.waitForFunction(() => window.__everydashcam.state.miniMapReady);
     const result = await page.evaluate(async () => {
-        const { state, dom } = window.__dashcamigo;
+        const { state, dom } = window.__everydashcam;
         const mini = state.miniMap;
         if (!mini || !state.miniMapMarker) throw new Error("mini-map unavailable");
         const player = dom.player;
@@ -197,7 +197,7 @@ test("mini-map playback reuses its width and refreshes zoom after a paused resiz
     await expect
         .poll(() =>
             page.evaluate(() => {
-                const mini = window.__dashcamigo.state.miniMap;
+                const mini = window.__everydashcam.state.miniMap;
                 if (!mini) throw new Error("mini-map unavailable");
                 return mini.getZoom();
             }),
@@ -208,11 +208,11 @@ test("mini-map playback reuses its width and refreshes zoom after a paused resiz
 test("Chase settles adaptive zoom while the camera keeps following playback", async ({ page }, testInfo) => {
     await page.locator("#mini-map").click();
     await expect(page.locator("body")).not.toHaveClass(/map-morphing/);
-    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map?.getPitch() ?? 0)).toBeCloseTo(58, 1);
+    await expect.poll(() => page.evaluate(() => window.__everydashcam.state.map?.getPitch() ?? 0)).toBeCloseTo(58, 1);
     await expect(page.locator("#map-chase-adaptive")).toHaveAttribute("aria-pressed", "true");
 
     const result = await page.evaluate(async () => {
-        const { state, dom } = window.__dashcamigo;
+        const { state, dom } = window.__everydashcam;
         const map = state.map;
         const trip = state.active && state.trips[state.active.trip];
         if (!map || !trip) throw new Error("Chase playback unavailable");

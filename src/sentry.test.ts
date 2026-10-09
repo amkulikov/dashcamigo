@@ -1,4 +1,4 @@
-// Tests for crash-reporting gating logic (build flag + opt-out flag +
+// Tests for crash-reporting gating logic (build flag + explicit consent +
 // environment classification). The SDK itself is never loaded here: node has no
 // `window`, so loadAndInit() returns before the dynamic import - we exercise the
 // pure gating surface. Scrubbing is covered in sentry-scrub.test.ts.
@@ -10,7 +10,6 @@ import {
     captureSentryMessage,
     crashReportingEnabled,
     isCrashReportingBuilt,
-    isCrashReportingOptIn,
     resolveEnvironment,
     setCrashReportingEnabled,
     _resetForTests,
@@ -69,29 +68,35 @@ describe("resolveEnvironment", () => {
 });
 
 describe("hosted consent", () => {
-    it.each(["everydashcam.app", "www.everydashcam.app", "beta.everydashcam.app", "ru.everydashcam.app"])(
-        "requires explicit consent on %s",
-        (hostname) => {
-            vi.stubGlobal("window", Object.assign(new EventTarget(), { location: { hostname } }));
-            expect(isCrashReportingOptIn()).toBe(true);
-            expect(crashReportingEnabled()).toBe(false);
-            for (const choice of ["off", "yes", "true", ""]) {
-                fakeStorage.setItem(CRASH_REPORTING_STORAGE_KEY, choice);
-                expect(crashReportingEnabled()).toBe(false);
-            }
-            fakeStorage.setItem(CRASH_REPORTING_STORAGE_KEY, "on");
-            expect(crashReportingEnabled()).toBe(true);
-        },
-    );
+    it("requires fresh consent instead of copying the previous preference", () => {
+        vi.stubGlobal("window", Object.assign(new EventTarget(), { location: { hostname: "everydashcam.app" } }));
+        fakeStorage.setItem("dashcamigo:crash-reporting", "on");
+        expect(crashReportingEnabled()).toBe(false);
+        expect(fakeStorage.getItem(CRASH_REPORTING_STORAGE_KEY)).toBeNull();
+    });
 
-    it.each(["dashcamigo.app", "beta.dashcamigo.app", "ru.dashcamigo.app", "gh.dashcamigo.app", "self-host.test"])(
-        "preserves the existing default on %s",
-        (hostname) => {
-            vi.stubGlobal("window", Object.assign(new EventTarget(), { location: { hostname } }));
-            expect(isCrashReportingOptIn()).toBe(false);
-            expect(crashReportingEnabled()).toBe(true);
-        },
-    );
+    it.each([
+        "everydashcam.app",
+        "www.everydashcam.app",
+        "beta.everydashcam.app",
+        "ru.everydashcam.app",
+        "dashcamigo.app",
+        "beta.dashcamigo.app",
+        "ru.dashcamigo.app",
+        "gh.dashcamigo.app",
+        "self-host.test",
+        "deploy-preview.pages.dev",
+        "localhost",
+    ])("requires explicit consent on %s", (hostname) => {
+        vi.stubGlobal("window", Object.assign(new EventTarget(), { location: { hostname } }));
+        expect(crashReportingEnabled()).toBe(false);
+        for (const choice of ["off", "yes", "true", ""]) {
+            fakeStorage.setItem(CRASH_REPORTING_STORAGE_KEY, choice);
+            expect(crashReportingEnabled()).toBe(false);
+        }
+        fakeStorage.setItem(CRASH_REPORTING_STORAGE_KEY, "on");
+        expect(crashReportingEnabled()).toBe(true);
+    });
 
     it("persists an explicit opt-in across a fresh session", () => {
         vi.stubGlobal("window", Object.assign(new EventTarget(), { location: { hostname: "everydashcam.app" } }));
@@ -150,8 +155,8 @@ describe("isCrashReportingBuilt", () => {
 });
 
 describe("crashReportingEnabled", () => {
-    it("default ON: enabled when built and no opt-out flag is stored", () => {
-        expect(crashReportingEnabled()).toBe(true);
+    it("defaults off until consent is stored", () => {
+        expect(crashReportingEnabled()).toBe(false);
     });
 
     it("disabled when the opt-out flag is 'off'", () => {
@@ -166,31 +171,31 @@ describe("crashReportingEnabled", () => {
         expect(crashReportingEnabled()).toBe(false);
     });
 
-    it("treats a blocked localStorage as enabled (matches absence)", () => {
+    it("defaults off when localStorage is blocked", () => {
         vi.stubGlobal("localStorage", {
             getItem: () => {
                 throw new Error("blocked");
             },
         } as unknown as Storage);
-        expect(crashReportingEnabled()).toBe(true);
+        expect(crashReportingEnabled()).toBe(false);
     });
 });
 
 describe("setCrashReportingEnabled", () => {
-    it("persists opt-out and clears it again (default-ON semantics: absence = enabled)", () => {
+    it("persists an explicit choice in either direction", () => {
         setCrashReportingEnabled(false);
         expect(fakeStorage.getItem(CRASH_REPORTING_STORAGE_KEY)).toBe("off");
         expect(crashReportingEnabled()).toBe(false);
 
         setCrashReportingEnabled(true);
-        // Re-enabling removes the key rather than storing "on".
-        expect(fakeStorage.getItem(CRASH_REPORTING_STORAGE_KEY)).toBeNull();
+        expect(fakeStorage.getItem(CRASH_REPORTING_STORAGE_KEY)).toBe("on");
         expect(crashReportingEnabled()).toBe(true);
     });
 });
 
 describe("capture helpers are safe no-ops without an initialized SDK", () => {
     it("do not throw when enabled but the SDK never loaded (node has no window)", () => {
+        setCrashReportingEnabled(true);
         expect(() => captureSentryMessage("x", { level: "warning" })).not.toThrow();
         expect(() => captureSentryException(new Error("y"))).not.toThrow();
     });

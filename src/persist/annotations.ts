@@ -89,7 +89,7 @@ const SIDECAR_FORMAT = "annotations";
 const SIDECAR_VERSION = 2;
 
 export function notesBackupFilename(date = new Date()): string {
-    return `dashcamigo-notes-${date.toISOString().slice(0, 10)}.dashcamigo`;
+    return `everydashcam-notes-${date.toISOString().slice(0, 10)}.dashcamigo`;
 }
 
 /**

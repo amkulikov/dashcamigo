@@ -53,7 +53,7 @@ test.describe("TS trailer recording ingest", () => {
             await expect
                 .poll(() =>
                     page.evaluate(() => {
-                        const state = window.__dashcamigo.state;
+                        const state = window.__everydashcam.state;
                         return state.trips[state.active!.trip]!.records.length;
                     }),
                 )

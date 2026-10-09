@@ -90,7 +90,7 @@ test("mobile event list opens a clip around the selected event", async ({ page }
     await expect(start).toHaveValue("0:02");
     // Public fixtures contain no detected events; use the same event seam as the popup coverage.
     await page.evaluate(() => {
-        const state = window.__dashcamigo.state;
+        const state = window.__everydashcam.state;
         const trip = state.trips[state.active!.trip]!;
         trip.events.push({ kind: "brake", unixSeconds: trip.startUtc + 2, relSec: 2, severity: 0.42, recordIndex: 0 });
     });

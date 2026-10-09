@@ -64,16 +64,16 @@ for (const vendor of vendors) {
             await page.waitForFunction(
                 () => {
                     const w = window as unknown as {
-                        __dashcamigoPerf?: { lifecycleEvents?: Array<{ type: string }> };
+                        __everydashcamPerf?: { lifecycleEvents?: Array<{ type: string }> };
                     };
-                    return !!w.__dashcamigoPerf?.lifecycleEvents?.some((e) => e.type === "dashcamigo:ingest-done");
+                    return !!w.__everydashcamPerf?.lifecycleEvents?.some((e) => e.type === "everydashcam:ingest-done");
                 },
                 { timeout: ingestBudgetMs, polling: 100 },
             );
 
             const tripCount = await page.evaluate(() => {
-                const w = window as unknown as { __dashcamigo?: { state: { trips: unknown[] } } };
-                return w.__dashcamigo?.state.trips.length ?? 0;
+                const w = window as unknown as { __everydashcam?: { state: { trips: unknown[] } } };
+                return w.__everydashcam?.state.trips.length ?? 0;
             });
             if (tripCount === 0) {
                 test.skip(true, `vendor ${vendor.name} has 0 trips after ingest, nothing to activate`);
@@ -106,19 +106,19 @@ for (const vendor of vendors) {
                     await page.waitForFunction(
                         () => {
                             const w = window as unknown as {
-                                __dashcamigoPerf?: { lifecycleEvents?: Array<{ type: string }> };
+                                __everydashcamPerf?: { lifecycleEvents?: Array<{ type: string }> };
                             };
-                            const seen = new Set((w.__dashcamigoPerf?.lifecycleEvents ?? []).map((e) => e.type));
+                            const seen = new Set((w.__everydashcamPerf?.lifecycleEvents ?? []).map((e) => e.type));
                             // player-failed is a terminal alternative to
                             // first-frame (canDecodeVideo rejected the codec).
                             // Treat either as "player done" so the harness does
                             // not hang on unplayable-but-otherwise-valid trips.
                             const playerDone =
-                                seen.has("dashcamigo:player-first-frame") || seen.has("dashcamigo:player-failed");
+                                seen.has("everydashcam:player-first-frame") || seen.has("everydashcam:player-failed");
                             return (
                                 playerDone &&
-                                seen.has("dashcamigo:map-tracks-rendered") &&
-                                seen.has("dashcamigo:chart-rendered")
+                                seen.has("everydashcam:map-tracks-rendered") &&
+                                seen.has("everydashcam:chart-rendered")
                             );
                         },
                         { timeout: 10_000, polling: 100 },
@@ -126,13 +126,13 @@ for (const vendor of vendors) {
                 } catch {
                     const dump = await page.evaluate(() => {
                         const w = window as unknown as {
-                            __dashcamigoPerf?: { lifecycleEvents?: Array<{ type: string }> };
-                            __dashcamigo?: { state: { active: unknown; trips: unknown[] } };
+                            __everydashcamPerf?: { lifecycleEvents?: Array<{ type: string }> };
+                            __everydashcam?: { state: { active: unknown; trips: unknown[] } };
                         };
                         return {
-                            events: (w.__dashcamigoPerf?.lifecycleEvents ?? []).map((e) => e.type),
-                            active: w.__dashcamigo?.state.active,
-                            tripsLen: w.__dashcamigo?.state.trips.length,
+                            events: (w.__everydashcamPerf?.lifecycleEvents ?? []).map((e) => e.type),
+                            active: w.__everydashcam?.state.active,
+                            tripsLen: w.__everydashcam?.state.trips.length,
                         };
                     });
                     throw new Error(
@@ -166,10 +166,10 @@ for (const vendor of vendors) {
                 const result: ScenarioResult = {
                     wallMs: wallEnd - wallStart,
                     latency: {
-                        tripActivated: lat("dashcamigo:trip-activated"),
-                        playerFirstFrame: lat("dashcamigo:player-first-frame"),
-                        mapTracksRendered: lat("dashcamigo:map-tracks-rendered"),
-                        chartRendered: lat("dashcamigo:chart-rendered"),
+                        tripActivated: lat("everydashcam:trip-activated"),
+                        playerFirstFrame: lat("everydashcam:player-first-frame"),
+                        mapTracksRendered: lat("everydashcam:map-tracks-rendered"),
+                        chartRendered: lat("everydashcam:chart-rendered"),
                     },
                     bytesRead,
                     peakUsedJSHeap: peakMem.peakUsedJSHeapSize,

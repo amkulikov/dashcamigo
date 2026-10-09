@@ -1,7 +1,7 @@
 # Self-build image: builds the app from this clone, serves it with nginx
 # (docs/self-hosting.md):
-#   docker build -t dashcamigo .
-#   docker run -d -p 8080:80 dashcamigo
+#   docker build -t everydashcam .
+#   docker run -d -p 8080:80 everydashcam
 # The prebuilt image at ghcr.io/everydashcam/everydashcam is NOT built from this
 # file: the release workflow packages its already-built (and attested) dist/
 # via docker/Dockerfile.prebuilt, so the image and the release archives are

@@ -40,7 +40,9 @@ export type LifecycleEvent =
     | "map-tracks-rendered"
     | "chart-rendered";
 
-const LIFECYCLE_PREFIX = "dashcamigo:";
+const LIFECYCLE_PREFIX = "everydashcam:";
+// Keep external observers working while released clients use the old namespace.
+const LEGACY_LIFECYCLE_PREFIX = "dashcamigo:";
 
 /**
  * Wraps an async stage in performance.mark+measure. Returns the value of fn().
@@ -73,17 +75,18 @@ export async function markStage<T>(name: string, fn: () => Promise<T>): Promise<
 }
 
 /**
- * Dispatches a CustomEvent on window with name `dashcamigo:<event>` and the
+ * Dispatches a CustomEvent on window with name `everydashcam:<event>` and the
  * given detail. Used as a public lifecycle signal for the performance-test
  * harness (it waits on these events) and for any third-party integration that
  * needs to know when key UI milestones are reached. No-op outside the browser.
  */
 export function emitLifecycle(event: LifecycleEvent, detail?: Record<string, unknown>): void {
     if (typeof window === "undefined" || typeof window.dispatchEvent !== "function") return;
-    try {
-        window.dispatchEvent(new CustomEvent(`${LIFECYCLE_PREFIX}${event}`, { detail }));
-    } catch {
-        // CustomEvent constructor missing on extremely old engines we do not target;
-        // swallow to keep call sites zero-risk.
+    for (const prefix of [LIFECYCLE_PREFIX, LEGACY_LIFECYCLE_PREFIX]) {
+        try {
+            window.dispatchEvent(new CustomEvent(`${prefix}${event}`, { detail }));
+        } catch {
+            // Observability must never interrupt the operation being observed.
+        }
     }
 }

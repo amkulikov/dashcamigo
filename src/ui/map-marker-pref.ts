@@ -24,7 +24,7 @@ export const DEFAULT_MAP_MARKER_APPEARANCE: Readonly<MapMarkerAppearance> = {
     size: "medium",
 };
 
-const STORAGE_KEY = "dashcamigo:mapMarker";
+const STORAGE_KEY = "everydashcam:mapMarker";
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
 let sessionAppearance: MapMarkerAppearance | null = null;

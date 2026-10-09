@@ -7,7 +7,7 @@ export async function verifyGpxSpeed(page: Page, mode: "sidecar" | "manual", est
     await loadTrip(page, SAMPLE_NOGPS);
     await pausePlayback(page);
     const start = await page.evaluate(() => {
-        const state = window.__dashcamigo.state;
+        const state = window.__everydashcam.state;
         return state.trips[state.active!.trip]!.timeline.segments[0]!.wallStart;
     });
     const point = (index: number, field = "") =>
@@ -27,7 +27,7 @@ export async function verifyGpxSpeed(page: Page, mode: "sidecar" | "manual", est
     await expect
         .poll(() =>
             page.evaluate(() => {
-                const state = window.__dashcamigo.state;
+                const state = window.__everydashcam.state;
                 return state.trips[state.active!.trip]!.records.map((r) => r.speedSource);
             }),
         )
@@ -44,7 +44,7 @@ export async function verifyGpxSpeed(page: Page, mode: "sidecar" | "manual", est
     await page.locator("#pm-speed-toggle").click();
     await expect(page.locator("#pm-speed")).toHaveText("≈40.0");
     const chart = await page.evaluate(() => {
-        const state = window.__dashcamigo.state;
+        const state = window.__everydashcam.state;
         return {
             speeds: state.chart!.data.datasets[0]!.data,
             spanGaps: Reflect.get(state.chart!.data.datasets[0]!, "spanGaps"),
@@ -83,7 +83,7 @@ export async function verifyRobustGpxSpeed(page: Page): Promise<void> {
     await loadTrip(page, SAMPLE_NOGPS);
     await pausePlayback(page);
     const start = await page.evaluate(() => {
-        const state = window.__dashcamigo.state;
+        const state = window.__everydashcam.state;
         return state.trips[state.active!.trip]!.timeline.segments[0]!.wallStart;
     });
     const metersPerDegree = (6_371_000 * Math.PI) / 180;
@@ -100,7 +100,7 @@ export async function verifyRobustGpxSpeed(page: Page): Promise<void> {
     await expect
         .poll(() =>
             page.evaluate(() => {
-                const state = window.__dashcamigo.state;
+                const state = window.__everydashcam.state;
                 return state.trips[state.active!.trip]!.records.length;
             }),
         )
@@ -111,7 +111,7 @@ export async function verifyRobustGpxSpeed(page: Page): Promise<void> {
     await expect(page.locator("#pm-speed")).toHaveText("≈108.0");
     await expect(page.locator("#pm-bar-speed")).toHaveText("≈108.0");
     const telemetry = await page.evaluate(() => {
-        const state = window.__dashcamigo.state;
+        const state = window.__everydashcam.state;
         const trip = state.trips[state.active!.trip]!;
         return {
             readings: trip.records.map((r) => ({ speed: r.speedMs, source: r.speedSource })),

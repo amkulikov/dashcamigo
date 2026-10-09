@@ -8,11 +8,11 @@
 //    Below min-level: not written to the console, but always captured in the
 //    ring buffer.
 //  - Ring buffer (500 entries) in memory - the user exports it via
-//    __dashcamigo.downloadLog() for a bug report. No backend; this is the
-//    primary local diagnostic channel. An optional, opt-out Sentry sink
+//    __everydashcam.downloadLog() for a bug report. No backend; this is the
+//    primary local diagnostic channel. An optional, opt-in Sentry sink
 //    (setLogSink) mirrors scrubbed records as breadcrumbs - see src/sentry.ts.
-//  - Override via localStorage["dashcamigo:log"]: format
-//    "ingest=debug,vendor:*=info,*=warn". Wildcard only at the end of the
+//  - Override via __everydashcam.setLogRules("ingest=debug,vendor:*=info,*=warn");
+//    pass null to restore defaults. Wildcard only at the end of the
 //    namespace ("vendor:*"). Multiple rules: LAST match wins.
 //
 // What we do NOT do:
@@ -83,7 +83,7 @@ export interface Logger {
     child(suffix: string): Logger;
 }
 
-const STORAGE_KEY = "dashcamigo:log";
+const STORAGE_KEY = "everydashcam:log";
 const RING_BUFFER_SIZE = 500;
 
 // Default min-level. import.meta.env.DEV: true in `vite dev`, false in
@@ -134,17 +134,19 @@ const IS_WORKER_SCOPE =
 
 // Marker for forwarded log entries. Workers send messages in this format to
 // the main thread; the main-side ring buffer receives them via
-// installWorkerLogBridge. The "__dashcamigo:" prefix avoids collisions with
+// installWorkerLogBridge. The "__everydashcam:" prefix avoids collisions with
 // regular worker messages.
-const FORWARD_MESSAGE_TYPE = "__dashcamigo:log";
+const FORWARD_MESSAGE_TYPE = "__everydashcam:log";
+// A restored tab can still receive messages from a released worker bundle.
+const LEGACY_FORWARD_MESSAGE_TYPE = "__dashcamigo:log";
 
 interface ForwardedLogMessage {
-    __type: typeof FORWARD_MESSAGE_TYPE;
+    __type: typeof FORWARD_MESSAGE_TYPE | typeof LEGACY_FORWARD_MESSAGE_TYPE;
     record: LogRecord;
 }
 
 /**
- * Parses the "dashcamigo:log" localStorage value. Invalid rules are silently
+ * Parses the "everydashcam:log" localStorage value. Invalid rules are silently
  * skipped - a bad config must not crash the page.
  */
 function parseRules(spec: string | null): Rule[] {
@@ -220,9 +222,18 @@ function ensureInstalled(): void {
     // React to config changes from another tab or DevTools.
     if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
         window.addEventListener("storage", (ev) => {
-            if (ev.key === STORAGE_KEY) reloadRules();
+            if (ev.key === null || ev.key === STORAGE_KEY) reloadRules();
         });
     }
+}
+
+/** Updates this tab immediately and persists the logging preference.
+ * Storage errors propagate without replacing the current logging rules. */
+export function setLogRules(value: string | null): void {
+    ensureInstalled();
+    if (value === null) localStorage.removeItem(STORAGE_KEY);
+    else localStorage.setItem(STORAGE_KEY, value);
+    reloadRules();
 }
 
 /**
@@ -291,7 +302,7 @@ function emit(ns: string, level: LogLevel, msg: string, payload?: unknown): void
     }
 
     // In a worker, also forward the record to the main thread so it ends up
-    // in the main ring buffer (exported via __dashcamigo.downloadLog). Without
+    // in the main ring buffer (exported via __everydashcam.downloadLog). Without
     // forwarding, worker logs would be missing from bug reports (no backend;
     // the ring buffer is the local record). Console output stays per-scope: each worker writes to its
     // own DevTools tab; we don't duplicate to the main console.
@@ -359,20 +370,20 @@ export function getLogBuffer(): LogRecord[] {
 /**
  * Registers a main-thread listener that forwards Worker log entries into the
  * main ring buffer. Without this, worker logs (transcode/gps-extract/preview)
- * would be absent from __dashcamigo.downloadLog() bug reports.
+ * would be absent from __everydashcam.downloadLog() bug reports.
  *
  * Not idempotent: calling it twice for the same worker adds a second listener
  * and duplicates entries. Each shim that creates a Worker must call this
  * EXACTLY ONCE right after `new Worker(...)`.
  *
  * Unknown/third-party messages are silently ignored - filter is on
- * `__type === "__dashcamigo:log"`.
+ * the current or legacy log envelope marker.
  */
 export function installWorkerLogBridge(worker: Worker): void {
     worker.addEventListener("message", (ev) => {
         const data = ev.data as Partial<ForwardedLogMessage> | null | undefined;
         if (!data || typeof data !== "object") return;
-        if (data.__type !== FORWARD_MESSAGE_TYPE) return;
+        if (data.__type !== FORWARD_MESSAGE_TYPE && data.__type !== LEGACY_FORWARD_MESSAGE_TYPE) return;
         const rec = data.record;
         if (!rec || typeof rec !== "object") return;
         // Tag as worker-originated so a reader of the downloaded buffer knows
@@ -402,7 +413,7 @@ export function downloadLogBuffer(): void {
     const payload = JSON.stringify(getLogBuffer(), null, 2);
     const blob = new Blob([payload], { type: "application/json" });
     const ts = new Date().toISOString().replace(/[:.]/g, "-");
-    downloadBlob(blob, `dashcamigo-log-${ts}.json`);
+    downloadBlob(blob, `everydashcam-log-${ts}.json`);
 }
 
 // Test-only reset: clears the buffer and rules. Never called in production.

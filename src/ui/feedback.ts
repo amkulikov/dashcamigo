@@ -120,7 +120,7 @@ function buildReportText(): string {
 }
 
 function reportFilename(ts: Date): string {
-    return `dashcamigo-report-${utcTimestampSlug(ts)}.txt`;
+    return `everydashcam-report-${utcTimestampSlug(ts)}.txt`;
 }
 
 function captureFeedbackSnapshot(recognitionIssue?: string): FeedbackSnapshot {

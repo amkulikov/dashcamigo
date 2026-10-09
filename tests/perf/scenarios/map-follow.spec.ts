@@ -108,9 +108,9 @@ for (const vendor of vendors) {
             const page = await ctx.newPage();
             await presetLocalStorage(page);
             await page.addInitScript(() => {
-                localStorage.setItem("dashcamigo:mapProvider", "openfreemap");
+                localStorage.setItem("everydashcam:mapProvider", "openfreemap");
                 localStorage.setItem(
-                    "dashcamigo:mapView",
+                    "everydashcam:mapView",
                     JSON.stringify({ style: "classic", theme: "dark", buildings3d: true }),
                 );
             });
@@ -119,15 +119,15 @@ for (const vendor of vendors) {
             await page.waitForFunction(
                 () => {
                     const w = window as unknown as {
-                        __dashcamigoPerf?: { lifecycleEvents?: Array<{ type: string }> };
+                        __everydashcamPerf?: { lifecycleEvents?: Array<{ type: string }> };
                     };
-                    return !!w.__dashcamigoPerf?.lifecycleEvents?.some((e) => e.type === "dashcamigo:ingest-done");
+                    return !!w.__everydashcamPerf?.lifecycleEvents?.some((e) => e.type === "everydashcam:ingest-done");
                 },
                 undefined,
                 { timeout: ingestBudgetMs, polling: 100 },
             );
 
-            if (await page.evaluate(() => window.__dashcamigo.state.trips.length === 0)) {
+            if (await page.evaluate(() => window.__everydashcam.state.trips.length === 0)) {
                 test.skip(true, `vendor ${vendor.name} has no trips`);
                 return;
             }
@@ -135,12 +135,12 @@ for (const vendor of vendors) {
             await page.waitForFunction(
                 () => {
                     const w = window as unknown as {
-                        __dashcamigoPerf?: { lifecycleEvents?: Array<{ type: string }> };
+                        __everydashcamPerf?: { lifecycleEvents?: Array<{ type: string }> };
                     };
-                    const seen = new Set((w.__dashcamigoPerf?.lifecycleEvents ?? []).map((e) => e.type));
+                    const seen = new Set((w.__everydashcamPerf?.lifecycleEvents ?? []).map((e) => e.type));
                     return (
-                        (seen.has("dashcamigo:player-first-frame") || seen.has("dashcamigo:player-failed")) &&
-                        seen.has("dashcamigo:map-tracks-rendered")
+                        (seen.has("everydashcam:player-first-frame") || seen.has("everydashcam:player-failed")) &&
+                        seen.has("everydashcam:map-tracks-rendered")
                     );
                 },
                 undefined,
@@ -148,11 +148,11 @@ for (const vendor of vendors) {
             );
             const activation = await page.evaluate(() => {
                 const w = window as unknown as {
-                    __dashcamigoPerf?: { lifecycleEvents?: Array<{ type: string }> };
+                    __everydashcamPerf?: { lifecycleEvents?: Array<{ type: string }> };
                 };
                 return {
-                    failed: w.__dashcamigoPerf?.lifecycleEvents?.some((e) => e.type === "dashcamigo:player-failed"),
-                    hasTrack: window.__dashcamigo.state.hasTrack,
+                    failed: w.__everydashcamPerf?.lifecycleEvents?.some((e) => e.type === "everydashcam:player-failed"),
+                    hasTrack: window.__everydashcam.state.hasTrack,
                     mapless: document.body.classList.contains("map-unavailable"),
                 };
             });
@@ -168,7 +168,7 @@ for (const vendor of vendors) {
                 await page.locator(`.map-follow-seg[data-follow-mode="${MODE}"]`).click();
             }
             await page.evaluate(() => {
-                const player = window.__dashcamigo.dom.player;
+                const player = window.__everydashcam.dom.player;
                 player.muted = true;
                 return player.play();
             });
@@ -187,11 +187,11 @@ for (const vendor of vendors) {
                 network: "external requests blocked; service workers disabled",
                 mapLoad: "local style and GPS geometry only; external basemap tiles unavailable",
                 map: await page.evaluate((mode) => {
-                    const { state } = window.__dashcamigo;
+                    const { state } = window.__everydashcam;
                     const map = mode === "mini" ? state.miniMap : state.map;
                     return {
-                        preferredProvider: localStorage.getItem("dashcamigo:mapProvider"),
-                        preferences: JSON.parse(localStorage.getItem("dashcamigo:mapView") ?? "null") as unknown,
+                        preferredProvider: localStorage.getItem("everydashcam:mapProvider"),
+                        preferences: JSON.parse(localStorage.getItem("everydashcam:mapView") ?? "null") as unknown,
                         styleName: map?.getStyle()?.name ?? null,
                         styleLoaded: map?.isStyleLoaded() ?? false,
                         loaded: map?.loaded() ?? false,
@@ -206,7 +206,7 @@ for (const vendor of vendors) {
             const cdpBefore = await readCdpMetrics(page);
             const procBefore = await readCdpProcesses(page);
             await page.evaluate((mode) => {
-                const { state, dom } = window.__dashcamigo;
+                const { state, dom } = window.__everydashcam;
                 const map = mode === "hidden" ? null : mode === "mini" ? state.miniMap : state.map;
                 const collector: FollowCollector = {
                     renders: 0,
@@ -309,7 +309,7 @@ for (const vendor of vendors) {
                 }
                 c.po?.disconnect();
                 const windowMs = performance.now() - c.startMs;
-                const { state, dom } = window.__dashcamigo;
+                const { state, dom } = window.__everydashcam;
                 if (
                     state.active?.trip !== c.activeTrip ||
                     state.active?.frame !== c.activeFrame ||

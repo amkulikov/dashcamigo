@@ -21,7 +21,7 @@ test("shows GPS dropouts and trip flags on both maps through seeking and style c
     await pausePlayback(page);
     await expect(page.locator("#mini-map .endpoint-marker-wrap")).toHaveCount(2);
     await page.evaluate(() => {
-        const { state, dom, setMapProvider } = window.__dashcamigo;
+        const { state, dom, setMapProvider } = window.__everydashcam;
         dom.player.currentTime = 0.25;
         const trip = state.trips[state.active!.trip]!;
         const startUtc = trip.frames[state.active!.frame]!.startUtc;
@@ -34,8 +34,8 @@ test("shows GPS dropouts and trip flags on both maps through seeking and style c
         ];
         setMapProvider("osm-raster");
     });
-    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.startMarker?.getLngLat().lng)).toBe(20);
-    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.endMarker?.getLngLat().lng)).toBe(20.01);
+    await expect.poll(() => page.evaluate(() => window.__everydashcam.state.startMarker?.getLngLat().lng)).toBe(20);
+    await expect.poll(() => page.evaluate(() => window.__everydashcam.state.endMarker?.getLngLat().lng)).toBe(20.01);
     for (const map of ["#map", "#mini-map"]) {
         await expect(page.locator(`${map} .endpoint-marker-wrap`)).toHaveCount(2);
         await expect(page.locator(`${map} [data-endpoint="start"]`)).toHaveAttribute("aria-label", "Trip start");
@@ -56,7 +56,7 @@ test("shows GPS dropouts and trip flags on both maps through seeking and style c
     await shot(page, "map-trip-markers-mini-no-gps");
 
     await page.evaluate(() => {
-        window.__dashcamigo.dom.player.currentTime = 1.5;
+        window.__everydashcam.dom.player.currentTime = 1.5;
     });
     await expect(miniBadge).toBeHidden();
     await expect(page.locator("#mini-map .car-marker-wrap")).toHaveCSS("visibility", "visible");
@@ -64,14 +64,16 @@ test("shows GPS dropouts and trip flags on both maps through seeking and style c
     await expect(page.locator("body")).not.toHaveClass(/map-morphing/);
     await page.locator('.map-follow-seg[data-follow-mode="off"]').click();
     await page.evaluate(() => {
-        window.__dashcamigo.dom.player.currentTime = 0.25;
+        window.__everydashcam.dom.player.currentTime = 0.25;
     });
     await expect(mapBadge).toBeVisible();
     await expect(page.locator("#map .car-marker-wrap")).toHaveCSS("visibility", "hidden");
     await page.locator('.theme-toggle-btn[data-theme="light"]').click();
     await expect(page.locator("html")).toHaveClass(/dc-light/);
     await expect
-        .poll(() => page.evaluate(() => window.__dashcamigo.state.mapReady && window.__dashcamigo.state.miniMapReady))
+        .poll(() =>
+            page.evaluate(() => window.__everydashcam.state.mapReady && window.__everydashcam.state.miniMapReady),
+        )
         .toBe(true);
     await expect(mapBadge).toBeVisible();
     await expect(page.locator("#map .endpoint-marker-wrap")).toHaveCount(2);
@@ -108,7 +110,7 @@ test("shows GPS dropouts and trip flags on both maps through seeking and style c
     expect(mobileBadge.x + mobileBadge.width).toBeLessThan(mobileCollapse.x);
 
     await page.evaluate(() => {
-        const { state, setMapProvider } = window.__dashcamigo;
+        const { state, setMapProvider } = window.__everydashcam;
         state.trips[state.active!.trip]!.records = [];
         setMapProvider("openfreemap");
     });
@@ -128,7 +130,7 @@ test.describe("touch map status", () => {
         await pausePlayback(page);
         await page.locator("#mobile-view-map").click();
         await page.evaluate(() => {
-            const { state, setMapProvider } = window.__dashcamigo;
+            const { state, setMapProvider } = window.__everydashcam;
             const trip = state.trips[state.active!.trip]!;
             trip.records = trip.records.map((record) => ({ ...record, unixSeconds: record.unixSeconds + 3600 }));
             setMapProvider("osm-raster");
@@ -150,13 +152,13 @@ test("keeps coincident trip flags distinct and labels them in Russian", async ({
     await loadTrip(page);
     await pausePlayback(page);
     await page.evaluate(() => {
-        const { state, setMapProvider } = window.__dashcamigo;
+        const { state, setMapProvider } = window.__everydashcam;
         const trip = state.trips[state.active!.trip]!;
         const source = trip.records.find((record) => record.active)!;
         trip.records = [{ ...source, unixSeconds: trip.frames[state.active!.frame]!.startUtc, lat: 50, lon: 20 }];
         setMapProvider("osm-raster");
     });
-    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.startMarker?.getLngLat().lng)).toBe(20);
+    await expect.poll(() => page.evaluate(() => window.__everydashcam.state.startMarker?.getLngLat().lng)).toBe(20);
     for (const map of ["#map", "#mini-map"]) {
         await expect(page.locator(`${map} [data-endpoint="start"]`)).toHaveAttribute("title", "Начало поездки");
         await expect(page.locator(`${map} [data-endpoint="end"]`)).toHaveAttribute("aria-label", "Конец поездки");

@@ -14,7 +14,7 @@ import {
 
 function mapBackground(page: Page): Promise<string | undefined> {
     return page.evaluate(() => {
-        const layer = window.__dashcamigo.state.map?.getStyle()?.layers.find((layer) => layer.type === "background");
+        const layer = window.__everydashcam.state.map?.getStyle()?.layers.find((layer) => layer.type === "background");
         return JSON.stringify(layer?.paint?.["background-color"]);
     });
 }
@@ -58,13 +58,15 @@ test("vehicle markers use overhead art on flat maps and preserve the chase persp
     );
 
     await page.locator("#mini-map").click();
-    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map!.getPitch())).toBeGreaterThan(20);
+    await expect.poll(() => page.evaluate(() => window.__everydashcam.state.map!.getPitch())).toBeGreaterThan(20);
     await expect(mainMarker).toHaveAttribute("data-marker-render-key", "sedan:#ff9000");
     await expect.poll(() => markerPixels(mainMarker)).toBe(perspectivePixels);
 
     await page.locator('.map-follow-seg[data-follow-mode="follow"]').click();
-    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map!.getPitch())).toBeLessThan(1);
-    await expect.poll(() => page.evaluate(() => Math.abs(window.__dashcamigo.state.map!.getBearing()))).toBeLessThan(1);
+    await expect.poll(() => page.evaluate(() => window.__everydashcam.state.map!.getPitch())).toBeLessThan(1);
+    await expect
+        .poll(() => page.evaluate(() => Math.abs(window.__everydashcam.state.map!.getBearing())))
+        .toBeLessThan(1);
     await expect(mainMarker).toHaveAttribute("data-marker-render-key", "sedan:#ff9000:overhead");
     await expect.poll(() => markerPixels(mainMarker)).toBe(overheadPixels);
     await page.locator('.map-follow-seg[data-follow-mode="rotate"]').click();
@@ -117,7 +119,7 @@ for (const locale of ["en", "ru"] as const) {
         const marker = page.locator(".map-wrap .car-marker__canvas");
         await expect(marker).toHaveAttribute("data-marker-render-key", "sedan:#ff9000");
         await expect.poll(() => markerPixels(marker)).toBe(chasePixels);
-        await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map!.isMoving())).toBe(false);
+        await expect.poll(() => page.evaluate(() => window.__everydashcam.state.map!.isMoving())).toBe(false);
 
         const disabledCompassKeepsCamera = async (): Promise<void> => {
             await expect(compass).toBeDisabled();
@@ -127,7 +129,7 @@ for (const locale of ["en", "ru"] as const) {
             // Follow uses per-frame jumpTo calls that can run while isMoving() is false.
             // Observe only the click handler's effects, without a follow frame in between.
             const { before, after } = await compass.evaluate((button) => {
-                const map = window.__dashcamigo.state.map!;
+                const map = window.__everydashcam.state.map!;
                 const before = { bearing: map.getBearing(), pitch: map.getPitch() };
                 button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
                 const after = { bearing: map.getBearing(), pitch: map.getPitch(), moving: map.isMoving() };
@@ -138,20 +140,20 @@ for (const locale of ["en", "ru"] as const) {
             expect(after.moving, "a disabled compass does not start a camera animation").toBe(false);
         };
 
-        await page.evaluate(() => window.__dashcamigo.state.map!.jumpTo({ bearing: 45 }));
+        await page.evaluate(() => window.__everydashcam.state.map!.jumpTo({ bearing: 45 }));
         await disabledCompassKeepsCamera();
         await page.locator('.map-follow-seg[data-follow-mode="follow"]').click();
-        await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map!.getPitch())).toBeLessThan(1);
+        await expect.poll(() => page.evaluate(() => window.__everydashcam.state.map!.getPitch())).toBeLessThan(1);
         await expect(compass).toBeEnabled();
         await page.locator('.map-follow-seg[data-follow-mode="off"]').click();
-        await page.evaluate(() => window.__dashcamigo.state.map!.jumpTo({ bearing: 45, pitch: 0 }));
+        await page.evaluate(() => window.__everydashcam.state.map!.jumpTo({ bearing: 45, pitch: 0 }));
         await compass.click();
         await expect
-            .poll(() => page.evaluate(() => Math.abs(window.__dashcamigo.state.map!.getBearing())))
+            .poll(() => page.evaluate(() => Math.abs(window.__everydashcam.state.map!.getBearing())))
             .toBeLessThan(0.1);
-        await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map!.isMoving())).toBe(false);
+        await expect.poll(() => page.evaluate(() => window.__everydashcam.state.map!.isMoving())).toBe(false);
 
-        await page.evaluate(() => window.__dashcamigo.state.map!.jumpTo({ bearing: 60, pitch: 50 }));
+        await page.evaluate(() => window.__everydashcam.state.map!.jumpTo({ bearing: 60, pitch: 50 }));
         await disabledCompassKeepsCamera();
         await page.locator('.map-follow-seg[data-follow-mode="chase"]').click();
         await expect(compass).toBeDisabled();
@@ -184,7 +186,9 @@ test.describe("delayed marker assets", () => {
 
         try {
             await page.locator("#mini-map").click();
-            await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.map!.getPitch())).toBeGreaterThan(20);
+            await expect
+                .poll(() => page.evaluate(() => window.__everydashcam.state.map!.getPitch()))
+                .toBeGreaterThan(20);
             await page.locator("#map-settings-toggle").click();
             const popover = page.locator('[data-marker-control="map-popover"]');
             await popover.locator('button[data-marker-shape="suv"]').click();
@@ -222,7 +226,7 @@ test("map provider choice applies immediately and survives a reload", async ({ p
     await expect(provider.locator('option[value="openfreemap"]')).toHaveText("OpenFreeMap (recommended)");
     await provider.selectOption("osm-vector");
     await expect
-        .poll(() => page.evaluate(() => Boolean(window.__dashcamigo.state.map?.getSource("osm-shortbread"))))
+        .poll(() => page.evaluate(() => Boolean(window.__everydashcam.state.map?.getSource("osm-shortbread"))))
         .toBe(true);
 
     await gotoApp(page, "ru");
@@ -266,7 +270,7 @@ test("map gear and general settings share style, theme and buildings choices", a
     await pausePlayback(page);
     await page.locator(".mini-map").click();
     const hasBuildings = (): Promise<boolean> =>
-        page.evaluate(() => Boolean(window.__dashcamigo.state.map?.getLayer("dc-buildings-3d")));
+        page.evaluate(() => Boolean(window.__everydashcam.state.map?.getLayer("dc-buildings-3d")));
     await expect.poll(hasBuildings).toBe(true);
     const darkBackground = await mapBackground(page);
     expect(darkBackground).toBeTruthy();
@@ -275,7 +279,7 @@ test("map gear and general settings share style, theme and buildings choices", a
     await page.locator("#map-style-select").selectOption("minimal");
     await page.locator("#map-theme-select").selectOption("dark");
     await page.locator("#map-buildings3d-toggle").uncheck();
-    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.mapReady)).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.__everydashcam.state.mapReady)).toBe(true);
     await expect.poll(hasBuildings).toBe(false);
     await expect(popover).toBeVisible();
     await expect(page.locator("#settings-map-style-select")).toHaveValue("minimal");
@@ -318,10 +322,10 @@ test("style changes preserve the manually positioned map camera", async ({ page 
     await loadTrip(page);
     await pausePlayback(page);
     await page.locator(".mini-map").click();
-    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.mapReady)).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.__everydashcam.state.mapReady)).toBe(true);
     await page.locator('.map-follow-seg[data-follow-mode="off"]').click();
     await page.evaluate(() => {
-        window.__dashcamigo.state.map!.jumpTo({ center: [65, 45], zoom: 17, bearing: 20, pitch: 0 });
+        window.__everydashcam.state.map!.jumpTo({ center: [65, 45], zoom: 17, bearing: 20, pitch: 0 });
     });
     const darkBackground = await mapBackground(page);
     expect(darkBackground).toBeTruthy();
@@ -337,13 +341,13 @@ test("style changes preserve the manually positioned map camera", async ({ page 
     await expect
         .poll(() =>
             page.evaluate(() => {
-                const map = window.__dashcamigo.state.map!;
-                return Boolean(map.getSource("openmaptiles")) && window.__dashcamigo.state.mapReady;
+                const map = window.__everydashcam.state.map!;
+                return Boolean(map.getSource("openmaptiles")) && window.__everydashcam.state.mapReady;
             }),
         )
         .toBe(true);
     const camera = await page.evaluate(() => {
-        const { map, followMode } = window.__dashcamigo.state;
+        const { map, followMode } = window.__everydashcam.state;
         return {
             lng: map!.getCenter().lng,
             lat: map!.getCenter().lat,

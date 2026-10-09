@@ -16,7 +16,7 @@
         "background-color": "#f5f4ef"
       },
       "metadata": {
-        "dashcamigo:role": "background"
+        "everydashcam:role": "background"
       }
     },
     {
@@ -30,7 +30,7 @@
         "fill-outline-color": "#a4c493"
       },
       "metadata": {
-        "dashcamigo:role": "park"
+        "everydashcam:role": "park"
       }
     },
     {
@@ -46,7 +46,7 @@
         ]
       },
       "metadata": {
-        "dashcamigo:role": "park"
+        "everydashcam:role": "park"
       }
     },
     {
@@ -67,7 +67,7 @@
         "fill-color": "#e9e7df"
       },
       "metadata": {
-        "dashcamigo:role": "landuse"
+        "everydashcam:role": "landuse"
       }
     },
     {
@@ -89,7 +89,7 @@
         "fill-opacity": 0.65
       },
       "metadata": {
-        "dashcamigo:role": "landcover"
+        "everydashcam:role": "landcover"
       }
     },
     {
@@ -141,7 +141,7 @@
         ]
       },
       "metadata": {
-        "dashcamigo:role": "water"
+        "everydashcam:role": "water"
       }
     },
     {
@@ -189,7 +189,7 @@
         ]
       },
       "metadata": {
-        "dashcamigo:role": "water"
+        "everydashcam:role": "water"
       }
     },
     {
@@ -237,7 +237,7 @@
         ]
       },
       "metadata": {
-        "dashcamigo:role": "water"
+        "everydashcam:role": "water"
       }
     },
     {
@@ -257,7 +257,7 @@
         "fill-color": "#aad3df"
       },
       "metadata": {
-        "dashcamigo:role": "water"
+        "everydashcam:role": "water"
       }
     },
     {
@@ -271,7 +271,7 @@
         "fill-outline-color": "#c6beb3"
       },
       "metadata": {
-        "dashcamigo:role": "building"
+        "everydashcam:role": "building"
       }
     },
     {
@@ -281,7 +281,7 @@
       "source-layer": "transportation",
       "minzoom": 7,
       "metadata": {
-        "dashcamigo:role": "transport"
+        "everydashcam:role": "transport"
       },
       "filter": [
         "==",
@@ -321,7 +321,7 @@
         "fill-color": "#eee7d9"
       },
       "metadata": {
-        "dashcamigo:role": "transport"
+        "everydashcam:role": "transport"
       }
     },
     {
@@ -331,10 +331,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": "below",
-        "dashcamigo:road-crossing": "all"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": "below",
+        "everydashcam:road-crossing": "all"
       },
       "filter": [
         "all",
@@ -965,10 +965,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": -5,
-        "dashcamigo:road-crossing": "tunnel"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": -5,
+        "everydashcam:road-crossing": "tunnel"
       },
       "filter": [
         "all",
@@ -1971,10 +1971,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": -5,
-        "dashcamigo:road-crossing": "tunnel"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": -5,
+        "everydashcam:road-crossing": "tunnel"
       },
       "filter": [
         "all",
@@ -2735,10 +2735,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": -5,
-        "dashcamigo:road-crossing": "surface"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": -5,
+        "everydashcam:road-crossing": "surface"
       },
       "filter": [
         "all",
@@ -3758,10 +3758,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": -5,
-        "dashcamigo:road-crossing": "surface"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": -5,
+        "everydashcam:road-crossing": "surface"
       },
       "filter": [
         "all",
@@ -4539,10 +4539,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": -5,
-        "dashcamigo:road-crossing": "bridge"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": -5,
+        "everydashcam:road-crossing": "bridge"
       },
       "filter": [
         "all",
@@ -5545,10 +5545,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": -5,
-        "dashcamigo:road-crossing": "bridge"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": -5,
+        "everydashcam:road-crossing": "bridge"
       },
       "filter": [
         "all",
@@ -6309,10 +6309,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": -4,
-        "dashcamigo:road-crossing": "tunnel"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": -4,
+        "everydashcam:road-crossing": "tunnel"
       },
       "filter": [
         "all",
@@ -7315,10 +7315,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": -4,
-        "dashcamigo:road-crossing": "tunnel"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": -4,
+        "everydashcam:road-crossing": "tunnel"
       },
       "filter": [
         "all",
@@ -8079,10 +8079,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": -4,
-        "dashcamigo:road-crossing": "surface"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": -4,
+        "everydashcam:road-crossing": "surface"
       },
       "filter": [
         "all",
@@ -9102,10 +9102,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": -4,
-        "dashcamigo:road-crossing": "surface"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": -4,
+        "everydashcam:road-crossing": "surface"
       },
       "filter": [
         "all",
@@ -9883,10 +9883,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": -4,
-        "dashcamigo:road-crossing": "bridge"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": -4,
+        "everydashcam:road-crossing": "bridge"
       },
       "filter": [
         "all",
@@ -10889,10 +10889,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": -4,
-        "dashcamigo:road-crossing": "bridge"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": -4,
+        "everydashcam:road-crossing": "bridge"
       },
       "filter": [
         "all",
@@ -11653,10 +11653,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": -3,
-        "dashcamigo:road-crossing": "tunnel"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": -3,
+        "everydashcam:road-crossing": "tunnel"
       },
       "filter": [
         "all",
@@ -12659,10 +12659,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": -3,
-        "dashcamigo:road-crossing": "tunnel"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": -3,
+        "everydashcam:road-crossing": "tunnel"
       },
       "filter": [
         "all",
@@ -13423,10 +13423,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": -3,
-        "dashcamigo:road-crossing": "surface"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": -3,
+        "everydashcam:road-crossing": "surface"
       },
       "filter": [
         "all",
@@ -14446,10 +14446,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": -3,
-        "dashcamigo:road-crossing": "surface"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": -3,
+        "everydashcam:road-crossing": "surface"
       },
       "filter": [
         "all",
@@ -15227,10 +15227,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": -3,
-        "dashcamigo:road-crossing": "bridge"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": -3,
+        "everydashcam:road-crossing": "bridge"
       },
       "filter": [
         "all",
@@ -16233,10 +16233,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": -3,
-        "dashcamigo:road-crossing": "bridge"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": -3,
+        "everydashcam:road-crossing": "bridge"
       },
       "filter": [
         "all",
@@ -16997,10 +16997,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": -2,
-        "dashcamigo:road-crossing": "tunnel"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": -2,
+        "everydashcam:road-crossing": "tunnel"
       },
       "filter": [
         "all",
@@ -18003,10 +18003,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": -2,
-        "dashcamigo:road-crossing": "tunnel"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": -2,
+        "everydashcam:road-crossing": "tunnel"
       },
       "filter": [
         "all",
@@ -18767,10 +18767,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": -2,
-        "dashcamigo:road-crossing": "surface"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": -2,
+        "everydashcam:road-crossing": "surface"
       },
       "filter": [
         "all",
@@ -19790,10 +19790,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": -2,
-        "dashcamigo:road-crossing": "surface"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": -2,
+        "everydashcam:road-crossing": "surface"
       },
       "filter": [
         "all",
@@ -20571,10 +20571,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": -2,
-        "dashcamigo:road-crossing": "bridge"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": -2,
+        "everydashcam:road-crossing": "bridge"
       },
       "filter": [
         "all",
@@ -21577,10 +21577,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": -2,
-        "dashcamigo:road-crossing": "bridge"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": -2,
+        "everydashcam:road-crossing": "bridge"
       },
       "filter": [
         "all",
@@ -22341,10 +22341,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": -1,
-        "dashcamigo:road-crossing": "tunnel"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": -1,
+        "everydashcam:road-crossing": "tunnel"
       },
       "filter": [
         "all",
@@ -23347,10 +23347,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": -1,
-        "dashcamigo:road-crossing": "tunnel"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": -1,
+        "everydashcam:road-crossing": "tunnel"
       },
       "filter": [
         "all",
@@ -24111,10 +24111,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": -1,
-        "dashcamigo:road-crossing": "surface"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": -1,
+        "everydashcam:road-crossing": "surface"
       },
       "filter": [
         "all",
@@ -25134,10 +25134,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": -1,
-        "dashcamigo:road-crossing": "surface"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": -1,
+        "everydashcam:road-crossing": "surface"
       },
       "filter": [
         "all",
@@ -25915,10 +25915,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": -1,
-        "dashcamigo:road-crossing": "bridge"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": -1,
+        "everydashcam:road-crossing": "bridge"
       },
       "filter": [
         "all",
@@ -26921,10 +26921,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": -1,
-        "dashcamigo:road-crossing": "bridge"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": -1,
+        "everydashcam:road-crossing": "bridge"
       },
       "filter": [
         "all",
@@ -27685,10 +27685,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": 0,
-        "dashcamigo:road-crossing": "tunnel"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": 0,
+        "everydashcam:road-crossing": "tunnel"
       },
       "filter": [
         "all",
@@ -28691,10 +28691,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": 0,
-        "dashcamigo:road-crossing": "tunnel"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": 0,
+        "everydashcam:road-crossing": "tunnel"
       },
       "filter": [
         "all",
@@ -29455,10 +29455,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": 0,
-        "dashcamigo:road-crossing": "surface"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": 0,
+        "everydashcam:road-crossing": "surface"
       },
       "filter": [
         "all",
@@ -30478,10 +30478,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": 0,
-        "dashcamigo:road-crossing": "surface"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": 0,
+        "everydashcam:road-crossing": "surface"
       },
       "filter": [
         "all",
@@ -31259,10 +31259,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": 0,
-        "dashcamigo:road-crossing": "bridge"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": 0,
+        "everydashcam:road-crossing": "bridge"
       },
       "filter": [
         "all",
@@ -32265,10 +32265,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": 0,
-        "dashcamigo:road-crossing": "bridge"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": 0,
+        "everydashcam:road-crossing": "bridge"
       },
       "filter": [
         "all",
@@ -33029,10 +33029,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": 1,
-        "dashcamigo:road-crossing": "tunnel"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": 1,
+        "everydashcam:road-crossing": "tunnel"
       },
       "filter": [
         "all",
@@ -34035,10 +34035,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": 1,
-        "dashcamigo:road-crossing": "tunnel"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": 1,
+        "everydashcam:road-crossing": "tunnel"
       },
       "filter": [
         "all",
@@ -34799,10 +34799,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": 1,
-        "dashcamigo:road-crossing": "surface"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": 1,
+        "everydashcam:road-crossing": "surface"
       },
       "filter": [
         "all",
@@ -35822,10 +35822,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": 1,
-        "dashcamigo:road-crossing": "surface"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": 1,
+        "everydashcam:road-crossing": "surface"
       },
       "filter": [
         "all",
@@ -36603,10 +36603,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": 1,
-        "dashcamigo:road-crossing": "bridge"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": 1,
+        "everydashcam:road-crossing": "bridge"
       },
       "filter": [
         "all",
@@ -37609,10 +37609,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": 1,
-        "dashcamigo:road-crossing": "bridge"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": 1,
+        "everydashcam:road-crossing": "bridge"
       },
       "filter": [
         "all",
@@ -38373,10 +38373,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": 2,
-        "dashcamigo:road-crossing": "tunnel"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": 2,
+        "everydashcam:road-crossing": "tunnel"
       },
       "filter": [
         "all",
@@ -39379,10 +39379,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": 2,
-        "dashcamigo:road-crossing": "tunnel"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": 2,
+        "everydashcam:road-crossing": "tunnel"
       },
       "filter": [
         "all",
@@ -40143,10 +40143,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": 2,
-        "dashcamigo:road-crossing": "surface"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": 2,
+        "everydashcam:road-crossing": "surface"
       },
       "filter": [
         "all",
@@ -41166,10 +41166,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": 2,
-        "dashcamigo:road-crossing": "surface"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": 2,
+        "everydashcam:road-crossing": "surface"
       },
       "filter": [
         "all",
@@ -41947,10 +41947,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": 2,
-        "dashcamigo:road-crossing": "bridge"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": 2,
+        "everydashcam:road-crossing": "bridge"
       },
       "filter": [
         "all",
@@ -42953,10 +42953,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": 2,
-        "dashcamigo:road-crossing": "bridge"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": 2,
+        "everydashcam:road-crossing": "bridge"
       },
       "filter": [
         "all",
@@ -43717,10 +43717,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": 3,
-        "dashcamigo:road-crossing": "tunnel"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": 3,
+        "everydashcam:road-crossing": "tunnel"
       },
       "filter": [
         "all",
@@ -44723,10 +44723,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": 3,
-        "dashcamigo:road-crossing": "tunnel"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": 3,
+        "everydashcam:road-crossing": "tunnel"
       },
       "filter": [
         "all",
@@ -45487,10 +45487,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": 3,
-        "dashcamigo:road-crossing": "surface"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": 3,
+        "everydashcam:road-crossing": "surface"
       },
       "filter": [
         "all",
@@ -46510,10 +46510,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": 3,
-        "dashcamigo:road-crossing": "surface"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": 3,
+        "everydashcam:road-crossing": "surface"
       },
       "filter": [
         "all",
@@ -47291,10 +47291,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": 3,
-        "dashcamigo:road-crossing": "bridge"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": 3,
+        "everydashcam:road-crossing": "bridge"
       },
       "filter": [
         "all",
@@ -48297,10 +48297,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": 3,
-        "dashcamigo:road-crossing": "bridge"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": 3,
+        "everydashcam:road-crossing": "bridge"
       },
       "filter": [
         "all",
@@ -49061,10 +49061,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": 4,
-        "dashcamigo:road-crossing": "tunnel"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": 4,
+        "everydashcam:road-crossing": "tunnel"
       },
       "filter": [
         "all",
@@ -50067,10 +50067,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": 4,
-        "dashcamigo:road-crossing": "tunnel"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": 4,
+        "everydashcam:road-crossing": "tunnel"
       },
       "filter": [
         "all",
@@ -50831,10 +50831,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": 4,
-        "dashcamigo:road-crossing": "surface"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": 4,
+        "everydashcam:road-crossing": "surface"
       },
       "filter": [
         "all",
@@ -51854,10 +51854,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": 4,
-        "dashcamigo:road-crossing": "surface"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": 4,
+        "everydashcam:road-crossing": "surface"
       },
       "filter": [
         "all",
@@ -52635,10 +52635,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": 4,
-        "dashcamigo:road-crossing": "bridge"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": 4,
+        "everydashcam:road-crossing": "bridge"
       },
       "filter": [
         "all",
@@ -53641,10 +53641,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": 4,
-        "dashcamigo:road-crossing": "bridge"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": 4,
+        "everydashcam:road-crossing": "bridge"
       },
       "filter": [
         "all",
@@ -54405,10 +54405,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": 5,
-        "dashcamigo:road-crossing": "tunnel"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": 5,
+        "everydashcam:road-crossing": "tunnel"
       },
       "filter": [
         "all",
@@ -55411,10 +55411,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": 5,
-        "dashcamigo:road-crossing": "tunnel"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": 5,
+        "everydashcam:road-crossing": "tunnel"
       },
       "filter": [
         "all",
@@ -56175,10 +56175,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": 5,
-        "dashcamigo:road-crossing": "surface"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": 5,
+        "everydashcam:road-crossing": "surface"
       },
       "filter": [
         "all",
@@ -57198,10 +57198,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": 5,
-        "dashcamigo:road-crossing": "surface"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": 5,
+        "everydashcam:road-crossing": "surface"
       },
       "filter": [
         "all",
@@ -57979,10 +57979,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "casing",
-        "dashcamigo:road-level": 5,
-        "dashcamigo:road-crossing": "bridge"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "casing",
+        "everydashcam:road-level": 5,
+        "everydashcam:road-crossing": "bridge"
       },
       "filter": [
         "all",
@@ -58985,10 +58985,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": 5,
-        "dashcamigo:road-crossing": "bridge"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": 5,
+        "everydashcam:road-crossing": "bridge"
       },
       "filter": [
         "all",
@@ -59749,10 +59749,10 @@
       "source-layer": "transportation",
       "minzoom": 5,
       "metadata": {
-        "dashcamigo:role": "transport",
-        "dashcamigo:road-kind": "fill",
-        "dashcamigo:road-level": "above",
-        "dashcamigo:road-crossing": "all"
+        "everydashcam:role": "transport",
+        "everydashcam:road-kind": "fill",
+        "everydashcam:road-level": "above",
+        "everydashcam:road-crossing": "all"
       },
       "filter": [
         "all",
@@ -60398,7 +60398,7 @@
         "icon-color": "#666e74"
       },
       "metadata": {
-        "dashcamigo:role": "transport"
+        "everydashcam:role": "transport"
       }
     },
     {
@@ -60424,7 +60424,7 @@
         "icon-color": "#666e74"
       },
       "metadata": {
-        "dashcamigo:role": "transport"
+        "everydashcam:role": "transport"
       }
     },
     {
@@ -60497,7 +60497,7 @@
         ]
       },
       "metadata": {
-        "dashcamigo:role": "boundary"
+        "everydashcam:role": "boundary"
       }
     },
     {
@@ -60575,7 +60575,7 @@
         ]
       },
       "metadata": {
-        "dashcamigo:role": "boundary"
+        "everydashcam:role": "boundary"
       }
     },
     {
@@ -60625,7 +60625,7 @@
         ]
       },
       "metadata": {
-        "dashcamigo:role": "boundary"
+        "everydashcam:role": "boundary"
       }
     },
     {
@@ -60635,7 +60635,7 @@
       "source-layer": "housenumber",
       "minzoom": 17,
       "metadata": {
-        "dashcamigo:role": "address"
+        "everydashcam:role": "address"
       },
       "layout": {
         "text-field": [
@@ -60664,7 +60664,7 @@
       "source-layer": "poi",
       "minzoom": 14,
       "metadata": {
-        "dashcamigo:role": "poi"
+        "everydashcam:role": "poi"
       },
       "filter": [
         "all",
@@ -60778,7 +60778,7 @@
       "source-layer": "poi",
       "minzoom": 14,
       "metadata": {
-        "dashcamigo:role": "poi-driver"
+        "everydashcam:role": "poi-driver"
       },
       "filter": [
         "all",
@@ -60921,7 +60921,7 @@
         "text-halo-width": 1.5
       },
       "metadata": {
-        "dashcamigo:role": "water-label"
+        "everydashcam:role": "water-label"
       }
     },
     {
@@ -60987,7 +60987,7 @@
         "text-halo-width": 1.5
       },
       "metadata": {
-        "dashcamigo:role": "water-label"
+        "everydashcam:role": "water-label"
       }
     },
     {
@@ -61060,7 +61060,7 @@
         "text-halo-width": 0.5
       },
       "metadata": {
-        "dashcamigo:role": "transport-label"
+        "everydashcam:role": "transport-label"
       }
     },
     {
@@ -61155,7 +61155,7 @@
         "text-halo-color": "#f5f4ef"
       },
       "metadata": {
-        "dashcamigo:role": "transport-label"
+        "everydashcam:role": "transport-label"
       }
     },
     {
@@ -61236,7 +61236,7 @@
         "text-halo-color": "#f5f4ef"
       },
       "metadata": {
-        "dashcamigo:role": "transport-label"
+        "everydashcam:role": "transport-label"
       }
     },
     {
@@ -61341,7 +61341,7 @@
         "text-halo-color": "#f5f4ef"
       },
       "metadata": {
-        "dashcamigo:role": "transport-label"
+        "everydashcam:role": "transport-label"
       }
     },
     {
@@ -61467,7 +61467,7 @@
         "text-halo-color": "#f5f4ef"
       },
       "metadata": {
-        "dashcamigo:role": "transport-label"
+        "everydashcam:role": "transport-label"
       }
     },
     {
@@ -61592,7 +61592,7 @@
         "text-halo-color": "#f5f4ef"
       },
       "metadata": {
-        "dashcamigo:role": "transport-label"
+        "everydashcam:role": "transport-label"
       }
     },
     {
@@ -61661,7 +61661,7 @@
         "text-halo-width": 1
       },
       "metadata": {
-        "dashcamigo:role": "context-label"
+        "everydashcam:role": "context-label"
       }
     },
     {
@@ -61745,7 +61745,7 @@
         "text-halo-width": 1
       },
       "metadata": {
-        "dashcamigo:role": "place-label"
+        "everydashcam:role": "place-label"
       }
     },
     {
@@ -61832,7 +61832,7 @@
         "text-halo-width": 1
       },
       "metadata": {
-        "dashcamigo:role": "place-label"
+        "everydashcam:role": "place-label"
       }
     },
     {
@@ -61919,7 +61919,7 @@
         "text-halo-width": 1
       },
       "metadata": {
-        "dashcamigo:role": "place-label"
+        "everydashcam:role": "place-label"
       }
     },
     {
@@ -61995,7 +61995,7 @@
         "text-halo-width": 1
       },
       "metadata": {
-        "dashcamigo:role": "place-label"
+        "everydashcam:role": "place-label"
       }
     },
     {
@@ -62099,7 +62099,7 @@
         "text-halo-width": 1
       },
       "metadata": {
-        "dashcamigo:role": "place-label"
+        "everydashcam:role": "place-label"
       }
     },
     {
@@ -62203,7 +62203,7 @@
         "text-halo-width": 1
       },
       "metadata": {
-        "dashcamigo:role": "place-label"
+        "everydashcam:role": "place-label"
       }
     },
     {
@@ -62288,7 +62288,7 @@
         "text-halo-width": 1
       },
       "metadata": {
-        "dashcamigo:role": "place-label"
+        "everydashcam:role": "place-label"
       }
     },
     {
@@ -62372,7 +62372,7 @@
         "text-halo-width": 1
       },
       "metadata": {
-        "dashcamigo:role": "place-label"
+        "everydashcam:role": "place-label"
       }
     },
     {
@@ -62456,12 +62456,12 @@
         "text-halo-width": 1
       },
       "metadata": {
-        "dashcamigo:role": "place-label"
+        "everydashcam:role": "place-label"
       }
     }
   ],
   "name": "everydashcam Classic Light",
   "metadata": {
-    "dashcamigo:theme": "light"
+    "everydashcam:theme": "light"
   }
 }

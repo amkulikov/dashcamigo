@@ -1,11 +1,11 @@
 ---
 name: onboard-format
-description: End-to-end onboarding of a new dashcam GPS data format into dashcamigo - or extending existing techniques to cover a new variant. Triggers when the user says "add support for format <X>", "add support for <model>", "here's a sample from <X>, figure it out" and drops a real file (or a folder of files) into private/incoming/. The skill anonymizes samples, adds a primitive/filename technique/source-hint where needed, creates fixtures and tests, and semantically validates that no sensitive data remains in the fixtures. Does not run without a real sample - writing a parser from a format description alone is forbidden.
+description: End-to-end onboarding of a new dashcam GPS data format into everydashcam - or extending existing techniques to cover a new variant. Triggers when the user says "add support for format <X>", "add support for <model>", "here's a sample from <X>, figure it out" and drops a real file (or a folder of files) into private/incoming/. The skill anonymizes samples, adds a primitive/filename technique/source-hint where needed, creates fixtures and tests, and semantically validates that no sensitive data remains in the fixtures. Does not run without a real sample - writing a parser from a format description alone is forbidden.
 ---
 
 # Onboard Format
 
-End-to-end workflow for onboarding a new camera or GPS data format into dashcamigo.
+End-to-end workflow for onboarding a new camera or GPS data format into everydashcam.
 
 Capability-first architecture: there is no "vendor" concept in the code. A new camera usually reuses existing techniques - it only adds entries to the relevant libraries. Layers:
 

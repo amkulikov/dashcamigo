@@ -55,12 +55,12 @@ describe("index cache limit pref", () => {
     });
 
     it("clamps a stored out-of-range value on read (hand-edited storage)", () => {
-        backing.set("dashcamigo:indexCache:limitBytes", "1");
+        backing.set("everydashcam:indexCache:limitBytes", "1");
         expect(getIndexCacheLimitBytes()).toBe(INDEX_CACHE_LIMIT_MIN_BYTES);
     });
 
     it("falls back to the default on an unparsable stored value", () => {
-        backing.set("dashcamigo:indexCache:limitBytes", "lots");
+        backing.set("everydashcam:indexCache:limitBytes", "lots");
         expect(getIndexCacheLimitBytes()).toBe(DEFAULT_INDEX_CACHE_LIMIT_BYTES);
     });
 

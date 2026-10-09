@@ -54,14 +54,14 @@ describe("OSM fallback styles", () => {
             const muted = matchingFills(road, "land", kind);
             expect(original, `${kind}: classic renders land polygons`).toHaveLength(1);
             expect(muted, `${kind}: road keeps park context`).toHaveLength(1);
-            expect(muted[0]?.metadata).toEqual({ "dashcamigo:role": "park" });
+            expect(muted[0]?.metadata).toEqual({ "everydashcam:role": "park" });
             expect(matchingFills(minimal, "land", kind), `${kind}: minimal removes park context`).toEqual([]);
         }
         expect(matchingFills(classic, "sites", "parking").map((layer) => layer.metadata)).toEqual([
-            { "dashcamigo:role": "landuse" },
+            { "everydashcam:role": "landuse" },
         ]);
         expect(matchingFills(classic, "sites", "school").map((layer) => layer.metadata)).toEqual([
-            { "dashcamigo:role": "landuse" },
+            { "everydashcam:role": "landuse" },
         ]);
     });
 

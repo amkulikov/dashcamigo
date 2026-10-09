@@ -10,11 +10,12 @@ import {
     openExport,
     pausePlayback,
     presetLocalStorage,
+    setStoredPreference,
     test,
 } from "./_fixtures.js";
 
 const defaultProvider = process.env.VITE_DEFAULT_MAP_PROVIDER || "openfreemap";
-const providerStorageKey = "dashcamigo:mapProvider";
+const providerStorageKey = "everydashcam:mapProvider";
 
 test.use({ serviceWorkers: "block" });
 
@@ -36,7 +37,7 @@ async function expectDefaultViewerSource(page: Page): Promise<void> {
     await expect
         .poll(() =>
             page.evaluate((source) => {
-                const { map, miniMap } = window.__dashcamigo.state;
+                const { map, miniMap } = window.__everydashcam.state;
                 return Boolean(map?.getSource(source)) && Boolean(miniMap?.getSource(source));
             }, source),
         )
@@ -61,7 +62,7 @@ test("first launch uses the build default in both English and Russian without sa
 
 test("saved OpenFreeMap overrides the build default and later choices survive reloads", async ({ page }) => {
     await gotoApp(page);
-    await page.evaluate((key) => localStorage.setItem(key, "openfreemap"), providerStorageKey);
+    await setStoredPreference(page, providerStorageKey, "openfreemap");
     await page.reload();
     const provider = page.locator("#settings-map-provider-select");
     await expect(provider).toHaveValue("openfreemap");

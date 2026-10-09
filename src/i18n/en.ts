@@ -899,7 +899,6 @@ export const enDict = {
     "settings.privacy.policyLink": "Privacy policy",
 
     "settings.privacy.crash.label": "Crash reports",
-    "settings.privacy.crash.description": "If the app breaks, an anonymized report helps us fix it — no video, no GPS, no file names, just what went wrong and on which browser. On by default; switch it off here.",
     "settings.privacy.crash.optInDescription": "If the app breaks, an anonymized report helps us fix it. No video, no GPS, no file names — just what went wrong and on which browser. Off until you turn it on here. You can turn it off at any time.",
     "settings.playback.section": "Playback",
     "settings.playback.units.label": "Units of measurement",

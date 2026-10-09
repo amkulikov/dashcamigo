@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LATEST_CHANGELOG_ID } from "../changelog/latest.js";
 import { initChangelogSeen, markChangelogSeen } from "./changelog-seen.js";
 
-const STORAGE_KEY = "dashcamigo:changelog:lastSeenId";
+const STORAGE_KEY = "everydashcam:changelog:lastSeenId";
 
 // Minimal localStorage stand-in: the node test environment has none, and the
 // pref must be exercised through the same get/set surface the browser offers.

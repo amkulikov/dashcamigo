@@ -234,7 +234,7 @@ test.describe("mobile landscape", () => {
         await expect
             .poll(() =>
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                page.evaluate(() => (window as any).__dashcamigo.state.videoZoom.scale),
+                page.evaluate(() => (window as any).__everydashcam.state.videoZoom.scale),
             )
             .toBeGreaterThan(1);
         // Back to the neutral scale so the plain-wheel check below starts clean.
@@ -244,7 +244,7 @@ test.describe("mobile landscape", () => {
         await expect
             .poll(() =>
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                page.evaluate(() => (window as any).__dashcamigo.state.videoZoom.scale),
+                page.evaluate(() => (window as any).__everydashcam.state.videoZoom.scale),
             )
             .toBe(1);
 
@@ -254,7 +254,7 @@ test.describe("mobile landscape", () => {
             .toBeGreaterThan(0);
         const zoomAfterPlain = await page.evaluate(
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            () => (window as any).__dashcamigo.state.videoZoom.scale,
+            () => (window as any).__everydashcam.state.videoZoom.scale,
         );
         expect(zoomAfterPlain, "plain wheel does not zoom the video").toBe(1);
 

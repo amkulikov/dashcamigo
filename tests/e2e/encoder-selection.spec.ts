@@ -254,13 +254,13 @@ test("automatic selection reaches the export encoder and the standard notificati
     await saveExport(page);
     const config = await page.evaluate(
         () =>
-            window.__dashcamigo
+            window.__everydashcam
                 .dumpLog()
                 .reverse()
                 .find((r) => r.msg === "video encoder config requested")?.ctx,
     );
     const diagnostics = await page.evaluate(() =>
-        window.__dashcamigo.dumpLog().filter((r) => /encoder trial|export settings/.test(r.msg)),
+        window.__everydashcam.dumpLog().filter((r) => /encoder trial|export settings/.test(r.msg)),
     );
     await info.attach("selection", { body: JSON.stringify(diagnostics), contentType: "application/json" });
     expect(config, JSON.stringify(diagnostics)).toMatchObject({
@@ -283,7 +283,7 @@ test("automatic selection reaches the export encoder and the standard notificati
     expect(
         await page.evaluate(
             () =>
-                window.__dashcamigo
+                window.__everydashcam
                     .dumpLog()
                     .reverse()
                     .find((r) => r.msg === "video encoder config requested")?.ctx,
@@ -298,7 +298,7 @@ test("a stalled quality probe times out and exports with the default encoder", a
     await page.locator("#export-panel-output").selectOption("720_16x9");
     await saveExport(page);
     expect(page.workers().some((worker) => PROBE_WORKER.test(worker.url()))).toBe(false);
-    const logs = await page.evaluate(() => window.__dashcamigo.dumpLog());
+    const logs = await page.evaluate(() => window.__everydashcam.dumpLog());
     expect(logs.find((r) => r.msg === "encoder trial unavailable")?.ctx).toMatchObject({
         err: "encoder probe timed out",
     });
@@ -313,7 +313,7 @@ test("an unavailable probe worker does not block export", async ({ page }) => {
     await prepareExport(page);
     await page.locator("#export-panel-output").selectOption("720_16x9");
     await saveExport(page);
-    const logs = await page.evaluate(() => window.__dashcamigo.dumpLog());
+    const logs = await page.evaluate(() => window.__everydashcam.dumpLog());
     expect(logs.some((r) => r.msg === "encoder trial unavailable")).toBe(true);
     expect(logs.find((r) => r.msg === "video encoder config requested")?.ctx).toMatchObject({
         hardwareAcceleration: "no-preference",
@@ -337,7 +337,7 @@ test("cancelling a quality probe terminates its worker and does not cache the ca
     await page.unroute(PROBE_WORKER);
     await saveExport(page);
     expect(
-        await page.evaluate(() => window.__dashcamigo.dumpLog().some((r) => r.msg === "encoder trial measured")),
+        await page.evaluate(() => window.__everydashcam.dumpLog().some((r) => r.msg === "encoder trial measured")),
     ).toBe(true);
 });
 
@@ -347,7 +347,7 @@ for (const layout of ["single", "composite"] as const) {
         page.on("worker", (worker) => {
             if (PROBE_WORKER.test(worker.url())) probes++;
         });
-        await page.addInitScript(() => localStorage.setItem("dashcamigo:encoder", "software"));
+        await page.addInitScript(() => localStorage.setItem("everydashcam:encoder", "software"));
         await prepareExport(page);
         if (layout === "single") {
             const includes = page.locator(".top-panel__channel-include");
@@ -363,7 +363,7 @@ for (const layout of ["single", "composite"] as const) {
         expect(
             await page.evaluate(
                 () =>
-                    window.__dashcamigo
+                    window.__everydashcam
                         .dumpLog()
                         .reverse()
                         .find((r) => r.msg === "video encoder config requested")?.ctx,
@@ -377,7 +377,7 @@ test("an unsupported manual encoder explains how to recover while unchanged expo
     page,
 }) => {
     await page.addInitScript(() => {
-        localStorage.setItem("dashcamigo:encoder", "hardware");
+        localStorage.setItem("everydashcam:encoder", "hardware");
         const supported = VideoEncoder.isConfigSupported.bind(VideoEncoder);
         VideoEncoder.isConfigSupported = async (config) =>
             config.hardwareAcceleration === "prefer-hardware" ? { supported: false, config } : supported(config);
@@ -396,7 +396,7 @@ test("an unsupported manual encoder explains how to recover while unchanged expo
     expect(probes).toBe(0);
     expect(
         await page.evaluate(() =>
-            window.__dashcamigo.dumpLog().some((r) => r.msg === "video encoder config requested"),
+            window.__everydashcam.dumpLog().some((r) => r.msg === "video encoder config requested"),
         ),
     ).toBe(false);
 });

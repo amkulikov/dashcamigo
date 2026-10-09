@@ -9,6 +9,7 @@
 import { type DBSchema, type IDBPDatabase, openDB } from "idb";
 import type { AnnotationRecord, CachedFileIndex, NotesFileRecord, RememberedFolder } from "./types.js";
 
+// Keep released tabs and recovery readers on the same notes, handles and tombstones.
 export const PERSIST_DB_NAME = "dashcamigo";
 const DB_VERSION = 4;
 

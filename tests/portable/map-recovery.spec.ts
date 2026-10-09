@@ -12,7 +12,7 @@ import { expectLocalRoute, isPortableMapRequest, openPortable, test, TEST_MAP_TI
 async function selectViewerMap(page: Page, provider: string): Promise<void> {
     await page.locator("#settings-btn").click();
     await page.locator("#settings-map-provider-select").selectOption(provider);
-    await expect.poll(() => page.evaluate(() => localStorage.getItem("dashcamigo:mapProvider"))).toBe(provider);
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("everydashcam:mapProvider"))).toBe(provider);
     await page.locator("#settings-modal-header-close").click();
 }
 
@@ -47,7 +47,7 @@ test("keeps the local route stable after every online provider fails and restore
     await expect(page.locator("#settings-map-provider-select")).toHaveValue("openfreemap");
     await page.evaluate(() => {
         document.documentElement.dataset.mapStyleReloads = "0";
-        for (const map of [window.__dashcamigo.state.map, window.__dashcamigo.state.miniMap]) {
+        for (const map of [window.__everydashcam.state.map, window.__everydashcam.state.miniMap]) {
             map?.on("style.load", () => {
                 const root = document.documentElement;
                 root.dataset.mapStyleReloads = String(Number(root.dataset.mapStyleReloads) + 1);
@@ -90,7 +90,7 @@ test("keeps the local route stable after every online provider fails and restore
     await expect
         .poll(() =>
             page.evaluate(() => {
-                const map = window.__dashcamigo.state.miniMap;
+                const map = window.__everydashcam.state.miniMap;
                 return Boolean(
                     map?.getSource("osm-raster") &&
                         map.isStyleLoaded() &&
@@ -119,7 +119,7 @@ test("persists explicit route-only mode without tile requests or reconnect probe
     await page.clock.fastForward(20_000);
     await expectLocalRoute(page);
     expect(requests.filter(isPortableMapRequest)).toEqual([]);
-    await expect.poll(() => page.evaluate(() => localStorage.getItem("dashcamigo:mapProvider"))).toBe("route-only");
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("everydashcam:mapProvider"))).toBe("route-only");
 
     await page.clock.resume();
     await page.reload();

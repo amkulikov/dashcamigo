@@ -17,7 +17,7 @@ import { activateModal, deactivateModal, wireBackdropDismiss } from "./modal-hel
 
 const log = createLogger("upload-warning");
 
-const STORAGE_KEY = "dashcamigo:upload-warning-shown-at";
+const STORAGE_KEY = "everydashcam:upload-warning-shown-at";
 const WARNING_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 let pendingResolve: ((continued: boolean) => void) | null = null;

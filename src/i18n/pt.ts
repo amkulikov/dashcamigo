@@ -898,7 +898,6 @@ export const ptDict = {
     "settings.privacy.policyLink": "Política de privacidade",
 
     "settings.privacy.crash.label": "Relatórios de falhas",
-    "settings.privacy.crash.description": "Se o app falhar, um relatório anônimo nos ajuda a corrigir — sem vídeo, sem GPS, sem nomes de arquivo, só o que deu errado e em qual navegador. Ativado por padrão; desative aqui.",
     "settings.privacy.crash.optInDescription": "Se o app falhar, um relatório anonimizado nos ajuda a corrigir o problema. Sem vídeo, GPS ou nomes de arquivo — apenas o que deu errado e em qual navegador. Desativado até você ativar aqui. Você pode desativar a qualquer momento.",
     "settings.playback.section": "Reprodução",
     "settings.playback.units.label": "Unidades de medida",

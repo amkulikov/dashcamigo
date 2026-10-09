@@ -7,10 +7,14 @@ const PRECACHE_MANIFEST = []; // __DC_PRECACHE_MANIFEST__
 const TRACKER_ASSET_URLS = []; // __DC_TRACKER_ASSET_URLS__
 
 const SCHEMA = "v4";
-const PRECACHE = `dashcamigo-precache-${SCHEMA}`;
-// These formats are unchanged; preserve already downloaded fonts and models.
-const RUNTIME = "dashcamigo-runtime-v3";
-const TRACKER = "dashcamigo-tracker-v3";
+const PRECACHE = `everydashcam-precache-${SCHEMA}`;
+const RUNTIME = "everydashcam-runtime-v3";
+const TRACKER = "everydashcam-tracker-v3";
+// Released workers still need these caches for live tabs and rollback.
+// Read through and copy on use; duplicating all downloaded models can exceed quota.
+const LEGACY_PRECACHE = "dashcamigo-precache-v4";
+const LEGACY_RUNTIME = "dashcamigo-runtime-v3";
+const LEGACY_TRACKER = "dashcamigo-tracker-v3";
 const REVISION_PARAM = "__dc_revision";
 const MANIFEST_KEY = "/__dc-precache-manifest__";
 const MAX_RUNTIME_ENTRIES = 60;
@@ -130,7 +134,8 @@ async function reconcilePrecache() {
                 try {
                     const key = precacheKey(entry);
                     if (await cache.match(key)) continue;
-                    await cache.put(key, await fetchForPrecache(entry));
+                    const legacy = await matchNamedCache(LEGACY_PRECACHE, key);
+                    await cache.put(key, legacy || (await fetchForPrecache(entry)));
                 } catch {
                     missing.push(entry.url);
                 }
@@ -181,15 +186,8 @@ self.addEventListener("activate", (event) => {
                 const stale = (await cache.keys()).filter((req) => !valid.has(req.url));
                 await demote(cache, stale);
                 await Promise.all(stale.map((req) => cache.delete(req)));
-                const keep = new Set([PRECACHE, RUNTIME, TRACKER]);
-                for (const name of await caches.keys()) {
-                    if (!name.startsWith("dashcamigo-") || keep.has(name)) continue;
-                    if (name.includes("precache") || name.includes("shell")) {
-                        const old = await caches.open(name);
-                        await demote(old, await old.keys());
-                    }
-                    await caches.delete(name);
-                }
+                // Legacy caches remain untouched, including shells and old
+                // chunks beyond the runtime limit. Rollback must still work.
                 await trimCache(runtime);
                 if (TRACKER_ASSET_URLS.length > 0) {
                     const tracker = await caches.open(TRACKER);
@@ -226,10 +224,44 @@ async function matchCache(cache, input, options) {
     }
 }
 
+async function matchNamedCache(name, input, options) {
+    try {
+        return await caches.match(input, { ...options, cacheName: name });
+    } catch {
+        return undefined;
+    }
+}
+
+async function matchWithLegacy(cache, name, input, evt, options) {
+    const hit = await matchCache(cache, input, options);
+    if (hit) return hit;
+    const legacyName = name === TRACKER ? LEGACY_TRACKER : LEGACY_RUNTIME;
+    const legacy = await matchNamedCache(legacyName, input, options);
+    const isBinary = name === TRACKER || /^\/(?:assets|fonts)\//.test(new URL(bareUrl(input)).pathname);
+    if (legacy && isBinary && isHtmlResponse(legacy)) return undefined;
+    if (legacy) cacheAndTrim(cache, input, legacy, evt, name !== TRACKER);
+    return legacy;
+}
+
+async function matchLegacyAsset(req) {
+    if (!new URL(req.url).pathname.startsWith("/assets/") || PRECACHE_URLS.has(bareUrl(req))) return undefined;
+    try {
+        for (const name of await caches.keys()) {
+            if (!/^dashcamigo-(?:precache|shell)-v\d+$/.test(name)) continue;
+            const hit = await matchNamedCache(name, req, { ignoreSearch: true });
+            if (hit && !isHtmlResponse(hit)) return hit;
+        }
+    } catch {
+        // Storage can fail independently of the network.
+    }
+    return undefined;
+}
+
 async function matchPrecache(input) {
     const entry = PRECACHE_ENTRIES.get(bareUrl(input));
     if (!entry) return undefined;
-    return matchCache(await openCache(PRECACHE), precacheKey(entry));
+    const key = precacheKey(entry);
+    return (await matchCache(await openCache(PRECACHE), key)) || (await matchNamedCache(LEGACY_PRECACHE, key));
 }
 
 self.addEventListener("fetch", (evt) => {
@@ -264,7 +296,7 @@ self.addEventListener("fetch", (evt) => {
 async function navigationResponse(req, evt) {
     const runtime = await openCache(RUNTIME);
     if (!navigator.onLine) {
-        const hit = await navigationCacheFallback(req, runtime);
+        const hit = await navigationCacheFallback(req, runtime, evt);
         if (hit) return hit;
         // onLine is only a hint: a reachable LAN server may still work when
         // the OS connectivity probe reports offline.
@@ -289,22 +321,22 @@ async function navigationResponse(req, evt) {
     } finally {
         clearTimeout(timer);
     }
-    return (await navigationCacheFallback(req, runtime)) || offlineResponse();
+    return (await navigationCacheFallback(req, runtime, evt)) || offlineResponse();
 }
 
-async function navigationCacheFallback(req, runtime) {
-    let hit = (await matchPrecache(req)) || (await matchCache(runtime, req));
+async function navigationCacheFallback(req, runtime, evt) {
+    let hit = (await matchPrecache(req)) || (await matchWithLegacy(runtime, RUNTIME, req, evt));
     if (hit) return hit;
-    hit = await matchCache(runtime, req, { ignoreSearch: true });
+    hit = await matchWithLegacy(runtime, RUNTIME, req, evt, { ignoreSearch: true });
     if (hit) return hit;
     const segment = new URL(req.url).pathname.split("/").filter(Boolean)[0];
     const locale = `/${segment}/`;
     if (LOCALE_SHELLS.includes(locale)) {
-        hit = (await matchPrecache(locale)) || (await matchCache(runtime, locale, { ignoreSearch: true }));
+        hit = (await matchPrecache(locale)) || (await matchWithLegacy(runtime, RUNTIME, locale, evt, { ignoreSearch: true }));
         if (hit) return hit;
     }
     // Never substitute the root redirect for a missing locale; it would loop.
-    return (await matchPrecache("/en/")) || (await matchCache(runtime, "/en/", { ignoreSearch: true }));
+    return (await matchPrecache("/en/")) || (await matchWithLegacy(runtime, RUNTIME, "/en/", evt, { ignoreSearch: true }));
 }
 
 function offlineResponse() {
@@ -318,9 +350,14 @@ async function cacheFirst(req, evt) {
     const hit = await matchPrecache(req);
     if (hit) return hit;
     const runtime = await openCache(RUNTIME);
-    const cached = await matchCache(runtime, req);
+    const cached = await matchWithLegacy(runtime, RUNTIME, req, evt);
     const isBinaryAsset = !PRECACHE_ENTRIES.get(bareUrl(req))?.htmlRevision;
     if (cached && (!isBinaryAsset || !isHtmlResponse(cached))) return cached;
+    const legacy = await matchLegacyAsset(req);
+    if (legacy) {
+        cacheAndTrim(runtime, req, legacy, evt);
+        return legacy;
+    }
     const res = await fetch(req);
     if (isBinaryAsset && isHtmlResponse(res)) return Response.error();
     cacheAndTrim(runtime, req, res, evt);
@@ -329,7 +366,7 @@ async function cacheFirst(req, evt) {
 
 async function trackerCacheFirst(req, evt) {
     const tracker = await openCache(TRACKER);
-    const hit = await matchCache(tracker, req);
+    const hit = await matchWithLegacy(tracker, TRACKER, req, evt);
     if (hit && !isHtmlResponse(hit)) return hit;
     if (hit) {
         try {
@@ -350,7 +387,7 @@ async function trackerCacheFirst(req, evt) {
 
 async function staleWhileRevalidate(req, evt, cacheName = RUNTIME, trim = true) {
     const cache = await openCache(cacheName);
-    const hit = await matchCache(cache, req);
+    const hit = await matchWithLegacy(cache, cacheName, req, evt);
     const cached = cacheName === TRACKER && hit && isHtmlResponse(hit) ? undefined : hit;
     const networkPromise = fetch(req)
         .then((res) => {

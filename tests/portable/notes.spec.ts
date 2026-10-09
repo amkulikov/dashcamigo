@@ -35,7 +35,7 @@ async function downloadNotes(page: Page, target: string): Promise<unknown> {
         page.waitForEvent("download"),
         page.locator("#settings-notes-export-btn").click(),
     ]);
-    expect(download.suggestedFilename()).toMatch(/^dashcamigo-notes-\d{4}-\d{2}-\d{2}\.dashcamigo$/);
+    expect(download.suggestedFilename()).toMatch(/^everydashcam-notes-\d{4}-\d{2}-\d{2}\.dashcamigo$/);
     await download.saveAs(target);
     await page.locator("#settings-modal-close").click();
     const data: unknown = JSON.parse(await readFile(target, "utf8"));

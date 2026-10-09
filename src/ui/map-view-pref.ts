@@ -15,7 +15,7 @@ const DEFAULT_PREFERENCES: Readonly<MapViewPreferences> = {
     theme: "auto",
     buildings3d: true,
 };
-const STORAGE_KEY = "dashcamigo:mapView";
+const STORAGE_KEY = "everydashcam:mapView";
 let sessionPreferences: MapViewPreferences | null = null;
 type Listener = (preferences: MapViewPreferences) => void;
 const listeners = new Set<Listener>();

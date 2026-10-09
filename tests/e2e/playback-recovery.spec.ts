@@ -141,8 +141,8 @@ for (const locale of ["en", "ru"]) {
         expect(
             await page.evaluate(
                 () =>
-                    window.__dashcamigo.state.trips[window.__dashcamigo.state.active!.trip]!.frames[0]!.channels.front!
-                        .canPlay,
+                    window.__everydashcam.state.trips[window.__everydashcam.state.active!.trip]!.frames[0]!.channels
+                        .front!.canPlay,
             ),
         ).toBe(true);
         expect(
@@ -174,7 +174,7 @@ test("retries a failed backward seek at its requested position instead of the ol
     await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.readyState)).toBeGreaterThanOrEqual(2);
     await video.evaluate((v: HTMLVideoElement) => v.pause());
     const target = await page.evaluate(() => {
-        const state = window.__dashcamigo.state;
+        const state = window.__everydashcam.state;
         return state.trips[state.active!.trip]!.timeline.contentDurationSec / 10;
     });
     // Move the MSE window forward before the backward seek, so its target is outside
@@ -233,7 +233,7 @@ test("leaves a failed trip without letting its retired worker interrupt the next
     await page.locator("#folder-input").setInputFiles(SAMPLE_NOGPS);
     await expect(page.locator("li.trip:not(.unindexed-note)")).toHaveCount(2);
     const nativeTrip = await page.evaluate(() =>
-        window.__dashcamigo.state.trips.findIndex((trip) =>
+        window.__everydashcam.state.trips.findIndex((trip) =>
             trip.frames.some((frame) => frame.channels.front?.file.name.endsWith(".mp4")),
         ),
     );
@@ -296,7 +296,7 @@ test("retries a failed slave while the healthy camera keeps playing", async ({ p
     expect(
         await page.evaluate(
             () =>
-                window.__dashcamigo.state.trips[window.__dashcamigo.state.active!.trip]!.frames[0]!.channels.rear!
+                window.__everydashcam.state.trips[window.__everydashcam.state.active!.trip]!.frames[0]!.channels.rear!
                     .canPlay,
         ),
     ).toBe(true);

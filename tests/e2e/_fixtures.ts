@@ -147,7 +147,7 @@ function isEgressAllowed(reqUrl: string, baseHost: string): boolean {
     if (u.host === baseHost) return true;
     // mockDirectoryPicker routes this synthetic host straight to local sample
     // bytes; the separate origin keeps the app service worker out of the way.
-    if (u.hostname === "dashcamigo-fsa.test") return true;
+    if (u.hostname === "everydashcam-fsa.test") return true;
     return (
         /(^|\.)openfreemap\.org$/i.test(u.hostname) ||
         u.hostname === "vector.openstreetmap.org" ||
@@ -202,7 +202,7 @@ export const test = base.extend<{ tolerateConsole: RegExp[]; viewerMap: "default
             // Keep MapLibre and local overlays real without parsing basemap styles
             // in scenarios that exercise other viewer controls.
             await page.addInitScript(() => {
-                window.addEventListener("dc:ready", () => window.__dashcamigo.setMapProvider("route-only"), {
+                window.addEventListener("dc:ready", () => window.__everydashcam.setMapProvider("route-only"), {
                     once: true,
                 });
             });
@@ -267,19 +267,18 @@ export async function presetLocalStorage(
             try {
                 const now = String(Date.now());
                 localStorage.setItem("dc-theme", theme);
-                localStorage.setItem("dashcamigo:upload-warning-shown-at", now);
-                localStorage.setItem("dashcamigo:pwa:toast:shown", "1");
-                localStorage.setItem("dashcamigo:pwa:toast:dismissedAt", now);
-                localStorage.setItem("dashcamigo:support:action-taken", "1");
-                localStorage.setItem("dashcamigo:lang-banner-dismissed", "1");
+                localStorage.setItem("everydashcam:upload-warning-shown-at", now);
+                localStorage.setItem("everydashcam:pwa:toast:shown", "1");
+                localStorage.setItem("everydashcam:pwa:toast:dismissedAt", now);
+                localStorage.setItem("everydashcam:support:action-taken", "1");
                 // Suppress the onboarding tours by default: their full-screen
                 // overlay blocks interaction and would break every spec that
                 // loads a trip / opens export. The onboarding spec clears these
                 // selectively via clearOnboarding() to test the first-run path.
                 for (const id of tourIds) {
-                    localStorage.setItem(`dashcamigo:onboarding:${id}`, "1");
+                    localStorage.setItem(`everydashcam:onboarding:${id}`, "1");
                 }
-                if (lang) localStorage.setItem("dashcamigo:lang", lang);
+                if (lang) localStorage.setItem("everydashcam:lang", lang);
             } catch {
                 /* private mode - ignore */
             }
@@ -293,6 +292,18 @@ export async function gotoApp(page: Page, locale = "en"): Promise<void> {
     await page.goto(`/${locale}/`);
 }
 
+/** Change a stored preference in an already loaded page. */
+export async function setStoredPreference(page: Page, key: string, value: string | null): Promise<void> {
+    await page.evaluate(
+        ({ key, value }) => {
+            if (!key.startsWith("everydashcam:")) throw new Error("expected a current preference key");
+            if (value === null) localStorage.removeItem(key);
+            else localStorage.setItem(key, value);
+        },
+        { key, value },
+    );
+}
+
 /**
  * Re-enable onboarding tours for a first-run test. presetLocalStorage() seeds
  * all four as "done"; call this AFTER it (so the removal wins) to make the
@@ -302,8 +313,8 @@ export async function clearOnboarding(page: Page, ids: OnboardTourId[] = ONBOARD
     await page.addInitScript((ids) => {
         try {
             for (const id of ids) {
-                localStorage.removeItem(`dashcamigo:onboarding:${id}`);
-                localStorage.removeItem(`dashcamigo:onboarding:${id}:offered`);
+                localStorage.removeItem(`everydashcam:onboarding:${id}`);
+                localStorage.removeItem(`everydashcam:onboarding:${id}:offered`);
             }
         } catch {
             /* private mode - ignore */
@@ -620,7 +631,7 @@ export interface TranscodeDoneFields {
  */
 export async function readTranscodeDoneFields(page: Page): Promise<TranscodeDoneFields | null> {
     return page.evaluate(() => {
-        const dump = (window as unknown as { __dashcamigo?: { dumpLog: () => unknown[] } }).__dashcamigo?.dumpLog;
+        const dump = (window as unknown as { __everydashcam?: { dumpLog: () => unknown[] } }).__everydashcam?.dumpLog;
         if (!dump) return null;
         const rec = dump()
             .reverse()
@@ -824,7 +835,7 @@ export async function mockDirectoryPicker(page: Page, folders: MockFolder[]): Pr
                     withPickerPermissions(handle);
                     const writable = await handle.createWritable();
                     const encoded = [sourceId, ...segments].map(encodeURIComponent).join("/");
-                    const response = await fetch(`https://dashcamigo-fsa.test/__fsa/${encoded}`);
+                    const response = await fetch(`https://everydashcam-fsa.test/__fsa/${encoded}`);
                     await writable.write(await response.arrayBuffer());
                     await writable.close();
                 }

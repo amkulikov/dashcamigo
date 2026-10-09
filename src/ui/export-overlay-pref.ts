@@ -6,7 +6,7 @@ import { MAP_MARKER_SHAPES, MAP_MARKER_SIZES, type MapMarkerAppearance } from ".
 import type { OverlayMapProviderPreference } from "./map-provider.js";
 import type { OverlayMapState, OverlayPreferences, OverlayTextState } from "./export-state.js";
 
-export const OVERLAY_PREFERENCES_STORAGE_KEY = "dashcamigo:export:overlays";
+export const OVERLAY_PREFERENCES_STORAGE_KEY = "everydashcam:export:overlays";
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 const OVERLAY_STYLES = ["min", "card", "bold"] as const;

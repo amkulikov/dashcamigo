@@ -664,10 +664,10 @@ test("video above panels preserves the recording and remembers either choice aft
     const master = page.locator(".video-tile.active video:not(.preload-slot):not(.tile-blur-bg)");
     await master.hover();
     await page.mouse.wheel(0, -120);
-    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.videoZoom.scale)).toBeGreaterThan(1);
+    await expect.poll(() => page.evaluate(() => window.__everydashcam.state.videoZoom.scale)).toBeGreaterThan(1);
     const context = await page.evaluate(() => ({
-        composition: window.__dashcamigo.state.composition,
-        zoom: window.__dashcamigo.state.videoZoom.scale,
+        composition: window.__everydashcam.state.composition,
+        zoom: window.__everydashcam.state.videoZoom.scale,
         preferences: localStorage.getItem("dc.viewer.panels"),
     }));
     const time = await masterVideoTime(page);
@@ -693,8 +693,8 @@ test("video above panels preserves the recording and remembers either choice aft
     ).toBe(true);
     expect(
         await page.evaluate(() => ({
-            composition: window.__dashcamigo.state.composition,
-            zoom: window.__dashcamigo.state.videoZoom.scale,
+            composition: window.__everydashcam.state.composition,
+            zoom: window.__everydashcam.state.videoZoom.scale,
             preferences: localStorage.getItem("dc.viewer.panels"),
         })),
     ).toEqual(context);
@@ -734,7 +734,7 @@ test("video above panels preserves the recording and remembers either choice aft
 for (const storage of ["invalid", "blocked"] as const) {
     test(`video above panels stays usable when its stored preference is ${storage}`, async ({ page }) => {
         await page.addInitScript((storage) => {
-            const key = "dashcamigo:player:panelsBelow";
+            const key = "everydashcam:player:panelsBelow";
             if (storage === "invalid") {
                 localStorage.setItem(key, "true");
                 return;
@@ -931,7 +931,7 @@ test("video above panels preserves editor range, composition, overlays, crop and
     await page.mouse.up();
     const blur = page.locator('.video-tile[data-channel="front"] .blur-box:not([hidden])');
     await expect(blur).toBeVisible();
-    const composition = await page.evaluate(() => window.__dashcamigo.state.composition);
+    const composition = await page.evaluate(() => window.__everydashcam.state.composition);
     const time = await masterVideoTime(page);
     await enterFullscreen(page);
     await setPanelsBelow(page, true);
@@ -947,7 +947,7 @@ test("video above panels preserves editor range, composition, overlays, crop and
     expect(overlay.height).toBeCloseTo(grid.height, 0);
     await setPanelsBelow(page, false);
     await setPanelsBelow(page, true);
-    expect(await page.evaluate(() => window.__dashcamigo.state.composition)).toEqual(composition);
+    expect(await page.evaluate(() => window.__everydashcam.state.composition)).toEqual(composition);
     expect(await masterVideoTime(page)).toBeCloseTo(time, 2);
     await expect(page.locator("#player-play")).toHaveAttribute("data-paused", "true");
     // The center belongs to the blur box, whose double-click keeps editing blur.
@@ -958,7 +958,7 @@ test("video above panels preserves editor range, composition, overlays, crop and
     await page.mouse.down();
     await page.mouse.move(handle.x - 30, handle.y - 30, { steps: 6 });
     await page.mouse.up();
-    expect(await page.evaluate(() => window.__dashcamigo.state.composition)).not.toEqual(composition);
+    expect(await page.evaluate(() => window.__everydashcam.state.composition)).not.toEqual(composition);
     await page.locator(".crop-done-btn").click();
     await expect(blur).toBeVisible();
     const beforeBlur = await blur.boundingBox();
@@ -971,13 +971,13 @@ test("video above panels preserves editor range, composition, overlays, crop and
     await page.mouse.up();
     await expect.poll(async () => (await blur.boundingBox())!.x).not.toBeCloseTo(beforeBlur!.x, 0);
     await page.locator('.video-tile[data-channel="interior"]').click();
-    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.composition.audioChannel)).toBe("interior");
-    const editedComposition = await page.evaluate(() => window.__dashcamigo.state.composition);
+    await expect.poll(() => page.evaluate(() => window.__everydashcam.state.composition.audioChannel)).toBe("interior");
+    const editedComposition = await page.evaluate(() => window.__everydashcam.state.composition);
     const readBlurPlacement = () =>
         blur.evaluate((element) => {
             const tile = element.closest<HTMLElement>(".video-tile")!;
             const video = tile.querySelector<HTMLVideoElement>("video:not(.preload-slot):not(.tile-blur-bg)")!;
-            const composition = window.__dashcamigo.state.composition;
+            const composition = window.__everydashcam.state.composition;
             const crop = composition.perSlotCrops[composition.channelOrder.indexOf("front")]!;
             const aspect = ((video.videoWidth / video.videoHeight) * crop.wPct) / crop.hPct;
             const tileRect = tile.getBoundingClientRect();
@@ -999,7 +999,7 @@ test("video above panels preserves editor range, composition, overlays, crop and
     await expect(page.locator('.export-panel__radio input[value="low"]')).toBeChecked();
     await expect(page.locator("#export-panel-ov-speed")).toBeChecked();
     await expect(page.locator("#export-panel-ov-coords")).toBeChecked();
-    expect(await page.evaluate(() => window.__dashcamigo.state.composition)).toEqual(editedComposition);
+    expect(await page.evaluate(() => window.__everydashcam.state.composition)).toEqual(editedComposition);
     const restoredBlur = await readBlurPlacement();
     for (const key of ["x", "y", "width", "height"] as const) expect(restoredBlur[key]).toBeCloseTo(editedBlur[key], 2);
     await page.locator(".export-panel__crop-btn").click();

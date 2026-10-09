@@ -896,7 +896,6 @@ export const deDict = {
     "settings.privacy.policyLink": "Datenschutzerklärung",
 
     "settings.privacy.crash.label": "Absturzberichte",
-    "settings.privacy.crash.description": "Wenn die App abstürzt, hilft uns ein anonymer Bericht beim Beheben — kein Video, kein GPS, keine Dateinamen, nur was schiefging und in welchem Browser. Standardmäßig an; hier abschaltbar.",
     "settings.privacy.crash.optInDescription": "Wenn die App abstürzt, hilft uns ein anonymisierter Bericht bei der Fehlerbehebung. Kein Video, kein GPS, keine Dateinamen — nur der Fehler und dein Browser. Aus, bis du es hier einschaltest. Du kannst es jederzeit wieder ausschalten.",
     "settings.playback.section": "Wiedergabe",
     "settings.playback.units.label": "Maßeinheiten",

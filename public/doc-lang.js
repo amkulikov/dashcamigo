@@ -7,7 +7,7 @@
 // first-class; the other 8 are community translations with an EN-prevails
 // disclaimer at the top of each article.
 (function () {
-    var STORE_KEY = "dashcamigo:doc-lang";
+    var STORE_KEY = "everydashcam:doc-lang";
     var SUPPORTED = ["de", "en", "es", "fr", "ja", "ko", "pl", "pt", "ru", "zh"];
 
     function isSupported(code) {
@@ -51,7 +51,7 @@
         try {
             var stored = localStorage.getItem(STORE_KEY);
             if (stored && isSupported(stored)) return stored;
-            var appLang = localStorage.getItem("dashcamigo:lang");
+            var appLang = localStorage.getItem("everydashcam:lang");
             if (appLang && isSupported(appLang)) return appLang;
         } catch (e) { /* private mode */ }
         var nav = (navigator.language || "").toLowerCase().split("-")[0];

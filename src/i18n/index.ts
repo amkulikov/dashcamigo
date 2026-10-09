@@ -36,7 +36,7 @@ const log = createLogger("i18n");
 export type Lang = "ru" | "en" | "de" | "es" | "pt" | "fr" | "pl" | "zh" | "ja" | "ko";
 export type { I18nKey } from "./keys.js";
 
-const STORAGE_KEY = "dashcamigo:lang";
+const STORAGE_KEY = "everydashcam:lang";
 
 // The DOM id of the JSON data island the prerender writes the active locale's
 // dictionary into. Kept in sync with vite-plugins/seo-prerender.ts and the
@@ -124,7 +124,7 @@ function isKnownLang(code: string): code is Lang {
  *     path segment is not a known locale - the root redirect stub "/",
  *     standalone pages like /privacy, unknown segments - and detection
  *     falls through to the next signal.
- *  2. localStorage[dashcamigo:lang] - user's choice from a previous session.
+ *  2. localStorage[everydashcam:lang] - user's choice from a previous session.
  *     This is the NORMAL path on the root stub "/": the URL carries no
  *     locale segment there, so the stored preference decides the language.
  *  3. navigator.language - two-letter prefix ("de-DE" → "de"); if the prefix

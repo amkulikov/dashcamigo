@@ -43,7 +43,7 @@ test("plays and seeks offline, draws GPS and exports manual blur with a route ov
     await expect
         .poll(() =>
             page.evaluate(() => {
-                const { map, miniMap } = window.__dashcamigo.state;
+                const { map, miniMap } = window.__everydashcam.state;
                 return Boolean(
                     map?.getLayer("trip-line") && miniMap?.getLayer("trip-line") && miniMap.isSourceLoaded("trip-line"),
                 );
@@ -170,14 +170,14 @@ test("opens the default internet map with embedded styles and sprites", async ({
     await expect
         .poll(() =>
             page.evaluate(() => {
-                const map = window.__dashcamigo.state.miniMap;
+                const map = window.__everydashcam.state.miniMap;
                 return Boolean(map?.getSource("openmaptiles") && map.isStyleLoaded() && map.listImages().length > 0);
             }),
         )
         .toBe(true);
     expect(network.some((url) => url.endsWith("/planet"))).toBe(true);
     await page.locator('.theme-toggle-btn[data-theme="light"]').click();
-    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.miniMap?.isStyleLoaded())).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.__everydashcam.state.miniMap?.isStyleLoaded())).toBe(true);
     await openExport(page);
     await page.locator("#export-panel-ov-map").check();
     await expect(page.locator("#export-map-provider-select")).toHaveValue("openfreemap");

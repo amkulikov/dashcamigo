@@ -27,7 +27,7 @@ async function addRecordings(page: Page, names: string[]): Promise<void> {
         writeFileSync(filename, footage);
     }
     await page.locator("#folder-input").setInputFiles(directory);
-    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.ingestController === null)).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.__everydashcam.state.ingestController === null)).toBe(true);
     await expect(page.locator("#trip-analysis-status")).toBeHidden({ timeout: 30_000 });
 }
 
@@ -57,11 +57,11 @@ test("filters whole trips by recording type without changing playback", async ({
     await recording(page, "manual").click();
     await expect(cards(page)).toHaveCount(1);
     await cards(page).locator(".trip-title").click();
-    await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.active !== null)).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.__everydashcam.state.active !== null)).toBe(true);
     await expect(page.locator("#player-total")).not.toHaveText("0:00");
     const playback = await page.evaluate(() => ({
-        trip: window.__dashcamigo.state.active!.trip,
-        source: window.__dashcamigo.dom.player.src,
+        trip: window.__everydashcam.state.active!.trip,
+        source: window.__everydashcam.dom.player.src,
     }));
 
     await expect(kind(page, "parking")).toBeHidden();
@@ -72,8 +72,8 @@ test("filters whole trips by recording type without changing playback", async ({
     await expect(page.locator("body")).not.toHaveClass(/browsing/);
     expect(
         await page.evaluate(() => ({
-            trip: window.__dashcamigo.state.active!.trip,
-            source: window.__dashcamigo.dom.player.src,
+            trip: window.__everydashcam.state.active!.trip,
+            source: window.__everydashcam.dom.player.src,
         })),
     ).toEqual(playback);
 

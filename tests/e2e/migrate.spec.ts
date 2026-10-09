@@ -101,7 +101,7 @@ async function exportNotes(page: Page): Promise<string> {
     const pending = page.waitForEvent("download");
     await page.locator("#migration-download").click();
     const download = await pending;
-    expect(download.suggestedFilename()).toMatch(/^dashcamigo-notes-\d{4}-\d{2}-\d{2}\.dashcamigo$/);
+    expect(download.suggestedFilename()).toMatch(/^everydashcam-notes-\d{4}-\d{2}-\d{2}\.dashcamigo$/);
     return downloadText(download);
 }
 
@@ -128,7 +128,7 @@ test.describe("standalone notes recovery", () => {
                 "recovery loads only its own assets",
             ).toBe(true);
             await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex, nofollow");
-            expect(await page.evaluate(() => "__dashcamigo" in window), "the viewer is not initialized").toBe(false);
+            expect(await page.evaluate(() => "__everydashcam" in window), "the viewer is not initialized").toBe(false);
         });
     }
 

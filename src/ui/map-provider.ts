@@ -11,7 +11,7 @@ export type MapProviderPreference = Exclude<MapProvider, "osm-raster">;
 export type OverlayMapProviderPreference = Exclude<MapProviderPreference, "yandex">;
 export type OverlayMapProvider = Exclude<MapProvider, "yandex">;
 
-const STORAGE_KEY = "dashcamigo:mapProvider";
+const STORAGE_KEY = "everydashcam:mapProvider";
 const FAILURE_WINDOW_MS = 5_000;
 const FAILURE_THRESHOLD = 2;
 // A blocked host can leave fetch pending until the browser's network timeout.

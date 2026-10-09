@@ -3,7 +3,7 @@ import type { Channel } from "../parsers/types.js";
 import type { Trip } from "../trips.js";
 import { activeTrip } from "./state.js";
 
-const STORAGE_KEY = "dashcamigo:player:flipByCamera";
+const STORAGE_KEY = "everydashcam:player:flipByCamera";
 const MAX_ENTRIES = 160;
 
 interface Entry extends CameraFlip {

@@ -13,9 +13,9 @@ import { observePromptSurfaces } from "./prompt-surfaces.js";
 
 const log = createLogger("support-prompt");
 
-const STORAGE_FIRST_USE_AT = "dashcamigo:support:first-use-at";
-const STORAGE_LAST_SHOWN_AT = "dashcamigo:support:last-shown-at";
-const STORAGE_ACTION_TAKEN = "dashcamigo:support:action-taken";
+const STORAGE_FIRST_USE_AT = "everydashcam:support:first-use-at";
+const STORAGE_LAST_SHOWN_AT = "everydashcam:support:last-shown-at";
+const STORAGE_ACTION_TAKEN = "everydashcam:support:action-taken";
 const RETURN_DELAY_MS = 24 * 60 * 60 * 1000;
 const PROMPT_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
 const COPY_FEEDBACK_MS = 1400;

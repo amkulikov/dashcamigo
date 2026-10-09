@@ -11,7 +11,15 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { _resetForTests, createLogger, downloadLogBuffer, getLogBuffer } from "./log.js";
+import {
+    _resetForTests,
+    createLogger,
+    downloadLogBuffer,
+    getLogBuffer,
+    installWorkerLogBridge,
+    setLogRules,
+    setLogSink,
+} from "./log.js";
 
 // Minimal in-memory Storage. Same pattern as in i18n/index.test.ts -
 // intentionally duplicated: both tests are small and a shared helper would
@@ -77,7 +85,7 @@ describe("ring buffer", () => {
 
     it("captures buffer entries even when console-output is silenced by level gate", () => {
         // Restrict console via a very strict rule: everything at error level.
-        localStorage.setItem("dashcamigo:log", "*=error");
+        localStorage.setItem("everydashcam:log", "*=error");
         const log = createLogger("any");
         log.debug("d");
         log.info("i");
@@ -103,7 +111,7 @@ describe("ring buffer", () => {
 
 describe("level gate", () => {
     it("respects min-level set via wildcard rule", () => {
-        localStorage.setItem("dashcamigo:log", "*=warn");
+        localStorage.setItem("everydashcam:log", "*=warn");
         const log = createLogger("ingest");
         log.debug("d");
         log.info("i");
@@ -116,7 +124,7 @@ describe("level gate", () => {
     });
 
     it("uses console method matching the level", () => {
-        localStorage.setItem("dashcamigo:log", "*=debug");
+        localStorage.setItem("everydashcam:log", "*=debug");
         const log = createLogger("test");
         log.debug("d");
         log.info("i");
@@ -129,21 +137,21 @@ describe("level gate", () => {
     });
 
     it("formats console output with [namespace] prefix", () => {
-        localStorage.setItem("dashcamigo:log", "*=debug");
+        localStorage.setItem("everydashcam:log", "*=debug");
         const log = createLogger("ingest");
         log.warn("hello");
         expect(console.warn).toHaveBeenCalledWith("[ingest] hello");
     });
 
     it("passes ctx as a separate argument to console", () => {
-        localStorage.setItem("dashcamigo:log", "*=debug");
+        localStorage.setItem("everydashcam:log", "*=debug");
         const log = createLogger("ingest");
         log.warn("with ctx", { count: 5 });
         expect(console.warn).toHaveBeenCalledWith("[ingest] with ctx", { count: 5 });
     });
 
     it("passes Error as a separate argument so DevTools shows the stack", () => {
-        localStorage.setItem("dashcamigo:log", "*=debug");
+        localStorage.setItem("everydashcam:log", "*=debug");
         const err = new Error("boom");
         const log = createLogger("ingest");
         log.error("failed", err);
@@ -153,7 +161,7 @@ describe("level gate", () => {
 
 describe("localStorage rule pattern", () => {
     it("exact match wins over default", () => {
-        localStorage.setItem("dashcamigo:log", "ingest=warn");
+        localStorage.setItem("everydashcam:log", "ingest=warn");
         const ingest = createLogger("ingest");
         const other = createLogger("other");
         ingest.info("ignored");
@@ -165,7 +173,7 @@ describe("localStorage rule pattern", () => {
     });
 
     it("trailing wildcard matches a namespace prefix", () => {
-        localStorage.setItem("dashcamigo:log", "*=error,vendor:*=info");
+        localStorage.setItem("everydashcam:log", "*=error,vendor:*=info");
         const v70 = createLogger("vendor:70mai");
         const vBlackvue = createLogger("vendor:blackvue");
         const ingest = createLogger("ingest");
@@ -181,7 +189,7 @@ describe("localStorage rule pattern", () => {
 
     it("last matching rule wins (general first, override later)", () => {
         // First "everything at debug", then override "ingest at warn".
-        localStorage.setItem("dashcamigo:log", "*=debug,ingest=warn");
+        localStorage.setItem("everydashcam:log", "*=debug,ingest=warn");
         const ingest = createLogger("ingest");
         const other = createLogger("other");
         ingest.info("ignored");
@@ -193,7 +201,7 @@ describe("localStorage rule pattern", () => {
     it("first rule wins if last is less specific (override semantics broken on purpose)", () => {
         // Document the semantics: LAST wins, not most specific. Users write
         // rules in "general to specific" order.
-        localStorage.setItem("dashcamigo:log", "ingest=warn,*=debug");
+        localStorage.setItem("everydashcam:log", "ingest=warn,*=debug");
         const ingest = createLogger("ingest");
         ingest.info("emitted because *=debug came last");
         expect(console.info).toHaveBeenCalledTimes(1);
@@ -202,7 +210,7 @@ describe("localStorage rule pattern", () => {
     it("ignores malformed rules silently", () => {
         // "no-eq", "=missingPattern", "ingest=invalidLevel" are all invalid;
         // only "*=warn" should survive.
-        localStorage.setItem("dashcamigo:log", "no-eq,=warn,ingest=funky,*=warn");
+        localStorage.setItem("everydashcam:log", "no-eq,=warn,ingest=funky,*=warn");
         const log = createLogger("ingest");
         log.info("ignored");
         log.warn("emitted");
@@ -211,7 +219,7 @@ describe("localStorage rule pattern", () => {
     });
 
     it("'*' alone matches every namespace", () => {
-        localStorage.setItem("dashcamigo:log", "*=error");
+        localStorage.setItem("everydashcam:log", "*=error");
         createLogger("a").warn("a");
         createLogger("b:c:d").warn("b");
         createLogger("vendor:x").warn("v");
@@ -221,7 +229,7 @@ describe("localStorage rule pattern", () => {
 
 describe("child()", () => {
     it("appends suffix with colon separator", () => {
-        localStorage.setItem("dashcamigo:log", "*=debug");
+        localStorage.setItem("everydashcam:log", "*=debug");
         const parent = createLogger("parser");
         const sub = parent.child("gpx");
         sub.warn("hi");
@@ -230,7 +238,7 @@ describe("child()", () => {
 
     it("child namespace is matched independently by wildcard rules", () => {
         // "parser:*=warn" - parent ("parser") does not match, child ("parser:gpx") does.
-        localStorage.setItem("dashcamigo:log", "*=debug,parser:*=warn");
+        localStorage.setItem("everydashcam:log", "*=debug,parser:*=warn");
         const parent = createLogger("parser");
         const child = parent.child("gpx");
         parent.info("parent emitted (default debug)");
@@ -308,7 +316,77 @@ describe("downloadLogBuffer()", () => {
         downloadLogBuffer();
 
         expect(clicked).toHaveLength(1);
-        expect(fakeAnchor.download).toMatch(/^dashcamigo-log-.+\.json$/);
+        expect(fakeAnchor.download).toMatch(/^everydashcam-log-.+\.json$/);
         expect(created).toHaveLength(1);
     });
+});
+
+describe("worker log bridge", () => {
+    it("keeps current and legacy worker records in order without duplicating sink entries", () => {
+        const worker = new EventTarget();
+        const sink = vi.fn();
+        setLogSink(sink);
+        installWorkerLogBridge(worker as Worker);
+        const records = [
+            { ts: 100, nsec: 1, level: "warn", ns: "gps", msg: "current", ctx: { count: 2 } },
+            { ts: 101, nsec: 2, level: "info", ns: "preview", msg: "legacy" },
+        ];
+        worker.dispatchEvent(new MessageEvent("message", { data: { __type: "other:log", record: records[0] } }));
+        worker.dispatchEvent(
+            new MessageEvent("message", { data: { __type: "__everydashcam:log", record: records[0] } }),
+        );
+        worker.dispatchEvent(new MessageEvent("message", { data: { __type: "__dashcamigo:log", record: records[1] } }));
+        const expected = records.map((record) => ({ ...record, scope: "worker" }));
+        expect(getLogBuffer()).toEqual(expected);
+        expect(sink.mock.calls).toEqual(expected.map((entry) => [entry]));
+    });
+});
+
+it("reloads logging rules when another tab changes or clears preferences", () => {
+    const target = new EventTarget();
+    vi.stubGlobal("window", target);
+    localStorage.setItem("everydashcam:log", "*=error");
+    const log = createLogger("test");
+    log.warn("hidden");
+    expect(console.warn).not.toHaveBeenCalled();
+
+    localStorage.setItem("everydashcam:log", "*=warn");
+    target.dispatchEvent(Object.assign(new Event("storage"), { key: "everydashcam:log" }));
+    log.warn("visible");
+    expect(console.warn).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem("everydashcam:log")).toBe("*=warn");
+
+    localStorage.clear();
+    target.dispatchEvent(Object.assign(new Event("storage"), { key: null }));
+    log.info("default level");
+    expect(console.info).toHaveBeenCalledTimes(1);
+});
+
+it("applies diagnostic logging rules immediately and persists or removes the preference", () => {
+    const log = createLogger("test");
+    setLogRules("*=error");
+    log.warn("hidden");
+    expect(console.warn).not.toHaveBeenCalled();
+    expect(localStorage.getItem("everydashcam:log")).toBe("*=error");
+
+    setLogRules("*=warn");
+    log.warn("visible");
+    expect(console.warn).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem("everydashcam:log")).toBe("*=warn");
+
+    setLogRules(null);
+    log.info("default level");
+    expect(console.info).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem("everydashcam:log")).toBeNull();
+});
+
+it("retains active logging rules when a diagnostic preference write fails", () => {
+    setLogRules("*=error");
+    vi.spyOn(localStorage, "setItem").mockImplementation(() => {
+        throw new DOMException("storage full", "QuotaExceededError");
+    });
+
+    expect(() => setLogRules("*=debug")).toThrow("storage full");
+    createLogger("test").warn("still hidden");
+    expect(console.warn).not.toHaveBeenCalled();
 });

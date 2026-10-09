@@ -32,7 +32,7 @@ async function openDetection(page: Page, { delayedCache = false } = {}): Promise
                     return new Response(new Uint8Array([1, 2, 3]));
                 };
             } else {
-                for (const url of urls) localStorage.setItem(`dashcamigo:blurAssetDownloaded:${url}`, "1");
+                for (const url of urls) localStorage.setItem(`everydashcam:blurAssetDownloaded:${url}`, "1");
             }
             const nativeFetch = window.fetch.bind(window);
             const requests: string[] = [];

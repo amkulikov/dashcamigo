@@ -76,7 +76,7 @@ class JsonReporter implements Reporter {
 
     private renderMarkdown(): string {
         const lines: string[] = [];
-        lines.push("# dashcamigo perf-suite results");
+        lines.push("# everydashcam perf-suite results");
         lines.push("");
         lines.push(`Generated: ${new Date().toISOString()}`);
         lines.push("");

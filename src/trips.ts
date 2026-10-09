@@ -496,11 +496,11 @@ export function tripCandidatesByChannel(trip: Trip, channel: Channel): VideoCand
  */
 const TRIP_GAP_THRESHOLD_SEC = 30;
 
-// User-configurable override. localStorage["dashcamigo:trips:gapSec"] can
+// User-configurable override. localStorage["everydashcam:trips:gapSec"] can
 // override the default; UI exposes presets (5min / 15min / 60min / off=Infinity).
 // "off" stores Number.POSITIVE_INFINITY worth of seconds (we serialize as the
 // literal string "off" to keep JSON-parseable).
-const STORAGE_KEY_TRIP_GAP = "dashcamigo:trips:gapSec";
+const STORAGE_KEY_TRIP_GAP = "everydashcam:trips:gapSec";
 
 /** Current gap threshold in seconds, or +Infinity for "never split into trips". */
 export function getTripGapSec(): number {

@@ -20,7 +20,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("transport follows the video center with expanded map and fullscreen", async ({ page }) => {
-    await page.addInitScript(() => localStorage.setItem("dashcamigo:hotkeys:seekStepSec", "600"));
+    await page.addInitScript(() => localStorage.setItem("everydashcam:hotkeys:seekStepSec", "600"));
     await gotoApp(page);
     await loadTrip(page, SAMPLE_70MAI);
     await pausePlayback(page);
@@ -150,7 +150,7 @@ test("transport buttons match arrow seeks, repeat while held, and stop after lea
 });
 
 test("Space toggles playback after toolbar clicks without reactivating the focused action", async ({ page }) => {
-    await page.addInitScript(() => localStorage.setItem("dashcamigo:hotkeys:seekStepSec", "0.5"));
+    await page.addInitScript(() => localStorage.setItem("everydashcam:hotkeys:seekStepSec", "0.5"));
     await gotoApp(page);
     await loadTrip(page, SAMPLE_70MAI);
     await pausePlayback(page);
@@ -290,7 +290,7 @@ test.describe("touch player toolbar", () => {
 
     test("a narrow phone keeps fullscreen and export reachable", async ({ page }) => {
         await page.setViewportSize({ width: 320, height: 568 });
-        await page.addInitScript(() => localStorage.setItem("dashcamigo:hotkeys:seekStepSec", "600"));
+        await page.addInitScript(() => localStorage.setItem("everydashcam:hotkeys:seekStepSec", "600"));
         await gotoApp(page, "ru");
         await loadTrip(page, SAMPLE_70MAI);
         await expect
@@ -375,7 +375,7 @@ test.describe("touch player toolbar", () => {
 
 test("expanded map fills a narrow desktop viewer after sidebar resizing", async ({ page }) => {
     await page.setViewportSize({ width: 1200, height: 900 });
-    await page.addInitScript(() => localStorage.setItem("dashcamigo:sidebar-width", "600"));
+    await page.addInitScript(() => localStorage.setItem("everydashcam:sidebar-width", "600"));
     await gotoApp(page);
     await loadTrip(page, SAMPLE_70MAI);
     await page.locator("#mini-map").click();

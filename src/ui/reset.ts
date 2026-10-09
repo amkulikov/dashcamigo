@@ -155,7 +155,8 @@ function clearOwnedStorage(storage: Storage): void {
         const key = storage.key(index);
         if (
             key &&
-            (key.startsWith("dashcamigo:") ||
+            (key.startsWith("everydashcam:") ||
+                key.startsWith("dashcamigo:") ||
                 key === "dc.viewer.panels" ||
                 key === "dc-theme" ||
                 key === "dc-asset-retry")

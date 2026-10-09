@@ -336,7 +336,7 @@ test.describe("export", () => {
         const readWindow = () =>
             page.evaluate(() => {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const st = (window as any).__dashcamigo.state;
+                const st = (window as any).__everydashcam.state;
                 const trip = st.active ? st.trips[st.active.trip] : null;
                 if (!st.chart || !trip) throw new Error("chart window unavailable");
                 return {
@@ -721,12 +721,12 @@ test.describe("export", () => {
     test("event popup's save-clip action opens export mode on the event window", async ({ page }) => {
         // No public fixture produces a detected brake event (the samples are
         // seconds long, steady speed), so inject a synthetic TripEvent through
-        // the __dashcamigo debug handle - the popup hit-test reads trip.events
+        // the __everydashcam debug handle - the popup hit-test reads trip.events
         // live, no chart rebuild needed. Gray-box on purpose: the alternative
         // is no coverage of the event->export leg at all.
         await page.evaluate(() => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const st = (window as any).__dashcamigo.state;
+            const st = (window as any).__everydashcam.state;
             const trip = st.trips[st.active.trip];
             trip.events.push({
                 kind: "brake",
@@ -757,7 +757,7 @@ test.describe("export", () => {
         const host = await boxOf(page, "#player-chart-canvas");
         const evPx = await page.evaluate(() => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            return (window as any).__dashcamigo.state.chart.scales.x.getPixelForValue(2) as number;
+            return (window as any).__everydashcam.state.chart.scales.x.getPixelForValue(2) as number;
         });
         await page.mouse.click(host.x + evPx, host.y + 4);
         const popupExport = page.locator(".event-popup-export");
@@ -829,7 +829,7 @@ test.describe("export", () => {
         await expect(endInput).toHaveValue("0:01");
         await page.locator("#export-trim-preview").click();
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        expect(await page.evaluate(() => (window as any).__dashcamigo.state.isPreviewZoom)).toBe(true);
+        expect(await page.evaluate(() => (window as any).__everydashcam.state.isPreviewZoom)).toBe(true);
 
         // Pause the one-click preview before asserting the independent seek clamp.
         await expect(play).toHaveAttribute("data-paused", "false");
@@ -1093,7 +1093,9 @@ test.describe("export", () => {
         await page.mouse.up();
         const savedLeft = await speed.evaluate((el) => (el as HTMLElement).style.left);
         await expect(reset).toBeVisible();
-        await expect.poll(() => page.evaluate(() => localStorage.getItem("dashcamigo:export:overlays"))).not.toBeNull();
+        await expect
+            .poll(() => page.evaluate(() => localStorage.getItem("everydashcam:export:overlays")))
+            .not.toBeNull();
 
         await page.reload();
         await loadTrip(page, SAMPLE_70MAI);
@@ -1112,7 +1114,7 @@ test.describe("export", () => {
         await expect(page.locator("#export-panel-ov-speed")).not.toBeChecked();
         await expect(page.locator('.export-panel__segment button[data-style="min"]')).toHaveClass(/is-active/);
         await expect(reset).toBeHidden();
-        await expect.poll(() => page.evaluate(() => localStorage.getItem("dashcamigo:export:overlays"))).toBeNull();
+        await expect.poll(() => page.evaluate(() => localStorage.getItem("everydashcam:export:overlays"))).toBeNull();
     });
 
     test("map overlay is draggable (pointer-events guard)", async ({ page }) => {
@@ -1218,7 +1220,7 @@ test.describe("export", () => {
         await exportControl.scrollIntoViewIfNeeded();
         await shot(page, "export-22-map-marker");
         const globalPreference = await page.evaluate(() =>
-            JSON.parse(localStorage.getItem("dashcamigo:mapMarker") ?? "null"),
+            JSON.parse(localStorage.getItem("everydashcam:mapMarker") ?? "null"),
         );
         expect(globalPreference).toEqual({ shape: "sedan", color: "#30a46c", size: "large" });
 
@@ -1371,7 +1373,7 @@ test.describe("export range lock", () => {
         await expect(fromZoom).toBeVisible();
         const viewBefore = await page.evaluate(() => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const st = (window as any).__dashcamigo.state;
+            const st = (window as any).__everydashcam.state;
             return {
                 min: st.chart.scales.x.min as number,
                 max: st.chart.scales.x.max as number,
@@ -1446,7 +1448,7 @@ test.describe("export range lock", () => {
         expect(
             await page.evaluate(() => {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const st = (window as any).__dashcamigo.state;
+                const st = (window as any).__everydashcam.state;
                 return {
                     min: st.chart.scales.x.min as number,
                     max: st.chart.scales.x.max as number,

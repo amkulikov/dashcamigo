@@ -192,7 +192,7 @@ test.describe("navigation & shell", () => {
         await page.locator("#feedback-primary").click();
         const download = await downloadPromise;
         // Single plain-text report - no zip, no JSON.
-        expect(download.suggestedFilename()).toMatch(/^dashcamigo-report-.+\.txt$/);
+        expect(download.suggestedFilename()).toMatch(/^everydashcam-report-.+\.txt$/);
         const reportPath = await download.path();
         const report = readFileSync(reportPath, "utf8");
         expect(report.startsWith("everydashcam — technical details"), "report leads with the send-to header").toBe(

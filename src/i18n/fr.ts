@@ -899,7 +899,6 @@ export const frDict = {
     "settings.privacy.policyLink": "Politique de confidentialité",
 
     "settings.privacy.crash.label": "Rapports de plantage",
-    "settings.privacy.crash.description": "Si l'appli plante, un rapport anonyme nous aide à corriger — aucune vidéo, aucun GPS, aucun nom de fichier, juste ce qui a échoué et sur quel navigateur. Activé par défaut ; tu peux le désactiver ici.",
     "settings.privacy.crash.optInDescription": "Si l’appli plante, un rapport anonymisé nous aide à la réparer. Aucune vidéo, aucun GPS, aucun nom de fichier — seulement l’erreur et ton navigateur. Désactivé tant que tu ne l’actives pas ici. Tu peux le désactiver à tout moment.",
     "settings.playback.section": "Lecture",
     "settings.playback.units.label": "Unités de mesure",

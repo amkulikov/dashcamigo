@@ -293,8 +293,8 @@ export function formatRateBytes(bytesPerSecond: number): string {
  * Base filename for the exported clip.
  *
  * Format:
- *   - same calendar day (typical): dashcamigo_YYYYMMDD_HHMMSS-HHMMSS
- *   - clip crossing midnight:       dashcamigo_YYYYMMDD_HHMMSS-YYYYMMDD_HHMMSS
+ *   - same calendar day (typical): everydashcam_YYYYMMDD_HHMMSS-HHMMSS
+ *   - clip crossing midnight:       everydashcam_YYYYMMDD_HHMMSS-YYYYMMDD_HHMMSS
  *
  * Date/time on the display clock (camera clock when known - matches the trip
  * header the user sees). Single source of truth for both the FSA picker
@@ -308,7 +308,7 @@ export function clipBasename(trip: Trip, startTripSec: number, endTripSec: numbe
     const sameDay = isSameDisplayDay(start, end);
     const startStr = formatClockForFilename(start, true);
     const endStr = formatClockForFilename(end, !sameDay);
-    return `dashcamigo_${startStr}-${endStr}`;
+    return `everydashcam_${startStr}-${endStr}`;
 }
 
 /**

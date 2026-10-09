@@ -91,7 +91,7 @@ const PROBE_BYTES = 4096;
 // A short batch finishes before conservative scheduling makes a useful
 // difference, so it stays on the high-throughput policy without a probe.
 const RESPONSIVE_POLICY_MIN_FILES = 30;
-const POLICY_OVERRIDE_KEY = "dashcamigo:ingest-policy";
+const POLICY_OVERRIDE_KEY = "everydashcam:ingest-policy";
 
 export interface IngestSchedulingPolicy {
     /** Immediate keeps local storage busy; idle yields between jobs on

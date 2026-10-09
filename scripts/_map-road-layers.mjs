@@ -149,10 +149,10 @@ function roadLayer(level, crossing, kind, filter) {
         "source-layer": "transportation",
         minzoom: 5,
         metadata: {
-            "dashcamigo:role": "transport",
-            "dashcamigo:road-kind": kind,
-            "dashcamigo:road-level": level,
-            "dashcamigo:road-crossing": crossing,
+            "everydashcam:role": "transport",
+            "everydashcam:road-kind": kind,
+            "everydashcam:road-level": level,
+            "everydashcam:road-crossing": crossing,
         },
         filter: [
             "all",

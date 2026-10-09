@@ -32,7 +32,7 @@ const MINIMAP_DRAG_THRESHOLD_PX = 5;
 async function chartWindow(page: Page): Promise<{ min: number; max: number; duration: number; zoomed: boolean }> {
     return page.evaluate(() => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const st = (window as any).__dashcamigo.state;
+        const st = (window as any).__everydashcam.state;
         const trip = st.active ? st.trips[st.active.trip] : null;
         if (!st.chart || !trip) throw new Error("chart window unavailable");
         return {
@@ -78,6 +78,7 @@ test.describe("player", () => {
     });
 
     test("play/pause control toggles the playing state", async ({ page }) => {
+        expect(await page.evaluate(() => window.__everydashcam === window.__dashcamigo)).toBe(true);
         const play = page.locator("#player-play");
         // The four-second fixture can finish while a busy full-suite worker is
         // still settling setup. A click at that point exercises the asynchronous
@@ -156,13 +157,13 @@ test.describe("player", () => {
 
         await page.locator("#export-panel-close").click();
         await expect(page.locator("#video-minimap")).toBeHidden();
-        expect(await page.evaluate(() => window.__dashcamigo.state.videoZoom.scale)).toBe(1);
+        expect(await page.evaluate(() => window.__everydashcam.state.videoZoom.scale)).toBe(1);
         await wheelVideoZoom(page, -120);
         await expect(page.locator("#video-minimap")).toBeVisible();
         await expect
             .poll(() => preview.evaluate((video: HTMLVideoElement) => video.readyState >= 2 && video.paused))
             .toBe(true);
-        expect(await page.evaluate(() => window.__dashcamigo.dom.player.paused)).toBe(true);
+        expect(await page.evaluate(() => window.__everydashcam.dom.player.paused)).toBe(true);
     });
 
     test("frame-step buttons step the paused player frame by frame, both ways", async ({ page }) => {
@@ -369,7 +370,7 @@ test.describe("player", () => {
 
         // Position persisted to localStorage (survives reload) AND the widget
         // actually followed the pointer.
-        const persisted = await page.evaluate(() => localStorage.getItem("dashcamigo:minimap-pos"));
+        const persisted = await page.evaluate(() => localStorage.getItem("everydashcam:minimap-pos"));
         expect(persisted, "mini-map position must be persisted after a drag").not.toBeNull();
         const after = await boxOf(page, ".mini-map");
         // Subpixel layout only, so a couple of px of slack - not a "did it move
@@ -457,7 +458,7 @@ test.describe("player", () => {
         await loadTrip(page, SAMPLE_70MAI);
         await expect(page.locator("#player-wrap")).toHaveClass(/map-expanded/);
         await expect
-            .poll(() => page.evaluate(() => window.__dashcamigo.state.map?.getPitch() ?? 0))
+            .poll(() => page.evaluate(() => window.__everydashcam.state.map?.getPitch() ?? 0))
             .toBeGreaterThan(20);
         await page.locator("#player-view-menu").click();
         await expect(page.locator('[data-map-mode="large"]')).toHaveAttribute("aria-checked", "true");
@@ -466,8 +467,8 @@ test.describe("player", () => {
     test("chase is the default follow mode: expanding the big map tilts it", async ({ page }) => {
         const pitch = () =>
             page.evaluate(() => {
-                const w = window as unknown as { __dashcamigo?: { state?: { map?: { getPitch?: () => number } } } };
-                return w.__dashcamigo?.state?.map?.getPitch?.() ?? 0;
+                const w = window as unknown as { __everydashcam?: { state?: { map?: { getPitch?: () => number } } } };
+                return w.__everydashcam?.state?.map?.getPitch?.() ?? 0;
             });
         // Chase is the default. Expanding the big map (the follow control lives
         // there) engages it: the camera tilts and the chase sub-controls show.
@@ -545,15 +546,15 @@ test.describe("player", () => {
         // Picking presets applies them but keeps the popover open - the user
         // compares variants against the live map behind it.
         await page.evaluate(() => {
-            const { state } = window.__dashcamigo;
+            const { state } = window.__everydashcam;
             state.followMode = "off";
             state.map!.jumpTo({ center: [65, 45], zoom: 17, bearing: 20 });
         });
         await scaleSeg.getByRole("button", { name: "150%" }).click();
         await namesSeg.getByRole("button", { name: "More" }).click();
-        await expect.poll(() => page.evaluate(() => window.__dashcamigo.state.mapReady)).toBe(true);
+        await expect.poll(() => page.evaluate(() => window.__everydashcam.state.mapReady)).toBe(true);
         const camera = await page.evaluate(() => {
-            const map = window.__dashcamigo.state.map!;
+            const map = window.__everydashcam.state.map!;
             return {
                 lon: map.getCenter().lng,
                 lat: map.getCenter().lat,
@@ -573,9 +574,9 @@ test.describe("player", () => {
         await expect(scaleSeg.locator('button[aria-pressed="true"]')).toHaveText("150%");
         await expect(namesSeg.locator('button[aria-pressed="true"]')).toHaveText("More");
         const stored = await page.evaluate(() => ({
-            labelScale: localStorage.getItem("dashcamigo:mapLabelScale"),
-            streetNames: localStorage.getItem("dashcamigo:streetLabelDensity"),
-            marker: JSON.parse(localStorage.getItem("dashcamigo:mapMarker") ?? "null"),
+            labelScale: localStorage.getItem("everydashcam:mapLabelScale"),
+            streetNames: localStorage.getItem("everydashcam:streetLabelDensity"),
+            marker: JSON.parse(localStorage.getItem("everydashcam:mapMarker") ?? "null"),
         }));
         expect(stored, "preferences must survive to the next session").toEqual({
             labelScale: "1.5",
@@ -836,7 +837,7 @@ test.describe("player", () => {
         // already-created programmatic view, not about the preview entry point.
         const seeded = await page.evaluate(() => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const st = (window as any).__dashcamigo.state;
+            const st = (window as any).__everydashcam.state;
             const trip = st.active ? st.trips[st.active.trip] : null;
             if (!st.chart || !trip) throw new Error("chart window unavailable");
             const duration = trip.timeline.contentDurationSec as number;
@@ -883,7 +884,7 @@ test.describe("player", () => {
             seeded.normalFloorSec,
         );
         expect(after.zoomed).toBe(true);
-        expect(await page.evaluate(() => (window as any).__dashcamigo.state.isPreviewZoom)).toBe(false);
+        expect(await page.evaluate(() => (window as any).__everydashcam.state.isPreviewZoom)).toBe(false);
 
         // The handles announce the same effective floor the next independent
         // edge gesture will enforce: at a below-floor view neither edge can
@@ -1328,7 +1329,7 @@ test.describe("player", () => {
 
         const zoomState = await page.evaluate(() => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const st = (window as any).__dashcamigo.state;
+            const st = (window as any).__everydashcam.state;
             return {
                 zoomed: st.chartZoomed,
                 preview: st.isPreviewZoom,
@@ -1357,7 +1358,7 @@ test.describe("player", () => {
         await expect
             .poll(() =>
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                page.evaluate(() => (window as any).__dashcamigo.state.chartZoomed),
+                page.evaluate(() => (window as any).__everydashcam.state.chartZoomed),
             )
             .toBe(false);
         await expect(reset).toBeHidden();
@@ -1375,7 +1376,7 @@ test.describe("player", () => {
         await expect
             .poll(() =>
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                page.evaluate(() => (window as any).__dashcamigo.state.chartZoomed),
+                page.evaluate(() => (window as any).__everydashcam.state.chartZoomed),
             )
             .toBe(false);
         await expect(page.locator("#player-chart-overview-reset")).toBeHidden();
@@ -1393,7 +1394,7 @@ test.describe("player", () => {
 
         const zoomState = await page.evaluate(() => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const st = (window as any).__dashcamigo.state;
+            const st = (window as any).__everydashcam.state;
             return { zoomed: st.chartZoomed, preview: st.isPreviewZoom, windowMax: st.chart.scales.x.max as number };
         });
         expect(zoomState.zoomed, "the wheel must have zoomed the timeline").toBe(true);
@@ -1426,7 +1427,7 @@ test.describe("player", () => {
         for (let i = 0; i < 4; i++) await page.mouse.wheel(0, -200);
         const windowMax = await page.evaluate(() => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const st = (window as any).__dashcamigo.state;
+            const st = (window as any).__everydashcam.state;
             return st.chartZoomed && !st.isPreviewZoom ? (st.chart.scales.x.max as number) : Number.NaN;
         });
         expect(windowMax, "must be a live inspection zoom below the trip end").toBeGreaterThan(0);
@@ -1628,7 +1629,7 @@ test.describe("player", () => {
             "data-marker-render-key",
             "van:#e5484d:overhead",
         );
-        const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("dashcamigo:mapMarker") ?? "null"));
+        const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("everydashcam:mapMarker") ?? "null"));
         expect(stored).toEqual({ shape: "van", color: "#e5484d", size: "small" });
     });
 });

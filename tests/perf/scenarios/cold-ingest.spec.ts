@@ -93,9 +93,11 @@ for (const vendor of vendors) {
                 await page.waitForFunction(
                     () => {
                         const w = window as unknown as {
-                            __dashcamigoPerf?: { lifecycleEvents?: Array<{ type: string }> };
+                            __everydashcamPerf?: { lifecycleEvents?: Array<{ type: string }> };
                         };
-                        return !!w.__dashcamigoPerf?.lifecycleEvents?.some((e) => e.type === "dashcamigo:ingest-done");
+                        return !!w.__everydashcamPerf?.lifecycleEvents?.some(
+                            (e) => e.type === "everydashcam:ingest-done",
+                        );
                     },
                     { timeout: replayBudgetMs, polling: 100 },
                 );
@@ -212,7 +214,7 @@ function publishMetrics(
     const prefix = `cold-ingest/${vendor.name}/`;
     const wall = aggregate(samples.map((s) => s.wallMs));
     const listReadyDurations = samples.map((sample) => {
-        const event = sample.lifecycleEvents.find((entry) => entry.type === "dashcamigo:ingest-list-ready");
+        const event = sample.lifecycleEvents.find((entry) => entry.type === "everydashcam:ingest-list-ready");
         const duration = Number(event?.detail?.durationMs);
         if (!Number.isFinite(duration)) throw new Error(`missing ingest-list-ready metric for ${vendor.name}`);
         return duration;
