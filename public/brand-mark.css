@@ -89,6 +89,8 @@
     flex: 0 0 var(--edc-base-width);
     width: var(--edc-base-width);
     clip-path: inset(0 calc(var(--edc-base-width) - var(--edc-deck-width)) 0 0);
+    transform: scale(var(--edc-deck-scale, 1));
+    transform-origin: left center;
 }
 .edc-mark--interactive .edc-mark__drum {
     flex-shrink: 0;

@@ -23,6 +23,7 @@ import type { Lang } from "../src/i18n/index.js";
 //  - vite-plugins/llms-txt.ts: opening summary of dist/llms.txt.
 //  - vite-plugins/vendor-pages.ts: subset with hasLandingPage=true gets the
 //    dedicated /cameras/<slug>/ pages (high-volume search terms).
+//  - src/ui/brand-mark.ts: the hover animation cycles the full inventory.
 //
 // Adding a brand: append below. Set hasLandingPage=true ONLY if there's a
 // matching VendorContent in vendor-pages.ts ready to render. Order is meant
@@ -140,6 +141,7 @@ export const SUPPORTED_BRANDS: ReadonlyArray<SupportedBrand> = [
     { displayName: "SilverStone F1", hasLandingPage: false, gpsSamples: ["A80"] },
     { displayName: "Roadgid", hasLandingPage: false, gpsSamples: ["Tube"] },
     { displayName: "iBOX", hasLandingPage: false, gpsSamples: ["iCON"] },
+    { displayName: "DDPAI", hasLandingPage: false, videoSamples: ["MOLA N3", "Z50"] },
 ];
 
 // Brands with a dedicated landing page.

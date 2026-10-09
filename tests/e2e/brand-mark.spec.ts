@@ -1,4 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
+import { SUPPORTED_BRANDS } from "../../vite-plugins/supported-brands.js";
 import { expect, gotoApp, loadTrip, presetLocalStorage, test } from "./_fixtures.js";
 
 test.use({ viewerMap: "route-only" });
@@ -20,28 +21,39 @@ const visibleWord = (columns: Locator) =>
             .join("")
             .trimEnd(),
     );
-async function prepare(page: Page, random: number): Promise<void> {
+async function prepare(page: Page): Promise<void> {
     await presetLocalStorage(page);
-    await page.addInitScript((value) => {
-        Math.random = () => value;
-    }, random);
     await page.emulateMedia({ reducedMotion: "no-preference" });
     await gotoApp(page);
     await expect(page.locator(".topbar .edc-mark")).not.toHaveClass(/edc-mark--animated/);
 }
 
+async function hoverBrand(mark: Locator, random: number): Promise<void> {
+    await mark.evaluate((element, value) => {
+        // Map workers use random request IDs; only the synchronous brand
+        // shuffle may be deterministic, never unrelated application work.
+        const original = Math.random;
+        Math.random = () => value;
+        try {
+            element.dispatchEvent(new MouseEvent("mouseenter"));
+        } finally {
+            Math.random = original;
+        }
+    }, random);
+}
+
 test("brand odometer rolls forward, starts and stops on the right, and respects reduced motion", async ({ page }) => {
-    await prepare(page, 0); // first 70MAI, then VIOFO: no consecutive repeat
+    await prepare(page);
     const mark = page.locator(".topbar .edc-mark");
     const columns = mark.locator(".edc-mark__column");
     await expect(mark).toHaveAccessibleName("everydashcam");
     await expect(mark).toHaveRole("img");
-    await expect(columns).toHaveCount(9);
+    await expect(columns).toHaveCount(Math.max(...SUPPORTED_BRANDS.map((brand) => brand.displayName.length)));
     await expect.poll(() => visibleWord(columns)).toBe("EVERY");
     await page.clock.install();
     await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
     const initial = await positions(columns);
-    await mark.hover();
+    await hoverBrand(mark, 0);
 
     await page.clock.runFor(200); // DASHCAM exits first; the right drum then starts.
     await expect(mark.locator(".edc-mark__word")).toHaveCSS("opacity", "0");
@@ -79,11 +91,16 @@ test("brand odometer rolls forward, starts and stops on the right, and respects 
     await page.clock.runFor(112);
     expect(await visibleWord(columns)).toBe("70MAI");
     await expect(mark).not.toHaveClass(/edc-mark--animated/);
+    await page.screenshot({ path: test.info().outputPath("brand-hover.png") });
     await page.clock.runFor(200);
     expect(await visibleWord(columns)).toBe("70MAI"); // hold starts after all stops
     await page.clock.runFor(180);
     await expect(mark).toHaveClass(/edc-mark--animated/);
-    await page.clock.runFor(1300);
+    await page.clock.runFor(1100);
+    expect(await visibleWord(columns)).toBe("DDPAI");
+    await expect(mark.locator(".edc-mark__word")).toHaveCSS("opacity", "0");
+    await mark.dispatchEvent("mouseleave");
+    await page.clock.runFor(1400);
     expect(await visibleWord(columns)).toBe("EVERY");
     // Five drums need no retract phase before DASHCAM returns.
     await expect(mark.locator(".edc-mark__word")).toHaveCSS("opacity", "1");
@@ -94,7 +111,7 @@ test("brand odometer rolls forward, starts and stops on the right, and respects 
     await page.mouse.move(0, 200);
     await mark.hover();
     await page.clock.runFor(1400);
-    expect(await visibleWord(columns)).toBe("VIOFO");
+    expect(await visibleWord(columns)).toBe("IBOX");
     // Media-query changes are delivered by the browser's rendering cycle,
     // independently of Playwright's mocked animation-frame clock.
     await page.clock.resume();
@@ -124,12 +141,47 @@ test("brand odometer rolls forward, starts and stops on the right, and respects 
         await expect(button).toBeInViewport({ ratio: 1 });
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await expect(mark.locator(".edc-mark__word")).toBeVisible();
+    expect(await visibleWord(columns)).toBe("EVERY");
+    await expect(mark.locator(".edc-mark__drums")).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
+});
+
+test("leaving and reentering the logo redirects the moving drums without stale timers", async ({ page }) => {
+    await prepare(page);
+    const mark = page.locator(".topbar .edc-mark");
+    const columns = mark.locator(".edc-mark__column");
+    await page.clock.install();
+    await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
+    for (const elapsed of [40, 400, 1400]) {
+        await mark.hover();
+        await page.clock.runFor(elapsed);
+        const beforeLeave = await positions(columns);
+        await page.mouse.move(0, 200);
+        expect(await positions(columns)).toEqual(beforeLeave);
+        await page.clock.runFor(100);
+        const beforeReenter = await positions(columns);
+        await mark.hover();
+        expect(await positions(columns)).toEqual(beforeReenter);
+        await page.clock.runFor(1500);
+        expect(await visibleWord(columns)).not.toBe("EVERY");
+        await expect(mark.locator(".edc-mark__word")).toHaveCSS("opacity", "0");
+        await page.mouse.move(0, 200);
+        await page.clock.runFor(1700);
+        expect(await visibleWord(columns)).toBe("EVERY");
+        await expect(mark.locator(".edc-mark__word")).toHaveCSS("opacity", "1");
+        await expect(mark).not.toHaveClass(/edc-mark--animated/);
+        const resting = await positions(columns);
+        await page.clock.runFor(5000);
+        expect(await positions(columns)).toEqual(resting);
+    }
+    await page.clock.resume();
 });
 
 for (const width of [601, 768]) {
     test(`long brand drums use the word's space without moving toolbar controls at ${width}px`, async ({ page }) => {
         await page.setViewportSize({ width, height: 900 });
-        await prepare(page, 0.999); // THINKWARE is the longest allowed name.
+        await prepare(page);
         await loadTrip(page);
         await page.locator("#notif-bell").evaluate((element) => {
             (element as HTMLButtonElement).hidden = false;
@@ -155,19 +207,22 @@ for (const width of [601, 768]) {
             expect(control.x).toBeGreaterThanOrEqual(0);
             expect(control.right).toBeLessThanOrEqual(width);
         }
-        await mark.hover();
+        const longest = SUPPORTED_BRANDS.reduce((a, b) => (a.displayName.length > b.displayName.length ? a : b));
+        await hoverBrand(mark, (SUPPORTED_BRANDS.indexOf(longest) + 0.5) / SUPPORTED_BRANDS.length);
         for (const elapsed of [64, 160, 560, 616]) {
             await page.clock.runFor(elapsed);
             expect(await geometry()).toEqual(initial);
         }
-        expect(await visibleWord(columns)).toBe("THINKWARE");
+        expect(await visibleWord(columns)).toBe(longest.displayName.toUpperCase());
         await expect(mark.locator(".edc-mark__word")).toHaveCSS("opacity", "0");
         await expect(mark).toHaveAccessibleName("everydashcam");
         expect(await mark.locator(".edc-mark__word").evaluate((word) => getComputedStyle(word).clipPath)).not.toBe(
             "inset(0px)",
         );
-        const ninth = await mark.locator(".edc-mark__drum").last().boundingBox();
-        expect(ninth!.x + ninth!.width).toBeLessThanOrEqual(initial.mark.x + initial.mark.width);
+        const last = await mark.locator(".edc-mark__drum").last().boundingBox();
+        expect(last!.x + last!.width).toBeLessThanOrEqual(initial.mark.x + initial.mark.width + 0.01);
+        await page.screenshot({ path: test.info().outputPath(`brand-long-${width}.png`) });
+        await mark.dispatchEvent("mouseleave");
         for (const elapsed of [250, 800, 400, 350]) {
             await page.clock.runFor(elapsed);
             expect(await geometry()).toEqual(initial);

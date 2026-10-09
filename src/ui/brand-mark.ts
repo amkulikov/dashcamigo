@@ -1,14 +1,35 @@
+import { SUPPORTED_BRANDS } from "../../vite-plugins/supported-brands.js";
+
 const ALPHABET = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 const BRAND_WORD = "EVERY";
-// A small display-only selection from supported-brands.ts and the DDPAI
-// sidecar registry; importing either registry would pull build/parser code in.
-const CAMERA_BRANDS = ["70MAI", "VIOFO", "DDPAI", "GOPRO", "MIVUE", "NAVITEL", "BLACKVUE", "THINKWARE"];
-const MAX_DRUMS = 9;
+const cameraBrands = SUPPORTED_BRANDS.map((brand) => brand.displayName.toUpperCase());
+const maxDrums = Math.max(BRAND_WORD.length, ...cameraBrands.map((word) => word.length));
 const ROLL_MS = 1100;
 const EXPAND_MS = 180;
 const HOLD_MS = 350;
 const WORD_EXIT_MS = 140;
 const WORD_ENTER_MS = 180;
+
+export function createBrandCycle(random: () => number = () => Math.random()): () => string {
+    let remaining: string[] = [];
+    let previous: string | undefined;
+    return () => {
+        if (remaining.length === 0) {
+            remaining = [...cameraBrands];
+            for (let index = remaining.length - 1; index > 0; index--) {
+                const other = Math.floor(random() * (index + 1));
+                [remaining[index], remaining[other]] = [remaining[other]!, remaining[index]!];
+            }
+            const last = remaining.length - 1;
+            if (remaining[last] === previous) {
+                const other = Math.floor(random() * last);
+                [remaining[last], remaining[other]] = [remaining[other]!, remaining[last]!];
+            }
+        }
+        previous = remaining.pop()!;
+        return previous;
+    };
+}
 
 export function initBrandMark(): void {
     const root = document.querySelector<HTMLElement>(".topbar .edc-mark");
@@ -18,17 +39,20 @@ export function initBrandMark(): void {
     const hover = matchMedia("(hover: hover)");
     const compact = matchMedia("(max-width: 600px)");
     let frame: number | undefined;
-    let returnTimer: ReturnType<typeof setTimeout> | undefined;
-    let busy = false;
-    let currentWord = BRAND_WORD;
-    let lastCameraBrand: string | undefined;
+    let holdTimer: ReturnType<typeof setTimeout> | undefined;
+    let isHovered = false;
     let drumCount = BRAND_WORD.length;
     let orangeDrum = -1;
+    let wordOpacity = 1;
+    let availableWidth = 0;
+    let drumWidth = 0;
+    let drumGap = 0;
+    const nextBrand = createBrandCycle();
 
     // Keep the original five-drum layout width; the extra drums are clipped
     // over DASHCAM, so revealing a long name cannot move toolbar controls.
     const drums = Array.from(deck.querySelectorAll<HTMLElement>(".edc-mark__drum"));
-    while (drums.length < MAX_DRUMS) {
+    while (drums.length < maxDrums) {
         const drum = document.createElement("span");
         drum.className = "edc-mark__drum";
         const column = document.createElement("span");
@@ -38,6 +62,7 @@ export function initBrandMark(): void {
         drums.push(drum);
     }
     const columns = drums.map((drum) => drum.querySelector<HTMLElement>(".edc-mark__column")!);
+    const positions = columns.map(() => 0);
     root.classList.add("edc-mark--interactive");
     columns.forEach((column) => {
         // A second alphabet makes the final digit -> blank -> A wrap seamless.
@@ -50,22 +75,34 @@ export function initBrandMark(): void {
             }),
         );
     });
+    const measureDeck = (): void => {
+        const style = getComputedStyle(root);
+        drumWidth = Number.parseFloat(style.getPropertyValue("--edc-drum-width"));
+        drumGap = Number.parseFloat(style.getPropertyValue("--edc-drum-gap"));
+        availableWidth = root.getBoundingClientRect().width;
+    };
     const setDrumCount = (count: number): void => {
         drumCount = count;
         root.style.setProperty("--edc-drum-count", String(count));
+        const width = count * drumWidth + (count - 1) * drumGap;
+        root.style.setProperty("--edc-deck-scale", String(compact.matches ? 1 : Math.min(1, availableWidth / width)));
         const last = Math.ceil(count) - 1;
         if (last === orangeDrum) return;
         drums[orangeDrum]?.classList.remove("edc-mark__drum--last");
         drums[last]!.classList.add("edc-mark__drum--last");
         orangeDrum = last;
     };
+    const setPosition = (index: number, position: number): void => {
+        positions[index] = position;
+        columns[index]!.style.setProperty("--edc-letter-index", String(position));
+    };
     const setWord = (word: string): void => {
-        columns.forEach((column, index) => {
-            column.style.setProperty("--edc-letter-index", String(ALPHABET.indexOf(word[index] ?? " ")));
+        columns.forEach((_, index) => {
+            setPosition(index, ALPHABET.indexOf(word[index] ?? " "));
         });
-        currentWord = word;
     };
     const setWordVisibility = (opacity: number): void => {
+        wordOpacity = opacity;
         root.style.setProperty("--edc-word-opacity", String(opacity));
     };
     const animate = (duration: number, update: (elapsed: number) => void, done: () => void): void => {
@@ -87,11 +124,11 @@ export function initBrandMark(): void {
     };
     const ease = (progress: number): number => progress * progress * (3 - 2 * progress);
     const rollTo = (word: string, done: () => void): void => {
-        const count = Math.max(currentWord.length, word.length);
+        measureDeck();
+        const count = Math.max(Math.ceil(drumCount), word.length);
         const fromCount = drumCount;
         let previousSpeed = 0;
-        const rolls = columns.slice(0, count).map((column, index) => {
-            const start = ALPHABET.indexOf(currentWord[index] ?? " ");
+        const rolls = positions.slice(0, count).map((start, index) => {
             const target = ALPHABET.indexOf(word[index] ?? " ");
             const delta = (target - start + ALPHABET.length) % ALPHABET.length;
             const across = index / (count - 1);
@@ -105,7 +142,7 @@ export function initBrandMark(): void {
             );
             const distance = turns * ALPHABET.length + delta;
             previousSpeed = distance / duration;
-            return { column, start, target, delay, duration, distance };
+            return { index, start, target, delay, duration, distance };
         });
         animate(
             ROLL_MS,
@@ -115,43 +152,34 @@ export function initBrandMark(): void {
                     const progress = Math.min(1, Math.max(0, elapsed - roll.delay) / roll.duration);
                     const position =
                         progress === 1 ? roll.target : (roll.start + roll.distance * progress) % ALPHABET.length;
-                    roll.column.style.setProperty("--edc-letter-index", String(position));
+                    setPosition(roll.index, position);
                 }
             },
             () => {
                 setWord(word);
-                done();
+                if (count === word.length) {
+                    done();
+                    return;
+                }
+                animate(
+                    EXPAND_MS,
+                    (elapsed) => setDrumCount(count + (word.length - count) * ease(elapsed / EXPAND_MS)),
+                    done,
+                );
             },
         );
     };
-    const finishHover = (): void => {
-        const showWord = (): void => {
-            animate(
-                WORD_ENTER_MS,
-                (elapsed) => setWordVisibility(ease(elapsed / WORD_ENTER_MS)),
-                () => {
-                    busy = false;
-                },
-            );
-        };
-        const fromCount = drumCount;
-        if (fromCount === BRAND_WORD.length) {
-            showWord();
-            return;
-        }
-        animate(
-            EXPAND_MS,
-            (elapsed) => setDrumCount(fromCount + (BRAND_WORD.length - fromCount) * ease(elapsed / EXPAND_MS)),
-            showWord,
-        );
-    };
-    const reset = (): void => {
+    const cancelPending = (): void => {
         if (frame !== undefined) cancelAnimationFrame(frame);
         frame = undefined;
-        clearTimeout(returnTimer);
-        returnTimer = undefined;
-        busy = false;
+        clearTimeout(holdTimer);
+        holdTimer = undefined;
         root.classList.remove("edc-mark--animated");
+    };
+    const reset = (): void => {
+        cancelPending();
+        isHovered = false;
+        measureDeck();
         setWord(BRAND_WORD);
         setDrumCount(BRAND_WORD.length);
         setWordVisibility(1);
@@ -159,36 +187,54 @@ export function initBrandMark(): void {
 
     reset();
     if (!reducedMotion.matches && !compact.matches) {
-        busy = true;
-        rollTo(BRAND_WORD, () => {
-            busy = false;
-        });
+        rollTo(BRAND_WORD, () => {});
     }
+    const showBrand = (word: string): void => {
+        rollTo(word, () => {
+            holdTimer = setTimeout(() => {
+                holdTimer = undefined;
+                showBrand(nextBrand());
+            }, HOLD_MS);
+        });
+    };
     root.addEventListener("mouseenter", () => {
-        if (reducedMotion.matches || compact.matches || !hover.matches || busy) return;
-        busy = true;
-        const candidates = CAMERA_BRANDS.filter((word) => word !== lastCameraBrand);
-        const word = candidates[Math.floor(Math.random() * candidates.length)]!;
-        lastCameraBrand = word;
+        if (reducedMotion.matches || compact.matches || !hover.matches || isHovered) return;
+        isHovered = true;
+        cancelPending();
+        const word = nextBrand();
+        const fromOpacity = wordOpacity;
         // Let DASHCAM leave before the deck expands into its space. Its box
         // stays in the layout, keeping every toolbar control stationary.
-        animate(
-            WORD_EXIT_MS,
-            (elapsed) => setWordVisibility(1 - ease(elapsed / WORD_EXIT_MS)),
-            () => {
-                rollTo(word, () => {
-                    returnTimer = setTimeout(() => {
-                        returnTimer = undefined;
-                        rollTo(BRAND_WORD, finishHover);
-                    }, HOLD_MS);
-                });
-            },
-        );
+        if (fromOpacity === 0) {
+            showBrand(word);
+        } else {
+            animate(
+                WORD_EXIT_MS,
+                (elapsed) => setWordVisibility(fromOpacity * (1 - ease(elapsed / WORD_EXIT_MS))),
+                () => showBrand(word),
+            );
+        }
+    });
+    root.addEventListener("mouseleave", () => {
+        if (!isHovered) return;
+        isHovered = false;
+        cancelPending();
+        rollTo(BRAND_WORD, () => {
+            const fromOpacity = wordOpacity;
+            animate(
+                WORD_ENTER_MS,
+                (elapsed) => setWordVisibility(fromOpacity + (1 - fromOpacity) * ease(elapsed / WORD_ENTER_MS)),
+                () => {},
+            );
+        });
     });
     reducedMotion.addEventListener("change", () => {
         if (reducedMotion.matches) reset();
     });
     compact.addEventListener("change", () => {
         if (compact.matches) reset();
+    });
+    hover.addEventListener("change", () => {
+        if (!hover.matches) reset();
     });
 }
