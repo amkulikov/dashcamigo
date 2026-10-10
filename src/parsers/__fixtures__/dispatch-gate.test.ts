@@ -117,6 +117,12 @@ const CASES = [
         extractor: "ligogps-trailer-ts",
     },
     {
+        label: "paired LigoGPS tables before preallocation -> ligogps-trailer-ts",
+        rel: "ligogps-trailer-ts/real-anonymized-paired.TS",
+        name: "20261008_095348_f.ts",
+        extractor: "ligogps-trailer-ts",
+    },
+    {
         // Same no-moov container class: the kind-gate keys off the
         // findNovatekTsGpsPid headerBytes scan.
         label: "Novatek GPS struct in MPEG-TS private PES -> novatek-ts",

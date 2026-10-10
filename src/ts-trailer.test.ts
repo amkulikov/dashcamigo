@@ -12,6 +12,7 @@ const wrongFormat = readFileSync(resolve(FIXTURES, "synthetic-wrong-format.TS"))
 const realAnonymized = readFileSync(resolve(FIXTURES, "real-anonymized.TS"));
 const realAmpersand = readFileSync(resolve(FIXTURES, "real-anonymized-ampersand.TS"));
 const realEmptyCapacity = readFileSync(resolve(FIXTURES, "real-anonymized-empty-capacity.TS"));
+const realPaired = readFileSync(resolve(FIXTURES, "real-anonymized-paired.TS"));
 
 // happy = 2 null TS packets + trailer (see build-synthetic.mjs).
 const HAPPY_CLEAN = 2 * 188;
@@ -162,7 +163,118 @@ describe("findTsGpsTrailer", () => {
     });
 });
 
+describe("paired TS trailers", () => {
+    const cleanLength = realPaired.length - 1024 - 17360;
+
+    it("recognizes the table structure independently of the firmware label and filename", async () => {
+        const bytes = Buffer.from(realPaired);
+        bytes.write("OTHERFW V2 ", cleanLength + 8680 + 8, "latin1");
+        const file = new File([Uint8Array.from(bytes)], "another-camera.ts");
+        expect((await findTsGpsTrailer(file))?.cleanLength).toBe(cleanLength);
+    });
+
+    it("uses each table's own length and slot count", async () => {
+        const first = Buffer.from(realPaired.subarray(cleanLength, cleanLength + 8680 - 132));
+        const total = 17360 - 132;
+        first.writeUInt32BE(total, 0);
+        first.writeUInt32LE(64, 24);
+        first.write("&&&&", first.length - 8, "latin1");
+        first.writeUInt32BE(total, first.length - 4);
+        const bytes = Buffer.concat([
+            realPaired.subarray(0, cleanLength),
+            first,
+            realPaired.subarray(cleanLength + 8680),
+        ]);
+        expect(await findTsGpsTrailer(blobOf(bytes))).toEqual({
+            cleanLength,
+            trailerLength: total,
+            unindexedRecordsOffset: 8772 - 132,
+        });
+    });
+
+    it("preserves zero bytes belonging to the trailing length field", async () => {
+        const blocks = [0, 8680].map((offset) => {
+            const block = Buffer.from(realPaired.subarray(cleanLength + offset, cleanLength + offset + 1024));
+            block.writeUInt32BE(offset === 0 ? 2048 : 1024, 0);
+            if (offset === 0) block.writeUInt32LE(7, 24);
+            else block.writeUInt32BE(7, 24);
+            block.write("&&&&", 1016, "latin1");
+            block.writeUInt32BE(offset === 0 ? 2048 : 1024, 1020);
+            return block;
+        });
+        const file = blobOf(Buffer.concat([realPaired.subarray(0, cleanLength), ...blocks, Buffer.alloc(1024)]));
+        expect(await findTsGpsTrailer(file)).toEqual({
+            cleanLength,
+            trailerLength: 2048,
+            unindexedRecordsOffset: 1116,
+        });
+    });
+
+    it.each([0, 1024, 40 * 1024 * 1024])("detects both tables before %i zero padding bytes", async (padding) => {
+        const file = new File([Uint8Array.from(realPaired.subarray(0, -1024)), new Uint8Array(padding)], "paired.ts");
+        expect(await findTsGpsTrailer(file)).toEqual({
+            cleanLength,
+            trailerLength: 17360,
+            unindexedRecordsOffset: 8772,
+        });
+        expect((await clampTsTrailingBytes(file)).size).toBe(cleanLength);
+    });
+
+    it.each([0, 4, 24, 28, 8680 - 8, 8680 - 4, 8680, 8680 + 4, 8680 + 24, 8680 + 28, 17360 - 8, 17360 - 4])(
+        "rejects a damaged paired header or footer at offset %i",
+        async (offset) => {
+            const bytes = Buffer.from(realPaired);
+            bytes[cleanLength + offset]! ^= 1;
+            expect(await findTsGpsTrailer(blobOf(bytes))).toBeNull();
+        },
+    );
+
+    it("rejects nonzero data following the tables", async () => {
+        const bytes = Buffer.from(realPaired);
+        bytes[bytes.length - 500] = 1;
+        expect(await findTsGpsTrailer(blobOf(bytes))).toBeNull();
+    });
+
+    it("rejects a valid-looking pair without the TS packet grid", async () => {
+        for (const offset of [0, cleanLength - 188]) {
+            const bytes = Buffer.from(realPaired);
+            bytes[offset] = 0;
+            expect(await findTsGpsTrailer(blobOf(bytes))).toBeNull();
+        }
+    });
+
+    it("rejects a pair shifted off the packet grid", async () => {
+        expect(await findTsGpsTrailer(new Blob([new Uint8Array(1), Uint8Array.from(realPaired)]))).toBeNull();
+    });
+
+    it("bounds the preallocation scan", async () => {
+        const file = new Blob([Uint8Array.from(realPaired), new Uint8Array(65 * 1024 * 1024)]);
+        expect(await findTsGpsTrailer(file)).toBeNull();
+    });
+});
+
 describe("clampTsTrailingBytes", () => {
+    it.each([1, 7, 40 * 1024 * 1024])(
+        "recognizes standard GPS tables before %i zero padding bytes",
+        async (padding) => {
+            const file = new File([Uint8Array.from(realAmpersand), new Uint8Array(padding)], "standard.ts");
+            const trailer = await findTsGpsTrailer(file);
+            expect(trailer?.trailerLength).toBe(7956);
+            expect((await clampTsTrailingBytes(file)).size).toBe(realAmpersand.length - 7956);
+        },
+    );
+
+    it.each([0, 1000])("clamps large zero preallocation after %i unknown suffix bytes without GPS", async (suffix) => {
+        const clean = Buffer.from(realEmptyCapacity.subarray(0, -36));
+        clean.fill(0, clean.length - 100);
+        const file = new File(
+            [Uint8Array.from(clean), new Uint8Array(suffix).fill(0xa5), new Uint8Array(40 * 1024 * 1024)],
+            "preallocated.ts",
+        );
+        expect(await findTsGpsTrailer(file)).toBeNull();
+        expect((await clampTsTrailingBytes(file)).size).toBe(clean.length);
+    });
+
     it("clamps a .ts File to the clean stream", async () => {
         const file = new File([Uint8Array.from(happy)], "20260813211138_0000002F.ts");
         const clamped = await clampTsTrailingBytes(file);

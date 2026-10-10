@@ -28,6 +28,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: readonly ChangelogEntry[] = [
     {
+        id: "2026-10-11.1",
+        category: "improvement",
+        text: {
+            en: "Improved support for TS recordings.",
+            ru: "Улучшена поддержка TS-файлов.",
+            de: "Verbesserte Unterstützung für TS-Aufnahmen.",
+            es: "Compatibilidad mejorada con grabaciones TS.",
+            fr: "Prise en charge améliorée des enregistrements TS.",
+            pl: "Ulepszona obsługa nagrań TS.",
+            pt: "Suporte aprimorado a gravações TS.",
+            zh: "改进了对 TS 录像的支持。",
+            ja: "TS 録画への対応を改善しました。",
+            ko: "TS 녹화 지원이 개선되었습니다.",
+        },
+    },
+    {
         id: "2026-10-09.3",
         category: "improvement",
         text: {

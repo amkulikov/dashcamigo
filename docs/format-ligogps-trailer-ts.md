@@ -18,6 +18,17 @@ with ampersands stores capacity, which can exceed the written count on partial
 clips. Do not infer the field's meaning from the terminator alone.
 The accepted combinations and bounds live in `src/ts-trailer.ts`.
 
+The lowercase `skip` dialect pairs an enciphered `LIGOGPSINFO` block with
+a plaintext block carrying a firmware label, followed by preallocated zero
+bytes. Validate both blocks and the adjacent TS packet grid before clamping. The first
+block's length copies cover the pair; the second block's copies cover only
+itself. Their slot counts use little-endian and big-endian order respectively.
+Plaintext slots start with the timestamp, without a record index. Read only
+the plaintext twin; erase the enciphered slots when anonymizing fixtures.
+Keep preallocation scans bounded and verify every skipped byte is zero.
+Zero padding is independent of GPS: ordinary TS packets and other recognized
+tables can precede it too. Preserve zero-valued bytes inside the final TS packet.
+
 Blackview X5S PRO recordings without GPS can end in an empty table. Parking
 clips use a `SKIP` block with zero magic, flags and count. Time-lapse clips
 retain the LCAI magic and a nominal slot capacity even though no slots were

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { DESKTOP, REPO_ROOT, expect, gotoApp, pausePlayback, presetLocalStorage, test } from "./_fixtures.js";
 
@@ -15,6 +15,7 @@ test.describe("TS trailer recording ingest", () => {
         ["empty", "20260902_174435", "_PARK"],
         ["empty-capacity", "20260904_205125", ""],
         ["unknown-suffix", "20260904_205125", ""],
+        ["paired", "20261008_095348_", ""],
     ]) {
         test(`indexes and plays both channels with ${dialect} trailing bytes in ${stamp}${suffix}`, async ({
             page,
@@ -28,14 +29,25 @@ test.describe("TS trailer recording ingest", () => {
             const buffer =
                 dialect === "unknown-suffix"
                     ? Buffer.concat([fixture.subarray(0, -36), Buffer.alloc(1000, 0xa5)])
-                    : fixture;
-            await page.locator("#file-input").setInputFiles(
-                ["F", "R"].map((channel) => ({
-                    name: `${stamp}${channel}${suffix}.ts`,
-                    mimeType: "video/mp2t",
-                    buffer,
-                })),
-            );
+                    : dialect === "paired"
+                      ? Buffer.concat([fixture, Buffer.alloc(40 * 1024 * 1024)])
+                      : fixture;
+            const files = ["F", "R"].map((channel) => ({
+                name: `${stamp}${channel}${suffix}.ts`,
+                mimeType: "video/mp2t",
+                buffer,
+            }));
+            // Playwright limits the combined in-memory upload to 50 MB.
+            const inputs =
+                dialect === "paired"
+                    ? files.map(({ name, buffer }) => {
+                          const target = test.info().outputPath("inputs", name);
+                          mkdirSync(path.dirname(target), { recursive: true });
+                          writeFileSync(target, buffer);
+                          return target;
+                      })
+                    : files;
+            await page.locator("#file-input").setInputFiles(inputs);
             const trips = page.locator("li.trip:not(.unindexed-note)");
             await expect(trips).toHaveCount(1);
             await expect(page.locator('[data-trip-filter-kind="unknown"]')).toHaveCount(0);

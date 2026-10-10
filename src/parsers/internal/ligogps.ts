@@ -558,17 +558,20 @@ export async function parseLigoGpsTsTrailer(file: VendorFile): Promise<ParsedRec
 
     const records: GpsRecord[] = [];
     const skipped: SkippedLine[] = [];
-    for (let off = TS_TRAILER_SLOTS_OFFSET; off + LIGO_SLOT_SIZE <= buf.length; off += LIGO_SLOT_SIZE) {
+    const slotsOffset = trailer.unindexedRecordsOffset ?? TS_TRAILER_SLOTS_OFFSET;
+    for (let off = slotsOffset; off + LIGO_SLOT_SIZE <= buf.length; off += LIGO_SLOT_SIZE) {
         if (isTsGpsTrailerTerminator(buf, off)) break; // known marker + length copy terminates the table
         const slot = buf.subarray(off, off + LIGO_SLOT_SIZE);
         // Blank (all-zero) slots are a normal firmware gap, not an error.
         if (slot.every((b) => b === 0)) continue;
         const text = bytesToAscii(slot).replace(/\0+$/, "");
-        const record = parseLigoGpsRecord(text, file.file.name, "kmh", true);
+        // The paired lowercase-skip table starts directly with the timestamp.
+        const indexedText = trailer.unindexedRecordsOffset === undefined ? text : `\0\0\0\0${text}`;
+        const record = parseLigoGpsRecord(indexedText, file.file.name, "kmh", true);
         if (record) {
             records.push(record);
         } else {
-            const slotIndex = (off - TS_TRAILER_SLOTS_OFFSET) / LIGO_SLOT_SIZE + 1;
+            const slotIndex = (off - slotsOffset) / LIGO_SLOT_SIZE + 1;
             skipped.push({
                 line: slotIndex,
                 raw: `<ligogps ts trailer slot ${slotIndex}: ${JSON.stringify(text.slice(0, 80))}>`,

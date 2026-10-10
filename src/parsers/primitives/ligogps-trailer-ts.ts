@@ -17,8 +17,7 @@ export const ligoGpsTrailerTsPrimitive: Primitive = {
     kind: "video-embedded",
 
     async marker(_file: VendorFile, index?: Mp4Index): Promise<boolean> {
-        // Detection ran during indexing (name-gated, two reads under 32 B) -
-        // this is a sync field check, and the same field gates dispatch.
+        // Detection ran during indexing; the same field gates dispatch.
         return index?.tsGpsTrailer != null;
     },
 

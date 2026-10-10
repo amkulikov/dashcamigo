@@ -25,6 +25,17 @@ const LIGOGPS_TS_FIXTURES_DIR = resolve(
 // indexing logic itself is environment-agnostic and that is what we want
 // to lock down (the wire layer is covered by worker-client.test.ts).
 describe("indexer: MPEG-TS branch", () => {
+    it("indexes paired GPS tables followed by large zero preallocation", async () => {
+        const bytes = readFileSync(resolve(LIGOGPS_TS_FIXTURES_DIR, "real-anonymized-paired.TS"));
+        const file = new File([bytes, new Uint8Array(40 * 1024 * 1024)], "20261008_095348_f.ts");
+        const { indexed } = await indexOneFile(file, false);
+        expect(indexed).not.toBeNull();
+        expect(indexed!.durationSec).toBeGreaterThan(1.9);
+        expect(indexed!.durationSec).toBeLessThan(2.3);
+        expect(indexed!.codec).toBe("avc");
+        expect(indexed!.audio?.codec).toBe("aac");
+    });
+
     it("extracts duration, codec and intended frame rate from a generated .TS fixture", async () => {
         const buf = readFileSync(resolve(FIXTURES_DIR, "20260511134011_073648A.TS"));
         const file = new File([buf], "20260511134011_073648A.TS");

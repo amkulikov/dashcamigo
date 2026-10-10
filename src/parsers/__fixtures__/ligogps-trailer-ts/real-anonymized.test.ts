@@ -22,6 +22,46 @@ const AMPERSAND_FIXTURE = resolve(HERE, "real-anonymized-ampersand.TS");
 const NAME = "20260813211138_0000002F.ts";
 
 describe("real-anonymized LigoGPS-TS-trailer fixture", () => {
+    it("skips a damaged plaintext slot without losing the rest of the paired table", async () => {
+        const bytes = readFileSync(resolve(HERE, "real-anonymized-paired.TS"));
+        const slotsStart = bytes.length - 1024 - 17360 + 8772;
+        bytes[slotsStart] = 0x78;
+        const file = new File([Uint8Array.from(bytes)], "damaged.ts");
+        const result = await ligoGpsTrailerTsPrimitive.parse({file, relativePath: file.name});
+        expect(result.records).toHaveLength(59);
+        expect(result.skipped).toHaveLength(1);
+        expect(result.skipped[0]!.line).toBe(1);
+    });
+
+    it("parses the plaintext twin before preallocated zeros and erases the enciphered route", async () => {
+        const bytes = readFileSync(resolve(HERE, "real-anonymized-paired.TS"));
+        const name = "20261008_095348_f.ts";
+        const file = new File([Uint8Array.from(bytes)], name);
+        const vf = { file, relativePath: name };
+        const index = await buildMp4Index(file);
+        expect(await ligoGpsTrailerTsPrimitive.marker(vf, index)).toBe(true);
+        const trailer = index.tsGpsTrailer!;
+        const encryptedSlots = bytes.subarray(trailer.cleanLength + 92, trailer.cleanLength + 8680 - 8);
+        expect(encryptedSlots.every((byte) => byte === 0)).toBe(true);
+        const coordinates = [...bytes.subarray(trailer.cleanLength).toString("latin1").matchAll(/[NSEW?]:(-?[\d.]+)/g)];
+        expect(coordinates).toHaveLength(120);
+        expect(coordinates.every((match) => Number.isInteger(Number(match[1])))).toBe(true);
+
+        const result = await ligoGpsTrailerTsPrimitive.parse(vf, index);
+        expect(result.skipped).toHaveLength(0);
+        expect(result.records).toHaveLength(60);
+        expectPlausibleGpsTrack(result.records, { minCount: 60, monotonicTime: true });
+        expect(result.records[0]!.unixSeconds).toBe(Date.UTC(2026, 9, 8, 9, 53, 49) / 1000);
+        expect(result.records[59]!.unixSeconds - result.records[0]!.unixSeconds).toBe(59);
+        expect(Math.min(...result.records.map((record) => record.speedMs))).toBeCloseTo(6 / 3.6);
+        expect(Math.max(...result.records.map((record) => record.speedMs))).toBeCloseTo(31 / 3.6);
+        for (const record of result.records) {
+            expect(Number.isInteger(record.lat) && Number.isInteger(record.lon)).toBe(true);
+            expect(record.mp4Filename).toBe(name);
+            expect(record.active).toBe(true);
+        }
+    });
+
     it.each([
         ["real-anonymized.TS", 120],
         ["real-anonymized-ampersand.TS", 120],

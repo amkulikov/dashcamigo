@@ -7,10 +7,12 @@
 import { isTransportStreamName } from "./video-format-names.js";
 
 export interface TsGpsTrailer {
-    /** Byte length of the clean 188-aligned TS stream; the trailer occupies the rest of the file. */
+    /** Byte length of the clean 188-aligned TS stream. */
     cleanLength: number;
-    /** Trailer length in bytes (fileSize - cleanLength). */
+    /** Trailer length in bytes, excluding preallocated zero padding. */
     trailerLength: number;
+    /** Plaintext slots without the usual four-byte record index, relative to the trailer start. */
+    unindexedRecordsOffset?: number;
 }
 
 const TS_PACKET = 188;
@@ -33,6 +35,9 @@ const MIN_TRAILER_BYTES = 36;
 /** Sanity cap: 24 h at 1 Hz is ~11.4 MB of 132-byte slots. */
 const MAX_TRAILER_BYTES = 16 * 1024 * 1024;
 const MAX_TRAILER_SLOTS = Math.floor((MAX_TRAILER_BYTES - MIN_TRAILER_BYTES) / TRAILER_SLOT_BYTES);
+const PAIRED_SLOTS_OFFSET = 92;
+const MAX_ZERO_PADDING_BYTES = 64 * 1024 * 1024;
+const ZERO_SCAN_BYTES = 1024 * 1024;
 
 /** Offset of the first 132-byte slot from the trailer start. */
 export const TS_TRAILER_SLOTS_OFFSET = 28;
@@ -69,8 +74,7 @@ export function isTsGpsTrailerTerminator(buf: Uint8Array, offset: number): boole
  * length copies agreeing, a known magic - or the file reads as trailer-less.
  * Returns null when there is no trailer; IO errors propagate.
  */
-export async function findTsGpsTrailer(blob: Blob): Promise<TsGpsTrailer | null> {
-    const size = blob.size;
+async function findStandardTsGpsTrailer(blob: Blob, size: number): Promise<TsGpsTrailer | null> {
     if (size < TS_PACKET + MIN_TRAILER_BYTES) return null;
 
     const tail = new Uint8Array(await blob.slice(size - 8, size).arrayBuffer());
@@ -125,6 +129,89 @@ export async function findTsGpsTrailer(blob: Blob): Promise<TsGpsTrailer | null>
     return { cleanLength, trailerLength };
 }
 
+/** The lowercase-skip dialect pairs an enciphered table with a plaintext twin. */
+async function findPairedTsGpsTrailer(blob: Blob, end: number): Promise<TsGpsTrailer | null> {
+    if (end < TS_PACKET + 2 * (PAIRED_SLOTS_OFFSET + 8)) return null;
+    const tail = new Uint8Array(await blob.slice(end - 8, end).arrayBuffer());
+    if (tsGpsTrailerTerminatorByte(tail, 0) !== AMPERSAND_BYTE) return null;
+    const blockLength = new DataView(tail.buffer).getUint32(4);
+    const slotBytes = blockLength - PAIRED_SLOTS_OFFSET - 8;
+    if (
+        slotBytes < 0 ||
+        slotBytes % TRAILER_SLOT_BYTES !== 0 ||
+        blockLength > MAX_TRAILER_BYTES ||
+        blockLength + 8 > end
+    )
+        return null;
+    const firstTail = new Uint8Array(await blob.slice(end - blockLength - 8, end - blockLength).arrayBuffer());
+    if (tsGpsTrailerTerminatorByte(firstTail, 0) !== AMPERSAND_BYTE) return null;
+    const trailerLength = new DataView(firstTail.buffer).getUint32(4);
+    const firstLength = trailerLength - blockLength;
+    const firstSlotBytes = firstLength - PAIRED_SLOTS_OFFSET - 8;
+    if (firstSlotBytes < 0 || firstSlotBytes % TRAILER_SLOT_BYTES !== 0 || trailerLength > MAX_TRAILER_BYTES)
+        return null;
+    const cleanLength = end - trailerLength;
+    if (cleanLength < TS_SYNC_RUN * TS_PACKET || cleanLength % TS_PACKET !== 0) return null;
+
+    const bytes = new Uint8Array(await blob.slice(cleanLength, end).arrayBuffer());
+    const view = new DataView(bytes.buffer);
+    const slotCount = slotBytes / TRAILER_SLOT_BYTES;
+    if (
+        view.getUint32(0) !== trailerLength ||
+        asciiAt(bytes, 4, 15) !== "skipLIGOGPSINFO" ||
+        view.getUint32(24, true) !== firstSlotBytes / TRAILER_SLOT_BYTES ||
+        view.getUint32(firstLength) !== blockLength ||
+        asciiAt(bytes, firstLength + 4, 4) !== "skip" ||
+        !bytes.subarray(firstLength + 8, firstLength + 19).every((byte) => byte >= 0x20 && byte < 0x7f) ||
+        !bytes.subarray(firstLength + 19, firstLength + 24).every((byte) => byte === 0) ||
+        view.getUint32(firstLength + 24) !== slotCount ||
+        !bytes.subarray(28, PAIRED_SLOTS_OFFSET).every((byte) => byte === 0) ||
+        !bytes.subarray(firstLength + 28, firstLength + PAIRED_SLOTS_OFFSET).every((byte) => byte === 0)
+    ) {
+        return null;
+    }
+    const runBytes = TS_SYNC_RUN * TS_PACKET;
+    const head = new Uint8Array(await blob.slice(0, runBytes).arrayBuffer());
+    const lastPackets = new Uint8Array(await blob.slice(cleanLength - runBytes, cleanLength).arrayBuffer());
+    if (!hasTsSyncRun(head, 0) || !hasTsSyncRun(lastPackets, 0)) return null;
+    return { cleanLength, trailerLength, unindexedRecordsOffset: firstLength + PAIRED_SLOTS_OFFSET };
+}
+
+/** Returns the end of nonzero data, without interpreting any container bytes. */
+async function findZeroPaddedEnd(blob: Blob): Promise<number | null> {
+    // Preallocated recordings leave zeros after their data. Verify every skipped
+    // byte, and keep the scan bounded so unrelated files cannot force a full read.
+    const tail = new Uint8Array(await blob.slice(-1).arrayBuffer());
+    if (tail[0] !== 0) return null;
+    const floor = Math.max(0, blob.size - MAX_ZERO_PADDING_BYTES);
+    for (let end = blob.size; end > floor; ) {
+        const start = Math.max(floor, end - ZERO_SCAN_BYTES);
+        const bytes = new Uint8Array(await blob.slice(start, end).arrayBuffer());
+        let last = bytes.length - 1;
+        while (last >= 0 && bytes[last] === 0) last--;
+        if (last >= 0) return start + last + 1;
+        end = start;
+    }
+    return null;
+}
+
+/** Detects known GPS table structures at EOF or before zero preallocation. */
+export async function findTsGpsTrailer(blob: Blob): Promise<TsGpsTrailer | null> {
+    const direct = (await findStandardTsGpsTrailer(blob, blob.size)) ?? (await findPairedTsGpsTrailer(blob, blob.size));
+    if (direct) return direct;
+    const dataEnd = await findZeroPaddedEnd(blob);
+    if (dataEnd === null) return null;
+    // A big-endian length may itself end in up to three zero bytes.
+    for (let zeros = 0; zeros < 4; zeros++) {
+        const trailerEnd = dataEnd + zeros;
+        if (trailerEnd > blob.size) break;
+        const trailer =
+            (await findStandardTsGpsTrailer(blob, trailerEnd)) ?? (await findPairedTsGpsTrailer(blob, trailerEnd));
+        if (trailer) return trailer;
+    }
+    return null;
+}
+
 function hasTsSyncRun(bytes: Uint8Array, start: number): boolean {
     for (let i = 0; i < TS_SYNC_RUN; i++) {
         const packet = start + i * TS_PACKET;
@@ -141,7 +228,7 @@ function hasTsSyncRun(bytes: Uint8Array, start: number): boolean {
 
 /** Finds the last complete packet when a .ts file has an unknown trailing block. */
 async function findTsPacketBoundary(blob: Blob): Promise<number | null> {
-    const alignedEnd = blob.size - (blob.size % TS_PACKET);
+    let alignedEnd = blob.size - (blob.size % TS_PACKET);
     const runBytes = TS_SYNC_RUN * TS_PACKET;
     if (alignedEnd < runBytes) return null;
 
@@ -154,6 +241,14 @@ async function findTsPacketBoundary(blob: Blob): Promise<number | null> {
     const head = new Uint8Array(await blob.slice(0, runBytes).arrayBuffer());
     if (!hasTsSyncRun(head, 0)) return null;
     if (hasCompleteTail) return alignedEnd;
+
+    const dataEnd = await findZeroPaddedEnd(blob);
+    if (dataEnd !== null) {
+        // Zero-valued payload bytes still belong to the last complete packet.
+        alignedEnd = Math.min(alignedEnd, Math.ceil(dataEnd / TS_PACKET) * TS_PACKET);
+        const packetTail = new Uint8Array(await blob.slice(alignedEnd - runBytes, alignedEnd).arrayBuffer());
+        if (hasTsSyncRun(packetTail, 0)) return alignedEnd;
+    }
 
     const floor = Math.max(runBytes, alignedEnd - Math.floor(MAX_TS_SUFFIX_BYTES / TS_PACKET) * TS_PACKET);
     const chunkBytes = TS_SUFFIX_SCAN_PACKETS * TS_PACKET;
